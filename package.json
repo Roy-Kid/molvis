@@ -1,0 +1,10 @@
+{
+  "name": "molvis",
+  "version": "1.0.0",
+  "description": "interactive molecule visulization package",
+  "author": "Roy Kid",
+  "license": "SEE LICENSE IN LICENSE",
+  "workspaces": [
+    "core"
+  ]
+}
