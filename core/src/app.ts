@@ -11,7 +11,7 @@ class Molvis {
     constructor(canvas: HTMLCanvasElement) {
         this._world = new World(canvas);
         this._system = new System();
-        this._mode = new EditMode(this._world, this._system);
+        this._mode = this.switch_mode('edit');
     }
 
     get world(): World {
@@ -22,21 +22,24 @@ class Molvis {
         return this._system;
     }
 
-    get editor(): Mode {
-        if (this._mode.type == 'edit') {
-            return this._mode;
-        } else {
-            throw new Error("Editor is not in edit mode");
+    public switch_mode(mode: string): Mode {
+        switch (mode) {
+            case 'edit':
+                this._mode = new EditMode(this);
+                break;
+            case 'view':
+                this._mode = new ViewMode(this);
+                break;
+            default:
+                throw new Error("Invalid mode");
         }
+        return this._mode;
     }
 
-    get viewer(): Mode {
-        if (this._mode.type == 'view') {
-            return this._mode;
-        } else {
-            throw new Error("Editor is not in view mode");
-        }
-    }
+    public add_atom(x: number, y: number, z: number, props: Map<string, any>) {
+        const atom = this._system.current_frame.add_atom(x, y, z, props);
+        this._world.artist.draw_atom(atom);
+    }   
 
     public start() {
         this._world.render();

@@ -1,22 +1,24 @@
-import { Engine, Scene, ArcRotateCamera, Light, Vector3, HemisphericLight, Color3, Camera } from '@babylonjs/core';
+import { Engine, Scene, ArcRotateCamera, Light, Vector3, HemisphericLight, Color3 } from '@babylonjs/core';
 import { Artist } from './artist';
+import { AxisHelper } from './axes';
 
 
 class World {
 
     private _engine: Engine;
     private _scene: Scene;
-    private _camera: Camera;
-    private _light: Light;
+    private _camera: ArcRotateCamera;
     private _artist: Artist;
+    private _axes: AxisHelper;
 
     constructor(canvas: HTMLCanvasElement) {
         this._engine = new Engine(canvas, true);
         this._scene = this.init_scene();
         this._camera = this.init_camera();
-        this._light = this.init_light();
+        this.init_light();
         // this._gui = this.init_gui();
         this._artist = this.init_artist();
+        this._axes = this.init_axes();
     }
 
     public get scene(): Scene {
@@ -27,7 +29,7 @@ class World {
         return this._engine;
     }
 
-    public get camera(): Camera {
+    public get camera(): ArcRotateCamera {
         return this._camera;
     }
 
@@ -62,9 +64,14 @@ class World {
         return artist;
     }
 
+    private init_axes() {
+        return new AxisHelper(this.engine, this.camera);
+    }
+
     public render() {
         this.engine.runRenderLoop(() => {
             this.scene.render();
+            this._axes.render();
         });
         window.addEventListener("resize", () => {
             this.engine.resize();
