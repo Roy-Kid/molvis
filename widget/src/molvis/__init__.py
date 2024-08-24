@@ -19,15 +19,13 @@ class Molvis(anywidget.AnyWidget):
     _esm = ESM
     _css = CSS
 
-    _width = traitlets.Int(800, allow_none=True).tag(sync=True)
-    _height = traitlets.Int(600, allow_none=True).tag(sync=True)
+    _width = traitlets.Int(800).tag(sync=True)
+    _height = traitlets.Int(600).tag(sync=True)
 
-    def __init__(self, width: int | None = None, height: int | None = None, **kwargs):
+    def __init__(self, width: int = 800, height: int = 600, **kwargs):
         super().__init__(**kwargs)
-        if width is not None:
-            self._width = width
-        if height is not None:
-            self._height = height
+        self._width = width
+        self._height = height
 
     def send_cmd(self, method: str, **params):
         self.send(

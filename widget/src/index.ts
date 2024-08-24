@@ -20,7 +20,6 @@ class MolvisWidget {
 
         model.on("msg:custom", this.on_custom_message);
 
-
     }
 
     start() {
@@ -31,8 +30,10 @@ class MolvisWidget {
     }
 
     on_resize = (_: unknown, new_size: { width?: number; height?: number }) => {
+        console.log(new_size);
         const canvas = this.molvis.canvas;
-        if (!canvas) throw new Error("on_resize called before viewer ready");
+        if (!canvas) throw new Error("on_resize called before canvas ready");
+
 
         const MIN_WIDTH = 200;
         const MIN_HEIGHT = 200;
