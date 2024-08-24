@@ -7,8 +7,10 @@ class Molvis {
     private _world: World;
     private _system: System;
     private _mode: Mode;
+    private _canvas: HTMLCanvasElement;
 
     constructor(canvas: HTMLCanvasElement) {
+        this._canvas = canvas;
         this._world = new World(canvas);
         this._system = new System();
         this._mode = this.switch_mode('edit');
@@ -20,6 +22,10 @@ class Molvis {
 
     get system(): System {
         return this._system;
+    }
+
+    get canvas(): HTMLCanvasElement {
+        return this._canvas;
     }
 
     public switch_mode(mode: string): Mode {
@@ -41,7 +47,7 @@ class Molvis {
         this._world.artist.draw_atom(atom);
     }   
 
-    public start() {
+    public render() {
         this._world.render();
     }
 

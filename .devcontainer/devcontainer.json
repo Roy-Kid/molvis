@@ -5,7 +5,8 @@
     "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
     // Features to add to the dev container. More info: https://containers.dev/features.
     "features": {
-      "ghcr.io/devcontainers/features/node:1": {}
+      "ghcr.io/devcontainers/features/node:1": {},
+      "ghcr.io/devcontainers/features/conda:1": {}
     },
     // Use 'forwardPorts' to make a list of ports inside the container available locally.
     // "forwardPorts": [],
@@ -16,7 +17,11 @@
     "customizations": {
       "vscode": {
         "extensions": [
-          "github.copilot"
+          "github.copilot",
+          "ms-python.python",
+          "ms-toolsai.jupyter",
+          "ms-python.black",
+          "ms-python.isort"
         ]
       }
     },

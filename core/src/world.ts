@@ -1,4 +1,4 @@
-import { Engine, Scene, ArcRotateCamera, Light, Vector3, HemisphericLight, Color3 } from '@babylonjs/core';
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Color3 } from '@babylonjs/core';
 import { Artist } from './artist';
 import { AxisHelper } from './axes';
 

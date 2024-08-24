@@ -1,0 +1,12 @@
+{
+  "name": "widget",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {},
+  "author": "Roy Kid",
+  "dependencies": {
+    "@anywidget/types": "^0.1.9",
+    "@anywidget/vite": "^0.2.0",
+    "molvis": "file:../core"
+  }
+}

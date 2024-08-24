@@ -131,7 +131,7 @@ class EditMode extends Mode {
         console.log("Mouse move");
     }
 
-    override _on_mouse_move(pointerInfo: PointerInfo) {
+    _on_mouse_move(pointerInfo: PointerInfo) {
     }
 
     override _on_mouse_wheel(pointerInfo: PointerInfo) {
@@ -151,6 +151,27 @@ class ViewMode extends Mode {
 
     constructor(app: Molvis) {
         super(ModeType.View, app);
+    }
+
+    override _on_mouse_down(pointerInfo: PointerInfo) {
+    }
+
+    override _on_mouse_up(pointerInfo: PointerInfo) {
+    }
+
+    override _on_mouse_move(pointerInfo: PointerInfo) {
+    }
+
+    override _on_mouse_wheel(pointerInfo: PointerInfo) {
+    }
+
+    override _on_mouse_pick(pointerInfo: PointerInfo) {
+    }
+
+    override _on_mouse_tap(pointerInfo: PointerInfo) {
+    }
+
+    override _on_mouse_double_tap(pointerInfo: PointerInfo) {
     }
 
 }

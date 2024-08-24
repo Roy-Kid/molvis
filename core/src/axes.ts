@@ -67,9 +67,9 @@ class AxisHelper {
         // Default intensity is 1. Let's dim the light a small amount
         light.intensity = 0.7;
 
-        var lightGizmo = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+        new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-        let axis = new AxisViewer(scene, 1);
+        new AxisViewer(scene, 1);
 
         // Clone main camera alpha and beta to axis camera
         scene.registerBeforeRender(function () {

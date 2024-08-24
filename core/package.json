@@ -1,6 +1,5 @@
 {
-  "name": "core",
-  "private": true,
+  "name": "molvis",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
@@ -9,8 +8,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@babylonjs/core": "^7.22.2",
-    "typescript": "^5.5.3",
-    "vite": "^5.4.1"
-  }
+    "@babylonjs/core": "^7.22.2"
+  },
+  "main": "src/index.ts"
 }
