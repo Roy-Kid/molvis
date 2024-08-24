@@ -28,3 +28,15 @@ class Molvis(anywidget.AnyWidget):
             self._width = width
         if height is not None:
             self._height = height
+
+    def send_cmd(self, method: str, **params):
+        self.send(
+            {
+                "type": "cmd",
+                "cmd": {"jsonrpc": "2.0", "method": method, "params": params},
+            }
+        )
+
+    def add_atom(self, x: float, y: float, z: float, **props):
+        print(f"add_atom: {x=}, {y=}, {z=}, {props=}")
+        self.send_cmd("add_atom", x=x, y=y, z=z, props=props)

@@ -13,10 +13,13 @@ class MolvisWidget {
 
     constructor(canvas: HTMLCanvasElement, model: AnyModel<WidgetModel>) {
 
+        this.molvis = new Molvis(canvas);
+        
         model.on("change:_width", (_, width) => this.on_resize(null, { width }));
         model.on("change:_height", (_, height) => this.on_resize(null, { height }));
 
-        this.molvis = new Molvis(canvas);
+        model.on("msg:custom", this.on_custom_message);
+
 
     }
 
@@ -56,6 +59,13 @@ class MolvisWidget {
             canvas.style.maxHeight = "";
         }
     };
+
+    on_custom_message = (msg: any, buffers: DataView[]) => {
+        if (msg?.type === "cmd") {
+            console.log("executing command", msg.cmd.params, typeof(msg.cmd.params));
+            this.molvis.exec_cmd(msg.cmd, buffers);
+        }
+    }
 
 }
 
