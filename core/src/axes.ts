@@ -8,26 +8,24 @@ class AxisViewer {
     private _scene: BABYLON.Scene;
     private _axis: BABYLON.AxesViewer;
 
-    constructor(scene: BABYLON.Scene, size: number) {
+    constructor(scene: BABYLON.Scene, main_camera: BABYLON.ArcRotateCamera, size: number) {
 
         this._scene = scene;
         this._axis = new BABYLON.AxesViewer(scene, size);
-        let font_size = size * 0.2;
+        let font_size = size * 0.3;
         let xChar = this._make_axis_label("X", "red", font_size);
         let yChar = this._make_axis_label("Y", "green", font_size);
         let zChar = this._make_axis_label("Z", "blue", font_size);
+        xChar.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+        yChar.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+        zChar.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
         // Position
-        xChar.position = this._axis.xAxis.position.clone();
-        yChar.position = this._axis.yAxis.position.clone();
-        zChar.position = this._axis.zAxis.position.clone();
-        xChar.position.z += 0.4;
-        yChar.position.z += 0.4;
-        zChar.position.z += 0.4;
+        xChar.position.x += size * 0.8;
+        yChar.position.y += size * 0.8;
+        zChar.position.z += size * 0.8;
 
-        // Rotation
-        // xChar.rotation.y = Math.PI/2;
-        yChar.rotation.x = Math.PI / 2;
-        // zChar.rotation.z = Math.PI/2;
+        // Flip
+        zChar.rotation.y = Math.PI;
 
         // Parent
         xChar.parent = this._axis.xAxis;
@@ -60,16 +58,14 @@ class AxisHelper {
         scene.useRightHandedSystem = true;
         scene.autoClear = false;
         var cameraGizmo = new BABYLON.ArcRotateCamera("cam1", 2.0, Math.PI / 2, 5, BABYLON.Vector3.Zero(), scene);
-        cameraGizmo.viewport = new BABYLON.Viewport(0.0, 0.0, 0.2, 0.2);
+        cameraGizmo.viewport = new BABYLON.Viewport(-0.05, -0.05, 0.3, 0.3);
 
-        // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
-        var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-        // Default intensity is 1. Let's dim the light a small amount
-        light.intensity = 0.7;
+        var light1 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+        var light2 = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, -1, 0), scene);
+        // light1.intensity = 0.9;
+        // light2.intensity = 0.9;
 
-        new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-
-        new AxisViewer(scene, 1);
+        new AxisViewer(scene, camera, 0.5);
 
         // Clone main camera alpha and beta to axis camera
         scene.registerBeforeRender(function () {
