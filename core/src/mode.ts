@@ -180,6 +180,8 @@ class EditMode extends Mode {
       // hit selected mesh
       if (this.is_first_move) {
         const atom_mesh = this._mesh_on_mouse_down.clone("drag_atom", null)!;
+        // this._app.system.current_frame.add_atom(atom_mesh.position.x, atom_mesh.position.y, atom_mesh.position.z, new Map());
+        // create a bond
         const pointer_drag_bahavior = new PointerDragBehavior({
           dragPlaneNormal: this._mesh_on_mouse_down.position.subtract(
             this._world.camera.position

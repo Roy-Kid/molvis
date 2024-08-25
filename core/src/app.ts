@@ -50,9 +50,20 @@ class Molvis {
         return this._mode;
     }
 
-    public add_atom = (x: number, y: number, z: number, props: Map<string, any>) => {
+    public add_atom = (x: number, y: number, z: number, props: object = {}) => {
         const atom = this._system.current_frame.add_atom(x, y, z, props);
-        return this._world.artist.draw_atom(atom);
+        this._world.artist.draw_atom(atom);
+        return atom;
+    }
+
+    public add_bond = (itom: any, jtom: any, props: object = {}) => {
+
+        const atom1 = itom;
+        const atom2 = jtom;
+
+        const bond = this._system.current_frame.add_bond(atom1, atom2, props);
+        this._world.artist.draw_bond(bond);
+        return bond;
     }
 
     public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {

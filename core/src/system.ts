@@ -1,3 +1,4 @@
+import { Vector3 } from "@babylonjs/core";
 
 class System{
 
@@ -24,24 +25,26 @@ class Frame{
         this._bonds = [];
     }
 
-    public add_atom(x: number, y: number, z: number, props: Map<string, any>): Atom {
+    public add_atom(x: number, y: number, z: number, props: object): Atom {
         const atom = new Atom(x, y, z, props);
         this._atoms.push(atom);
         return atom;
+    }
+
+    public add_bond(itom: Atom, jtom: Atom, props: object): Bond {
+        const bond = new Bond(itom, jtom, props);
+        this._bonds.push(bond);
+        return bond;
     }
 }
 
 class Atom {
 
-    public x: number;
-    public y: number;
-    public z: number;
-    public props: Map<string, any>;
+    public position: Vector3;
+    public props: object;
 
-    constructor(x: number, y: number, z: number, props: Map<string, any>) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
+    constructor(x: number, y: number, z: number, props: object) {
+        this.position = new Vector3(x, y, z);
         this.props = props;
     }
 
@@ -51,9 +54,9 @@ class Bond {
 
     public itom: Atom;
     public jtom: Atom;
-    public props: Map<string, any>;
+    public props: object;
 
-    constructor(itom: Atom, jtom: Atom, props: Map<string, any>) {
+    constructor(itom: Atom, jtom: Atom, props: object) {
         this.itom = itom;
         this.jtom = jtom;
         this.props = props;
