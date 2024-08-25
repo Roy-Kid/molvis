@@ -52,7 +52,7 @@ class Molvis {
 
     public add_atom = (x: number, y: number, z: number, props: Map<string, any>) => {
         const atom = this._system.current_frame.add_atom(x, y, z, props);
-        this._world.artist.draw_atom(atom);
+        return this._world.artist.draw_atom(atom);
     }
 
     public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {

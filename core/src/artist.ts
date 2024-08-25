@@ -1,8 +1,8 @@
-import { Scene, MeshBuilder } from "@babylonjs/core";
+import { Scene, MeshBuilder, Vector3 } from "@babylonjs/core";
 import { Atom } from "./system";
 
 class Artist {
-    
+
     private _scene: Scene;
 
     constructor(scene: Scene) {
@@ -14,7 +14,10 @@ class Artist {
         sphere.position.x = atom.x;
         sphere.position.y = atom.y;
         sphere.position.z = atom.z;
+        
+        return sphere;
     }
+
 }
 
 export { Artist };
