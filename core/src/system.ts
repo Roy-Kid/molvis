@@ -13,6 +13,14 @@ class System{
     public get current_frame(): Frame {
         return this._traj[this._current_frame_index];
     }
+
+    static random_atom_id(): string {
+        const randomNum = Math.floor(Math.random() * 0x10000);
+
+        const hexID = randomNum.toString(16).padStart(4, "0");
+
+        return hexID;
+    }
 }
 
 class Frame{
@@ -25,8 +33,8 @@ class Frame{
         this._bonds = [];
     }
 
-    public add_atom(x: number, y: number, z: number, props: object): Atom {
-        const atom = new Atom(x, y, z, props);
+    public add_atom(name: string, x: number, y: number, z: number, props: object): Atom {
+        const atom = new Atom(name, x, y, z, props);
         this._atoms.push(atom);
         return atom;
     }
@@ -36,14 +44,24 @@ class Frame{
         this._bonds.push(bond);
         return bond;
     }
+
+    public get_atom_by_name(name: string): Atom | undefined {
+        return this._atoms.find(atom => atom.name === name);
+    }
+
+    get n_atoms(): number {
+        return this._atoms.length;
+    }
 }
 
 class Atom {
 
+    public name: string;
     public position: Vector3;
     public props: object;
 
-    constructor(x: number, y: number, z: number, props: object) {
+    constructor(name: string, x: number, y: number, z: number, props: object = {}) {
+        this.name = name;
         this.position = new Vector3(x, y, z);
         this.props = props;
     }

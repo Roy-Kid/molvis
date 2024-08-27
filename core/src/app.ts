@@ -50,8 +50,8 @@ class Molvis {
         return this._mode;
     }
 
-    public add_atom = (x: number, y: number, z: number, props: object = {}) => {
-        const atom = this._system.current_frame.add_atom(x, y, z, props);
+    public add_atom = (name : string, x: number, y: number, z: number, props: object = { type: 0}) => {
+        const atom = this._system.current_frame.add_atom(name, x, y, z, props);
         this._world.artist.draw_atom(atom);
         return atom;
     }
