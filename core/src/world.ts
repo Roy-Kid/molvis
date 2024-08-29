@@ -80,6 +80,13 @@ class World {
         });
     }
 
+    public clear() {
+        while(this._scene.meshes.length) {
+            const mesh = this._scene.meshes[0]
+            mesh.dispose();
+        }
+    }
+
     public select_mesh(mesh: Mesh) {
         this._selected.push(mesh);
     }

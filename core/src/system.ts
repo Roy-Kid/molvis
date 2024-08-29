@@ -7,13 +7,45 @@ class System{
     private _current_frame_index: number;
 
     constructor() {
-        this._traj = [new Frame()];
+        this._traj = [];
         this._current_frame_index = 0;
         this._selected = [];
     }
 
     public get current_frame(): Frame {
         return this._traj[this._current_frame_index];
+    }
+
+    public get traj(): Frame[] {
+        return this._traj;
+    }
+
+    public set current_frame_index(idx: number) {
+        this._current_frame_index = idx;
+    }
+
+    public get_frame(idx: number): Frame {
+        return this._traj[idx];
+    }
+
+    public change_frame(idx: number) {
+        this._current_frame_index = idx;
+    }
+
+    public next_frame() {
+        this._current_frame_index += 1;
+        if (this._current_frame_index >= this._traj.length) {
+            this._current_frame_index = this._traj.length - 1;
+        }
+        return this.current_frame;
+    }
+
+    public prev_frame() {
+        this._current_frame_index -= 1;
+        if (this._current_frame_index < 0) {
+            this._current_frame_index = 0;
+        }
+        return this.current_frame;
     }
 
     static random_atom_id(): string {
@@ -27,16 +59,22 @@ class System{
     public select_atom(atom: Atom) {
         this._selected.push(atom);
     }
+
+    public append_frame(frame: Frame) {
+        this._traj.push(frame);
+    }
 }
 
 class Frame{
 
     private _atoms: Atom[];
     private _bonds: Bond[];
+    private _props: Map<string, any>;
 
     constructor() {
         this._atoms = [];
         this._bonds = [];
+        this._props = new Map();
     }
 
     public add_atom(name: string, x: number, y: number, z: number, props: object = {}): Atom {
@@ -58,6 +96,18 @@ class Frame{
 
     get n_atoms(): number {
         return this._atoms.length;
+    }
+
+    get props(): Map<string, any> {
+        return this._props;
+    }
+
+    get atoms(): Atom[] {
+        return this._atoms;
+    }
+
+    get bonds(): Bond[] {
+        return this._bonds;
     }
 }
 

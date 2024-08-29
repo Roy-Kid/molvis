@@ -81,7 +81,9 @@ abstract class Mode {
   }
 
   private unregister_pointer_events = () => {
-    let is_successful = this._scene.onPointerObservable.remove(this._pointer_observer);
+    let is_successful = this._scene.onPointerObservable.remove(
+      this._pointer_observer
+    );
     if (!is_successful) {
     }
   };
@@ -112,22 +114,24 @@ abstract class Mode {
           break;
       }
     });
-
-  };
+  }
 
   private register_keyboard_events = () => {
+    console.log("register_keyboard_events");
     return this._scene.onKeyboardObservable.add((kbInfo) => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
           switch (kbInfo.event.key) {
-            case "ArrowRight":
-              console.log("ArrowRight");
+            case "e":
+              this._on_press_e();
+              break;
+            case "q":
+              this._on_press_q();
               break;
           }
           break;
       }
     });
-
   };
 
   _on_mouse_down(pointerInfo: PointerInfo): void {}
@@ -209,17 +213,27 @@ class EditMode extends Mode {
         const drag_on_atom = this._system.current_frame.get_atom_by_name(
           this._mesh_on_mouse_down.name.substring(4)
         );
+        if (drag_on_atom === undefined) {
+          throw new Error(
+            `Atom ${this._mesh_on_mouse_down.name.substring(4)} not found`
+          );
+        }
         const dragging_atom_mesh = this._scene.getMeshByName("_dragging_atom");
+        if (dragging_atom_mesh === null) {
+          throw new Error(`Mesh _dragging_atom not found`);
+        }
         const dragging_bond_mesh =
           this._scene.getMeshByName("bond_on_dragging");
-        dragging_atom_mesh!.name = `atom${System.random_atom_id()}`;
+        dragging_atom_mesh.name = `atom${System.random_atom_id()}`;
+
         const dragging_atom = this._system.current_frame.add_atom(
-          dragging_atom_mesh!.name,
-          dragging_atom_mesh!.position.x,
-          dragging_atom_mesh!.position.y,
-          dragging_atom_mesh!.position.z,
+          dragging_atom_mesh.name.substring(4),
+          dragging_atom_mesh.position.x,
+          dragging_atom_mesh.position.y,
+          dragging_atom_mesh.position.z,
           drag_on_atom?.props
         );
+        console.log(dragging_atom);
         const dragging_bond = this._system.current_frame.add_bond(
           drag_on_atom!,
           dragging_atom,
@@ -321,6 +335,19 @@ class ViewMode extends Mode {
   override _on_mouse_tap(pointerInfo: PointerInfo) {}
 
   override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
+
+  _on_press_e() {
+    const frame = this._app.system.next_frame();
+    this._app.world.clear();
+    this._app.world.artist.draw_frame(frame);
+  }
+  
+  _on_press_q() {
+    const frame = this._app.system.prev_frame();
+    this._app.world.clear();
+    this._app.world.artist.draw_frame(frame);
+  }
+
 }
 
 class SelectMode extends Mode {

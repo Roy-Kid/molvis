@@ -21,7 +21,8 @@
           "ms-python.python",
           "ms-toolsai.jupyter",
           "ms-python.black",
-          "ms-python.isort"
+          "ms-python.isort",
+          "esbenp.prettier-vscode"
         ]
       }
     },

@@ -1,6 +1,13 @@
 import { World } from "./world";
-import { System } from "./system";
-import { EditMode, Mode, ModeType, ViewMode, SelectMode, ManupulateMode } from "./mode";
+import { Frame, System, Atom, Bond } from "./system";
+import {
+  EditMode,
+  Mode,
+  ModeType,
+  ViewMode,
+  SelectMode,
+  ManupulateMode,
+} from "./mode";
 import { KeyboardEventTypes } from "@babylonjs/core";
 
 interface JsonRpcRequest {
@@ -37,27 +44,26 @@ class Molvis {
 
   private init_mode = () => {
     this._world.scene.onKeyboardObservable.add((kbInfo) => {
-        switch (kbInfo.type) {
-          case KeyboardEventTypes.KEYDOWN:
-            switch (kbInfo.event.key) {
-              case "1":
-                this._mode = this.switch_mode("view");
-                break;
-              case "2":
-                this._mode = this.switch_mode("select");
-                break;
-              case "3":
-                this._mode = this.switch_mode("edit");
-                break;
-              case "4":
-                this._mode = this.switch_mode("manupulate");
-            }
-            break;
-        }
-      });
+      switch (kbInfo.type) {
+        case KeyboardEventTypes.KEYDOWN:
+          switch (kbInfo.event.key) {
+            case "1":
+              this._mode = this.switch_mode("view");
+              break;
+            case "2":
+              this._mode = this.switch_mode("select");
+              break;
+            case "3":
+              this._mode = this.switch_mode("edit");
+              break;
+            case "4":
+              this._mode = this.switch_mode("manupulate");
+          }
+          break;
+      }
+    });
     return new ViewMode(this);
   };
-
 
   public switch_mode = (mode: string): Mode => {
     let _mode = undefined;
@@ -73,11 +79,10 @@ class Molvis {
         break;
       case "manupulate":
         _mode = new ManupulateMode(this);
-        break
+        break;
       default:
         throw new Error("Invalid mode");
     }
-    console.log('finish mode', this._mode.name);
     this._mode.finish();
     return _mode;
   };
@@ -103,6 +108,54 @@ class Molvis {
     return bond;
   };
 
+  public add_frame = (
+    step: number,
+    atoms: { names: string[]; xyz: number[][]; props?: Map<string, any[]> },
+    bonds: { bond_ids: number[][]; props?: Map<string, any[]> } = {
+      bond_ids: [],
+      props: new Map<string, any[]>(),
+    }
+  ) => {
+    const frame = new Frame();
+    frame.props.set("step", step);
+    const _atoms = new Map<string, Atom>();
+    for (let i = 0; i < atoms.names.length; i++) {
+      _atoms.set(
+        atoms.names[i],
+        frame.add_atom(
+          atoms.names[i],
+          atoms.xyz[i][0],
+          atoms.xyz[i][1],
+          atoms.xyz[i][2],
+          new Map(Object.entries(atoms.props ? atoms.props: new Map()).map(([k, v]) => [k, v[i]]))
+        )
+      );
+    }
+    for (let i = 0; i < bonds.bond_ids.length; i++) {
+      const [atom1_idx, atom2_idx] = bonds.bond_ids[i];
+      const atom1 = _atoms.get(atoms.names[atom1_idx]);
+      const atom2 = _atoms.get(atoms.names[atom2_idx]);
+      if (atom1 === undefined) {
+        throw new Error(`Atom ${atoms.names[atom1_idx]} not found`);
+      }
+      if (atom2 === undefined) {
+        throw new Error(`Atom ${atoms.names[atom2_idx]} not found`);
+      }
+      frame.add_bond(
+        atom1,
+        atom2,
+        new Map(Object.entries(bonds.props ? bonds.props : new Map()).map(([k, v]) => [k, v[i]]))
+      );
+    }
+    this._system.append_frame(frame);
+  }
+
+  public draw_frame = (idx: number) => {
+    this._system.current_frame_index = idx;
+    const frame = this._system.current_frame;
+    this._world.artist.draw_frame(frame);
+  };
+
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
     const { jsonrpc, method, params, id } = request;
     if (jsonrpc !== "2.0") {
@@ -123,9 +176,7 @@ class Molvis {
     }
 
     try {
-      console.log("start exec", method, " with ", params);
       const result = func(...Object.values(params || {}));
-      console.log("exec_cmd result", result);
       return {
         jsonrpc: "2.0",
         result,

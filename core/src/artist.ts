@@ -1,34 +1,50 @@
 import { Scene, MeshBuilder, Mesh } from "@babylonjs/core";
-import { Atom, Bond } from "./system";
+import { Atom, Bond, Frame } from "./system";
 
 class Artist {
+  private _scene: Scene;
 
-    private _scene: Scene;
+  constructor(scene: Scene) {
+    this._scene = scene;
+  }
 
-    constructor(scene: Scene) {
-        this._scene = scene;
+  public draw_atom(atom: Atom) {
+    const sphere = MeshBuilder.CreateSphere(
+      `atom${atom.name}`,
+      { diameter: 1 },
+      this._scene
+    );
+    sphere.position = atom.position;
+
+    return sphere;
+  }
+
+  public draw_bond(bond: Bond, options?: { radius?: number; instance?: Mesh }) {
+    let _options = {
+      path: [bond.itom.position, bond.jtom.position],
+      radius: 0.1,
+    };
+    // update _options with options with all keys
+    _options = Object.assign(_options, options);
+
+    const tube = MeshBuilder.CreateTube(
+      `bond${bond.itom.name}-${bond.jtom.name}`,
+      _options,
+      this._scene
+    );
+    return tube;
+  }
+
+  public draw_frame(frame: Frame) {
+
+    for (let atom of frame.atoms) {
+      this.draw_atom(atom);
     }
 
-    public draw_atom(atom: Atom) {
-        const sphere = MeshBuilder.CreateSphere(`atom${atom.name}`, { diameter: 1 }, this._scene);
-        sphere.position = atom.position;
-
-        return sphere;
+    for (let bond of frame.bonds) {
+      this.draw_bond(bond);
     }
-
-    public draw_bond(bond: Bond, options?: { radius?: number, instance?: Mesh }) {
-
-        let _options = {
-            path: [bond.itom.position, bond.jtom.position],
-            radius: 0.1
-        }
-        // update _options with options with all keys
-        _options = Object.assign(_options, options);
-
-        const tube = MeshBuilder.CreateTube(`bond${bond.itom.name}-${bond.jtom.name}`, _options, this._scene);
-        return tube;
-    }
-
+  }
 }
 
 export { Artist };
