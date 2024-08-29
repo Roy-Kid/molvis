@@ -1,4 +1,4 @@
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Color3 } from '@babylonjs/core';
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Color3, Mesh } from '@babylonjs/core';
 import { Artist } from './artist';
 import { AxisHelper } from './axes';
 
@@ -10,6 +10,8 @@ class World {
     private _camera: ArcRotateCamera;
     private _artist: Artist;
     private _axes: AxisHelper;
+
+    private _selected: Mesh[] = [];
 
     constructor(canvas: HTMLCanvasElement) {
         this._engine = new Engine(canvas, true);
@@ -76,6 +78,10 @@ class World {
         window.addEventListener("resize", () => {
             this.engine.resize();
         });
+    }
+
+    public select_mesh(mesh: Mesh) {
+        this._selected.push(mesh);
     }
 
 }

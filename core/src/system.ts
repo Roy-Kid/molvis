@@ -2,12 +2,14 @@ import { Vector3 } from "@babylonjs/core";
 
 class System{
 
+    private _selected: Atom[];
     private _traj: Frame[];
     private _current_frame_index: number;
 
     constructor() {
         this._traj = [new Frame()];
         this._current_frame_index = 0;
+        this._selected = [];
     }
 
     public get current_frame(): Frame {
@@ -21,6 +23,10 @@ class System{
 
         return hexID;
     }
+
+    public select_atom(atom: Atom) {
+        this._selected.push(atom);
+    }
 }
 
 class Frame{
@@ -33,14 +39,15 @@ class Frame{
         this._bonds = [];
     }
 
-    public add_atom(name: string, x: number, y: number, z: number, props: object): Atom {
+    public add_atom(name: string, x: number, y: number, z: number, props: object = {}): Atom {
         const atom = new Atom(name, x, y, z, props);
         this._atoms.push(atom);
         return atom;
     }
 
     public add_bond(itom: Atom, jtom: Atom, props: object): Bond {
-        const bond = new Bond(itom, jtom, props);
+        const name = `${itom.name}-${jtom.name}`;
+        const bond = new Bond(name, itom, jtom, props);
         this._bonds.push(bond);
         return bond;
     }
@@ -70,11 +77,13 @@ class Atom {
 
 class Bond {
 
+    public name: string;
     public itom: Atom;
     public jtom: Atom;
     public props: object;
 
-    constructor(itom: Atom, jtom: Atom, props: object) {
+    constructor(name:string, itom: Atom, jtom: Atom, props: object) {
+        this.name = name;
         this.itom = itom;
         this.jtom = jtom;
         this.props = props;
