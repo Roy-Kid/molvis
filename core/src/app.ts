@@ -9,6 +9,7 @@ import {
   ManupulateMode,
 } from "./mode";
 import { KeyboardEventTypes } from "@babylonjs/core";
+import { Logger } from "tslog";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -16,6 +17,8 @@ interface JsonRpcRequest {
   params?: object;
   id?: string | number | null;
 }
+
+const logger = new Logger({ name: "molvis-core" });
 
 class Molvis {
   private _world: World;
@@ -28,6 +31,7 @@ class Molvis {
     this._world = new World(canvas);
     this._system = new System();
     this._mode = this.init_mode();
+    logger.info("Molvis initialized");
   }
 
   get world(): World {
@@ -193,6 +197,10 @@ class Molvis {
 
   public render = () => {
     this._world.render();
+  };
+
+  public finalize = () => {
+    
   };
 }
 

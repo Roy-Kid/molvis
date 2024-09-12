@@ -8,6 +8,12 @@ export default defineConfig({
 			entry: ["src/index.ts"],
 			formats: ["es"],
 		},
+		rollupOptions:{
+			"output": {
+				"inlineDynamicImports": true,
+				"entryFileNames": "molvis.js"
+			}
+		}
 	},
     plugins: [anywidget()],
 });

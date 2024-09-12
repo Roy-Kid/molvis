@@ -11,10 +11,14 @@
   "scripts": {
     "dev:core": "vite core",
     "dev:widget": "vite widget",
-    "build:core": "npm run -w core build"
+    "build:core": "npm run -w core build",
+    "build:widget": "npm run build -w widget"
   },
   "devDependencies": {
     "@anywidget/vite": "^0.2.0",
     "vite": "^5.4.2"
+  },
+  "dependencies": {
+    "tslog": "^4.9.3"
   }
 }

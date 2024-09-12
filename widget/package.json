@@ -2,7 +2,9 @@
   "name": "widget",
   "version": "1.0.0",
   "type": "module",
-  "scripts": {},
+  "scripts": {
+    "build": "vite build"
+  },
   "author": "Roy Kid",
   "dependencies": {
     "@anywidget/types": "^0.1.9",

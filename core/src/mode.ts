@@ -117,7 +117,6 @@ abstract class Mode {
   }
 
   private register_keyboard_events = () => {
-    console.log("register_keyboard_events");
     return this._scene.onKeyboardObservable.add((kbInfo) => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
