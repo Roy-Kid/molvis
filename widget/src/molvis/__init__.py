@@ -5,7 +5,7 @@ import logging
 
 logger = logging.getLogger("molvis-widget-py")
 
-_DEV = True  # switch to False for production
+_DEV = True
 
 if _DEV:
     # from `npx vite`
@@ -25,18 +25,12 @@ class Molvis(anywidget.AnyWidget):
     _esm = ESM
     _css = CSS
 
-    _width = traitlets.Int(800).tag(sync=True)
-    _height = traitlets.Int(600).tag(sync=True)
+    width = traitlets.Int(800).tag(sync=True)
+    height = traitlets.Int(600).tag(sync=True)
+    ready = traitlets.Bool(False).tag(sync=True)
 
-    def __init__(self, width: int = 800, height: int = 600, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.resize(width, height)
-
-    def resize(self, width: int, height: int):
-        self._width = width
-        self._height = height
-        logger.info(f"resize: {width}x{height}")
-        return self
 
     def send_cmd(self, method: str, params:dict, buffers: list):
         jsonrpc = {
@@ -45,11 +39,12 @@ class Molvis(anywidget.AnyWidget):
             "params": params,
         }
         self.send(jsonrpc, buffers=buffers)
-        logger.info(jsonrpc)
 
-    def add_atom(self, x: float, y: float, z: float):
+    def add_atom(self, name: str, x: float, y: float, z: float):
         self.send_cmd("add_atom", {
+            "name": name,
             "x": x,
             "y": y,
             "z": z,
         }, [])
+        return self

@@ -77,7 +77,7 @@ class Frame{
         this._props = new Map();
     }
 
-    public add_atom(name: string, x: number, y: number, z: number, props: object = {}): Atom {
+    public add_atom = (name: string, x: number, y: number, z: number, props: object = {}): Atom => {
         const atom = new Atom(name, x, y, z, props);
         this._atoms.push(atom);
         return atom;

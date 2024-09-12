@@ -14,8 +14,8 @@ import { Logger } from "tslog";
 interface JsonRpcRequest {
   jsonrpc: string;
   method: string;
-  params?: object;
-  id?: string | number | null;
+  params: object;
+  id: number | null;
 }
 
 const logger = new Logger({ name: "molvis-core" });
@@ -31,7 +31,6 @@ class Molvis {
     this._world = new World(canvas);
     this._system = new System();
     this._mode = this.init_mode();
-    logger.info("Molvis initialized");
   }
 
   get world(): World {
@@ -98,6 +97,9 @@ class Molvis {
     z: number,
     props: object = { type: 0 }
   ) => {
+    if (this._system.current_frame === undefined) {
+      this._system.append_frame(new Frame());
+    }
     const atom = this._system.current_frame.add_atom(name, x, y, z, props);
     this._world.artist.draw_atom(atom);
     return atom;
@@ -170,31 +172,39 @@ class Molvis {
       };
     }
 
-    const func = (this as any)[method];
-    if (!func) {
-      return {
-        jsonrpc: "2.0",
-        error: { code: -32601, message: "Method not found" },
-        id: id || null,
-      };
-    }
-
     try {
-      const result = func(...Object.values(params || {}));
+      const parts = method.split('.');
+      const methodName = parts.pop();
+      if (!methodName) {
+        throw new Error('Invalid method format');
+      }
+  
+      const context = parts.reduce((acc, part) => acc && acc[part], this);
+      if (!context || typeof context[methodName] !== 'function') {
+        throw new Error('Method not found or is not a function');
+      }
+  
+      const func = context[methodName].bind(context);
+      const kwargs = params || {};
+      const result = func(...Object.values(kwargs));
+  
+      // 返回 JSON-RPC 响应
       return {
         jsonrpc: "2.0",
         result,
         id: id || null,
       };
+  
     } catch (error: any) {
+      // 错误处理
       return {
         jsonrpc: "2.0",
         error: { code: -32603, message: error.message, data: error.stack },
         id: id || null,
       };
     }
-  };
-
+  }
+  
   public render = () => {
     this._world.render();
   };
