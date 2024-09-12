@@ -3,6 +3,8 @@ import anywidget
 import traitlets
 import logging
 
+import molpy as mp
+
 logger = logging.getLogger("molvis-widget-py")
 
 _DEV = True
@@ -40,11 +42,23 @@ class Molvis(anywidget.AnyWidget):
         }
         self.send(jsonrpc, buffers=buffers)
 
-    def add_atom(self, name: str, x: float, y: float, z: float):
-        self.send_cmd("add_atom", {
-            "name": name,
-            "x": x,
-            "y": y,
-            "z": z,
-        }, [])
+    def add_atom(self, atom: mp.Atom):
+
+        atom_dict = atom.to_dict()
+        if 'xyz' in atom_dict:
+            xyz = atom_dict.pop('xyz')
+            atom_dict['x'], atom_dict['y'], atom_dict['z'] = xyz
+        self.send_cmd("add_atom", atom_dict, [])
+        return self
+    
+    def add_bond(self, bond: mp.Bond):
+        self.send_cmd("add_bond", bond.to_dict(), [])
+        return self
+    
+    
+    def add_struct(self, struct: mp.Struct):
+        for atom in struct.atoms:
+            self.add_atom(atom)
+        for bond in struct.bonds:
+            self.add_bond(bond)
         return self

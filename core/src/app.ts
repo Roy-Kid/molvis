@@ -91,70 +91,31 @@ class Molvis {
   };
 
   public add_atom = (
-    name: string,
+    id: number,
     x: number,
     y: number,
     z: number,
     props: object = { type: 0 }
   ) => {
-    if (this._system.current_frame === undefined) {
-      this._system.append_frame(new Frame());
-    }
-    const atom = this._system.current_frame.add_atom(name, x, y, z, props);
-    this._world.artist.draw_atom(atom);
+    const atom = this._system.current_frame.add_atom(id, x, y, z, props);
+    logger.debug(this._system.current_frame.n_atoms);
     return atom;
   };
 
-  public add_bond = (itom: any, jtom: any, props: object = {}) => {
-    const atom1 = itom;
-    const atom2 = jtom;
-
-    const bond = this._system.current_frame.add_bond(atom1, atom2, props);
+  public add_bond = (itom: Atom|number, jtom: Atom|number, props: object = {}) => {
+    if (typeof itom === 'number') {
+      itom = this._system.current_frame.get_atom((atom: Atom) => atom.id === itom)!;
+    }
+    if (typeof jtom === 'number') {
+      jtom = this._system.current_frame.get_atom((atom: Atom) => atom.id === jtom)!;
+    }
+    if (itom === undefined || jtom === undefined) {
+      throw new Error('Atom not found');
+    }
+    const bond = this._system.current_frame.add_bond(itom, jtom, props);
     this._world.artist.draw_bond(bond);
     return bond;
   };
-
-  public add_frame = (
-    step: number,
-    atoms: { names: string[]; xyz: number[][]; props?: Map<string, any[]> },
-    bonds: { bond_ids: number[][]; props?: Map<string, any[]> } = {
-      bond_ids: [],
-      props: new Map<string, any[]>(),
-    }
-  ) => {
-    const frame = new Frame();
-    frame.props.set("step", step);
-    const _atoms = new Map<string, Atom>();
-    for (let i = 0; i < atoms.names.length; i++) {
-      _atoms.set(
-        atoms.names[i],
-        frame.add_atom(
-          atoms.names[i],
-          atoms.xyz[i][0],
-          atoms.xyz[i][1],
-          atoms.xyz[i][2],
-          new Map(Object.entries(atoms.props ? atoms.props: new Map()).map(([k, v]) => [k, v[i]]))
-        )
-      );
-    }
-    for (let i = 0; i < bonds.bond_ids.length; i++) {
-      const [atom1_idx, atom2_idx] = bonds.bond_ids[i];
-      const atom1 = _atoms.get(atoms.names[atom1_idx]);
-      const atom2 = _atoms.get(atoms.names[atom2_idx]);
-      if (atom1 === undefined) {
-        throw new Error(`Atom ${atoms.names[atom1_idx]} not found`);
-      }
-      if (atom2 === undefined) {
-        throw new Error(`Atom ${atoms.names[atom2_idx]} not found`);
-      }
-      frame.add_bond(
-        atom1,
-        atom2,
-        new Map(Object.entries(bonds.props ? bonds.props : new Map()).map(([k, v]) => [k, v[i]]))
-      );
-    }
-    this._system.append_frame(frame);
-  }
 
   public draw_frame = (idx: number) => {
     this._system.current_frame_index = idx;
@@ -186,7 +147,7 @@ class Molvis {
   
       const func = context[methodName].bind(context);
       const kwargs = params || {};
-      const result = func(...Object.values(kwargs));
+      const result = func(kwargs);
   
       // 返回 JSON-RPC 响应
       return {

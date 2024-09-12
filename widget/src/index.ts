@@ -26,6 +26,7 @@ class MolvisWidget {
 
   public handle_custom_message = (msg: any, buffers: DataView[]) => {
     const response = this._molvis.exec_cmd(msg, buffers);
+    logger.info("response", response);
   }
 
   public start() {
