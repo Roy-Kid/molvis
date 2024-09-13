@@ -25,8 +25,11 @@ class MolvisWidget {
   }
 
   public handle_custom_message = (msg: any, buffers: DataView[]) => {
-    const response = this._molvis.exec_cmd(msg, buffers);
-    logger.info("response", response);
+    logger.info("Received custom message", msg);
+    logger.info(typeof msg.atoms.props);
+    const cmd = JSON.parse(msg);
+    const response = this._molvis.controller.exec_cmd(cmd, buffers);
+    logger.info("Response", response);
   }
 
   public start() {

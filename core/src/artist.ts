@@ -10,7 +10,7 @@ class Artist {
 
   public draw_atom(atom: Atom) {
     const sphere = MeshBuilder.CreateSphere(
-      `atom${atom.name}`,
+      `atom${atom.id}`,
       { diameter: 1 },
       this._scene
     );
@@ -28,7 +28,7 @@ class Artist {
     _options = Object.assign(_options, options);
 
     const tube = MeshBuilder.CreateTube(
-      `bond${bond.itom.name}-${bond.jtom.name}`,
+      `bond${bond.itom.id}-${bond.jtom.id}`,
       _options,
       this._scene
     );

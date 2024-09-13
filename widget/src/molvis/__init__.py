@@ -2,6 +2,7 @@ import pathlib
 import anywidget
 import traitlets
 import logging
+import json
 
 import molpy as mp
 
@@ -40,25 +41,31 @@ class Molvis(anywidget.AnyWidget):
             "method": method,
             "params": params,
         }
-        self.send(jsonrpc, buffers=buffers)
+        self.send(json.dumps(jsonrpc), buffers=buffers)
 
-    def add_atom(self, atom: mp.Atom):
+    def draw_atom(self, atom: mp.Atom):
 
         atom_dict = atom.to_dict()
         if 'xyz' in atom_dict:
             xyz = atom_dict.pop('xyz')
             atom_dict['x'], atom_dict['y'], atom_dict['z'] = xyz
-        self.send_cmd("add_atom", atom_dict, [])
+        self.send_cmd("draw_atom", atom_dict, [])
         return self
     
-    def add_bond(self, bond: mp.Bond):
-        self.send_cmd("add_bond", bond.to_dict(), [])
+    def draw_bond(self, bond: mp.Bond):
+        self.send_cmd("draw_bond", bond.to_dict(), [])
         return self
     
-    
-    def add_struct(self, struct: mp.Struct):
-        for atom in struct.atoms:
-            self.add_atom(atom)
-        for bond in struct.bonds:
-            self.add_bond(bond)
+    def draw_struct(self, struct: mp.Struct):
+        atoms = {
+            'id': [int(atom.id) for atom in struct.atoms],
+            'xyz': [atom['xyz'].tolist() for atom in struct.atoms],
+            'props': {}
+        }
+        bonds = {
+            'i': [int(bond.itom.id) for bond in struct.bonds],
+            'j': [int(bond.jtom.id) for bond in struct.bonds],
+        }
+        print(atoms, bonds)
+        self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
         return self
