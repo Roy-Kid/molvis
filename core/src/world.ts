@@ -1,7 +1,9 @@
 import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Color3, Mesh } from '@babylonjs/core';
 import { Artist } from './artist';
 import { AxisHelper } from './axes';
+import { Logger } from 'tslog';
 
+const logger = new Logger({ name: "molvis-core" });
 
 class World {
 
@@ -89,6 +91,10 @@ class World {
 
     public select_mesh(mesh: Mesh) {
         this._selected.push(mesh);
+    }
+
+    public resize() {
+        this.engine.resize();
     }
 
 }

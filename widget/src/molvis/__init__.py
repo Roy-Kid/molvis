@@ -50,22 +50,20 @@ class Molvis(anywidget.AnyWidget):
             xyz = atom_dict.pop('xyz')
             atom_dict['x'], atom_dict['y'], atom_dict['z'] = xyz
         self.send_cmd("draw_atom", atom_dict, [])
-        return self
     
     def draw_bond(self, bond: mp.Bond):
         self.send_cmd("draw_bond", bond.to_dict(), [])
-        return self
     
     def draw_struct(self, struct: mp.Struct):
         atoms = {
             'id': [int(atom.id) for atom in struct.atoms],
             'xyz': [atom['xyz'].tolist() for atom in struct.atoms],
-            'props': {}
+            'props': {
+                'element': [atom['element'] for atom in struct.atoms],
+            }
         }
         bonds = {
             'i': [int(bond.itom.id) for bond in struct.bonds],
             'j': [int(bond.jtom.id) for bond in struct.bonds],
         }
-        print(atoms, bonds)
         self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
-        return self

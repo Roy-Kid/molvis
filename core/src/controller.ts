@@ -28,7 +28,6 @@ export class Controller {
     z: number,
     props: object
   ) => {
-    logger.info(`Draw atom ${id} at (${x}, ${y}, ${z}) with ${props}`);
     const atom = this._system.current_frame.add_atom(id, x, y, z, props);
     this._world.artist.draw_atom(atom);
     return atom;
@@ -51,23 +50,31 @@ export class Controller {
       j: number[];
     }
   ) => {
-    for (let i = 0; i < atoms.id.length; i++) {
+
+    const n_atoms = atoms.id.length;
+    const n_bonds = bonds.i.length;
+
+    for (let i = 0; i < n_atoms; i++) {
       const id = atoms.id[i];
       const x = atoms.xyz[i][0];
       const y = atoms.xyz[i][1];
       const z = atoms.xyz[i][2];
-      const prop = {};
-      for (const [key, values] of Object.entries(atoms.props)) {
-        prop[key] = values[i];
-      this.draw_atom(id, x, y, z, prop);
+      const prop = new Map<string, string>();
+      for (const [key, value] of Object.entries(atoms.props)) {
+        prop.set(key, value[i]);
       }
+      this.draw_atom(id, x, y, z, prop);
     }
-    const registed_atoms = this._system.current_frame.atoms;
-    for (let i = 0; i < bonds.i.length; i++) {
-      const itom = registed_atoms[bonds.i[i]];
-      const jtom = registed_atoms[bonds.j[i]];
-      this.draw_bond(itom, jtom);
+    const id_atom_map = this._system.current_frame.atoms.reduce((acc, atom) => {
+      acc.set(atom.id, atom);
+      return acc;
+    }, new Map<number, Atom>());
+    for (let i = 0; i < n_bonds; i++) {
+      const itom = id_atom_map.get(bonds.i[i]);
+      const jtom = id_atom_map.get(bonds.j[i]);
+      this.draw_bond(itom!, jtom!);
     }
+    logger.info(`Frame drawn with ${n_atoms} atoms and ${n_bonds} bonds`);
     return this._system.current_frame;
   };
 
@@ -79,7 +86,7 @@ export class Controller {
 
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
     const { jsonrpc, method, params, id } = request;
-    
+
     if (jsonrpc !== "2.0") {
       return {
         jsonrpc: "2.0",
