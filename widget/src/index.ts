@@ -47,8 +47,9 @@ class MolvisWidget {
 
   public handle_custom_message = (msg: any, buffers: DataView[]) => {
     const cmd = JSON.parse(msg);
-    console.log(cmd);
+    console.info("exec", cmd);
     const response = this._molvis.controller.exec_cmd(cmd, buffers);
+    console.info("response", response);
   };
 
   public start() {

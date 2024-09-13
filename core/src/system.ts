@@ -121,9 +121,9 @@ class Frame {
 class Atom {
   public id: number;
   public position: Vector3;
-  public props: object;
+  public props: Map<string, any>;
 
-  constructor(id: number, x: number, y: number, z: number, props: object = {}) {
+  constructor(id: number, x: number, y: number, z: number, props: Map<string, any> = new Map()) {
     this.id = id;
     this.position = new Vector3(x, y, z);
     this.props = props;
@@ -134,9 +134,9 @@ class Bond {
   public name: string;
   public itom: Atom;
   public jtom: Atom;
-  public props: object;
+  public props: Map<string, any>;
 
-  constructor(name: string, itom: Atom, jtom: Atom, props: object) {
+  constructor(name: string, itom: Atom, jtom: Atom, props: Map<string, any> = new Map()) {
     this.name = name;
     this.itom = itom;
     this.jtom = jtom;

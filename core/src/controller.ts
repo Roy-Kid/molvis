@@ -50,7 +50,6 @@ export class Controller {
       j: number[];
     }
   ) => {
-
     const n_atoms = atoms.id.length;
     const n_bonds = bonds.i.length;
 
@@ -59,7 +58,7 @@ export class Controller {
       const x = atoms.xyz[i][0];
       const y = atoms.xyz[i][1];
       const z = atoms.xyz[i][2];
-      const prop = new Map<string, string>();
+      const prop = new Map<string, any>();
       for (const [key, value] of Object.entries(atoms.props)) {
         prop.set(key, value[i]);
       }
