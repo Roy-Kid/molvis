@@ -140,6 +140,8 @@ abstract class Mode {
   _on_mouse_pick(pointerInfo: PointerInfo): void {}
   _on_mouse_tap(pointerInfo: PointerInfo): void {}
   _on_mouse_double_tap(pointerInfo: PointerInfo): void {}
+  _on_press_e(): void {}
+  _on_press_q(): void {}
 
   protected get_pointer_xy(): { x: number; y: number } {
     return { x: this._scene.pointerX, y: this._scene.pointerY };
@@ -325,7 +327,25 @@ class ViewMode extends Mode {
 
   override _on_mouse_up(pointerInfo: PointerInfo) {}
 
-  override _on_mouse_move(pointerInfo: PointerInfo) {}
+  override _on_mouse_move(pointerInfo: PointerInfo) {
+    const pick_info = pointerInfo.pickInfo;
+    if (pick_info && pick_info.pickedMesh) {
+      const picked_mesh = pick_info.pickedMesh;
+      const name = picked_mesh!.name;
+      const type = name.split(":")[0];
+      switch (type) {
+        case "atom":
+          console.log(
+            this._system.current_frame.get_atom((atom: Atom)=> atom.id === Number(name))
+          );
+          break;
+        case "bond":
+          console.log(
+            this._system.current_frame.get_bond((bond: Bond)=> bond.name === name)
+          );
+          break;
+      }
+  }}
 
   override _on_mouse_wheel(pointerInfo: PointerInfo) {}
 

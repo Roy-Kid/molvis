@@ -26,14 +26,18 @@ export class Controller {
     x: number,
     y: number,
     z: number,
-    props: object
+    props: Map<string, any> = new Map()
   ) => {
     const atom = this._system.current_frame.add_atom(id, x, y, z, props);
     this._world.artist.draw_atom(atom);
     return atom;
   };
 
-  public draw_bond = (itom: Atom, jtom: Atom, props: object = {}) => {
+  public draw_bond = (
+    itom: Atom,
+    jtom: Atom,
+    props: Map<string, any> = new Map()
+  ) => {
     const bond = this._system.current_frame.add_bond(itom, jtom, props);
     this._world.artist.draw_bond(bond);
     return bond;
@@ -85,7 +89,7 @@ export class Controller {
 
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
     const { jsonrpc, method, params, id } = request;
-
+    logger.info(`Received request: ${method}`);
     if (jsonrpc !== "2.0") {
       return {
         jsonrpc: "2.0",

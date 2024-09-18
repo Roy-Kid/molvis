@@ -24,8 +24,6 @@ class MolvisWidget {
     this._molvis = new Molvis(this._canvas);
     this.bind_canvas(el);
     model.on("msg:custom", this.handle_custom_message);
-
-    logger.info("MolvisWidget created");
   }
 
   private create_canvas = () => {
@@ -45,11 +43,11 @@ class MolvisWidget {
     el.appendChild(container);
   };
 
-  public handle_custom_message = (msg: any, buffers: DataView[]) => {
+  public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
+    logger.info("exec", msg);
     const cmd = JSON.parse(msg);
-    console.info("exec", cmd);
     const response = this._molvis.controller.exec_cmd(cmd, buffers);
-    console.info("response", response);
+    logger.info("response", response);
   };
 
   public start() {
@@ -69,11 +67,11 @@ const render: Render<WidgetModel> = ({ model, el }) => {
     molvis_widget.start();
   } else {
     molvis_widget.bind_canvas(el);
+    logger.info("bind canvas");
   }
   model.set("ready", true);
   model.save_changes();
   molvis_widget.resize();
-  logger.info("MolvisWidget rendered");
 };
 
 export default { render };

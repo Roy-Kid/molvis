@@ -83,14 +83,18 @@ class Frame {
     x: number,
     y: number,
     z: number,
-    props: object = {}
+    props: Map<string, any> = new Map()
   ): Atom => {
     const atom = new Atom(id, x, y, z, props);
     this._atoms.push(atom);
     return atom;
   };
 
-  public add_bond = (itom: Atom, jtom: Atom, props: object): Bond => {
+  public add_bond = (
+    itom: Atom,
+    jtom: Atom,
+    props: Map<string, any> = new Map()
+  ): Bond => {
     const name = `${itom.id}-${jtom.id}`;
     const bond = new Bond(name, itom, jtom, props);
     this._bonds.push(bond);
@@ -100,6 +104,10 @@ class Frame {
   public get_atom = (fn: (atom: Atom) => boolean): Atom | undefined => {
     return this._atoms.find(fn);
   };
+
+  public get_bond = (fn: (bond: Bond) => boolean): Bond | undefined => {
+    return this._bonds.find(fn);
+  }
 
   get n_atoms(): number {
     return this._atoms.length;
@@ -116,6 +124,12 @@ class Frame {
   get bonds(): Bond[] {
     return this._bonds;
   }
+
+  public clear() {
+    this._atoms = [];
+    this._bonds = [];
+    this._props = new Map();
+  }
 }
 
 class Atom {
@@ -123,7 +137,13 @@ class Atom {
   public position: Vector3;
   public props: Map<string, any>;
 
-  constructor(id: number, x: number, y: number, z: number, props: Map<string, any> = new Map()) {
+  constructor(
+    id: number,
+    x: number,
+    y: number,
+    z: number,
+    props: Map<string, any> = new Map()
+  ) {
     this.id = id;
     this.position = new Vector3(x, y, z);
     this.props = props;
@@ -136,7 +156,12 @@ class Bond {
   public jtom: Atom;
   public props: Map<string, any>;
 
-  constructor(name: string, itom: Atom, jtom: Atom, props: Map<string, any> = new Map()) {
+  constructor(
+    name: string,
+    itom: Atom,
+    jtom: Atom,
+    props: Map<string, any> = new Map()
+  ) {
     this.name = name;
     this.itom = itom;
     this.jtom = jtom;

@@ -15,7 +15,7 @@ class Artist {
     const radius = real_atom_palette.get_radius(atom);
 
     const sphere = MeshBuilder.CreateSphere(
-      `atom${atom.id}`,
+      `atom:${atom.id}`,
       { diameter: radius },
       this._scene
     );
@@ -35,7 +35,7 @@ class Artist {
     _options = Object.assign(_options, options);
 
     const tube = MeshBuilder.CreateTube(
-      `bond${bond.itom.id}-${bond.jtom.id}`,
+      `bond:${bond.itom.id}-${bond.jtom.id}`,
       _options,
       this._scene
     );

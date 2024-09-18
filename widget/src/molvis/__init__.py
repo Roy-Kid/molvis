@@ -8,11 +8,13 @@ import molpy as mp
 
 logger = logging.getLogger("molvis-widget-py")
 
+__version__ = "0.1.0"
+
 _DEV = True
 
 if _DEV:
     # from `npx vite`
-    ESM = "http://localhost:5173/src/index.ts?anywidget"
+    ESM = "http://localhost:5173/src/index.ts?anywidge"
     CSS = ""
 else:
     # from `npx vite build`
@@ -42,17 +44,18 @@ class Molvis(anywidget.AnyWidget):
             "params": params,
         }
         self.send(json.dumps(jsonrpc), buffers=buffers)
+        logger.info(f"send_cmd: {method} {params}")
+        return self
 
     def draw_atom(self, atom: mp.Atom):
 
         atom_dict = atom.to_dict()
-        if 'xyz' in atom_dict:
-            xyz = atom_dict.pop('xyz')
-            atom_dict['x'], atom_dict['y'], atom_dict['z'] = xyz
         self.send_cmd("draw_atom", atom_dict, [])
+        return self
     
     def draw_bond(self, bond: mp.Bond):
         self.send_cmd("draw_bond", bond.to_dict(), [])
+        return self
     
     def draw_struct(self, struct: mp.Struct):
         atoms = {
@@ -67,3 +70,23 @@ class Molvis(anywidget.AnyWidget):
             'j': [int(bond.jtom.id) for bond in struct.bonds],
         }
         self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
+        return self
+
+    def draw_frame(self, frame: mp.Frame):
+        atoms = {
+            'id': frame['atoms']['id'].to_pylist(),
+            'x': frame['atoms']['x'].to_pylist(),
+            'y': frame['atoms']['y'].to_pylist(),
+            'z': frame['atoms']['z'].to_pylist(),
+            'props': {}
+        }
+        bonds = {
+            'i': frame['bonds']['i'].to_pylist(),
+            'j': frame['bonds']['j'].to_pylist(),
+        }
+        self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
+        return self
+
+    def draw_system(self, system: mp.System):
+        self.draw_frame(system.frame)
+        return self
