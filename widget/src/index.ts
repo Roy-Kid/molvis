@@ -1,15 +1,11 @@
 import type { AnyModel, Render } from "@anywidget/types";
 import { Logger } from "tslog";
-import { preventEventPropagation } from "./utils";
+// import { preventEventPropagation } from "./utils";
 import "./style.css";
 
 const logger = new Logger({ name: "molvis-widget-ts" });
 
-interface WidgetModel {
-  _width: number;
-  _height: number;
-  ready: boolean;
-}
+interface WidgetModel {}
 
 import { Molvis } from "molvis";
 
@@ -33,14 +29,20 @@ class MolvisWidget {
   };
 
   public bind_canvas = (el: HTMLElement) => {
+    const old_container = document.getElementById("molvis-container");
+    if (old_container) {
+      old_container.remove();
+      logger.info("old container removed");
+    }
     let container = document.createElement("div");
     container.id = "molvis-container";
     let canvas_wrapper = document.createElement("div");
     canvas_wrapper.id = "molvis-wrapper";
     canvas_wrapper.appendChild(this._canvas);
-    preventEventPropagation(canvas_wrapper);
+    // preventEventPropagation(canvas_wrapper);
     container.appendChild(canvas_wrapper);
     el.appendChild(container);
+    logger.info("new container added");
   };
 
   public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
@@ -67,10 +69,7 @@ const render: Render<WidgetModel> = ({ model, el }) => {
     molvis_widget.start();
   } else {
     molvis_widget.bind_canvas(el);
-    logger.info("bind canvas");
   }
-  model.set("ready", true);
-  model.save_changes();
   molvis_widget.resize();
 };
 

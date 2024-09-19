@@ -84,6 +84,9 @@ class RealAtomPalette {
   }
   public get_color(atom: Atom) {
     const element = atom.props.get("element");
+    if (!element) {
+      return "#FFFFFF";
+    }
     const hash = stringToHash(element);
     return this.color[hash % this.color.length];
   }

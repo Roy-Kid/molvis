@@ -46,7 +46,9 @@ export class Controller {
   public draw_frame = (
     atoms: {
       id: number[];
-      xyz: number[][];
+      x: number[];
+      y: number[];
+      z: number[];
       props: object;
     },
     bonds: {
@@ -59,9 +61,9 @@ export class Controller {
 
     for (let i = 0; i < n_atoms; i++) {
       const id = atoms.id[i];
-      const x = atoms.xyz[i][0];
-      const y = atoms.xyz[i][1];
-      const z = atoms.xyz[i][2];
+      const x = atoms.x[i];
+      const y = atoms.y[i];
+      const z = atoms.z[i];
       const prop = new Map<string, any>();
       for (const [key, value] of Object.entries(atoms.props)) {
         prop.set(key, value[i]);

@@ -14,7 +14,7 @@ _DEV = True
 
 if _DEV:
     # from `npx vite`
-    ESM = "http://localhost:5173/src/index.ts?anywidge"
+    ESM = "http://localhost:5173/src/index.ts?anywidget"
     CSS = ""
 else:
     # from `npx vite build`
@@ -29,10 +29,6 @@ class Molvis(anywidget.AnyWidget):
 
     _esm = ESM
     _css = CSS
-
-    width = traitlets.Int(800).tag(sync=True)
-    height = traitlets.Int(600).tag(sync=True)
-    ready = traitlets.Bool(False).tag(sync=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
