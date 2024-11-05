@@ -3,13 +3,15 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite tests",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "main": "src/index.ts",
   "dependencies": {
     "@babylonjs/core": "^7.22.2",
+    "@babylonjs/gui": "^7.32.3",
+    "@babylonjs/materials": "^7.28.0",
     "chroma-js": "^3.1.1"
   }
 }

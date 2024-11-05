@@ -5,72 +5,96 @@ import "./style.css";
 
 const logger = new Logger({ name: "molvis-widget-ts" });
 
-interface WidgetModel {}
+interface WidgetModel {
+  width: number;
+  height: number;
+}
+
+function preventEventPropagation(element: HTMLElement) {
+  const stopPropagation = (e) => e.stopPropagation();
+  ["click", "keydown", "keyup", "keypress"].forEach((eventType) => {
+    element.addEventListener(eventType, stopPropagation, false);
+  });
+}
 
 import { Molvis } from "molvis";
 
 class MolvisWidget {
-  // private _model: AnyModel<WidgetModel>;
-  private _canvas: HTMLCanvasElement;
-  private _molvis: Molvis;
+  private canvas: HTMLCanvasElement;
+  private molvis: Molvis;
 
-  constructor(model: AnyModel<WidgetModel>, el: HTMLElement) {
-    // this._model = model;
-    this._canvas = this.create_canvas();
-    this._molvis = new Molvis(this._canvas);
-    this.bind_canvas(el);
+  constructor(model: AnyModel<WidgetModel>) {
+
+    const width = model.get("width");
+    const height = model.get("height");
+
+    this.canvas = document.createElement("canvas");
+    this.canvas.id = "molvis-canvas";
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.molvis = new Molvis(this.canvas);
     model.on("msg:custom", this.handle_custom_message);
   }
 
-  private create_canvas = () => {
-    let canvas = document.createElement("canvas") as HTMLCanvasElement;
-    canvas.id = "molvis-canvas";
-    return canvas;
-  };
-
-  public bind_canvas = (el: HTMLElement) => {
-    const old_container = document.getElementById("molvis-container");
-    if (old_container) {
-      old_container.remove();
-      logger.info("old container removed");
-    }
-    let container = document.createElement("div");
-    container.id = "molvis-container";
-    let canvas_wrapper = document.createElement("div");
-    canvas_wrapper.id = "molvis-wrapper";
-    canvas_wrapper.appendChild(this._canvas);
-    // preventEventPropagation(canvas_wrapper);
-    container.appendChild(canvas_wrapper);
-    el.appendChild(container);
-    logger.info("new container added");
-  };
-
   public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
-    logger.info("exec", msg);
     const cmd = JSON.parse(msg);
-    const response = this._molvis.controller.exec_cmd(cmd, buffers);
-    logger.info("response", response);
+    const response = this.molvis.controller.exec_cmd(cmd, buffers);
   };
 
-  public start() {
-    this._molvis.render();
+  public render = (el: HTMLElement) => {
+    el.appendChild(this.canvas);
+    this.resize();
+  };
+
+  public rerender = (model: AnyModel<WidgetModel>) => {
+
+    const width = model.get("width");
+    const height = model.get("height");
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.resize();
   }
 
-  public resize() {
-    this._molvis.resize();
-  }
+  public start = () => {
+    this.molvis.render();
+  };
+
+  public resize = () => {
+    this.molvis.resize();
+  };
 }
 
-let molvis_widget: MolvisWidget | undefined = undefined;
+export default () => {
+  let extraState: { molvis?: MolvisWidget } = {};
 
-const render: Render<WidgetModel> = ({ model, el }) => {
-  if (!molvis_widget) {
-    molvis_widget = new MolvisWidget(model, el);
-    molvis_widget.start();
-  } else {
-    molvis_widget.bind_canvas(el);
-  }
-  molvis_widget.resize();
+  return {
+    initialize({ model }: { model: AnyModel<WidgetModel> }) {
+      extraState.molvis = new MolvisWidget(model);
+      extraState.molvis.start();
+      return () => {
+        extraState.molvis = undefined;
+      }
+    },
+    render({ model, el }: { model: AnyModel<WidgetModel>; el: HTMLElement }) {
+
+      preventEventPropagation(el);
+      
+      const vscodeBackgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-editor-background');
+      
+      // 应用背景色到 widget 的 el 元素
+      if (vscodeBackgroundColor) {
+        el.style.backgroundColor = vscodeBackgroundColor.trim();
+      }
+      if (!extraState.molvis) logger.fatal("molvis not initialized");
+      else {
+        if (el.querySelector("#molvis-canvas")) {
+          extraState.molvis.rerender(model);
+        } else {
+          extraState.molvis.render(el);
+        }
+      }
+      return () => {
+      }
+    },
+  };
 };
-
-export default { render };

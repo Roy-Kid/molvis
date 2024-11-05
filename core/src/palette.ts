@@ -87,7 +87,7 @@ class RealAtomPalette {
     if (!element) {
       return "#FFFFFF";
     }
-    const hash = stringToHash(element);
+    const hash = stringToHash(String(element));
     return this.color[hash % this.color.length];
   }
 

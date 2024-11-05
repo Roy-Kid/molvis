@@ -79,13 +79,13 @@ class Frame {
   }
 
   public add_atom = (
-    id: number,
+    name: string,
     x: number,
     y: number,
     z: number,
     props: Map<string, any> = new Map()
   ): Atom => {
-    const atom = new Atom(id, x, y, z, props);
+    const atom = new Atom(name, x, y, z, props);
     this._atoms.push(atom);
     return atom;
   };
@@ -95,7 +95,7 @@ class Frame {
     jtom: Atom,
     props: Map<string, any> = new Map()
   ): Bond => {
-    const name = `${itom.id}-${jtom.id}`;
+    const name = `${itom.name}-${jtom.name}`;
     const bond = new Bond(name, itom, jtom, props);
     this._bonds.push(bond);
     return bond;
@@ -133,20 +133,28 @@ class Frame {
 }
 
 class Atom {
-  public id: number;
+  public name: string;
   public position: Vector3;
   public props: Map<string, any>;
 
   constructor(
-    id: number,
+    name: string,
     x: number,
     y: number,
     z: number,
     props: Map<string, any> = new Map()
   ) {
-    this.id = id;
+    this.name = name;
     this.position = new Vector3(x, y, z);
     this.props = props;
+  }
+
+  public get(key: string): any {
+    if (this.props.has(key)) {
+      return this.props.get(key);
+    } else {
+      this[key];
+    }
   }
 }
 

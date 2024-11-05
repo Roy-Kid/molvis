@@ -3,9 +3,9 @@ import anywidget from "@anywidget/vite";
 
 export default defineConfig({
 	build: {
-		outDir: "src/static",
+		outDir: "src/molvis/static",
 		lib: {
-			entry: ["src/index.ts"],
+			entry: ["src/molvis/index.ts"],
 			formats: ["es"],
 		},
 		rollupOptions:{

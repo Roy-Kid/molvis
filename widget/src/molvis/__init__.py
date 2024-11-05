@@ -14,11 +14,11 @@ _DEV = True
 
 if _DEV:
     # from `npx vite`
-    ESM = "http://localhost:5173/src/index.ts?anywidget"
+    ESM = "http://localhost:5173/src/index.ts?anywidget=1"
     CSS = ""
 else:
     # from `npx vite build`
-    bundled_assets_dir = pathlib.Path(__file__).parent.parent / "static"
+    bundled_assets_dir = pathlib.Path(__file__).parent / "static"
     ESM_path = bundled_assets_dir / "molvis.js"
     assert ESM_path.exists(), f"{ESM_path} not found"
     ESM = ESM_path.read_text()
@@ -30,8 +30,8 @@ class Molvis(anywidget.AnyWidget):
     _esm = ESM
     _css = CSS
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    width = traitlets.Int(800).tag(sync=True)
+    height = traitlets.Int(600).tag(sync=True)
 
     def send_cmd(self, method: str, params:dict, buffers: list):
         jsonrpc = {
@@ -55,17 +55,27 @@ class Molvis(anywidget.AnyWidget):
     
     def draw_struct(self, struct: mp.Struct):
         atoms = {
-            'id': [int(atom.id) for atom in struct.atoms],
-            'xyz': [atom['xyz'].tolist() for atom in struct.atoms],
+            'name': [atom['name'] for atom in struct['atoms']],
+            'x': [atom['x'] for atom in struct['atoms']],
+            'y': [atom['y'] for atom in struct['atoms']],
+            'z': [atom['z'] for atom in struct['atoms']],
             'props': {
-                'element': [atom['element'] for atom in struct.atoms],
+                'type': [atom['type'] for atom in struct['atoms']],
             }
         }
+        if 'element' in struct['atoms'][0]:
+            atoms['props']['element'] = [atom['element'] for atom in struct['atoms']]
         bonds = {
-            'i': [int(bond.itom.id) for bond in struct.bonds],
-            'j': [int(bond.jtom.id) for bond in struct.bonds],
+            'i': [int(bond['i']) for bond in struct['bonds']],
+            'j': [int(bond['j']) for bond in struct['bonds']],
         }
+        print(atoms)
+        print(bonds)
         self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
+        return self
+
+    def label_atom(self):
+        self.send_cmd("label_atom", {}, [])
         return self
 
     def draw_frame(self, frame: mp.Frame):
