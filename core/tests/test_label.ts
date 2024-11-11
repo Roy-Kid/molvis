@@ -11,4 +11,4 @@ const H2 = molvis.draw_atom("Hydrogen2", 0.047, 0.205, 1.784);
 molvis.draw_bond(O, H1);
 molvis.draw_bond(O, H2);
 
-molvis.label_atom();
+molvis.label_atom("name");

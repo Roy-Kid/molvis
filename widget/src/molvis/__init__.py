@@ -53,44 +53,43 @@ class Molvis(anywidget.AnyWidget):
         self.send_cmd("draw_bond", bond.to_dict(), [])
         return self
     
-    def draw_struct(self, struct: mp.Struct):
-        atoms = {
-            'name': [atom['name'] for atom in struct['atoms']],
-            'x': [atom['x'] for atom in struct['atoms']],
-            'y': [atom['y'] for atom in struct['atoms']],
-            'z': [atom['z'] for atom in struct['atoms']],
-            'props': {
-                'type': [atom['type'] for atom in struct['atoms']],
-            }
-        }
-        if 'element' in struct['atoms'][0]:
-            atoms['props']['element'] = [atom['element'] for atom in struct['atoms']]
-        bonds = {
-            'i': [int(bond['i']) for bond in struct['bonds']],
-            'j': [int(bond['j']) for bond in struct['bonds']],
-        }
-        print(atoms)
-        print(bonds)
-        self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
+    def draw_struct(self, struct: mp.Struct, extra_atom_props: list[str], label: str|list[str]|None = None):
+        
+        frame = struct.to_frame()
+        self.draw_frame(frame, extra_atom_props, label)
+
         return self
 
-    def label_atom(self):
-        self.send_cmd("label_atom", {}, [])
+    def label_atom(self, labels: list[str]):
+        self.send_cmd("label_atom", {"labels": labels}, [])
         return self
 
-    def draw_frame(self, frame: mp.Frame):
+    def draw_frame(self, frame: mp.Frame, extra_atom_props: list[str], label: str|list[str]|None = None):
         atoms = {
-            'id': frame['atoms']['id'].to_pylist(),
-            'x': frame['atoms']['x'].to_pylist(),
-            'y': frame['atoms']['y'].to_pylist(),
-            'z': frame['atoms']['z'].to_pylist(),
-            'props': {}
+            'name': frame['atoms']['name'].to_numpy(),
+            'x': frame['atoms']['x'].to_numpy(),
+            'y': frame['atoms']['y'].to_numpy(),
+            'z': frame['atoms']['z'].to_numpy(),
         }
+
+        for prop in extra_atom_props:
+            atoms[prop] = frame['atoms'][prop].to_numpy()
+
         bonds = {
-            'i': frame['bonds']['i'].to_pylist(),
-            'j': frame['bonds']['j'].to_pylist(),
+            'i': frame['bonds']['i'].to_numpy(),
+            'j': frame['bonds']['j'].to_numpy(),
         }
+
+        if label is not None:
+            if isinstance(label, str):
+                labels = frame['atoms'][label].to_numpy()
+            elif isinstance(label, (list, tuple)):
+                assert len(label) == len(frame['atoms'])
+                assert all(isinstance(l, str) for l in label)
+                labels = label
+
         self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
+        self.label_atom(labels)
         return self
 
     def draw_system(self, system: mp.System):

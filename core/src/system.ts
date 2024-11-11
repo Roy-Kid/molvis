@@ -149,11 +149,11 @@ class Atom {
     this.props = props;
   }
 
-  public get(key: string): any {
-    if (this.props.has(key)) {
-      return this.props.get(key);
+  public get<K extends keyof this>(key: K): this[K] | undefined {
+    if (typeof key === "string" && this.props.has(key)) {
+      return this.props.get(key) as this[K];
     } else {
-      this[key];
+      return this[key];
     }
   }
 }

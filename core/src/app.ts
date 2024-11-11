@@ -13,6 +13,11 @@ interface JsonRpcRequest {
   id: number | null;
 }
 
+interface FrameLikeObject {
+  atoms: Map<string, Array<any>>;
+  bonds: Map<string, Array<any>>;
+}
+
 const logger = new Logger({ name: "molvis-core" });
 
 class Molvis {
@@ -118,20 +123,14 @@ class Molvis {
   };
 
   public draw_frame = (
-    atoms: {
-      name: string[];
-      x: number[];
-      y: number[];
-      z: number[];
-      props: object;
-    },
-    bonds: {
-      i: number[];
-      j: number[];
-    }
+    frame: FrameLikeObject
   ) => {
-    const n_atoms = atoms.name.length;
-    const n_bonds = bonds.i.length;
+
+    const atoms = frame.atoms;
+    const bonds = frame.bonds;
+
+    const n_atoms = atoms.get("x").length;
+    const n_bonds = bonds.get("i").length;
     const atom_list = [];
     for (let i = 0; i < n_atoms; i++) {
       const name = atoms.name[i];
@@ -149,6 +148,11 @@ class Molvis {
       const jtom = atom_list[bonds.j[i] - 1];
       this.draw_bond(itom, jtom);
     }
+    if ('label' in atoms.props) {
+      if (atoms.props['label'] === undefined || typeof atoms.props['label'] === "string" || Array.isArray(atoms.props['label'])) {
+      this.label_atom(atoms.props['label']);
+      }
+    }
     const ramdom_atom = this._system.current_frame.atoms[0];
     const { x, y, z } = ramdom_atom.position;
     this.cameraLookAt(x, y, z);
@@ -165,12 +169,30 @@ class Molvis {
     this._world.camera.target = new Vector3(x, y, z);
   };
 
-  public label_atom = () => {
-    const labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom) => {
-      acc[atom.name] = atom.name;
-      return acc;
-    }, {});
-    this._world.artist.label_atom(labels);
+  public label_atom = (labels: string | string[] | undefined) => {
+
+    let _labels: Record<string, string>;
+
+    if (labels === undefined) {
+      _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom) => {
+        acc[atom.name] = atom.name;
+        return acc;
+      }, {});
+    } else if (typeof labels === "string") {
+      _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom) => {
+        acc[atom.name] = atom.get(labels as keyof Atom) as string;
+        return acc;
+      }, {});
+    } else if (Array.isArray(labels)) {
+      _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom, idx) => {
+        acc[atom.name] = labels[idx];
+        return acc;
+      }, {});
+    } else {
+      throw new Error("Invalid labels");
+    }
+
+    this._world.artist.label_atom(_labels);
   };
 
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
