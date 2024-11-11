@@ -18,7 +18,7 @@ if _DEV:
     CSS = ""
 else:
     # from `npx vite build`
-    bundled_assets_dir = pathlib.Path(__file__).parent / "static"
+    bundled_assets_dir = pathlib.Path(__file__).parent.parent / "static"
     ESM_path = bundled_assets_dir / "molvis.js"
     assert ESM_path.exists(), f"{ESM_path} not found"
     ESM = ESM_path.read_text()
@@ -39,8 +39,8 @@ class Molvis(anywidget.AnyWidget):
             "method": method,
             "params": params,
         }
+        logger.info(f"send_cmd: {jsonrpc}")
         self.send(json.dumps(jsonrpc), buffers=buffers)
-        logger.info(f"send_cmd: {method} {params}")
         return self
 
     def draw_atom(self, atom: mp.Atom):
@@ -64,7 +64,7 @@ class Molvis(anywidget.AnyWidget):
         self.send_cmd("label_atom", {"labels": labels}, [])
         return self
 
-    def draw_frame(self, frame: mp.Frame, extra_atom_props: list[str], label: str|list[str]|None = None):
+    def draw_frame(self, frame: mp.Frame, extra_atom_props: list[str]=[], label: str|list[str]|None = None):
         atoms = {
             'name': frame['atoms']['name'].tolist(),
             'x': frame['atoms']['x'].tolist(),
@@ -88,7 +88,7 @@ class Molvis(anywidget.AnyWidget):
                 assert all(isinstance(l, str) for l in label)
                 labels = label
 
-        self.send_cmd("draw_frame", {'atoms': atoms, 'bonds': bonds}, [])
+        self.send_cmd("draw_frame", {"frame": {'atoms': atoms, 'bonds': bonds}}, [])
         self.label_atom(labels)
         return self
 

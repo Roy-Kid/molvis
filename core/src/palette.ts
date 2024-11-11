@@ -82,17 +82,13 @@ class RealAtomPalette {
       Pm: 1.63,
     };
   }
-  public get_color(atom: Atom) {
-    const element = atom.props.get("element");
-    if (!element) {
-      return "#FFFFFF";
-    }
-    const hash = stringToHash(String(element));
+  public get_color(elem_or_type: string) {
+    const hash = stringToHash(elem_or_type);
     return this.color[hash % this.color.length];
   }
 
-  public get_radius(atom: Atom) {
-    return this.element_radius[atom.props.get("element")]*1.2 || 1.0;
+  public get_radius(elem_or_type: string) {
+    return this.element_radius[elem_or_type]*1.2 || 1.0;
   }
 } // RealAtomPalette
 

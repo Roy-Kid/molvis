@@ -78,14 +78,8 @@ class Frame {
     this._props = new Map();
   }
 
-  public add_atom = (
-    name: string,
-    x: number,
-    y: number,
-    z: number,
-    props: Map<string, any> = new Map()
-  ): Atom => {
-    const atom = new Atom(name, x, y, z, props);
+  public add_atom = (data: Map<string, any> = new Map()): Atom => {
+    const atom = new Atom(data);
     this._atoms.push(atom);
     return atom;
   };
@@ -93,10 +87,10 @@ class Frame {
   public add_bond = (
     itom: Atom,
     jtom: Atom,
-    props: Map<string, any> = new Map()
+    data: Map<string, any> = new Map()
   ): Bond => {
-    const name = `${itom.name}-${jtom.name}`;
-    const bond = new Bond(name, itom, jtom, props);
+    const bond = new Bond(itom, jtom, data);
+    console.log(bond);
     this._bonds.push(bond);
     return bond;
   };
@@ -107,7 +101,7 @@ class Frame {
 
   public get_bond = (fn: (bond: Bond) => boolean): Bond | undefined => {
     return this._bonds.find(fn);
-  }
+  };
 
   get n_atoms(): number {
     return this._atoms.length;
@@ -132,48 +126,28 @@ class Frame {
   }
 }
 
-class Atom {
-  public name: string;
-  public position: Vector3;
-  public props: Map<string, any>;
-
-  constructor(
-    name: string,
-    x: number,
-    y: number,
-    z: number,
-    props: Map<string, any> = new Map()
-  ) {
-    this.name = name;
-    this.position = new Vector3(x, y, z);
-    this.props = props;
+class Atom extends Map<string, any> {
+  static from_obj(obj: object): Atom {
+    return new Atom(Object.entries(obj));
   }
 
-  public get<K extends keyof this>(key: K): this[K] | undefined {
-    if (typeof key === "string" && this.props.has(key)) {
-      return this.props.get(key) as this[K];
-    } else {
-      return this[key];
-    }
+  get name(): string {
+    return this.get("name");
+  }
+
+  get xyz(): Vector3 {
+    return new Vector3(this.get("x"), this.get("y"), this.get("z"));
   }
 }
 
-class Bond {
-  public name: string;
+class Bond extends Map<string, any> {
   public itom: Atom;
   public jtom: Atom;
-  public props: Map<string, any>;
 
-  constructor(
-    name: string,
-    itom: Atom,
-    jtom: Atom,
-    props: Map<string, any> = new Map()
-  ) {
-    this.name = name;
+  constructor(itom: Atom, jtom: Atom, props: Map<string, any> = new Map()) {
+    super(props);
     this.itom = itom;
     this.jtom = jtom;
-    this.props = props;
   }
 }
 

@@ -9,7 +9,6 @@ import {
   DynamicTexture,
   Engine
 } from "@babylonjs/core";
-import { AdvancedDynamicTexture } from "@babylonjs/gui";
 import { Atom, Bond, Frame } from "./system";
 import { real_atom_palette } from "./palette";
 
@@ -25,8 +24,8 @@ class Artist {
   }
 
   public draw_atom(atom: Atom) {
-    const color = real_atom_palette.get_color(atom);
-    const radius = real_atom_palette.get_radius(atom);
+    const color = real_atom_palette.get_color(atom.get("element"));
+    const radius = real_atom_palette.get_radius(atom.get("element"));
     const sphere = MeshBuilder.CreateSphere(
       `atom:${atom.name}`,
       { diameter: radius },
@@ -35,7 +34,7 @@ class Artist {
     const material = new StandardMaterial("atom", this._scene);
     material.diffuseColor = Color3.FromHexString(color);
     sphere.material = material;
-    sphere.position = atom.position;
+    sphere.position = atom.xyz;
     return sphere;
   }
 
@@ -75,7 +74,7 @@ class Artist {
 
   public draw_bond(bond: Bond, options?: { radius?: number; instance?: Mesh }) {
     let _options = {
-      path: [bond.itom.position, bond.jtom.position],
+      path: [bond.itom.xyz, bond.jtom.xyz],
       radius: 0.1,
     };
     // update _options with options with all keys

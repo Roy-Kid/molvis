@@ -1,6 +1,5 @@
 import type { AnyModel, Render } from "@anywidget/types";
 import { Logger } from "tslog";
-// import { preventEventPropagation } from "./utils";
 import "./style.css";
 
 const logger = new Logger({ name: "molvis-widget-ts" });
@@ -24,7 +23,6 @@ class MolvisWidget {
   private molvis: Molvis;
 
   constructor(model: AnyModel<WidgetModel>) {
-
     const width = model.get("width");
     const height = model.get("height");
 
@@ -39,7 +37,6 @@ class MolvisWidget {
   public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
     const cmd = JSON.parse(msg);
     const response = this.molvis.exec_cmd(cmd, buffers);
-    console.log("response", response);
   };
 
   public render = (el: HTMLElement) => {
@@ -48,13 +45,12 @@ class MolvisWidget {
   };
 
   public rerender = (model: AnyModel<WidgetModel>) => {
-
     const width = model.get("width");
     const height = model.get("height");
     this.canvas.width = width;
     this.canvas.height = height;
     this.resize();
-  }
+  };
 
   public start = () => {
     this.molvis.render();
@@ -70,17 +66,18 @@ export default () => {
 
   return {
     initialize({ model }: { model: AnyModel<WidgetModel> }) {
-      extraState.molvis = new MolvisWidget(model);
-      extraState.molvis.start();
-      return () => {
-        extraState.molvis = undefined;
+      if (!extraState.molvis) {
+        extraState.molvis = new MolvisWidget(model);
+        extraState.molvis.start();
+      } else {
+        logger.fatal("molvis already initialized");
       }
     },
     render({ model, el }: { model: AnyModel<WidgetModel>; el: HTMLElement }) {
-
       preventEventPropagation(el);
-      
-      const vscodeBackgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-editor-background');
+      const vscodeBackgroundColor = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue("--vscode-editor-background");
       if (vscodeBackgroundColor) {
         el.style.backgroundColor = vscodeBackgroundColor.trim();
       }
@@ -93,7 +90,10 @@ export default () => {
         }
       }
       return () => {
-      }
+        // remove canvas from el
+        const canvas = el.querySelector("#molvis-canvas");
+        if (canvas) el.removeChild(canvas);
+      };
     },
   };
 };

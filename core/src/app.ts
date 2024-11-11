@@ -14,8 +14,8 @@ interface JsonRpcRequest {
 }
 
 interface FrameLikeObject {
-  atoms: Map<string, Array<any>>;
-  bonds: Map<string, Array<any>>;
+  atoms: {name: string[], x: number[], y: number[], z: number[]};
+  bonds: {i: number[], j: number[]};
 }
 
 const logger = new Logger({ name: "molvis-core" });
@@ -101,13 +101,9 @@ class Molvis {
   public finalize = () => {};
 
   public draw_atom = (
-    name: string,
-    x: number,
-    y: number,
-    z: number,
-    props: Map<string, any> = new Map()
+    data: Map<string, any>
   ) => {
-    const atom = this._system.current_frame.add_atom(name, x, y, z, props);
+    const atom = this._system.current_frame.add_atom(data);
     this._world.artist.draw_atom(atom);
     return atom;
   };
@@ -126,37 +122,27 @@ class Molvis {
     frame: FrameLikeObject
   ) => {
 
-    console.log(frame);
-
     const atoms = frame.atoms;
     const bonds = frame.bonds;
 
-    const n_atoms = atoms.get("x").length;
-    const n_bonds = bonds.get("i").length;
+    const n_atoms = atoms.x.length;
+    const n_bonds = bonds.i.length;
     const atom_list = [];
     for (let i = 0; i < n_atoms; i++) {
-      const name = atoms.name[i];
-      const x = atoms.x[i];
-      const y = atoms.y[i];
-      const z = atoms.z[i];
-      const prop = new Map<string, any>();
-      for (const [key, value] of Object.entries(atoms.props)) {
-        prop.set(key, value[i]);
+      const atom = new Map();
+      for (const [key, values] of Object.entries(atoms)) {
+        atom.set(key, values[i]);
       }
-      atom_list.push(this.draw_atom(name, x, y, z, prop));
+      atom_list.push(this.draw_atom(atom));
     }
     for (let i = 0; i < n_bonds; i++) {
-      const itom = atom_list[bonds.i[i] - 1];
-      const jtom = atom_list[bonds.j[i] - 1];
+      const itom = atom_list[bonds.i[i]];
+      const jtom = atom_list[bonds.j[i]];
       this.draw_bond(itom, jtom);
     }
-    if ('label' in atoms.props) {
-      if (atoms.props['label'] === undefined || typeof atoms.props['label'] === "string" || Array.isArray(atoms.props['label'])) {
-      this.label_atom(atoms.props['label']);
-      }
-    }
+    console.log("draw bond")
     const ramdom_atom = this._system.current_frame.atoms[0];
-    const { x, y, z } = ramdom_atom.position;
+    const { x, y, z } = ramdom_atom.xyz;
     this.cameraLookAt(x, y, z);
     return this._system.current_frame;
   };
@@ -182,7 +168,7 @@ class Molvis {
       }, {});
     } else if (typeof labels === "string") {
       _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom) => {
-        acc[atom.name] = atom.get(labels as keyof Atom) as string;
+        acc[atom.name] = atom.get(labels) as string;
         return acc;
       }, {});
     } else if (Array.isArray(labels)) {
@@ -198,8 +184,8 @@ class Molvis {
   };
 
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
+
     const { jsonrpc, method, params, id } = request;
-    logger.info(`exec_cmd: ${method}`);
 
     if (jsonrpc !== "2.0") {
       return this.createErrorResponse(id, -32600, "Invalid JSON-RPC version");
@@ -210,7 +196,7 @@ class Molvis {
       const func = this.getMethodFunction(context, methodName);
       logger.info(`exec ${method} with params: ${JSON.stringify(params)}`);
       const result = func(...Object.values(params || {}));
-
+      logger.info(`exec ${method} with result: ${JSON.stringify(result)}`);
       return this.createSuccessResponse(id, result);
     } catch (error: any) {
       return this.createErrorResponse(id, -32603, error.message, error.stack);
