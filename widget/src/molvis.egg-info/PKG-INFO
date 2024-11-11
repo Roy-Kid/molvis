@@ -1,8 +1,0 @@
-Metadata-Version: 2.1
-Name: molvis
-Version: 0.1.0
-Summary: Jupyter widget for molvis
-Author-email: Roy Kid <lijichen365@gmail.com>
-Requires-Python: >=3.10
-Description-Content-Type: text/markdown
-Requires-Dist: anywidget

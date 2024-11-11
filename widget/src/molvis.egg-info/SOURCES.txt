@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-src/molvis/__init__.py
-src/molvis.egg-info/PKG-INFO
-src/molvis.egg-info/SOURCES.txt
-src/molvis.egg-info/dependency_links.txt
-src/molvis.egg-info/requires.txt
-src/molvis.egg-info/top_level.txt
