@@ -126,6 +126,8 @@ class Molvis {
     frame: FrameLikeObject
   ) => {
 
+    console.log(frame);
+
     const atoms = frame.atoms;
     const bonds = frame.bonds;
 
@@ -206,6 +208,7 @@ class Molvis {
     try {
       const { context, methodName } = this.parseMethod(method);
       const func = this.getMethodFunction(context, methodName);
+      logger.info(`exec ${method} with params: ${JSON.stringify(params)}`);
       const result = func(...Object.values(params || {}));
 
       return this.createSuccessResponse(id, result);

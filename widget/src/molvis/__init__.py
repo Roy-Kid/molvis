@@ -66,23 +66,23 @@ class Molvis(anywidget.AnyWidget):
 
     def draw_frame(self, frame: mp.Frame, extra_atom_props: list[str], label: str|list[str]|None = None):
         atoms = {
-            'name': frame['atoms']['name'].to_numpy(),
-            'x': frame['atoms']['x'].to_numpy(),
-            'y': frame['atoms']['y'].to_numpy(),
-            'z': frame['atoms']['z'].to_numpy(),
+            'name': frame['atoms']['name'].tolist(),
+            'x': frame['atoms']['x'].tolist(),
+            'y': frame['atoms']['y'].tolist(),
+            'z': frame['atoms']['z'].tolist(),
         }
 
         for prop in extra_atom_props:
-            atoms[prop] = frame['atoms'][prop].to_numpy()
+            atoms[prop] = frame['atoms'][prop].tolist()
 
         bonds = {
-            'i': frame['bonds']['i'].to_numpy(),
-            'j': frame['bonds']['j'].to_numpy(),
+            'i': frame['bonds']['i'].tolist(),
+            'j': frame['bonds']['j'].tolist(),
         }
 
         if label is not None:
             if isinstance(label, str):
-                labels = frame['atoms'][label].to_numpy()
+                labels = frame['atoms'][label].tolist()
             elif isinstance(label, (list, tuple)):
                 assert len(label) == len(frame['atoms'])
                 assert all(isinstance(l, str) for l in label)

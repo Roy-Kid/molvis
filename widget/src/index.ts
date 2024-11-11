@@ -38,7 +38,8 @@ class MolvisWidget {
 
   public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
     const cmd = JSON.parse(msg);
-    const response = this.molvis.controller.exec_cmd(cmd, buffers);
+    const response = this.molvis.exec_cmd(cmd, buffers);
+    console.log("response", response);
   };
 
   public render = (el: HTMLElement) => {
@@ -80,8 +81,6 @@ export default () => {
       preventEventPropagation(el);
       
       const vscodeBackgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-editor-background');
-      
-      // 应用背景色到 widget 的 el 元素
       if (vscodeBackgroundColor) {
         el.style.backgroundColor = vscodeBackgroundColor.trim();
       }
