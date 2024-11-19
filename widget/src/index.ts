@@ -11,9 +11,11 @@ interface WidgetModel {
 
 function preventEventPropagation(element: HTMLElement) {
   const stopPropagation = (e) => e.stopPropagation();
-  ["click", "keydown", "keyup", "keypress"].forEach((eventType) => {
-    element.addEventListener(eventType, stopPropagation, false);
-  });
+  ["contextmenu", "click", "keydown", "keyup", "keypress"].forEach(
+    (eventType) => {
+      element.addEventListener(eventType, stopPropagation, false);
+    }
+  );
 }
 
 import { Molvis } from "molvis";
@@ -21,6 +23,7 @@ import { Molvis } from "molvis";
 class MolvisWidget {
   private canvas: HTMLCanvasElement;
   private molvis: Molvis;
+  private model: AnyModel<WidgetModel>;
 
   constructor(model: AnyModel<WidgetModel>) {
     const width = model.get("width");
@@ -31,12 +34,20 @@ class MolvisWidget {
     this.canvas.width = width;
     this.canvas.height = height;
     this.molvis = new Molvis(this.canvas);
+    this.model = model;
     model.on("msg:custom", this.handle_custom_message);
   }
 
   public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
+    console.log("handle_custom_message", msg);
     const cmd = JSON.parse(msg);
-    const response = this.molvis.exec_cmd(cmd, buffers);
+    try {
+      const response = this.molvis.exec_cmd(cmd, buffers);
+      this.model.send(response);
+    } catch (e) {
+      this.model.send({ error: e.message });
+    }
+    console.log("handle_custom_message", msg);
   };
 
   public render = (el: HTMLElement) => {

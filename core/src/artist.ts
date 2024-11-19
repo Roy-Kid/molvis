@@ -11,6 +11,9 @@ import {
 } from "@babylonjs/core";
 import { Atom, Bond, Frame } from "./system";
 import { real_atom_palette } from "./palette";
+import { Logger } from "tslog";
+
+const logger = new Logger({ name: "molvis-core" });
 
 const get_name_from_mesh = (mesh: AbstractMesh) => {
   return mesh.name.split(":")[1];

@@ -42,6 +42,10 @@ class Molvis(anywidget.AnyWidget):
         logger.info(f"send_cmd: {jsonrpc}")
         self.send(json.dumps(jsonrpc), buffers=buffers)
         return self
+    
+    def recv_cmd(self, msg):
+        logger.info(f"recv_cmd: {msg}")
+        return msg
 
     def draw_atom(self, atom: mp.Atom):
 
@@ -94,4 +98,13 @@ class Molvis(anywidget.AnyWidget):
 
     def draw_system(self, system: mp.System):
         self.draw_frame(system.frame)
+        return self
+    
+    def draw(self, molpy_obj: mp.Struct | mp.Frame | mp.System, extra_atom_props: list[str]=[], label: str|list[str]|None = None):
+        if isinstance(molpy_obj, mp.Struct):
+            self.draw_struct(molpy_obj, extra_atom_props, label)
+        elif isinstance(molpy_obj, mp.Frame):
+            self.draw_frame(molpy_obj, extra_atom_props, label)
+        elif isinstance(molpy_obj, mp.System):
+            self.draw_system(molpy_obj)
         return self

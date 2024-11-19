@@ -186,6 +186,7 @@ class Molvis {
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
 
     const { jsonrpc, method, params, id } = request;
+    logger.info(`exec_cmd: ${method} with params: ${JSON.stringify(params)}`);
 
     if (jsonrpc !== "2.0") {
       return this.createErrorResponse(id, -32600, "Invalid JSON-RPC version");
