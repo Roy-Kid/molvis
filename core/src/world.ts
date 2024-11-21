@@ -91,10 +91,12 @@ class World {
   }
 
   public render() {
+    // this._axes.resize();
     this.engine.runRenderLoop(() => {
       this.scene.render();
       this._axes.render();
     });
+    this.engine.resize();
     window.addEventListener("resize", () => {
       this.engine.resize();
     });

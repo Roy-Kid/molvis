@@ -42,9 +42,10 @@ class Artist {
     return sphere;
   }
 
-  public label_atom(labels: Record<string, string>) {
+  public label_atom(labels: Map<string, string>) {
 
     // get all atom info
+    console.log(labels);
     const atom_meshs = this._scene.meshes.filter((mesh) =>
       mesh.name.startsWith("atom")
     );
@@ -60,7 +61,12 @@ class Artist {
       const label_plane = MeshBuilder.CreatePlane(`label_plane:${atom_mesh.name}`, {width: height * ratio, height: height}, this._scene);  // width and height are in scene units
       label_plane.rotate(new Vector3(0, 1, 0), Math.PI);
       const text = new DynamicTexture(`label_text:${atom_mesh.name}`, {width: height * resolution * ratio, height: height * resolution}, this._scene);  // width and height are in pixels
-      text.drawText(labels[atom_name], 10, 200, "bold 256px monospace", "cyan", "#00000000", true);  // x and y are magical
+      const label = labels.get(atom_name);
+      if (label === undefined) {
+        logger.warn(`No label found for atom ${atom_name}`);
+        continue;
+      }
+      text.drawText(label, 10, 200, "bold 256px monospace", "cyan", "#00000000", true);  // x and y are magical
       const material = new StandardMaterial("label", this._scene);
       material.diffuseTexture = text;
       material.diffuseTexture.hasAlpha = true;

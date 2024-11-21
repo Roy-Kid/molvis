@@ -157,29 +157,29 @@ class Molvis {
     this._world.camera.target = new Vector3(x, y, z);
   };
 
-  public label_atom = (labels: string | string[] | undefined) => {
+  public label_atom = (labels: string | string[] | undefined = undefined) => {
 
-    let _labels: Record<string, string>;
+    let _labels: Map<string, string>;
 
     if (labels === undefined) {
-      _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom) => {
-        acc[atom.name] = atom.name;
+      _labels = this._system.current_frame.atoms.reduce<Map<string, string>>((acc, atom) => {
+        acc.set(atom.name, atom.name);
         return acc;
-      }, {});
+      }, new Map());
     } else if (typeof labels === "string") {
-      _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom) => {
-        acc[atom.name] = atom.get(labels) as string;
+      _labels = this._system.current_frame.atoms.reduce<Map<string, string>>((acc, atom) => {
+        acc.set(atom.name, atom.get(labels) as string);
         return acc;
-      }, {});
+      }, new Map());
     } else if (Array.isArray(labels)) {
-      _labels = this._system.current_frame.atoms.reduce((acc: Record<string, string>, atom, idx) => {
-        acc[atom.name] = labels[idx];
+      _labels = this._system.current_frame.atoms.reduce((acc, atom, idx) => {
+        acc.set(atom.name, labels[idx]);
         return acc;
-      }, {});
+      }, new Map());
     } else {
       throw new Error("Invalid labels");
     }
-
+    logger.info(`label_atom: ${_labels} labels`);
     this._world.artist.label_atom(_labels);
   };
 

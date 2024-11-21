@@ -102,8 +102,8 @@ class Molvis(anywidget.AnyWidget):
             self.label_atom(labels)
         return self
 
-    def draw_system(self, system: mp.System):
-        self.draw_frame(system.frame)
+    def draw_system(self, system: mp.System, extra_atom_props, label):
+        self.draw_frame(system.frame, extra_atom_props, label)
         return self
     
     def draw(self, molpy_obj: mp.Struct | mp.Frame | mp.System, extra_atom_props: list[str]=[], label: str|list[str]|None = None):
@@ -112,7 +112,7 @@ class Molvis(anywidget.AnyWidget):
         elif isinstance(molpy_obj, mp.Frame):
             self.draw_frame(molpy_obj, extra_atom_props, label)
         elif isinstance(molpy_obj, mp.System):
-            self.draw_system(molpy_obj)
+            self.draw_system(molpy_obj, extra_atom_props, label)
         else:
             raise TypeError(f"molpy_obj must be one of mp.Struct, mp.Frame, mp.System, got {type(molpy_obj)}")
         return self
