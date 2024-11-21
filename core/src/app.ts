@@ -140,7 +140,6 @@ class Molvis {
       const jtom = atom_list[bonds.j[i]];
       this.draw_bond(itom, jtom);
     }
-    console.log("draw bond")
     const ramdom_atom = this._system.current_frame.atoms[0];
     const { x, y, z } = ramdom_atom.xyz;
     this.cameraLookAt(x, y, z);
