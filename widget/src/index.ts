@@ -39,7 +39,6 @@ class MolvisWidget {
   }
 
   public handle_custom_message = (msg: any, buffers: DataView[] = []) => {
-    console.log("handle_custom_message", msg);
     const cmd = JSON.parse(msg);
     try {
       const response = this.molvis.exec_cmd(cmd, buffers);
@@ -47,7 +46,6 @@ class MolvisWidget {
     } catch (e) {
       this.model.send({ error: e.message });
     }
-    console.log("handle_custom_message", msg);
   };
 
   public render = (el: HTMLElement) => {

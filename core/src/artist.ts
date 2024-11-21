@@ -27,8 +27,9 @@ class Artist {
   }
 
   public draw_atom(atom: Atom) {
-    const color = real_atom_palette.get_color(atom.get("element"));
-    const radius = real_atom_palette.get_radius(atom.get("element"));
+    let elem = atom.get("element");
+    const color = real_atom_palette.get_color(elem);
+    const radius = real_atom_palette.get_radius(elem);
     const sphere = MeshBuilder.CreateSphere(
       `atom:${atom.name}`,
       { diameter: radius },
