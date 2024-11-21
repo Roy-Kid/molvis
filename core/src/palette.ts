@@ -1,7 +1,10 @@
 import chroma from "chroma-js";
 import { Atom } from "./system";
 
-const stringToHash = (str: string): number => {
+const stringToHash = (str: string | undefined): number => {
+  if (str === undefined) {
+    return 0;
+  }
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
@@ -19,6 +22,7 @@ class RealAtomPalette {
     this.color = chroma.scale("Set1").mode("lch").colors(40);
 
     this.element_radius = {
+      undefined: 1.0,
       H: 0.38,
       He: 0.32,
       Li: 1.34,

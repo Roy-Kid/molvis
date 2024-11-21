@@ -90,7 +90,6 @@ class Frame {
     data: Map<string, any> = new Map()
   ): Bond => {
     const bond = new Bond(itom, jtom, data);
-    console.log(bond);
     this._bonds.push(bond);
     return bond;
   };

@@ -124,9 +124,10 @@ class Molvis {
 
     const atoms = frame.atoms;
     const bonds = frame.bonds;
-
+    
     const n_atoms = atoms.x.length;
     const n_bonds = bonds.i.length;
+    logger.info(`draw_frame: ${n_atoms} atoms, ${n_bonds} bonds`);
     const atom_list = [];
     for (let i = 0; i < n_atoms; i++) {
       const atom = new Map();
@@ -140,7 +141,6 @@ class Molvis {
       const jtom = atom_list[bonds.j[i]];
       this.draw_bond(itom, jtom);
     }
-    console.log("draw bond")
     const ramdom_atom = this._system.current_frame.atoms[0];
     const { x, y, z } = ramdom_atom.xyz;
     this.cameraLookAt(x, y, z);
@@ -186,7 +186,7 @@ class Molvis {
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
 
     const { jsonrpc, method, params, id } = request;
-    logger.info(`exec_cmd: ${method} with params: ${JSON.stringify(params)}`);
+    logger.info(`exec_cmd: ${method}`);
 
     if (jsonrpc !== "2.0") {
       return this.createErrorResponse(id, -32600, "Invalid JSON-RPC version");
@@ -195,11 +195,10 @@ class Molvis {
     try {
       const { context, methodName } = this.parseMethod(method);
       const func = this.getMethodFunction(context, methodName);
-      logger.info(`exec ${method} with params: ${JSON.stringify(params)}`);
       const result = func(...Object.values(params || {}));
-      logger.info(`exec ${method} with result: ${JSON.stringify(result)}`);
       return this.createSuccessResponse(id, result);
     } catch (error: any) {
+      logger.error(`error: ${error.message} from ${method}`);
       return this.createErrorResponse(id, -32603, error.message, error.stack);
     }
   };
