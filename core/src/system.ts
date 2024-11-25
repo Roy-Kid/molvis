@@ -148,6 +148,10 @@ class Bond extends Map<string, any> {
     this.itom = itom;
     this.jtom = jtom;
   }
+
+  get name(): string {
+    return `${this.itom.name}-${this.jtom.name}`;
+  }
 }
 
 export { System, Atom, Bond, Frame };

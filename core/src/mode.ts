@@ -17,6 +17,9 @@ import {
 import { Molvis } from "./app";
 import { World } from "./world";
 import { System, Bond, Atom } from "./system";
+import { Logger } from "tslog";
+
+const logger = new Logger({ name: "molvis-core" });
 
 function highlight_mesh(mesh: AbstractMesh) {
   mesh.renderOutline = !mesh.renderOutline;
@@ -161,191 +164,41 @@ abstract class Mode {
   }
 }
 
-class EditMode extends Mode {
-  private is_first_move: boolean = true;
-
-  constructor(app: Molvis) {
-    super(ModeType.Edit, app);
-  }
-
-  override _on_mouse_down(pointerInfo: PointerInfo) {
-    this._pos_on_mouse_down = {
-      x: this._scene.pointerX,
-      y: this._scene.pointerY,
-    };
-
-    if (this._is_pick_mesh(pointerInfo)) {
-      this._mesh_on_mouse_down = pointerInfo.pickInfo!.pickedMesh!;
-    }
-
-    // hit selected mesh
-  }
-
-  override _on_mouse_up(pointerInfo: PointerInfo) {
-    if (pointerInfo.pickInfo) {
-      const picked_mesh = pointerInfo.pickInfo.pickedMesh;
-
-      if (picked_mesh) {
-        // click mesh
-        // if (!this._is_dragging)
-        // drag mesh
-      } else {
-        // click empty
-        if (!this._is_dragging && this._pos_on_mouse_down) {
-          const xyz = get_vec3_from_screen_with_depth(
-            this._scene,
-            this._pos_on_mouse_down.x,
-            this._pos_on_mouse_down.y,
-            10
-          );
-          this._app.add_atom(
-            System.random_atom_id(),
-            xyz.x,
-            xyz.y,
-            xyz.z,
-            new Map()
-          );
-        }
-        // else: drag empty
-      }
-
-      // concretet dragging atom and bond
-      if (this._is_dragging && this._mesh_on_mouse_down) {
-        const drag_on_atom = this._system.current_frame.get_atom_by_name(
-          this._mesh_on_mouse_down.name.substring(4)
-        );
-        if (drag_on_atom === undefined) {
-          throw new Error(
-            `Atom ${this._mesh_on_mouse_down.name.substring(4)} not found`
-          );
-        }
-        const dragging_atom_mesh = this._scene.getMeshByName("_dragging_atom");
-        if (dragging_atom_mesh === null) {
-          throw new Error(`Mesh _dragging_atom not found`);
-        }
-        const dragging_bond_mesh =
-          this._scene.getMeshByName("bond_on_dragging");
-        dragging_atom_mesh.name = `atom${System.random_atom_id()}`;
-
-        const dragging_atom = this._system.current_frame.add_atom(
-          dragging_atom_mesh.name.substring(4),
-          dragging_atom_mesh.position.x,
-          dragging_atom_mesh.position.y,
-          dragging_atom_mesh.position.z,
-          drag_on_atom?.props
-        );
-        console.log(dragging_atom);
-        const dragging_bond = this._system.current_frame.add_bond(
-          drag_on_atom!,
-          dragging_atom,
-          new Map()
-        );
-        dragging_bond_mesh!.name = dragging_bond.name;
-      }
-    }
-
-    // reset
-    this._pos_on_mouse_down = undefined;
-    this._mesh_on_mouse_down = undefined;
-    this.is_first_move = true;
-
-    // concrete dragging atom and bond
-  }
-
-  _on_mouse_move = (pointerInfo: PointerInfo) => {
-    // hit mesh and dragging
-    if (this._mesh_on_mouse_down && this._is_dragging) {
-      this._world.camera.detachControl();
-      // hit selected mesh
-      if (
-        this.is_first_move &&
-        this._mesh_on_mouse_down.name.startsWith("atom")
-      ) {
-        const atom_mesh_on_dragging = this._mesh_on_mouse_down.clone(
-          `_dragging_atom`,
-          null
-        )!;
-        const on_drag_start_position = atom_mesh_on_dragging.position.clone();
-
-        const pointer_drag_bahavior = new PointerDragBehavior({
-          dragPlaneNormal: this._mesh_on_mouse_down.position.subtract(
-            this._world.camera.position
-          ),
-        });
-
-        this._mesh_on_mouse_down.removeBehavior(
-          this._mesh_on_mouse_down.getBehaviorByName(
-            pointer_drag_bahavior.name
-          )!
-        );
-
-        const bond_raidus = 0.1;
-        let bond_mesh_on_dragging = MeshBuilder.CreateTube(
-          `bond_on_dragging`,
-          {
-            path: [on_drag_start_position, on_drag_start_position],
-            radius: bond_raidus,
-            updatable: true,
-          },
-          this._scene
-        );
-        pointer_drag_bahavior.useObjectOrientationForDragging = false;
-
-        pointer_drag_bahavior.onDragObservable.add((event) => {
-          bond_mesh_on_dragging = MeshBuilder.CreateTube(`bond_on_dragging`, {
-            path: [on_drag_start_position, atom_mesh_on_dragging.position],
-            radius: bond_raidus,
-            instance: bond_mesh_on_dragging,
-            updatable: true,
-          });
-        });
-        atom_mesh_on_dragging.addBehavior(pointer_drag_bahavior);
-        pointer_drag_bahavior.startDrag();
-        this.is_first_move = false;
-      }
-
-      // hit unselected mesh
-      this._world.camera.attachControl();
-    }
-  };
-
-  override _on_mouse_wheel(pointerInfo: PointerInfo) {}
-
-  override _on_mouse_pick(pointerInfo: PointerInfo) {}
-
-  override _on_mouse_tap(pointerInfo: PointerInfo) {}
-
-  override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
-}
-
 class ViewMode extends Mode {
   constructor(app: Molvis) {
     super(ModeType.View, app);
   }
 
-  override _on_mouse_down(pointerInfo: PointerInfo) {}
+  override _on_mouse_down(pointerInfo: PointerInfo) {
+  }
 
   override _on_mouse_up(pointerInfo: PointerInfo) {}
 
   override _on_mouse_move(pointerInfo: PointerInfo) {
     const pick_info = pointerInfo.pickInfo;
-    if (pick_info && pick_info.pickedMesh) {
+    if (pick_info && pick_info.pickedMesh !== null) {
       const picked_mesh = pick_info.pickedMesh;
-      const name = picked_mesh!.name;
-      const type = name.split(":")[0];
+      const mesh_name = picked_mesh.name;
+      const type = mesh_name.split(":")[0];
+      const name = mesh_name.split(":")[1];
+      let entity = undefined;
       switch (type) {
         case "atom":
-          console.log(
-            this._system.current_frame.get_atom((atom: Atom)=> atom.id === Number(name))
+          entity = this._system.current_frame.get_atom(
+            (atom: Atom) => atom['name'] == name
           );
           break;
         case "bond":
-          console.log(
-            this._system.current_frame.get_bond((bond: Bond)=> bond.name === name)
+          entity = this._system.current_frame.get_bond(
+            (bond: Bond) => bond.name == name
           );
           break;
       }
-  }}
+      if (entity) {
+        this._world.update_gui(`${type}: ${name}`);
+      }
+    }
+  }
 
   override _on_mouse_wheel(pointerInfo: PointerInfo) {}
 
@@ -360,13 +213,12 @@ class ViewMode extends Mode {
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
   }
-  
+
   _on_press_q() {
     const frame = this._app.system.prev_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
   }
-
 }
 
 class SelectMode extends Mode {
@@ -385,24 +237,184 @@ class SelectMode extends Mode {
   }
 }
 
-class ManupulateMode extends Mode {
-  constructor(app: Molvis) {
-    super(ModeType.Manupulate, app);
-  }
 
-  override _on_mouse_down(pointerInfo: PointerInfo) {}
 
-  override _on_mouse_up(pointerInfo: PointerInfo) {}
+// class EditMode extends Mode {
+//   private is_first_move: boolean = true;
 
-  override _on_mouse_move(pointerInfo: PointerInfo) {}
+//   constructor(app: Molvis) {
+//     super(ModeType.Edit, app);
+//   }
 
-  override _on_mouse_wheel(pointerInfo: PointerInfo) {}
+//   override _on_mouse_down(pointerInfo: PointerInfo) {
+//     this._pos_on_mouse_down = {
+//       x: this._scene.pointerX,
+//       y: this._scene.pointerY,
+//     };
 
-  override _on_mouse_pick(pointerInfo: PointerInfo) {}
+//     if (this._is_pick_mesh(pointerInfo)) {
+//       this._mesh_on_mouse_down = pointerInfo.pickInfo!.pickedMesh!;
+//     }
 
-  override _on_mouse_tap(pointerInfo: PointerInfo) {}
+//     // hit selected mesh
+//   }
 
-  override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
-}
+//   override _on_mouse_up(pointerInfo: PointerInfo) {
+//     if (pointerInfo.pickInfo) {
+//       const picked_mesh = pointerInfo.pickInfo.pickedMesh;
 
-export { EditMode, ViewMode, Mode, ModeType, SelectMode, ManupulateMode };
+//       if (picked_mesh) {
+//         // click mesh
+//         // if (!this._is_dragging)
+//         // drag mesh
+//       } else {
+//         // click empty
+//         if (!this._is_dragging && this._pos_on_mouse_down) {
+//           const xyz = get_vec3_from_screen_with_depth(
+//             this._scene,
+//             this._pos_on_mouse_down.x,
+//             this._pos_on_mouse_down.y,
+//             10
+//           );
+//           this._app.add_atom(
+//             System.random_atom_id(),
+//             xyz.x,
+//             xyz.y,
+//             xyz.z,
+//             new Map()
+//           );
+//         }
+//         // else: drag empty
+//       }
+
+//       // concretet dragging atom and bond
+//       if (this._is_dragging && this._mesh_on_mouse_down) {
+//         const drag_on_atom = this._system.current_frame.get_atom_by_name(
+//           this._mesh_on_mouse_down.name.substring(4)
+//         );
+//         if (drag_on_atom === undefined) {
+//           throw new Error(
+//             `Atom ${this._mesh_on_mouse_down.name.substring(4)} not found`
+//           );
+//         }
+//         const dragging_atom_mesh = this._scene.getMeshByName("_dragging_atom");
+//         if (dragging_atom_mesh === null) {
+//           throw new Error(`Mesh _dragging_atom not found`);
+//         }
+//         const dragging_bond_mesh =
+//           this._scene.getMeshByName("bond_on_dragging");
+//         dragging_atom_mesh.name = `atom${System.random_atom_id()}`;
+
+//         const dragging_atom = this._system.current_frame.add_atom(
+//           dragging_atom_mesh.name.substring(4),
+//           dragging_atom_mesh.position.x,
+//           dragging_atom_mesh.position.y,
+//           dragging_atom_mesh.position.z,
+//           drag_on_atom?.props
+//         );
+//         console.log(dragging_atom);
+//         const dragging_bond = this._system.current_frame.add_bond(
+//           drag_on_atom!,
+//           dragging_atom,
+//           new Map()
+//         );
+//         dragging_bond_mesh!.name = dragging_bond.name;
+//       }
+//     }
+
+//     // reset
+//     this._pos_on_mouse_down = undefined;
+//     this._mesh_on_mouse_down = undefined;
+//     this.is_first_move = true;
+
+//     // concrete dragging atom and bond
+//   }
+
+//   _on_mouse_move = (pointerInfo: PointerInfo) => {
+//     // hit mesh and dragging
+//     if (this._mesh_on_mouse_down && this._is_dragging) {
+//       this._world.camera.detachControl();
+//       // hit selected mesh
+//       if (
+//         this.is_first_move &&
+//         this._mesh_on_mouse_down.name.startsWith("atom")
+//       ) {
+//         const atom_mesh_on_dragging = this._mesh_on_mouse_down.clone(
+//           `_dragging_atom`,
+//           null
+//         )!;
+//         const on_drag_start_position = atom_mesh_on_dragging.position.clone();
+
+//         const pointer_drag_bahavior = new PointerDragBehavior({
+//           dragPlaneNormal: this._mesh_on_mouse_down.position.subtract(
+//             this._world.camera.position
+//           ),
+//         });
+
+//         this._mesh_on_mouse_down.removeBehavior(
+//           this._mesh_on_mouse_down.getBehaviorByName(
+//             pointer_drag_bahavior.name
+//           )!
+//         );
+
+//         const bond_raidus = 0.1;
+//         let bond_mesh_on_dragging = MeshBuilder.CreateTube(
+//           `bond_on_dragging`,
+//           {
+//             path: [on_drag_start_position, on_drag_start_position],
+//             radius: bond_raidus,
+//             updatable: true,
+//           },
+//           this._scene
+//         );
+//         pointer_drag_bahavior.useObjectOrientationForDragging = false;
+
+//         pointer_drag_bahavior.onDragObservable.add((event) => {
+//           bond_mesh_on_dragging = MeshBuilder.CreateTube(`bond_on_dragging`, {
+//             path: [on_drag_start_position, atom_mesh_on_dragging.position],
+//             radius: bond_raidus,
+//             instance: bond_mesh_on_dragging,
+//             updatable: true,
+//           });
+//         });
+//         atom_mesh_on_dragging.addBehavior(pointer_drag_bahavior);
+//         pointer_drag_bahavior.startDrag();
+//         this.is_first_move = false;
+//       }
+
+//       // hit unselected mesh
+//       this._world.camera.attachControl();
+//     }
+//   };
+
+//   override _on_mouse_wheel(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_pick(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_tap(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
+// }
+
+
+// class ManupulateMode extends Mode {
+//   constructor(app: Molvis) {
+//     super(ModeType.Manupulate, app);
+//   }
+
+//   override _on_mouse_down(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_up(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_move(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_wheel(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_pick(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_tap(pointerInfo: PointerInfo) {}
+
+//   override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
+// }
+
+export { ViewMode, Mode, ModeType, SelectMode };

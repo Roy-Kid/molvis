@@ -1,10 +1,10 @@
-import { KeyboardEventTypes } from "@babylonjs/core";
 import { Logger } from "tslog";
-import { EditMode, ManupulateMode, Mode, SelectMode, ViewMode } from "./mode";
 import { System } from "./system";
 import { World } from "./world";
 import { Atom } from "./system";
 import { Vector3 } from "@babylonjs/core";
+import { Mode, ViewMode, SelectMode } from "./mode";
+import { KeyboardEventTypes } from "@babylonjs/core";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -23,15 +23,62 @@ const logger = new Logger({ name: "molvis-core" });
 class Molvis {
   private _world: World;
   private _system: System;
-  private _mode: Mode;
   private _canvas: HTMLCanvasElement;
+  private _mode: Mode;
 
   constructor(canvas: HTMLCanvasElement) {
     this._canvas = canvas;
     this._world = new World(canvas);
     this._system = new System();
-    this._mode = this.init_mode();
+    this._mode = this.init_mode(this._world, this._system);
   }
+
+  private init_mode = (world: World, system: System) => {
+    world.scene.onKeyboardObservable.add((kbInfo) => {
+      switch (kbInfo.type) {
+        case KeyboardEventTypes.KEYDOWN:
+          switch (kbInfo.event.key) {
+            case "1":
+              logger.info("view mode");
+              this._mode = this.switch_mode("view");
+              break;
+            case "2":
+              logger.info("select mode");
+              this._mode = this.switch_mode("select");
+              break;
+            // case "3":
+            //   this._mode = this.switch_mode("edit");
+            //   break;
+            // case "4":
+            //   this._mode = this.switch_mode("manupulate");
+          }
+          break;
+      }
+    });
+    return new ViewMode(this);
+  };
+
+  public switch_mode = (mode_key: string): Mode => {
+    let _mode = undefined;
+    switch (mode_key) {
+      // case "edit":
+      //   _mode = new EditMode(this);
+      //   break;
+      case "view":
+        _mode = new ViewMode(this);
+        break;
+      case "select":
+        _mode = new SelectMode(this);
+        break;
+      // case "manupulate":
+      //   _mode = new ManupulateMode(this);
+      //   break;
+      default:
+        throw new Error("Invalid mode");
+    }
+    this._mode.finish();
+    return _mode;
+  };
 
   get world(): World {
     return this._world;
@@ -44,51 +91,6 @@ class Molvis {
   get canvas(): HTMLCanvasElement {
     return this._canvas;
   }
-
-  private init_mode = () => {
-    this._world.scene.onKeyboardObservable.add((kbInfo) => {
-      switch (kbInfo.type) {
-        case KeyboardEventTypes.KEYDOWN:
-          switch (kbInfo.event.key) {
-            case "1":
-              this._mode = this.switch_mode("view");
-              break;
-            case "2":
-              this._mode = this.switch_mode("select");
-              break;
-            case "3":
-              this._mode = this.switch_mode("edit");
-              break;
-            case "4":
-              this._mode = this.switch_mode("manupulate");
-          }
-          break;
-      }
-    });
-    return new ViewMode(this);
-  };
-
-  public switch_mode = (mode: string): Mode => {
-    let _mode = undefined;
-    switch (mode) {
-      case "edit":
-        _mode = new EditMode(this);
-        break;
-      case "view":
-        _mode = new ViewMode(this);
-        break;
-      case "select":
-        _mode = new SelectMode(this);
-        break;
-      case "manupulate":
-        _mode = new ManupulateMode(this);
-        break;
-      default:
-        throw new Error("Invalid mode");
-    }
-    this._mode.finish();
-    return _mode;
-  };
 
   public render = () => {
     this._world.render();
@@ -127,7 +129,6 @@ class Molvis {
     
     const n_atoms = atoms.x.length;
     const n_bonds = bonds.i.length;
-    logger.info(`draw_frame: ${n_atoms} atoms, ${n_bonds} bonds`);
     const atom_list = [];
     for (let i = 0; i < n_atoms; i++) {
       const atom = new Map();
@@ -179,14 +180,12 @@ class Molvis {
     } else {
       throw new Error("Invalid labels");
     }
-    logger.info(`label_atom: ${_labels} labels`);
     this._world.artist.label_atom(_labels);
   };
 
   public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
 
     const { jsonrpc, method, params, id } = request;
-    logger.info(`exec_cmd: ${method}`);
 
     if (jsonrpc !== "2.0") {
       return this.createErrorResponse(id, -32600, "Invalid JSON-RPC version");

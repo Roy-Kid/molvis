@@ -1,15 +1,16 @@
 import {
-  Engine,
-  Scene,
   ArcRotateCamera,
-  Vector3,
-  HemisphericLight,
   Color3,
+  Engine,
+  HemisphericLight,
   Mesh,
+  Scene,
+  Vector3,
 } from "@babylonjs/core";
+import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+import { Logger } from "tslog";
 import { Artist } from "./artist";
 import { AxisHelper } from "./axes";
-import { Logger } from "tslog";
 
 const logger = new Logger({ name: "molvis-core" });
 
@@ -19,17 +20,46 @@ class World {
   private _camera: ArcRotateCamera;
   private _artist: Artist;
   private _axes: AxisHelper;
-
+  private _global_gui: AdvancedDynamicTexture;
   private _selected: Mesh[] = [];
+  private _lowerleft_gui: TextBlock;
 
   constructor(canvas: HTMLCanvasElement) {
     this._engine = new Engine(canvas, true);
     this._scene = this.init_scene();
     this._camera = this.init_camera();
     this.init_light();
-    // this._gui = this.init_gui();
     this._artist = this.init_artist();
     this._axes = this.init_axes();
+    this._global_gui = this.init_gui();
+    this._lowerleft_gui = this.init_lowerleft_gui();
+  }
+
+  private init_gui() {
+    const at = AdvancedDynamicTexture.CreateFullscreenUI("UI", true, this._scene);
+    at.rootContainer.scaleX = window.devicePixelRatio;
+    at.rootContainer.scaleY = window.devicePixelRatio;
+    return at;
+  }
+
+  private init_lowerleft_gui() {
+    const textblock = new TextBlock("detail_textblock");
+    this._global_gui.addControl(textblock);
+    return textblock;
+  }
+
+  public update_gui(info: string) {
+    logger.info(info);
+    this._lowerleft_gui.text = info;
+    this._lowerleft_gui.color = "white";
+    this._lowerleft_gui.fontSize = 32;
+    this._lowerleft_gui.top = "46%";
+    this._lowerleft_gui.left = "3%";
+    this._lowerleft_gui.textHorizontalAlignment = TextBlock.HORIZONTAL_ALIGNMENT_LEFT;
+  }
+
+  get global_gui() {
+    return this._global_gui;
   }
 
   public get scene(): Scene {

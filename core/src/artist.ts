@@ -39,13 +39,13 @@ class Artist {
     material.diffuseColor = Color3.FromHexString(color);
     sphere.material = material;
     sphere.position = atom.xyz;
+    sphere.enablePointerMoveEvents = true;
     return sphere;
   }
 
   public label_atom(labels: Map<string, string>) {
 
     // get all atom info
-    console.log(labels);
     const atom_meshs = this._scene.meshes.filter((mesh) =>
       mesh.name.startsWith("atom")
     );
