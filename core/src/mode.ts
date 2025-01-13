@@ -195,7 +195,7 @@ class ViewMode extends Mode {
           break;
       }
       if (entity) {
-        this._world.update_gui(`${type}: ${name}`);
+        this._world.update_gui(`${type}: ${name} (${entity.get('type')})`);
       }
     }
   }

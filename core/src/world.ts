@@ -49,7 +49,6 @@ class World {
   }
 
   public update_gui(info: string) {
-    logger.info(info);
     this._lowerleft_gui.text = info;
     this._lowerleft_gui.color = "white";
     this._lowerleft_gui.fontSize = 32;
