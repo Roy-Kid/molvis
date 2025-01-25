@@ -7,7 +7,7 @@ import {
   Vector3,
   AbstractMesh,
   DynamicTexture,
-  Engine
+  Engine,
 } from "@babylonjs/core";
 import { Atom, Bond, Frame } from "./system";
 import { real_atom_palette } from "./palette";
@@ -17,7 +17,7 @@ const logger = new Logger({ name: "molvis-core" });
 
 const get_name_from_mesh = (mesh: AbstractMesh) => {
   return mesh.name.split(":")[1];
-}
+};
 
 class Artist {
   private _scene: Scene;
@@ -28,8 +28,8 @@ class Artist {
 
   public draw_atom(atom: Atom) {
     let elem = atom.get("element");
-    const color = real_atom_palette.get_color(elem);
-    const radius = real_atom_palette.get_radius(elem);
+    const color = real_atom_palette.get_color(elem as string);
+    const radius = real_atom_palette.get_radius(elem as string);
     const sphere = MeshBuilder.CreateSphere(
       `atom:${atom.name}`,
       { diameter: radius },
@@ -44,7 +44,6 @@ class Artist {
   }
 
   public label_atom(labels: Map<string, string>) {
-
     // get all atom info
     const atom_meshs = this._scene.meshes.filter((mesh) =>
       mesh.name.startsWith("atom")
@@ -52,21 +51,37 @@ class Artist {
     const ratio = 3.0;
     const resolution = 1000;
     const offset = 1.2;
-    
+
     for (const atom_mesh of atom_meshs) {
       const atom_name = get_name_from_mesh(atom_mesh);
       const radius = atom_mesh.getBoundingInfo().boundingBox.extendSize.x;
-      const plane_offset = new Vector3(0, radius*offset, 0);
+      const plane_offset = new Vector3(0, radius * offset, 0);
       const height = 0.5;
-      const label_plane = MeshBuilder.CreatePlane(`label_plane:${atom_mesh.name}`, {width: height * ratio, height: height}, this._scene);  // width and height are in scene units
+      const label_plane = MeshBuilder.CreatePlane(
+        `label_plane:${atom_mesh.name}`,
+        { width: height * ratio, height: height },
+        this._scene
+      ); // width and height are in scene units
       label_plane.rotate(new Vector3(0, 1, 0), Math.PI);
-      const text = new DynamicTexture(`label_text:${atom_mesh.name}`, {width: height * resolution * ratio, height: height * resolution}, this._scene);  // width and height are in pixels
+      const text = new DynamicTexture(
+        `label_text:${atom_mesh.name}`,
+        { width: height * resolution * ratio, height: height * resolution },
+        this._scene
+      ); // width and height are in pixels
       const label = labels.get(atom_name);
       if (label === undefined) {
         logger.warn(`No label found for atom ${atom_name}`);
         continue;
       }
-      text.drawText(label, 10, 200, "bold 256px monospace", "cyan", "#00000000", true);  // x and y are magical
+      text.drawText(
+        label,
+        10,
+        200,
+        "bold 256px monospace",
+        "cyan",
+        "#00000000",
+        true
+      ); // x and y are magical
       const material = new StandardMaterial("label", this._scene);
       material.diffuseTexture = text;
       material.diffuseTexture.hasAlpha = true;
@@ -79,23 +94,30 @@ class Artist {
       label_plane.material = material;
       label_plane.position = atom_mesh.position.add(plane_offset);
     }
-
   }
 
   public draw_bond(bond: Bond, options?: { radius?: number; instance?: Mesh }) {
-    let _options = {
-      path: [bond.itom.xyz, bond.jtom.xyz],
-      radius: 0.1,
-    };
-    // update _options with options with all keys
-    _options = Object.assign(_options, options);
+    const path = [bond.itom.xyz, bond.jtom.xyz];
+    const radius = options?.radius ?? 0.1;
 
-    const tube = MeshBuilder.CreateTube(
-      `bond:${bond.itom.name}-${bond.jtom.name}`,
-      _options,
-      this._scene
-    );
-    return tube;
+    if (options?.instance) {
+      const tube = MeshBuilder.CreateTube(
+        `bond:${bond.name}`,
+        { path, radius, instance: options.instance },
+        this._scene
+      );
+      return tube;
+    } else {
+      const tube = MeshBuilder.CreateTube(
+        `bond:${bond.name}`,
+        { path, radius, updatable: true },
+        this._scene
+      );
+      const material = new StandardMaterial("bond", this._scene);
+      material.diffuseColor = new Color3(0.8, 0.8, 0.8);
+      tube.material = material;
+      return tube;
+    }
   }
 
   public draw_frame(frame: Frame) {

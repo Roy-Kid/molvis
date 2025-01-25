@@ -77,12 +77,17 @@ class Frame {
     this._bonds = [];
     this._props = new Map();
   }
-
-  public add_atom = (data: Map<string, any> = new Map()): Atom => {
-    const atom = new Atom(data);
-    this._atoms.push(atom);
-    return atom;
-  };
+  
+  public add_atom(arg: Atom | Map<string, any>): Atom {
+    if (arg instanceof Atom) {
+      this._atoms.push(arg);
+      return arg;
+    } else {
+      const atom = new Atom(arg);
+      this._atoms.push(atom);
+      return atom;
+    }
+  }
 
   public add_bond = (
     itom: Atom,
@@ -125,17 +130,53 @@ class Frame {
   }
 }
 
-class Atom extends Map<string, any> {
-  static from_obj(obj: object): Atom {
-    return new Atom(Object.entries(obj));
+type AtomValue = number | string | Vector3 | Array<number> | boolean;
+
+class Atom {
+  private _data: Map<string, AtomValue> = new Map();
+
+  constructor(data?: Map<string, AtomValue> | [string, AtomValue][]) {
+    if (data) {
+      if (data instanceof Map) {
+        data.forEach((value, key) => this.set(key, value));
+      } else {
+        data.forEach(([key, value]) => this.set(key, value));
+      }
+    }
+  }
+
+  public set(key: string, value: AtomValue): void {
+    this._data.set(key, value);
+  }
+
+  public get(key: string): AtomValue | undefined {
+    return this._data.get(key);
+  }
+
+  public has(key: string): boolean {
+    return this._data.has(key);
   }
 
   get name(): string {
-    return this.get("name");
+    const name = this.get("name");
+    return typeof name === "string" ? name : "";
   }
 
   get xyz(): Vector3 {
-    return new Vector3(this.get("x"), this.get("y"), this.get("z"));
+    const x = this.get("x");
+    const y = this.get("y");
+    const z = this.get("z");
+    return new Vector3(
+      typeof x === "number" ? x : 0,
+      typeof y === "number" ? y : 0,
+      typeof z === "number" ? z : 0
+    );
+  }
+
+  set xyz(xyz: Vector3) {
+    this.set("x", xyz.x);
+    this.set("y", xyz.y);
+    this.set("z", xyz.z);
   }
 }
 

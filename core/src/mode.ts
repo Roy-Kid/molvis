@@ -2,13 +2,12 @@ import {
   PointerEventTypes,
   PointerInfo,
   AbstractMesh,
+  Mesh,
   Vector3,
   Scene,
   Matrix,
   Color3,
   RayHelper,
-  PointerDragBehavior,
-  MeshBuilder,
   Observer,
   KeyboardEventTypes,
   KeyboardInfo,
@@ -237,165 +236,131 @@ class SelectMode extends Mode {
   }
 }
 
+class EditMode extends Mode {
+  private _draggingAtomMesh: Mesh | undefined = undefined;
+  private _draggingBondMesh: Mesh | undefined = undefined;
+  private _startAtom: Atom | undefined = undefined;
+  private _draggingAtom: Atom | undefined = undefined;
+  private _draggingBond: Bond | undefined = undefined;
 
+  constructor(app: Molvis) {
+    super(ModeType.Edit, app);
+  }
 
-// class EditMode extends Mode {
-//   private is_first_move: boolean = true;
+  override _on_mouse_down(pointerInfo: PointerInfo) {
+    if (pointerInfo.event.button !== 0) {
+      return;
+    }
+    this._pos_on_mouse_down = this.get_pointer_xy();
 
-//   constructor(app: Molvis) {
-//     super(ModeType.Edit, app);
-//   }
+    if (this._is_pick_mesh(pointerInfo)) {
+      // 如果点击在已有原子上
+      const pickedMesh = pointerInfo.pickInfo!.pickedMesh!;
+      if (pickedMesh.name.startsWith("atom:")) {
+        const atomName = pickedMesh.name.split(":")[1];
+        this._startAtom = this._system.current_frame.get_atom(
+          (atom: Atom) => atom.name === atomName
+        );
+      }
+    } else {
+      // 点击在空白处，创建新原子
+      const xyz = get_vec3_from_screen_with_depth(
+        this._scene,
+        pointerInfo.event.clientX,
+        pointerInfo.event.clientY,
+        10
+      );
+      
+      const atomData = new Map<string, any>([
+        ["name", `atom_${Date.now()}`],
+        ["type", "C"],
+        ["x", xyz.x],
+        ["y", xyz.y],
+        ["z", xyz.z]
+      ]);
+      
+      this._startAtom = this._app.draw_atom(atomData);
+    }
+  }
 
-//   override _on_mouse_down(pointerInfo: PointerInfo) {
-//     this._pos_on_mouse_down = {
-//       x: this._scene.pointerX,
-//       y: this._scene.pointerY,
-//     };
+  override _on_mouse_move(pointerInfo: PointerInfo) {
+    if (!this._startAtom || !this._pos_on_mouse_down) return;
 
-//     if (this._is_pick_mesh(pointerInfo)) {
-//       this._mesh_on_mouse_down = pointerInfo.pickInfo!.pickedMesh!;
-//     }
+    const xyz = get_vec3_from_screen_with_depth(
+      this._scene,
+      pointerInfo.event.clientX,
+      pointerInfo.event.clientY,
+      10
+    );
 
-//     // hit selected mesh
-//   }
+    if (this._is_dragging && !this._draggingAtomMesh) {
+      // 首次拖动时创建临时原子和键
+      const atomData = new Map<string, any>([
+        ["name", `atom_${Date.now()}`],
+        ["type", "C"],
+        ["x", xyz.x],
+        ["y", xyz.y],
+        ["z", xyz.z]
+      ]);
 
-//   override _on_mouse_up(pointerInfo: PointerInfo) {
-//     if (pointerInfo.pickInfo) {
-//       const picked_mesh = pointerInfo.pickInfo.pickedMesh;
+      // 创建临时原子，但不添加到系统中
+      this._draggingAtom = new Atom(atomData);
+      this._draggingBond = new Bond(this._draggingAtom, this._startAtom);
+      this._draggingAtomMesh = this._world.artist.draw_atom(this._draggingAtom);
+      this._draggingBondMesh = this._world.artist.draw_bond(this._draggingBond);
+    }
 
-//       if (picked_mesh) {
-//         // click mesh
-//         // if (!this._is_dragging)
-//         // drag mesh
-//       } else {
-//         // click empty
-//         if (!this._is_dragging && this._pos_on_mouse_down) {
-//           const xyz = get_vec3_from_screen_with_depth(
-//             this._scene,
-//             this._pos_on_mouse_down.x,
-//             this._pos_on_mouse_down.y,
-//             10
-//           );
-//           this._app.add_atom(
-//             System.random_atom_id(),
-//             xyz.x,
-//             xyz.y,
-//             xyz.z,
-//             new Map()
-//           );
-//         }
-//         // else: drag empty
-//       }
+    else if (this._draggingAtomMesh) {
+      // 只更新网格位置，不更新系统数据
+      this._draggingAtom!.xyz = xyz;
+      this._draggingAtomMesh.position = xyz;
+      
+      // 更新键的位置和方向
+      if (this._draggingBondMesh) {
+        this._world.artist.draw_bond(
+          this._draggingBond!, {
+            instance: this._draggingBondMesh
+          }
+        );
+      }
+    }
+  }
 
-//       // concretet dragging atom and bond
-//       if (this._is_dragging && this._mesh_on_mouse_down) {
-//         const drag_on_atom = this._system.current_frame.get_atom_by_name(
-//           this._mesh_on_mouse_down.name.substring(4)
-//         );
-//         if (drag_on_atom === undefined) {
-//           throw new Error(
-//             `Atom ${this._mesh_on_mouse_down.name.substring(4)} not found`
-//           );
-//         }
-//         const dragging_atom_mesh = this._scene.getMeshByName("_dragging_atom");
-//         if (dragging_atom_mesh === null) {
-//           throw new Error(`Mesh _dragging_atom not found`);
-//         }
-//         const dragging_bond_mesh =
-//           this._scene.getMeshByName("bond_on_dragging");
-//         dragging_atom_mesh.name = `atom${System.random_atom_id()}`;
+  override _on_mouse_up(pointerInfo: PointerInfo) {
+    if (this._draggingAtomMesh && this._draggingAtom) {
+      // 鼠标释放时才将数据同步到系统中
+      const xyz = this._draggingAtomMesh.position;
+      const atomData = new Map<string, any>([
+        ["name", this._draggingAtom.name],
+        ["type", "C"],
+        ["x", xyz.x],
+        ["y", xyz.y],
+        ["z", xyz.z]
+      ]);
 
-//         const dragging_atom = this._system.current_frame.add_atom(
-//           dragging_atom_mesh.name.substring(4),
-//           dragging_atom_mesh.position.x,
-//           dragging_atom_mesh.position.y,
-//           dragging_atom_mesh.position.z,
-//           drag_on_atom?.props
-//         );
-//         console.log(dragging_atom);
-//         const dragging_bond = this._system.current_frame.add_bond(
-//           drag_on_atom!,
-//           dragging_atom,
-//           new Map()
-//         );
-//         dragging_bond_mesh!.name = dragging_bond.name;
-//       }
-//     }
+      // 添加原子到系统
+      const newAtom = this._app.draw_atom(atomData);
+      
+      // 添加键到系统
+      if (this._startAtom) {
+        this._app.draw_bond(this._startAtom, newAtom);
+      }
 
-//     // reset
-//     this._pos_on_mouse_down = undefined;
-//     this._mesh_on_mouse_down = undefined;
-//     this.is_first_move = true;
+      // 清除临时网格
+      if (this._draggingBondMesh) {
+        this._draggingBondMesh.dispose();
+      }
+      this._draggingAtomMesh.dispose();
+    }
 
-//     // concrete dragging atom and bond
-//   }
-
-//   _on_mouse_move = (pointerInfo: PointerInfo) => {
-//     // hit mesh and dragging
-//     if (this._mesh_on_mouse_down && this._is_dragging) {
-//       this._world.camera.detachControl();
-//       // hit selected mesh
-//       if (
-//         this.is_first_move &&
-//         this._mesh_on_mouse_down.name.startsWith("atom")
-//       ) {
-//         const atom_mesh_on_dragging = this._mesh_on_mouse_down.clone(
-//           `_dragging_atom`,
-//           null
-//         )!;
-//         const on_drag_start_position = atom_mesh_on_dragging.position.clone();
-
-//         const pointer_drag_bahavior = new PointerDragBehavior({
-//           dragPlaneNormal: this._mesh_on_mouse_down.position.subtract(
-//             this._world.camera.position
-//           ),
-//         });
-
-//         this._mesh_on_mouse_down.removeBehavior(
-//           this._mesh_on_mouse_down.getBehaviorByName(
-//             pointer_drag_bahavior.name
-//           )!
-//         );
-
-//         const bond_raidus = 0.1;
-//         let bond_mesh_on_dragging = MeshBuilder.CreateTube(
-//           `bond_on_dragging`,
-//           {
-//             path: [on_drag_start_position, on_drag_start_position],
-//             radius: bond_raidus,
-//             updatable: true,
-//           },
-//           this._scene
-//         );
-//         pointer_drag_bahavior.useObjectOrientationForDragging = false;
-
-//         pointer_drag_bahavior.onDragObservable.add((event) => {
-//           bond_mesh_on_dragging = MeshBuilder.CreateTube(`bond_on_dragging`, {
-//             path: [on_drag_start_position, atom_mesh_on_dragging.position],
-//             radius: bond_raidus,
-//             instance: bond_mesh_on_dragging,
-//             updatable: true,
-//           });
-//         });
-//         atom_mesh_on_dragging.addBehavior(pointer_drag_bahavior);
-//         pointer_drag_bahavior.startDrag();
-//         this.is_first_move = false;
-//       }
-
-//       // hit unselected mesh
-//       this._world.camera.attachControl();
-//     }
-//   };
-
-//   override _on_mouse_wheel(pointerInfo: PointerInfo) {}
-
-//   override _on_mouse_pick(pointerInfo: PointerInfo) {}
-
-//   override _on_mouse_tap(pointerInfo: PointerInfo) {}
-
-//   override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
-// }
-
+    // 重置所有临时变量
+    this._draggingAtomMesh = undefined;
+    this._startAtom = undefined;
+    this._draggingBondMesh = undefined;
+    this._draggingAtom = undefined;
+    this._pos_on_mouse_down = undefined;
+  }
+}
 
 // class ManupulateMode extends Mode {
 //   constructor(app: Molvis) {
@@ -417,4 +382,4 @@ class SelectMode extends Mode {
 //   override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
 // }
 
-export { ViewMode, Mode, ModeType, SelectMode };
+export { ViewMode, Mode, ModeType, SelectMode, EditMode };

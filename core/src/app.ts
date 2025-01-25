@@ -3,7 +3,7 @@ import { System } from "./system";
 import { World } from "./world";
 import { Atom } from "./system";
 import { Vector3 } from "@babylonjs/core";
-import { Mode, ViewMode, SelectMode } from "./mode";
+import { Mode, ViewMode, SelectMode, EditMode } from "./mode";
 import { KeyboardEventTypes } from "@babylonjs/core";
 
 interface JsonRpcRequest {
@@ -40,15 +40,16 @@ class Molvis {
           switch (kbInfo.event.key) {
             case "1":
               logger.info("view mode");
-              this._mode = this.switch_mode("view");
+              this.switch_mode("view");
               break;
             case "2":
               logger.info("select mode");
-              this._mode = this.switch_mode("select");
+              this.switch_mode("select");
               break;
-            // case "3":
-            //   this._mode = this.switch_mode("edit");
-            //   break;
+              case "e":
+              logger.info("edit mode");
+              this.switch_mode("edit");
+              break;
             // case "4":
             //   this._mode = this.switch_mode("manupulate");
           }
@@ -58,17 +59,17 @@ class Molvis {
     return new ViewMode(this);
   };
 
-  public switch_mode = (mode_key: string): Mode => {
-    let _mode = undefined;
+  public switch_mode = (mode_key: string) => {
+    this._mode.finish();
     switch (mode_key) {
-      // case "edit":
-      //   _mode = new EditMode(this);
-      //   break;
+      case "edit":
+        this._mode = new EditMode(this);
+        break;
       case "view":
-        _mode = new ViewMode(this);
+        this._mode = new ViewMode(this);
         break;
       case "select":
-        _mode = new SelectMode(this);
+        this._mode = new SelectMode(this);
         break;
       // case "manupulate":
       //   _mode = new ManupulateMode(this);
@@ -76,8 +77,6 @@ class Molvis {
       default:
         throw new Error("Invalid mode");
     }
-    this._mode.finish();
-    return _mode;
   };
 
   get world(): World {
