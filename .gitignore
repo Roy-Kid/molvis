@@ -1,6 +1,9 @@
 # front-end
 static/
 
+# build
+build/
+
 # python
 __pycache__/
 
