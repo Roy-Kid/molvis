@@ -43,58 +43,59 @@ class Artist {
     return sphere;
   }
 
-  public label_atom(labels: Map<string, string>) {
-    // get all atom info
-    const atom_meshs = this._scene.meshes.filter((mesh) =>
-      mesh.name.startsWith("atom")
-    );
-    const ratio = 3.0;
-    const resolution = 1000;
-    const offset = 1.2;
+public label_atom(labels: Map<string, string>, offsetMultiplier: number = 1.2, fontSize: number = 256) {
+  // 获取所有原子信息
+  const atom_meshs = this._scene.meshes.filter((mesh) =>
+    mesh.name.startsWith("atom")
+  );
+  const ratio = 3.0;
+  const resolution = 2000; // 高清纹理
+  const offset = offsetMultiplier;
 
-    for (const atom_mesh of atom_meshs) {
-      const atom_name = get_name_from_mesh(atom_mesh);
-      const radius = atom_mesh.getBoundingInfo().boundingBox.extendSize.x;
-      const plane_offset = new Vector3(0, radius * offset, 0);
-      const height = 0.5;
-      const label_plane = MeshBuilder.CreatePlane(
-        `label_plane:${atom_mesh.name}`,
-        { width: height * ratio, height: height },
-        this._scene
-      ); // width and height are in scene units
-      label_plane.rotate(new Vector3(0, 1, 0), Math.PI);
-      const text = new DynamicTexture(
-        `label_text:${atom_mesh.name}`,
-        { width: height * resolution * ratio, height: height * resolution },
-        this._scene
-      ); // width and height are in pixels
-      const label = labels.get(atom_name);
-      if (label === undefined) {
-        logger.warn(`No label found for atom ${atom_name}`);
-        continue;
-      }
-      text.drawText(
-        label,
-        10,
-        200,
-        "bold 256px monospace",
-        "cyan",
-        "#00000000",
-        true
-      ); // x and y are magical
-      const material = new StandardMaterial("label", this._scene);
-      material.diffuseTexture = text;
-      material.diffuseTexture.hasAlpha = true;
-      material.useAlphaFromDiffuseTexture = true;
-      material.specularColor = new Color3(0, 0, 0);
-      material.emissiveColor = new Color3(1, 1, 1);
-      material.backFaceCulling = false;
-      material.depthFunction = Engine.ALWAYS;
-      label_plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
-      label_plane.material = material;
-      label_plane.position = atom_mesh.position.add(plane_offset);
+  for (const atom_mesh of atom_meshs) {
+    const atom_name = get_name_from_mesh(atom_mesh);
+    const radius = atom_mesh.getBoundingInfo().boundingBox.extendSize.x;
+    const plane_offset = new Vector3(0, radius * offset, 0);
+    const height = 0.5;
+    const label_plane = MeshBuilder.CreatePlane(
+      `label_plane:${atom_mesh.name}`,
+      { width: height * ratio, height: height },
+      this._scene
+    ); // 宽度和高度以场景单位为单位
+    label_plane.rotate(new Vector3(0, 1, 0), Math.PI);
+    const text = new DynamicTexture(
+      `label_text:${atom_mesh.name}`,
+      { width: height * resolution * ratio, height: height * resolution },
+      this._scene
+    ); // 宽度和高度以像素为单位
+    const label = labels.get(atom_name);
+    if (label === undefined) {
+      logger.warn(`No label found for atom ${atom_name}`);
+      continue;
     }
+    text.drawText(
+      label,
+      10,
+      200,
+      `bold ${fontSize}px monospace`,
+      "cyan",
+      "#00000000",
+      true
+    ); // x 和 y 是魔法数
+    const material = new StandardMaterial("label", this._scene);
+    material.diffuseTexture = text;
+    material.diffuseTexture.hasAlpha = true;
+    material.useAlphaFromDiffuseTexture = true;
+    material.specularColor = new Color3(0, 0, 0);
+    material.emissiveColor = new Color3(1, 1, 1);
+    material.backFaceCulling = false;
+    material.alpha = 0.5; // 使平面透明
+    material.depthFunction = Engine.ALWAYS;
+    label_plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    label_plane.material = material;
+    label_plane.position = atom_mesh.position.add(plane_offset);
   }
+}
 
   public draw_bond(bond: Bond, options?: { radius?: number; instance?: Mesh }) {
     const path = [bond.itom.xyz, bond.jtom.xyz];
