@@ -25,6 +25,7 @@ class World {
   private _lowerleft_gui: TextBlock;
 
   constructor(canvas: HTMLCanvasElement) {
+
     this._engine = new Engine(canvas, true);
     this._scene = this.init_scene();
     this._camera = this.init_camera();

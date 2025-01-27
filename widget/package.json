@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build"
+    "dev": "esbuild esbuild.config.mjs --watch",
+    "build": "esbuild esbuild.config.mjs --build"
   },
   "author": "Roy Kid",
   "dependencies": {
     "@anywidget/types": "^0.2.0",
     "@anywidget/vite": "^0.2.0",
+    "@apache-arrow/ts": "^19.0.0",
+    "apache-arrow": "^19.0.0",
     "molvis": "file:../core"
   }
 }

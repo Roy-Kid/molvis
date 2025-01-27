@@ -182,68 +182,7 @@ class Molvis {
     this._world.artist.label_atom(_labels);
   };
 
-  public exec_cmd = (request: JsonRpcRequest, buffers: DataView[]) => {
-
-    const { jsonrpc, method, params, id } = request;
-
-    if (jsonrpc !== "2.0") {
-      return this.createErrorResponse(id, -32600, "Invalid JSON-RPC version");
-    }
-
-    try {
-      const { context, methodName } = this.parseMethod(method);
-      const func = this.getMethodFunction(context, methodName);
-      const result = func(...Object.values(params || {}));
-      return this.createSuccessResponse(id, result);
-    } catch (error: any) {
-      logger.error(`error: ${error.message} from ${method}`);
-      return this.createErrorResponse(id, -32603, error.message, error.stack);
-    }
-  };
-
-  // Helper function to parse and retrieve context and method name
-  private parseMethod(method: string) {
-    const parts = method.split(".");
-    const methodName = parts.pop();
-    if (!methodName) throw new Error("Invalid method format");
-
-    const context = parts.reduce(
-      (acc, part) => acc && (acc as any)?.[part],
-      this
-    );
-    return { context, methodName };
-  }
-
-  // Helper function to retrieve the method function from the context
-  private getMethodFunction(context: any, methodName: string) {
-    if (!context || typeof context[methodName] !== "function") {
-      throw new Error(`Method ${methodName} not found or is not a function`);
-    }
-    return context[methodName].bind(context);
-  }
-
-  // Helper function to create success response
-  private createSuccessResponse(id: any, result: any) {
-    return {
-      jsonrpc: "2.0",
-      result,
-      id: id || null,
-    };
-  }
-
-  // Helper function to create error response
-  private createErrorResponse(
-    id: any,
-    code: number,
-    message: string,
-    data?: any
-  ) {
-    return {
-      jsonrpc: "2.0",
-      error: { code, message, data },
-      id: id || null,
-    };
-  }
+ 
 }
 
 export { Molvis };
