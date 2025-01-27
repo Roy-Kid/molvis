@@ -62,6 +62,10 @@ export class MolvisWidget {
     this.molvis.render();
   };
 
+  public stop = () => {
+    this.molvis.stop();
+  };
+
   public resize = () => {
     this.molvis.resize();
   };

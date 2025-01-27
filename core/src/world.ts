@@ -132,6 +132,10 @@ class World {
     });
   }
 
+  public stop() {
+    this.engine.dispose();
+  }
+
   public clear() {
     while (this._scene.meshes.length) {
       const mesh = this._scene.meshes[0];

@@ -18,6 +18,7 @@ export default () => {
       }
       return () => {
         logger.info(`MolvisWidget${session_id} init cleanup`);
+        app.stop();
       };
     },
 

@@ -95,6 +95,10 @@ class Molvis {
     this._world.render();
   };
 
+  public stop = () => {
+    this._world.stop();
+  };
+
   public resize = () => {
     this._world.resize();
   };
