@@ -1,7 +1,7 @@
 import { Molvis } from "molvis";
 import { Logger } from "tslog";
 import { tableFromIPC } from 'apache-arrow';
-const logger = new Logger({ name: "molvis-jsonrpc" });
+const logger = new Logger({ name: "molvis-jsonrpc", filePathWithLine: true });
 
 export interface JsonRpcRequest {
   jsonrpc: string;
@@ -39,10 +39,13 @@ export class JsonRpcHandler {
     try {
       // Handle special cases with buffers
       const processedParams = this.processBuffers(method, params, buffers);
-      
+      logger.info(`processedParams: ${processedParams}`);
+      // print processedParams keys
+      logger.info(`processedParams keys: ${Object.keys(processedParams)}`);
       const { context, methodName } = this.parseMethod(method);
       const func = this.getMethodFunction(context || this.context, methodName);
-      const result = func(...Object.values(processedParams || {}));
+      const paramsObject = Object.fromEntries(processedParams);
+      const result = func(paramsObject);
       return this.createSuccessResponse(id, result);
     } catch (error: any) {
       logger.error(`error: ${error.message} from ${method}`);
@@ -51,8 +54,8 @@ export class JsonRpcHandler {
   }
 
   private processBuffers(method: string, params: any, buffers: DataView[]) {
-    const processedParams = { ...params };
-    
+    const tableData = new Map<string, any[]>();
+    Object.assign(tableData, params);
     if (buffers.length > 0) {
 
       buffers.forEach((buffer, idx) => {
@@ -61,35 +64,28 @@ export class JsonRpcHandler {
         
         // Create Arrow Table from buffer
         const table = tableFromIPC(uint8Buffer);
-        
         // Convert table to object with column arrays
         // assume field of buffers is unique
-        const tableData = new Map<string, any[]>();
 
         // Iterate over the columns of the table
-        const columns = table.schema.fields;
-        columns.forEach((column) => {
-          const columnName = column.name;
-          const columnValues = table.getChild(columnName);
-          if (columnValues) {
-            tableData.set(columnName, columnValues?.toArray());
+        const fields = table.schema.fields;
+        fields.forEach((field) => {
+          logger.info(`field: ${field.name}`);
+          const arr = table.getChild(field.name);
+          if (arr) {
+            tableData.set(field.name, arr?.toArray());
           }
         });
-
-        Object.assign(processedParams, tableData);
       });
-
-      return processedParams;
     }
+    return tableData;
     
-    return processedParams;
   }
 
   private parseMethod(method: string) {
     const parts = method.split(".");
     const methodName = parts.pop();
     if (!methodName) throw new Error("Invalid method format");
-
     const context = parts.length > 0
       ? parts.reduce((acc, part) => acc && (acc as any)?.[part], this.context)
       : null;

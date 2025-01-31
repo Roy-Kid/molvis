@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "esbuild esbuild.config.mjs --watch",
-    "build": "esbuild esbuild.config.mjs --build"
+    "dev": "esbuild esbuild.config.js --watch",
+    "build": "esbuild esbuild.config.js --build"
   },
   "author": "Roy Kid",
   "dependencies": {

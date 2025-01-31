@@ -12,12 +12,12 @@ const config = {
 
 const host = args.includes('--host') ? args[args.indexOf('--host') + 1] : '127.0.0.1';
 
-if (args.includes('--start')) {
+if (args.includes('--watch')) {
   esbuild
     .context({
       ...config,
       minify: false,
-      sourcemap: true,
+      sourcemap: "inline",
     })
     .then(async (ctx) => {
       await ctx.watch();
