@@ -5,9 +5,9 @@
   "author": "Roy Kid",
   "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
-    "core",
-    "standalone",
-    "widget"
+    "molvis/core",
+    "molvis/standalone",
+    "molvis/widget"
   ],
   "scripts": {
     "dev:core": "npm run -w core dev",
@@ -18,9 +18,14 @@
     "build:standalone": "npm run build -w standalone"
   },
   "devDependencies": {
-    "esbuild": "*"
+    "esbuild": "*",
+    "jest": "*"
   },
   "dependencies": {
-    "tslog": "^4.9.3"
+    "tslog": "^4.9.3",
+    "@babylonjs/core": "^7.33.0",
+    "@babylonjs/gui": "^7.33.0",
+    "@babylonjs/materials": "^7.33.0",
+    "chroma-js": "^3.1.2"
   }
 }

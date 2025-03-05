@@ -8,7 +8,6 @@ const startMode = args.includes('--start');
 
 const baseConfig = {
   entryPoints: ['src/index.ts'],
-  outfile: 'dist/bundle.js',
   bundle: true,
 };
 
@@ -45,8 +44,9 @@ if (testMode) {
   esbuild
     .build({
       ...baseConfig,
-      entryPoints: ['tests/index.test.ts'],
-      outfile: 'dist/bundle.test.js',
+      entryPoints: ['tests/*.test.ts'],
+      outdir: 'dist/tests',
+      "external": ["jest"]
     })
     .catch((e) => {
       console.error(e);

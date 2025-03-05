@@ -1,23 +1,11 @@
 {
-  "name": "molvis",
+  "name": "molvis-core",
   "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "node esbuild.config.js --watch",
     "build": "node esbuild.config.js",
-    "test": "node esbuild.config.js --test && jest"
+    "test": "node esbuild.config.js --test && jest --config jest.config.js"
   },
-  "main": "src/index.ts",
-  "dependencies": {
-    "@babylonjs/core": "^7.33.0",
-    "@babylonjs/gui": "^7.33.0",
-    "@babylonjs/materials": "^7.33.0",
-    "chroma-js": "^3.1.2"
-  },
-  "devDependencies": {
-    "jest": "^29.0.0",
-    "ts-jest": "^29.0.0",
-    "@types/jest": "^29.0.0",
-    "esbuild": "^0.19.0"
-  }
+  "main": "src/index.ts"
 }
