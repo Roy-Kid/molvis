@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "node esbuild.dev.js",
-    "build": "node esbuild.build.js",
-    "preview": "serve dist"
+    "dev": "node esbuild.config.js --watch",
+    "build": "node esbuild.config.js",
+    "test": "node esbuild.config.js --test && jest"
   },
   "main": "src/index.ts",
   "dependencies": {
@@ -15,8 +15,9 @@
     "chroma-js": "^3.1.2"
   },
   "devDependencies": {
-    "esbuild": "^0.20.0",
-    "serve": "^14.2.1",
-    "typescript": "^5.3.3"
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "esbuild": "^0.19.0"
   }
 }
