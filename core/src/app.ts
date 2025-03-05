@@ -1,5 +1,5 @@
 import { Logger } from "tslog";
-import { System } from "./system";
+import { Frame, System } from "./system";
 import { World } from "./world";
 import { Atom } from "./system";
 import { Vector3 } from "@babylonjs/core";
@@ -159,6 +159,12 @@ class Molvis {
     const frame = this._system.current_frame;
     this._world.artist.draw_frame(frame);
   };
+
+  public append_frame = (frame: Frame) => {
+    this._system.append_frame(frame);
+    this._world.artist.draw_frame(frame);
+    this._world.update_frame_indicator(this._system.current_frame_index, this._system.n_frames);
+  }
 
   public cameraLookAt = (x: number, y: number, z: number) => {
     this._world.camera.target = new Vector3(x, y, z);

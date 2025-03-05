@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "node esbuild.config.js --watch",
+    "dev": "node esbuild.config.js --dev",
     "build": "node esbuild.config.js",
     "test": "node esbuild.config.js --test && jest --config jest.config.js"
   },

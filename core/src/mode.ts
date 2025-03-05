@@ -166,6 +166,8 @@ abstract class Mode {
 class ViewMode extends Mode {
   constructor(app: Molvis) {
     super(ModeType.View, app);
+    // Initialize by showing frame information
+    this._updateFrameInfo();
   }
 
   override _on_mouse_down(pointerInfo: PointerInfo) {
@@ -194,7 +196,7 @@ class ViewMode extends Mode {
           break;
       }
       if (entity) {
-        this._world.update_gui(`${type}: ${name} (${entity.get('type')})`);
+        this._world.update_info_text(`${type}: ${name} (${entity.get('type')})`);
       }
     }
   }
@@ -211,13 +213,27 @@ class ViewMode extends Mode {
     const frame = this._app.system.next_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
+    this._updateFrameInfo();
   }
 
   _on_press_q() {
     const frame = this._app.system.prev_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
+    this._updateFrameInfo();
   }
+  
+  private _updateFrameInfo() {
+    const trajectory = this._app.system.trajectory;
+    const currentIndex = trajectory['_current_index']; // We should add a getter for this
+    const totalFrames = trajectory.frames.length;
+    
+    // Update visual frame indicator
+    this._world.update_frame_indicator(currentIndex, totalFrames);
+    
+    logger.debug(`Viewing frame ${currentIndex + 1} of ${totalFrames}`);
+  }
+  
 }
 
 class SelectMode extends Mode {

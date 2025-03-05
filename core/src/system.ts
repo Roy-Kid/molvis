@@ -90,6 +90,11 @@ class System {
   public append_frame(frame: Frame) {
     this._trajectory.addFrame(frame);
   }
+
+  get n_frames(): number {
+    return this._trajectory.frames.length;
+  }
+
 }
 
 class Frame {
