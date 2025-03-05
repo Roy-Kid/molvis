@@ -1,20 +1,38 @@
 import esbuild from 'esbuild';
 
 const args = process.argv;
+const devMode = args.includes('--dev');
+const prodMode = args.includes('--prod');
+const testMode = args.includes('--test');
+const startMode = args.includes('--start');
 
-const config = {
-  logLevel: 'info',
+const baseConfig = {
   entryPoints: ['src/index.tsx'],
   outfile: 'build/bundle.js',
-  bundle: true
+  bundle: true,
+  logLevel: 'info',
 };
 
-const host = args.includes('--host') ? args[args.indexOf('--host') + 1] : '127.0.0.1';
-
-if (args.includes('--build')) {
+if (devMode) {
   esbuild
     .build({
-      ...config,
+      ...baseConfig,
+      outfile: 'build/bundle.dev.js',
+      sourcemap: true,
+      watch: true,
+      minify: false,
+    })
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}
+
+if (prodMode) {
+  esbuild
+    .build({
+      ...baseConfig,
+      outfile: 'build/bundle.prod.js',
       minify: true,
       sourcemap: false,
     })
@@ -24,13 +42,26 @@ if (args.includes('--build')) {
     });
 }
 
-if (args.includes('--start')) {
+if (testMode) {
+  esbuild
+    .build({
+      ...baseConfig,
+      entryPoints: ['tests/index.test.ts'],
+      outfile: 'build/bundle.test.js',
+    })
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}
+
+if (startMode) {
   esbuild
     .context({
-      ...config,
-      minify: false,
+      ...baseConfig,
       sourcemap: true,
-      loader: { '.tsx': 'tsx' } // 添加加载tsx文件的配置
+      loader: { '.tsx': 'tsx' },
+      minify: false,
     })
     .then(async (ctx) => {
       await ctx.watch();
