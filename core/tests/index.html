@@ -1,35 +1,35 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Molvis-core-preview</title>
-  <style>
-    body,
-    html {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      height: 100%;
-      width: 100%;
-    }
-
-    canvas {
-      display: block;
-      position: absolute;
-      /* 使Canvas在页面上绝对定位 */
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Molvis Core Test</title>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+    </style>
 </head>
-
 <body>
-  <canvas id="canvas"></canvas>
-  <script type="module" src="./test_label.ts"></script>
+    <canvas id="renderCanvas"></canvas>
+    <script type="module" src="/dist/index.js"></script>
+    <script>
+        // Live reload script
+        new EventSource('/esbuild').addEventListener('message', e => {
+            if (e.data === 'update') {
+                console.log('Reloading page due to update...');
+                location.reload();
+            }
+        });
+    </script>
 </body>
-
 </html>

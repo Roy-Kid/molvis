@@ -11,12 +11,15 @@ import {
   Observer,
   KeyboardEventTypes,
   KeyboardInfo,
+  Vector2,
+  Tools,
 } from "@babylonjs/core";
 
 import { Molvis } from "./app";
 import { World } from "./world";
 import { System, Bond, Atom } from "./system";
 import { Logger } from "tslog";
+import { ContextMenu } from "./menu";
 
 const logger = new Logger({ name: "molvis-core" });
 
@@ -63,8 +66,11 @@ abstract class Mode {
   private _pointer_observer: Observer<PointerInfo>;
   private _kb_observer: Observer<KeyboardInfo>;
 
-  protected _pos_on_mouse_down: { x: number; y: number } | undefined;
+  protected _pos_on_mouse_down: Vector2;
+  protected _pos_on_mouse_up: Vector2;
   protected _mesh_on_mouse_down: AbstractMesh | undefined;
+
+  protected _context_menu: ContextMenu | undefined;
 
   constructor(name: ModeType, app: Molvis) {
     this.name = name;
@@ -76,6 +82,12 @@ abstract class Mode {
     this._kb_observer = this.register_keyboard_events();
 
     this._pos_on_mouse_down = this.get_pointer_xy();
+    this._pos_on_mouse_up = this.get_pointer_xy();
+    this._context_menu = this.init_context_menu();
+  }
+
+  protected init_context_menu(): ContextMenu | undefined {
+    return undefined;
   }
 
   public finish() {
@@ -135,8 +147,25 @@ abstract class Mode {
     });
   };
 
-  _on_mouse_down(pointerInfo: PointerInfo): void {}
-  _on_mouse_up(pointerInfo: PointerInfo): void {}
+  _on_mouse_down(pointerInfo: PointerInfo): void {
+    this._pos_on_mouse_down = this.get_pointer_xy();
+    if (this._is_dragging) {
+    } else {
+      if (this._context_menu?.isOpen() && pointerInfo.event.button === 0) {
+        this._context_menu?.hide();
+      }
+    }
+  }
+
+  _on_mouse_up(pointerInfo: PointerInfo): void {
+    this._pos_on_mouse_up = this.get_pointer_xy();
+    if (this._is_dragging) {
+    } else {
+      if (pointerInfo.event.button === 2) {
+        this._context_menu?.show(this.get_pointer_xy());
+      }
+    }
+  }
   _on_mouse_move(pointerInfo: PointerInfo): void {}
   _on_mouse_wheel(pointerInfo: PointerInfo): void {}
   _on_mouse_pick(pointerInfo: PointerInfo): void {}
@@ -145,8 +174,8 @@ abstract class Mode {
   _on_press_e(): void {}
   _on_press_q(): void {}
 
-  protected get_pointer_xy(): { x: number; y: number } {
-    return { x: this._scene.pointerX, y: this._scene.pointerY };
+  protected get_pointer_xy(): Vector2 {
+    return new Vector2(this._scene.pointerX, this._scene.pointerY);
   }
 
   get _is_dragging(): boolean {
@@ -168,10 +197,34 @@ class ViewMode extends Mode {
     super(ModeType.View, app);
   }
 
-  override _on_mouse_down(pointerInfo: PointerInfo) {
+  override init_context_menu() {
+    const context_menu = new ContextMenu(this._scene);
+    context_menu.addItem({
+      label: "Screen Shot",
+      callback: () => {
+        Tools.CreateScreenshot(
+          this._scene.getEngine(), this._world.camera, { precision: 1 }
+        );
+      },
+    });
+    return context_menu;
   }
 
-  override _on_mouse_up(pointerInfo: PointerInfo) {}
+  override _on_mouse_down(pointerInfo: PointerInfo) {
+    super._on_mouse_down(pointerInfo);
+  }
+
+  override _on_mouse_up(pointerInfo: PointerInfo) {
+    super._on_mouse_up(pointerInfo);
+    
+    // Explicitly handle right clicks for context menu
+    if (pointerInfo.event.button === 2 && !this._is_dragging && this._context_menu) {
+      const position = new Vector2(pointerInfo.event.clientX, pointerInfo.event.clientY);
+      console.log("Opening context menu at:", position);
+      this._context_menu.show(position);
+      pointerInfo.event.preventDefault();
+    }
+  }
 
   override _on_mouse_move(pointerInfo: PointerInfo) {
     const pick_info = pointerInfo.pickInfo;
@@ -184,7 +237,7 @@ class ViewMode extends Mode {
       switch (type) {
         case "atom":
           entity = this._system.current_frame.get_atom(
-            (atom: Atom) => atom['name'] == name
+            (atom: Atom) => atom["name"] == name
           );
           break;
         case "bond":
@@ -194,7 +247,7 @@ class ViewMode extends Mode {
           break;
       }
       if (entity) {
-        this._world.update_gui(`${type}: ${name} (${entity.get('type')})`);
+        this._world.update_gui(`${type}: ${name} (${entity.get("type")})`);
       }
     }
   }
@@ -254,7 +307,6 @@ class EditMode extends Mode {
     this._pos_on_mouse_down = this.get_pointer_xy();
 
     if (this._is_pick_mesh(pointerInfo)) {
-      // 如果点击在已有原子上
       const pickedMesh = pointerInfo.pickInfo!.pickedMesh!;
       if (pickedMesh.name.startsWith("atom:")) {
         const atomName = pickedMesh.name.split(":")[1];
@@ -263,22 +315,21 @@ class EditMode extends Mode {
         );
       }
     } else {
-      // 点击在空白处，创建新原子
       const xyz = get_vec3_from_screen_with_depth(
         this._scene,
         pointerInfo.event.clientX,
         pointerInfo.event.clientY,
         10
       );
-      
+
       const atomData = new Map<string, any>([
         ["name", `atom_${Date.now()}`],
         ["type", "C"],
         ["x", xyz.x],
         ["y", xyz.y],
-        ["z", xyz.z]
+        ["z", xyz.z],
       ]);
-      
+
       this._startAtom = this._app.draw_atom(atomData);
     }
   }
@@ -300,7 +351,7 @@ class EditMode extends Mode {
         ["type", "C"],
         ["x", xyz.x],
         ["y", xyz.y],
-        ["z", xyz.z]
+        ["z", xyz.z],
       ]);
 
       // 创建临时原子，但不添加到系统中
@@ -308,20 +359,16 @@ class EditMode extends Mode {
       this._draggingBond = new Bond(this._draggingAtom, this._startAtom);
       this._draggingAtomMesh = this._world.artist.draw_atom(this._draggingAtom);
       this._draggingBondMesh = this._world.artist.draw_bond(this._draggingBond);
-    }
-
-    else if (this._draggingAtomMesh) {
+    } else if (this._draggingAtomMesh) {
       // 只更新网格位置，不更新系统数据
       this._draggingAtom!.xyz = xyz;
       this._draggingAtomMesh.position = xyz;
-      
+
       // 更新键的位置和方向
       if (this._draggingBondMesh) {
-        this._world.artist.draw_bond(
-          this._draggingBond!, {
-            instance: this._draggingBondMesh
-          }
-        );
+        this._world.artist.draw_bond(this._draggingBond!, {
+          instance: this._draggingBondMesh,
+        });
       }
     }
   }
@@ -335,12 +382,12 @@ class EditMode extends Mode {
         ["type", "C"],
         ["x", xyz.x],
         ["y", xyz.y],
-        ["z", xyz.z]
+        ["z", xyz.z],
       ]);
 
       // 添加原子到系统
       const newAtom = this._app.draw_atom(atomData);
-      
+
       // 添加键到系统
       if (this._startAtom) {
         this._app.draw_bond(this._startAtom, newAtom);
@@ -358,7 +405,8 @@ class EditMode extends Mode {
     this._startAtom = undefined;
     this._draggingBondMesh = undefined;
     this._draggingAtom = undefined;
-    this._pos_on_mouse_down = undefined;
+    this._pos_on_mouse_down = this.get_pointer_xy();
+    this._pos_on_mouse_down = this.get_pointer_xy();
   }
 }
 

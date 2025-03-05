@@ -46,7 +46,7 @@ class Molvis {
               logger.info("select mode");
               this.switch_mode("select");
               break;
-              case "e":
+            case "3":
               logger.info("edit mode");
               this.switch_mode("edit");
               break;

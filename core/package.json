@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite tests",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "dev": "node esbuild.dev.js",
+    "build": "node esbuild.build.js",
+    "preview": "serve dist"
   },
   "main": "src/index.ts",
   "dependencies": {
@@ -13,5 +13,10 @@
     "@babylonjs/gui": "^7.33.0",
     "@babylonjs/materials": "^7.33.0",
     "chroma-js": "^3.1.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "serve": "^14.2.1",
+    "typescript": "^5.3.3"
   }
 }
