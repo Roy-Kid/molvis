@@ -66,7 +66,7 @@ class System {
     return this._trajectory.get_frame(idx);
   }
 
-  public change_frame(idx: number) {
+  public set_frame(idx: number) {
     this._trajectory.currentIndex = idx;
   }
 

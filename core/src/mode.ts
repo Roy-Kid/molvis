@@ -20,6 +20,7 @@ import type { Molvis } from "./app";
 import { ContextMenu } from "./menu";
 import { Atom, type ItemValue, Bond, type System } from "./system";
 import type { World } from "./world";
+import { GuiManager } from "./gui";
 
 const logger = new Logger({ name: "molvis-core" });
 
@@ -65,6 +66,7 @@ abstract class Mode {
   protected _scene: Scene;
   private _pointer_observer: Observer<PointerInfo>;
   private _kb_observer: Observer<KeyboardInfo>;
+  protected _guiManager: GuiManager;
 
   protected _pos_on_mouse_down: Vector2;
   protected _pos_on_mouse_up: Vector2;
@@ -78,6 +80,7 @@ abstract class Mode {
     this._world = app.world;
     this._system = app.system;
     this._scene = app.world.scene;
+    this._guiManager = app.guiManager;
     this._pointer_observer = this.register_pointer_events();
     this._kb_observer = this.register_keyboard_events();
 
@@ -92,6 +95,7 @@ abstract class Mode {
 
   public finish() {
     this.unregister_pointer_events();
+    this.unregister_keyboard_events();
   }
 
   private unregister_pointer_events = () => {
@@ -246,10 +250,9 @@ class ViewMode extends Mode {
   }
 
   override _on_mouse_move(pointerInfo: PointerInfo) {
-    const pick_info = pointerInfo.pickInfo;
-    if (pick_info && pick_info.pickedMesh !== null) {
-      const picked_mesh = pick_info.pickedMesh;
-      const mesh_name = picked_mesh.name;
+    const mesh = this._pick_mesh(pointerInfo);
+    if (mesh) {
+      const mesh_name = mesh.name;
       const type = mesh_name.split(":")[0];
       const name = mesh_name.split(":")[1];
       let entity = undefined;
@@ -266,7 +269,9 @@ class ViewMode extends Mode {
           break;
       }
       if (entity) {
-        this._world.updateInfoText(`${type}: ${name} (${entity.get("type")})`);
+        this._guiManager.updateInfoText(
+          `${type}: ${name} (${entity.get("type")})`,
+        );
       }
     }
   }
@@ -283,7 +288,7 @@ class ViewMode extends Mode {
     const frame = this._system.next_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
-    this._world.updateFrameIndicator(
+    this._guiManager.updateFrameIndicator(
       this._system.current_frame_index,
       this._system.n_frames,
     );
@@ -293,7 +298,7 @@ class ViewMode extends Mode {
     const frame = this._system.prev_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
-    this._world.updateFrameIndicator(
+    this._guiManager.updateFrameIndicator(
       this._system.current_frame_index,
       this._system.n_frames,
     );
@@ -308,7 +313,11 @@ class SelectMode extends Mode {
   }
 
   _on_mouse_pick(pointerInfo: PointerInfo): void {
-    const picked_mesh = this._pick_mesh(pointerInfo);
+    const pickInfo = pointerInfo.pickInfo;
+    if (pickInfo === null) {
+        return;
+    }
+    const picked_mesh = pickInfo.pickedMesh;
     if (picked_mesh) {
       this.selected.push(picked_mesh);
       highlight_mesh(picked_mesh);
@@ -332,7 +341,7 @@ class EditMode extends Mode {
       return;
     }
     this._pos_on_mouse_down = this.get_pointer_xy();
-    const mesh = this._pick_mesh(pointerInfo);
+    const mesh = this._pick_mesh(pointerInfo)
     if (mesh) {
       if (mesh.name.startsWith("atom:")) {
         const atomName = mesh.name.split(":")[1];
@@ -348,7 +357,7 @@ class EditMode extends Mode {
         10,
       );
 
-      const atomData = new Map<string, ItemValue>([
+      const atomData = new Map<string, any>([
         ["name", `atom_${Date.now()}`],
         ["type", "C"],
         ["x", xyz.x],
@@ -371,7 +380,6 @@ class EditMode extends Mode {
     );
 
     if (this._is_dragging && !this._draggingAtomMesh) {
-      // 首次拖动时创建临时原子和键
       const atomData = new Map<string, any>([
         ["name", `atom_${Date.now()}`],
         ["type", "C"],

@@ -1,18 +1,21 @@
 import {
   ArcRotateCamera,
   Color3,
-  Engine,
+  type Engine,
   HemisphericLight,
   type Mesh,
-  Scene,
+  type Scene,
   Vector3,
 } from "@babylonjs/core";
 import { Logger } from "tslog";
 import { Artist } from "./artist";
 import { AxisHelper } from "./axes";
-import { GuiManager } from "./gui";
 
 const logger = new Logger({ name: "molvis-core" });
+
+interface GuiOptions {
+  useFrameIndicator: boolean;
+}
 
 class World {
   private _engine: Engine;
@@ -21,32 +24,18 @@ class World {
   private _artist: Artist;
   private _axes: AxisHelper;
   private _selected: Mesh[] = [];
-  private _guiManager: GuiManager;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this._engine = new Engine(canvas, true);
-    this._scene = this.init_scene();
+  constructor(engine: Engine, scene: Scene) {
+    this._engine = engine;
+    this._scene = scene;
     this._camera = this.init_camera();
     this.init_light();
     this._artist = this.init_artist();
     this._axes = this.init_axes();
-    this._guiManager = new GuiManager(this._scene);
   }
 
-  public updateInfoText(info: string) {
-    this._guiManager.updateInfoText(info);
-  }
-
-  public updateFrameIndicator(currentIndex: number, totalFrames: number) {
-    this._guiManager.updateFrameIndicator(currentIndex, totalFrames);
-  }
-
-  public get scene(): Scene {
+  get scene(): Scene {
     return this._scene;
-  }
-
-  public get engine(): Engine {
-    return this._engine;
   }
 
   public get camera(): ArcRotateCamera {
@@ -57,12 +46,6 @@ class World {
     return this._artist;
   }
 
-  public init_scene() {
-    const scene = new Scene(this.engine);
-    scene.useRightHandedSystem = true;
-    return scene;
-  }
-
   public init_camera() {
     const camera = new ArcRotateCamera(
       "Camera",
@@ -70,10 +53,10 @@ class World {
       Math.PI / 6,
       12,
       Vector3.Zero(),
-      this.scene,
+      this._scene,
     );
     camera.lowerRadiusLimit = 5;
-    camera.attachControl(this.engine.getRenderingCanvas()!, false);
+    camera.attachControl(this._engine.getRenderingCanvas()!, false);
     camera.inertia = 0;
 
     return camera;
@@ -83,7 +66,7 @@ class World {
     const hemisphericLight = new HemisphericLight(
       "ambientLight",
       new Vector3(0, 1, 0),
-      this.scene,
+      this._scene,
     );
     hemisphericLight.diffuse = new Color3(1, 1, 1);
     hemisphericLight.groundColor = new Color3(0, 0, 0);
@@ -91,28 +74,28 @@ class World {
   }
 
   private init_artist() {
-    const artist = new Artist(this.scene);
+    const artist = new Artist(this._scene);
     return artist;
   }
 
   private init_axes() {
-    return new AxisHelper(this.engine, this.camera);
+    return new AxisHelper(this._engine, this.camera);
   }
 
   public render() {
     // this._axes.resize();
-    this.engine.runRenderLoop(() => {
-      this.scene.render();
+    this._engine.runRenderLoop(() => {
+      this._scene.render();
       this._axes.render();
     });
-    this.engine.resize();
+    this._engine.resize();
     window.addEventListener("resize", () => {
-      this.engine.resize();
+      this._engine.resize();
     });
   }
 
   public stop() {
-    this.engine.dispose();
+    this._engine.dispose();
   }
 
   public clear() {
@@ -127,7 +110,7 @@ class World {
   }
 
   public resize() {
-    this.engine.resize();
+    this._engine.resize();
   }
 }
 

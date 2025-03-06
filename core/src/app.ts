@@ -1,6 +1,8 @@
 import { Vector3 } from "@babylonjs/core";
 import { KeyboardEventTypes } from "@babylonjs/core";
+import { Engine, Scene } from "@babylonjs/core";
 import { Logger } from "tslog";
+import { GuiManager, GuiOptions } from "./gui";
 import { EditMode, type Mode, SelectMode, ViewMode } from "./mode";
 import { type Frame, System } from "./system";
 import type { Atom } from "./system";
@@ -21,19 +23,35 @@ interface FrameLikeObject {
 const logger = new Logger({ name: "molvis-core" });
 
 class Molvis {
+  private _scene: Scene;
+  private _engine: Engine;
   private _world: World;
   private _system: System;
   private _canvas: HTMLCanvasElement;
   private _mode: Mode;
+  private _guiManager: GuiManager;
 
   constructor(canvas: HTMLCanvasElement) {
     this._canvas = canvas;
-    this._world = new World(canvas);
     this._system = new System();
-    this._mode = this.init_mode(this._world, this._system);
+    this._engine = new Engine(canvas, true);
+    this._scene = this._initScene(this._engine);
+
+    this._world = new World(this._engine, this._scene);
+    this._mode = this.init_mode(this._world);
+
+    this._guiManager = new GuiManager(this._world, this._system, {
+      useFrameIndicator: true,
+    });
   }
 
-  private init_mode = (world: World, system: System) => {
+  private _initScene = (engine: Engine) => {
+    const scene = new Scene(engine);
+    scene.useRightHandedSystem = true;
+    return scene;
+  };
+
+  private init_mode = (world: World) => {
     world.scene.onKeyboardObservable.add((kbInfo) => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
@@ -91,6 +109,14 @@ class Molvis {
     return this._canvas;
   }
 
+  get mode(): Mode {
+    return this._mode;
+  }
+
+  get guiManager(): GuiManager {
+    return this._guiManager;
+  }
+
   public render = () => {
     this._world.render();
   };
@@ -105,21 +131,21 @@ class Molvis {
 
   public finalize = () => {};
 
-  public draw_atom = (data: Map<string, any>) => {
+  public draw_atom = (data: Map<string, unknown>) => {
     const atom = this._system.current_frame.add_atom(data);
     this._world.artist.draw_atom(atom);
     return atom;
   };
 
-  public draw_bond = (
-    itom: Atom,
-    jtom: Atom,
-    props: Map<string, any> = new Map(),
-  ) => {
-    const bond = this._system.current_frame.add_bond(itom, jtom, props);
-    this._world.artist.draw_bond(bond);
-    return bond;
-  };
+public draw_bond = (
+	itom: Atom,
+	jtom: Atom,
+	props: Map<string, unknown> = new Map(),
+) => {
+	const bond = this._system.current_frame.add_bond(itom, jtom, props);
+	this._world.artist.draw_bond(bond);
+	return bond;
+};
 
   public draw_frame = ({
     x,
@@ -175,7 +201,7 @@ class Molvis {
   public append_frame = (frame: Frame) => {
     this._system.append_frame(frame);
     this._world.artist.draw_frame(frame);
-    this._world.update_frame_indicator(
+    this._guiManager.updateFrameIndicator(
       this._system.current_frame_index,
       this._system.n_frames,
     );

@@ -3,22 +3,37 @@ import {
   AdvancedDynamicTexture,
   Control,
   Rectangle,
+  Slider,
   StackPanel,
   TextBlock,
 } from "@babylonjs/gui";
 import { Logger } from "tslog";
+import type { System } from "./system";
+import type { World } from "./world";
 
 const logger = new Logger({ name: "molvis-gui" });
 
+interface GuiOptions {
+  useFrameIndicator: boolean;
+}
+
 class GuiManager {
+  private _world: World;
+  private _system: System;
+
   private _rootTexture: AdvancedDynamicTexture;
   private _infoPanel: TextBlock;
   private _frameIndicator: FrameIndicator;
 
-  constructor(scene: Scene) {
-    this._rootTexture = this._createRootTexture(scene);
+  constructor(world: World, system: System, guiOptions: GuiOptions) {
+    this._world = world;
+    this._system = system;
+
+    this._rootTexture = this._createRootTexture(world.scene);
     this._infoPanel = this._createInfoPanel();
-    this._frameIndicator = new FrameIndicator(this._rootTexture);
+
+    this._frameIndicator = new FrameIndicator(this._rootTexture, this._system);
+    this._frameIndicator.visible = guiOptions.useFrameIndicator;
   }
 
   private _createRootTexture(scene: Scene): AdvancedDynamicTexture {
@@ -58,56 +73,53 @@ class GuiManager {
 
 class FrameIndicator {
   private _container: StackPanel;
-  private _frameMarkers: Rectangle[] = [];
-  private _texture: AdvancedDynamicTexture;
-  private _totalFrames = 0;
-  private _currentIndex = 0;
 
-  constructor(rootTexture: AdvancedDynamicTexture) {
-    this._texture = rootTexture;
-    this._container = this._createContainer();
-    this._texture.addControl(this._container);
-  }
-
-  private _createContainer(): StackPanel {
+  constructor(texture: AdvancedDynamicTexture, system: System) {
     const panel = new StackPanel();
     panel.isVertical = false;
     panel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
     panel.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
     panel.height = "40px";
     panel.paddingBottom = "10px";
-    return panel;
+
+    const header = new TextBlock();
+    header.text = "";
+    header.height = "30px";
+    header.color = "white";
+    panel.addControl(header);
+
+    const slider = new Slider();
+    slider.minimum = 0;
+    slider.maximum = system.n_frames;
+    slider.value = 0;
+    slider.isVertical = false;
+    slider.height = "20px";
+    slider.width = "200px";
+    slider.onValueChangedObservable.add((value) => {
+      header.text = `${value} / ${system.n_frames}`;
+      system.set_frame(value);
+    });
+    panel.addControl(slider);
+    this._container = panel;
+    texture.addControl(panel);
+  }
+
+  get visible(): boolean {
+    return this._container.isVisible;
+  }
+
+  set visible(value: boolean) {
+    this._container.isVisible = value;
   }
 
   public update(currentIndex: number, totalFrames: number): void {
-    if (totalFrames <= 0) return;
-
-    this._currentIndex = currentIndex;
-    this._totalFrames = totalFrames;
-
-    // Clear existing markers
-    this._frameMarkers.forEach((marker) => {
-      this._container.removeControl(marker);
-    });
-    this._frameMarkers = [];
-
-    const numMarkers = Math.min(totalFrames, 30); // Limit the number of markers for performance
-    const markerWidth = 200 / numMarkers;
-
-    for (let i = 0; i < numMarkers; i++) {
-      const frameIndex = Math.floor((i / numMarkers) * totalFrames);
-      const marker = new Rectangle(`frameMarker_${i}`);
-      marker.width = `${markerWidth}px`;
-      marker.height = "30px";
-      marker.cornerRadius = 5;
-      marker.color = "white";
-      marker.thickness = 1;
-      marker.background = frameIndex === currentIndex ? "green" : "gray";
-
-      this._container.addControl(marker);
-      this._frameMarkers.push(marker);
-    }
+    const header = this._container.children[0] as TextBlock;
+    const slider = this._container.children[1] as Slider;
+    slider.maximum = totalFrames;
+    slider.value = currentIndex;
+    header.text = `${currentIndex} / ${totalFrames}`;
   }
 }
 
 export { GuiManager };
+export type { GuiOptions };
