@@ -56,7 +56,7 @@ class World {
       this._scene,
     );
     camera.lowerRadiusLimit = 5;
-    camera.attachControl(this._engine.getRenderingCanvas()!, false);
+    camera.attachControl(this._engine.getRenderingCanvas(), false);
     camera.inertia = 0;
 
     return camera;
