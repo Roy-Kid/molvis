@@ -14,5 +14,3 @@ app.render();
 window.addEventListener('resize', () => {
     app.resize();
 });
-
-console.log('Molvis test application initialized');

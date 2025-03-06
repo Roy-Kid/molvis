@@ -98,10 +98,6 @@ class System {
     return this._trajectory.frames.length;
   }
 
-  get n_frames(): number {
-    return this._trajectory.frames.length;
-  }
-
 }
 
 class Frame {
@@ -234,7 +230,4 @@ class Bond extends Map<string, ItemValue> {
 }
 
 export { System, Atom, Bond, Frame, Trajectory };
-<<<<<<< HEAD
 export type { ItemValue };
-=======
->>>>>>> f3c6e92b102e0faa5abbd59b3e968abcc4840297

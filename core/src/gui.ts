@@ -86,7 +86,7 @@ class FrameIndicator {
     header.text = "";
     header.height = "30px";
     header.color = "white";
-    panel.addControl(header);
+    // panel.addControl(header);
 
     const slider = new Slider();
     slider.minimum = 0;
@@ -113,11 +113,11 @@ class FrameIndicator {
   }
 
   public update(currentIndex: number, totalFrames: number): void {
-    const header = this._container.children[0] as TextBlock;
-    const slider = this._container.children[1] as Slider;
-    slider.maximum = totalFrames;
-    slider.value = currentIndex;
-    header.text = `${currentIndex} / ${totalFrames}`;
+    // const header = this._container.children[0] as TextBlock;
+    // const slider = this._container.children[1] as Slider;
+    // slider.maximum = totalFrames;
+    // slider.value = currentIndex;
+    // header.text = `${currentIndex} / ${totalFrames}`;
   }
 }
 

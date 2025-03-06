@@ -213,7 +213,6 @@ public draw_bond = (
 
   public label_atom = (labels: string | string[] | undefined = undefined) => {
     let _labels: Map<string, string>;
-
     if (labels === undefined) {
       _labels = this._system.current_frame.atoms.reduce<Map<string, string>>(
         (acc, atom) => {

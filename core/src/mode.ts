@@ -20,14 +20,12 @@ import type { Molvis } from "./app";
 import { ContextMenu } from "./menu";
 import { Atom, type ItemValue, Bond, type System } from "./system";
 import type { World } from "./world";
-import { GuiManager } from "./gui";
+import type { GuiManager } from "./gui";
 
 const logger = new Logger({ name: "molvis-core" });
-
 function highlight_mesh(mesh: AbstractMesh) {
   mesh.renderOutline = !mesh.renderOutline;
 }
-
 function get_vec3_from_screen_with_depth(
   scene: Scene,
   x: number,
@@ -211,8 +209,6 @@ abstract class Mode {
 class ViewMode extends Mode {
   constructor(app: Molvis) {
     super(ModeType.View, app);
-    // Initialize by showing frame information
-    this._updateFrameInfo();
   }
 
   override init_context_menu() {
@@ -304,17 +300,6 @@ class ViewMode extends Mode {
       this._system.current_frame_index,
       this._system.n_frames,
     );
-  }
-  
-  private _updateFrameInfo() {
-    const trajectory = this._app.system.trajectory;
-    const currentIndex = trajectory['_current_index']; // We should add a getter for this
-    const totalFrames = trajectory.frames.length;
-    
-    // Update visual frame indicator
-    this._world.update_frame_indicator(currentIndex, totalFrames);
-    
-    logger.debug(`Viewing frame ${currentIndex + 1} of ${totalFrames}`);
   }
   
 }
