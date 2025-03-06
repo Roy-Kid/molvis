@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
 	"name": "molvis",
 	"version": "1.0.0",
 	"description": "interactive molecule visulization package",
@@ -25,4 +26,35 @@
 		"chroma-js": "^3.1.2",
 		"tslog": "^4.9.3"
 	}
+=======
+  "name": "molvis",
+  "version": "1.0.0",
+  "description": "interactive molecule visulization package",
+  "author": "Roy Kid",
+  "license": "SEE LICENSE IN LICENSE",
+  "workspaces": [
+    "core",
+    "standalone",
+    "widget"
+  ],
+  "scripts": {
+    "dev:core": "npm run -w core dev",
+    "dev:widget": "npm run -w widget dev",
+    "dev:standalone": "npm run -w standalone dev",
+    "build:core": "npm run -w core build",
+    "build:widget": "npm run build -w widget",
+    "build:standalone": "npm run build -w standalone"
+  },
+  "devDependencies": {
+    "esbuild": "*",
+    "jest": "*"
+  },
+  "dependencies": {
+    "tslog": "^4.9.3",
+    "@babylonjs/core": "^7.33.0",
+    "@babylonjs/gui": "^7.33.0",
+    "@babylonjs/materials": "^7.33.0",
+    "chroma-js": "^3.1.2"
+  }
+>>>>>>> f3c6e92b102e0faa5abbd59b3e968abcc4840297
 }

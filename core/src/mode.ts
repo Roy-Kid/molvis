@@ -211,6 +211,8 @@ abstract class Mode {
 class ViewMode extends Mode {
   constructor(app: Molvis) {
     super(ModeType.View, app);
+    // Initialize by showing frame information
+    this._updateFrameInfo();
   }
 
   override init_context_menu() {
@@ -303,6 +305,18 @@ class ViewMode extends Mode {
       this._system.n_frames,
     );
   }
+  
+  private _updateFrameInfo() {
+    const trajectory = this._app.system.trajectory;
+    const currentIndex = trajectory['_current_index']; // We should add a getter for this
+    const totalFrames = trajectory.frames.length;
+    
+    // Update visual frame indicator
+    this._world.update_frame_indicator(currentIndex, totalFrames);
+    
+    logger.debug(`Viewing frame ${currentIndex + 1} of ${totalFrames}`);
+  }
+  
 }
 
 class SelectMode extends Mode {
