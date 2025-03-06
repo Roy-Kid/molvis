@@ -5,9 +5,9 @@
   "author": "Roy Kid",
   "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
-    "molvis/core",
-    "molvis/standalone",
-    "molvis/widget"
+    "core",
+    "standalone",
+    "widget"
   ],
   "scripts": {
     "dev:core": "npm run -w core dev",

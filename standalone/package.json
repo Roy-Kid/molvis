@@ -19,6 +19,6 @@
   },
   "scripts": {
     "build": "node esbuild.config.js --build",
-    "start": "node esbuild.config.js --start"
+    "dev": "node esbuild.config.js --dev"
   }
 }

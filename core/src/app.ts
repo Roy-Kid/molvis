@@ -1,10 +1,10 @@
-import { Logger } from "tslog";
-import { System } from "./system";
-import { World } from "./world";
-import { Atom } from "./system";
 import { Vector3 } from "@babylonjs/core";
-import { Mode, ViewMode, SelectMode, EditMode } from "./mode";
 import { KeyboardEventTypes } from "@babylonjs/core";
+import { Logger } from "tslog";
+import { EditMode, type Mode, SelectMode, ViewMode } from "./mode";
+import { type Frame, System } from "./system";
+import type { Atom } from "./system";
+import { World } from "./world";
 
 interface JsonRpcRequest {
   jsonrpc: string;
@@ -14,8 +14,8 @@ interface JsonRpcRequest {
 }
 
 interface FrameLikeObject {
-  atoms: {name: string[], x: number[], y: number[], z: number[]};
-  bonds: {i: number[], j: number[]};
+  atoms: { name: string[]; x: number[]; y: number[]; z: number[] };
+  bonds: { i: number[]; j: number[] };
 }
 
 const logger = new Logger({ name: "molvis-core" });
@@ -105,9 +105,7 @@ class Molvis {
 
   public finalize = () => {};
 
-  public draw_atom = (
-    data: Map<string, any>
-  ) => {
+  public draw_atom = (data: Map<string, any>) => {
     const atom = this._system.current_frame.add_atom(data);
     this._world.artist.draw_atom(atom);
     return atom;
@@ -116,16 +114,30 @@ class Molvis {
   public draw_bond = (
     itom: Atom,
     jtom: Atom,
-    props: Map<string, any> = new Map()
+    props: Map<string, any> = new Map(),
   ) => {
     const bond = this._system.current_frame.add_bond(itom, jtom, props);
     this._world.artist.draw_bond(bond);
     return bond;
   };
 
-  public draw_frame = (
-    {x, y, z, name, element, bond_i, bond_j}: {x: Float64Array, y: Float64Array, z: Float64Array, name: Array<string>, element: Array<string>, bond_i: Array<number>, bond_j: Array<number>}
-  ) => {
+  public draw_frame = ({
+    x,
+    y,
+    z,
+    name,
+    element,
+    bond_i,
+    bond_j,
+  }: {
+    x: Float64Array;
+    y: Float64Array;
+    z: Float64Array;
+    name: Array<string>;
+    element: Array<string>;
+    bond_i: Array<number>;
+    bond_j: Array<number>;
+  }) => {
     logger.info(`bond_i: ${bond_i}`);
     logger.info(`bond_j: ${bond_j}`);
     const n_atoms = x.length;
@@ -160,24 +172,38 @@ class Molvis {
     this._world.artist.draw_frame(frame);
   };
 
+  public append_frame = (frame: Frame) => {
+    this._system.append_frame(frame);
+    this._world.artist.draw_frame(frame);
+    this._world.update_frame_indicator(
+      this._system.current_frame_index,
+      this._system.n_frames,
+    );
+  };
+
   public cameraLookAt = (x: number, y: number, z: number) => {
     this._world.camera.target = new Vector3(x, y, z);
   };
 
   public label_atom = (labels: string | string[] | undefined = undefined) => {
-
     let _labels: Map<string, string>;
 
     if (labels === undefined) {
-      _labels = this._system.current_frame.atoms.reduce<Map<string, string>>((acc, atom) => {
-        acc.set(atom.name, atom.name);
-        return acc;
-      }, new Map());
+      _labels = this._system.current_frame.atoms.reduce<Map<string, string>>(
+        (acc, atom) => {
+          acc.set(atom.name, atom.name);
+          return acc;
+        },
+        new Map(),
+      );
     } else if (typeof labels === "string") {
-      _labels = this._system.current_frame.atoms.reduce<Map<string, string>>((acc, atom) => {
-        acc.set(atom.name, atom.get(labels) as string);
-        return acc;
-      }, new Map());
+      _labels = this._system.current_frame.atoms.reduce<Map<string, string>>(
+        (acc, atom) => {
+          acc.set(atom.name, atom.get(labels) as string);
+          return acc;
+        },
+        new Map(),
+      );
     } else if (Array.isArray(labels)) {
       _labels = this._system.current_frame.atoms.reduce((acc, atom, idx) => {
         acc.set(atom.name, labels[idx]);
@@ -188,8 +214,6 @@ class Molvis {
     }
     this._world.artist.label_atom(_labels);
   };
-
- 
 }
 
 export { Molvis };

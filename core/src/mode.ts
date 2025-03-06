@@ -1,25 +1,25 @@
 import {
-  PointerEventTypes,
-  PointerInfo,
-  AbstractMesh,
-  Mesh,
-  Vector3,
-  Scene,
-  Matrix,
+  type AbstractMesh,
   Color3,
-  RayHelper,
-  Observer,
   KeyboardEventTypes,
-  KeyboardInfo,
-  Vector2,
+  type KeyboardInfo,
+  Matrix,
+  type Mesh,
+  type Observer,
+  PointerEventTypes,
+  type PointerInfo,
+  RayHelper,
+  type Scene,
   Tools,
+  Vector2,
+  type Vector3,
 } from "@babylonjs/core";
 
-import { Molvis } from "./app";
-import { World } from "./world";
-import { System, Bond, Atom } from "./system";
 import { Logger } from "tslog";
+import type { Molvis } from "./app";
 import { ContextMenu } from "./menu";
+import { Atom, type ItemValue, Bond, type System } from "./system";
+import type { World } from "./world";
 
 const logger = new Logger({ name: "molvis-core" });
 
@@ -32,7 +32,7 @@ function get_vec3_from_screen_with_depth(
   x: number,
   y: number,
   depth: number,
-  debug: boolean = false
+  debug = false,
 ): Vector3 {
   // cast a ray from the camera to xy screen position
   // get the Vector3 of the intersection point with a plane at depth
@@ -40,7 +40,7 @@ function get_vec3_from_screen_with_depth(
     x,
     y,
     Matrix.Identity(),
-    scene.activeCamera
+    scene.activeCamera,
   );
   const xyz = ray.origin.add(ray.direction.scale(depth));
   if (debug) {
@@ -95,8 +95,16 @@ abstract class Mode {
   }
 
   private unregister_pointer_events = () => {
-    let is_successful = this._scene.onPointerObservable.remove(
-      this._pointer_observer
+    const is_successful = this._scene.onPointerObservable.remove(
+      this._pointer_observer,
+    );
+    if (!is_successful) {
+    }
+  };
+
+  private unregister_keyboard_events = () => {
+    const is_successful = this._scene.onKeyboardObservable.remove(
+      this._kb_observer,
     );
     if (!is_successful) {
     }
@@ -180,15 +188,19 @@ abstract class Mode {
 
   get _is_dragging(): boolean {
     return (
-      this._pos_on_mouse_down!.x !== this._scene.pointerX ||
-      this._pos_on_mouse_down!.y !== this._scene.pointerY
+      this._pos_on_mouse_down.x !== this._scene.pointerX ||
+      this._pos_on_mouse_down.y !== this._scene.pointerY
     );
   }
 
-  protected _is_pick_mesh(pointerInfo: PointerInfo): boolean {
-    return (
-      pointerInfo.pickInfo !== null && pointerInfo.pickInfo.pickedMesh !== null
-    );
+  protected _pick_mesh(pointerInfo: PointerInfo): AbstractMesh | undefined {
+    if (
+      pointerInfo.pickInfo !== null &&
+      pointerInfo.pickInfo.pickedMesh !== null
+    ) {
+      return pointerInfo.pickInfo.pickedMesh;
+    }
+    return undefined;
   }
 }
 
@@ -202,9 +214,9 @@ class ViewMode extends Mode {
     context_menu.addItem({
       label: "Screen Shot",
       callback: () => {
-        Tools.CreateScreenshot(
-          this._scene.getEngine(), this._world.camera, { precision: 1 }
-        );
+        Tools.CreateScreenshot(this._scene.getEngine(), this._world.camera, {
+          precision: 1,
+        });
       },
     });
     return context_menu;
@@ -216,10 +228,17 @@ class ViewMode extends Mode {
 
   override _on_mouse_up(pointerInfo: PointerInfo) {
     super._on_mouse_up(pointerInfo);
-    
+
     // Explicitly handle right clicks for context menu
-    if (pointerInfo.event.button === 2 && !this._is_dragging && this._context_menu) {
-      const position = new Vector2(pointerInfo.event.clientX, pointerInfo.event.clientY);
+    if (
+      pointerInfo.event.button === 2 &&
+      !this._is_dragging &&
+      this._context_menu
+    ) {
+      const position = new Vector2(
+        pointerInfo.event.clientX,
+        pointerInfo.event.clientY,
+      );
       console.log("Opening context menu at:", position);
       this._context_menu.show(position);
       pointerInfo.event.preventDefault();
@@ -237,17 +256,17 @@ class ViewMode extends Mode {
       switch (type) {
         case "atom":
           entity = this._system.current_frame.get_atom(
-            (atom: Atom) => atom["name"] == name
+            (atom: Atom) => atom.name === name,
           );
           break;
         case "bond":
           entity = this._system.current_frame.get_bond(
-            (bond: Bond) => bond.name == name
+            (bond: Bond) => bond.name === name,
           );
           break;
       }
       if (entity) {
-        this._world.update_gui(`${type}: ${name} (${entity.get("type")})`);
+        this._world.updateInfoText(`${type}: ${name} (${entity.get("type")})`);
       }
     }
   }
@@ -261,15 +280,23 @@ class ViewMode extends Mode {
   override _on_mouse_double_tap(pointerInfo: PointerInfo) {}
 
   _on_press_e() {
-    const frame = this._app.system.next_frame();
+    const frame = this._system.next_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
+    this._world.updateFrameIndicator(
+      this._system.current_frame_index,
+      this._system.n_frames,
+    );
   }
 
   _on_press_q() {
-    const frame = this._app.system.prev_frame();
+    const frame = this._system.prev_frame();
     this._app.world.clear();
     this._app.world.artist.draw_frame(frame);
+    this._world.updateFrameIndicator(
+      this._system.current_frame_index,
+      this._system.n_frames,
+    );
   }
 }
 
@@ -281,7 +308,7 @@ class SelectMode extends Mode {
   }
 
   _on_mouse_pick(pointerInfo: PointerInfo): void {
-    const picked_mesh = pointerInfo.pickInfo!.pickedMesh!;
+    const picked_mesh = this._pick_mesh(pointerInfo);
     if (picked_mesh) {
       this.selected.push(picked_mesh);
       highlight_mesh(picked_mesh);
@@ -305,13 +332,12 @@ class EditMode extends Mode {
       return;
     }
     this._pos_on_mouse_down = this.get_pointer_xy();
-
-    if (this._is_pick_mesh(pointerInfo)) {
-      const pickedMesh = pointerInfo.pickInfo!.pickedMesh!;
-      if (pickedMesh.name.startsWith("atom:")) {
-        const atomName = pickedMesh.name.split(":")[1];
+    const mesh = this._pick_mesh(pointerInfo);
+    if (mesh) {
+      if (mesh.name.startsWith("atom:")) {
+        const atomName = mesh.name.split(":")[1];
         this._startAtom = this._system.current_frame.get_atom(
-          (atom: Atom) => atom.name === atomName
+          (atom: Atom) => atom.name === atomName,
         );
       }
     } else {
@@ -319,10 +345,10 @@ class EditMode extends Mode {
         this._scene,
         pointerInfo.event.clientX,
         pointerInfo.event.clientY,
-        10
+        10,
       );
 
-      const atomData = new Map<string, any>([
+      const atomData = new Map<string, ItemValue>([
         ["name", `atom_${Date.now()}`],
         ["type", "C"],
         ["x", xyz.x],
@@ -341,7 +367,7 @@ class EditMode extends Mode {
       this._scene,
       pointerInfo.event.clientX,
       pointerInfo.event.clientY,
-      10
+      10,
     );
 
     if (this._is_dragging && !this._draggingAtomMesh) {

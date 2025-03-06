@@ -2,7 +2,7 @@ import { Vector3 } from "@babylonjs/core";
 
 class Trajectory {
   private _frames: Frame[] = [];
-  private _current_index = 0;
+  private _currentIndex = 0;
 
   addFrame(frame: Frame) {
     this._frames.push(frame);
@@ -12,7 +12,7 @@ class Trajectory {
     if (this._frames.length === 0) {
       this.addFrame(new Frame());
     }
-    return this._frames[this._current_index];
+    return this._frames[this._currentIndex];
   }
 
   get frames(): Frame[] {
@@ -23,17 +23,20 @@ class Trajectory {
     return this._frames[idx];
   }
 
-  set current_index(idx: number) {
-    this._current_index = idx;
+  set currentIndex(idx: number) {
+    this._currentIndex = idx;
   }
 
   nextFrame() {
-    this._current_index = Math.min(this._current_index + 1, this._frames.length - 1);
+    this._currentIndex = Math.min(
+      this._currentIndex + 1,
+      this._frames.length - 1,
+    );
     return this.currentFrame;
   }
 
   prevFrame() {
-    this._current_index = Math.max(this._current_index - 1, 0);
+    this._currentIndex = Math.max(this._currentIndex - 1, 0);
     return this.currentFrame;
   }
 }
@@ -56,7 +59,7 @@ class System {
   }
 
   public set current_frame_index(idx: number) {
-    this._trajectory.current_index = idx;
+    this._trajectory.currentIndex = idx;
   }
 
   public get_frame(idx: number): Frame | undefined {
@@ -64,7 +67,7 @@ class System {
   }
 
   public change_frame(idx: number) {
-    this._trajectory.current_index = idx;
+    this._trajectory.currentIndex = idx;
   }
 
   public next_frame() {
@@ -90,34 +93,37 @@ class System {
   public append_frame(frame: Frame) {
     this._trajectory.addFrame(frame);
   }
+
+  get n_frames(): number {
+    return this._trajectory.frames.length;
+  }
 }
 
 class Frame {
   private _atoms: Atom[];
   private _bonds: Bond[];
-  private _props: Map<string, any>;
+  private _props: Map<string, ItemValue>;
 
   constructor() {
     this._atoms = [];
     this._bonds = [];
     this._props = new Map();
   }
-  
-  public add_atom(arg: Atom | Map<string, any>): Atom {
+
+  public add_atom(arg: Atom | Map<string, ItemValue>): Atom {
     if (arg instanceof Atom) {
       this._atoms.push(arg);
       return arg;
-    } else {
-      const atom = new Atom(arg);
-      this._atoms.push(atom);
-      return atom;
     }
+    const atom = new Atom(arg);
+    this._atoms.push(atom);
+    return atom;
   }
 
   public add_bond = (
     itom: Atom,
     jtom: Atom,
-    data: Map<string, any> = new Map()
+    data: Map<string, ItemValue> = new Map(),
   ): Bond => {
     const bond = new Bond(itom, jtom, data);
     this._bonds.push(bond);
@@ -136,7 +142,7 @@ class Frame {
     return this._atoms.length;
   }
 
-  get props(): Map<string, any> {
+  get props(): Map<string, ItemValue> {
     return this._props;
   }
 
@@ -155,26 +161,28 @@ class Frame {
   }
 }
 
-type AtomValue = number | string | Vector3 | Array<number> | boolean;
+type ItemValue = number | string | Vector3 | Array<number> | boolean;
 
 class Atom {
-  private _data: Map<string, AtomValue> = new Map();
+  private _data: Map<string, ItemValue> = new Map();
 
-  constructor(data?: Map<string, AtomValue> | [string, AtomValue][]) {
+  constructor(data?: Map<string, ItemValue> | [string, ItemValue][]) {
     if (data) {
       if (data instanceof Map) {
         data.forEach((value, key) => this.set(key, value));
       } else {
-        data.forEach(([key, value]) => this.set(key, value));
+        for (const [key, value] of data) {
+          this.set(key, value);
+        }
       }
     }
   }
 
-  public set(key: string, value: AtomValue): void {
+  public set(key: string, value: ItemValue): void {
     this._data.set(key, value);
   }
 
-  public get(key: string): AtomValue | undefined {
+  public get(key: string): ItemValue | undefined {
     return this._data.get(key);
   }
 
@@ -194,7 +202,7 @@ class Atom {
     return new Vector3(
       typeof x === "number" ? x : 0,
       typeof y === "number" ? y : 0,
-      typeof z === "number" ? z : 0
+      typeof z === "number" ? z : 0,
     );
   }
 
@@ -205,11 +213,11 @@ class Atom {
   }
 }
 
-class Bond extends Map<string, any> {
+class Bond extends Map<string, ItemValue> {
   public itom: Atom;
   public jtom: Atom;
 
-  constructor(itom: Atom, jtom: Atom, props: Map<string, any> = new Map()) {
+  constructor(itom: Atom, jtom: Atom, props: Map<string, ItemValue> = new Map()) {
     super(props);
     this.itom = itom;
     this.jtom = jtom;
@@ -221,3 +229,4 @@ class Bond extends Map<string, any> {
 }
 
 export { System, Atom, Bond, Frame, Trajectory };
+export type { ItemValue };

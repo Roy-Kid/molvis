@@ -10,14 +10,14 @@ const stringToHash = (str: string | undefined): number => {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
   return hash;
-}
+};
 
 class RealAtomPalette {
   style: string;
   color: string[];
   element_radius: { [key: string]: number };
 
-  constructor(style: string = "Set1") {
+  constructor(style = "Set1") {
     this.style = style;
     this.color = chroma.scale("Set1").mode("lch").colors(40);
 
@@ -92,10 +92,10 @@ class RealAtomPalette {
   }
 
   public get_radius(elem_or_type: string) {
-    return this.element_radius[elem_or_type]*1.2 || 1.0;
+    return this.element_radius[elem_or_type] * 1.2 || 1.0;
   }
 } // RealAtomPalette
 
 const real_atom_palette = new RealAtomPalette();
 
-export { real_atom_palette, };
+export { real_atom_palette };
