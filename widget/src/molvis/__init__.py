@@ -46,6 +46,7 @@ class Molvis(anywidget.AnyWidget):
             "jsonrpc": "2.0",
             "method": method,
             "params": params,
+            "id": self.session_id,
         }
         logger.info(f"send_cmd: {jsonrpc} with {len(buffers)} buffers")
         self.send(json.dumps(jsonrpc), buffers=buffers)
@@ -70,10 +71,16 @@ class Molvis(anywidget.AnyWidget):
         buffers = [atoms_buffer]
 
         # If bonds exist, convert and send them too
-        # bonds = frame.get("bonds", None)
-        # if bonds is not None:
-        #     bonds_arrow = bonds[['i', 'j']].to_arrow() 
-        #     bonds_buffer = bonds_arrow.to_buffer()
+        bonds = frame.get("bonds", None)
+        if bonds is not None:
+            # pandas.DataFrame change colume name to bond_i and bond_j
+            bond_info = bonds[['i', 'j']].rename(columns={'i': 'bond_i', 'j': 'bond_j'})
+            bonds_arrow = pa.Table.from_pandas(bond_info)
+            sink = pa.BufferOutputStream()
+            with pa.ipc.new_stream(sink, bonds_arrow.schema) as writer:
+                writer.write_table(bonds_arrow)
+            bonds_buffer = sink.getvalue()
+            buffers.append(bonds_buffer)
 
         self.send_cmd("draw_frame", {}, buffers)
 

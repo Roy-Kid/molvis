@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "dev:core": "npm run -w core dev",
-    "dev:widget": "vite widget",
+    "dev:widget": "npm run -w widget dev",
     "dev:standalone": "npm run -w standalone dev",
     "build:core": "npm run -w core build",
     "build:widget": "npm run build -w widget",

@@ -124,30 +124,33 @@ class Molvis {
   };
 
   public draw_frame = (
-    frame: FrameLikeObject
+    {x, y, z, name, element, bond_i, bond_j}: {x: Float64Array, y: Float64Array, z: Float64Array, name: Array<string>, element: Array<string>, bond_i: Array<number>, bond_j: Array<number>}
   ) => {
-
-    const atoms = frame.atoms;
-    const bonds = frame.bonds;
-    
-    const n_atoms = atoms.x.length;
-    const n_bonds = bonds.i.length;
+    logger.info(`bond_i: ${bond_i}`);
+    logger.info(`bond_j: ${bond_j}`);
+    const n_atoms = x.length;
+    // const n_bonds = bonds.i.length;
     const atom_list = [];
     for (let i = 0; i < n_atoms; i++) {
       const atom = new Map();
-      for (const [key, values] of Object.entries(atoms)) {
-        atom.set(key, values[i]);
-      }
+      atom.set("name", name[i]);
+      atom.set("element", element[i]);
+      atom.set("x", x[i]);
+      atom.set("y", y[i]);
+      atom.set("z", z[i]);
       atom_list.push(this.draw_atom(atom));
     }
-    for (let i = 0; i < n_bonds; i++) {
-      const itom = atom_list[bonds.i[i]];
-      const jtom = atom_list[bonds.j[i]];
-      this.draw_bond(itom, jtom);
+    if (bond_i && bond_j) {
+      const n_bonds = bond_i.length;
+      for (let i = 0; i < n_bonds; i++) {
+        const itom = atom_list[bond_i[i]];
+        const jtom = atom_list[bond_j[i]];
+        this.draw_bond(itom, jtom);
+      }
     }
     const ramdom_atom = this._system.current_frame.atoms[0];
-    const { x, y, z } = ramdom_atom.xyz;
-    this.cameraLookAt(x, y, z);
+    const { _x, _y, _z } = ramdom_atom.xyz;
+    this.cameraLookAt(_x, _y, _z);
     return this._system.current_frame;
   };
 
