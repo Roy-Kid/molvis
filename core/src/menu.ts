@@ -94,8 +94,8 @@ export class ContextMenu {
    */
   public show(position: Vector2): void {
     // Position the menu at cursor
-    this.container.left = position.x + "px";
-    this.container.top = position.y + "px";
+    this.container.left = `${position.x}px`;
+    this.container.top = `${position.y}px`;
     this.container.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
     this.container.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     this.container.isVisible = true;
@@ -115,9 +115,9 @@ export class ContextMenu {
    */
   private rebuildMenu(): void {
     // Clear existing items
-    this.panel.children.slice().forEach((control) => {
+    for (const control of this.panel.children.slice()) {
       this.panel.removeControl(control);
-    });
+    }
 
     // Add new items
     this.items.forEach((item, index) => {
@@ -126,7 +126,7 @@ export class ContextMenu {
     });
 
     // Adjust container height based on number of items
-    this.container.height = this.items.length * 40 + "px";
+    this.container.height = `${this.items.length * 40}px`;
   }
 
   /**

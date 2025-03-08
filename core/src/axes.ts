@@ -9,7 +9,6 @@ class AxisViewer {
 
   constructor(
     scene: BABYLON.Scene,
-    main_camera: BABYLON.ArcRotateCamera,
     size: number,
   ) {
     this._scene = scene;
@@ -36,7 +35,7 @@ class AxisViewer {
   }
 
   private _make_axis_label(text: string, color: string, size: number) {
-    var dynamicTexture = new BABYLON.DynamicTexture(
+    const dynamicTexture = new BABYLON.DynamicTexture(
       "DynamicTexture",
       50,
       this._scene,
@@ -52,7 +51,7 @@ class AxisViewer {
       "transparent",
       true,
     );
-    var plane = BABYLON.MeshBuilder.CreatePlane(
+    const plane = BABYLON.MeshBuilder.CreatePlane(
       "TextPlane",
       { size: size },
       this._scene,
@@ -77,7 +76,7 @@ class AxisHelper {
     this._scene = scene;
     scene.useRightHandedSystem = true;
     scene.autoClear = false;
-    var cameraGizmo = new BABYLON.ArcRotateCamera(
+    const cameraGizmo = new BABYLON.ArcRotateCamera(
       "cam1",
       2.0,
       Math.PI / 2,
@@ -87,12 +86,12 @@ class AxisHelper {
     );
     cameraGizmo.viewport = new BABYLON.Viewport(-0.05, -0.05, 0.3, 0.3);
 
-    var light1 = new BABYLON.HemisphericLight(
+    new BABYLON.HemisphericLight(
       "light",
       new BABYLON.Vector3(0, 1, 0),
       scene,
     );
-    var light2 = new BABYLON.HemisphericLight(
+    new BABYLON.HemisphericLight(
       "light",
       new BABYLON.Vector3(0, -1, 0),
       scene,
@@ -100,7 +99,7 @@ class AxisHelper {
     // light1.intensity = 0.9;
     // light2.intensity = 0.9;
 
-    new AxisViewer(scene, camera, 0.5);
+    new AxisViewer(scene, 0.5);
 
     // Clone main camera alpha and beta to axis camera
     scene.registerBeforeRender(() => {

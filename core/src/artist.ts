@@ -10,7 +10,7 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { Logger } from "tslog";
-import { real_atom_palette } from "./palette";
+import { realAtomPalette } from "./palette";
 import type { Atom, Bond, Frame } from "./system";
 
 const logger = new Logger({ name: "molvis-core" });
@@ -28,8 +28,8 @@ class Artist {
 
   public draw_atom(atom: Atom) {
     const elem = atom.get("element");
-    const color = real_atom_palette.get_color(elem as string);
-    const radius = real_atom_palette.get_radius(elem as string);
+    const color = realAtomPalette.getAtomColor(elem as string);
+    const radius = realAtomPalette.getAtomRadius(elem as string);
     const sphere = MeshBuilder.CreateSphere(
       `atom:${atom.name}`,
       { diameter: radius },
@@ -104,16 +104,15 @@ class Artist {
   public draw_bond(bond: Bond, options?: { radius?: number; instance?: Mesh }) {
     const path = [bond.itom.xyz, bond.jtom.xyz];
     const radius = options?.radius ?? 0.1;
-
+    let tube: Mesh;
     if (options?.instance) {
-      const tube = MeshBuilder.CreateTube(
+      tube = MeshBuilder.CreateTube(
         `bond:${bond.name}`,
         { path, radius, instance: options.instance },
         this._scene,
       );
-      return tube;
     } else {
-      const tube = MeshBuilder.CreateTube(
+      tube = MeshBuilder.CreateTube(
         `bond:${bond.name}`,
         { path, radius, updatable: true },
         this._scene,
@@ -121,8 +120,8 @@ class Artist {
       const material = new StandardMaterial("bond", this._scene);
       material.diffuseColor = new Color3(0.8, 0.8, 0.8);
       tube.material = material;
-      return tube;
     }
+    return tube;
   }
 
   public draw_frame(frame: Frame) {

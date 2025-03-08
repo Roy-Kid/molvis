@@ -103,7 +103,7 @@ class System {
 class Frame {
   private _atoms: Atom[];
   private _bonds: Bond[];
-  private _props: Map<string, ItemValue>;
+  private _props: Map<string, ItemProp>;
 
   constructor() {
     this._atoms = [];
@@ -111,7 +111,7 @@ class Frame {
     this._props = new Map();
   }
 
-  public add_atom(arg: Atom | Map<string, ItemValue>): Atom {
+  public add_atom(arg: Atom | Map<string, ItemProp>): Atom {
     if (arg instanceof Atom) {
       this._atoms.push(arg);
       return arg;
@@ -124,7 +124,7 @@ class Frame {
   public add_bond = (
     itom: Atom,
     jtom: Atom,
-    data: Map<string, ItemValue> = new Map(),
+    data: Map<string, ItemProp> = new Map(),
   ): Bond => {
     const bond = new Bond(itom, jtom, data);
     this._bonds.push(bond);
@@ -143,7 +143,7 @@ class Frame {
     return this._atoms.length;
   }
 
-  get props(): Map<string, ItemValue> {
+  get props(): Map<string, ItemProp> {
     return this._props;
   }
 
@@ -162,12 +162,12 @@ class Frame {
   }
 }
 
-type ItemValue = number | string | Vector3 | Array<number> | boolean;
+type ItemProp = number | string | Vector3 | Array<number> | boolean;
 
 class Atom {
-  private _data: Map<string, ItemValue> = new Map();
+  private _data: Map<string, ItemProp> = new Map();
 
-  constructor(data?: Map<string, ItemValue> | [string, ItemValue][]) {
+  constructor(data?: Map<string, ItemProp> | [string, ItemProp][]) {
     if (data) {
       if (data instanceof Map) {
         data.forEach((value, key) => this.set(key, value));
@@ -179,11 +179,11 @@ class Atom {
     }
   }
 
-  public set(key: string, value: ItemValue): void {
+  public set(key: string, value: ItemProp): void {
     this._data.set(key, value);
   }
 
-  public get(key: string): ItemValue | undefined {
+  public get(key: string): ItemProp | undefined {
     return this._data.get(key);
   }
 
@@ -214,11 +214,11 @@ class Atom {
   }
 }
 
-class Bond extends Map<string, ItemValue> {
+class Bond extends Map<string, ItemProp> {
   public itom: Atom;
   public jtom: Atom;
 
-  constructor(itom: Atom, jtom: Atom, props: Map<string, ItemValue> = new Map()) {
+  constructor(itom: Atom, jtom: Atom, props: Map<string, ItemProp> = new Map()) {
     super(props);
     this.itom = itom;
     this.jtom = jtom;
@@ -230,4 +230,4 @@ class Bond extends Map<string, ItemValue> {
 }
 
 export { System, Atom, Bond, Frame, Trajectory };
-export type { ItemValue };
+export type { ItemProp };

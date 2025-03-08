@@ -1,11 +1,24 @@
 {
-  "name": "molvis-core",
-  "version": "0.0.1",
+  "name": "molvis",
+  "version": "1.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node esbuild.config.js --dev",
-    "build": "node esbuild.config.js",
-    "test": "node esbuild.config.js --test && jest --config jest.config.js"
+    "build": "rsbuild build",
+    "dev": "rsbuild dev",
+    "preview": "rsbuild preview"
   },
-  "main": "src/index.ts"
+  "devDependencies": {
+    "@rsbuild/core": "^1.2.14",
+    "@types/chroma-js": "^3.1.1",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^7.52.2",
+    "@babylonjs/gui": "^7.52.2",
+    "@babylonjs/materials": "^7.52.2",
+    "babylonjs": "^7.52.2",
+    "chroma-js": "^3.1.2",
+    "tslog": "^4.9.3"
+  }
 }

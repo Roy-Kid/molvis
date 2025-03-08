@@ -1,1 +1,3 @@
-export { Molvis } from "./app";
+import { Molvis } from './app';
+
+export { Molvis };

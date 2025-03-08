@@ -10,7 +10,6 @@ import {
 import { Logger } from "tslog";
 import { Artist } from "./artist";
 import { AxisHelper } from "./axes";
-import { GuiManager } from "./gui";
 
 const logger = new Logger({ name: "molvis-core" });
 

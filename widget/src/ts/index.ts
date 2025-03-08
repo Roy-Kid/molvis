@@ -3,7 +3,7 @@ import { preventEventPropagation } from "./utils";
 import type { ModelType } from "./types";
 import { Logger } from "tslog";
 
-const logger = new Logger({ name: "molvis-widget-ts" });
+const logger = new Logger({ name: "molvis-widget" });
 
 export default () => {
 

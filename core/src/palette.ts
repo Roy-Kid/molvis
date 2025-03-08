@@ -1,26 +1,27 @@
-import chroma from "chroma-js";
-import { Atom } from "./system";
+import chroma from 'chroma-js';
 
-const stringToHash = (str: string | undefined): number => {
-  if (str === undefined) {
-    return 0;
-  }
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return hash;
-};
-
-class RealAtomPalette {
+class BasePalette {
   style: string;
   color: string[];
-  element_radius: { [key: string]: number };
-
-  constructor(style = "Set1") {
+  constructor(style:chroma.BrewerPaletteName = "Set1", ncolors = 9) {
     this.style = style;
-    this.color = chroma.scale("Set1").mode("lch").colors(40);
+    this.color = this.setStyle(style, ncolors);
+  }
+  protected setStyle(newStyle: chroma.BrewerPaletteName, ncolors: number) {
+    this.style = newStyle;
+    this.color = chroma.scale(newStyle as chroma.BrewerPaletteName).colors(ncolors);
+    return this.color;
+  }
+  public getAtomColor(input: string) {
+    const index = input.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return this.color[index % this.color.length];
+  }
+}
 
+class RealAtomPalette extends BasePalette {
+  element_radius: { [key: string]: number };
+  constructor(style: chroma.BrewerPaletteName = "Set1") {
+    super(style, 118);
     this.element_radius = {
       undefined: 1.0,
       H: 0.38,
@@ -86,16 +87,11 @@ class RealAtomPalette {
       Pm: 1.63,
     };
   }
-  public get_color(elem_or_type: string) {
-    const hash = stringToHash(elem_or_type);
-    return this.color[hash % this.color.length];
+  public getAtomRadius(elem_or_type: string) {
+    return this.element_radius[elem_or_type] || 1.0;
   }
+}
 
-  public get_radius(elem_or_type: string) {
-    return this.element_radius[elem_or_type] * 1.2 || 1.0;
-  }
-} // RealAtomPalette
+const realAtomPalette = new RealAtomPalette();
 
-const real_atom_palette = new RealAtomPalette();
-
-export { real_atom_palette };
+export { realAtomPalette };

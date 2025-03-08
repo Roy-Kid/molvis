@@ -18,11 +18,12 @@ import {
 import { Logger } from "tslog";
 import type { Molvis } from "./app";
 import { ContextMenu } from "./menu";
-import { Atom, type ItemValue, Bond, type System } from "./system";
+import { Atom, type ItemProp, Bond, type System } from "./system";
 import type { World } from "./world";
 import type { GuiManager } from "./gui";
 
 const logger = new Logger({ name: "molvis-core" });
+
 function highlight_mesh(mesh: AbstractMesh) {
   mesh.renderOutline = !mesh.renderOutline;
 }
@@ -356,7 +357,7 @@ class EditMode extends Mode {
         10,
       );
 
-      const atomData = new Map<string, any>([
+      const atomData = new Map<string, ItemProp>([
         ["name", `atom_${Date.now()}`],
         ["type", "C"],
         ["x", xyz.x],
@@ -379,7 +380,7 @@ class EditMode extends Mode {
     );
 
     if (this._is_dragging && !this._draggingAtomMesh) {
-      const atomData = new Map<string, any>([
+      const atomData = new Map<string, ItemProp>([
         ["name", `atom_${Date.now()}`],
         ["type", "C"],
         ["x", xyz.x],
@@ -410,7 +411,7 @@ class EditMode extends Mode {
     if (this._draggingAtomMesh && this._draggingAtom) {
       // 鼠标释放时才将数据同步到系统中
       const xyz = this._draggingAtomMesh.position;
-      const atomData = new Map<string, any>([
+      const atomData = new Map<string, ItemProp>([
         ["name", this._draggingAtom.name],
         ["type", "C"],
         ["x", xyz.x],

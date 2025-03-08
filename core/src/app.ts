@@ -2,10 +2,10 @@ import { Vector3 } from "@babylonjs/core";
 import { KeyboardEventTypes } from "@babylonjs/core";
 import { Engine, Scene } from "@babylonjs/core";
 import { Logger } from "tslog";
-import { GuiManager, GuiOptions } from "./gui";
+import { GuiManager } from "./gui";
 import { EditMode, type Mode, SelectMode, ViewMode } from "./mode";
 import { type Frame, System } from "./system";
-import type { Atom } from "./system";
+import type { Atom, ItemProp } from "./system";
 import { World } from "./world";
 
 interface JsonRpcRequest {
@@ -131,7 +131,7 @@ class Molvis {
 
   public finalize = () => {};
 
-  public draw_atom = (data: Map<string, unknown>) => {
+  public draw_atom = (data: Map<string, ItemProp>) => {
     const atom = this._system.current_frame.add_atom(data);
     this._world.artist.draw_atom(atom);
     return atom;
@@ -140,7 +140,7 @@ class Molvis {
 public draw_bond = (
 	itom: Atom,
 	jtom: Atom,
-	props: Map<string, unknown> = new Map(),
+	props: Map<string, ItemProp> = new Map(),
 ) => {
 	const bond = this._system.current_frame.add_bond(itom, jtom, props);
 	this._world.artist.draw_bond(bond);
