@@ -7,18 +7,19 @@ const logger = new Logger({ name: "molvis-widget" });
 
 export default () => {
 
-  let app: MolvisWidget;
+  const widgets = new Map<number, MolvisWidget>();
 
   return {
     initialize({ model }: { model: ModelType }) {
       const session_id = model.get("session_id");
-      if (session_id) {
-        app = new MolvisWidget(model);
-        app.start();
+      if (!widgets.has(session_id)) {
+        const widget = new MolvisWidget(model);
+        widgets.set(session_id, widget);
+        widget.start();
       }
       return () => {
+        widgets.get(session_id)?.stop();
         logger.info(`MolvisWidget${session_id} init cleanup`);
-        app.stop();
       };
     },
 
@@ -26,9 +27,10 @@ export default () => {
       preventEventPropagation(el);
 
       const session_id = model.get("session_id");
-      if (app) {
-        app.attach(el);
-        app.resize();
+      const widget = widgets.get(session_id);
+      if (widget) {
+        widget.attach(el);
+        widget.resize();
       }
       else {
         throw new Error(`MolvisWidget${session_id} not found`);
@@ -36,7 +38,7 @@ export default () => {
       
       return () => { 
         logger.info(`MolvisWidget${session_id} render cleanup`);
-        app.detach();
+        widget.detach();
       };
     },
   };

@@ -1,5 +1,5 @@
 import { Logger } from "tslog";
-import { Molvis } from "molvis";
+import { Molvis } from "@molvis/app";
 import type { ModelType } from "./types";
 import { JsonRpcHandler } from "./jsonrpc-handler";
 
@@ -18,7 +18,7 @@ export class MolvisWidget {
 
     this.canvas = document.createElement("canvas");
     this.session_id = model.get("session_id");
-    this.canvas.id = `molvis-canvas${this.session_id}`;
+    this.canvas.id = `molvis-widget-${this.session_id}`;
     this.canvas.width = width;
     this.canvas.height = height;
     this.canvas_container = null;
@@ -36,8 +36,12 @@ export class MolvisWidget {
     try {
       const response = this.jrpc_handler.execute(cmd, buffers);
       this.model.send(response);
-    } catch (e: any) {
-      this.model.send({ error: e.message });
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        this.model.send({ error: e.message });
+      } else {
+        this.model.send({ error: "An unknown error occurred" });
+      }
     }
   };
 
