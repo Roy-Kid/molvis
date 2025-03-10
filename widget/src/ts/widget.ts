@@ -1,7 +1,7 @@
 import { Logger } from "tslog";
 import { Molvis } from "@molvis/app";
 import type { ModelType } from "./types";
-import { JsonRpcHandler } from "./jsonrpc-handler";
+import { JsonRpcHandler } from "./jsonrpc";
 
 const logger = new Logger({ name: "molvis-widget" });
 

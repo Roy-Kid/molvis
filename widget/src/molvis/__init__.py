@@ -3,28 +3,24 @@ import anywidget
 import traitlets
 import logging
 import json
-from typing import Dict, List, Union, Optional
 import molpy as mp
 import pyarrow as pa
-logger = logging.getLogger("molvis-widget-py")
-
+from .types import JsonRPCRequest, JsonRPCResponse
+logger = logging.getLogger("molvis")
+print("molvis.__init__")
 __version__ = "0.1.0"
 
 # Asset configuration
-# _DEV = True
-# if _DEV:
-#     ESM = "http://localhost:5173/src/index.ts?anywidget"
-#     CSS = ""
-# else:
-#     bundled_assets_dir = pathlib.Path(__file__).parent.parent / "static"
-#     ESM_path = bundled_assets_dir / "molvis.js"
-#     assert ESM_path.exists(), f"{ESM_path} not found"
-#     ESM = ESM_path.read_text()
-#     CSS = (bundled_assets_dir / "style.css").read_text()
-
-bundled_assets_dir = pathlib.Path(__file__).parent / "build"
-ESM = bundled_assets_dir / "index.js"
-# CSS = bundled_assets_dir / "style.css"
+_DEV = True
+if _DEV:
+    ESM = "http://localhost:3000/static/js/index.js"
+    CSS = ""
+else:
+    bundled_assets_dir = pathlib.Path(__file__).parent.parent / "static"
+    ESM_path = bundled_assets_dir / "molvis.js"
+    assert ESM_path.exists(), f"{ESM_path} not found"
+    ESM = ESM_path.read_text()
+    CSS = (bundled_assets_dir / "style.css").read_text()
 
 class Molvis(anywidget.AnyWidget):
     """A widget for molecular visualization using molpy and anywidget."""
@@ -42,14 +38,20 @@ class Molvis(anywidget.AnyWidget):
 
     def send_cmd(self, method: str, params: dict, buffers: list) -> 'Molvis':
         """Send a command to the frontend."""
-        jsonrpc = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": self.session_id,
-        }
+        # jsonrpc = {
+        #     "jsonrpc": "2.0",
+        #     "method": method,
+        #     "params": params,
+        #     "id": self.session_id,
+        # }
+        jsonrpc = JsonRPCRequest(
+            jsonrpc="2.0",
+            method=method,
+            params=params,
+            id=self.session_id, # NOTE: session_id?
+        )
         logger.info(f"send_cmd: {jsonrpc} with {len(buffers)} buffers")
-        self.send(json.dumps(jsonrpc), buffers=buffers)
+        self.send(json.dumps(dict(jsonrpc)), buffers=buffers)
         return self
     
     def recv_cmd(self, msg: dict) -> dict:
@@ -59,9 +61,11 @@ class Molvis(anywidget.AnyWidget):
 
     def draw_frame(self, 
                   frame: mp.Frame, 
+                  atom_fields: list[str] = []
                 ) -> 'Molvis':
         """Draw a molecular frame with optional properties and labels."""
-        atoms = frame["atoms"][['x', 'y', 'z', 'name', 'element']]
+        atom_fields = ['x', 'y', 'z', *atom_fields]
+        atoms = frame["atoms"][atom_fields]
         atoms_arrow = pa.Table.from_pandas(atoms)
 
         sink = pa.BufferOutputStream()

@@ -6,15 +6,22 @@ export interface WidgetModel {
   session_id: number;
 }
 
-export interface JsonRpcMessage {
+export interface JsonRPCRequest {
   jsonrpc: "2.0";
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-  id: string | number | null;
+  id: number | null;
+  method: string;
+  params: { [key: string]: string };
 }
 
-export type ModelType = AnyModel<WidgetModel>; 
+export interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  id: number;
+  result: { [key: string]: string } | null;
+  error: {
+    code: number;
+    message: string;
+    data: { [key: string]: string } | null;
+  } | null;
+}
+
+export type ModelType = AnyModel<WidgetModel>;
