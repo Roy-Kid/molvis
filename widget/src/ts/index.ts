@@ -12,8 +12,9 @@ export default () => {
   return {
     initialize({ model }: { model: ModelType }) {
       const session_id = model.get("session_id");
-      if (!widgets.has(session_id)) {
-        const widget = new MolvisWidget(model);
+      let widget = widgets.get(session_id);
+      if (widget === undefined) {
+        widget = new MolvisWidget(model);
         widgets.set(session_id, widget);
         widget.start();
       }

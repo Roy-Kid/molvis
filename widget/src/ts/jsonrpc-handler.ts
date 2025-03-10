@@ -1,25 +1,11 @@
-import { Molvis } from "molvis";
+import type { Molvis } from "@molvis/app";
 import { Logger } from "tslog";
 import { tableFromIPC } from 'apache-arrow';
-const logger = new Logger({ name: "molvis-jsonrpc", filePathWithLine: true });
+import { JsonRpcMessage } from "./types";
 
-export interface JsonRpcRequest {
-  jsonrpc: string;
-  method: string;
-  params?: any;
-  id: string | number | null;
-}
 
-export interface JsonRpcResponse {
-  jsonrpc: "2.0";
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-  id: string | number | null;
-}
+const logger = new Logger({ name: "molvis-jsonrpc" });
+
 
 export class JsonRpcHandler {
 
@@ -29,7 +15,7 @@ export class JsonRpcHandler {
     this.context = context;
   }
 
-  public execute(request: JsonRpcRequest, buffers: DataView[] = []) {
+  public execute(request: JsonRpcMessage, buffers: DataView[] = []) {
       // params: object
     const { jsonrpc, method, params, id } = request;
     if (jsonrpc !== "2.0") {

@@ -1,8 +1,6 @@
 export function preventEventPropagation(element: HTMLElement) {
   const stopPropagation = (e: Event) => e.stopPropagation();
-  ["contextmenu", "click", "keydown", "keyup", "keypress"].forEach(
-    (eventType) => {
-      element.addEventListener(eventType, stopPropagation, false);
-    }
-  );
+  for (const eventType of ["contextmenu", "click", "keydown", "keyup", "keypress"]) {
+    element.addEventListener(eventType, stopPropagation, false);
+  }
 } 

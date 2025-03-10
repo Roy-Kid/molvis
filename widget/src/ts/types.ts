@@ -7,9 +7,14 @@ export interface WidgetModel {
 }
 
 export interface JsonRpcMessage {
-  jsonrpc: string;
-  method: string;
-  params: any;
+  jsonrpc: "2.0";
+  result?: any;
+  error?: {
+    code: number;
+    message: string;
+    data?: any;
+  };
+  id: string | number | null;
 }
 
 export type ModelType = AnyModel<WidgetModel>; 

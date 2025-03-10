@@ -3,7 +3,7 @@ import { Molvis } from "@molvis/app";
 import type { ModelType } from "./types";
 import { JsonRpcHandler } from "./jsonrpc-handler";
 
-const logger = new Logger({ name: "molvis-widget-ts" });
+const logger = new Logger({ name: "molvis-widget" });
 
 export class MolvisWidget {
   private canvas_container: HTMLElement | null;
