@@ -10,10 +10,9 @@
     "widget"
   ],
   "scripts": {
-    
+    "dev:widget": "npm run dev -w widget"
   },
   "devDependencies": {
-  },
-  "dependencies": {
+    "@rslib/core": "^0.5.4"
   }
 }

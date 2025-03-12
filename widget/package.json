@@ -3,14 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "rsbuild dev"
+    "dev": "rslib build -w"
   },
   "author": "Roy Kid",
   "dependencies": {
     "@anywidget/types": "^0.2.0",
-    "@apache-arrow/ts": "^19.0.0",
     "anywidget": "^0.9.15",
-    "apache-arrow": "^19.0.0",
     "molvis": "file:../core"
+  },
+  "devDependencies": {
+    "@rslib/core": "^0.5.4",
+    "@apache-arrow/ts": "^19.0.0"
   }
 }
