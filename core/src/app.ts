@@ -4,21 +4,10 @@ import { Engine, Scene } from "@babylonjs/core";
 import { Logger } from "tslog";
 import { GuiManager } from "./gui";
 import { EditMode, type Mode, SelectMode, ViewMode } from "./mode";
-import { type Frame, System } from "./system";
+import type { Frame } from "./system";
+import { System } from "./system";
 import type { Atom, ItemProp } from "./system";
 import { World } from "./world";
-
-interface JsonRpcRequest {
-  jsonrpc: string;
-  method: string;
-  params: object;
-  id: number | null;
-}
-
-interface FrameLikeObject {
-  atoms: { name: string[]; x: number[]; y: number[]; z: number[] };
-  bonds: { i: number[]; j: number[] };
-}
 
 const logger = new Logger({ name: "molvis-core" });
 
@@ -38,11 +27,10 @@ class Molvis {
     this._scene = this._initScene(this._engine);
 
     this._world = new World(this._engine, this._scene);
-    this._mode = this.init_mode(this._world);
-
     this._guiManager = new GuiManager(this._world, this._system, {
       useFrameIndicator: true,
     });
+    this._mode = this.init_mode(this._world);
   }
 
   private _initScene = (engine: Engine) => {
@@ -164,7 +152,6 @@ class Molvis {
     bond_i?: Array<number>;
     bond_j?: Array<number>;
   }): Frame => {
-
     const n_atoms = x.length;
     // const n_bonds = bonds.i.length;
     const atom_list = [];

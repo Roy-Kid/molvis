@@ -27,9 +27,14 @@ class Artist {
   }
 
   public draw_atom(atom: Atom) {
-    const elem = atom.get("element");
-    const color = realAtomPalette.getAtomColor(elem as string);
-    const radius = realAtomPalette.getAtomRadius(elem as string);
+    const elem = atom.get("element") as string ?? "";
+    const name = atom.get("name") as string ?? "";
+    let identifier: string = elem;
+    if (elem === "") {
+      identifier = name;
+    }
+    const color = realAtomPalette.getAtomColor(identifier as string);
+    const radius = realAtomPalette.getAtomRadius(identifier as string);
     const sphere = MeshBuilder.CreateSphere(
       `atom:${atom.name}`,
       { diameter: radius },
@@ -125,12 +130,22 @@ class Artist {
   }
 
   public draw_frame(frame: Frame) {
+    this.clear();
     for (const atom of frame.atoms) {
       this.draw_atom(atom);
     }
 
     for (const bond of frame.bonds) {
       this.draw_bond(bond);
+    }
+  }
+
+  public clear() {
+    const meshes = this._scene.meshes.filter((mesh) =>
+      mesh.name.startsWith("atom") || mesh.name.startsWith("bond"),
+    );
+    for (const mesh of meshes) {
+      mesh.dispose();
     }
   }
 }

@@ -19,8 +19,12 @@ class Trajectory {
     return this._frames;
   }
 
-  get_frame(idx: number): Frame | undefined {
+  getFrame(idx: number): Frame {
     return this._frames[idx];
+  }
+
+  get currentIndex(): number {
+    return this._currentIndex;
   }
 
   set currentIndex(idx: number) {
@@ -55,15 +59,15 @@ class System {
   }
 
   public get current_frame() {
-    return this._trajectory.currentFrame;
+    return this._trajectory.getFrame(this._trajectory.currentIndex);
   }
 
   public set current_frame_index(idx: number) {
     this._trajectory.currentIndex = idx;
   }
 
-  public get_frame(idx: number): Frame | undefined {
-    return this._trajectory.get_frame(idx);
+  public getFrame(idx: number): Frame | undefined {
+    return this._trajectory.getFrame(idx);
   }
 
   public set_frame(idx: number) {
@@ -155,6 +159,14 @@ class Frame {
     return this._bonds;
   }
 
+  set atoms(atoms: Atom[]) {
+    this._atoms = atoms;
+  }
+
+  set bonds(bonds: Bond[]) {
+    this._bonds = bonds;
+  }
+
   public clear() {
     this._atoms = [];
     this._bonds = [];
@@ -201,9 +213,9 @@ class Atom {
     const y = this.get("y");
     const z = this.get("z");
     return new Vector3(
-      typeof x === "number" ? x : 0,
-      typeof y === "number" ? y : 0,
-      typeof z === "number" ? z : 0,
+      Number(x),
+      Number(y),
+      Number(z)
     );
   }
 

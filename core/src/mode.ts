@@ -269,9 +269,11 @@ class ViewMode extends Mode {
       }
       if (entity) {
         this._guiManager.updateInfoText(
-          `${type}: ${name} (${entity.get("type")})`,
+          `${type}: ${name} (${entity.get("name")})`,
         );
       }
+    } else {
+      this._guiManager.updateInfoText("");
     }
   }
 

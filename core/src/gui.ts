@@ -32,8 +32,10 @@ class GuiManager {
     this._rootTexture = this._createRootTexture(world.scene);
     this._infoPanel = this._createInfoPanel();
 
-    this._frameIndicator = new FrameIndicator(this._rootTexture, this._system);
+    this._frameIndicator = new FrameIndicator(this._rootTexture, this._world, this._system);
     this._frameIndicator.visible = guiOptions.useFrameIndicator;
+
+    logger.info("GUI manager initialized");
   }
 
   private _createRootTexture(scene: Scene): AdvancedDynamicTexture {
@@ -74,34 +76,40 @@ class GuiManager {
 class FrameIndicator {
   private _container: StackPanel;
 
-  constructor(texture: AdvancedDynamicTexture, system: System) {
+  constructor(texture: AdvancedDynamicTexture, world: World, system: System) {
     const panel = new StackPanel();
-    panel.isVertical = false;
     panel.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
     panel.verticalAlignment = Control.VERTICAL_ALIGNMENT_BOTTOM;
-    panel.height = "40px";
-    panel.paddingBottom = "10px";
+    panel.adaptHeightToChildren = true;
+    texture.addControl(panel);
 
-    const header = new TextBlock();
+    const header = new TextBlock("frame_header");
     header.text = "";
     header.height = "30px";
     header.color = "white";
-    // panel.addControl(header);
+    panel.addControl(header);
 
-    const slider = new Slider();
-    slider.minimum = 0;
+    const slider = new Slider("frame_slider");
+    slider.minimum = 1;
     slider.maximum = system.n_frames;
-    slider.value = 0;
-    slider.isVertical = false;
+    slider.value = 1;
     slider.height = "20px";
-    slider.width = "200px";
+    slider.width = "400px";
+    let prev_value = 1;
     slider.onValueChangedObservable.add((value) => {
-      header.text = `${value} / ${system.n_frames}`;
-      system.set_frame(value);
+      let value_num = Number.isNaN(value) ? 1 : value;
+      value_num = Math.round(value_num);
+      if (value_num !== prev_value) {
+        console.log(value);
+        header.text = `${value_num} / ${system.n_frames}`;
+        system.set_frame(value_num-1);
+        world.artist.draw_frame(system.current_frame);
+        prev_value = value_num;
+      }
+
     });
     panel.addControl(slider);
     this._container = panel;
-    texture.addControl(panel);
   }
 
   get visible(): boolean {
@@ -113,11 +121,11 @@ class FrameIndicator {
   }
 
   public update(currentIndex: number, totalFrames: number): void {
-    // const header = this._container.children[0] as TextBlock;
-    // const slider = this._container.children[1] as Slider;
-    // slider.maximum = totalFrames;
-    // slider.value = currentIndex;
-    // header.text = `${currentIndex} / ${totalFrames}`;
+    const header = this._container.children[0] as TextBlock;
+    const slider = this._container.children[1] as Slider;
+    slider.maximum = totalFrames;
+    slider.value = currentIndex;
+    header.text = `${currentIndex} / ${totalFrames}`;
   }
 }
 

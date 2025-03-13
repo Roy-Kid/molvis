@@ -10,7 +10,9 @@
     "widget"
   ],
   "scripts": {
-    "dev:widget": "npm run dev -w widget"
+    "dev:widget": "npm run dev -w widget",
+    "dev:standalone": "npm run dev -w standalone",
+    "dev:web": "npm run dev -w standalone"
   },
   "devDependencies": {
     "@rslib/core": "^0.5.4"
