@@ -137,15 +137,15 @@ class Molvis {
     return atom;
   };
 
-public draw_bond = (
-	itom: Atom,
-	jtom: Atom,
-	props: Map<string, ItemProp> = new Map(),
-) => {
-	const bond = this._system.current_frame.add_bond(itom, jtom, props);
-	this._world.artist.draw_bond(bond);
-	return bond;
-};
+  public draw_bond = (
+    itom: Atom,
+    jtom: Atom,
+    props: Map<string, ItemProp> = new Map(),
+  ) => {
+    const bond = this._system.current_frame.add_bond(itom, jtom, props);
+    this._world.artist.draw_bond(bond);
+    return bond;
+  };
 
   public draw_frame = ({
     x,
@@ -159,30 +159,41 @@ public draw_bond = (
     x: Float64Array;
     y: Float64Array;
     z: Float64Array;
-    name: Array<string>;
-    element: Array<string>;
-    bond_i: Array<number>;
-    bond_j: Array<number>;
-  }) => {
-    logger.info(`bond_i: ${bond_i}`);
-    logger.info(`bond_j: ${bond_j}`);
+    name?: Array<string>;
+    element?: Array<string>;
+    bond_i?: Array<number>;
+    bond_j?: Array<number>;
+  }): Frame => {
+
     const n_atoms = x.length;
     // const n_bonds = bonds.i.length;
     const atom_list = [];
     for (let i = 0; i < n_atoms; i++) {
       const atom = new Map();
-      atom.set("name", name[i]);
-      atom.set("element", element[i]);
       atom.set("x", x[i]);
       atom.set("y", y[i]);
       atom.set("z", z[i]);
-      atom_list.push(this.draw_atom(atom));
+      atom_list.push(atom);
     }
+    if (name) {
+      for (let i = 0; i < n_atoms; i++) {
+        atom_list[i].set("name", name[i]);
+      }
+    }
+    if (element) {
+      for (let i = 0; i < n_atoms; i++) {
+        atom_list[i].set("element", element[i]);
+      }
+    }
+    const atom_obj_list = atom_list.map((atom) => {
+      return this.draw_atom(atom);
+    });
     if (bond_i && bond_j) {
       const n_bonds = bond_i.length;
       for (let i = 0; i < n_bonds; i++) {
-        const itom = atom_list[bond_i[i]];
-        const jtom = atom_list[bond_j[i]];
+        console.log(bond_i[i], bond_j[i]);
+        const itom = atom_obj_list[bond_i[i]];
+        const jtom = atom_obj_list[bond_j[i]];
         this.draw_bond(itom, jtom);
       }
     }

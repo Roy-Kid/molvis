@@ -11,11 +11,6 @@ export default () => {
   return {
     initialize({ model }: { model: ModelType }) {
       const session_id = model.get("session_id");
-      console.log(`<MolvisWidget ${session_id}> init`);
-      console.log(model.get("session_id"));
-      console.log(model.get("session_id"));
-      console.log(model.get("session_id"));
-
       let widget = widgets.get(session_id);
       if (widget === undefined) {
         widget = new MolvisWidget(model);
@@ -32,9 +27,6 @@ export default () => {
       preventEventPropagation(el);
 
       const session_id = model.get("session_id");
-      console.log(model.get("session_id"));
-      console.log(model.get("session_id"));
-      console.log(model.get("session_id"));
       const widget = widgets.get(session_id);
       if (widget) {
         widget.attach(el);

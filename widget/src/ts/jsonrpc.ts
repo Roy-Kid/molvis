@@ -28,7 +28,6 @@ export class JsonRpcHandler {
     }
 
     const processedParams = this.processBuffers(params, buffers);
-    logger.info(`Executing method: ${method}`);
     const { context, methodName } = this.parseMethod(method);
     const response = this.callFunction(
       // @ts-ignore
@@ -48,15 +47,14 @@ export class JsonRpcHandler {
     for (const [key, value] of Object.entries(params)) {
       tableData.set(key, value);
     }
-    if (buffers.length > 0) {
-      const table = tableFromIPC(buffers);
+    for (const buffer of buffers) {
+      const table = tableFromIPC(buffer);
       const columns = table.schema.fields.map((field) => field.name);
       for (const column of columns) {
         const columnData = table.getChild(column);
-        tableData.set(column, columnData);
+        tableData.set(column, columnData?.toArray());
       }
     }
-
     return tableData;
   }
 
@@ -83,8 +81,9 @@ export class JsonRpcHandler {
       if (typeof method !== "function") {
         throw new Error(`Method ${String(methodName)} is not a function`);
       }
+      const paramObj = Object.fromEntries(params);
       // @ts-ignore
-      const result = method(params);
+      const result = method(paramObj);
       return createSuccessResponse(id, result);
     } catch (error: unknown) {
       if (error instanceof Error) {
