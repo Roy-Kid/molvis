@@ -16,36 +16,34 @@ export interface ContextMenuItem {
 }
 
 export class ContextMenu {
-  private scene: Scene;
+  private _scene: Scene;
   private advancedTexture: AdvancedDynamicTexture;
   private container: Rectangle;
   private panel: StackPanel;
   private items: ContextMenuItem[] = [];
-  private isVisible = false;
 
-  constructor(scene: Scene) {
-    this.scene = scene;
-    this.advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI(
-      "ContextMenu",
-      true,
-      this.scene,
-    );
+  constructor(scene: Scene, texture: AdvancedDynamicTexture) {
+    this.advancedTexture = texture;
+    this._scene = scene;
 
     // Create container for the menu
     this.container = new Rectangle("contextMenuContainer");
-    this.container.width = "200px";
+    this.container.width = "100px";
     this.container.background = "#333333";
     this.container.color = "#ffffff";
-    this.container.cornerRadius = 5;
+    this.container.cornerRadius = 3;
     this.container.thickness = 1;
     this.container.isVisible = false;
     this.container.zIndex = 1000;
+    // high light frame for debugging
+    this.container.isHighlighted = true;
     this.advancedTexture.addControl(this.container);
 
     // Create stack panel for menu items
     this.panel = new StackPanel("contextMenuPanel");
     this.panel.isVertical = true;
-    this.panel.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
+    this.container.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
+    this.container.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     this.container.addControl(this.panel);
 
     // Handle click outside to close menu
@@ -57,17 +55,11 @@ export class ContextMenu {
 
     // Prevent closing when clicking on the menu itself
     this.container.onPointerDownObservable.add(
-      (evt: Vector2WithInfo, evtState: EventState) => {
+      (_: Vector2WithInfo, evtState: EventState) => {
         evtState.skipNextObservers = true;
       },
     );
 
-    // Prevent default context menu
-    window.addEventListener("contextmenu", (evt) => {
-      if (this.scene.isReady()) {
-        evt.preventDefault();
-      }
-    });
   }
 
   /**
@@ -93,20 +85,41 @@ export class ContextMenu {
    * @param position Screen position to show the menu
    */
   public show(position: Vector2): void {
-    // Position the menu at cursor
-    this.container.left = `${position.x}px`;
-    this.container.top = `${position.y}px`;
-    this.container.verticalAlignment = Control.VERTICAL_ALIGNMENT_TOP;
-    this.container.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
+    // Calculate the position to ensure the menu is fully visible
+    const screenWidth = this._scene.getEngine().getRenderWidth();
+    const screenHeight = this._scene.getEngine().getRenderHeight();
+    const menuWidth = parseFloat(this.container.width as string);
+    const menuHeight = parseFloat(this.container.height as string);
+
+    let left = position.x;
+    let top = position.y;
+
+    // Adjust position if the menu goes beyond the right edge of the screen
+    if (left + menuWidth > screenWidth) {
+      left = screenWidth - menuWidth;
+    }
+
+    // Adjust position if the menu goes beyond the bottom edge of the screen
+    if (top + menuHeight > screenHeight) {
+      top = screenHeight - menuHeight;
+    }
+
+    this.container.left = `${left}px`;
+    this.container.top = `${top}px`;
+
     this.container.isVisible = true;
-    this.isVisible = true;
+
   }
 
-  /**
-   * Hide the context menu
-   */
+  public get isVisble(): boolean {
+    return this.container.isVisible;
+  }
+
+  public set isVisible(value: boolean) {
+    this.container.isVisible = value;
+  }
+
   public hide(): void {
-    this.container.isVisible = false;
     this.isVisible = false;
   }
 
@@ -126,7 +139,7 @@ export class ContextMenu {
     });
 
     // Adjust container height based on number of items
-    this.container.height = `${this.items.length * 40}px`;
+    this.container.height = `${this.items.length * 20}px`;
   }
 
   /**
@@ -134,13 +147,13 @@ export class ContextMenu {
    */
   private createMenuItem(item: ContextMenuItem, isLast: boolean): Button {
     const button = Button.CreateSimpleButton(`menuItem_${item.label}`, "");
-    button.height = "40px";
+    button.height = "20px";
     button.thickness = 0;
     button.cornerRadius = 0;
     button.color = "white";
     button.background = "#333333";
-    button.paddingLeft = "10px";
-    button.paddingRight = "10px";
+    button.paddingLeft = "5px";
+    button.paddingRight = "5px";
     button.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
 
     // Add hover effect
@@ -155,8 +168,8 @@ export class ContextMenu {
     const textBlock = new TextBlock();
     textBlock.text = item.label;
     textBlock.color = "white";
-    textBlock.fontSize = 14;
-    textBlock.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
+    textBlock.fontSize = 12;
+    textBlock.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
     button.addControl(textBlock);
 
     // Add icon if provided

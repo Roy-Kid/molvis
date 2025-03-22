@@ -11,7 +11,7 @@ import {
 } from "@babylonjs/core";
 import { Logger } from "tslog";
 import { realAtomPalette } from "./palette";
-import type { Atom, Bond, Frame } from "./system";
+import type { Atom, Bond, Frame } from "../system/system";
 
 const logger = new Logger({ name: "molvis-core" });
 

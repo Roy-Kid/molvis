@@ -15,6 +15,7 @@
     "dev:web": "npm run dev -w standalone"
   },
   "devDependencies": {
+    "@rsbuild/core": "^1.2.19",
     "@rslib/core": "^0.5.4"
   }
 }

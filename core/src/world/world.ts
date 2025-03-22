@@ -1,21 +1,19 @@
 import {
   ArcRotateCamera,
   Color3,
-  type Engine,
+  Engine,
   HemisphericLight,
   type Mesh,
-  type Scene,
+  Scene,
   Vector3,
+  Tools,
 } from "@babylonjs/core";
-import { Logger } from "tslog";
 import { Artist } from "./artist";
 import { AxisHelper } from "./axes";
+import { Pipeline } from "./pipeline";
 
-const logger = new Logger({ name: "molvis-core" });
-
-interface GuiOptions {
-  useFrameIndicator: boolean;
-}
+// import { Logger } from "tslog";
+// const logger = new Logger({ name: "molvis-world" });
 
 class World {
   private _engine: Engine;
@@ -24,15 +22,28 @@ class World {
   private _artist: Artist;
   private _axes: AxisHelper;
   private _selected: Mesh[] = [];
+  private _pipeline: Pipeline;
 
-  constructor(engine: Engine, scene: Scene) {
-    this._engine = engine;
-    this._scene = scene;
-    this._camera = this.init_camera();
-    this.init_light();
-    this._artist = this.init_artist();
-    this._axes = this.init_axes();
+  constructor(canvas: HTMLCanvasElement, ) {
+    this._engine = this._initEngine(canvas);
+    this._scene = this._initScene(this._engine);
+    this._camera = this._initCamera();
+    this._initLight();
+    this._artist = this._initArtist();
+    this._axes = this._initAxes();
+    this._pipeline = new Pipeline();
   }
+
+  private _initEngine(canvas: HTMLCanvasElement) {
+    const engine = new Engine(canvas);
+    return engine;
+  }
+
+  private _initScene = (engine: Engine) => {
+    const scene = new Scene(engine);
+    scene.useRightHandedSystem = true;
+    return scene;
+  };
 
   get scene(): Scene {
     return this._scene;
@@ -46,7 +57,7 @@ class World {
     return this._artist;
   }
 
-  public init_camera() {
+  private _initCamera() {
     const camera = new ArcRotateCamera(
       "Camera",
       -Math.PI / 2,
@@ -62,7 +73,7 @@ class World {
     return camera;
   }
 
-  private init_light() {
+  private _initLight() {
     const hemisphericLight = new HemisphericLight(
       "ambientLight",
       new Vector3(0, 1, 0),
@@ -73,13 +84,17 @@ class World {
     return hemisphericLight;
   }
 
-  private init_artist() {
+  private _initArtist() {
     const artist = new Artist(this._scene);
     return artist;
   }
 
-  private init_axes() {
+  private _initAxes() {
     return new AxisHelper(this._engine, this.camera);
+  }
+
+  public takeScreenShot() {
+    Tools.CreateScreenshot(this._engine, this._camera, {precision: 1.0});
   }
 
   public render() {

@@ -16,7 +16,10 @@
     /* type checking */
     "strict": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "paths": {
+      "@molvis/core": ["./src/index.ts"]
+    }
   },
   "include": ["src", "tests/index.ts"],
   "types": [

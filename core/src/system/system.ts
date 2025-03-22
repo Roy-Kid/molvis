@@ -59,7 +59,7 @@ class System {
   }
 
   public get current_frame() {
-    return this._trajectory.getFrame(this._trajectory.currentIndex);
+    return this._trajectory.currentFrame;
   }
 
   public set current_frame_index(idx: number) {
@@ -115,57 +115,57 @@ class Frame {
     this._props = new Map();
   }
 
-  public add_atom(arg: Atom | Map<string, ItemProp>): Atom {
-    if (arg instanceof Atom) {
-      this._atoms.push(arg);
-      return arg;
-    }
-    const atom = new Atom(arg);
+  public add_atom(name: string, xyz: Vector3, element=""): Atom {
+    const atom = new Atom();
+    atom.set("name", name);
+    atom.set("xyz", xyz);
+    atom.set("element", element);
     this._atoms.push(atom);
     return atom;
   }
 
-  public add_bond = (
-    itom: Atom,
-    jtom: Atom,
-    data: Map<string, ItemProp> = new Map(),
-  ): Bond => {
-    const bond = new Bond(itom, jtom, data);
-    this._bonds.push(bond);
-    return bond;
-  };
 
-  public get_atom = (fn: (atom: Atom) => boolean): Atom | undefined => {
-    return this._atoms.find(fn);
-  };
+  // public add_bond = (
+  //   itom: Atom,
+  //   jtom: Atom,
+  //   data: Map<string, ItemProp> = new Map(),
+  // ): Bond => {
+  //   const bond = new Bond(itom, jtom, data);
+  //   this._bonds.push(bond);
+  //   return bond;
+  // };
 
-  public get_bond = (fn: (bond: Bond) => boolean): Bond | undefined => {
-    return this._bonds.find(fn);
-  };
+  // public get_atom = (fn: (atom: Atom) => boolean): Atom | undefined => {
+  //   return this._atoms.find(fn);
+  // };
 
-  get n_atoms(): number {
-    return this._atoms.length;
-  }
+  // public get_bond = (fn: (bond: Bond) => boolean): Bond | undefined => {
+  //   return this._bonds.find(fn);
+  // };
 
-  get props(): Map<string, ItemProp> {
-    return this._props;
-  }
+  // get n_atoms(): number {
+  //   return this._atoms.length;
+  // }
 
-  get atoms(): Atom[] {
-    return this._atoms;
-  }
+  // get props(): Map<string, ItemProp> {
+  //   return this._props;
+  // }
 
-  get bonds(): Bond[] {
-    return this._bonds;
-  }
+  // get atoms(): Atom[] {
+  //   return this._atoms;
+  // }
 
-  set atoms(atoms: Atom[]) {
-    this._atoms = atoms;
-  }
+  // get bonds(): Bond[] {
+  //   return this._bonds;
+  // }
 
-  set bonds(bonds: Bond[]) {
-    this._bonds = bonds;
-  }
+  // set atoms(atoms: Atom[]) {
+  //   this._atoms = atoms;
+  // }
+
+  // set bonds(bonds: Bond[]) {
+  //   this._bonds = bonds;
+  // }
 
   public clear() {
     this._atoms = [];
@@ -174,55 +174,20 @@ class Frame {
   }
 }
 
-type ItemProp = number | string | Vector3 | Array<number> | boolean;
+type Prop = number | string | Vector3 | boolean;
 
-class Atom {
-  private _data: Map<string, ItemProp> = new Map();
-
-  constructor(data?: Map<string, ItemProp> | [string, ItemProp][]) {
-    if (data) {
-      if (data instanceof Map) {
-        data.forEach((value, key) => this.set(key, value));
-      } else {
-        for (const [key, value] of data) {
-          this.set(key, value);
-        }
-      }
-    }
-  }
-
-  public set(key: string, value: ItemProp): void {
-    this._data.set(key, value);
-  }
-
-  public get(key: string): ItemProp | undefined {
-    return this._data.get(key);
-  }
-
-  public has(key: string): boolean {
-    return this._data.has(key);
-  }
+class Atom extends Map<string, Prop> {
 
   get name(): string {
-    const name = this.get("name");
-    return typeof name === "string" ? name : "";
+    return this.get("name") as string;
+  }
+
+  get element(): string {
+    return this.get("element") as string;
   }
 
   get xyz(): Vector3 {
-    const x = this.get("x");
-    const y = this.get("y");
-    const z = this.get("z");
-    return new Vector3(
-      Number(x),
-      Number(y),
-      Number(z)
-    );
-  }
-
-  set xyz(xyz: Vector3) {
-    this.set("x", xyz.x);
-    this.set("y", xyz.y);
-    this.set("z", xyz.z);
+    return this.get("xyz") as Vector3;
   }
 }
 
