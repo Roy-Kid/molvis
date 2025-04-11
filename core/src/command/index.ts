@@ -1,6 +1,6 @@
 import { classRegistry } from "./base";
 import "./draw";
-import { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/core";
 
 class Executor {
 
@@ -15,16 +15,13 @@ class Executor {
         return classRegistry.keys();
     }
 
-    public execute = (cmd: string, args: { [key: string]: any }) => {
+    public execute = (cmd: string, args: object) => {
         const Cmd = classRegistry.get(cmd);
         if (Cmd) {
-            const { x, y, z, name, ...options } = args; // 假设位置参数为 x, y, z, name
-            const command = new Cmd(x, y, z, name, options);
+            const command = new Cmd(args);
             return command.do(this._app);
-            // this._commands.push(command);
-        } else {
-            throw new Error(`Command ${cmd} not found`);
         }
+        throw new Error(`Command ${cmd} not found`);
     }
     
 }

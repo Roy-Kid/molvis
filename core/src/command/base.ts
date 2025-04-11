@@ -5,7 +5,6 @@ import { IEntity } from "../system/base";
 const classRegistry = new Map<string, CommandConstructor>();
 const registerCommand = (name: string) => {
   return (target: CommandConstructor) => {
-    console.log(`Registering command: ${name}`);
     classRegistry.set(name, target);
   }
 }

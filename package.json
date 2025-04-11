@@ -15,7 +15,9 @@
     "dev:core": "npm run dev -w core"
   },
   "devDependencies": {
+    "@biomejs/biome": "1.9.4",
     "@rsbuild/core": "^1.2.19",
-    "@rslib/core": "^0.5.4"
+    "@rslib/core": "^0.5.4",
+    "ts-jest": "^29.3.1"
   }
 }

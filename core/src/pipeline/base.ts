@@ -1,46 +1,51 @@
 import type { Mesh } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { IEntity } from "../system/base";
+import type { IEntity } from "../system/base";
 
 const modifierRegistry = new Map<string, ModifierConstructor>();
 const registerModifier = (name: string) => {
-    return (target: ModifierConstructor) => {
-        console.log(`Registering modifier: ${name}`);
-        modifierRegistry.set(name, target);
-    }
-}
+  return (target: ModifierConstructor) => {
+    modifierRegistry.set(name, target);
+  };
+};
 
 interface IModifier {
-    modify(app: Molvis, selected: Mesh[], entities: IEntity[]): [Mesh[], IEntity[]];
+  modify(
+    app: Molvis,
+    selected: Mesh[],
+    entities: IEntity[],
+  ): [Mesh[], IEntity[]];
 }
 
 interface ModifierConstructor {
-    new(...args: any[]): IModifier;
+  new (...args: any[]): IModifier;
 }
 
-
 class Pipeline {
+  private _modifiers: IModifier[] = [];
 
-    private _modifiers: IModifier[] = [];
+  public append = (name: string, args: object) => {
+    const Modifier = modifierRegistry.get(name);
+    if (Modifier) {
+      this._modifiers.push(new Modifier(args));
+    } else {
+      throw new Error(`Modifier ${name} not found`);
+    }
+  };
 
-    public append = (name: string, args: {}) => {
-        const Modifier = modifierRegistry.get(name);
-        if (Modifier) {
-            this._modifiers.push(new Modifier(...Object.values(args)));
-        }
-        else {
-            throw new Error(`Modifier ${name} not found`);
-        }
-    };
-
-    public modify = (app: Molvis, selected: Mesh[], entity: IEntity[]) => {
-        for (let i = 0; i < this._modifiers.length; i++) {
-            const modifier = this._modifiers[i];
-            [selected, entity] = modifier.modify(app, selected, entity);
-        }
-        return selected;
-    };
-
+  public modify = (app: Molvis, selected: Mesh[], entity: IEntity[]) => {
+    let upstream_selected = selected;
+    let upstream_entity = entity;
+    for (let i = 0; i < this._modifiers.length; i++) {
+      const modifier = this._modifiers[i];
+      [upstream_selected, upstream_entity] = modifier.modify(
+        app,
+        upstream_selected,
+        upstream_entity,
+      );
+    }
+    return selected;
+  };
 }
 
 export { Pipeline, registerModifier };

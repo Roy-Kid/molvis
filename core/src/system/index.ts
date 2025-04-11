@@ -1,7 +1,7 @@
-import { Frame } from './frame';
-import { Atom } from './item';
-import { Trajectory } from './trajectory';
-import { IEntity } from './base';
+import { Frame } from "./frame";
+import { Atom, Bond } from "./item";
+import { Trajectory } from "./trajectory";
+import type { IEntity, IProp } from "./base";
 
 class System {
   private _selected: Atom[];
@@ -59,10 +59,7 @@ class System {
   get n_frames(): number {
     return this._trajectory.frames.length;
   }
-
 }
 
-
-
-export { System };
-export type { IEntity }
+export { System, Frame, Atom, Bond, Trajectory };
+export type { IEntity, IProp };
