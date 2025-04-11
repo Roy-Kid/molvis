@@ -12,7 +12,7 @@
   "scripts": {
     "dev:widget": "npm run dev -w widget",
     "dev:standalone": "npm run dev -w standalone",
-    "dev:web": "npm run dev -w standalone"
+    "dev:core": "npm run dev -w core"
   },
   "devDependencies": {
     "@rsbuild/core": "^1.2.19",

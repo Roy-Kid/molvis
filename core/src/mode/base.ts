@@ -8,7 +8,7 @@ import {
   AbstractMesh
 } from "@babylonjs/core";
 
-import { System, World, GuiManager } from "@molvis/core";
+import { Molvis } from "@molvis/core";
 
 enum ModeType {
   Edit = "edit",
@@ -20,30 +20,41 @@ enum ModeType {
 abstract class BaseMode {
   name: ModeType;
 
-  protected world: World;
-  protected system: System;
-  protected gui: GuiManager;
+  private _app: Molvis;
   private _pointer_observer: Observer<PointerInfo>;
   private _kb_observer: Observer<KeyboardInfo>;
   private _pointer_down_xy: Vector2 = new Vector2();
   private _pointer_up_xy: Vector2 = new Vector2();
 
-  constructor(name: ModeType, system: System, world: World, gui: GuiManager) {
+  constructor(name: ModeType, app: Molvis) {
+    this._app = app;
     this.name = name;
-    this.system = system;
-    this.gui = gui;
-    this.world = world;
     this._pointer_observer = this.register_pointer_events();
     this._kb_observer = this.register_keyboard_events();
     this.init_context_menu();
   }
 
   private get scene() {
-    return this.world.scene;
+    return this._app.world.scene;
+  }
+
+  protected get app() {
+    return this._app;
+  }
+
+  protected get gui() {
+    return this._app.gui;
+  }
+
+  protected get system() {
+    return this._app.system;
+  }
+
+  protected get world() {
+    return this._app.world;
   }
 
   private get _is_dragging() {
-    // if on and up close enough
     return this._pointer_up_xy.subtract(this._pointer_down_xy).length() > 0.2;
   }
 

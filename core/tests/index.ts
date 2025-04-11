@@ -38,13 +38,22 @@ const app = new Molvis(canvas);
 //     bond_i: [0, 0],
 //     bond_j: [1, 2],
 // })
+
+app.modify(
+    "type_select", {
+        type: "O",
+        highlight: true
+    }
+)
+
 app.execute("draw_atom", {
     x: 0.00000,
     y: -0.06556,
     z: 0.00000,
     name: "O",
-    element: "O",
+    type: "O",
 });
+
 
 app.render();
 

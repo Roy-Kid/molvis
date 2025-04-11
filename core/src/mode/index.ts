@@ -4,38 +4,34 @@ import {
 } from "@babylonjs/core";
 
 import { Logger } from "tslog";
-import { World, System, GuiManager } from "@molvis/core";
+import { World, System, GuiManager, Molvis } from "@molvis/core";
 
 const logger = new Logger({ name: "molvis-core" });
 
 import { ModeType, BaseMode } from "./base";
-// import { EditMode } from "./edit";
-// import { SelectMode } from "./select";
 import { ViewMode } from "./view";
 
 class Mode {
 
+    private _app: Molvis;
     private _mode: BaseMode;
 
-    private _system: System;
-    private _world: World;
-    private _gui: GuiManager;
-
-    constructor(system: System, world: World, gui: GuiManager) {
-        this._system = system;
-        this._world = world;
-        this._gui = gui;
+    constructor(app: Molvis) {
+        this._app = app;
         this._mode = this.switch_mode(ModeType.View);
         this._register_keyboard_events();
     }
 
+    private get _scene() {
+        return this._app.world.scene;
+    }
+
     private _register_keyboard_events = () => {
-        this._world.scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
+        this._scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
             switch (kbInfo.type) {
                 case KeyboardEventTypes.KEYDOWN:
                     switch (kbInfo.event.key) {
                         case "1":
-                            logger.info("view mode");
                             this.switch_mode(ModeType.View);
                             break;
                         // case "2":
@@ -64,7 +60,7 @@ class Mode {
             //     this._mode = new EditMode(this._system, this._world);
             //     break;
             case "view":
-                _mode = new ViewMode(this._system, this._world, this._gui);
+                _mode = new ViewMode(this._app);
                 break;
             // case "select":
             //     this._mode = new SelectMode(this._system, this._world);

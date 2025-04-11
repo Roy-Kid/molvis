@@ -1,11 +1,11 @@
 import { BaseMode, ModeType } from "./base";
-import { System, World, GuiManager } from "@molvis/core";
+import { Molvis } from "@molvis/core";
 import { PointerInfo } from "@babylonjs/core";
 
 class ViewMode extends BaseMode {
 
-    constructor(system: System, world: World, gui: GuiManager) {
-      super(ModeType.View, system, world, gui);
+    constructor(app: Molvis) {
+      super(ModeType.View, app);
     }
   
     override _on_pointer_move(pointerInfo: PointerInfo) {
@@ -16,8 +16,8 @@ class ViewMode extends BaseMode {
   
     _on_press_e() {
       const frame = this.system.next_frame();
-      this.world.artist.clear();
-      this.world.artist.draw_frame(frame);
+      this.app.artist.clear();
+      this.app.artist.do("draw_frame", frame);
       // this.gui.updateFrameIndicator(
       //   this.system.current_frame_index,
       //   this.system.n_frames,
@@ -26,8 +26,8 @@ class ViewMode extends BaseMode {
   
     _on_press_q() {
       const frame = this.system.prev_frame();
-      this.world.artist.clear();
-      this.world.artist.draw_frame(frame);
+      this.app.artist.clear();
+      this.app.artist.do("draw_frame", frame);
       // this.gui.updateFrameIndicator(
       //   this.system.current_frame_index,
       //   this.system.n_frames,

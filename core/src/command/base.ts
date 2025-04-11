@@ -1,18 +1,24 @@
-import { System, World } from "@molvis/core";
+import { Molvis } from "@molvis/core";
+import type { Mesh } from "@babylonjs/core";
+import { IEntity } from "../system/base";
 
 const classRegistry = new Map<string, CommandConstructor>();
 const registerCommand = (name: string) => {
   return (target: CommandConstructor) => {
+    console.log(`Registering command: ${name}`);
     classRegistry.set(name, target);
   }
 }
 
-interface Command {
-  execute(system: System, world: World): void;
+interface ICommand {
+  
+  do(app: Molvis): [Mesh[], IEntity[]];
+  undo(app: Molvis): void;
 }
 
 interface CommandConstructor {
-  new (...args: any[]): Command;
+  new(...args: any[]): ICommand;
 }
 
-export { type Command, type CommandConstructor, registerCommand, classRegistry };
+export { registerCommand, classRegistry };
+export type { CommandConstructor, ICommand };

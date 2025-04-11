@@ -8,9 +8,8 @@ import {
   Vector3,
   Tools,
 } from "@babylonjs/core";
-import { Artist } from "./artist";
 import { AxisHelper } from "./axes";
-import { Pipeline } from "./pipeline";
+import { Pipeline } from "../pipeline";
 
 // import { Logger } from "tslog";
 // const logger = new Logger({ name: "molvis-world" });
@@ -19,9 +18,7 @@ class World {
   private _engine: Engine;
   private _scene: Scene;
   private _camera: ArcRotateCamera;
-  private _artist: Artist;
   private _axes: AxisHelper;
-  private _selected: Mesh[] = [];
   private _pipeline: Pipeline;
 
   constructor(canvas: HTMLCanvasElement, ) {
@@ -29,9 +26,8 @@ class World {
     this._scene = this._initScene(this._engine);
     this._camera = this._initCamera();
     this._initLight();
-    this._artist = this._initArtist();
-    this._axes = this._initAxes();
     this._pipeline = new Pipeline();
+    this._axes = this._initAxes();
   }
 
   private _initEngine(canvas: HTMLCanvasElement) {
@@ -49,12 +45,12 @@ class World {
     return this._scene;
   }
 
-  public get camera(): ArcRotateCamera {
-    return this._camera;
+  get pipeline(): Pipeline {
+    return this._pipeline;
   }
 
-  public get artist(): Artist {
-    return this._artist;
+  public get camera(): ArcRotateCamera {
+    return this._camera;
   }
 
   private _initCamera() {
@@ -84,13 +80,12 @@ class World {
     return hemisphericLight;
   }
 
-  private _initArtist() {
-    const artist = new Artist(this._scene);
-    return artist;
-  }
-
   private _initAxes() {
     return new AxisHelper(this._engine, this.camera);
+  }
+
+  public append_modifier(name: string, args: {}) {
+    this._pipeline.append(name, args);
   }
 
   public takeScreenShot() {
@@ -118,10 +113,6 @@ class World {
       const mesh = this._scene.meshes[0];
       mesh.dispose();
     }
-  }
-
-  public select_mesh(mesh: Mesh) {
-    this._selected.push(mesh);
   }
 
   public resize() {

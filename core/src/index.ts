@@ -1,6 +1,6 @@
-import { Molvis } from './app';
-import { System } from './system';
-import { World } from './world';
-import { GuiManager } from './gui';
 
-export { Molvis, System, World, GuiManager };
+export { Molvis } from './app';
+export { System } from './system';
+export { World } from './world';
+export { GuiManager } from './gui';
+export type { IEntity } from './system';
