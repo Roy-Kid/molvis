@@ -18,7 +18,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
-      "@molvis/*": ["../core/src/*"]
+      "@molvis/core": ["./src/index.ts"],
+      "@molvis/core/*": ["./src/*"]
     }
   },
   "include": ["src/ts"],

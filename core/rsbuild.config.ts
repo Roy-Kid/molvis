@@ -12,7 +12,7 @@ export default defineConfig({
   },
   source: {
     entry: {
-        index: "./index.ts"
+        index: "./tests/index.ts"
     }
   }
 });

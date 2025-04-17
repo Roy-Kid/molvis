@@ -1,8 +1,9 @@
 {
-  "name": "molvis",
+  "name": "@molvis/core",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "module": "./src/index.ts",
   "scripts": {
     "build": "rsbuild build",
     "dev": "rsbuild dev",

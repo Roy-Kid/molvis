@@ -62,7 +62,7 @@ app.execute("draw_frame", {
       z: [0.0, 0.37848, -0.37848],
       props: { type: ["O", "H1", "H2"] },
     },
-    bonds: { bond_i: [0, 0], bond_j: [1, 2] },
+    bonds: { i: [0, 0], j: [1, 2] },
     options: {
       atoms: {},
       bonds: {

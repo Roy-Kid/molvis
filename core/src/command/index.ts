@@ -15,11 +15,12 @@ class Executor {
         return classRegistry.keys();
     }
 
-    public execute = (cmd: string, args: object) => {
+    public execute = (cmd: string, args: Record<string, unknown>) => {
         const Cmd = classRegistry.get(cmd);
         if (Cmd) {
-            const command = new Cmd(args);
-            return command.do(this._app);
+            const command = new Cmd(this._app);
+            console.log("command", command);
+            return command.do(args);
         }
         throw new Error(`Command ${cmd} not found`);
     }

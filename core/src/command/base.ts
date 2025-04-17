@@ -1,6 +1,6 @@
-import { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/core";
 import type { Mesh } from "@babylonjs/core";
-import { IEntity } from "../system/base";
+import type { IEntity, IProp } from "../system/base";
 
 const classRegistry = new Map<string, CommandConstructor>();
 const registerCommand = (name: string) => {
@@ -11,12 +11,12 @@ const registerCommand = (name: string) => {
 
 interface ICommand {
   
-  do(app: Molvis): [Mesh[], IEntity[]];
-  undo(app: Molvis): void;
+  do(args: Record<string, unknown>): [Mesh[], IEntity[]];
+  undo(): void;
 }
 
 interface CommandConstructor {
-  new(...args: any[]): ICommand;
+  new(app: Molvis): ICommand;
 }
 
 export { registerCommand, classRegistry };
