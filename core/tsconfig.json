@@ -5,6 +5,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "useDefineForClassFields": true,
+    "experimentalDecorators": true,
 
     /* modules */
     "module": "ESNext",

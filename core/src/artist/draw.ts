@@ -16,7 +16,6 @@ export interface IDrawBondOptions {
 export interface IDrawFrameOptions {
   atoms: IDrawAtomOptions;
   bonds: IDrawBondOptions;
-  // an option to specify if clean the scene
   clean: boolean;
 }
 

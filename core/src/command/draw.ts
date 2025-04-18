@@ -14,8 +14,7 @@ import type { Molvis } from "../app";
 import type { IEntity } from "../system";
 
 @registerCommand("draw_atom")
-export class DrawAtom implements ICommand {
-
+class DrawAtom implements ICommand {
   private app: Molvis;
 
   constructor(app: Molvis) {
@@ -29,12 +28,9 @@ export class DrawAtom implements ICommand {
     z: number;
     options: IDrawAtomOptions;
   }) {
-    const { name, x, y, z, options, ...props } = args; 
-    const atom = this.app.system.current_frame.add_atom(
-      name, x, y, z, props,
-    );
-    console.log("draw atom", atom);
-    const sphere = draw_atom(this.app, atom, options);
+    const { name, x, y, z, options, ...props } = args;
+    const atom = this.app.system.current_frame.add_atom(name, x, y, z, props);
+    const sphere = draw_atom(this.app, atom, options??{});
     return [[sphere], [atom]] as [Mesh[], IEntity[]];
   }
 
@@ -42,7 +38,7 @@ export class DrawAtom implements ICommand {
 }
 
 @registerCommand("draw_bond")
-export class DrawBond implements ICommand {
+class DrawBond implements ICommand {
   private app: Molvis;
 
   constructor(app: Molvis) {
@@ -60,10 +56,21 @@ export class DrawBond implements ICommand {
     options: IDrawBondOptions;
   }) {
     const { x1, y1, z1, x2, y2, z2, props, options } = args;
-    const itom = this.app.system.current_frame.add_atom("bond", x1, y1, z1, props);
-    const jtom = this.app.system.current_frame.add_atom("bond", x2, y2, z2, props);
+    const itom = this.app.system.current_frame.add_atom(
+      "bond",
+      x1,
+      y1,
+      z1,
+      props,
+    );
+    const jtom = this.app.system.current_frame.add_atom(
+      "bond",
+      x2,
+      y2,
+      z2,
+      props,
+    );
     const bond = this.app.system.current_frame.add_bond(itom, jtom, props);
-    console.log("draw bond", bond);
     const tube = draw_bond(this.app, bond, options);
     return [[tube], [bond]] as [Mesh[], IEntity[]];
   }
@@ -72,7 +79,7 @@ export class DrawBond implements ICommand {
 }
 
 @registerCommand("draw_frame")
-export class DrawFrame implements ICommand {
+class DrawFrame implements ICommand {
   private app: Molvis;
 
   constructor(app: Molvis) {
@@ -95,11 +102,20 @@ export class DrawFrame implements ICommand {
     const atomPropKeys = Object.keys(atomProps);
 
     const atoms = name.map((n, i) => {
-      const perAtomProps = atomPropKeys.reduce((acc, key) => {
-        acc[key] = atomProps[key][i];
-        return acc;
-      }, {} as Record<string, IProp>);
-      return this.app.system.current_frame.add_atom(n, x[i], y[i], z[i], perAtomProps);
+      const perAtomProps = atomPropKeys.reduce(
+        (acc, key) => {
+          acc[key] = atomProps[key][i];
+          return acc;
+        },
+        {} as Record<string, IProp>,
+      );
+      return this.app.system.current_frame.add_atom(
+        n,
+        x[i],
+        y[i],
+        z[i],
+        perAtomProps,
+      );
     });
 
     const bonds: Bond[] = [];
@@ -116,7 +132,6 @@ export class DrawFrame implements ICommand {
     }
 
     const frame = new Frame(atoms, bonds);
-    console.log("draw frame", frame);
     this.app.system.append_frame(frame);
     const meshes = draw_frame(this.app, frame, options);
     return [meshes, [...frame.atoms, ...frame.bonds]] as [Mesh[], IEntity[]];
@@ -124,3 +139,5 @@ export class DrawFrame implements ICommand {
 
   public undo() {}
 }
+
+export { DrawAtom, DrawBond, DrawFrame };
