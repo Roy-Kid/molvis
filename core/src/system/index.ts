@@ -1,6 +1,7 @@
 import { Frame } from './frame';
 import { Atom } from './item';
 import { Trajectory } from './trajectory';
+import { Box } from './box';
 import { IEntity } from './base';
 
 class System {
@@ -64,5 +65,5 @@ class System {
 
 
 
-export { System };
-export type { IEntity }
+export { System, Box };
+export type { IEntity };

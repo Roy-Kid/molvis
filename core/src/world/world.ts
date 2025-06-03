@@ -7,9 +7,11 @@ import {
   Scene,
   Vector3,
   Tools,
+  type LinesMesh,
 } from "@babylonjs/core";
 import { AxisHelper } from "./axes";
 import { Pipeline } from "../pipeline";
+import { Box } from "../system";
 
 // import { Logger } from "tslog";
 // const logger = new Logger({ name: "molvis-world" });
@@ -20,6 +22,7 @@ class World {
   private _camera: ArcRotateCamera;
   private _axes: AxisHelper;
   private _pipeline: Pipeline;
+  private _boxMesh: LinesMesh | null = null;
 
   constructor(canvas: HTMLCanvasElement, ) {
     this._engine = this._initEngine(canvas);
@@ -88,6 +91,13 @@ class World {
     this._pipeline.append(name, args);
   }
 
+  public drawBox(box: Box, color: Color3 = Color3.White()) {
+    if (this._boxMesh) {
+      this._boxMesh.dispose();
+    }
+    this._boxMesh = box.toLinesMesh(this._scene, "simulation_box", color);
+  }
+
   public takeScreenShot() {
     Tools.CreateScreenshot(this._engine, this._camera, {precision: 1.0});
   }
@@ -112,6 +122,10 @@ class World {
     while (this._scene.meshes.length) {
       const mesh = this._scene.meshes[0];
       mesh.dispose();
+    }
+    if (this._boxMesh) {
+      this._boxMesh.dispose();
+      this._boxMesh = null;
     }
   }
 
