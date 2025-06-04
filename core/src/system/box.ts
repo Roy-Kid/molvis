@@ -1,4 +1,11 @@
-import { Matrix, Vector3 } from "@babylonjs/core";
+import {
+  Matrix,
+  Vector3,
+  MeshBuilder,
+  type Scene,
+  type LinesMesh,
+  Color3,
+} from "@babylonjs/core";
 
 /**
  * Box class for molecular dynamics simulations
@@ -409,5 +416,31 @@ export class Box {
             
             return new Box(newVectors);
         }
+    }
+
+    /**
+     * Create a Babylon.js LinesMesh representation of the box for visualization
+     *
+     * @param scene - Scene where the mesh will be created
+     * @param name - Mesh name
+     * @param color - Line color
+     */
+    public toLinesMesh(
+        scene: Scene,
+        name = "simulationBox",
+        color: Color3 = Color3.White(),
+    ): LinesMesh {
+        const c = this.get_corners();
+        const lines = [
+            [c[0], c[1], c[3], c[2], c[0]],
+            [c[4], c[5], c[7], c[6], c[4]],
+            [c[0], c[4]],
+            [c[1], c[5]],
+            [c[2], c[6]],
+            [c[3], c[7]],
+        ];
+        const mesh = MeshBuilder.CreateLineSystem(name, { lines }, scene);
+        mesh.color = color;
+        return mesh;
     }
 }
