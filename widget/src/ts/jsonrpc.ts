@@ -1,16 +1,10 @@
 import type { Molvis } from "@molvis/app";
 import { Logger } from "tslog";
-import { tableFromIPC } from "@apache-arrow/ts";
+import { tableFromIPC, type Table } from "@apache-arrow/ts";
 import type { JsonRPCRequest } from "./types";
 import { createErrorResponse, createSuccessResponse } from "./types";
 
 const logger = new Logger({ name: "molvis-jsonrpc" });
-
-type MolvisClass<T = unknown> = new (...args: unknown[]) => T;
-
-function getattr<T extends object>(instance: T, name: keyof T) {
-  return instance[name];
-}
 
 export class JsonRpcHandler {
   private app: Molvis;
@@ -20,7 +14,6 @@ export class JsonRpcHandler {
   }
 
   public execute(request: JsonRPCRequest, buffers: DataView[] = []) {
-
     const { jsonrpc, method, params, id } = request;
 
     if (jsonrpc !== "2.0") {
@@ -28,68 +21,65 @@ export class JsonRpcHandler {
     }
 
     const processedParams = this.processBuffers(params, buffers);
-    const { context, methodName } = this.parseMethod(method);
     const response = this.callFunction(
-      // @ts-ignore
-      context,
       id,
-      methodName,
+      method,
+      // @ts-ignore
       processedParams,
     );
     return response;
   }
 
   private processBuffers(
-    params: { [key: string]: string },
+    params: Record<string, string|number|Record<string, unknown>>,
     buffers: DataView[],
   ) {
-    const tableData = new Map<string, unknown>();
-    for (const [key, value] of Object.entries(params)) {
-      tableData.set(key, value);
-    }
-    for (const buffer of buffers) {
-      const table = tableFromIPC(buffer);
-      const columns = table.schema.fields.map((field) => field.name);
-      for (const column of columns) {
-        const columnData = table.getChild(column);
-        tableData.set(column, columnData?.toArray());
+    for (const key in params) {
+      const value = params[key];
+      if (typeof value === "string") {
+        if (value.startsWith("__buffer")) {
+          const index = value.split(".")[1];
+          const buffer = buffers[Number.parseInt(index)];
+   
+
+          // parser arrow format into a object
+          const table = tableFromIPC(buffer);
+          const tableData = this.parseArrowTable(table);
+
+          params[key] = tableData;
+          
+        }
       }
     }
-    return tableData;
+    return params;
   }
 
-  private parseMethod(method: string) {
-    const parts = method.split(".");
-    const methodName = parts.pop();
-    if (!methodName) throw new Error("Invalid method format");
-    let context = this.app;
-    for (const part of parts) {
-      // @ts-ignore
-      context = getattr(this.app, part);
+  private parseArrowTable(table: Table) {
+    const data: Record<string, unknown> = {};
+    const columns = table.schema.fields.map((field) => field.name);
+    for (const column of columns) {
+      // const type = column.type;
+      const values = table.getChild(column)?.toArray();
+      // if (type === "string") {
+      //   data[name] = values.map((v) => v.toString());
+      // } else if (type === "number") {
+      //   data[name] = values.map((v) => Number(v));
+      // } else if (type === "boolean") {
+      //   data[name] = values.map((v) => Boolean(v));
+      // } else {
+      //   data[name] = values;
+      // }
+      data[column] = Array.from(values);
     }
-    return { context, methodName };
+    return data;
   }
 
   private callFunction(
-    context: MolvisClass,
     id: number | null,
-    methodName: keyof MolvisClass,
-    params: Map<string, unknown>,
+    method: string,
+    params: Record<string, unknown>,
   ) {
-    try {
-      const method = getattr(context, methodName);
-      if (typeof method !== "function") {
-        throw new Error(`Method ${String(methodName)} is not a function`);
-      }
-      const paramObj = Object.fromEntries(params);
-      // @ts-ignore
-      const result = method(paramObj);
-      return createSuccessResponse(id, result);
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return createErrorResponse(id, -32603, error.message);
-      }
-      throw new Error("An unknown error occurred");
-    }
+    const result = this.app.execute(method, params);
+    return createSuccessResponse(id, result);
   }
 }

@@ -1,33 +1,42 @@
-import { Vector3 } from "@babylonjs/core";
-import { Atom, Bond, Prop } from "./item";
+import { Atom, Bond } from "./item";
+import type { IProp } from "./base";
 
 class Frame {
     private _atoms: Atom[];
     private _bonds: Bond[];
-    private _props: Map<string, Prop>;
+    private _props: Map<string, IProp>;
 
-    constructor() {
-        this._atoms = [];
-        this._bonds = [];
+    constructor(atoms: Atom[] = [], bonds: Bond[] = []) {
+        this._atoms = atoms;
+        this._bonds = bonds;
         this._props = new Map();
     }
 
-    public add_atom(name: string, xyz: Vector3, props: Record<string, any>): Atom {
-        const atom = new Atom();
-        atom.set("name", name);
-        atom.set("xyz", xyz);
-        for (const key in props) {
-            atom.set(key, props[key]);
-        }
+    public add_atom(name: string, x: number, y: number, z: number, props?: Record<string, IProp>): Atom {
+        const atom = new Atom(name, x, y, z, props);
         this._atoms.push(atom);
         return atom;
+    }
+
+    public add_bond(itom: Atom, jtom: Atom, props?: Record<string, IProp>): Bond {
+        const bond = new Bond(itom, jtom, props);
+        this._bonds.push(bond);
+        return bond;
+    }
+
+    get atoms(): Atom[] {
+        return this._atoms;
+    }
+
+    get bonds(): Bond[] {
+        return this._bonds;
     }
 
 
     // public add_bond = (
     //   itom: Atom,
     //   jtom: Atom,
-    //   data: Map<string, Prop> = new Map(),
+    //   data: Record<string, Prop[]>; = new Map(),
     // ): Bond => {
     //   const bond = new Bond(itom, jtom, data);
     //   this._bonds.push(bond);
@@ -46,7 +55,7 @@ class Frame {
     //   return this._atoms.length;
     // }
 
-    // get props(): Map<string, Prop> {
+    // get props(): Record<string, Prop[]>; {
     //   return this._props;
     // }
 

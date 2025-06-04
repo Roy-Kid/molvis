@@ -1,5 +1,5 @@
 import { Logger } from "tslog";
-import { Molvis } from "@molvis/app";
+import { Molvis } from "@molvis/core";
 import type { ModelType } from "./types";
 import { JsonRpcHandler } from "./jsonrpc";
 
@@ -26,8 +26,6 @@ export class MolvisWidget {
     this.model = model;
 
     this.jrpc_handler = new JsonRpcHandler(this.molvis);
-
-    logger.info(`<MolvisWidget${this.session_id}> created`);
     model.on("msg:custom", this.handle_custom_message);
   }
 
@@ -50,7 +48,7 @@ export class MolvisWidget {
     this.detach();
     el.appendChild(this.canvas);
     this.canvas_container = el;
-    logger.info(`<MolvisWidget ${this.canvas.id}> attached`);
+    logger.info(`<MolvisWidget ${this.session_id}> attached`);
     this.resize();
   };
 
@@ -58,7 +56,7 @@ export class MolvisWidget {
     if (this.canvas_container) {
       this.canvas_container.removeChild(this.canvas);
       this.canvas_container = null;
-      logger.info(`<MolvisWidget ${this.canvas.id}> detached`);
+      logger.info(`<MolvisWidget ${this.session_id}> detached`);
     }
   };
 

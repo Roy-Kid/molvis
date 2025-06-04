@@ -8,11 +8,11 @@
   "author": "Roy Kid",
   "dependencies": {
     "@anywidget/types": "^0.2.0",
-    "anywidget": "^0.9.15",
-    "molvis": "file:../core"
+    "anywidget": "^0.9.15"
   },
   "devDependencies": {
-    "@rslib/core": "^0.5.4",
-    "@apache-arrow/ts": "^19.0.0"
+    "@apache-arrow/ts": "^19.0.0",
+    "@molvis/core": "file:../core",
+    "@rslib/core": "^0.5.4"
   }
 }
