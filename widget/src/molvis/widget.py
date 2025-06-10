@@ -13,16 +13,10 @@ logger = logging.getLogger("molvis")
 
 __version__ = "0.1.0"
 
-# Asset configuration
-_DEV = False
-if _DEV:
-    ESM = "http://localhost:3000/static/js/index.js"
-    CSS = ""
-else:
-    bundled_assets_dir = pathlib.Path("/workspaces/molcrafts/molvis/widget/dist")
-    ESM_path = bundled_assets_dir / "index.js"
-    assert ESM_path.exists(), f"{ESM_path} not found"
-    ESM = ESM_path.read_text()
+bundled_assets_dir = pathlib.Path("/workspaces/molvis/widget/dist")
+ESM_path = bundled_assets_dir / "index.js"
+assert ESM_path.exists(), f"{ESM_path} not found"
+ESM = ESM_path.read_text()
 
 
 class Molvis(anywidget.AnyWidget):
@@ -44,7 +38,6 @@ class Molvis(anywidget.AnyWidget):
             params=params,
             id=self.session_id,  # NOTE: session_id?
         )
-        logger.info(f"send_cmd: {jsonrpc} with {len(buffers)} buffers")
         self.send(json.dumps(asdict(jsonrpc)), buffers=buffers)
         return self
 
@@ -52,8 +45,27 @@ class Molvis(anywidget.AnyWidget):
         """Handle received commands from the frontend."""
         logger.info(f"recv_cmd: {msg}")
         return msg
+    
+    def draw_atom(
+            self, name, x, y, z, element=None
+    ):
+        self.send_cmd(
+            "draw_atom", 
+            {
+                "name": name,
+                "x": x,
+                "y": y,
+                "z": z,
+                "element": element,
+            },
+            [],
+        )
+        return self
+        
 
-    def draw_frame(self, frame: mp.Frame, atom_fields: list[str] = ["name", "element"]) -> "Molvis":
+    def draw_frame(
+        self, frame: mp.Frame, atom_fields: list[str] = ["name", "element"]
+    ) -> "Molvis":
         """Draw a molecular frame with optional properties and labels."""
         atom_fields = ["x", "y", "z", *atom_fields]
         atoms = frame["atoms"][atom_fields]
@@ -69,14 +81,22 @@ class Molvis(anywidget.AnyWidget):
         bonds = frame.get("bonds", None)
         if bonds is not None:
             # pandas.DataFrame change colume name to bond_i and bond_j
-            bond_info = bonds[["i", "j"]].rename(columns={"i": "bond_i", "j": "bond_j"})
-            bonds_arrow = pa.Table.from_pandas(bond_info)
+            # bond_info = bonds[["i", "j"]].rename(columns={"i": "bond_i", "j": "bond_j"})
+            bonds_arrow = pa.Table.from_pandas(bonds)
             sink = pa.BufferOutputStream()
             with pa.ipc.new_stream(sink, bonds_arrow.schema) as writer:
                 writer.write_table(bonds_arrow)
             bonds_buffer = sink.getvalue()
             buffers.append(bonds_buffer)
 
-        self.send_cmd("draw_frame", {}, buffers)
+        self.send_cmd(
+            "draw_frame",
+            {
+                "atoms": "__buffer.0",
+                "bonds": "__buffer.1",
+                "options": {"atoms": {}, "bonds": {}},
+            },
+            buffers,
+        )
 
         return self

@@ -1,46 +1,51 @@
 import { Vector3 } from "@babylonjs/core";
-import type { IEntity, Prop } from "./base";
+import type { IProp } from "./base";
+import { Entity } from "./base";
 
-class Atom implements IEntity {
-  public _data: Map<string, Prop> = new Map();
-
-  constructor() { }
-
-  public get(key: string): Prop {
-    const p = this._data.get(key);
-    if (p === undefined) {
-      throw new Error(`Property ${key} not found`);
-    }
-    return p;
-  }
-
-  public set(key: string, value: Prop): void {
-    this._data.set(key, value);
+export class Atom extends Entity<IProp> {
+  constructor(name: string, x: number, y: number, z: number, props: Record<string, IProp> = {}) {
+    super({
+      name,
+      x,
+      y,
+      z,
+      ...props,
+    });
   }
 
   get name(): string {
-    return this._data.get("name") as string;
+    return this.get("name") as string;
   }
 
-  get xyz(): Vector3 {
-    return this._data.get("xyz") as Vector3;
+  get xyz() {
+    return new Vector3(
+      this.get("x") as number,
+      this.get("y") as number,
+      this.get("z") as number,
+    );
   }
 }
 
-class Bond extends Map<string, Prop> {
-  public itom: Atom;
-  public jtom: Atom;
+export class Bond extends Entity<IProp> {
 
-  constructor(itom: Atom, jtom: Atom, props: Map<string, Prop> = new Map()) {
+  private _itom: Atom;
+  private _jtom: Atom;
+
+  constructor(itom: Atom, jtom: Atom, props: Record<string, IProp> = {}) {
     super(props);
-    this.itom = itom;
-    this.jtom = jtom;
+    this._itom = itom;
+    this._jtom = jtom;
+  }
+
+  get itom(): Atom {
+    return this._itom;
+  }
+
+  get jtom(): Atom {
+    return this._jtom;
   }
 
   get name(): string {
-    return `${this.itom.name}-${this.jtom.name}`;
+    return this.get("name") as string ?? `${this._itom.name}-${this._jtom.name}`;
   }
 }
-
-export { Atom, Bond };
-export type { Prop };

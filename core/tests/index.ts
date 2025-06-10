@@ -1,14 +1,10 @@
-import { Molvis, Box } from '../src';
-import { Vector3, Color3 } from '@babylonjs/core';
+import { Molvis } from "@molvis/core";
+import { Vector3 } from "@babylonjs/core";
 
-document.documentElement.lang = 'en';
-document.head.insertAdjacentHTML('afterbegin', `
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-`);
-const canvas = document.createElement('canvas') as HTMLCanvasElement;
-canvas.id = 'molvisCanvas';
-const style = document.createElement('style');
+document.documentElement.lang = "en";
+const canvas = document.createElement("canvas") as HTMLCanvasElement;
+canvas.id = "molvisCanvas";
+const style = document.createElement("style");
 style.textContent = `
 html, body {
     width: 100%;
@@ -26,15 +22,61 @@ html, body {
 document.body.appendChild(canvas);
 document.head.appendChild(style);
 
-// Initialize Molvis and draw a simple box
+// Initialize Molvis
 const app = new Molvis(canvas);
-const box = new Box(new Vector3(5, 5, 5));
-app.world.drawBox(box, Color3.Red());
+
+app.modify("type_select", {
+  type: "O",
+  highlight: true,
+});
+
+// app.execute("draw_atom", {
+//     x: 0.00000,
+//     y: -0.06556,
+//     z: 0.00000,
+//     name: "O",
+//     type: "O",
+// });
+app.execute("draw_frame", {
+  atoms: {
+    name: ["O", "H1", "H2"],
+    x: [0.0, 0.75695, -0.75695],
+    y: [-0.06556, 0.52032, 0.52032],
+    z: [0.0, 0.0, 0.0],
+    props: { type: ["O", "H1", "H2"] },
+  },
+  bonds: { bond_i: [0, 0], bond_j: [1, 2] },
+  options: {
+    atoms: {},
+    bonds: {
+      radius: 0.05,
+    },
+  },
+});
+
+app.execute("draw_frame", {
+    atoms: {
+      name: ["O", "H1", "H2"],
+      x: [0.0, 0.65432, -0.65432],
+      y: [-0.06556, 0.52032, 0.52032],
+      z: [0.0, 0.37848, -0.37848],
+      props: { type: ["O", "H1", "H2"] },
+    },
+    bonds: { i: [0, 0], j: [1, 2] },
+    options: {
+      atoms: {},
+      bonds: {
+        radius: 0.05,
+        update: true,
+      },
+    },
+  });
+
+app.world.camera.target = new Vector3(0, -0.06556, 0);
+
 app.render();
 
-console.log('Molvis box test initialized');
-
 // Handle window resize
-window.addEventListener('resize', () => {
-    app.resize();
+window.addEventListener("resize", () => {
+  app.resize();
 });

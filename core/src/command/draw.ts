@@ -1,64 +1,143 @@
-import { Vector3, MeshBuilder, Mesh } from "@babylonjs/core";
-import { StandardMaterial, Color3 } from "@babylonjs/core";
-import { registerCommand } from "./base";
-import type { ICommand } from "./base";
-import { Molvis } from "@molvis/core";
-import { realAtomPalette } from "../artist";
-import type { IEntity } from "@molvis/core";
+import type { Mesh } from "@babylonjs/core";
+import { registerCommand, type ICommand } from "./base";
+import { Frame } from "../system/frame";
+import type { Bond, IProp } from "../system";
+import {
+  draw_atom,
+  draw_frame,
+  draw_bond,
+  type IDrawAtomOptions,
+  type IDrawFrameOptions,
+  type IDrawBondOptions,
+} from "../artist";
+import type { Molvis } from "../app";
+import type { IEntity } from "../system";
 
 @registerCommand("draw_atom")
 class DrawAtom implements ICommand {
+  private app: Molvis;
 
-    public x: number;
-    public y: number;
-    public z: number;
-    public name: string;
-    public props: Record<string, any>;
+  constructor(app: Molvis) {
+    this.app = app;
+  }
 
-    constructor(x: number, y: number, z: number, name: string, props: Record<string, any> = {}) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.name = name;
-        this.props = props;
-    }
+  public do(args: {
+    name: string;
+    x: number;
+    y: number;
+    z: number;
+    options: IDrawAtomOptions;
+  }) {
+    const { name, x, y, z, options, ...props } = args;
+    const atom = this.app.system.current_frame.add_atom(name, x, y, z, props);
+    const sphere = draw_atom(this.app, atom, options??{});
+    return [[sphere], [atom]] as [Mesh[], IEntity[]];
+  }
 
-    public do(app: Molvis) {
-        const atom = app.system.current_frame.add_atom(
-            this.name,
-            new Vector3(this.x, this.y, this.z),
-            this.props
-        );
-
-        const atype = atom.get("type") || atom.get("element");
-        const name = atom.get("name") as string ?? "";
-        let identifier = atype;
-        if (atype === "") {
-            identifier = name;
-        }
-        const color = realAtomPalette.getAtomColor(identifier as string);
-        const radius = realAtomPalette.getAtomRadius(identifier as string);
-        const sphere = MeshBuilder.CreateSphere(
-            `atom:${atom.name}`,
-            { diameter: radius },
-            app.scene,
-        );
-        const material = new StandardMaterial("atom", app.scene);
-        material.diffuseColor = Color3.FromHexString(color);
-        sphere.material = material;
-        sphere.position = atom.xyz;
-        sphere.enablePointerMoveEvents = true;
-        return [[sphere], [atom]] as [Mesh[], IEntity[]];
-    }
-
-    public undo(app: Molvis) {
-        // const atom = app.system.current_frame.get_atom(this.name);
-        // if (atom) {
-        //     app.artist.do("remove_atom", atom);
-        //     app.system.current_frame.remove_atom(atom);
-        // }
-        // return atom;
-    }
+  public undo() {}
 }
 
-export { DrawAtom };
+@registerCommand("draw_bond")
+class DrawBond implements ICommand {
+  private app: Molvis;
+
+  constructor(app: Molvis) {
+    this.app = app;
+  }
+
+  public do(args: {
+    x1: number;
+    y1: number;
+    z1: number;
+    x2: number;
+    y2: number;
+    z2: number;
+    props?: Record<string, IProp>;
+    options: IDrawBondOptions;
+  }) {
+    const { x1, y1, z1, x2, y2, z2, props, options } = args;
+    const itom = this.app.system.current_frame.add_atom(
+      "bond",
+      x1,
+      y1,
+      z1,
+      props,
+    );
+    const jtom = this.app.system.current_frame.add_atom(
+      "bond",
+      x2,
+      y2,
+      z2,
+      props,
+    );
+    const bond = this.app.system.current_frame.add_bond(itom, jtom, props);
+    const tube = draw_bond(this.app, bond, options);
+    return [[tube], [bond]] as [Mesh[], IEntity[]];
+  }
+
+  public undo() {}
+}
+
+@registerCommand("draw_frame")
+class DrawFrame implements ICommand {
+  private app: Molvis;
+
+  constructor(app: Molvis) {
+    this.app = app;
+  }
+
+  public do(args: {
+    atoms: {
+      name: string[];
+      x: number[];
+      y: number[];
+      z: number[];
+      [key: string]: IProp[]; // Allow additional properties
+    };
+    bonds: { i: number[]; j: number[] };
+    options: IDrawFrameOptions;
+  }) {
+    const { atoms: atomData, bonds: bondData, options } = args;
+    const { name, x, y, z, ...atomProps } = atomData;
+    const atomPropKeys = Object.keys(atomProps);
+
+    const atoms = name.map((n, i) => {
+      const perAtomProps = atomPropKeys.reduce(
+        (acc, key) => {
+          acc[key] = atomProps[key][i];
+          return acc;
+        },
+        {} as Record<string, IProp>,
+      );
+      return this.app.system.current_frame.add_atom(
+        n,
+        x[i],
+        y[i],
+        z[i],
+        perAtomProps,
+      );
+    });
+
+    const bonds: Bond[] = [];
+    if (bondData.i && bondData.j) {
+      if (bondData.i.length !== bondData.j.length) {
+        throw new Error("bond_i and bond_j must have the same length");
+      }
+      for (let i = 0; i < bondData.i.length; i++) {
+        const itom = atoms[bondData.i[i]];
+        const jtom = atoms[bondData.j[i]];
+        const bond = this.app.system.current_frame.add_bond(itom, jtom);
+        bonds.push(bond);
+      }
+    }
+
+    const frame = new Frame(atoms, bonds);
+    this.app.system.append_frame(frame);
+    const meshes = draw_frame(this.app, frame, options);
+    return [meshes, [...frame.atoms, ...frame.bonds]] as [Mesh[], IEntity[]];
+  }
+
+  public undo() {}
+}
+
+export { DrawAtom, DrawBond, DrawFrame };
