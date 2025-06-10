@@ -10,7 +10,7 @@ import { ModeType } from "./base";
 import { ViewMode } from "./view";
 import { EditMode } from "./edit";
 
-class Mode {
+class ModeManager {
   private _app: Molvis;
   private _mode: BaseMode;
 
@@ -70,4 +70,4 @@ class Mode {
   };
 }
 
-export { Mode };
+export { ModeManager };
