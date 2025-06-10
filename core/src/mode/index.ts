@@ -10,6 +10,7 @@ const logger = new Logger({ name: "molvis-core" });
 
 import { ModeType, BaseMode } from "./base";
 import { ViewMode } from "./view";
+import { EditMode } from "./edit";
 
 class Mode {
 
@@ -34,14 +35,10 @@ class Mode {
                         case "1":
                             this.switch_mode(ModeType.View);
                             break;
-                        // case "2":
-                        //     logger.info("select mode");
-                        //     this.switch_mode(ModeType.Select);
-                        //     break;
-                        // case "3":
-                        //     logger.info("edit mode");
-                        //     this.switch_mode(ModeType.Edit);
-                        //     break;
+                        case "2":
+                            logger.info("edit mode");
+                            this.switch_mode(ModeType.Edit);
+                            break;
                         // case "4":
                         //   this._mode = this.switch_mode("manupulate");
                     }
@@ -56,9 +53,9 @@ class Mode {
             this._mode.finish();
         let _mode;
         switch (mode) {
-            // case "edit":
-            //     this._mode = new EditMode(this._system, this._world);
-            //     break;
+            case "edit":
+                _mode = new EditMode(this._app);
+                break;
             case "view":
                 _mode = new ViewMode(this._app);
                 break;
@@ -70,6 +67,7 @@ class Mode {
             default:
                 throw new Error(`unknown mode: ${mode}`);
         }
+        this._mode = _mode;
         return _mode;
     }
 }
