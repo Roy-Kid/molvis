@@ -15,7 +15,7 @@ class EditModeMenu {
     this.container = document.createElement("div");
     this.container.style.position = "absolute";
     document.body.appendChild(this.container);
-    this.pane = new Pane({ container: this.container });
+    this.pane = new Pane({ container: this.container, title: "Edit Mode" });
     this.pane.hidden = true;
     this.build();
   }

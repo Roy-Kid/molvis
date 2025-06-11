@@ -17,7 +17,7 @@ const PeriodicTablePlugin: any = {
   core: VERSION,
   accept(params: any) {
     if (params.view === "periodic-table" && typeof params.value === "string") {
-      return { params };
+      return { params: { view: "periodic-table", value: params.value, label: params.label } };
     }
     return null;
   },
@@ -51,6 +51,6 @@ const PeriodicTablePlugin: any = {
   },
 };
 
-Pane.registerPlugin(PeriodicTablePlugin);
+Pane.registerPlugin({ id: "periodic-table-bundle", plugin: PeriodicTablePlugin });
 
 export { PeriodicTablePlugin };
