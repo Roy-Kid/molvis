@@ -1,5 +1,5 @@
 import { BaseMode, ModeType } from "./base";
-import { Molvis } from "@molvis/core";
+import { Molvis, draw_frame } from "@molvis/core";
 import { PointerInfo } from "@babylonjs/core";
 import { Pane } from "tweakpane";
 
@@ -106,22 +106,20 @@ class ViewMode extends BaseMode {
 
   _on_press_e() {
     const frame = this.system.next_frame();
-    this.app.artist.clear();
-    this.app.artist.do("draw_frame", frame);
-    // this.gui.updateFrameIndicator(
-    //   this.system.current_frame_index,
-    //   this.system.n_frames,
-    // );
+    draw_frame(this.app, frame, { atoms: {}, bonds: {}, clean: true });
+    this.gui.updateFrameIndicator(
+      this.system.current_frame_index,
+      this.system.n_frames,
+    );
   }
 
   _on_press_q() {
     const frame = this.system.prev_frame();
-    this.app.artist.clear();
-    this.app.artist.do("draw_frame", frame);
-    // this.gui.updateFrameIndicator(
-    //   this.system.current_frame_index,
-    //   this.system.n_frames,
-    // );
+    draw_frame(this.app, frame, { atoms: {}, bonds: {}, clean: true });
+    this.gui.updateFrameIndicator(
+      this.system.current_frame_index,
+      this.system.n_frames,
+    );
   }
 }
 
