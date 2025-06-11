@@ -23,6 +23,7 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
     "chroma-js": "^3.1.2",
-    "tslog": "^4.9.3"
+    "tslog": "^4.9.3",
+    "tweakpane": "^4.0.5"
   }
 }

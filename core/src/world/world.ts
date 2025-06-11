@@ -24,7 +24,7 @@ class World {
   private _pipeline: Pipeline;
   private _boxMesh: LinesMesh | null = null;
 
-  constructor(canvas: HTMLCanvasElement, ) {
+  constructor(canvas: HTMLCanvasElement) {
     this._engine = this._initEngine(canvas);
     this._scene = this._initScene(this._engine);
     this._camera = this._initCamera();
@@ -99,7 +99,42 @@ class World {
   }
 
   public takeScreenShot() {
-    Tools.CreateScreenshot(this._engine, this._camera, {precision: 1.0});
+    Tools.CreateScreenshot(this._engine, this._camera, { precision: 1.0 });
+  }
+
+  public setPerspective() {
+    this._camera.mode = ArcRotateCamera.PERSPECTIVE_CAMERA;
+  }
+
+  public setOrthographic() {
+    this._camera.mode = ArcRotateCamera.ORTHOGRAPHIC_CAMERA;
+    const ratio =
+      this._engine.getRenderWidth() / this._engine.getRenderHeight();
+    const ortho = this._camera.radius;
+    this._camera.orthoLeft = -ortho;
+    this._camera.orthoRight = ortho;
+    this._camera.orthoBottom = -ortho / ratio;
+    this._camera.orthoTop = ortho / ratio;
+  }
+
+  public viewFront() {
+    this._camera.alpha = -Math.PI / 2;
+    this._camera.beta = Math.PI / 2;
+  }
+
+  public viewBack() {
+    this._camera.alpha = Math.PI / 2;
+    this._camera.beta = Math.PI / 2;
+  }
+
+  public viewLeft() {
+    this._camera.alpha = Math.PI;
+    this._camera.beta = Math.PI / 2;
+  }
+
+  public viewRight() {
+    this._camera.alpha = 0;
+    this._camera.beta = Math.PI / 2;
   }
 
   public render() {
