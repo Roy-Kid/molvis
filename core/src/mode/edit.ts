@@ -85,6 +85,7 @@ class EditMode extends BaseMode {
   private _previewAtom: Mesh | null = null;
   private _previewBond: Mesh | null = null;
   private _hoverAtom: Atom | null = null;
+  private _pendingAtom = false;
 
   private _element: string = "C";
   private _bondOrder = 1;
@@ -110,27 +111,12 @@ class EditMode extends BaseMode {
         const name = mesh.name.substring(5);
         this._startAtom =
           this.system.current_frame.atoms.find((a) => a.name === name) || null;
-        // disable camera control when start dragging from an atom
         this.world.camera.detachControl(
           this.world.scene.getEngine().getRenderingCanvas(),
         );
         this._hoverAtom = null;
       } else {
-        const xyz = get_vec3_from_screen_with_depth(
-          this.world.scene,
-          pointerInfo.event.clientX,
-          pointerInfo.event.clientY,
-          10,
-        );
-        const atomName = `a_${System.random_atom_id()}`;
-        const atom = this.system.current_frame.add_atom(
-          atomName,
-          xyz.x,
-          xyz.y,
-          xyz.z,
-          { type: this._element },
-        );
-        draw_atom(this.app, atom, {});
+        this._pendingAtom = true;
       }
     }
   }
@@ -212,7 +198,7 @@ class EditMode extends BaseMode {
           this._hoverAtom,
           { order: this._bondOrder },
         );
-        draw_bond(this.app, bond, { order: this._bondOrder });
+        draw_bond(this.app, bond, { order: this._bondOrder, update: true });
       } else if (this._previewAtom) {
         const xyz = this._previewAtom.position;
         const type = this._startAtom.get("type") as string | undefined;
@@ -229,7 +215,7 @@ class EditMode extends BaseMode {
           newAtom,
           { order: this._bondOrder },
         );
-        draw_bond(this.app, bond, { order: this._bondOrder });
+        draw_bond(this.app, bond, { order: this._bondOrder, update: true });
       }
 
       if (this._previewAtom) {
@@ -248,6 +234,25 @@ class EditMode extends BaseMode {
       );
 
       this._startAtom = null;
+    } else if (pointerInfo.event.button === 0 && this._pendingAtom && !this._is_dragging) {
+      const xyz = get_vec3_from_screen_with_depth(
+        this.world.scene,
+        pointerInfo.event.clientX,
+        pointerInfo.event.clientY,
+        10,
+      );
+      const atomName = `a_${System.random_atom_id()}`;
+      const atom = this.system.current_frame.add_atom(
+        atomName,
+        xyz.x,
+        xyz.y,
+        xyz.z,
+        { type: this._element },
+      );
+      draw_atom(this.app, atom, {});
+      this._pendingAtom = false;
+    } else if (pointerInfo.event.button === 0 && this._pendingAtom) {
+      this._pendingAtom = false;
     } else if (pointerInfo.event.button === 2) {
       if (!this._is_dragging) {
         const mesh = this.pick_mesh();

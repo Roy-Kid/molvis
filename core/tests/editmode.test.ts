@@ -57,6 +57,7 @@ describe('EditMode', () => {
 
     const mode = new EditMode(app);
     mode._on_pointer_down({ event: { button: 0, clientX: 0, clientY: 0 } } as any);
+    mode._on_pointer_up({ event: { button: 0, clientX: 0, clientY: 0 } } as any);
     expect(system.current_frame.atoms.length).toBe(1);
     mode.finish();
   });
@@ -130,8 +131,46 @@ describe('EditMode', () => {
     scene.pointerX = 5; scene.pointerY = 5;
     mode._on_pointer_up({ event: { button:0, clientX:5, clientY:5 } } as any);
 
-    expect(system.current_frame.bonds[0].get('order')).toBe(3);
-    expect(require('../src/artist').draw_bond).toHaveBeenCalledWith(expect.anything(), expect.anything(), { order: 3 });
+    expect(system.current_frame.bonds[0].order).toBe(3);
+    expect(require('../src/artist').draw_bond).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { order: 3, update: true },
+    );
+    mode.finish();
+  });
+
+  test('adding bond twice updates instead of duplicating', () => {
+    const system = new System();
+    const scene = createScene();
+    const camera = { detachControl: jest.fn(), attachControl: jest.fn() };
+    const app = { world: { scene, camera }, system, gui: {} } as unknown as Molvis;
+
+    const a1 = system.current_frame.add_atom('a1',0,0,0,{type:'C'});
+    const a2 = system.current_frame.add_atom('a2',1,0,0,{type:'C'});
+    scene.meshes.push({ name: 'atom:a1', dispose: jest.fn() });
+    scene.meshes.push({ name: 'atom:a2', dispose: jest.fn() });
+
+    scene.pick.mockReturnValueOnce({ hit: true, pickedMesh: { name: 'atom:a1' } });
+    scene.pick.mockReturnValueOnce({ hit: true, pickedMesh: { name: 'atom:a2' } });
+
+    const mode = new EditMode(app);
+    mode._on_pointer_down({ event: { button:0, clientX:0, clientY:0 } } as any);
+    mode._on_pointer_move({ event: { buttons:1, clientX:5, clientY:5 } } as any);
+    scene.pointerX = 5; scene.pointerY = 5;
+    mode._on_pointer_up({ event: { button:0, clientX:5, clientY:5 } } as any);
+
+    // second time with different order
+    mode.bondOrder = 2;
+    scene.pick.mockReturnValueOnce({ hit: true, pickedMesh: { name: 'atom:a1' } });
+    scene.pick.mockReturnValueOnce({ hit: true, pickedMesh: { name: 'atom:a2' } });
+    mode._on_pointer_down({ event: { button:0, clientX:0, clientY:0 } } as any);
+    mode._on_pointer_move({ event: { buttons:1, clientX:5, clientY:5 } } as any);
+    scene.pointerX = 5; scene.pointerY = 5;
+    mode._on_pointer_up({ event: { button:0, clientX:5, clientY:5 } } as any);
+
+    expect(system.current_frame.bonds.length).toBe(1);
+    expect(system.current_frame.bonds[0].order).toBe(2);
     mode.finish();
   });
 

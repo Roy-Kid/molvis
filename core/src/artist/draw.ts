@@ -88,13 +88,9 @@ export const draw_bond = (
   const order = options.order ?? bond.order;
   const radius = options.radius ?? 0.1;
 
-  const createTube = (name: string, path: any, instance?: Mesh) => {
+  const createTube = (name: string, path: Vector3[], instance?: Mesh) => {
     if (options.update && instance) {
-      return MeshBuilder.CreateTube(name, {
-        path,
-        radius,
-        instance,
-      });
+      return MeshBuilder.CreateTube(name, { path, radius, instance });
     }
     const tube = MeshBuilder.CreateTube(name, { path, radius, updatable: true }, app.scene);
     const material = new StandardMaterial("bond", app.scene);
@@ -104,24 +100,66 @@ export const draw_bond = (
   };
 
   const dir = end.subtract(start);
-  let perp = new Vector3(-dir.y, dir.x, 0);
-  let l = Math.sqrt(perp.x * perp.x + perp.y * perp.y + perp.z * perp.z);
-  if (l === 0) {
-    perp = new Vector3(0, 0, 1);
-    l = 1;
+  const axis = dir.normalize();
+  let perp = Vector3.Cross(axis, Vector3.Up());
+  if (perp.lengthSquared() < 1e-6) {
+    perp = Vector3.Cross(axis, Vector3.Right());
   }
-  perp = perp.scale(1 / l).scale(radius * 2);
+  perp = perp.normalize().scale(radius * 2);
+
+  const existingTubes: Mesh[] = [];
+  for (let i = 0; ; i++) {
+    const m = app.scene.getMeshByName(`bond:${bond.name}:${i}`);
+    if (m) existingTubes.push(m as Mesh);
+    else break;
+  }
 
   const tubes: Mesh[] = [];
   if (order === 1) {
-    tubes.push(createTube(`bond:${bond.name}:0`, [start, end]));
+    tubes.push(
+      createTube(
+        `bond:${bond.name}:0`,
+        [start, end],
+        existingTubes[0],
+      ),
+    );
   } else if (order === 2) {
-    tubes.push(createTube(`bond:${bond.name}:0`, [start.add(perp), end.add(perp)]));
-    tubes.push(createTube(`bond:${bond.name}:1`, [start.add(perp.scale(-1)), end.add(perp.scale(-1))]));
+    tubes.push(
+      createTube(
+        `bond:${bond.name}:0`,
+        [start.add(perp), end.add(perp)],
+        existingTubes[0],
+      ),
+    );
+    tubes.push(
+      createTube(
+        `bond:${bond.name}:1`,
+        [start.add(perp.scale(-1)), end.add(perp.scale(-1))],
+        existingTubes[1],
+      ),
+    );
   } else if (order >= 3) {
-    tubes.push(createTube(`bond:${bond.name}:0`, [start.add(perp), end.add(perp)]));
-    tubes.push(createTube(`bond:${bond.name}:1`, [start, end]));
-    tubes.push(createTube(`bond:${bond.name}:2`, [start.add(perp.scale(-1)), end.add(perp.scale(-1))]));
+    tubes.push(
+      createTube(
+        `bond:${bond.name}:0`,
+        [start.add(perp), end.add(perp)],
+        existingTubes[0],
+      ),
+    );
+    tubes.push(
+      createTube(`bond:${bond.name}:1`, [start, end], existingTubes[1]),
+    );
+    tubes.push(
+      createTube(
+        `bond:${bond.name}:2`,
+        [start.add(perp.scale(-1)), end.add(perp.scale(-1))],
+        existingTubes[2],
+      ),
+    );
+  }
+
+  for (let i = order; i < existingTubes.length; i++) {
+    existingTubes[i].dispose();
   }
 
   return tubes;

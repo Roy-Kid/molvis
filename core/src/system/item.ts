@@ -35,11 +35,13 @@ export class Atom extends Entity<IProp> {
 export class Bond extends Entity<IProp> {
   private _itom: Atom;
   private _jtom: Atom;
+  private _order: number;
 
   constructor(itom: Atom, jtom: Atom, props: Record<string, IProp> = {}) {
     super(props);
     this._itom = itom;
     this._jtom = jtom;
+    this._order = (props.order as number) ?? 1;
   }
 
   get itom(): Atom {
@@ -57,7 +59,10 @@ export class Bond extends Entity<IProp> {
   }
 
   get order(): number {
-    const o = this.get("order") as number | undefined;
-    return o ?? 1;
+    return this._order;
+  }
+
+  set order(v: number) {
+    this._order = v;
   }
 }
