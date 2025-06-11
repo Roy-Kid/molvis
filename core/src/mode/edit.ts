@@ -225,8 +225,7 @@ class EditMode extends BaseMode {
               }
             }
           }
-        }
-        else {
+        } else if (!mesh) {
           pointerInfo.event.preventDefault();
           this.menu?.show(pointerInfo.event.clientX, pointerInfo.event.clientY);
         }
