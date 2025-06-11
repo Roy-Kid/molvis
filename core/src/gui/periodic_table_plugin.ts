@@ -1,4 +1,6 @@
-import { VERSION } from "tweakpane";
+// The core version must match Tweakpane's internal major version (2.x)
+// Otherwise registering the plugin will throw a "Not compatible" error.
+const CORE_VERSION = { major: 2 } as const;
 
 export interface PeriodicTableParams {
   view: "periodic-table";
@@ -14,7 +16,7 @@ const ELEMENTS = [
 const PeriodicTablePlugin: any = {
   id: "periodic-table",
   type: "blade",
-  core: VERSION,
+  core: CORE_VERSION,
   accept(params: any) {
     if (params.view === "periodic-table" && typeof params.value === "string") {
       return { params: { view: "periodic-table", value: params.value, label: params.label } };
