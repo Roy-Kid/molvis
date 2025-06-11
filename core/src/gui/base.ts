@@ -14,7 +14,8 @@ class GuiManager {
   private _infoPanel: HTMLElement;
   private _frameIndicator: HTMLDivElement;
   private _framePane: Pane;
-  private _frameLabel: HTMLSpanElement;
+  private _frameLabel: HTMLInputElement;
+  private _frameTotal: HTMLSpanElement;
   private _bars: HTMLDivElement[] = [];
 
   constructor(app: Molvis) {
@@ -62,6 +63,7 @@ class GuiManager {
     const barContainer = document.createElement("div");
     barContainer.style.flex = "1";
     barContainer.style.display = "flex";
+    barContainer.style.justifyContent = "space-between";
     barContainer.style.height = "10px";
     barContainer.style.alignItems = "flex-end";
     container.appendChild(barContainer);
@@ -69,12 +71,16 @@ class GuiManager {
     const labelInput = document.createElement("input");
     labelInput.type = "number";
     labelInput.value = "1";
-    labelInput.style.width = "50px";
+    labelInput.style.width = "40px";
     labelInput.style.marginLeft = "8px";
     labelInput.style.background = "transparent";
     labelInput.style.border = "1px solid #666";
     labelInput.style.color = "white";
+    const totalLabel = document.createElement("span");
+    totalLabel.style.marginLeft = "4px";
     container.appendChild(labelInput);
+    container.appendChild(document.createTextNode(" / "));
+    container.appendChild(totalLabel);
 
     document.body.appendChild(container);
 
@@ -112,6 +118,7 @@ class GuiManager {
 
     this._framePane = new Pane({ container });
     this._frameLabel = labelInput;
+    this._frameTotal = totalLabel;
 
     return container;
   }
@@ -123,8 +130,8 @@ class GuiManager {
       const container = this._frameIndicator.firstElementChild as HTMLDivElement;
       for (let i = 0; i < total; i++) {
         const bar = document.createElement("div");
-        bar.style.flex = "1";
-        bar.style.margin = "0 1px";
+        bar.style.width = "2px";
+        bar.style.margin = "0";
         bar.style.height = "8px";
         bar.style.background = "white";
         bar.style.opacity = "0.5";
@@ -146,7 +153,8 @@ class GuiManager {
       b.style.height = i === current ? "12px" : "8px";
     });
 
-    (this._frameLabel as HTMLInputElement).value = String(current + 1);
+    this._frameLabel.value = String(current + 1);
+    this._frameTotal.textContent = String(total);
     if (total > 1) {
       this._frameIndicator.style.display = "flex";
     } else {
