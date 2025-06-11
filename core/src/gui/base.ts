@@ -1,4 +1,5 @@
 import { Molvis, draw_frame } from "@molvis/core";
+import { Pane, SliderBladeApi } from "tweakpane";
 
 // import { Logger } from "tslog";
 // const logger = new Logger({ name: "molvis-gui" });
@@ -12,7 +13,8 @@ class GuiManager {
 
   private _infoPanel: HTMLElement;
   private _frameIndicator: HTMLDivElement;
-  private _frameSlider: HTMLInputElement;
+  private _framePane: Pane;
+  private _frameSlider: SliderBladeApi;
   private _frameLabel: HTMLSpanElement;
 
   constructor(app: Molvis) {
@@ -57,31 +59,29 @@ class GuiManager {
     container.style.fontSize = "12px";
     container.style.zIndex = "1";
 
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "0";
-    slider.value = "0";
-    slider.step = "1";
-    slider.style.flex = "1";
-    slider.style.margin = "0 8px";
+    const paneHost = document.createElement("div");
+    paneHost.style.flex = "1";
+    container.appendChild(paneHost);
 
-    slider.addEventListener("input", () => {
-      const idx = Number.parseInt(slider.value);
+    const label = document.createElement("span");
+    label.textContent = "0/0";
+    container.appendChild(label);
+
+    document.body.appendChild(container);
+
+    const pane = new Pane({ container: paneHost });
+    const slider = pane.addBlade({ view: "slider", label: "frame", min: 0, max: 0, value: 0 }) as SliderBladeApi;
+    slider.on("change", (ev) => {
+      const idx = ev.value;
       this._app.system.set_frame(idx);
       const frame = this._app.system.current_frame;
       draw_frame(this._app, frame, { atoms: {}, bonds: {}, clean: true });
       this.updateFrameIndicator(idx, this._app.system.n_frames);
     });
 
-    const label = document.createElement("span");
-    label.textContent = "0/0";
-
-    container.appendChild(slider);
-    container.appendChild(label);
     container.style.display = "none";
 
-    document.body.appendChild(container);
-
+    this._framePane = pane;
     this._frameSlider = slider;
     this._frameLabel = label;
 
@@ -89,8 +89,8 @@ class GuiManager {
   }
 
   public updateFrameIndicator(current: number, total: number) {
-    this._frameSlider.max = `${Math.max(total - 1, 0)}`;
-    this._frameSlider.value = `${current}`;
+    this._frameSlider.max = Math.max(total - 1, 0);
+    this._frameSlider.value = current;
     this._frameLabel.textContent = `${current + 1}/${total}`;
     if (total > 1) {
       this._frameIndicator.style.display = "flex";
