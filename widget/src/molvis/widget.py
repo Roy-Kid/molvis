@@ -4,7 +4,8 @@ import traitlets
 import logging
 import json
 import molpy as mp
-import pyarrow as pa
+import io
+import h5py
 from .types import JsonRPCRequest, JsonRPCResponse
 import random
 from dataclasses import asdict
@@ -92,16 +93,18 @@ class Molvis(anywidget.AnyWidget):
         self, frame: mp.Frame, atom_fields: list[str] = ["name", "element"]
     ) -> "Molvis":
         """Draw a molecular frame with optional properties and labels."""
-        atom_fields = ["xyz", *atom_fields]
-        atoms = frame["atoms"]
-        atom_dict = {}
-        for field in atom_fields:
-            atom_dict[field] = atoms[field].to_numpy()
-        atoms_arrow = pa.Table.from_pydict(atom_dict)
+        def _df_to_hdf5_buffer(df):
+            buf = io.BytesIO()
+            with h5py.File(buf, "w") as f:
+                for col in df.columns:
+                    data = df[col].to_numpy()
+                    if data.dtype == object:
+                        data = data.astype("S")
+                    f.create_dataset(col, data=data)
+            return buf.getvalue()
 
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, atoms_arrow.schema) as writer:
-            writer.write_table(atoms_arrow)
+        atoms_buffer = _df_to_hdf5_buffer(atoms)
+            bonds_buffer = _df_to_hdf5_buffer(bonds)
         atoms_buffer = sink.getvalue()
         buffers = [atoms_buffer]
 
