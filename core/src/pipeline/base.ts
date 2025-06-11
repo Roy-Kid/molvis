@@ -33,7 +33,11 @@ class Pipeline {
     }
   };
 
-  public modify = (app: Molvis, selected: Mesh[], entity: IEntity[]) => {
+  public modify = (
+    app: Molvis,
+    selected: Mesh[],
+    entity: IEntity[],
+  ): [Mesh[], IEntity[]] => {
     let upstream_selected = selected;
     let upstream_entity = entity;
     for (let i = 0; i < this._modifiers.length; i++) {
@@ -44,7 +48,7 @@ class Pipeline {
         upstream_entity,
       );
     }
-    return selected;
+    return [upstream_selected, upstream_entity];
   };
 }
 
