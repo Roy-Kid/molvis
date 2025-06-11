@@ -3,7 +3,13 @@ import type { IProp } from "./base";
 import { Entity } from "./base";
 
 export class Atom extends Entity<IProp> {
-  constructor(name: string, x: number, y: number, z: number, props: Record<string, IProp> = {}) {
+  constructor(
+    name: string,
+    x: number,
+    y: number,
+    z: number,
+    props: Record<string, IProp> = {},
+  ) {
     super({
       name,
       x,
@@ -27,14 +33,15 @@ export class Atom extends Entity<IProp> {
 }
 
 export class Bond extends Entity<IProp> {
-
   private _itom: Atom;
   private _jtom: Atom;
+  private _order: number;
 
   constructor(itom: Atom, jtom: Atom, props: Record<string, IProp> = {}) {
     super(props);
     this._itom = itom;
     this._jtom = jtom;
+    this._order = (props.order as number) ?? 1;
   }
 
   get itom(): Atom {
@@ -46,6 +53,16 @@ export class Bond extends Entity<IProp> {
   }
 
   get name(): string {
-    return this.get("name") as string ?? `${this._itom.name}-${this._jtom.name}`;
+    return (
+      (this.get("name") as string) ?? `${this._itom.name}-${this._jtom.name}`
+    );
+  }
+
+  get order(): number {
+    return this._order;
+  }
+
+  set order(v: number) {
+    this._order = v;
   }
 }
