@@ -29,10 +29,10 @@ export class MolvisWidget {
     model.on("msg:custom", this.handle_custom_message);
   }
 
-  public handle_custom_message = (msg: string, buffers: DataView[] = []) => {
+  public handle_custom_message = async (msg: string, buffers: DataView[] = []) => {
     const cmd = JSON.parse(msg);
     try {
-      const response = this.jrpc_handler.execute(cmd, buffers);
+      const response = await this.jrpc_handler.execute(cmd, buffers);
       this.model.send(response);
     } catch (e: unknown) {
       if (e instanceof Error) {
