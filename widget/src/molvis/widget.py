@@ -92,9 +92,12 @@ class Molvis(anywidget.AnyWidget):
         self, frame: mp.Frame, atom_fields: list[str] = ["name", "element"]
     ) -> "Molvis":
         """Draw a molecular frame with optional properties and labels."""
-        atom_fields = ["x", "y", "z", *atom_fields]
-        atoms = frame["atoms"][atom_fields]
-        atoms_arrow = pa.Table.from_pandas(atoms)
+        atom_fields = ["xyz", *atom_fields]
+        atoms = frame["atoms"]
+        atom_dict = {}
+        for field in atom_fields:
+            atom_dict[field] = atoms[field].to_numpy()
+        atoms_arrow = pa.Table.from_pydict(atom_dict)
 
         sink = pa.BufferOutputStream()
         with pa.ipc.new_stream(sink, atoms_arrow.schema) as writer:
