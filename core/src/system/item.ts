@@ -55,4 +55,9 @@ export class Bond extends Entity<IProp> {
       (this.get("name") as string) ?? `${this._itom.name}-${this._jtom.name}`
     );
   }
+
+  get order(): number {
+    const o = this.get("order") as number | undefined;
+    return o ?? 1;
+  }
 }

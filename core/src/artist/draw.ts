@@ -3,6 +3,7 @@ import {
   MeshBuilder,
   StandardMaterial,
   Color3,
+  Vector3,
   type Mesh,
 } from "@babylonjs/core";
 import type { Molvis, Atom, Bond, Frame } from "@molvis/core";
@@ -12,6 +13,7 @@ export interface IDrawAtomOptions {
 export interface IDrawBondOptions {
   radius?: number;
   update?: boolean;
+  order?: number;
 }
 export interface IDrawFrameOptions {
   atoms: IDrawAtomOptions;
@@ -71,7 +73,7 @@ export const draw_frame = (
     draw_atom(app, atom, options.atoms),
   );
   console.log("draw_bonds", frame.bonds);
-  const tubes = frame.bonds.map((bond) => draw_bond(app, bond, options.bonds));
+  const tubes = frame.bonds.flatMap((bond) => draw_bond(app, bond, options.bonds));
   return [...spheres, ...tubes];
 };
 
@@ -81,28 +83,46 @@ export const draw_bond = (
   options: IDrawBondOptions,
 ) => {
   console.log("draw_bond", bond);
-  const path = [bond.itom.xyz, bond.jtom.xyz];
+  const start = bond.itom.xyz;
+  const end = bond.jtom.xyz;
+  const order = options.order ?? bond.order;
   const radius = options.radius ?? 0.1;
 
-  if (options.update) {
-    // find instance
-    const instance = app.scene.getMeshByName(`bond:${bond.name}`);
-    if (instance) {
-      const tube = MeshBuilder.CreateTube(`bond:${bond.name}`, {
+  const createTube = (name: string, path: any, instance?: Mesh) => {
+    if (options.update && instance) {
+      return MeshBuilder.CreateTube(name, {
         path,
         radius,
-        instance: instance as Mesh,
+        instance,
       });
-      return tube;
     }
+    const tube = MeshBuilder.CreateTube(name, { path, radius, updatable: true }, app.scene);
+    const material = new StandardMaterial("bond", app.scene);
+    material.diffuseColor = new Color3(0.8, 0.8, 0.8);
+    tube.material = material;
+    return tube;
+  };
+
+  const dir = end.subtract(start);
+  let perp = new Vector3(-dir.y, dir.x, 0);
+  let l = Math.sqrt(perp.x * perp.x + perp.y * perp.y + perp.z * perp.z);
+  if (l === 0) {
+    perp = new Vector3(0, 0, 1);
+    l = 1;
   }
-  const tube = MeshBuilder.CreateTube(
-    `bond:${bond.name}`,
-    { path, radius, updatable: true },
-    app.scene,
-  );
-  const material = new StandardMaterial("bond", app.scene);
-  material.diffuseColor = new Color3(0.8, 0.8, 0.8);
-  tube.material = material;
-  return tube;
+  perp = perp.scale(1 / l).scale(radius * 2);
+
+  const tubes: Mesh[] = [];
+  if (order === 1) {
+    tubes.push(createTube(`bond:${bond.name}:0`, [start, end]));
+  } else if (order === 2) {
+    tubes.push(createTube(`bond:${bond.name}:0`, [start.add(perp), end.add(perp)]));
+    tubes.push(createTube(`bond:${bond.name}:1`, [start.add(perp.scale(-1)), end.add(perp.scale(-1))]));
+  } else if (order >= 3) {
+    tubes.push(createTube(`bond:${bond.name}:0`, [start.add(perp), end.add(perp)]));
+    tubes.push(createTube(`bond:${bond.name}:1`, [start, end]));
+    tubes.push(createTube(`bond:${bond.name}:2`, [start.add(perp.scale(-1)), end.add(perp.scale(-1))]));
+  }
+
+  return tubes;
 };

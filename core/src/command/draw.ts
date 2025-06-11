@@ -71,8 +71,8 @@ class DrawBond implements ICommand {
       props,
     );
     const bond = this.app.system.current_frame.add_bond(itom, jtom, props);
-    const tube = draw_bond(this.app, bond, options);
-    return [[tube], [bond]] as [Mesh[], IEntity[]];
+    const tubes = draw_bond(this.app, bond, options);
+    return [tubes, [bond]] as [Mesh[], IEntity[]];
   }
 
   public undo() {}

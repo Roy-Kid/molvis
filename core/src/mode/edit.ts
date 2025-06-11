@@ -53,9 +53,20 @@ class EditModeMenu {
         this.em.element = ev.value;
       });
     const bond = this.pane.addFolder({ title: "Bond" });
-    bond.addBlade({ view: "list", label: "order", options: [{ text: "single", value: 1 }, { text: "double", value: 2 }], value: this.em.bondOrder }).on("change", (ev: any) => {
-      this.em.bondOrder = ev.value;
-    });
+    bond
+      .addBlade({
+        view: "list",
+        label: "order",
+        options: [
+          { text: "single", value: 1 },
+          { text: "double", value: 2 },
+          { text: "triple", value: 3 },
+        ],
+        value: this.em.bondOrder,
+      })
+      .on("change", (ev: any) => {
+        this.em.bondOrder = ev.value;
+      });
   }
 
   public show(x: number, y: number) {
@@ -196,7 +207,11 @@ class EditMode extends BaseMode {
     super._on_pointer_up(pointerInfo);
     if (pointerInfo.event.button === 0 && this._startAtom) {
       if (this._hoverAtom) {
-        const bond = this.system.current_frame.add_bond(this._startAtom, this._hoverAtom);
+        const bond = this.system.current_frame.add_bond(
+          this._startAtom,
+          this._hoverAtom,
+          { order: this._bondOrder },
+        );
         draw_bond(this.app, bond, { order: this._bondOrder });
       } else if (this._previewAtom) {
         const xyz = this._previewAtom.position;
@@ -212,6 +227,7 @@ class EditMode extends BaseMode {
         const bond = this.system.current_frame.add_bond(
           this._startAtom,
           newAtom,
+          { order: this._bondOrder },
         );
         draw_bond(this.app, bond, { order: this._bondOrder });
       }
