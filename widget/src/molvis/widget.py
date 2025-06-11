@@ -47,10 +47,35 @@ class Molvis(anywidget.AnyWidget):
         return msg
     
     def draw_atom(
-            self, name, x, y, z, element=None
-    ):
+        self,
+        atom_or_name,
+        x: float | None = None,
+        y: float | None = None,
+        z: float | None = None,
+        element: str | None = None,
+    ) -> "Molvis":
+        """Draw a single atom.
+
+        Parameters
+        ----------
+        atom_or_name:
+            Either an :class:`molpy.Atom` instance or the atom name.
+        x, y, z:
+            Coordinates of the atom when ``atom_or_name`` is a string.
+        element:
+            Optional element symbol.
+        """
+
+        if isinstance(atom_or_name, mp.Atom):
+            atom = atom_or_name
+            name = atom.get("name")
+            x, y, z = atom["xyz"]
+            element = atom.get("element")
+        else:
+            name = atom_or_name
+
         self.send_cmd(
-            "draw_atom", 
+            "draw_atom",
             {
                 "name": name,
                 "x": x,
@@ -61,7 +86,7 @@ class Molvis(anywidget.AnyWidget):
             [],
         )
         return self
-        
+
 
     def draw_frame(
         self, frame: mp.Frame, atom_fields: list[str] = ["name", "element"]
@@ -100,3 +125,45 @@ class Molvis(anywidget.AnyWidget):
         )
 
         return self
+
+    def draw_bond(
+        self,
+        bond: mp.Bond,
+        radius: float | None = None,
+        order: int | None = None,
+        update: bool | None = None,
+    ) -> "Molvis":
+        """Draw a bond between two atoms."""
+
+        itom = bond.itom
+        jtom = bond.jtom
+        x1, y1, z1 = itom["xyz"]
+        x2, y2, z2 = jtom["xyz"]
+        if order is None:
+            order = bond.get("order", 1)
+
+        self.send_cmd(
+            "draw_bond",
+            {
+                "x1": x1,
+                "y1": y1,
+                "z1": z1,
+                "x2": x2,
+                "y2": y2,
+                "z2": z2,
+                "options": {"radius": radius, "order": order, "update": update},
+            },
+            [],
+        )
+        return self
+
+    def draw_struct(
+        self,
+        struct: mp.Struct,
+        atom_keys: list[str] | None = None,
+        bond_keys: list[str] | None = None,
+    ) -> "Molvis":
+        """Draw a :class:`molpy.Struct` object."""
+
+        frame = struct.to_frame(atom_keys=atom_keys, bond_keys=bond_keys)
+        return self.draw_frame(frame, atom_fields=atom_keys or ["name", "element"])
