@@ -134,6 +134,10 @@ class DrawFrame implements ICommand {
     const frame = new Frame(atoms, bonds);
     this.app.system.append_frame(frame);
     const meshes = draw_frame(this.app, frame, options);
+    this.app.gui.updateFrameIndicator(
+      this.app.system.current_frame_index,
+      this.app.system.n_frames,
+    );
     return [meshes, [...frame.atoms, ...frame.bonds]] as [Mesh[], IEntity[]];
   }
 
