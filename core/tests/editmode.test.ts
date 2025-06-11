@@ -58,9 +58,13 @@ describe('EditMode', () => {
     const mode = new EditMode(app);
     mode._on_pointer_down({ event: { button: 0, clientX: 0, clientY: 0 } } as any);
 <<<<<<< HEAD
+<<<<<<< HEAD
     mode._on_pointer_up({ event: { button: 0, clientX: 0, clientY: 0 } } as any);
 =======
 >>>>>>> 6aa5119 ([feat] add edite mode)
+=======
+    mode._on_pointer_up({ event: { button: 0, clientX: 0, clientY: 0 } } as any);
+>>>>>>> d35dc9b (Implement edit mode menu (#5))
     expect(system.current_frame.atoms.length).toBe(1);
     mode.finish();
   });
