@@ -1,5 +1,4 @@
 import { Pane } from "tweakpane";
-import { PeriodicTablePlugin } from "../gui/periodic_table_plugin";
 import { PointerInfo, MeshBuilder, StandardMaterial, Color3, type Mesh } from "@babylonjs/core";
 import { get_vec3_from_screen_with_depth } from "./utils";
 import { BaseMode, ModeType } from "./base";
@@ -16,7 +15,6 @@ class EditModeMenu {
     this.container.style.position = "absolute";
     document.body.appendChild(this.container);
     this.pane = new Pane({ container: this.container, title: "Edit Mode" });
-    this.pane.registerPlugin({ id: "periodic-table", plugin: PeriodicTablePlugin });
     this.pane.hidden = true;
     this.build();
   }
@@ -24,9 +22,36 @@ class EditModeMenu {
   private build() {
     this.pane.children.forEach((c) => this.pane.remove(c));
     const element = this.pane.addFolder({ title: "Element" });
-    element.addBlade({ view: "periodic-table", label: "type", value: this.em.element }).on("change", (ev: any) => {
-      this.em.element = ev.value;
-    });
+    const elements = [
+      "H",
+      "He",
+      "Li",
+      "Be",
+      "B",
+      "C",
+      "N",
+      "O",
+      "F",
+      "Ne",
+      "Na",
+      "Mg",
+      "Al",
+      "Si",
+      "P",
+      "S",
+      "Cl",
+      "Ar",
+    ];
+    element
+      .addBlade({
+        view: "list",
+        label: "type",
+        options: elements.map((el) => ({ text: el, value: el })),
+        value: this.em.element,
+      })
+      .on("change", (ev: any) => {
+        this.em.element = ev.value;
+      });
     const bond = this.pane.addFolder({ title: "Bond" });
     bond.addBlade({ view: "list", label: "order", options: [{ text: "single", value: 1 }, { text: "double", value: 2 }], value: this.em.bondOrder }).on("change", (ev: any) => {
       this.em.bondOrder = ev.value;
