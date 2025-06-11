@@ -16,6 +16,7 @@ class EditModeMenu {
     this.container.style.position = "absolute";
     document.body.appendChild(this.container);
     this.pane = new Pane({ container: this.container, title: "Edit Mode" });
+    this.pane.registerPlugin({ id: "periodic-table", plugin: PeriodicTablePlugin });
     this.pane.hidden = true;
     this.build();
   }

@@ -3,7 +3,7 @@ import { System } from '../src/system';
 import { EditMode } from '../src/mode/edit';
 import type { Molvis } from '../src/app';
 
-jest.mock("tweakpane", () => ({ Pane: class { constructor(){ this.children=[]; this.hidden=false; } addFolder(){ return { addBlade(){ return { on(){ } }; } }; } remove(){} static registerPlugin(){} } }));
+jest.mock("tweakpane", () => ({ Pane: class { constructor(){ this.children=[]; this.hidden=false; } addFolder(){ return { addBlade(){ return { on(){ } }; } }; } remove(){} registerPlugin(){} } }));
 jest.mock('../src/artist', () => ({
   draw_atom: jest.fn(),
   draw_bond: jest.fn(),

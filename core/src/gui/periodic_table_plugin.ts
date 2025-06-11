@@ -1,4 +1,4 @@
-import { Pane, VERSION } from "tweakpane";
+import { VERSION } from "tweakpane";
 
 export interface PeriodicTableParams {
   view: "periodic-table";
@@ -50,7 +50,5 @@ const PeriodicTablePlugin: any = {
     return ctrl;
   },
 };
-
-Pane.registerPlugin({ id: "periodic-table-bundle", plugin: PeriodicTablePlugin });
 
 export { PeriodicTablePlugin };
