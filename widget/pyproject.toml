@@ -9,13 +9,15 @@ requires-python = ">=3.10"
 version = "0.1.0"
 dependencies = [
     "anywidget",
-    "pyarrow"
+    "pyarrow",
+    "h5py"
 ]
 
 [project.optional-dependencies]
 dev = [
     "anywidget[dev]",
-    "pyarrow"
+    "pyarrow",
+    "h5py"
 ]
 
 [tool.black]
