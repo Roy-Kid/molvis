@@ -4,8 +4,8 @@ import traitlets
 import logging
 import json
 import molpy as mp
-import pyarrow as pa
 from .types import JsonRPCRequest, JsonRPCResponse
+from .utils import frame_to_dict, to_h5py
 import random
 from dataclasses import asdict
 
@@ -45,12 +45,10 @@ class Molvis(anywidget.AnyWidget):
         """Handle received commands from the frontend."""
         logger.info(f"recv_cmd: {msg}")
         return msg
-    
-    def draw_atom(
-            self, name, x, y, z, element=None
-    ):
+
+    def draw_atom(self, name, x, y, z, element=None):
         self.send_cmd(
-            "draw_atom", 
+            "draw_atom",
             {
                 "name": name,
                 "x": x,
@@ -61,32 +59,21 @@ class Molvis(anywidget.AnyWidget):
             [],
         )
         return self
-        
 
     def draw_frame(
         self, frame: mp.Frame, atom_fields: list[str] = ["name", "element"]
     ) -> "Molvis":
         """Draw a molecular frame with optional properties and labels."""
-        atom_fields = ["x", "y", "z", *atom_fields]
-        atoms = frame["atoms"][atom_fields]
-        atoms_arrow = pa.Table.from_pandas(atoms)
+        data = frame_to_dict(frame)
 
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, atoms_arrow.schema) as writer:
-            writer.write_table(atoms_arrow)
-        atoms_buffer = sink.getvalue()
+        atom_fields = ["x", "y", "z", *atom_fields]
+        atoms_data = {k: data["atoms"][k] for k in atom_fields if k in data["atoms"]}
+        atoms_buffer = to_h5py(atoms_data)
         buffers = [atoms_buffer]
 
-        # If bonds exist, convert and send them too
-        bonds = frame.get("bonds", None)
-        if bonds is not None:
-            # pandas.DataFrame change colume name to bond_i and bond_j
-            # bond_info = bonds[["i", "j"]].rename(columns={"i": "bond_i", "j": "bond_j"})
-            bonds_arrow = pa.Table.from_pandas(bonds)
-            sink = pa.BufferOutputStream()
-            with pa.ipc.new_stream(sink, bonds_arrow.schema) as writer:
-                writer.write_table(bonds_arrow)
-            bonds_buffer = sink.getvalue()
+        bonds_data = data.get("bonds")
+        if bonds_data:
+            bonds_buffer = to_h5py(bonds_data)
             buffers.append(bonds_buffer)
 
         self.send_cmd(
