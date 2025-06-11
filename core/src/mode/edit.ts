@@ -1,3 +1,4 @@
+import { Pane } from "tweakpane";
 import { PointerInfo, MeshBuilder, StandardMaterial, Color3, type Mesh } from "@babylonjs/core";
 import { get_vec3_from_screen_with_depth } from "./utils";
 import { BaseMode, ModeType } from "./base";
@@ -5,45 +6,117 @@ import type { Molvis, Atom } from "@molvis/core";
 import { draw_atom, draw_bond } from "../artist";
 import { System } from "../system";
 
+class EditModeMenu {
+  private container: HTMLDivElement;
+  private pane: Pane;
+
+  constructor(private em: EditMode) {
+    this.container = document.createElement("div");
+    this.container.style.position = "absolute";
+    document.body.appendChild(this.container);
+    this.pane = new Pane({ container: this.container, title: "Edit Mode" });
+    this.pane.hidden = true;
+    this.build();
+  }
+
+  private build() {
+    this.pane.children.forEach((c) => this.pane.remove(c));
+    const element = this.pane.addFolder({ title: "Element" });
+    const elements = [
+      "H",
+      "He",
+      "Li",
+      "Be",
+      "B",
+      "C",
+      "N",
+      "O",
+      "F",
+      "Ne",
+      "Na",
+      "Mg",
+      "Al",
+      "Si",
+      "P",
+      "S",
+      "Cl",
+      "Ar",
+    ];
+    element
+      .addBlade({
+        view: "list",
+        label: "type",
+        options: elements.map((el) => ({ text: el, value: el })),
+        value: this.em.element,
+      })
+      .on("change", (ev: any) => {
+        this.em.element = ev.value;
+      });
+    const bond = this.pane.addFolder({ title: "Bond" });
+    bond
+      .addBlade({
+        view: "list",
+        label: "order",
+        options: [
+          { text: "single", value: 1 },
+          { text: "double", value: 2 },
+          { text: "triple", value: 3 },
+        ],
+        value: this.em.bondOrder,
+      })
+      .on("change", (ev: any) => {
+        this.em.bondOrder = ev.value;
+      });
+  }
+
+  public show(x: number, y: number) {
+    this.container.style.left = `${x}px`;
+    this.container.style.top = `${y}px`;
+    this.pane.hidden = false;
+  }
+
+  public hide() {
+    this.pane.hidden = true;
+  }
+}
+
 class EditMode extends BaseMode {
   private _startAtom: Atom | null = null;
   private _previewAtom: Mesh | null = null;
   private _previewBond: Mesh | null = null;
   private _hoverAtom: Atom | null = null;
+  private _pendingAtom = false;
 
+  private _element: string = "C";
+  private _bondOrder = 1;
+  private menu?: EditModeMenu;
+
+  get element(): string { return this._element; }
+  set element(v: string) { this._element = v; }
+  get bondOrder(): number { return this._bondOrder; }
+  set bondOrder(v: number) { this._bondOrder = v; }
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
+    if (typeof document !== "undefined") {
+      this.menu = new EditModeMenu(this);
+    }
   }
 
   override _on_pointer_down(pointerInfo: PointerInfo) {
     super._on_pointer_down(pointerInfo);
+    if (pointerInfo.event.button === 0) this.menu?.hide();
     if (pointerInfo.event.button === 0) {
       const mesh = this.pick_mesh();
       if (mesh && mesh.name.startsWith("atom:")) {
         const name = mesh.name.substring(5);
         this._startAtom =
           this.system.current_frame.atoms.find((a) => a.name === name) || null;
-        // disable camera control when start dragging from an atom
         this.world.camera.detachControl(
           this.world.scene.getEngine().getRenderingCanvas(),
         );
         this._hoverAtom = null;
       } else {
-        const xyz = get_vec3_from_screen_with_depth(
-          this.world.scene,
-          pointerInfo.event.clientX,
-          pointerInfo.event.clientY,
-          10,
-        );
-        const atomName = `a_${System.random_atom_id()}`;
-        const atom = this.system.current_frame.add_atom(
-          atomName,
-          xyz.x,
-          xyz.y,
-          xyz.z,
-          { type: "C" },
-        );
-        draw_atom(this.app, atom, {});
+        this._pendingAtom = true;
       }
     }
   }
@@ -120,8 +193,12 @@ class EditMode extends BaseMode {
     super._on_pointer_up(pointerInfo);
     if (pointerInfo.event.button === 0 && this._startAtom) {
       if (this._hoverAtom) {
-        const bond = this.system.current_frame.add_bond(this._startAtom, this._hoverAtom);
-        draw_bond(this.app, bond, {});
+        const bond = this.system.current_frame.add_bond(
+          this._startAtom,
+          this._hoverAtom,
+          { order: this._bondOrder },
+        );
+        draw_bond(this.app, bond, { order: this._bondOrder, update: true });
       } else if (this._previewAtom) {
         const xyz = this._previewAtom.position;
         const type = this._startAtom.get("type") as string | undefined;
@@ -136,8 +213,9 @@ class EditMode extends BaseMode {
         const bond = this.system.current_frame.add_bond(
           this._startAtom,
           newAtom,
+          { order: this._bondOrder },
         );
-        draw_bond(this.app, bond, {});
+        draw_bond(this.app, bond, { order: this._bondOrder, update: true });
       }
 
       if (this._previewAtom) {
@@ -156,6 +234,25 @@ class EditMode extends BaseMode {
       );
 
       this._startAtom = null;
+    } else if (pointerInfo.event.button === 0 && this._pendingAtom && !this._is_dragging) {
+      const xyz = get_vec3_from_screen_with_depth(
+        this.world.scene,
+        pointerInfo.event.clientX,
+        pointerInfo.event.clientY,
+        10,
+      );
+      const atomName = `a_${System.random_atom_id()}`;
+      const atom = this.system.current_frame.add_atom(
+        atomName,
+        xyz.x,
+        xyz.y,
+        xyz.z,
+        { type: this._element },
+      );
+      draw_atom(this.app, atom, {});
+      this._pendingAtom = false;
+    } else if (pointerInfo.event.button === 0 && this._pendingAtom) {
+      this._pendingAtom = false;
     } else if (pointerInfo.event.button === 2) {
       if (!this._is_dragging) {
         const mesh = this.pick_mesh();
@@ -175,6 +272,9 @@ class EditMode extends BaseMode {
               }
             }
           }
+        } else if (!mesh) {
+          pointerInfo.event.preventDefault();
+          this.menu?.show(pointerInfo.event.clientX, pointerInfo.event.clientY);
         }
       }
     }

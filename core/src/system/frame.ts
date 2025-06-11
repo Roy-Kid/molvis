@@ -29,6 +29,17 @@ class Frame {
     jtom: Atom,
     props: Record<string, IProp> = {},
   ): Bond {
+    const existing = this._bonds.find(
+      (b) =>
+        (b.itom === itom && b.jtom === jtom) ||
+        (b.itom === jtom && b.jtom === itom),
+    );
+    if (existing) {
+      if (props.order !== undefined) {
+        existing.order = props.order as number;
+      }
+      return existing;
+    }
     const bond = new Bond(itom, jtom, props);
     this._bonds.push(bond);
     return bond;
