@@ -9,6 +9,7 @@ import type { BaseMode } from "./base";
 import { ModeType } from "./base";
 import { ViewMode } from "./view";
 import { EditMode } from "./edit";
+import { SelectMode } from "./select";
 
 class ModeManager {
   private _app: Molvis;
@@ -32,10 +33,9 @@ class ModeManager {
             case "1":
               this._mode = this.switch_mode(ModeType.View);
               break;
-            // case "2":
-            //     logger.info("select mode");
-            //     this.switch_mode(ModeType.Select);
-            //     break;
+            case "2":
+              this._mode = this.switch_mode(ModeType.Select);
+              break;
             case "3":
               this._mode = this.switch_mode(ModeType.Edit);
               break;
@@ -58,9 +58,9 @@ class ModeManager {
       case ModeType.View:
         _mode = new ViewMode(this._app);
         break;
-      // case "select":
-      //     this._mode = new SelectMode(this._system, this._world);
-      //     break;
+      case ModeType.Select:
+        _mode = new SelectMode(this._app);
+        break;
       // case "manupulate":
 
       default:
