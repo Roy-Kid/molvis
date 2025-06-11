@@ -1,3 +1,5 @@
+import { Pane } from "tweakpane";
+import { PeriodicTablePlugin } from "../gui/periodic_table_plugin";
 import { PointerInfo, MeshBuilder, StandardMaterial, Color3, type Mesh } from "@babylonjs/core";
 import { get_vec3_from_screen_with_depth } from "./utils";
 import { BaseMode, ModeType } from "./base";
@@ -5,18 +7,66 @@ import type { Molvis, Atom } from "@molvis/core";
 import { draw_atom, draw_bond } from "../artist";
 import { System } from "../system";
 
+class EditModeMenu {
+  private container: HTMLDivElement;
+  private pane: Pane;
+
+  constructor(private em: EditMode) {
+    this.container = document.createElement("div");
+    this.container.style.position = "absolute";
+    document.body.appendChild(this.container);
+    this.pane = new Pane({ container: this.container });
+    this.pane.hidden = true;
+    this.build();
+  }
+
+  private build() {
+    this.pane.children.forEach((c) => this.pane.remove(c));
+    const element = this.pane.addFolder({ title: "Element" });
+    element.addBlade({ view: "periodic-table", label: "type", value: this.em.element }).on("change", (ev: any) => {
+      this.em.element = ev.value;
+    });
+    const bond = this.pane.addFolder({ title: "Bond" });
+    bond.addBlade({ view: "list", label: "order", options: [{ text: "single", value: 1 }, { text: "double", value: 2 }], value: this.em.bondOrder }).on("change", (ev: any) => {
+      this.em.bondOrder = ev.value;
+    });
+  }
+
+  public show(x: number, y: number) {
+    this.container.style.left = `${x}px`;
+    this.container.style.top = `${y}px`;
+    this.pane.hidden = false;
+  }
+
+  public hide() {
+    this.pane.hidden = true;
+  }
+}
+
 class EditMode extends BaseMode {
   private _startAtom: Atom | null = null;
   private _previewAtom: Mesh | null = null;
   private _previewBond: Mesh | null = null;
   private _hoverAtom: Atom | null = null;
 
+  private _element: string = "C";
+  private _bondOrder = 1;
+  private menu?: EditModeMenu;
+
+  get element(): string { return this._element; }
+  set element(v: string) { this._element = v; }
+  get bondOrder(): number { return this._bondOrder; }
+  set bondOrder(v: number) { this._bondOrder = v; }
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
+    if (typeof document !== "undefined") {
+      this.menu = new EditModeMenu(this);
+    }
   }
 
   override _on_pointer_down(pointerInfo: PointerInfo) {
     super._on_pointer_down(pointerInfo);
+    if (pointerInfo.event.button === 0) this.menu?.hide();
     if (pointerInfo.event.button === 0) {
       const mesh = this.pick_mesh();
       if (mesh && mesh.name.startsWith("atom:")) {
@@ -41,7 +91,7 @@ class EditMode extends BaseMode {
           xyz.x,
           xyz.y,
           xyz.z,
-          { type: "C" },
+          { type: this._element },
         );
         draw_atom(this.app, atom, {});
       }
@@ -121,7 +171,7 @@ class EditMode extends BaseMode {
     if (pointerInfo.event.button === 0 && this._startAtom) {
       if (this._hoverAtom) {
         const bond = this.system.current_frame.add_bond(this._startAtom, this._hoverAtom);
-        draw_bond(this.app, bond, {});
+        draw_bond(this.app, bond, { order: this._bondOrder });
       } else if (this._previewAtom) {
         const xyz = this._previewAtom.position;
         const type = this._startAtom.get("type") as string | undefined;
@@ -137,7 +187,7 @@ class EditMode extends BaseMode {
           this._startAtom,
           newAtom,
         );
-        draw_bond(this.app, bond, {});
+        draw_bond(this.app, bond, { order: this._bondOrder });
       }
 
       if (this._previewAtom) {
@@ -175,6 +225,10 @@ class EditMode extends BaseMode {
               }
             }
           }
+        }
+        else {
+          pointerInfo.event.preventDefault();
+          this.menu?.show(pointerInfo.event.clientX, pointerInfo.event.clientY);
         }
       }
     }
