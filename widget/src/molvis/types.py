@@ -1,15 +1,16 @@
 from dataclasses import dataclass
+from typing import Dict, Any, Optional
 
 @dataclass
 class JsonRPCRequest:
     jsonrpc: str
-    id: int | None
+    id: int
     method: str
-    params: dict[str, str]
+    params: Dict[str, Any]
 
 @dataclass
 class JsonRPCResponse:
     jsonrpc: str
     id: int
-    result: dict[str, str] | None
-    error: dict[str, str] | None
+    result: Optional[Dict[str, Any]]
+    error: Optional[Dict[str, Any]]

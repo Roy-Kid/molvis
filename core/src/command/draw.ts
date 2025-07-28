@@ -156,8 +156,6 @@ class DrawFrame implements ICommand {
     if (frame_bonds?.i && frame_bonds?.j && atoms.length > 0) {
       const { i, j, order = [] } = frame_bonds;
       for (let idx = 0; idx < i.length; idx++) {
-        console.log(i[idx], j[idx]);
-        console.log(atoms[i[idx]], atoms[j[idx]]);
         if (atoms[i[idx]] && atoms[j[idx]]) {
           const bond = frame.add_bond(atoms[i[idx]], atoms[j[idx]], {
             order: order[idx] || 1,

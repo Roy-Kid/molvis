@@ -2,6 +2,7 @@ import { BaseMode, ModeType } from "./base";
 import type { Molvis } from "@molvis/core";
 import type { PointerInfo } from "@babylonjs/core";
 import { Pane } from "tweakpane";
+import { draw_frame } from "../artist/draw";
 
 class ViewModeMenu {
   private container: HTMLDivElement | null = null;
@@ -72,6 +73,29 @@ class ViewModeMenu {
       },
       value: "persp"
     });
+    this.pane.addBlade({
+      view: 'separator',
+    });
+    
+    // Add split viewport options
+    const splitFolder = this.pane.addFolder({ title: "Split Viewport" });
+    
+    splitFolder.addButton({ title: "Split Horizontal" }).on("click", () => {
+      this.vm.splitViewport("horizontal");
+    });
+    
+    splitFolder.addButton({ title: "Split Vertical" }).on("click", () => {
+      this.vm.splitViewport("vertical");
+    });
+    
+    splitFolder.addButton({ title: "Split Quad" }).on("click", () => {
+      this.vm.splitViewport("quad");
+    });
+    
+    splitFolder.addButton({ title: "Reset Viewport" }).on("click", () => {
+      this.vm.resetViewport();
+    });
+    
     this.pane.addBlade({
       view: 'separator',
     });
@@ -194,6 +218,64 @@ class ViewMode extends BaseMode {
   
   public takeScreenShot(): void {
     this.world.takeScreenShot();
+  }
+
+  public splitViewport(mode: "horizontal" | "vertical" | "quad"): void {
+    // Get current viewport ID (for now, we'll use "main" as default)
+    const currentViewportId = "main";
+    
+    // Get available frame indices from trajectory
+    const frameIndices: number[] = [];
+    const nFrames = this.app.system.n_frames;
+    
+    // For now, use sequential frame indices
+    // In the future, this could be configurable
+    switch (mode) {
+      case "horizontal":
+      case "vertical":
+        frameIndices.push(0, Math.min(1, nFrames - 1));
+        break;
+      case "quad":
+        frameIndices.push(0, Math.min(1, nFrames - 1), Math.min(2, nFrames - 1), Math.min(3, nFrames - 1));
+        break;
+    }
+    
+    // Perform the split
+    const newViewports = this.world.viewportManager.splitViewport(currentViewportId, mode, frameIndices);
+    
+    // Redraw all viewports with their respective frames
+    this._redrawAllViewports();
+  }
+
+  public resetViewport(): void {
+    this.world.viewportManager.resetToSingleViewport();
+    this._redrawAllViewports();
+  }
+
+  private _redrawAllViewports(): void {
+    const viewports = this.world.viewportManager.getAllViewports();
+    
+    // Clear the scene first
+    this.world.clear();
+    
+    // Draw each viewport's frame
+    for (const viewport of viewports) {
+      const frame = this.app.system.getFrame(viewport.frameIndex);
+      if (frame) {
+        // Set the camera for this viewport
+        this.world.scene.activeCamera = viewport.camera;
+        
+        // Draw the frame with default options
+        draw_frame(this.app, frame, { 
+          atoms: {}, 
+          bonds: {}, 
+          clean: false 
+        });
+      }
+    }
+    
+    // Restore default camera
+    this.world.scene.activeCamera = this.world.camera;
   }
 
   public override finish(): void {
