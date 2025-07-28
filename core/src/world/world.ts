@@ -11,6 +11,7 @@ import {
 import { AxisHelper } from "./axes";
 import { Pipeline } from "../pipeline";
 import type { Box } from "../system/box";
+import { ViewportManager } from "./viewport-manager";
 
 // import { Logger } from "tslog";
 // const logger = new Logger({ name: "molvis-world" });
@@ -23,6 +24,7 @@ class World {
   private _pipeline: Pipeline;
   private _boxMesh: LinesMesh | null = null;
   private _isRunning = false;
+  private _viewportManager: ViewportManager;
 
   constructor(canvas: HTMLCanvasElement) {
     this._engine = this._initEngine(canvas);
@@ -31,6 +33,7 @@ class World {
     this._initLight();
     this._pipeline = new Pipeline();
     this._axes = this._initAxes();
+    this._viewportManager = new ViewportManager(this._scene, this._camera);
   }
 
   private _initEngine(canvas: HTMLCanvasElement) {
@@ -64,6 +67,10 @@ class World {
 
   public get camera(): ArcRotateCamera {
     return this._camera;
+  }
+
+  get viewportManager(): ViewportManager {
+    return this._viewportManager;
   }
 
   private _initCamera() {

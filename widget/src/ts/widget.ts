@@ -46,10 +46,11 @@ export class MolvisWidget {
         showViewIndicator: true,
         showInfoPanel: true,
         showFrameIndicator: true,
-      },
-      
-      debug: false
+      }
     });
+    
+    // Ensure UI components are on top of canvas
+    this._ensureUILayer();
     
     this._model = model;
     this.jrpc_handler = new JsonRpcHandler(this.molvis);
@@ -58,6 +59,34 @@ export class MolvisWidget {
     // Listen for size changes
     model.on("change:width", this.resize);
     model.on("change:height", this.resize);
+  }
+
+  private _ensureUILayer(): void {
+    // Ensure UI container is on top of canvas
+    const uiContainer = this.widgetContainer.querySelector('.molvis-ui');
+    if (uiContainer) {
+      (uiContainer as HTMLElement).style.zIndex = '1000';
+      (uiContainer as HTMLElement).style.pointerEvents = 'none';
+    }
+    
+    // Ensure mode indicator and other UI elements are clickable
+    const modeIndicator = this.widgetContainer.querySelector('.mode-indicator');
+    if (modeIndicator) {
+      (modeIndicator as HTMLElement).style.pointerEvents = 'auto';
+      (modeIndicator as HTMLElement).style.zIndex = '1001';
+    }
+    
+    const viewIndicator = this.widgetContainer.querySelector('.view-indicator');
+    if (viewIndicator) {
+      (viewIndicator as HTMLElement).style.pointerEvents = 'auto';
+      (viewIndicator as HTMLElement).style.zIndex = '1001';
+    }
+    
+    const infoPanel = this.widgetContainer.querySelector('.info-panel');
+    if (infoPanel) {
+      (infoPanel as HTMLElement).style.pointerEvents = 'auto';
+      (infoPanel as HTMLElement).style.zIndex = '1001';
+    }
   }
 
   public handle_custom_message = async (msg: string, buffers: DataView[] = []) => {
@@ -78,6 +107,7 @@ export class MolvisWidget {
     
     el.appendChild(this.widgetContainer);
     this.resize();
+    this._ensureUILayer(); // Re-ensure UI layer after attachment
   };
 
   public detach = (el: HTMLElement) => {
@@ -102,6 +132,9 @@ export class MolvisWidget {
     
     // 更新Molvis显示尺寸
     this.molvis.setSize(newWidth, newHeight);
+    
+    // Re-ensure UI layer after resize
+    this._ensureUILayer();
     
     console.log(`Widget resized to: ${newWidth}x${newHeight}`);
     console.log(`Display size: ${JSON.stringify(this.molvis.displaySize)}`);

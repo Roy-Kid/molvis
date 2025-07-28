@@ -1,20 +1,6 @@
-[project]
-name = "molvis"
-authors = [
-    { name = "Roy Kid", email = "lijichen365@gmail.com" },
-]
-description = "Jupyter widget for molvis"
-readme = "README.md"
-requires-python = ">=3.10"
-version = "0.1.0"
-dependencies = [
-    "anywidget"
-]
-
-[project.optional-dependencies]
-dev = [
-    "anywidget[dev]",
-]
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 88

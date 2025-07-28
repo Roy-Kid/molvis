@@ -133,10 +133,10 @@ class Molvis {
     `;
 
     // Assemble structure
+    this._rootContainer.appendChild(this._canvas);
     if (this._options.showUI) {
       this._rootContainer.appendChild(this._uiContainer);
     }
-    this._rootContainer.appendChild(this._canvas);
     this._mountPoint.appendChild(this._rootContainer);
   }
 
@@ -310,5 +310,4 @@ class Molvis {
 
 }
 
-export { Molvis };
-export type { MolvisOptions };
+export { Molvis };export type { MolvisOptions };

@@ -127,16 +127,31 @@ abstract class BaseMode {
             this.hideContextMenu();
             this._contextMenuOpen = false;
           } else {
-            switch (kbInfo.event.key) {
-              case "e":
-                this._on_press_e();
-                break;
-              case "q":
-                this._on_press_q();
-                break;
-              case "Escape":
-                this._on_press_escape();
-                break;
+            // Handle Ctrl key combinations
+            if (kbInfo.event.ctrlKey) {
+              switch (kbInfo.event.key.toLowerCase()) {
+                case "s":
+                  this._on_press_ctrl_s();
+                  break;
+                case "z":
+                  this._on_press_ctrl_z();
+                  break;
+                case "y":
+                  this._on_press_ctrl_y();
+                  break;
+              }
+            } else {
+              switch (kbInfo.event.key) {
+                case "e":
+                  this._on_press_e();
+                  break;
+                case "q":
+                  this._on_press_q();
+                  break;
+                case "Escape":
+                  this._on_press_escape();
+                  break;
+              }
             }
           }
           break;
@@ -267,6 +282,10 @@ abstract class BaseMode {
   protected _on_press_escape(): void {
     // Override in subclasses for custom escape behavior
   }
+
+  protected _on_press_ctrl_s(): void {}
+  protected _on_press_ctrl_z(): void {}
+  protected _on_press_ctrl_y(): void {}
 
   protected get_pointer_xy(): Vector2 {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);

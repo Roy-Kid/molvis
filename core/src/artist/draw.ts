@@ -11,7 +11,7 @@ import type { Molvis } from "../app";
 import type { Frame } from "../system/frame";
 
 export interface IDrawAtomOptions {
-  radius?: number;
+  radius?: number | number[] | null;
 }
 export interface IDrawBondOptions {
   radius?: number;
@@ -34,10 +34,30 @@ export const draw_atom = (
   app: Molvis,
   atom: Atom,
   options: IDrawAtomOptions,
+  atomIndex?: number,
 ) => {
   const atype = atom.get("element");
   // const name = (atom.get("name") as string) ?? "";
-  const radius = options.radius ?? realAtomPalette.getAtomRadius(atype as string);
+  
+  // Handle different radius types
+  let radius: number;
+  const elementRadius = realAtomPalette.getAtomRadius(atype as string);
+  
+  if (options.radius === null || options.radius === undefined) {
+    // Use element-specific radius from palette
+    radius = elementRadius;
+  } else if (Array.isArray(options.radius)) {
+    // Use specific radius for this atom if available
+    if (atomIndex !== undefined && atomIndex < options.radius.length) {
+      radius = options.radius[atomIndex];
+    } else {
+      radius = elementRadius;
+    }
+  } else {
+    // Use global scaling factor
+    radius = elementRadius * options.radius;
+  }
+  
   const color = realAtomPalette.getAtomColor(atype as string);
   const sphere = MeshBuilder.CreateSphere(
     `atom:${atom.name}`,
@@ -73,8 +93,8 @@ export const draw_frame = (
       }
     }
   }
-  const spheres = frame.atoms.map((atom: Atom) =>
-    draw_atom(app, atom, options.atoms),
+  const spheres = frame.atoms.map((atom: Atom, index: number) =>
+    draw_atom(app, atom, options.atoms, index),
   );
   const tubes = frame.bonds.flatMap((bond: Bond) => draw_bond(app, bond, options.bonds));
   return [...spheres, ...tubes];

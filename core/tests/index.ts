@@ -28,24 +28,32 @@ html, body {
 `;
 document.head.appendChild(style);
 
-// Initialize Molvis with the new simple API
+// Initialize Molvis with fullscreen options
 const app = new Molvis(mountPoint, {
   fitContainer: true,
   showUI: true,
-  debug: true
+  autoRenderResolution: true,
 });
 
-// Add multiple frames for testing
-// Frame 1: Water molecule
+// Frame 1: Water molecule (H2O)
 app.execute("draw_frame", {
-  atoms: {
-    name: ["O", "H1", "H2"],
-    x: [0.0, 0.75695, -0.75695],
-    y: [-0.06556, 0.52032, 0.52032],
-    z: [0.0, 0.0, 0.0],
-    element: ["O", "H", "H"],
+  frameData: {
+    blocks: {
+      atoms: {
+        name: ["O", "H1", "H2"],
+        xyz: [
+          [0.0, -0.06556, 0.0],
+          [0.75695, 0.52032, 0.0],
+          [-0.75695, 0.52032, 0.0]
+        ],
+        element: ["O", "H", "H"],
+      },
+      bonds: {
+        i: [0, 0],
+        j: [1, 2],
+      },
+    },
   },
-  bonds: { bond_i: [0, 0], bond_j: [1, 2] },
   options: {
     atoms: {},
     bonds: {
@@ -54,16 +62,27 @@ app.execute("draw_frame", {
   },
 });
 
-// Frame 2: Methane molecule (slightly moved)
+// Frame 2: Methane molecule (CH4)
 app.execute("draw_frame", {
-  atoms: {
-    name: ["C", "H1", "H2", "H3", "H4"],
-    x: [2.0, 2.8, 1.2, 2.8, 1.2],
-    y: [0.0, 0.8, 0.8, -0.8, -0.8],
-    z: [0.0, 0.8, -0.8, 0.8, -0.8],
-    element: ["C", "H", "H", "H", "H"],
+  frameData: {
+    blocks: {
+      atoms: {
+        name: ["C", "H1", "H2", "H3", "H4"],
+        xyz: [
+          [2.0, 0.0, 0.0],
+          [2.8, 0.8, 0.8],
+          [1.2, 0.8, -0.8],
+          [2.8, -0.8, 0.8],
+          [1.2, -0.8, -0.8]
+        ],
+        element: ["C", "H", "H", "H", "H"],
+      },
+      bonds: {
+        i: [0, 0, 0, 0],
+        j: [1, 2, 3, 4],
+      },
+    },
   },
-  bonds: { bond_i: [0, 0, 0, 0], bond_j: [1, 2, 3, 4] },
   options: {
     atoms: {},
     bonds: {
@@ -74,14 +93,24 @@ app.execute("draw_frame", {
 
 // Frame 3: Ammonia molecule (NH3)
 app.execute("draw_frame", {
-  atoms: {
-    name: ["N", "H1", "H2", "H3"],
-    x: [-2.0, -1.2, -2.8, -2.0],
-    y: [0.0, 0.8, 0.0, -0.8],
-    z: [0.0, 0.0, 0.8, 0.8],
-    element: ["N", "H", "H", "H"],
+  frameData: {
+    blocks: {
+      atoms: {
+        name: ["N", "H1", "H2", "H3"],
+        xyz: [
+          [-2.0, 0.0, 0.0],
+          [-1.2, 0.8, 0.0],
+          [-2.8, 0.0, 0.8],
+          [-2.0, -0.8, 0.8]
+        ],
+        element: ["N", "H", "H", "H"],
+      },
+      bonds: {
+        i: [0, 0, 0],
+        j: [1, 2, 3],
+      },
+    },
   },
-  bonds: { bond_i: [0, 0, 0], bond_j: [1, 2, 3] },
   options: {
     atoms: {},
     bonds: {
@@ -90,5 +119,8 @@ app.execute("draw_frame", {
   },
 });
 
+// Set camera target to center
 app.world.camera.target = new Vector3(0, 0, 0);
+
+// Start rendering
 app.start();
