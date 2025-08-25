@@ -43,39 +43,29 @@ export class MolvisWidget {
   }
 
   static clearAllInstances(): void {
-    console.log(`🧹 Clearing all ${this.widgets.size} frontend widget instances...`);
-    
     for (const [sessionId, widget] of this.widgets) {
       try {
-        console.log(`   🧹 Clearing frontend instance ${sessionId}`);
         widget.dispose();
         this.widgets.delete(sessionId);
       } catch (error) {
-        console.error(`   ❌ Error clearing frontend instance ${sessionId}:`, error);
+        // Handle error silently
       }
     }
     
     // Clear attached elements
     this.attachedElements.clear();
-    
-    console.log(`✅ All frontend instances cleared. Remaining: ${this.widgets.size}`);
   }
 
   static clearAllContent(): void {
-    console.log(`🧹 Clearing 3D content from all ${this.widgets.size} frontend instances...`);
-    
     for (const [sessionId, widget] of this.widgets) {
       try {
-        console.log(`   🧹 Clearing 3D content from frontend instance ${sessionId}`);
         if (widget.app) {
           widget.app.execute("clear", {});
         }
       } catch (error) {
-        console.error(`   ❌ Error clearing 3D content from frontend instance ${sessionId}:`, error);
+        // Handle error silently
       }
     }
-    
-    console.log("✅ 3D content cleared from all frontend instances");
   }
 
   public initialize(): void {

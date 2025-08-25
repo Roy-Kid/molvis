@@ -98,15 +98,11 @@ export const draw_atom = (
     options: IDrawAtomOptions = {}
 ): Mesh => {
     
-    console.log(`🔬 draw_atom called for atom:`, { atom, options });
-    
     const atype = atom.get("element") || "C";
-    console.log(`🔬 Atom type:`, atype);
     
     // Handle different radius types
     let radius: number;
     const elementRadius = molecularPalette.getRadius(atype as string);
-    console.log(`🔬 Element radius:`, elementRadius);
     
     if (options.radius === null || options.radius === undefined) {
         radius = elementRadius;
@@ -119,13 +115,8 @@ export const draw_atom = (
         radius = options.radius;
     }
     
-    console.log(`🔬 Final radius:`, radius);
-    
     // Get color with potential gradient mapping
     const color = molecularPalette.getColor(atype as string);
-    console.log(`🔬 Atom color:`, color);
-    
-    console.log(`🔬 Creating sphere for atom:`, { name: atom.name, position: atom.xyz, radius });
     
     const sphere = MeshBuilder.CreateSphere(
         `atom:${atom.name}`,
@@ -135,17 +126,10 @@ export const draw_atom = (
     
     // Use the Vector3 xyz property directly
     sphere.position = atom.xyz;
-    console.log(`🔬 Sphere position set to:`, sphere.position);
     
     const material = new StandardMaterial(`atom_material:${atom.name}`, app.scene);
     material.diffuseColor = Color3.FromHexString(color);
     sphere.material = material;
-    
-    console.log(`✅ Atom sphere created successfully:`, { 
-        name: sphere.name, 
-        position: sphere.position, 
-        material: sphere.material
-    });
     
     return sphere;
 };
@@ -156,17 +140,8 @@ export const draw_frame = (
     options: IDrawFrameOptions = { atoms: {}, bonds: {} }
 ): Mesh[] => {
     
-    console.log("🎨 draw_frame artist function called with:", { frame, options });
-    console.log("📊 Frame contains:", { 
-        atomsCount: frame.atoms.length, 
-        bondsCount: frame.bonds.length,
-        atoms: frame.atoms,
-        bonds: frame.bonds
-    });
-    
     // Always draw without clearing - use clear() command to clear content
     const spheres = frame.atoms.map((atom: Atom, index: number) => {
-        console.log(`🔬 Drawing atom ${index}:`, atom);
         const atomOptions = options.atoms || {};
         // Handle array radius case
         if (Array.isArray(atomOptions.radius) && atomOptions.radius[index] !== undefined) {
@@ -174,22 +149,15 @@ export const draw_frame = (
         }
         
         const sphere = draw_atom(app, atom, atomOptions);
-        console.log(`✅ Atom ${index} sphere created:`, sphere);
         return sphere;
     });
     
-    console.log("⚛️ All atom spheres created:", spheres);
-    
     const tubes = frame.bonds.flatMap((bond: Bond) => {
-        console.log(`🔗 Drawing bond:`, bond);
         const bondTubes = draw_bond(app, bond, options.bonds);
-        console.log(`✅ Bond tubes created:`, bondTubes);
         return bondTubes;
     });
     
     const allMeshes = [...spheres, ...tubes];
-    console.log("🎨 draw_frame returning all meshes:", allMeshes);
-    console.log("📊 Scene mesh count:", app.scene.meshes.length);
     
     return allMeshes;
 };
@@ -318,25 +286,19 @@ export const draw_box = (
 
   const { matrix, origin } = boxData;
   
-  // Add debug logging and validation
-  console.log("draw_box called with:", { boxData, matrix, origin });
-  
   // Validate matrix structure
   if (!matrix || !Array.isArray(matrix) || matrix.length !== 3) {
-    console.error("Invalid matrix structure:", matrix);
     return [];
   }
   
   for (let i = 0; i < matrix.length; i++) {
     if (!Array.isArray(matrix[i]) || matrix[i].length !== 3) {
-      console.error(`Invalid matrix[${i}] structure:`, matrix[i]);
       return [];
     }
   }
   
   // Validate origin structure
   if (!origin || !Array.isArray(origin) || origin.length !== 3) {
-    console.error("Invalid origin structure:", origin);
     return [];
   }
   
@@ -362,8 +324,7 @@ export const draw_box = (
     Number(origin[2]) || 0
   );
 
-  console.log("Box vectors:", { a: a.asArray(), b: b.asArray(), c: c.asArray(), o: o.asArray() });
-
+  
   // Calculate the 8 vertices of the box
   const vertices = [
     o,                                // 0: origin
@@ -399,6 +360,5 @@ export const draw_box = (
     lineMeshes.push(line);
   }
 
-  console.log("Box created with", lineMeshes.length, "edges");
   return lineMeshes;
 };

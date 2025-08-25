@@ -128,21 +128,15 @@ class DrawFrame implements ICommand {
   }) {
     const { frameData, options } = args;
     
-    console.log("🎨 DrawFrame command executed with:", { frameData, options });
-    
     // Frame data processed
     const atoms: Atom[] = [];
     const bonds: Bond[] = [];
 
     // Use current frame instead of creating a new one
     const frame = this.app.system.current_frame;
-    console.log("📋 Current frame:", frame);
     
     const frame_atoms = frameData.blocks?.atoms || {};
     const frame_bonds = frameData.blocks?.bonds || {};
-    
-    console.log("🔍 Frame atoms data:", frame_atoms);
-    console.log("🔍 Frame bonds data:", frame_bonds);
     
     // Register atoms in ECS
     if (frame_atoms.xyz) {
@@ -153,8 +147,6 @@ class DrawFrame implements ICommand {
         name = [],
         ...rest
       } = frame_atoms;
-      
-      console.log("⚛️ Processing atoms:", { xyz, type, element, name });
       
       for (let i = 0; i < xyz.length; i++) {
         const atomType = type[i] || element[i] || "C";
@@ -171,10 +163,8 @@ class DrawFrame implements ICommand {
           }
         }
         
-        console.log(`🔬 Adding atom ${i}:`, { name: atomName, type: atomType, xyz: xyz[i], props });
         const atom = frame.add_atom(atomName, xyz[i][0], xyz[i][1], xyz[i][2], props);
         atoms.push(atom);
-        console.log(`✅ Atom ${i} added:`, atom);
       }
     }
     
@@ -183,28 +173,15 @@ class DrawFrame implements ICommand {
     if (frame_bonds?.i && frame_bonds?.j && atoms.length > 0) {
       const { i, j, order = [] } = frame_bonds;
       
-      console.log("🔗 Processing bonds:", { i, j, order });
-      
       for (let idx = 0; idx < i.length; idx++) {
         if (atoms[i[idx]] && atoms[j[idx]]) {
-          console.log(`🔗 Adding bond ${idx}:`, { i: i[idx], j: j[idx], order: order[idx] || 1 });
           const bond = frame.add_bond(atoms[i[idx]], atoms[j[idx]], {
             order: order[idx] || 1,
           });
           bonds.push(bond);
-          console.log(`✅ Bond ${idx} added:`, bond);
-        } else {
-          console.warn(`⚠️ Skipping bond ${idx}: atoms not found`, { i: i[idx], j: j[idx], atomsLength: atoms.length });
         }
       }
     }
-
-    console.log("📊 Final frame state:", { 
-      atomsCount: atoms.length, 
-      bondsCount: bonds.length,
-      frameAtoms: frame.atoms,
-      frameBonds: frame.bonds
-    });
 
     // Update GUI frame indicator
     this.app.gui.updateFrameIndicator(
@@ -213,9 +190,7 @@ class DrawFrame implements ICommand {
     );
 
     // Draw using the current frame
-    console.log("🎨 Calling draw_frame artist function...");
     const meshes = draw_frame(this.app, frame, options);
-    console.log("🎨 draw_frame artist returned meshes:", meshes);
     
     // Return serializable status instead of Mesh objects to avoid circular reference issues
     return {
@@ -434,10 +409,9 @@ class SetViewMode implements ICommand {
         case "front":
         case "side":
           // These view modes can be implemented later
-          console.log(`View mode ${mode} not yet implemented`);
           break;
         default:
-          console.warn(`Unknown view mode: ${mode}`);
+          // Unknown view mode
       }
     }
     
