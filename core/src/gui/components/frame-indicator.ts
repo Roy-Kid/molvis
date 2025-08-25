@@ -108,10 +108,12 @@ export class FrameIndicator implements TweakpaneGuiComponent {
     let dragging = false;
 
     const setFrame = (idx: number) => {
-      const clampedIdx = Math.max(0, Math.min(idx, this._bars.length - 1));
+      const clampedIdx = Math.max(0, Math.min(idx, this._app.system.n_frames - 1));
       this._app.system.set_frame(clampedIdx);
       const frame = this._app.system.current_frame;
-      draw_frame(this._app, frame, { atoms: {}, bonds: {}, clean: true });
+      // 切换frame时先清除旧内容
+      this._app.world.clear();
+      draw_frame(this._app, frame, { atoms: {}, bonds: {} });
       this.updateFrame(clampedIdx, this._app.system.n_frames);
     };
 

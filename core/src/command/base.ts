@@ -1,6 +1,4 @@
 import type { Molvis } from "@molvis/core";
-import type { Mesh } from "@babylonjs/core";
-import type { IEntity, IProp } from "../system/base";
 
 const classRegistry = new Map<string, CommandConstructor>();
 const registerCommand = (name: string) => {
@@ -10,8 +8,13 @@ const registerCommand = (name: string) => {
 }
 
 interface ICommand {
-  
-  do(args: Record<string, unknown>): [Mesh[], IEntity[]];
+  // Return serializable status/result instead of Mesh objects
+  do(args: Record<string, unknown>): {
+    success: boolean;
+    message?: string;
+    data?: Record<string, unknown>;
+    count?: number;
+  };
   undo(): void;
 }
 

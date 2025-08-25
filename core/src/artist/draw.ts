@@ -1,13 +1,15 @@
-import { realAtomPalette } from "./palette";
 import {
-  MeshBuilder,
-  StandardMaterial,
-  Color3,
-  Vector3,
-  type Mesh,
+    Color3,
+    MeshBuilder,
+    StandardMaterial,
+    Vector3,
+    type Mesh,
+    TransformNode,
+    Scene,
 } from "@babylonjs/core";
 import type { Atom, Bond } from "../system/item";
 import type { Molvis } from "../app";
+import { molecularPalette } from "./palette";
 import type { Frame } from "../system/frame";
 
 export interface IDrawAtomOptions {
@@ -27,77 +29,169 @@ export interface IDrawFrameOptions {
   atoms: IDrawAtomOptions;
   bonds: IDrawBondOptions;
   box?: IDrawBoxOptions;
-  clean: boolean;
+}
+
+export interface GridOptions {
+    spacing?: number;
+    size?: number;
+    color?: string;
+    alpha?: number;
+}
+
+export function draw_grid(
+    scene: Scene,
+    gridOptions: GridOptions = {}
+): void {
+    const { spacing = 1.0, size = 10.0, color = "#888888", alpha = 0.3 } = gridOptions;
+    
+    // 不再清除现有网格！让用户手动调用clear()
+    // const existingGrid = scene.getMeshByName("grid");
+    // if (existingGrid) {
+    //     existingGrid.dispose();
+    // }
+    
+    // 为每次调用创建唯一的网格组
+    const gridId = `grid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const gridGroup = new TransformNode(gridId, scene);
+    
+    // Create material for grid lines
+    const gridMaterial = new StandardMaterial(`gridMaterial_${gridId}`, scene);
+    gridMaterial.emissiveColor = Color3.FromHexString(color);
+    gridMaterial.alpha = alpha;
+    
+    // Draw XY planes (parallel to XY, varying Z)
+    for (let z = -size; z <= size; z += spacing) {
+        // Create a plane mesh for this Z level
+        const plane = MeshBuilder.CreatePlane(`xy_plane_${gridId}_${z}`, { width: size * 2, height: size * 2 }, scene);
+        plane.position = new Vector3(0, 0, z);
+        plane.material = gridMaterial;
+        plane.parent = gridGroup;
+        
+        // Make it wireframe-like by using a very thin plane
+        plane.scaling = new Vector3(1, 1, 0.001);
+    }
+    
+    // Draw XZ planes (parallel to XZ, varying Y)
+    for (let y = -size; y <= size; y += spacing) {
+        const plane = MeshBuilder.CreatePlane(`xz_plane_${gridId}_${y}`, { width: size * 2, height: size * 2 }, scene);
+        plane.position = new Vector3(0, y, 0);
+        plane.rotation = new Vector3(Math.PI / 2, 0, 0);
+        plane.material = gridMaterial;
+        plane.parent = gridGroup;
+        plane.scaling = new Vector3(1, 1, 0.001);
+    }
+    
+    // Draw YZ planes (parallel to YZ, varying X)
+    for (let x = -size; x <= size; x += spacing) {
+        const plane = MeshBuilder.CreatePlane(`yz_plane_${gridId}_${x}`, { width: size * 2, height: size * 2 }, scene);
+        plane.position = new Vector3(x, 0, 0);
+        plane.rotation = new Vector3(0, Math.PI / 2, 0);
+        plane.material = gridMaterial;
+        plane.parent = gridGroup;
+        plane.scaling = new Vector3(1, 1, 0.001);
+    }
 }
 
 export const draw_atom = (
-  app: Molvis,
-  atom: Atom,
-  options: IDrawAtomOptions,
-  atomIndex?: number,
-) => {
-  const atype = atom.get("element");
-  // const name = (atom.get("name") as string) ?? "";
-  
-  // Handle different radius types
-  let radius: number;
-  const elementRadius = realAtomPalette.getAtomRadius(atype as string);
-  
-  if (options.radius === null || options.radius === undefined) {
-    // Use element-specific radius from palette
-    radius = elementRadius;
-  } else if (Array.isArray(options.radius)) {
-    // Use specific radius for this atom if available
-    if (atomIndex !== undefined && atomIndex < options.radius.length) {
-      radius = options.radius[atomIndex];
+    app: Molvis,
+    atom: Atom,
+    options: IDrawAtomOptions = {}
+): Mesh => {
+    
+    console.log(`🔬 draw_atom called for atom:`, { atom, options });
+    
+    const atype = atom.get("element") || "C";
+    console.log(`🔬 Atom type:`, atype);
+    
+    // Handle different radius types
+    let radius: number;
+    const elementRadius = molecularPalette.getRadius(atype as string);
+    console.log(`🔬 Element radius:`, elementRadius);
+    
+    if (options.radius === null || options.radius === undefined) {
+        radius = elementRadius;
+    } else if (typeof options.radius === "string") {
+        radius = molecularPalette.getRadius(options.radius);
+    } else if (Array.isArray(options.radius)) {
+        // Use specific radius for this atom if available
+        radius = elementRadius;
     } else {
-      radius = elementRadius;
+        radius = options.radius;
     }
-  } else {
-    // Use global scaling factor
-    radius = elementRadius * options.radius;
-  }
-  
-  const color = realAtomPalette.getAtomColor(atype as string);
-  const sphere = MeshBuilder.CreateSphere(
-    `atom:${atom.name}`,
-    { diameter: radius * 2 },
-    app.scene,
-  );
-  const material = new StandardMaterial("atom", app.scene);
-  material.diffuseColor = Color3.FromHexString(color);
-  sphere.material = material;
-  sphere.position = atom.xyz;
-  sphere.enablePointerMoveEvents = true;
-
-  sphere.metadata = atom.data;
-
-  return sphere;
+    
+    console.log(`🔬 Final radius:`, radius);
+    
+    // Get color with potential gradient mapping
+    const color = molecularPalette.getColor(atype as string);
+    console.log(`🔬 Atom color:`, color);
+    
+    console.log(`🔬 Creating sphere for atom:`, { name: atom.name, position: atom.xyz, radius });
+    
+    const sphere = MeshBuilder.CreateSphere(
+        `atom:${atom.name}`,
+        { diameter: radius * 2 },
+        app.scene
+    );
+    
+    // Use the Vector3 xyz property directly
+    sphere.position = atom.xyz;
+    console.log(`🔬 Sphere position set to:`, sphere.position);
+    
+    const material = new StandardMaterial(`atom_material:${atom.name}`, app.scene);
+    material.diffuseColor = Color3.FromHexString(color);
+    sphere.material = material;
+    
+    console.log(`✅ Atom sphere created successfully:`, { 
+        name: sphere.name, 
+        position: sphere.position, 
+        material: sphere.material
+    });
+    
+    return sphere;
 };
 
 export const draw_frame = (
-  app: Molvis,
-  frame: Frame,
-  options: IDrawFrameOptions,
-) => {
-  if (options !== undefined) {
-    if (options.clean ?? true) {
-      const meshesToDispose = [];
-      for (const mesh of app.scene.meshes) {
-        if (mesh.name.startsWith("atom:") || mesh.name.startsWith("bond:")) {
-          meshesToDispose.push(mesh);
+    app: Molvis,
+    frame: Frame,
+    options: IDrawFrameOptions = { atoms: {}, bonds: {} }
+): Mesh[] => {
+    
+    console.log("🎨 draw_frame artist function called with:", { frame, options });
+    console.log("📊 Frame contains:", { 
+        atomsCount: frame.atoms.length, 
+        bondsCount: frame.bonds.length,
+        atoms: frame.atoms,
+        bonds: frame.bonds
+    });
+    
+    // Always draw without clearing - use clear() command to clear content
+    const spheres = frame.atoms.map((atom: Atom, index: number) => {
+        console.log(`🔬 Drawing atom ${index}:`, atom);
+        const atomOptions = options.atoms || {};
+        // Handle array radius case
+        if (Array.isArray(atomOptions.radius) && atomOptions.radius[index] !== undefined) {
+            atomOptions.radius = atomOptions.radius[index];
         }
-      }
-      for (const mesh of meshesToDispose) {
-        mesh.dispose();
-      }
-    }
-  }
-  const spheres = frame.atoms.map((atom: Atom, index: number) =>
-    draw_atom(app, atom, options.atoms, index),
-  );
-  const tubes = frame.bonds.flatMap((bond: Bond) => draw_bond(app, bond, options.bonds));
-  return [...spheres, ...tubes];
+        
+        const sphere = draw_atom(app, atom, atomOptions);
+        console.log(`✅ Atom ${index} sphere created:`, sphere);
+        return sphere;
+    });
+    
+    console.log("⚛️ All atom spheres created:", spheres);
+    
+    const tubes = frame.bonds.flatMap((bond: Bond) => {
+        console.log(`🔗 Drawing bond:`, bond);
+        const bondTubes = draw_bond(app, bond, options.bonds);
+        console.log(`✅ Bond tubes created:`, bondTubes);
+        return bondTubes;
+    });
+    
+    const allMeshes = [...spheres, ...tubes];
+    console.log("🎨 draw_frame returning all meshes:", allMeshes);
+    console.log("📊 Scene mesh count:", app.scene.meshes.length);
+    
+    return allMeshes;
 };
 
 export const draw_bond = (
@@ -224,11 +318,51 @@ export const draw_box = (
 
   const { matrix, origin } = boxData;
   
-  // Convert matrix to vectors
-  const a = new Vector3(matrix[0][0], matrix[0][1], matrix[0][2]);
-  const b = new Vector3(matrix[1][0], matrix[1][1], matrix[1][2]);
-  const c = new Vector3(matrix[2][0], matrix[2][1], matrix[2][2]);
-  const o = new Vector3(origin[0], origin[1], origin[2]);
+  // Add debug logging and validation
+  console.log("draw_box called with:", { boxData, matrix, origin });
+  
+  // Validate matrix structure
+  if (!matrix || !Array.isArray(matrix) || matrix.length !== 3) {
+    console.error("Invalid matrix structure:", matrix);
+    return [];
+  }
+  
+  for (let i = 0; i < matrix.length; i++) {
+    if (!Array.isArray(matrix[i]) || matrix[i].length !== 3) {
+      console.error(`Invalid matrix[${i}] structure:`, matrix[i]);
+      return [];
+    }
+  }
+  
+  // Validate origin structure
+  if (!origin || !Array.isArray(origin) || origin.length !== 3) {
+    console.error("Invalid origin structure:", origin);
+    return [];
+  }
+  
+  // Convert matrix to vectors with safe access
+  const a = new Vector3(
+    Number(matrix[0][0]) || 0, 
+    Number(matrix[0][1]) || 0, 
+    Number(matrix[0][2]) || 0
+  );
+  const b = new Vector3(
+    Number(matrix[1][0]) || 0, 
+    Number(matrix[1][1]) || 0, 
+    Number(matrix[1][2]) || 0
+  );
+  const c = new Vector3(
+    Number(matrix[2][0]) || 0, 
+    Number(matrix[2][1]) || 0, 
+    Number(matrix[2][2]) || 0
+  );
+  const o = new Vector3(
+    Number(origin[0]) || 0, 
+    Number(origin[1]) || 0, 
+    Number(origin[2]) || 0
+  );
+
+  console.log("Box vectors:", { a: a.asArray(), b: b.asArray(), c: c.asArray(), o: o.asArray() });
 
   // Calculate the 8 vertices of the box
   const vertices = [
@@ -265,5 +399,6 @@ export const draw_box = (
     lineMeshes.push(line);
   }
 
+  console.log("Box created with", lineMeshes.length, "edges");
   return lineMeshes;
 };

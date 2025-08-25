@@ -9,9 +9,10 @@ import {
   Tools,
 } from "@babylonjs/core";
 import { AxisHelper } from "./axes";
+import { GridGround } from "./grid";
 import { Pipeline } from "../pipeline";
 import type { Box } from "../system/box";
-import { ViewportManager } from "./viewport-manager";
+
 
 // import { Logger } from "tslog";
 // const logger = new Logger({ name: "molvis-world" });
@@ -21,19 +22,20 @@ class World {
   private _scene: Scene;
   private _camera: ArcRotateCamera;
   private _axes: AxisHelper;
+  private _gridGround: GridGround;
   private _pipeline: Pipeline;
   private _boxMesh: LinesMesh | null = null;
   private _isRunning = false;
-  private _viewportManager: ViewportManager;
+
 
   constructor(canvas: HTMLCanvasElement) {
     this._engine = this._initEngine(canvas);
     this._scene = this._initScene(this._engine);
-    this._camera = this._initCamera();
+    this._camera = this._initCamera(canvas);
     this._initLight();
     this._pipeline = new Pipeline();
     this._axes = this._initAxes();
-    this._viewportManager = new ViewportManager(this._scene, this._camera);
+    this._gridGround = new GridGround(this._scene, this._camera, this._engine);
   }
 
   private _initEngine(canvas: HTMLCanvasElement) {
@@ -61,6 +63,10 @@ class World {
     return this._scene;
   }
 
+  get gridGround(): GridGround {
+    return this._gridGround;
+  }
+
   get pipeline(): Pipeline {
     return this._pipeline;
   }
@@ -69,11 +75,9 @@ class World {
     return this._camera;
   }
 
-  get viewportManager(): ViewportManager {
-    return this._viewportManager;
-  }
 
-  private _initCamera() {
+
+  private _initCamera(canvas: HTMLCanvasElement) {
     const camera = new ArcRotateCamera(
       "Camera",
       -Math.PI / 2,
@@ -83,7 +87,7 @@ class World {
       this._scene,
     );
     camera.lowerRadiusLimit = 5;
-    camera.attachControl(this._engine.getRenderingCanvas(), false);
+    camera.attachControl(canvas, false);
     camera.inertia = 0;
 
     return camera;
@@ -155,19 +159,25 @@ class World {
   }
 
   public render() {
+    console.log("🌍 World.render() called - starting rendering loop");
     this.isRunning = true;
     this._engine.runRenderLoop(() => {
       this._scene.render();
       this._axes.render();
     });
+    console.log("🌍 Rendering loop started");
     this._engine.resize();
     window.addEventListener("resize", () => {
       this._engine.resize();
     });
+    console.log("🌍 World render completed");
   }
 
   public stop() {
     this.isRunning = false;
+    if (this._gridGround) {
+      this._gridGround.dispose();
+    }
     this._engine.dispose();
   }
 
@@ -179,6 +189,11 @@ class World {
     if (this._boxMesh) {
       this._boxMesh.dispose();
       this._boxMesh = null;
+    }
+    // Re-enable grid ground after clearing
+    if (this._gridGround.isEnabled) {
+      this._gridGround.disable();
+      this._gridGround.enable();
     }
   }
 

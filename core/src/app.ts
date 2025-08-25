@@ -1,4 +1,5 @@
 import { Logger } from "tslog";
+import { Color3 } from "@babylonjs/core";
 import { ModeManager } from "./mode";
 import { System } from "./system";
 import { World } from "./world";
@@ -31,7 +32,19 @@ interface MolvisUIOptions {
   };
 }
 
-interface MolvisOptions extends MolvisDisplayOptions, MolvisRenderOptions, MolvisUIOptions { }
+interface MolvisGridOptions {
+  enabled?: boolean;
+  mainColor?: string;
+  lineColor?: string;
+  opacity?: number;
+  majorUnitFrequency?: number;
+  minorUnitVisibility?: number;
+  size?: number;
+}
+
+interface MolvisOptions extends MolvisDisplayOptions, MolvisRenderOptions, MolvisUIOptions {
+  grid?: MolvisGridOptions;
+}
 
 class Molvis {
 
@@ -45,12 +58,13 @@ class Molvis {
   private _executor!: Executor;
   private _gui!: GuiManager;
   private _options: MolvisOptions;
+  public gridManager: any; // 动态网格管理器
 
   // private _artist: ArtistGuild;
 
   constructor(mountPoint: HTMLElement, options: MolvisOptions = {}) {
     this._mountPoint = mountPoint;
-    preventEventPropagation(mountPoint);
+    // preventEventPropagation(mountPoint);
     this._options = {
 
       displayWidth: 800,
@@ -118,6 +132,7 @@ class Molvis {
       width: 100%;
       height: 100%;
       touch-action: none;
+      pointer-events: auto;
     `;
 
     // Create UI container
@@ -141,11 +156,42 @@ class Molvis {
   }
 
   private _initializeComponents(): void {
+    console.log("🔧 Molvis._initializeComponents() called");
+    
     this._system = new System();
+    console.log("✅ System created");
+    
     this._world = new World(this._canvas);
+    console.log("✅ World created");
+    
     this._gui = new GuiManager(this, this._uiContainer, this._options.uiComponents || {});
+    console.log("✅ GUI created");
+    
     this._mode = new ModeManager(this);
+    console.log("✅ Mode manager created");
+    
     this._executor = new Executor(this);
+    console.log("✅ Executor created");
+    
+    // Start the rendering loop
+    console.log("🌍 Starting rendering loop...");
+    this._world.render();
+    console.log("✅ Rendering loop started");
+    
+    // Grid ground is not enabled by default
+    // Use enableGrid() method with parameters to enable it
+    console.log("🔧 Molvis initialization completed");
+  }
+
+  /**
+   * Parse color string to Color3
+   */
+  private _parseColor(colorStr: string): any {
+    if (colorStr.startsWith('#')) {
+      return Color3.FromHexString(colorStr);
+    }
+    // Add more color parsing logic if needed
+    return Color3.FromHexString(colorStr);
   }
 
   get canvas(): HTMLCanvasElement {
@@ -176,26 +222,39 @@ class Molvis {
     return this._gui;
   }
 
-  public execute(cmd: string, args: Record<string, unknown>) {
-    const [meshes, entities] = this._executor.execute(cmd, args);
-    this._world.pipeline.modify(
-      this,
-      meshes,
-      entities
-    )
+  public execute(method: string, params: any = {}): any {
+    try {
+      const result = this._executor.execute(method, params);
+      return result;
+    } catch (error) {
+      logger.error("Method execution failed:", { method, params, error });
+      throw error;
+    }
   }
 
-  public modify(name: string, args: Record<string, unknown>) {
-    this._world.append_modifier(name, args);
+  public modify(name: string, args: Record<string, unknown>): void {
+    try {
+      const result = this._executor.execute(name, args);
+      this._world.pipeline.modify(this, result[0], result[1]);
+    } catch (error) {
+      logger.error("Method execution failed:", { name, args, error });
+      throw error;
+    }
   }
 
-  public start = () => {
-    this._world.render();
-  };
+  public start(): void {
+    if (!this._world.isRunning) {
+      this._world.render();
+      logger.info("Molvis started successfully");
+    }
+  }
 
-  public stop = () => {
-    this._world.stop();
-  };
+  public stop(): void {
+    if (this._world.isRunning) {
+      this._world.stop();
+      logger.info("Molvis stopped successfully");
+    }
+  }
 
   public resize = () => {
     this._world.resize();
