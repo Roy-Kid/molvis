@@ -121,7 +121,6 @@ export class GridGround {
    * Create reference lines for x=0 and y=0
    */
   private _createReferenceLines(): void {
-    console.log("Creating reference lines");
     if (this._referenceLines) {
       this._referenceLines.dispose();
     }

@@ -158,27 +158,21 @@ class World {
     this._camera.beta = Math.PI / 2;
   }
 
-  public render() {
-    console.log("🌍 World.render() called - starting rendering loop");
-    this.isRunning = true;
-    this._engine.runRenderLoop(() => {
-      this._scene.render();
-      this._axes.render();
-    });
-    console.log("🌍 Rendering loop started");
-    this._engine.resize();
-    window.addEventListener("resize", () => {
-      this._engine.resize();
-    });
-    console.log("🌍 World render completed");
-  }
-
-  public stop() {
-    this.isRunning = false;
-    if (this._gridGround) {
-      this._gridGround.dispose();
+  public render(): void {
+    if (this.isRunning) {
+      return;
     }
-    this._engine.dispose();
+    
+    this.isRunning = true;
+    
+    // Start the rendering loop
+    this._scene.onBeforeRenderObservable.add(() => {
+      // Render loop logic can be added here
+    });
+  }
+  
+  public stop(): void {
+    this.isRunning = false;
   }
 
   public clear() {

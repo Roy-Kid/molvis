@@ -49,48 +49,29 @@ export class JsonRpcHandler {
     }
   }
 
-  private async callMethod(method: string, params: Record<string, unknown>, buffers: DataView[]): Promise<unknown> {
-    console.log("🚀 JSON-RPC callMethod called:", { method, params, buffers });
-    
-    // Special handling for instance management methods (these are frontend-only)
+  private async callMethod(method: string, params: any = {}, buffers: DataView[] = []): Promise<any> {
     if (method === "get_instance_count") {
-      console.log("📊 Getting frontend instance count");
       return MolvisWidget.getInstanceCount();
     }
     
     if (method === "clear_all_instances") {
-      console.log("🧹 Clearing all frontend instances");
       MolvisWidget.clearAllInstances();
-      return true;
+      return { success: true };
     }
     
     if (method === "clear_all_content") {
-      console.log("🧹 Clearing all frontend content");
       MolvisWidget.clearAllContent();
-      return true;
+      return { success: true };
     }
     
-    // Special handling for enable_grid to support both enable/disable
     if (method === "enable_grid") {
-      console.log("🌐 Executing enable_grid command with params:", params);
-      const enabled = params.enabled !== false;
-      if (enabled) {
-        return this.app.execute("enable_grid", params);
-      } else {
-        return this.app.execute("disable_grid", {});
-      }
+      const result = await this.app.execute("enable_grid", params);
+      return result;
     }
     
-    // For all other methods, dynamically call app.execute
-    console.log(`🎯 Dynamically executing ${method} command with params:`, params);
-    try {
-      const result = this.app.execute(method, params);
-      console.log(`✅ ${method} command executed successfully:`, result);
-      return result;
-    } catch (error) {
-      console.error(`❌ Error executing ${method} command:`, error);
-      throw error;
-    }
+    // Dynamic method execution
+    const result = await this.app.execute(method, params);
+    return result;
   }
 
   private get supportedMethods(): string[] {

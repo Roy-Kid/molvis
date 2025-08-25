@@ -78,15 +78,17 @@ class Molvis(anywidget.AnyWidget):
         # Add this instance to the class tracking set
         Molvis._instances.add(self)
         
-        print(f"🔧 Molvis widget created with session_id: {self.session_id}")
-        print(f"📊 Total widget instances: {len(Molvis._instances)}")
-        
         # 设置 ESM
         module_dir = pathlib.Path(__file__).parent
         ESM_path = module_dir / "dist" / "index.js"
         assert ESM_path.exists(), f"{ESM_path} not found"
         self._esm = ESM_path.read_text()
         
+        # Don't wait for ready here - frontend hasn't initialized yet
+        # The ready state will be set by frontend when it initializes
+        
+        # Add observer for ready state changes
+        self.observe(self._on_ready_changed, names=['ready'])
 
     @classmethod
     def get_frontend_instance_count(cls) -> int:
@@ -102,48 +104,39 @@ class Molvis(anywidget.AnyWidget):
             result = first_instance.send_cmd("get_instance_count", {})
             return result if isinstance(result, int) else 0
         except Exception as e:
-            print(f"❌ Error getting frontend instance count: {e}")
             return 0
 
     @classmethod
     def clear_all_frontend_instances(cls) -> None:
         """Clear all frontend widget instances."""
-        print("🧹 Requesting frontend to clear all widget instances...")
         try:
             # Just need one instance to send the command to frontend
             # Frontend will handle clearing all instances internally
             instances = list(cls._instances)
             if not instances:
-                print("   ℹ️ No instances to send command through")
                 return
             
             # Send command through first available instance
             first_instance = instances[0]
             first_instance.send_cmd("clear_all_instances", {})
-            print(f"   ✅ Clear command sent through instance {first_instance.session_id}")
-            print("✅ Frontend will clear all widget instances")
         except Exception as e:
-            print(f"❌ Error sending clear command: {e}")
+            pass
 
     @classmethod
     def clear_all_frontend_content(cls) -> None:
         """Clear all 3D content from all frontend widget instances."""
-        print("🧹 Requesting frontend to clear all 3D content...")
         try:
             # Just need one instance to send the command to frontend
             # Frontend will handle clearing all content internally
             instances = list(cls._instances)
             if not instances:
-                print("   ℹ️ No instances to send command through")
                 return
             
             # Send command through first available instance
             first_instance = instances[0]
             first_instance.send_cmd("clear_all_content", {})
-            print(f"   ✅ Clear content command sent through instance {first_instance.session_id}")
-            print("✅ Frontend will clear all 3D content")
         except Exception as e:
-            print(f"❌ Error sending clear content command: {e}")
+            pass
 
     @classmethod
     def get_instance_count(cls) -> int:
@@ -756,27 +749,16 @@ class Molvis(anywidget.AnyWidget):
         """
         import time
         
-        print(f"⏳ Waiting up to {timeout}s for frontend to initialize...")
-        print(f"   Current ready state: {self.ready}")
-        print(f"   Session ID: {self.session_id}")
-        
         start_time = time.time()
         
         while not self.ready:
             # Check if we've exceeded timeout
             if time.time() - start_time > timeout:
-                print(f"❌ Timeout after {timeout}s - frontend not ready")
-                print(f"   Current ready state: {self.ready}")
-                print(f"   This usually means:")
-                print(f"   1. Frontend code hasn't executed yet")
-                print(f"   2. Widget hasn't been displayed in Jupyter")
-                print(f"   3. There's a communication issue")
                 return False
             
             # Wait a bit before checking again
             time.sleep(0.1)
         
-        print(f"✅ Frontend is ready! (took {time.time() - start_time:.2f}s)")
         return True
     
     def _on_ready_changed(self, change: Any) -> None:
@@ -786,11 +768,7 @@ class Molvis(anywidget.AnyWidget):
         Args:
             change: Traitlets change object containing old and new values
         """
-        print(f"🔄 Ready state changed: {change['old']} -> {change['new']}")
-        if change['new']:
-            print(f"🎉 Frontend is now ready for session {self.session_id}")
-        else:
-            print(f"⚠️ Frontend is no longer ready for session {self.session_id}")
+        pass
     
     def is_ready(self) -> bool:
         """

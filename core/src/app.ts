@@ -156,31 +156,21 @@ class Molvis {
   }
 
   private _initializeComponents(): void {
-    console.log("🔧 Molvis._initializeComponents() called");
-    
     this._system = new System();
-    console.log("✅ System created");
     
     this._world = new World(this._canvas);
-    console.log("✅ World created");
     
     this._gui = new GuiManager(this, this._uiContainer, this._options.uiComponents || {});
-    console.log("✅ GUI created");
     
     this._mode = new ModeManager(this);
-    console.log("✅ Mode manager created");
     
     this._executor = new Executor(this);
-    console.log("✅ Executor created");
     
     // Start the rendering loop
-    console.log("🌍 Starting rendering loop...");
     this._world.render();
-    console.log("✅ Rendering loop started");
     
     // Grid ground is not enabled by default
     // Use enableGrid() method with parameters to enable it
-    console.log("🔧 Molvis initialization completed");
   }
 
   /**

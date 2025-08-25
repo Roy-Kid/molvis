@@ -109,7 +109,6 @@ class ViewModeMenu {
       molecularPalette.configure({ theme: ev.value });
       // 更新调色盘配置，但不自动刷新显示
       // 用户需要手动重新绘制来看到新主题效果
-      console.log(`Theme changed to: ${ev.value}`);
     });
 
     this.pane.addBlade({
