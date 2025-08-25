@@ -120,7 +120,7 @@ class GuiManager {
         this._viewIndicator.updateView(false);
       }
     } catch (error) {
-      console.warn('Failed to get orthographic state, using default:', error);
+      logger.warn('Failed to get orthographic state, using default:', error);
       this._viewIndicator.updateView(false);
     }
     
@@ -135,7 +135,7 @@ class GuiManager {
         this._frameIndicator.updateFrame(0, 0);
       }
     } catch (error) {
-      console.warn('Failed to get frame state, using default:', error);
+      logger.warn('Failed to get frame state, using default:', error);
       this._frameIndicator.updateFrame(0, 0);
     }
     

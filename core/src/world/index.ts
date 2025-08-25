@@ -1,3 +1,3 @@
-import { World } from "./world";
-
-export { World };
+export { World } from "./world";
+export { AxisHelper } from "./axes";
+export { GridGround } from "./grid";

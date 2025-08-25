@@ -11,11 +11,11 @@ from setuptools import setup, find_packages
 
 def build_js():
     """Build JavaScript assets and copy to static directory."""
-    project_root = Path(__file__).parent
+    project_root = Path(__file__).parent.parent
     
     # Build JavaScript
     print("Building JavaScript...")
-    subprocess.run(["npm", "run", "build"], cwd=project_root, check=True)
+    subprocess.run(["npm", "run", "build:widget"], cwd=project_root, check=True)
     
     # Copy built assets to static directory
     dist_dir = project_root / "dist"

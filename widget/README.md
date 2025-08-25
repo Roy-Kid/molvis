@@ -280,10 +280,10 @@ pip install -e .
 
 ```bash
 # Run basic functionality tests
-python test_simple.py
+python -m pytest tests/
 
-# Run UI and atom size tests
-python test_fixes.py
+# Test widget functionality
+python example/test_clean_code.py
 ```
 
 ## Recent Fixes

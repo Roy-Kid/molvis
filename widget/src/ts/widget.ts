@@ -1,143 +1,271 @@
 import { Logger } from "tslog";
 import { Molvis } from "@molvis/core/src/app";
-import type { ModelType } from "./types";
+import type { AnyModel } from "@anywidget/types";
 import { JsonRpcHandler } from "./jsonrpc";
 
 const logger = new Logger({ name: "molvis-widget" });
 
 export class MolvisWidget {
+  private model: AnyModel;
+  private app: Molvis | null = null;
+  private jsonRpcHandler: JsonRpcHandler | null = null;
+  private isInitialized = false;
+  private sessionId: number;
+  private widgetContainer: HTMLElement | null = null;
+  private attachedElement: HTMLElement | null = null;
+  private isAttached = false;
 
-  private widgetContainer: HTMLElement;
+  // Static widget instance management
+  private static widgets = new Map<number, MolvisWidget>();
+  private static attachedElements = new Map<number, HTMLElement>();
 
-  private molvis: Molvis;
-  private _model: ModelType;
-  private jrpc_handler: JsonRpcHandler;
-  private session_id: number;
-
-  constructor(model: ModelType) {
-
-    this.session_id = model.get("session_id");
+  constructor(model: AnyModel) {
+    this.model = model;
+    this.sessionId = model.get("session_id");
     
-    const widgetWidth = model.get("width");
-    const widgetHeight = model.get("height");
+    // Add this instance to static tracking
+    MolvisWidget.widgets.set(this.sessionId, this);
+    
+    logger.info("MolvisWidget instance created", { sessionId: this.sessionId });
+  }
 
-    // Create widget container
-    this.widgetContainer = document.createElement("div");
-    this.widgetContainer.id = `molvis-widget-${this.session_id}`;
-    this.widgetContainer.style.cssText = `
-      width: ${widgetWidth}px;
-      height: ${widgetHeight}px;
-      position: relative;
-      overflow: hidden;
-    `;
+  // Static methods for widget instance management
+  static getInstance(sessionId: number): MolvisWidget | undefined {
+    return this.widgets.get(sessionId);
+  }
 
-    // Initialize Molvis with clear size parameters
-    this.molvis = new Molvis(this.widgetContainer, {
-      displayWidth: widgetWidth,
-      displayHeight: widgetHeight,
-      fitContainer: true,
-      
-      autoRenderResolution: true,
-      pixelRatio: window.devicePixelRatio || 1,
-      
-      showUI: true,
-      uiComponents: {
-        showModeIndicator: true,
-        showViewIndicator: true,
-        showInfoPanel: true,
-        showFrameIndicator: true,
+  static getAllInstances(): Map<number, MolvisWidget> {
+    return new Map(this.widgets);
+  }
+
+  static getInstanceCount(): number {
+    return this.widgets.size;
+  }
+
+  static clearAllInstances(): void {
+    console.log(`🧹 Clearing all ${this.widgets.size} frontend widget instances...`);
+    
+    for (const [sessionId, widget] of this.widgets) {
+      try {
+        console.log(`   🧹 Clearing frontend instance ${sessionId}`);
+        widget.dispose();
+        this.widgets.delete(sessionId);
+      } catch (error) {
+        console.error(`   ❌ Error clearing frontend instance ${sessionId}:`, error);
       }
-    });
+    }
     
-    // Ensure UI components are on top of canvas
-    this._ensureUILayer();
+    // Clear attached elements
+    this.attachedElements.clear();
     
-    this._model = model;
-    this.jrpc_handler = new JsonRpcHandler(this.molvis);
-    model.on("msg:custom", this.handle_custom_message);
-    
-    // Listen for size changes
-    model.on("change:width", this.resize);
-    model.on("change:height", this.resize);
+    console.log(`✅ All frontend instances cleared. Remaining: ${this.widgets.size}`);
   }
 
-  private _ensureUILayer(): void {
-    // Ensure UI container is on top of canvas
-    const uiContainer = this.widgetContainer.querySelector('.molvis-ui');
-    if (uiContainer) {
-      (uiContainer as HTMLElement).style.zIndex = '1000';
-      (uiContainer as HTMLElement).style.pointerEvents = 'none';
+  static clearAllContent(): void {
+    console.log(`🧹 Clearing 3D content from all ${this.widgets.size} frontend instances...`);
+    
+    for (const [sessionId, widget] of this.widgets) {
+      try {
+        console.log(`   🧹 Clearing 3D content from frontend instance ${sessionId}`);
+        if (widget.app) {
+          widget.app.execute("clear", {});
+        }
+      } catch (error) {
+        console.error(`   ❌ Error clearing 3D content from frontend instance ${sessionId}:`, error);
+      }
     }
     
-    // Ensure mode indicator and other UI elements are clickable
-    const modeIndicator = this.widgetContainer.querySelector('.mode-indicator');
-    if (modeIndicator) {
-      (modeIndicator as HTMLElement).style.pointerEvents = 'auto';
-      (modeIndicator as HTMLElement).style.zIndex = '1001';
+    console.log("✅ 3D content cleared from all frontend instances");
+  }
+
+  public initialize(): void {
+    if (this.isInitialized) {
+      return;
     }
-    
-    const viewIndicator = this.widgetContainer.querySelector('.view-indicator');
-    if (viewIndicator) {
-      (viewIndicator as HTMLElement).style.pointerEvents = 'auto';
-      (viewIndicator as HTMLElement).style.zIndex = '1001';
-    }
-    
-    const infoPanel = this.widgetContainer.querySelector('.info-panel');
-    if (infoPanel) {
-      (infoPanel as HTMLElement).style.pointerEvents = 'auto';
-      (infoPanel as HTMLElement).style.zIndex = '1001';
+    try {
+      this.initializeMolvisCore();
+      this.isInitialized = true;
+    } catch (error) {
+      logger.error("Failed to initialize MolvisWidget", { sessionId: this.sessionId, error });
+      throw error;
     }
   }
 
-  public handle_custom_message = async (msg: string, buffers: DataView[] = []) => {
-    const cmd = JSON.parse(msg);
-    const response = await this.jrpc_handler.execute(cmd, buffers);
-    this._model.send("msg:custom", JSON.stringify(response));
+  private initializeMolvisCore(): void {
+    try {
+      const widgetWidth = this.model.get("width");
+      const widgetHeight = this.model.get("height");
+
+      // Create widget container
+      this.widgetContainer = document.createElement("div");
+      this.widgetContainer.id = `molvis-widget-${this.sessionId}`;
+      this.widgetContainer.style.cssText = `
+        width: ${widgetWidth}px;
+        height: ${widgetHeight}px;
+        position: relative;
+        overflow: hidden;
+      `;
+
+      // Initialize Molvis core
+      this.app = new Molvis(this.widgetContainer, {
+        displayWidth: widgetWidth,
+        displayHeight: widgetHeight,
+        fitContainer: true,
+        autoRenderResolution: true,
+        pixelRatio: window.devicePixelRatio || 1,
+        showUI: true,
+        uiComponents: {
+          showModeIndicator: true,
+          showViewIndicator: true,
+          showInfoPanel: true,
+          showFrameIndicator: true,
+        }
+      });
+
+      // Initialize JSON-RPC handler
+      this.jsonRpcHandler = new JsonRpcHandler(this.app);
+
+      // Bind event listeners
+      this.model.on("msg:custom", this.handleCustomMessage);
+      this.model.on("change:width", this.resize);
+      this.model.on("change:height", this.resize);
+
+      logger.info("Molvis core initialized successfully", { sessionId: this.sessionId });
+    } catch (error) {
+      logger.error("Failed to initialize Molvis core", { sessionId: this.sessionId, error });
+    }
+  }
+
+  public handleCustomMessage = async (msg: string, buffers: DataView[] = []) => {
+    if (!this.jsonRpcHandler) {
+      logger.error("JSON-RPC handler not initialized", { sessionId: this.sessionId });
+      return;
+    }
+
+    try {
+      const cmd = JSON.parse(msg);
+      const response = await this.jsonRpcHandler.execute(cmd, buffers);
+      this.model.send("msg:custom", JSON.stringify(response));
+    } catch (error) {
+      logger.error("Error handling custom message", { sessionId: this.sessionId, error });
+      
+      // Send error response back
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32603,
+          message: `Internal error: ${error instanceof Error ? error.message : String(error)}`
+        }
+      };
+      this.model.send("msg:custom", JSON.stringify(errorResponse));
+    }
   };
 
   public attach = (el: HTMLElement) => {
-    if (el.contains(this.widgetContainer)) {
-      this.detach(el);
+    if (!this.isInitialized) {
+      this.initialize();
     }
-    el.style.width = "100%";
-    el.style.height = "100%";
-    if (!this.molvis.isRunning) {
-      this.molvis.start();
+
+    // If already attached to same element, return early
+    if (this.attachedElement === el && this.isAttached) {
+      return;
     }
     
-    el.appendChild(this.widgetContainer);
+    // If previously attached to different element, detach first
+    if (this.attachedElement && this.attachedElement !== el) {
+      this.detach(this.attachedElement);
+    }
+    
+    // Set element styles
+    el.style.width = "100%";
+    el.style.height = "100%";
+    
+    // Start molvis if not running
+    if (this.app && !this.app.isRunning) {
+      this.app.start();
+    }
+    
+    // Attach to new element
+    if (this.widgetContainer) {
+      el.appendChild(this.widgetContainer);
+    }
+    
+    this.attachedElement = el;
+    this.isAttached = true;
+    
+    // Update static tracking
+    MolvisWidget.attachedElements.set(this.sessionId, el);
+    
     this.resize();
-    this._ensureUILayer(); // Re-ensure UI layer after attachment
   };
 
   public detach = (el: HTMLElement) => {
-    el.removeChild(this.widgetContainer);
+    // Check if really attached to this element
+    if (this.attachedElement !== el || !this.isAttached) {
+      return;
+    }
+    
+    // Check if element really contains widget
+    if (this.widgetContainer && el.contains(this.widgetContainer)) {
+      el.removeChild(this.widgetContainer);
+    }
+    
+    this.attachedElement = null;
+    this.isAttached = false;
+    
+    // Update static tracking
+    MolvisWidget.attachedElements.delete(this.sessionId);
   };
 
   public start = () => {
-    this.molvis.start();
+    if (this.app && !this.app.isRunning) {
+      this.app.start();
+    }
   };
 
   public stop = () => {
-    this.molvis.stop();
+    if (this.app && this.app.isRunning) {
+      this.app.stop();
+    }
+  };
+
+  public dispose = () => {
+    // Clean up all event listeners
+    this.model.off("msg:custom", this.handleCustomMessage);
+    this.model.off("change:width", this.resize);
+    this.model.off("change:height", this.resize);
+    
+    // Stop molvis
+    this.stop();
+    
+    // Detach if still attached
+    if (this.attachedElement && this.isAttached) {
+      this.detach(this.attachedElement);
+    }
+    
+    // Remove from static tracking
+    MolvisWidget.widgets.delete(this.sessionId);
+    MolvisWidget.attachedElements.delete(this.sessionId);
+    
+    logger.info("MolvisWidget disposed", { sessionId: this.sessionId });
   };
 
   public resize = () => {
-    const newWidth = this._model.get("width");
-    const newHeight = this._model.get("height");
+    if (!this.widgetContainer || !this.app) {
+      return;
+    }
+
+    const newWidth = this.model.get("width");
+    const newHeight = this.model.get("height");
     
-    // 更新widget容器尺寸
     this.widgetContainer.style.width = `${newWidth}px`;
     this.widgetContainer.style.height = `${newHeight}px`;
     
-    // 更新Molvis显示尺寸
-    this.molvis.setSize(newWidth, newHeight);
-    
-    // Re-ensure UI layer after resize
-    this._ensureUILayer();
-    
-    console.log(`Widget resized to: ${newWidth}x${newHeight}`);
-    console.log(`Display size: ${JSON.stringify(this.molvis.displaySize)}`);
-    console.log(`Render resolution: ${JSON.stringify(this.molvis.renderResolution)}`);
-  };
+    try {
+      this.app.setSize(newWidth, newHeight);
+    } catch (error) {
+      logger.error("Failed to resize Molvis core", { sessionId: this.sessionId, error });
+    }
+  }
 }

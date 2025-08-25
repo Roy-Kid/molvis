@@ -15,7 +15,6 @@ import {
 import type { Molvis } from "@molvis/core";
 
 enum ModeType {
-  Edit = "edit",
   View = "view",
   Select = "select",
   Measure = "measure",
@@ -207,16 +206,17 @@ abstract class BaseMode {
 
   protected _on_right_up(pointerInfo: PointerInfo): void {
     if (!this._is_dragging) {
-      pointerInfo.event.preventDefault();
-      
-      if (this._contextMenuOpen) {
-        this.hideContextMenu();
-        this._contextMenuOpen = false;
-      } else {
-        const { x, y } = pointerInfo.event;
-        this.showContextMenu(x, y);
-        this._contextMenuOpen = true;
-      }
+              // Prevent default context menu
+        pointerInfo.event.preventDefault();
+        
+        if (this._contextMenuOpen) {
+          this.hideContextMenu();
+          this._contextMenuOpen = false;
+        } else {
+          const { x, y } = pointerInfo.event;
+          this.showContextMenu(x, y);
+          this._contextMenuOpen = true;
+        }
     }
   }
 
@@ -259,7 +259,9 @@ abstract class BaseMode {
   _on_pointer_double_tap(_pointerInfo: PointerInfo): void {}
   _on_press_e(): void {
     const frame = this.system.next_frame();
-    draw_frame(this.app, frame, { atoms: {}, bonds: {}, clean: true });
+    // 切换frame时先清除旧内容
+    this.world.clear();
+    draw_frame(this.app, frame, { atoms: {}, bonds: {} });
     if (this.gui) {
       this.gui.updateFrameIndicator(
         this.system.current_frame_index,
@@ -270,7 +272,9 @@ abstract class BaseMode {
   
   _on_press_q(): void {
     const frame = this.system.prev_frame();
-    draw_frame(this.app, frame, { atoms: {}, bonds: {}, clean: true });
+    // 切换frame时先清除旧内容
+    this.world.clear();
+    draw_frame(this.app, frame, { atoms: {}, bonds: {} });
     if (this.gui) {
       this.gui.updateFrameIndicator(
         this.system.current_frame_index,

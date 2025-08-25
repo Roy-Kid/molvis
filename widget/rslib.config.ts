@@ -15,6 +15,9 @@ export default defineConfig({
     },
   ],
   output: {
-    target: 'web'
+    target: 'web',
+    distPath: {
+      root: 'src/molvis/dist'
+    }
   }
 });

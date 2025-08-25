@@ -8,7 +8,7 @@ const logger = new Logger({ name: "molvis-core" });
 import type { BaseMode } from "./base";
 import { ModeType } from "./base";
 import { ViewMode } from "./view";
-import { EditMode } from "./edit";
+
 import { SelectMode } from "./select";
 import { MeasureMode } from "./measure";
 
@@ -37,9 +37,7 @@ class ModeManager {
             case "2":
               this.switch_mode(ModeType.Select);
               break;
-            case "3":
-              this.switch_mode(ModeType.Edit);
-              break;
+
             case "4":
               this.switch_mode(ModeType.Measure);
               break;
@@ -55,9 +53,7 @@ class ModeManager {
   public switch_mode = (mode: ModeType) => {
     if (this._mode) this._mode.finish();
     switch (mode) {
-      case ModeType.Edit:
-        this._mode = new EditMode(this._app);
-        break;
+
       case ModeType.View:
         this._mode = new ViewMode(this._app);
         break;
