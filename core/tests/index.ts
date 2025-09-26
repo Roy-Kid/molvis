@@ -62,6 +62,10 @@ app.execute("draw_frame", {
   },
 });
 
+app.execute(
+  "new_frame",
+);
+
 // Frame 2: Methane molecule (CH4)
 app.execute("draw_frame", {
   frameData: {
@@ -90,6 +94,10 @@ app.execute("draw_frame", {
     },
   },
 });
+
+app.execute(
+  "new_frame",
+);
 
 // Frame 3: Ammonia molecule (NH3)
 app.execute("draw_frame", {

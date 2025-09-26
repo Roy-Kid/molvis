@@ -6,8 +6,8 @@
   "license": "SEE LICENSE IN LICENSE",
   "workspaces": [
     "core",
-    "standalone",
-    "widget"
+    "widget",
+    "page"
   ],
   "scripts": {
     "dev:widget": "npm run dev -w widget",
@@ -20,8 +20,6 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@rsbuild/core": "^1.2.19",
-    "@rslib/core": "^0.5.4",
-    "@tweakpane/core": "^2.0.5",
-    "ts-jest": "^29.3.1"
+    "@rslib/core": "^0.5.4"
   }
 }

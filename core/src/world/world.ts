@@ -165,9 +165,13 @@ class World {
     
     this.isRunning = true;
     
-    // Start the rendering loop
-    this._scene.onBeforeRenderObservable.add(() => {
-      // Render loop logic can be added here
+    this._engine.runRenderLoop(() => {
+      this._scene.render();
+      this._axes.render();
+    });
+    this._engine.resize();
+    window.addEventListener("resize", () => {
+      this._engine.resize();
     });
   }
   

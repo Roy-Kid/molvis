@@ -1,0 +1,24 @@
+{
+  "name": "page",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fluentui/react-components": "^9.70.0",
+    "@fluentui/react-icons": "^2.0.310",
+    "@molvis/core": "file:../core",
+    "tslog": "^4.9.3"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^1.2.14",
+    "@rsbuild/plugin-react": "^1.1.1",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build"
+  }
+}

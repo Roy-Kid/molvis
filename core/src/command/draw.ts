@@ -306,8 +306,8 @@ class DrawBox implements ICommand {
   public undo() {}
 }
 
-@registerCommand("clear")
-class Clear implements ICommand {
+@registerCommand("hide")
+class Hide implements ICommand {
   private app: Molvis;
 
   constructor(app: Molvis) {
@@ -321,6 +321,30 @@ class Clear implements ICommand {
     return {
       success: true,
       message: "All meshes cleared from scene",
+      data: { cleared: true },
+      count: 0
+    };
+  }
+
+  public undo() {}
+}
+
+@registerCommand("clear")
+class Clear implements ICommand {
+  private app: Molvis;
+
+  constructor(app: Molvis) {
+    this.app = app;
+  }
+
+  public do() {
+
+    this.app.world.clear();
+    this.app.system.current_frame.clear();
+    
+    return {
+      success: true,
+      message: "All meshes cleared up",
       data: { cleared: true },
       count: 0
     };

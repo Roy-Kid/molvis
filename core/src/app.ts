@@ -173,17 +173,6 @@ class Molvis {
     // Use enableGrid() method with parameters to enable it
   }
 
-  /**
-   * Parse color string to Color3
-   */
-  private _parseColor(colorStr: string): any {
-    if (colorStr.startsWith('#')) {
-      return Color3.FromHexString(colorStr);
-    }
-    // Add more color parsing logic if needed
-    return Color3.FromHexString(colorStr);
-  }
-
   get canvas(): HTMLCanvasElement {
     return this._canvas;
   }

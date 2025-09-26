@@ -5,12 +5,11 @@ export default defineConfig({
   plugins: [pluginReact()],
   source: {
     entry: {
-      index: './src/main.tsx',
+      index: './src/index.tsx',
     },
   },
   html: {
-    title: 'MolVis Standalone',
-    favicon: './public/favicon.ico',
+    title: 'MolVis page',
     meta: {
       charset: 'utf-8',
       viewport: 'width=device-width, initial-scale=1.0'
