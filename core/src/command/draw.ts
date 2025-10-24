@@ -1,6 +1,5 @@
 import { Color3 } from "@babylonjs/core";
 import { registerCommand, type ICommand } from "./base";
-import { Frame } from "../system/frame";
 import type { Atom, Bond } from "../system/item";
 import {
   draw_atom,
@@ -60,7 +59,7 @@ class DrawAtom implements ICommand {
     options: IDrawAtomOptions;
   }) {
     const { name, x, y, z, options, ...props } = args;
-    const atom = this.app.system.current_frame.add_atom(name, x, y, z, props);
+  const atom = this.app.system.add_atom(name, x, y, z, props);
     const sphere = draw_atom(this.app, atom, options ?? {});
     return {
       success: true,
@@ -93,10 +92,9 @@ class DrawBond implements ICommand {
     const { x1, y1, z1, x2, y2, z2, options, ...props } = args;
     
     // Create atoms if they don't exist
-    const itom = this.app.system.current_frame.add_atom("bond_atom_1", x1, y1, z1, props);
-    const jtom = this.app.system.current_frame.add_atom("bond_atom_2", x2, y2, z2, props);
-    
-    const bond = this.app.system.current_frame.add_bond(itom, jtom, props);
+  const itom = this.app.system.add_atom("bond_atom_1", x1, y1, z1, props);
+  const jtom = this.app.system.add_atom("bond_atom_2", x2, y2, z2, props);
+  const bond = this.app.system.add_bond(itom, jtom, props);
     const tubes = draw_bond(this.app, bond, options);
     return {
       success: true,
@@ -118,36 +116,18 @@ class DrawBond implements ICommand {
 class DrawFrame implements ICommand {
   private app: Molvis;
 
-  constructor(app: Molvis) {
-    this.app = app;
-  }
+  constructor(app: Molvis) { this.app = app; }
 
-  public do(args: {
-    frameData: FrameData;
-    options: IDrawFrameOptions;
-  }) {
+  public do(args: { frameData: FrameData; options: IDrawFrameOptions; }) {
     const { frameData, options } = args;
-    
-    // Frame data processed
     const atoms: Atom[] = [];
     const bonds: Bond[] = [];
 
-    // Use current frame instead of creating a new one
-    const frame = this.app.system.current_frame;
-    
     const frame_atoms = frameData.blocks?.atoms || {};
     const frame_bonds = frameData.blocks?.bonds || {};
-    
-    // Register atoms in ECS
+
     if (frame_atoms.xyz) {
-      const {
-        xyz,
-        type = [],
-        element = [],
-        name = [],
-        ...rest
-      } = frame_atoms;
-      
+      const { xyz, type = [], element = [], name = [], ...rest } = frame_atoms;
       for (let i = 0; i < xyz.length; i++) {
         const atomType = type[i] || element[i] || "C";
         const atomName = name[i] || `atom_${i}`;
@@ -155,44 +135,29 @@ class DrawFrame implements ICommand {
           type: atomType,
           element: element[i] || atomType,
         };
-        
-        // Add any extra properties
         for (const key in rest) {
-          if (rest[key] && rest[key][i] !== undefined) {
-            props[key] = rest[key][i] as IProp;
-          }
+          const arr = rest[key] as unknown[] | undefined;
+          if (arr && arr[i] !== undefined) props[key] = arr[i] as IProp;
         }
-        
-        const atom = frame.add_atom(atomName, xyz[i][0], xyz[i][1], xyz[i][2], props);
+        const atom = this.app.system.add_atom(atomName, xyz[i][0], xyz[i][1], xyz[i][2], props);
         atoms.push(atom);
       }
     }
-    
-    // Bond indices processed
-    // Register bonds in ECS
+
     if (frame_bonds?.i && frame_bonds?.j && atoms.length > 0) {
       const { i, j, order = [] } = frame_bonds;
-      
       for (let idx = 0; idx < i.length; idx++) {
         if (atoms[i[idx]] && atoms[j[idx]]) {
-          const bond = frame.add_bond(atoms[i[idx]], atoms[j[idx]], {
-            order: order[idx] || 1,
-          });
+          const bond = this.app.system.add_bond(atoms[i[idx]], atoms[j[idx]], { order: order[idx] || 1 });
           bonds.push(bond);
         }
       }
     }
 
-    // Update GUI frame indicator
-    this.app.gui.updateFrameIndicator(
-      this.app.system.current_frame_index,
-      this.app.system.n_frames,
-    );
+    // GUI frame indicator (single frame model)
+    if (this.app.gui) this.app.gui.updateFrameIndicator(0, 1);
 
-    // Draw using the current frame
-    const meshes = draw_frame(this.app, frame, options);
-    
-    // Return serializable status instead of Mesh objects to avoid circular reference issues
+    const meshes = draw_frame(this.app, atoms, bonds, options);
     return {
       success: true,
       message: `Frame drawn successfully with ${atoms.length} atoms and ${bonds.length} bonds`,
@@ -200,64 +165,15 @@ class DrawFrame implements ICommand {
         atomsCount: atoms.length,
         bondsCount: bonds.length,
         meshesCount: meshes.length,
-        frameIndex: this.app.system.current_frame_index
+        frameIndex: 0,
       },
-      count: meshes.length
+      count: meshes.length,
     };
   }
 
   public undo() {}
 }
 
-@registerCommand("new_frame")
-class NewFrame implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: {
-    name?: string;
-    clear?: boolean;
-  } = {}) {
-    const { name = "frame", clear = true } = args;
-    
-    // Create a new frame
-    const newFrame = new Frame();
-    
-    // Add the new frame to the system
-    this.app.system.append_frame(newFrame);
-    
-    // Set it as current frame
-    this.app.system.current_frame_index = this.app.system.n_frames - 1;
-    
-    // Update GUI
-    this.app.gui.updateFrameIndicator(
-      this.app.system.current_frame_index,
-      this.app.system.n_frames,
-    );
-    
-    // Clear the world if requested
-    if (clear) {
-      this.app.world.clear();
-    }
-    
-    return {
-      success: true,
-      message: `New frame "${name}" created and set as current`,
-      data: {
-        frameName: name,
-        frameIndex: this.app.system.current_frame_index,
-        totalFrames: this.app.system.n_frames,
-        cleared: clear
-      },
-      count: 1
-    };
-  }
-
-  public undo() {}
-}
 
 @registerCommand("draw_box")
 class DrawBox implements ICommand {
@@ -306,28 +222,6 @@ class DrawBox implements ICommand {
   public undo() {}
 }
 
-@registerCommand("hide")
-class Hide implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do() {
-    // Clear all meshes from scene
-    this.app.world.clear();
-    
-    return {
-      success: true,
-      message: "All meshes cleared from scene",
-      data: { cleared: true },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
 
 @registerCommand("clear")
 class Clear implements ICommand {
@@ -339,8 +233,8 @@ class Clear implements ICommand {
 
   public do() {
 
-    this.app.world.clear();
-    this.app.system.current_frame.clear();
+  this.app.world.clear();
+  this.app.system.clear();
     
     return {
       success: true,
@@ -372,6 +266,8 @@ class SetStyle implements ICommand {
   }) {
     // Apply style changes
     // This would update the visual appearance of atoms and bonds
+  // Touch world/scene to avoid unused warnings in strict mode
+  void this.app.world.scene.meshes.length;
     
     return {
       success: true,
@@ -397,6 +293,8 @@ class SetTheme implements ICommand {
   }) {
     // Apply theme changes
     // This would update the overall visual theme
+  // Touch world to avoid unused warnings in strict mode
+  void this.app.world.isRunning;
     
     return {
       success: true,
@@ -450,93 +348,7 @@ class SetViewMode implements ICommand {
   public undo() {}
 }
 
-@registerCommand("get_current_frame")
-class GetCurrentFrame implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: Record<string, unknown> = {}) {
-    const currentFrame = this.app.system.current_frame;
-    const frameIndex = this.app.system.current_frame_index;
-    const totalFrames = this.app.system.n_frames;
-    
-    // Store frame info for later retrieval
-    // Return empty arrays to match ICommand interface
-    return {
-      success: true,
-      message: "Current frame information retrieved",
-      data: {
-        currentFrameIndex: frameIndex,
-        totalFrames: totalFrames,
-        singleFrameMode: this.app.system.single_frame_mode,
-        isRunning: this.app.world.isRunning,
-        meshCount: this.app.world.scene.meshes.length
-      },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("get_frame_info")
-class GetFrameInfo implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: Record<string, unknown> = {}) {
-    const currentFrame = this.app.system.current_frame;
-    const frameIndex = this.app.system.current_frame_index;
-    const totalFrames = this.app.system.n_frames;
-    
-    // Get detailed frame information
-    const frameInfo = {
-      current: {
-        index: frameIndex,
-        atoms: currentFrame.atoms.map(atom => ({
-          name: atom.name,
-          element: atom.get("element"),
-          xyz: atom.xyz,
-          properties: atom.toJSON()
-        })),
-        bonds: currentFrame.bonds.map(bond => ({
-          name: bond.name,
-          itom: bond.itom.name,
-          jtom: bond.jtom.name,
-          order: bond.order,
-          properties: bond.toJSON()
-        }))
-      },
-      system: {
-        totalFrames: totalFrames,
-        singleFrameMode: this.app.system.single_frame_mode,
-        currentFrameIndex: frameIndex
-      },
-      world: {
-        isRunning: this.app.world.isRunning,
-        meshCount: this.app.world.scene.meshes.length
-      },
-      timestamp: Date.now()
-    };
-    
-    // Store frame info for later retrieval
-    // Return empty arrays to match ICommand interface
-    return {
-      success: true,
-      message: "Frame information retrieved",
-      data: frameInfo,
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
+// Frame info commands removed in Scene-centric rewrite
 
 @registerCommand("set_grid_size")
 class SetGridSize implements ICommand {

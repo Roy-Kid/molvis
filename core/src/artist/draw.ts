@@ -10,7 +10,6 @@ import {
 import type { Atom, Bond } from "../system/item";
 import type { Molvis } from "../app";
 import { molecularPalette } from "./palette";
-import type { Frame } from "../system/frame";
 
 export interface IDrawAtomOptions {
   radius?: number | number[] | null;
@@ -135,13 +134,13 @@ export const draw_atom = (
 };
 
 export const draw_frame = (
-    app: Molvis,
-    frame: Frame,
-    options: IDrawFrameOptions = { atoms: {}, bonds: {} }
+  app: Molvis,
+  atoms: Atom[],
+  bonds: Bond[],
+  options: IDrawFrameOptions = { atoms: {}, bonds: {} }
 ): Mesh[] => {
-    
-    // Always draw without clearing - use clear() command to clear content
-    const spheres = frame.atoms.map((atom: Atom, index: number) => {
+  // Always draw without clearing - use clear() command to clear content
+  const spheres = atoms.map((atom: Atom, index: number) => {
         const atomOptions = options.atoms || {};
         // Handle array radius case
         if (Array.isArray(atomOptions.radius) && atomOptions.radius[index] !== undefined) {
@@ -152,7 +151,7 @@ export const draw_frame = (
         return sphere;
     });
     
-    const tubes = frame.bonds.flatMap((bond: Bond) => {
+  const tubes = bonds.flatMap((bond: Bond) => {
         const bondTubes = draw_bond(app, bond, options.bonds);
         return bondTubes;
     });
@@ -188,11 +187,12 @@ export const draw_bond = (
       tube.material = material;
     }
 
-    // Always update metadata to ensure correct bond information
+    // Minimal metadata for picking/debug
     tube.metadata = {
-      ...bond.data,
+      name: bond.name,
+      order: bond.order,
       itom_name: bond.itom.name,
-      jtom_name: bond.jtom.name
+      jtom_name: bond.jtom.name,
     };
 
     return tube;

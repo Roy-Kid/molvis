@@ -1,72 +1,69 @@
-import { Atom, Bond } from "./item";
 import type { IProp } from "./base";
 
 class Frame {
-  private _atoms: Atom[];
-  private _bonds: Bond[];
-  private _props: Map<string, IProp>;
+  private xs: number[] = [];
+  private ys: number[] = [];
+  private zs: number[] = [];
+  private bi: number[] = [];
+  private bj: number[] = [];
+  private bmeta: Record<number, Record<string, IProp>> = {};
 
-  constructor(atoms: Atom[] = [], bonds: Bond[] = []) {
-    this._atoms = atoms;
-    this._bonds = bonds;
-    this._props = new Map();
+  constructor() {}
+
+  get n_atoms(): number { return this.xs.length; }
+  get n_bonds(): number { return this.bi.length; }
+
+  // Add an atom position (column arrays)
+  add_atom(_name: string, x: number, y: number, z: number, _props: Record<string, IProp> = {}): number {
+    this.xs.push(x); this.ys.push(y); this.zs.push(z);
+    return this.xs.length - 1; // index
   }
 
-  public add_atom(
-    name: string,
-    x: number,
-    y: number,
-    z: number,
-    props: Record<string, IProp> = {},
-  ): Atom {
-    const atom = new Atom({ name, x, y, z, ...props });
-    this._atoms.push(atom);
-    return atom;
-  }
-
-  public add_bond(
-    itom: Atom,
-    jtom: Atom,
-    props: Record<string, IProp> = {},
-  ): Bond {
-    const existingIndex = this._bonds.findIndex(
-      (b) =>
-        (b.itom === itom && b.jtom === jtom) ||
-        (b.itom === jtom && b.jtom === itom),
-    );
-    
-    if (existingIndex !== -1) {
-      // Update existing bond by creating a new one with merged properties
-      const existing = this._bonds[existingIndex];
-      const mergedProps = { ...existing.toJSON(), ...props };
-      const updatedBond = new Bond(existing.itom, existing.jtom, mergedProps);
-      this._bonds[existingIndex] = updatedBond;
-      return updatedBond;
+  // Add a bond by atom indices
+  add_bond(i: number, j: number, props: Record<string, IProp> = {}): number {
+    if (i < 0 || j < 0 || i >= this.n_atoms || j >= this.n_atoms) {
+      throw new Error('Bond indices out of range');
     }
-    
-    const bond = new Bond(itom, jtom, props);
-    this._bonds.push(bond);
-    return bond;
+    this.bi.push(i); this.bj.push(j);
+    const idx = this.bi.length - 1;
+    this.bmeta[idx] = { ...props };
+    return idx;
   }
 
-  public remove_atom(atom: Atom) {
-    this._atoms = this._atoms.filter((a) => a !== atom);
-    this._bonds = this._bonds.filter((b) => b.itom !== atom && b.jtom !== atom);
+  remove_atom(index: number) {
+    if (index < 0 || index >= this.n_atoms) return;
+    this.xs.splice(index, 1);
+    this.ys.splice(index, 1);
+    this.zs.splice(index, 1);
+    // rebuild bonds excluding any that referenced removed index and reindex > index
+    const newBi: number[] = [];
+    const newBj: number[] = [];
+    const newMeta: Record<number, Record<string, IProp>> = {};
+    let k = 0;
+    for (let b = 0; b < this.bi.length; b++) {
+      const ii = this.bi[b];
+      const jj = this.bj[b];
+      if (ii === index || jj === index) continue; // drop
+      newBi.push(ii > index ? ii - 1 : ii);
+      newBj.push(jj > index ? jj - 1 : jj);
+      newMeta[k] = this.bmeta[b];
+      k++;
+    }
+    this.bi = newBi; this.bj = newBj; this.bmeta = newMeta;
   }
 
-  get atoms(): Atom[] {
-    return this._atoms;
+  clear() {
+    this.xs = []; this.ys = []; this.zs = [];
+    this.bi = []; this.bj = []; this.bmeta = {};
   }
 
-  get bonds(): Bond[] {
-    return this._bonds;
-  }
-
-  public clear() {
-    this._atoms = [];
-    this._bonds = [];
-    this._props = new Map();
-  }
+  // Accessors for rendering/compute
+  get X(): ReadonlyArray<number> { return this.xs; }
+  get Y(): ReadonlyArray<number> { return this.ys; }
+  get Z(): ReadonlyArray<number> { return this.zs; }
+  get BI(): ReadonlyArray<number> { return this.bi; }
+  get BJ(): ReadonlyArray<number> { return this.bj; }
+  getBondProps(index: number): Record<string, IProp> | undefined { return this.bmeta[index]; }
 }
 
 export { Frame };

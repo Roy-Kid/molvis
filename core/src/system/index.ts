@@ -1,83 +1,57 @@
-import { Frame } from "./frame";
 import { Atom, Bond } from "./item";
+import { Scene } from "./scene";
+import { Frame } from "./frame";
 import { Trajectory } from "./trajectory";
-import type { IEntity, IProp } from "./base";
+import { Topology } from "./topology";
+import { Vector3 } from "@babylonjs/core";
+import type { IProp } from "./base";
 
 class System {
-  private _selected: Atom[];
-  private _trajectory: Trajectory;
-  private _singleFrameMode = true;
+  private _selected: Atom[] = [];
+  private _atoms: Atom[] = [];
+  private _bonds: Bond[] = [];
+  private _universe: Scene;
 
   constructor() {
-    this._trajectory = new Trajectory();
-    this._selected = [];
+    this._universe = Scene.instance();
   }
 
-  public get trajectory() {
-    return this._trajectory;
+  get scene(): Scene { return this._universe; }
+
+  get atoms(): Atom[] { return this._atoms; }
+  get bonds(): Bond[] { return this._bonds; }
+
+  add_atom(_name: string, x: number, y: number, z: number, _props: Record<string, IProp> = {}): Atom {
+    const atom = this._universe.addAtom(new Vector3(x, y, z));
+    this._atoms.push(atom);
+    return atom;
   }
 
-  public get current_frame() {
-    return this._trajectory.currentFrame;
+  add_bond(itom: Atom, jtom: Atom, props: Record<string, IProp> = {}): Bond {
+    const bond = this._universe.addBond(itom, jtom, props);
+    this._bonds.push(bond);
+    return bond;
   }
 
-  public set current_frame_index(idx: number) {
-    this._trajectory.currentIndex = idx;
+  remove_atom(atom: Atom) {
+    this._atoms = this._atoms.filter(a => a !== atom);
+    this._bonds = this._bonds.filter(b => b.itom !== atom && b.jtom !== atom);
+    this._universe.removeAtom(atom);
   }
 
-  public get current_frame_index(): number {
-    return this._trajectory.currentIndex;
+  clear() {
+    this._atoms = [];
+    this._bonds = [];
+    // Recreate scene to ensure clean ECS state
+    (this as any)._universe = Scene.instance();
   }
 
-  public getFrame(idx: number): Frame | undefined {
-    return this._trajectory.getFrame(idx);
-  }
+  public select_atom(atom: Atom) { this._selected.push(atom); }
 
-  public set_frame(idx: number) {
-    if (this._singleFrameMode) return;
-    this._trajectory.currentIndex = idx;
-  }
-
-  public next_frame() {
-    if (this._singleFrameMode) {
-      return this._trajectory.currentFrame;
-    }
-    return this._trajectory.nextFrame();
-  }
-
-  public prev_frame() {
-    if (this._singleFrameMode) {
-      return this._trajectory.currentFrame;
-    }
-    return this._trajectory.prevFrame();
-  }
-
-  static random_atom_id(): string {
-    const randomNum = Math.floor(Math.random() * 0x10000);
-
-    const hexID = randomNum.toString(16).padStart(4, "0");
-
-    return hexID;
-  }
-
-  public select_atom(atom: Atom) {
-    this._selected.push(atom);
-  }
-
-  public append_frame(frame: Frame) {
-    this._trajectory.addFrame(frame);
-    this._singleFrameMode = this._trajectory.frames.length === 1;
-  }
-
-  get n_frames(): number {
-    return this._trajectory.frames.length;
-  }
-
-  get single_frame_mode(): boolean {
-    return this._singleFrameMode;
-  }
+  // Back-compat for UI indicators: single pseudo-frame
+  public get current_frame_index(): number { return 0; }
+  public get n_frames(): number { return 1; }
 }
 
-// Export ECS-based classes
-export { System, Frame, Atom, Bond, Trajectory };
-export type { IEntity, IProp };
+export { System, Atom, Bond, Scene, Topology, Frame, Trajectory };
+export type { IProp };

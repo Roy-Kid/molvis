@@ -1,5 +1,5 @@
 export { Molvis } from "./app";
-export { System, Frame, Atom, Bond, Trajectory } from "./system";
+export { System, Frame, Atom, Bond, Trajectory, Scene, Topology } from "./system";
 export { World } from "./world";
 export { GuiManager } from "./gui";
 export type { IEntity, IProp } from "./system";

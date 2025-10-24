@@ -1,310 +1,102 @@
 import {
-  Matrix,
-  Vector3,
-  MeshBuilder,
-  type Scene,
-  type LinesMesh,
-  Color3,
+    Matrix,
+    Vector3,
+    MeshBuilder,
+    type Scene,
+    type LinesMesh,
+    Color3,
 } from "@babylonjs/core";
+
+import { MrBox } from "molrs-wasm";
 
 /**
  * Box class for molecular dynamics simulations
  * Supports both orthogonal and triclinic boxes
  */
 export class Box {
-    // Box vectors stored as array of Vector3
-    private _box_vectors: Vector3[];
-    private _box_matrix: Matrix | null;
-    private _inv_matrix: Matrix | null;
-    private _is_orthogonal: boolean;
-    private _box_lengths: Vector3;
-    private _box_angles: Vector3;
 
-    /**
-     * Create a new simulation box
-     * 
-     * @param boxInput - Either a matrix, array of vectors, or dimensions for orthogonal box
-     * @param angles - For orthogonal box, optional angles in degrees (alpha, beta, gamma)
-     */
-    constructor(boxInput: Matrix | Vector3[] | Vector3, angles?: Vector3) {
-        // Initialize with default values
-        this._box_vectors = [];
-        this._box_matrix = null;
-        this._inv_matrix = null;
-        
-        if (boxInput instanceof Matrix) {
-            // Convert matrix to vectors
-            this._box_vectors = this.extract_vectors_from_matrix(boxInput);
-            this._box_matrix = boxInput.clone();
-        } 
-        else if (Array.isArray(boxInput) && boxInput.length === 3 && boxInput[0] instanceof Vector3) {
-            // Copy vectors directly
-            this._box_vectors = boxInput.map(v => v.clone());
-            this._box_matrix = this.create_matrix_from_vectors(this._box_vectors);
-        } 
-        else if (boxInput instanceof Vector3) {
-            // Orthogonal box from dimensions
-            if (angles) {
-                // Non-orthogonal box with specified angles
-                this._box_vectors = this.create_vectors_from_lengths_angles(boxInput, angles);
-                this._box_matrix = this.create_matrix_from_vectors(this._box_vectors);
-            } else {
-                // Simple orthogonal box
-                this._box_vectors = [
-                    new Vector3(boxInput.x, 0, 0),
-                    new Vector3(0, boxInput.y, 0),
-                    new Vector3(0, 0, boxInput.z)
-                ];
-                this._box_matrix = this.create_matrix_from_vectors(this._box_vectors);
-            }
-        } 
-        else {
-            throw new Error("Invalid box input - must be Matrix, array of 3 Vector3, or Vector3 dimensions");
-        }
-        
-        // Calculate derived properties
-        this._is_orthogonal = this.check_if_orthogonal();
-        if (this._box_matrix) {
-            this._inv_matrix = Matrix.Invert(this._box_matrix);
-        }
-        this._box_lengths = this.calculate_box_lengths();
-        this._box_angles = this.calculate_box_angles();
+    private box: MrBox;
+
+    constructor(matrix: Vector3[], origin?: Vector3, pbc?: boolean[]) {
+        const _origin = new Float32Array([origin?.x ?? 0, origin?.y ?? 0, origin?.z ?? 0]);
+        const h = Box.hFromVectors(matrix);
+        const _pbc = pbc
+            ? new Uint8Array([pbc[0] ? 1 : 0, pbc[1] ? 1 : 0, pbc[2] ? 1 : 0])
+            : new Uint8Array([1, 1, 1]);
+        this.box = new MrBox(h, _origin, _pbc);
     }
 
-    /**
-     * Extract box vectors from a 4x4 matrix
-     */
-    private extract_vectors_from_matrix(matrix: Matrix): Vector3[] {
-        const result: Vector3[] = [];
-        
-        // Create temporary matrix to safely extract the vectors
-        const m = matrix.clone().m;
-        
-        // Extract the three column vectors
-        result.push(new Vector3(
-            m[0],
-            m[4],
-            m[8]
-        ));
-        
-        result.push(new Vector3(
-            m[1],
-            m[5],
-            m[9]
-        ));
-        
-        result.push(new Vector3(
-            m[2],
-            m[6],
-            m[10]
-        ));
-        
-        return result;
-    }
-
-    /**
-     * Create a 4x4 matrix from box vectors
-     */
-    private create_matrix_from_vectors(vectors: Vector3[]): Matrix {
-        const matrix = new Matrix();
-        
-        // Create a matrix with the vectors as columns
-        Matrix.FromValuesToRef(
-            vectors[0].x, vectors[1].x, vectors[2].x, 0,
-            vectors[0].y, vectors[1].y, vectors[2].y, 0,
-            vectors[0].z, vectors[1].z, vectors[2].z, 0,
-            0, 0, 0, 1,
-            matrix
-        );
-        
-        return matrix;
-    }
-
-    /**
-     * Create box vectors from lengths and angles
-     */
-    private create_vectors_from_lengths_angles(lengths: Vector3, angles: Vector3): Vector3[] {
-        // Convert angles from degrees to radians
-        const alpha = angles.x * Math.PI / 180;
-        const beta = angles.y * Math.PI / 180;
-        const gamma = angles.z * Math.PI / 180;
-
-        // First vector along x-axis
-        const v1 = new Vector3(lengths.x, 0, 0);
-
-        // Second vector in xy-plane
-        const v2 = new Vector3(
-            lengths.y * Math.cos(gamma),
-            lengths.y * Math.sin(gamma),
-            0
-        );
-
-        // Third vector with components in all dimensions
-        const v3_x = lengths.z * Math.cos(beta);
-        const v3_y = lengths.z * (Math.cos(alpha) - Math.cos(beta) * Math.cos(gamma)) / Math.sin(gamma);
-        const v3_z_squared = lengths.z * lengths.z - v3_x * v3_x - v3_y * v3_y;
-        // Avoid numerical errors that might make v3_z_squared slightly negative
-        const v3_z = Math.sqrt(Math.max(0, v3_z_squared));
-        
-        const v3 = new Vector3(v3_x, v3_y, v3_z);
-
-        return [v1, v2, v3];
-    }
-
-    /**
-     * Check if the box is orthogonal
-     */
-    private check_if_orthogonal(): boolean {
-        const eps = 1e-10;
-        
-        // Check if all vectors are aligned with the coordinate axes
-        return (
-            Math.abs(this._box_vectors[0].y) < eps && Math.abs(this._box_vectors[0].z) < eps &&
-            Math.abs(this._box_vectors[1].x) < eps && Math.abs(this._box_vectors[1].z) < eps &&
-            Math.abs(this._box_vectors[2].x) < eps && Math.abs(this._box_vectors[2].y) < eps
+    static box(length: Vector3) : Box {
+        return new Box(
+            [
+                new Vector3(length.x, 0, 0),
+                new Vector3(0, length.y, 0),
+                new Vector3(0, 0, length.z),
+            ]
         );
     }
 
-    /**
-     * Calculate box lengths from box vectors
-     */
-    private calculate_box_lengths(): Vector3 {
-        return new Vector3(
-            this._box_vectors[0].length(),
-            this._box_vectors[1].length(),
-            this._box_vectors[2].length()
-        );
+    public getPBC(): boolean[] {
+        const pbc = this.box.pbc();
+        return [pbc[0] === 1, pbc[1] === 1, pbc[2] === 1];
     }
+
+    // Return Babylon Matrix built from row-major 3x3 H
+    public getMatrix(): Vector3[] {
+        const m = this.box.matrix() as Float32Array | number[];
+        return [
+            new Vector3(m[0], m[3], m[6]),
+            new Vector3(m[1], m[4], m[7]),
+            new Vector3(m[2], m[5], m[8]),
+        ];
+    }
+
+    public isOrtho(): boolean { return (this.box as any).is_ortho(); }
 
     /**
      * Calculate box angles from box vectors
      */
-    private calculate_box_angles(): Vector3 {
-        // Create normalized vectors
-        const v1_norm = Vector3.Normalize(this._box_vectors[0]);
-        const v2_norm = Vector3.Normalize(this._box_vectors[1]);
-        const v3_norm = Vector3.Normalize(this._box_vectors[2]);
-
-        // Calculate angles in degrees
-        const alpha = Math.acos(Vector3.Dot(v2_norm, v3_norm)) * 180 / Math.PI;
-        const beta = Math.acos(Vector3.Dot(v1_norm, v3_norm)) * 180 / Math.PI;
-        const gamma = Math.acos(Vector3.Dot(v1_norm, v2_norm)) * 180 / Math.PI;
-        
-        return new Vector3(alpha, beta, gamma);
+    public getAngles(): Vector3 {
+    const a = (this.box as any).get_angles() as Float32Array | number[];
+        return new Vector3(a[0], a[1], a[2]);
     }
 
     /**
      * Get the volume of the box
      */
-    public get_volume(): number {
-        // Volume is the triple product: v1 · (v2 × v3)
-        const crossProduct = Vector3.Cross(this._box_vectors[1], this._box_vectors[2]);
-        return Math.abs(Vector3.Dot(this._box_vectors[0], crossProduct));
-    }
+    public getVolume(): number { return this.box.volume(); }
 
     /**
      * Get the dimensions (lengths) of the box
      */
-    public get_dimensions(): Vector3 {
-        return this._box_lengths.clone();
+    public getBounds(): Vector3 {
+        const l = this.box.lengths();
+        return new Vector3(l[0], l[1], l[2]);
     }
 
     /**
      * Get the angles of the box in degrees
      */
-    public get_angles(): Vector3 {
-        return this._box_angles.clone();
-    }
-
-    /**
-     * Wrap a position into the box
-     * 
-     * @param position - Position to wrap
-     * @returns Wrapped position
-     */
-    public wrap_position(position: Vector3): Vector3 {
-        // Convert to fractional coordinates
-        const fractional = this.cartesian_to_fractional(position);
-        
-        // Apply periodic boundary conditions
-        fractional.x -= Math.floor(fractional.x);
-        fractional.y -= Math.floor(fractional.y);
-        fractional.z -= Math.floor(fractional.z);
-        
-        // Convert back to Cartesian
-        return this.fractional_to_cartesian(fractional);
+    // Wrap a single position into the primary image
+    public wrapSingle(position: Vector3): Vector3 {
+    const w = (this.box as any).wrap_single(new Float32Array([position.x, position.y, position.z])) as Float32Array | number[];
+        return new Vector3(w[0], w[1], w[2]);
     }
 
     /**
      * Convert Cartesian coordinates to fractional coordinates
      */
-    public cartesian_to_fractional(position: Vector3): Vector3 {
-        if (this._is_orthogonal) {
-            // Orthogonal case is simpler
-            return new Vector3(
-                position.x / this._box_lengths.x,
-                position.y / this._box_lengths.y,
-                position.z / this._box_lengths.z
-            );
-        }
-        
-        // For triclinic box, use the inverse matrix
-        if (!this._inv_matrix) {
-            this._inv_matrix = Matrix.Invert(this._box_matrix!);
-        }
-        return Vector3.TransformCoordinates(position, this._inv_matrix);
+    public toFrac(position: Vector3): Vector3 {
+    const f = (this.box as any).cartesian_to_fractional_single(new Float32Array([position.x, position.y, position.z])) as Float32Array | number[];
+        return new Vector3(f[0], f[1], f[2]);
     }
 
     /**
      * Convert fractional coordinates to Cartesian coordinates
      */
-    public fractional_to_cartesian(fractional: Vector3): Vector3 {
-        if (this._is_orthogonal) {
-            // Orthogonal case is simpler
-            return new Vector3(
-                fractional.x * this._box_lengths.x,
-                fractional.y * this._box_lengths.y,
-                fractional.z * this._box_lengths.z
-            );
-        }
-        
-        // For triclinic box, linear combination of basis vectors
-        const result = new Vector3(0, 0, 0);
-        result.addInPlace(this._box_vectors[0].scale(fractional.x));
-        result.addInPlace(this._box_vectors[1].scale(fractional.y));
-        result.addInPlace(this._box_vectors[2].scale(fractional.z));
-        return result;
-    }
-
-    /**
-     * Calculate the minimum image distance between two points
-     * 
-     * @param pos1 - First position
-     * @param pos2 - Second position
-     * @returns Minimum image vector from pos1 to pos2
-     */
-    public minimum_image_distance(pos1: Vector3, pos2: Vector3): Vector3 {
-        // Convert to fractional coordinates
-        const frac1 = this.cartesian_to_fractional(pos1);
-        const frac2 = this.cartesian_to_fractional(pos2);
-        
-        // Calculate fractional displacement
-        const fracDiff = frac2.subtract(frac1);
-        
-        // Apply minimum image convention
-        fracDiff.x -= Math.round(fracDiff.x);
-        fracDiff.y -= Math.round(fracDiff.y);
-        fracDiff.z -= Math.round(fracDiff.z);
-        
-        // Convert back to Cartesian
-        return this.fractional_to_cartesian(fracDiff);
-    }
-
-    /**
-     * Calculate the distance between two points with periodic boundary conditions
-     */
-    public minimum_image_distance_scalar(pos1: Vector3, pos2: Vector3): number {
-        return this.minimum_image_distance(pos1, pos2).length();
+    public toCart(fractional: Vector3): Vector3 {
+    const c = (this.box as any).fractional_to_cartesian_single(new Float32Array([fractional.x, fractional.y, fractional.z])) as Float32Array | number[];
+        return new Vector3(c[0], c[1], c[2]);
     }
 
     /**
@@ -313,66 +105,30 @@ export class Box {
      * @param direction - Direction index (0=x, 1=y, 2=z)
      * @returns Distance between faces
      */
-    public distance_between_faces(direction: number): number {
-        if (direction < 0 || direction > 2) {
-            throw new Error("Direction must be 0, 1, or 2 (for x, y, z)");
-        }
-        
-        if (this._is_orthogonal) {
-            // For orthogonal box, it's just the length in that dimension
-            return this._box_lengths.asArray()[direction];
-        }
-        
-        // For triclinic box, calculate the distance between planes
-        // We need the reciprocal basis vector for this direction
-        // The reciprocal vectors are the rows of the inverse matrix
-        if (!this._inv_matrix) {
-            this._inv_matrix = Matrix.Invert(this._box_matrix!);
-        }
-        
-        // Extract the correct row from the inverse matrix
-        const row = this._inv_matrix.getRow(direction)!;
-        const recipVector = new Vector3(row.x, row.y, row.z);
-        
-        // Distance between planes is 1 / |reciprocal vector|
-        return 1.0 / recipVector.length();
+    public distBetweenFaces(direction: number): number {
+        if (direction < 0 || direction > 2) throw new Error("Direction must be 0, 1, or 2 (for x, y, z)");
+    return (this.box as any).dist_between_faces(direction) as number;
     }
 
     /**
      * Calculate the center of the box
      */
-    public get_center(): Vector3 {
-        // Center is at fractional coordinates (0.5, 0.5, 0.5)
-        return this.fractional_to_cartesian(new Vector3(0.5, 0.5, 0.5));
-    }
+    public getCenter(): Vector3 { return this.toCart(new Vector3(0.5, 0.5, 0.5)); }
 
     /**
      * Get the box vectors
      */
-    public get_box_vectors(): Vector3[] {
-        return this._box_vectors.map(v => v.clone());
-    }
-
-    /**
-     * Get the box matrix (recreated from vectors if needed)
-     */
-    public get_box_matrix(): Matrix {
-        if (!this._box_matrix) {
-            this._box_matrix = this.create_matrix_from_vectors(this._box_vectors);
-        }
-        return this._box_matrix.clone();
+    public getLattice(i: number): Vector3 {
+        const m = this.box.matrix() as Float32Array | number[]; // row-major
+        return new Vector3(m[i], m[i + 3], m[i + 6]);
     }
 
     /**
      * Check if a position is inside the box
      */
-    public is_position_inside(position: Vector3): boolean {
-        const fractional = this.cartesian_to_fractional(position);
-        return (
-            fractional.x >= 0 && fractional.x < 1 &&
-            fractional.y >= 0 && fractional.y < 1 &&
-            fractional.z >= 0 && fractional.z < 1
-        );
+    public isin(position: Vector3): boolean {
+        const f = this.toFrac(position);
+        return f.x >= 0 && f.x < 1 && f.y >= 0 && f.y < 1 && f.z >= 0 && f.z < 1;
     }
     
     /**
@@ -380,42 +136,39 @@ export class Box {
      * Useful for visualization
      */
     public get_corners(): Vector3[] {
-        const corners: Vector3[] = [];
-        
-        // All combinations of 0 and 1 for fractional coordinates
-        for (let i = 0; i <= 1; i++) {
-            for (let j = 0; j <= 1; j++) {
-                for (let k = 0; k <= 1; k++) {
-                    corners.push(this.fractional_to_cartesian(new Vector3(i, j, k)));
-                }
-            }
-        }
-        
-        return corners;
+        // Compute corners from H and origin: cart = origin + H * frac
+        const m = this.box.matrix() as Float32Array | number[];
+        const o = this.box.origin() as Float32Array | number[];
+        const H = [
+            [m[0], m[1], m[2]],
+            [m[3], m[4], m[5]],
+            [m[6], m[7], m[8]],
+        ];
+        const fracs = [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [1, 1, 0],
+            [0, 0, 1],
+            [1, 0, 1],
+            [0, 1, 1],
+            [1, 1, 1],
+        ];
+        return fracs.map(([fx, fy, fz]) => {
+            const x = o[0] + H[0][0] * fx + H[0][1] * fy + H[0][2] * fz;
+            const y = o[1] + H[1][0] * fx + H[1][1] * fy + H[1][2] * fz;
+            const z = o[2] + H[2][0] * fx + H[2][1] * fy + H[2][2] * fz;
+            return new Vector3(x, y, z);
+        });
     }
 
-    /**
-     * Expand the box by a factor in each dimension
-     */
-    public expand(factors: Vector3): Box {
-        if (this._is_orthogonal) {
-            // Simple scaling for orthogonal box
-            const newLengths = new Vector3(
-                this._box_lengths.x * factors.x,
-                this._box_lengths.y * factors.y,
-                this._box_lengths.z * factors.z
-            );
-            return new Box(newLengths);
-        } else {
-            // Scale each vector for triclinic box
-            const newVectors = [
-                this._box_vectors[0].scale(factors.x),
-                this._box_vectors[1].scale(factors.y),
-                this._box_vectors[2].scale(factors.z)
-            ];
-            
-            return new Box(newVectors);
-        }
+    private static hFromVectors(vectors: Vector3[]): Float32Array {
+        // Row-major 3x3 from column vectors
+        return new Float32Array([
+            vectors[0].x, vectors[1].x, vectors[2].x,
+            vectors[0].y, vectors[1].y, vectors[2].y,
+            vectors[0].z, vectors[1].z, vectors[2].z,
+        ]);
     }
 
     /**
