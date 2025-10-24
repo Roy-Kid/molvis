@@ -157,6 +157,7 @@ class EditMode extends BaseMode {
         this._hoverAtom = null;
         const xyz = get_vec3_from_screen_with_depth(
           this.world.scene,
+          this.world.scene,
           pointerInfo.event.clientX,
           pointerInfo.event.clientY,
           10,
