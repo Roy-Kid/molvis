@@ -1,13 +1,32 @@
-export { Molvis } from "./app";
-export { System, Frame, Atom, Bond, Trajectory, Scene, Topology } from "./system";
+export { Molvis, mountMolvis, createMolvisDom, resolveMolvisOptions } from "./app";
+export { Frame, Atom, Bond, Scene, Topology, Box } from "./structure";
+// System and Trajectory removed; use structure module only
 export { World } from "./world";
 export { GuiManager } from "./gui";
-export type { IEntity, IProp } from "./system";
-export { draw_atom, draw_frame, draw_bond, draw_box } from "./artist";
+export type { IEntity, IProp } from "./structure/base";
+export {
+  ArtistBase,
+  ArtistRegistry,
+  InstancedArtist,
+  MeshArtist,
+  ArtistCommand,
+} from "./artist";
 export type {
-  IDrawAtomOptions,
-  IDrawBondOptions,
-  IDrawFrameOptions,
-  IDrawBoxOptions,
+  ArtistContext,
+  ArtistOp,
+  ArtistCtor,
+  DrawAtomInput,
+  DrawAtomOptions,
+  DrawBondInput,
+  DrawBondOptions,
+  DrawBoxInput,
+  DrawBoxOptions,
+  DrawSystemInput,
+  DrawSystemOptions,
+  DrawFrameInput,
+  DrawFrameOptions,
+  DrawGridInput,
+  RenderData,
 } from "./artist";
 export { ModeType } from "./mode";
+export type { MolvisOptions, ResolvedMolvisOptions, MolvisDomContext } from "./app";

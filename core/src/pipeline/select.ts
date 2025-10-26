@@ -1,4 +1,4 @@
-import type { IEntity } from "../system/base";
+import type { IEntity } from "../structure/base";
 import type { IModifier } from "./base";
 import { registerModifier } from "./base";
 import type { Mesh } from "@babylonjs/core";

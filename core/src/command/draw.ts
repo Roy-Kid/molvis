@@ -1,483 +1,213 @@
-import { Color3 } from "@babylonjs/core";
-import { registerCommand, type ICommand } from "./base";
-import type { Atom, Bond } from "../system/item";
-import {
-  draw_atom,
-  draw_frame,
-  draw_bond,
-  draw_box,
-  type IDrawAtomOptions,
-  type IDrawFrameOptions,
-  type IDrawBondOptions,
-} from "../artist";
-import type { Molvis } from "../app";
-import type { IProp } from "../system/base";
+import type { Mesh, LinesMesh } from "@babylonjs/core";
+import type { CommandExecutionContext } from "./base";
+import { defineCommand } from "./base";
+import type {
+  DrawAtomInput,
+  DrawBondInput,
+  DrawBoxInput,
+  DrawFrameInput,
+  DrawSystemInput,
+} from "../artist/types";
+import type { ArtistBase } from "../artist/base";
 
-// Inline type for Python Frame data
-type FrameData = {
-  blocks?: {
-    atoms?: {
-      xyz?: number[][];
-      type?: string[];
-      element?: string[];
-      name?: string[];
-      [key: string]: unknown[] | undefined;
-    };
-    bonds?: {
-      i?: number[];
-      j?: number[];
-      order?: number[];
-    };
-  };
-  box?: {
-    matrix: number[][];
-    pbc?: boolean[];
-    origin: number[];
-  };
+const VIEW_ARTIST_NAME = "basic";
+const MESH_ARTIST_NAME = "mesh";
+
+const ensureArtist = (ctx: CommandExecutionContext, name: string): ArtistBase => {
+  const artist = ctx.runtime.getArtist(name);
+  if (!artist) {
+    throw new Error(`Artist "${name}" is not registered.`);
+  }
+  return artist;
 };
 
-// Inline type for Python Box data
-type BoxData = {
-  matrix: number[][];
-  pbc: boolean[];
-  origin: number[];
+const toDrawAtomInput = (payload: unknown): DrawAtomInput => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("draw_atom expects an object payload.");
+  }
+  if (!("position" in (payload as Record<string, unknown>))) {
+    throw new Error("draw_atom payload must include a position.");
+  }
+  return payload as DrawAtomInput;
 };
 
-@registerCommand("draw_atom")
-class DrawAtom implements ICommand {
-  private app: Molvis
+const toDrawBondInput = (payload: unknown): DrawBondInput => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("draw_bond expects an object payload.");
+  }
+  if (!("start" in (payload as Record<string, unknown>)) || !("end" in (payload as Record<string, unknown>))) {
+    throw new Error("draw_bond payload must include start and end positions.");
+  }
+  return payload as DrawBondInput;
+};
 
-  constructor(app: Molvis) {
-    this.app = app;
+const toDrawBoxInput = (payload: unknown): DrawBoxInput => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("draw_box expects an object payload.");
+  }
+  if (!("box" in (payload as Record<string, unknown>))) {
+    throw new Error("draw_box payload must include box data.");
+  }
+  return payload as DrawBoxInput;
+};
+
+const toDrawSystemInput = (payload: unknown): DrawSystemInput => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("draw_system expects an object payload.");
+  }
+  if (!("atoms" in (payload as Record<string, unknown>))) {
+    throw new Error("draw_system payload must include atoms data.");
+  }
+  const systemPayload = payload as DrawSystemInput;
+  if (!Array.isArray(systemPayload.atoms.xyz)) {
+    throw new Error("draw_system atoms.xyz must be an array.");
+  }
+  return systemPayload;
+};
+
+const toDrawFrameInput = (payload: unknown): DrawFrameInput => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("draw_frame expects an object payload.");
+  }
+  if (!("frame" in (payload as Record<string, unknown>))) {
+    throw new Error("draw_frame payload must include a frame property.");
+  }
+  return payload as DrawFrameInput;
+};
+
+defineCommand("draw_atom", async (ctx, payload) => {
+  const artist = ensureArtist(ctx, MESH_ARTIST_NAME);
+  const mesh = await artist.invoke<Mesh>("draw_atom", toDrawAtomInput(payload));
+  const meshes = mesh ? [mesh] : [];
+  return {
+    success: true,
+    data: { meshName: mesh?.name, count: meshes.length },
+    meshes,
+    entities: [],
+  };
+});
+
+defineCommand("draw_bond", async (ctx, payload) => {
+  const artist = ensureArtist(ctx, MESH_ARTIST_NAME);
+  const meshes = await artist.invoke<Mesh[]>("draw_bond", toDrawBondInput(payload));
+  return {
+    success: true,
+    data: { count: meshes.length },
+    meshes,
+    entities: [],
+  };
+});
+
+defineCommand("draw_box", async (ctx, payload) => {
+  const artist = ensureArtist(ctx, MESH_ARTIST_NAME);
+  const meshes = await artist.invoke<LinesMesh[]>("draw_box", toDrawBoxInput(payload));
+  return {
+    success: true,
+    data: { count: meshes.length },
+    meshes,
+    entities: [],
+  };
+});
+
+defineCommand("draw_frame", async (ctx, payload) => {
+  const artist = ensureArtist(ctx, VIEW_ARTIST_NAME);
+  const meshes = await artist.invoke<Mesh[]>("draw_frame", toDrawFrameInput(payload));
+  return {
+    success: true,
+    data: { count: meshes.length },
+    meshes,
+    entities: [],
+  };
+});
+
+defineCommand("clear", (ctx) => {
+  ctx.app.world.clear();
+  return { success: true, meshes: [], entities: [] };
+});
+
+defineCommand("set_style", () => {
+  return { success: true, meshes: [], entities: [] };
+});
+
+defineCommand("set_theme", (_ctx, payload: { theme: string }) => {
+  return { success: true, data: { theme: payload.theme }, meshes: [], entities: [] };
+});
+
+defineCommand("set_view_mode", (ctx, payload: { mode: string }) => {
+  switch (payload.mode) {
+    case "persp":
+      ctx.app.world.setPerspective();
+      break;
+    case "ortho":
+      ctx.app.world.setOrthographic();
+      break;
+    case "front":
+      ctx.app.world.viewFront();
+      break;
+    case "back":
+      ctx.app.world.viewBack();
+      break;
+    case "left":
+      ctx.app.world.viewLeft();
+      break;
+    case "right":
+      ctx.app.world.viewRight();
+      break;
+    default:
+      break;
   }
 
-  public do(args: {
-    name: string;
-    x: number;
-    y: number;
-    z: number;
-    options: IDrawAtomOptions;
-  }) {
-    const { name, x, y, z, options, ...props } = args;
-  const atom = this.app.system.add_atom(name, x, y, z, props);
-    const sphere = draw_atom(this.app, atom, options ?? {});
-    return {
-      success: true,
-      message: `Atom ${name} drawn at (${x}, ${y}, ${z})`,
-      data: { atomName: name, position: [x, y, z], meshName: sphere.name },
-      count: 1
-    };
-  }
+  return { success: true, data: { mode: payload.mode }, meshes: [], entities: [] };
+});
 
-  public undo() {}
-}
+defineCommand("set_grid_size", (ctx, payload: { size: number }) => {
+  ctx.app.world.gridGround.setSize(payload.size, payload.size);
+  return { success: true, data: { size: payload.size }, meshes: [], entities: [] };
+});
 
-@registerCommand("draw_bond")
-class DrawBond implements ICommand {
-  private app: Molvis
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: {
-    x1: number;
-    y1: number;
-    z1: number;
-    x2: number;
-    y2: number;
-    z2: number;
-    options: IDrawBondOptions;
-  }) {
-    const { x1, y1, z1, x2, y2, z2, options, ...props } = args;
-    
-    // Create atoms if they don't exist
-  const itom = this.app.system.add_atom("bond_atom_1", x1, y1, z1, props);
-  const jtom = this.app.system.add_atom("bond_atom_2", x2, y2, z2, props);
-  const bond = this.app.system.add_bond(itom, jtom, props);
-    const tubes = draw_bond(this.app, bond, options);
-    return {
-      success: true,
-      message: `Bond drawn between (${x1}, ${y1}, ${z1}) and (${x2}, ${y2}, ${z2})`,
-      data: { 
-        atom1: [x1, y1, z1], 
-        atom2: [x2, y2, z2], 
-        bondOrder: bond.order,
-        meshCount: tubes.length 
-      },
-      count: tubes.length
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("draw_frame")
-class DrawFrame implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) { this.app = app; }
-
-  public do(args: { frameData: FrameData; options: IDrawFrameOptions; }) {
-    const { frameData, options } = args;
-    const atoms: Atom[] = [];
-    const bonds: Bond[] = [];
-
-    const frame_atoms = frameData.blocks?.atoms || {};
-    const frame_bonds = frameData.blocks?.bonds || {};
-
-    if (frame_atoms.xyz) {
-      const { xyz, type = [], element = [], name = [], ...rest } = frame_atoms;
-      for (let i = 0; i < xyz.length; i++) {
-        const atomType = type[i] || element[i] || "C";
-        const atomName = name[i] || `atom_${i}`;
-        const props: Record<string, IProp> = {
-          type: atomType,
-          element: element[i] || atomType,
-        };
-        for (const key in rest) {
-          const arr = rest[key] as unknown[] | undefined;
-          if (arr && arr[i] !== undefined) props[key] = arr[i] as IProp;
-        }
-        const atom = this.app.system.add_atom(atomName, xyz[i][0], xyz[i][1], xyz[i][2], props);
-        atoms.push(atom);
-      }
-    }
-
-    if (frame_bonds?.i && frame_bonds?.j && atoms.length > 0) {
-      const { i, j, order = [] } = frame_bonds;
-      for (let idx = 0; idx < i.length; idx++) {
-        if (atoms[i[idx]] && atoms[j[idx]]) {
-          const bond = this.app.system.add_bond(atoms[i[idx]], atoms[j[idx]], { order: order[idx] || 1 });
-          bonds.push(bond);
-        }
-      }
-    }
-
-    // GUI frame indicator (single frame model)
-    if (this.app.gui) this.app.gui.updateFrameIndicator(0, 1);
-
-    const meshes = draw_frame(this.app, atoms, bonds, options);
-    return {
-      success: true,
-      message: `Frame drawn successfully with ${atoms.length} atoms and ${bonds.length} bonds`,
-      data: {
-        atomsCount: atoms.length,
-        bondsCount: bonds.length,
-        meshesCount: meshes.length,
-        frameIndex: 0,
-      },
-      count: meshes.length,
-    };
-  }
-
-  public undo() {}
-}
-
-
-@registerCommand("draw_box")
-class DrawBox implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: {
-    boxData: BoxData;
+defineCommand(
+  "enable_grid",
+  (
+    ctx,
     options: {
-      color?: string;
-      lineWidth?: number;
-      visible?: boolean;
-    };
-  }) {
-    const { boxData, options } = args;
-    
-    // Convert color string to Color3 if provided
-    let color;
-    if (options.color) {
-      color = Color3.FromHexString(options.color);
+      mainColor?: string;
+      lineColor?: string;
+      opacity?: number;
+      majorUnitFrequency?: number;
+      minorUnitVisibility?: number;
+      distanceThreshold?: number;
+      minGridStep?: number;
+      size?: number;
+    } = {},
+  ) => {
+    const { world } = ctx.app;
+    if (world.gridGround.isEnabled) {
+      world.gridGround.disable();
     }
-    
-    const meshes = draw_box(this.app, boxData, {
-      visible: options.visible ?? true,
-      color,
-      lineWidth: options.lineWidth,
-    });
-    
-    return {
-      success: true,
-      message: `Box drawn with ${meshes.length} meshes`,
-      data: {
-        boxMatrix: boxData.matrix,
-        boxOrigin: boxData.origin,
-        meshCount: meshes.length,
-        color: options.color,
-        lineWidth: options.lineWidth
-      },
-      count: meshes.length
-    };
-  }
+    world.gridGround.enable();
 
-  public undo() {}
-}
-
-
-@registerCommand("clear")
-class Clear implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do() {
-
-  this.app.world.clear();
-  this.app.system.clear();
-    
-    return {
-      success: true,
-      message: "All meshes cleared up",
-      data: { cleared: true },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("set_style")
-class SetStyle implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: {
-    style?: string;
-    atoms?: {
-      radius?: number | number[] | null;
-    };
-    bonds?: {
-      radius?: number;
-    };
-  }) {
-    // Apply style changes
-    // This would update the visual appearance of atoms and bonds
-  // Touch world/scene to avoid unused warnings in strict mode
-  void this.app.world.scene.meshes.length;
-    
-    return {
-      success: true,
-      message: "Style updated successfully",
-      data: { style: args.style, atoms: args.atoms, bonds: args.bonds },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("set_theme")
-class SetTheme implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: {
-    theme: string;
-  }) {
-    // Apply theme changes
-    // This would update the overall visual theme
-  // Touch world to avoid unused warnings in strict mode
-  void this.app.world.isRunning;
-    
-    return {
-      success: true,
-      message: `Theme "${args.theme}" applied successfully`,
-      data: { theme: args.theme },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("set_view_mode")
-class SetViewMode implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: { mode: string }) {
-    const { mode } = args;
-    
-    // Set view mode in world camera
-    if (this.app.world) {
-      switch (mode) {
-        case "persp":
-          this.app.world.setPerspective();
-          break;
-        case "ortho":
-          this.app.world.setOrthographic();
-          break;
-        case "top":
-        case "front":
-        case "side":
-          // These view modes can be implemented later
-          break;
-        default:
-          // Unknown view mode
-      }
+    const appearance: Record<string, unknown> = { ...options };
+    if (options.mainColor) {
+      appearance.mainColor = Color3.FromHexString(options.mainColor);
     }
-    
-    return {
-      success: true,
-      message: `View mode "${mode}" applied`,
-      data: { mode: mode },
-      count: 0
-    };
-  }
+    if (options.lineColor) {
+      appearance.lineColor = Color3.FromHexString(options.lineColor);
+    }
 
-  public undo() {}
-}
+    if (Object.keys(appearance).length > 0) {
+      world.gridGround.updateAppearance(appearance);
+    }
 
-// Frame info commands removed in Scene-centric rewrite
+    return { success: true, data: options, meshes: [], entities: [] };
+  },
+);
 
-@registerCommand("set_grid_size")
-class SetGridSize implements ICommand {
-  private app: Molvis;
+defineCommand("disable_grid", (ctx) => {
+  ctx.app.world.gridGround.disable();
+  return { success: true, meshes: [], entities: [] };
+});
 
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(args: { size: number }) {
-    const { size } = args;
-    this.app.world.gridGround.setSize(size, size);
-    return {
-      success: true,
-      message: `Grid size set to ${size}`,
-      data: { size: size },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("enable_grid")
-class EnableGrid implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do(options: {
-    mainColor?: string;
-    lineColor?: string;
-    opacity?: number;
-    majorUnitFrequency?: number;
-    minorUnitVisibility?: number;
-    distanceThreshold?: number;
-    minGridStep?: number;
-    size?: number;
-  }) {
-      if (this.app.world.gridGround.isEnabled) {
-        this.app.world.gridGround.disable();
-      }
-    
-      this.app.world.gridGround.enable();
-      
-      // Apply custom grid settings if provided
-      if (Object.keys(options).length > 0) {
-        // Convert string colors to Color3
-        const gridOptions: any = { ...options };
-        if (gridOptions.mainColor) {
-          gridOptions.mainColor = Color3.FromHexString(gridOptions.mainColor);
-        }
-        if (gridOptions.lineColor) {
-          gridOptions.lineColor = Color3.FromHexString(gridOptions.lineColor);
-        }
-        
-        this.app.world.gridGround.updateAppearance(gridOptions);
-      }
-
-    
-    return {
-      success: true,
-      message: `Grid enabled with options: ${JSON.stringify(options)}`,
-      data: options,
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("disable_grid")
-class DisableGrid implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do() {
-    this.app.world.gridGround.disable();
-    return {
-      success: true,
-      message: "Grid disabled",
-      data: { disabled: true },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-@registerCommand("is_grid_enabled")
-class IsGridEnabled implements ICommand {
-  private app: Molvis;
-
-  constructor(app: Molvis) {
-    this.app = app;
-  }
-
-  public do() {
-    // Return empty arrays to match ICommand interface, but store result in app for retrieval
-    const enabled = this.app.world.gridGround.isEnabled;
-    (this.app as any)._lastGridEnabledStatus = enabled;
-    return {
-      success: true,
-      message: "Grid enabled status retrieved",
-      data: { enabled: enabled },
-      count: 0
-    };
-  }
-
-  public undo() {}
-}
-
-
-export { 
-  DrawAtom, 
-  DrawBond, 
-  DrawFrame, 
-  DrawBox, 
-  Clear, 
-  SetStyle, 
-  SetTheme, 
-  SetViewMode, 
-  SetGridSize,
-  EnableGrid,
-  DisableGrid,
-  IsGridEnabled
-};
+defineCommand("is_grid_enabled", (ctx) => {
+  const enabled = ctx.app.world.gridGround.isEnabled;
+  return { success: true, data: { enabled }, meshes: [], entities: [] };
+});

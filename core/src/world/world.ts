@@ -11,7 +11,7 @@ import {
 import { AxisHelper } from "./axes";
 import { GridGround } from "./grid";
 import { Pipeline } from "../pipeline";
-import type { Box } from "../system/box";
+import type { Box } from "../structure/box";
 
 
 // import { Logger } from "tslog";

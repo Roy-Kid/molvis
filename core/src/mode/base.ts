@@ -9,9 +9,6 @@ import type {
   AbstractMesh,
   Observer,
 } from "@babylonjs/core";
-import {
-  draw_frame
-} from "@molvis/core";
 import type { Molvis } from "@molvis/core";
 
 enum ModeType {
@@ -257,31 +254,9 @@ abstract class BaseMode {
   _on_pointer_pick(_pointerInfo: PointerInfo): void {}
   _on_pointer_tap(_pointerInfo: PointerInfo): void {}
   _on_pointer_double_tap(_pointerInfo: PointerInfo): void {}
-  _on_press_e(): void {
-    const frame = this.system.next_frame();
-    // 切换frame时先清除旧内容
-    this.world.clear();
-    draw_frame(this.app, frame, { atoms: {}, bonds: {} });
-    if (this.gui) {
-      this.gui.updateFrameIndicator(
-        this.system.current_frame_index,
-        this.system.n_frames,
-      );
-    }
-  }
+  _on_press_e(): void {}
   
-  _on_press_q(): void {
-    const frame = this.system.prev_frame();
-    // 切换frame时先清除旧内容
-    this.world.clear();
-    draw_frame(this.app, frame, { atoms: {}, bonds: {} });
-    if (this.gui) {
-      this.gui.updateFrameIndicator(
-        this.system.current_frame_index,
-        this.system.n_frames,
-      );
-    }
-  }
+  _on_press_q(): void {}
   
   protected _on_press_escape(): void {
     // Override in subclasses for custom escape behavior
@@ -302,7 +277,10 @@ abstract class BaseMode {
       scene.pointerX, 
       scene.pointerY,
       (mesh) => {
-        return mesh.name.startsWith(`${type}:`) && mesh.isEnabled() && mesh.isVisible;
+        const md: any = (mesh as any).metadata;
+        const byMeta = md && md.type === type;
+        const byName = mesh.name.startsWith(`${type}:`);
+        return (byMeta || byName) && mesh.isEnabled() && mesh.isVisible;
       },
       false,
       this.world.camera

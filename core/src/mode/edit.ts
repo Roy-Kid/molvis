@@ -7,10 +7,9 @@ import {
 } from '@babylonjs/core';
 import type { Atom, Molvis } from '@molvis/core';
 import { Pane } from 'tweakpane';
-import { System } from '../system';
+// import { System } from '../system';
 import { BaseMode, ModeType } from './base';
 import { get_vec3_from_screen_with_depth } from './utils';
-import { classRegistry } from '../command/base';
 import { StageMeshPool, type CommandRecord } from './stage-mesh-pool';
 
 class EditModeMenu {
@@ -142,66 +141,98 @@ class EditMode extends BaseMode {
 
   // 执行命令并添加到mesh池
   private _executeAndStageCommand(command: string, args: any): CommandRecord {
-    const CommandClass = classRegistry.get(command);
-    if (!CommandClass) {
-      console.error(`Command not found: ${command}`);
-      return { command, args, meshes: [], entities: [] };
+    const record: CommandRecord = { command, args, meshes: [], entities: [] };
+
+    try {
+      const outcome = this.app.executor.execute(command, args);
+      if (outcome instanceof Promise) {
+        outcome
+          .then((result) => this._finalizeCommandRecord(record, result))
+          .catch((error) => {
+            console.error(`Command execution failed: ${command}`, error);
+          });
+      } else {
+        this._finalizeCommandRecord(record, outcome);
+      }
+    } catch (error) {
+      console.error(`Command execution threw: ${command}`, error);
     }
 
-    const commandInstance = new CommandClass(this.app);
-    const result = commandInstance.do(args);
-    
-    // 处理返回结果
-    let meshes: Mesh[] = [];
-    let entities: any[] = [];
-    
-    if (Array.isArray(result) && result.length === 2) {
-      meshes = result[0] || [];
-      entities = result[1] || [];
-    }
-    
-    // 为mesh添加metadata并添加到池中
+    return record;
+  }
+
+  private _finalizeCommandRecord(record: CommandRecord, result: any): void {
+    const { meshes, entities } = this._extractMeshesAndEntities(result);
+    record.meshes = meshes;
+    record.entities = entities;
+
     for (let i = 0; i < meshes.length; i++) {
       const mesh = meshes[i];
       const entity = entities[i];
-      
-      const metadata = this._createMetadata(command, args, entity);
+      const metadata = this._createMetadata(record.command, record.args, entity);
       this._meshPool.addMesh(mesh, metadata);
     }
-    
-    const record: CommandRecord = { command, args, meshes, entities };
+
     this._meshPool.addCommand(record);
     this._markAsChanged();
-    
-    console.log(`Executed and staged command: ${command}`, args);
-    return record;
+    console.log(`Executed and staged command: ${record.command}`, record.args);
+  }
+
+  private _extractMeshesAndEntities(result: any): { meshes: Mesh[]; entities: any[] } {
+    if (Array.isArray(result) && result.length === 2) {
+      return {
+        meshes: (result[0] as Mesh[]) ?? [],
+        entities: result[1] ?? [],
+      };
+    }
+
+    if (result && typeof result === 'object') {
+      const meshes = Array.isArray(result.meshes) ? (result.meshes as Mesh[]) : [];
+      const entities = Array.isArray(result.entities) ? result.entities : [];
+      return { meshes, entities };
+    }
+
+    return { meshes: [], entities: [] };
+  }
+
+  private _normalizePosition(position: any): [number, number, number] {
+    if (Array.isArray(position)) {
+      return [position[0] ?? 0, position[1] ?? 0, position[2] ?? 0];
+    }
+    if (position && typeof position === 'object' && 'x' in position) {
+      return [position.x ?? 0, position.y ?? 0, position.z ?? 0];
+    }
+    return [0, 0, 0];
   }
 
   // 创建metadata
   private _createMetadata(command: string, args: any, entity: any): any {
     if (command === 'draw_atom') {
+      const [x, y, z] = this._normalizePosition(args.position);
       return {
         type: 'atom',
         command: command,
         args: args,
         name: args.name,
-        element: args.type,
-        x: args.x,
-        y: args.y,
-        z: args.z
+        element: args.element,
+        x,
+        y,
+        z
       };
     } else if (command === 'draw_bond') {
+      const [x1, y1, z1] = this._normalizePosition(args.start);
+      const [x2, y2, z2] = this._normalizePosition(args.end);
       return {
         type: 'bond',
         command: command,
         args: args,
-        x1: args.x1,
-        y1: args.y1,
-        z1: args.z1,
-        x2: args.x2,
-        y2: args.y2,
-        z2: args.z2,
-        order: args.props?.order || 1
+        x1,
+        y1,
+        z1,
+        x2,
+        y2,
+        z2,
+        order: args.options?.order || 1
       };
     } else if (command === 'delete_atom') {
       return {
@@ -475,14 +506,9 @@ class EditMode extends BaseMode {
       if (this._hoverAtom) {
         // Create bond between two existing atoms
         this._executeAndStageCommand('draw_bond', {
-          x1: this._startAtom.xyz.x,
-          y1: this._startAtom.xyz.y,
-          z1: this._startAtom.xyz.z,
-          x2: this._hoverAtom.xyz.x,
-          y2: this._hoverAtom.xyz.y,
-          z2: this._hoverAtom.xyz.z,
-          props: { order: this._bondOrder },
-          options: {}
+          start: [this._startAtom.xyz.x, this._startAtom.xyz.y, this._startAtom.xyz.z],
+          end: [this._hoverAtom.xyz.x, this._hoverAtom.xyz.y, this._hoverAtom.xyz.z],
+          options: { order: this._bondOrder },
         });
       } else if (this._previewAtom) {
         // Create new atom and bond
@@ -492,23 +518,16 @@ class EditMode extends BaseMode {
         // Add new atom command
         this._executeAndStageCommand('draw_atom', {
           name: atomName,
-          x: xyz.x,
-          y: xyz.y,
-          z: xyz.z,
-          type: this._element,
-          options: {}
+          element: this._element,
+          position: [xyz.x, xyz.y, xyz.z],
+          options: {},
         });
         
         // Add bond command
         this._executeAndStageCommand('draw_bond', {
-          x1: this._startAtom.xyz.x,
-          y1: this._startAtom.xyz.y,
-          z1: this._startAtom.xyz.z,
-          x2: xyz.x,
-          y2: xyz.y,
-          z2: xyz.z,
-          props: { order: this._bondOrder },
-          options: {}
+          start: [this._startAtom.xyz.x, this._startAtom.xyz.y, this._startAtom.xyz.z],
+          end: [xyz.x, xyz.y, xyz.z],
+          options: { order: this._bondOrder },
         });
       }
       
@@ -534,11 +553,9 @@ class EditMode extends BaseMode {
       
       this._executeAndStageCommand('draw_atom', {
         name: atomName,
-        x: xyz.x,
-        y: xyz.y,
-        z: xyz.z,
-        type: this._element,
-        options: {}
+        element: this._element,
+        position: [xyz.x, xyz.y, xyz.z],
+        options: {},
       });
       
       this._pendingAtom = false;

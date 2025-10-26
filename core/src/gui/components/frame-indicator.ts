@@ -1,7 +1,9 @@
 import type { TweakpaneGuiComponent } from "../types";
 import { Pane } from "tweakpane";
-import { draw_frame } from "../../artist/draw";
 import type { Molvis } from "../../app";
+import type { Frame } from "../../structure/frame";
+import type { StrArray } from "../../structure/base";
+import type { RenderData } from "../../structure/types";
 
 export class FrameIndicator implements TweakpaneGuiComponent {
   private _app: Molvis;
@@ -112,8 +114,7 @@ export class FrameIndicator implements TweakpaneGuiComponent {
       this._app.system.set_frame(clampedIdx);
       const frame = this._app.system.current_frame;
       // 切换frame时先清除旧内容
-      this._app.world.clear();
-      draw_frame(this._app, frame, { atoms: {}, bonds: {} });
+      this._renderFrame(frame);
       this.updateFrame(clampedIdx, this._app.system.n_frames);
     };
 
@@ -197,5 +198,77 @@ export class FrameIndicator implements TweakpaneGuiComponent {
     } else {
       this.hide();
     }
+  }
+
+  private _frameToRenderData(frame: Frame): RenderData {
+    const atomBlock = frame.atomBlock;
+    const bondBlock = frame.bondBlock;
+
+    const xyz: number[][] = [];
+    const xs = atomBlock.x;
+    const ys = atomBlock.y;
+    const zs = atomBlock.z;
+    for (let i = 0; i < atomBlock.n_atoms; i++) {
+      xyz.push([xs[i], ys[i], zs[i]]);
+    }
+
+    let element: (string | number)[] | undefined;
+    try {
+      const col = atomBlock.get("element", { kind: "utf8", data: [] } as StrArray);
+      if (col.kind === "utf8" && col.data.length > 0) {
+        element = [...col.data];
+      }
+    } catch {
+      element = undefined;
+    }
+
+    let name: string[] | undefined;
+    try {
+      const col = atomBlock.get("name", { kind: "utf8", data: [] } as StrArray);
+      if (col.kind === "utf8" && col.data.length > 0) {
+        name = [...col.data];
+      }
+    } catch {
+      name = undefined;
+    }
+
+    let bondI: number[] = [];
+    let bondJ: number[] = [];
+    let bondOrder: number[] = [];
+    try {
+      bondI = Array.from(bondBlock.i);
+      bondJ = Array.from(bondBlock.j);
+    } catch {
+      bondI = [];
+      bondJ = [];
+    }
+    try {
+      bondOrder = Array.from(bondBlock.order);
+    } catch {
+      bondOrder = [];
+    }
+
+    const bonds = {
+      i: bondI,
+      j: bondJ,
+      order: bondOrder,
+    };
+
+    return {
+      blocks: {
+        atoms: {
+          xyz,
+          element,
+          name,
+        },
+        bonds,
+      },
+    };
+  }
+
+  private _renderFrame(frame: Frame): void {
+    this._app.world.clear();
+    const renderData = this._frameToRenderData(frame);
+    void this._app.executor.execute("draw_frame", { frame: renderData, options: { atoms: {}, bonds: {} } });
   }
 }

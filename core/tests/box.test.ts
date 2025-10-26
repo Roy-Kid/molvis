@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { Box } from '../src/system/box';
+import { Box } from '../src/structure/box';
 import { Matrix, Vector3 } from '@babylonjs/core';
 
 describe('Test Box', () => {

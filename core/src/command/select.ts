@@ -1,31 +1,13 @@
 import type { Mesh } from "@babylonjs/core";
-import { registerCommand, type ICommand } from "./base";
-import type { Molvis } from "../app";
-import type { IEntity } from "../system";
+import type { IEntity } from "../structure/base";
+import { defineCommand } from "./base";
 
-@registerCommand("get_select")
-class GetSelect implements ICommand {
-    private app: Molvis;
-    
-    constructor(app: Molvis) {
-        this.app = app;
-    }
-    
-    public do(): [Mesh[], IEntity[]] {
-        
-        const meshes = this.app.world.meshGroup.getSubgroup("selected")?.getChildren() as Mesh[] || [];
+defineCommand("get_select", (ctx) => {
+  const subgroup = ctx.app.world.meshGroup.getSubgroup("selected");
+  const meshes = (subgroup?.getChildren() as Mesh[]) ?? [];
+  const entities = meshes
+    .map((mesh) => mesh.metadata)
+    .filter((entity): entity is IEntity => entity !== undefined);
 
-        const entities = meshes.map(mesh => {
-            return mesh.metadata;
-        }).filter(entity => entity !== undefined) as IEntity[];
-
-        return [meshes, entities];
-    }
-    
-    public undo(): [Mesh[], IEntity[]] {
-        // Undo logic for selection can be implemented if needed
-        return [[], []];
-    }
-}
-
-export { GetSelect };
+  return [meshes, entities] as const;
+});

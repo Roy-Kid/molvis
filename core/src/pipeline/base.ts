@@ -1,6 +1,6 @@
 import type { Mesh } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import type { IEntity } from "../system/base";
+import type { IEntity } from "../structure/base";
 
 const modifierRegistry = new Map<string, ModifierConstructor>();
 const registerModifier = (name: string) => {

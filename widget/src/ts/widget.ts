@@ -1,5 +1,5 @@
 import { Logger } from "tslog";
-import { Molvis } from "@molvis/core/src/app";
+import { Molvis, mountMolvis } from "@molvis/core/src/app";
 import type { AnyModel } from "@anywidget/types";
 import { JsonRpcHandler } from "./jsonrpc";
 
@@ -97,7 +97,7 @@ export class MolvisWidget {
       `;
 
       // Initialize Molvis core
-      this.app = new Molvis(this.widgetContainer, {
+      this.app = mountMolvis(this.widgetContainer, {
         displayWidth: widgetWidth,
         displayHeight: widgetHeight,
         fitContainer: true,

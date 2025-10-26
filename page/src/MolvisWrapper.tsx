@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Molvis, MolvisOptions } from '@molvis/core';
+import { Molvis, MolvisOptions, mountMolvis } from '@molvis/core';
 
 // Molvis wrapper: create / destroy core instance. Pure rendering area.
 const MolvisWrapper: React.FC = () => {
@@ -21,7 +21,7 @@ const MolvisWrapper: React.FC = () => {
       },
     };
     try {
-      molvisRef.current = new Molvis(containerRef.current, options);
+      molvisRef.current = mountMolvis(containerRef.current, options);
     } catch (e) {
   console.error('Failed to init Molvis', e);
     }
