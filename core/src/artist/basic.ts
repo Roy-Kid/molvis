@@ -93,16 +93,23 @@ export class InstancedArtist extends ArtistBase {
     const qIdentity = Quaternion.Identity();
     const tmpMat = new Matrix();
 
-    const elements = atomBlock.get<string[]>("element") || [];
+    const elements = atomBlock.get<string[]>("element") ?? [];
+
+    const atom_radii = new Float32Array(count);
+
+    if (elements.length === count) {
+      for (let i = 0; i < count; i++) {
+        const el = elements[i];
+        atom_radii[i] = el ? palette.getAtomRadius(el) : DEFAULT_ATOM_RADIUS;
+      }
+    } else {
+      atom_radii.fill(DEFAULT_ATOM_RADIUS);
+    }
 
     for (let i = 0; i < count; i++) {
       pos.set(atomBlock.x[i], atomBlock.y[i], atomBlock.z[i]);
 
-      const r =
-        typeof radiiScalarOrArray === "number"
-          ? radiiScalarOrArray
-          : (radiiScalarOrArray as any)[i] ?? DEFAULT_ATOM_RADIUS;
-
+      const r = atom_radii[i]
       scale.set(r, r, r);
 
       const c =
@@ -111,7 +118,6 @@ export class InstancedArtist extends ArtistBase {
           : (colorOverrideScalarOrArray as Color3 | undefined))
         ?? (elements[i] ? Color3.FromHexString(palette.getAtomColor(elements[i])) : DEFAULT_ATOM_COLOR);
 
-      // 组合矩阵：用 ComposeToRef 直写 buffer
       Matrix.ComposeToRef(scale, qIdentity, pos, tmpMat);
       tmpMat.copyToArray(matrices, i * 16);
 

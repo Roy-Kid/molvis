@@ -3,7 +3,7 @@ export { Frame, Atom, Bond, Scene, Topology, Box } from "./structure";
 // System and Trajectory removed; use structure module only
 export { World } from "./world";
 export { GuiManager } from "./gui";
-export type { IEntity, IProp } from "./structure/base";
+export type { IEntity, IProp } from "./structure/block";
 export {
   ArtistBase,
   ArtistRegistry,

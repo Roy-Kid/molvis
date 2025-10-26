@@ -2,7 +2,7 @@ import type { TweakpaneGuiComponent } from "../types";
 import { Pane } from "tweakpane";
 import type { Molvis } from "../../app";
 import type { Frame } from "../../structure/frame";
-import type { StrArray } from "../../structure/base";
+import type { StrArray } from "../../structure/block";
 import type { RenderData } from "../../structure/types";
 
 export class FrameIndicator implements TweakpaneGuiComponent {

@@ -33,7 +33,7 @@ const initialize = async (): Promise<void> => {
     [0.0, 0.0, 0.0],
     ["O", "H", "H"],
   );
-  atomBlock.set("name", { kind: "utf8", data: ["O", "H1", "H2"] });
+  atomBlock.set<string[]>('element', ["O", "H", "H"]);
 
   const bondBlock = new BondBlock([0, 0], [1, 2], [1, 1]);
   const frame = new Frame(atomBlock, bondBlock);

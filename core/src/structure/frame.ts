@@ -1,4 +1,4 @@
-import { Block } from './base';
+import { Block } from './block';
 
 
 class AtomBlock extends Block {

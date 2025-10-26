@@ -1,5 +1,5 @@
 import type { Mesh } from "@babylonjs/core";
-import type { IEntity } from "../structure/base";
+import type { IEntity } from "../structure/block";
 import { defineCommand } from "./base";
 
 defineCommand("get_select", (ctx) => {

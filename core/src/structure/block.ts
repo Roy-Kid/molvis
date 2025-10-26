@@ -13,12 +13,27 @@ export type NumArray =
   | { kind: 'uint8';   data: Uint8Array }
   | { kind: 'uint8c';  data: Uint8ClampedArray };
 
-export type BoolArray = { kind: 'bool'; data: Uint8Array };         // 0/1
-export type StrArray = { kind: 'utf8'; data: string[] };           // 简版：用 string[]（需要零拷贝可换成 offsets+bytes）
+export type BoolArray = { kind: 'bool'; data: Uint8Array };
+export type StrArray = { kind: 'utf8'; data: string[] };
 export type BlockData = NumArray | BoolArray | StrArray;
 
 export type DType = BlockData['kind'];
-export type DArray = BlockData['data'];
+export type TypedArray = BlockData['data'];
+
+const ctorToDtype = new Map<Function, DType>([
+  [Float64Array, 'float64'],
+  [Float32Array, 'float32'],
+  [Int32Array,   'int32'],
+  [Uint32Array,  'uint32'],
+  [Int16Array,   'int16'],
+  [Uint16Array,  'uint16'],
+  [Int8Array,    'int8'],
+  [Uint8Array,   'uint8'],
+  [Uint8ClampedArray, 'uint8c'],
+  [Uint8Array, 'bool'],
+  [Array, 'utf8'],
+]);
+
 
 const isNum = (c: BlockData): c is NumArray =>
   c.kind !== 'bool' && c.kind !== 'utf8';
@@ -62,16 +77,34 @@ export class Block {
     return lengthOf(firstCol);
   }
 
-  public set(key: string, col: BlockData): void {
+  public set(key: string, col: BlockData): void;
+  public set<T extends TypedArray>(key: string, col: T): void;
+
+  public set(key: string, col: TypedArray | BlockData, dtype?: DType): void {
+    let colData: BlockData;
+    if ('kind' in col) {
+      colData = col as BlockData;
+    } else {
+      if (dtype) {
+        colData = { kind: dtype, data: col as any };
+      } else {
+        const kind = ctorToDtype.get(col.constructor as Function);
+        if (!kind) throw new Error(`Unsupported array type for column '${key}'`);
+        colData = { kind, data: col as any };
+      }
+    }
+
     const nrows = this.nrows;
-    const colLen = lengthOf(col);
+    const colLen = lengthOf(colData);
     if (nrows !== 0 && colLen !== nrows) {
       throw BlockError.Ragged(key, nrows, colLen);
     }
-    this.data.set(key, col);
+    this.data.set(key, colData);
   }
 
-  public get<T extends DArray>(key: string, defaultValue?: T): T {
+
+
+  public get<T extends TypedArray>(key: string, defaultValue?: T): T {
     const col = this.data.get(key);
     if (col === undefined) {
       if (defaultValue !== undefined) return defaultValue;
