@@ -8,6 +8,8 @@ import {
   VertexData,
   Matrix,
   type Scene,
+  CreateCylinderVertexData,
+  CreateSphereVertexData,
 } from "@babylonjs/core";
 import { ArtistBase, ArtistCommand } from "./base";
 import { type DrawFrameInput, type DrawFrameOption } from "./types";
@@ -68,7 +70,7 @@ export class InstancedArtist extends ArtistBase {
 
     const geometryKey = "atom:sphere:16";
     const mesh = this.createInstancedMesh("atoms", geometryKey, () =>
-      VertexData.CreateSphere({ diameter: 1, segments: 16 })
+      CreateSphereVertexData({ diameter: 1, segments: 16 })
     );
 
     const materialKey = "atom:standard";
@@ -81,10 +83,6 @@ export class InstancedArtist extends ArtistBase {
     mesh.material = material;
     this.attachResourceTracking(mesh, { materialKey, geometryKey });
 
-    const radiiScalarOrArray =
-      options.atoms?.radius ?? DEFAULT_ATOM_RADIUS; // number | Float32Array | number[]
-    const colorOverrideScalarOrArray = options.atoms?.color; // Color3 | Color3[] | undefined
-
     const matrices = new Float32Array(count * 16);
     const colors = new Float32Array(count * 4);
 
@@ -92,18 +90,43 @@ export class InstancedArtist extends ArtistBase {
     const scale = new Vector3();
     const qIdentity = Quaternion.Identity();
     const tmpMat = new Matrix();
+    
 
     const elements = atomBlock.get<string[]>("element") ?? [];
+    const name = atomBlock.get<string[]>("name") ?? [];
 
-    const atom_radii = new Float32Array(count);
+    const atom_radii  = new Float32Array(count);
+    const atom_colors = new Float32Array(count * 4);
 
-    if (elements.length === count) {
+    const haveElements = !!elements && elements.length === count;
+    for (let i = 0; i < count; i++) {
+      const el = haveElements ? elements![i] : undefined;
+
+      atom_radii[i] = el ? palette.getAtomRadius(el) : DEFAULT_ATOM_RADIUS;
+
+      const c = el ? Color3.FromHexString(palette.getAtomColor(el)) : DEFAULT_ATOM_COLOR;
+      const off = i * 4;
+      atom_colors[off] = c.r;
+      atom_colors[off + 1] = c.g;
+      atom_colors[off + 2] = c.b;
+      atom_colors[off + 3] = 1;
+    }
+
+    const userR = options.atoms?.radii;
+    if (Array.isArray(userR) && userR.length === count) {
+      atom_radii.set(userR);
+    }
+
+    const userC = options.atoms?.color;
+    if (Array.isArray(userC)) {
       for (let i = 0; i < count; i++) {
-        const el = elements[i];
-        atom_radii[i] = el ? palette.getAtomRadius(el) : DEFAULT_ATOM_RADIUS;
+        const c = Color3.FromHexString(userC[i]);
+        const off = i * 4;
+        atom_colors[off] = c.r;
+        atom_colors[off + 1] = c.g;
+        atom_colors[off + 2] = c.b;
+        atom_colors[off + 3] = 1;
       }
-    } else {
-      atom_radii.fill(DEFAULT_ATOM_RADIUS);
     }
 
     for (let i = 0; i < count; i++) {
@@ -111,24 +134,19 @@ export class InstancedArtist extends ArtistBase {
 
       const r = atom_radii[i]
       scale.set(r, r, r);
-
-      const c =
-        (Array.isArray(colorOverrideScalarOrArray)
-          ? (colorOverrideScalarOrArray[i] as Color3 | undefined)
-          : (colorOverrideScalarOrArray as Color3 | undefined))
-        ?? (elements[i] ? Color3.FromHexString(palette.getAtomColor(elements[i])) : DEFAULT_ATOM_COLOR);
+      const c = atom_colors.subarray(i * 4, i * 4 + 4);
 
       Matrix.ComposeToRef(scale, qIdentity, pos, tmpMat);
       tmpMat.copyToArray(matrices, i * 16);
 
       const off = i * 4;
-      colors[off] = c.r; colors[off + 1] = c.g; colors[off + 2] = c.b; colors[off + 3] = 1;
+      colors[off] = c[0]; colors[off + 1] = c[1]; colors[off + 2] = c[2]; colors[off + 3] = 1;
     }
 
     mesh.thinInstanceSetBuffer("matrix", matrices, 16, true);
     mesh.thinInstanceSetBuffer("color", colors, 4);
     mesh.thinInstanceEnablePicking = true;
-    mesh.metadata = { type: "atom_batch", artistId: this.id };
+    mesh.metadata = { type: "atom", artistId: this.id, matrices: matrices, names: name };
     return mesh;
   }
 
@@ -141,7 +159,7 @@ export class InstancedArtist extends ArtistBase {
 
     const geometryKey = "bond:cylinder:16";
     const mesh = this.createInstancedMesh("bonds", geometryKey, () =>
-      VertexData.CreateCylinder({ height: 1, tessellation: 16, diameter: 1 })
+      CreateCylinderVertexData({ height: 1, tessellation: 16, diameter: 1 })
     );
 
     const materialKey = "bond:standard";
@@ -154,8 +172,8 @@ export class InstancedArtist extends ArtistBase {
     mesh.material = material;
     this.attachResourceTracking(mesh, { materialKey, geometryKey });
 
-    const bondRadiusScalarOrArray =
-      options.bonds?.radius ?? DEFAULT_BOND_RADIUS;
+    const r =
+      options.bonds?.radii ?? DEFAULT_BOND_RADIUS;
     const bondColor = DEFAULT_BOND_COLOR;
 
     const matrices = new Float32Array(total * 16);
@@ -179,11 +197,6 @@ export class InstancedArtist extends ArtistBase {
 
       mid.copyFrom(A).addInPlace(B).scaleInPlace(0.5);
       dir.scaleInPlace(1 / len);
-
-      const r =
-        typeof bondRadiusScalarOrArray === "number"
-          ? bondRadiusScalarOrArray
-          : (bondRadiusScalarOrArray as any)[k] ?? DEFAULT_BOND_RADIUS;
 
       Quaternion.FromUnitVectorsToRef(Vector3.UpReadOnly, dir, rot);
 
@@ -209,13 +222,13 @@ export class InstancedArtist extends ArtistBase {
     mesh.thinInstanceSetBuffer("matrix", mtx, 16, true);
     mesh.thinInstanceSetBuffer("color", col, 4);
     mesh.thinInstanceEnablePicking = true;
-    mesh.metadata = { type: "bond_batch", artistId: this.id };
+    mesh.metadata = { type: "bond", artistId: this.id, i: bondBlock.i, j: bondBlock.j };
 
     for (let k = 0; k < total; k++) {
       const ia = bondBlock.i[k], ib = bondBlock.j[k];
       A.set(atomBlock.x[ia], atomBlock.y[ia], atomBlock.z[ia]);
       B.set(atomBlock.x[ib], atomBlock.y[ib], atomBlock.z[ib]);
-      if (A.equalsWithEpsilon(B, 1e-6)) continue; // 与上面的跳过条件一致
+      if (A.equalsWithEpsilon(B, 1e-6)) continue;
       mid.copyFrom(A).addInPlace(B).scaleInPlace(0.5);
     }
     return mesh;

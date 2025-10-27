@@ -8,12 +8,15 @@ import type {
   KeyboardInfo,
   AbstractMesh,
   Observer,
+  Vector3,
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
+import { getPositionFromMatrix } from "./utils";
 
 enum ModeType {
   View = "view",
   Select = "select",
+  Edit = "edit",
   Measure = "measure",
   Manupulate = "manupulate",
 }
@@ -36,7 +39,7 @@ abstract class BaseMode {
     this.init_context_menu();
   }
 
-  private get scene() {
+  protected get scene() {
     return this._app.world.scene;
   }
 
@@ -46,10 +49,6 @@ abstract class BaseMode {
 
   protected get gui() {
     return this._app.gui;
-  }
-
-  protected get system() {
-    return this._app.system;
   }
 
   protected get world() {
@@ -218,29 +217,34 @@ abstract class BaseMode {
   }
 
   _on_pointer_move(_pointerInfo: PointerInfo): void {
-    const mesh = this.pick_mesh();
-    
+    const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, undefined, false, this.world.camera);
+    const mesh = pickResult.hit ? pickResult.pickedMesh : null;
     if (mesh?.metadata) {
-      const meshType = mesh.name.split(':')[0];
-      
+      const meshType = mesh.metadata.meshType;
+
       if (meshType === 'atom') {
         const atomData = mesh.metadata;
-        const element = atomData.element || 'Unknown';
-        const type = atomData.type || 'Unknown';
-        const atomName = mesh.name.split(':')[1] || 'Unknown';
-        const atomId = atomData.id ?? 'Unknown';
-        const x = mesh.position.x.toFixed(2);
-        const y = mesh.position.y.toFixed(2);
-        const z = mesh.position.z.toFixed(2);
-        const infoText = `${atomId} | ${type ?? element} | name: ${atomName} | xyz: ${x}, ${y}, ${z}`;
+        const atomThinIndex = pickResult.thinInstanceIndex!;
+        let atomInfo = new Map<string, string>();
+        let pos: Vector3;
+        if (atomThinIndex != -1) {  // thin instances
+          const m = atomData.matrices as Float32Array;
+          pos = getPositionFromMatrix(m, atomThinIndex);
+        } else {
+          pos = mesh.position;
+        }
+        atomInfo.set("xyz", `${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)}`);
+
+        let infoText = `[Atom] `;
+        atomInfo.forEach((value, key) => {
+          infoText += `${key}: ${value} | `;
+        });
         this.gui.updateInfoText(infoText);
       } else if (meshType === 'bond') {
         const bondData = mesh.metadata;
-        const bondName = mesh.name.split(':')[1] || 'Unknown';
-        const itomName = bondData.itom_name || 'Unknown';
-        const jtomName = bondData.jtom_name || 'Unknown';
-        const order = bondData.order || 1;
-        const infoText = `Bond: ${itomName} - ${jtomName} (${bondName}) Order: ${order}`;
+        const i = bondData.i[pickResult.thinInstanceIndex!];
+        const j = bondData.j[pickResult.thinInstanceIndex!];
+        const infoText = `Bond: ${i} - ${j}`;
         this.gui.updateInfoText(infoText);
       } else {
         this.gui.updateInfoText(mesh.name);
@@ -270,22 +274,22 @@ abstract class BaseMode {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);
   }
 
-  protected pick_mesh(type: "atom" | "bond"="atom"): AbstractMesh | null {
+  protected pick_mesh(type: "atom" | "bond"): AbstractMesh | null {
     const scene = this.world.scene;
     
     const pickResult = scene.pick(
       scene.pointerX, 
       scene.pointerY,
-      (mesh) => {
+      (mesh: AbstractMesh) => {
         const md: any = (mesh as any).metadata;
-        const byMeta = md && md.type === type;
-        const byName = mesh.name.startsWith(`${type}:`);
-        return (byMeta || byName) && mesh.isEnabled() && mesh.isVisible;
+        const meshType = md?.meshType;
+        const byMeta = md && (meshType === type);
+        return byMeta && mesh.isEnabled() && mesh.isVisible;
       },
       false,
       this.world.camera
     );
-    
+    console.log("Pick result:", pickResult);
     return pickResult.hit ? pickResult.pickedMesh : null;
   }
 }

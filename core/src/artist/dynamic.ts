@@ -11,6 +11,7 @@ import {
 import { ArtistBase, ArtistCommand } from "./base";
 import { DefaultPalette } from "./palette";
 import {
+  DeleteAtomInput,
   type DrawAtomInput,
   type DrawBondInput,
   type DrawBoxInput,
@@ -81,7 +82,7 @@ export class DynamicArtist extends ArtistBase {
     const colorHex =
       options?.color ?? DEFAULT_ATOM_COLOR;
     const sphere = MeshBuilder.CreateSphere(
-      name ?? `atom:${id ?? Date.now().toString(36)}`,
+      name ?? `atom:${id}`,
       { diameter: radius * 2 },
       this.scene,
     );
@@ -92,11 +93,10 @@ export class DynamicArtist extends ArtistBase {
     sphere.material = material;
 
     sphere.metadata = {
-      type: "atom",
-      id: id ?? name ?? sphere.name,
+      meshType: "atom",
+      atomId: id ?? sphere.uniqueId,
       element,
     };
-
     return sphere;
   }
 
@@ -128,7 +128,7 @@ export class DynamicArtist extends ArtistBase {
       }
 
       tube.metadata = {
-        type: "bond",
+        meshType: "bond",
         order,
         i: options.i,
         j: options.j,
@@ -226,5 +226,20 @@ export class DynamicArtist extends ArtistBase {
     }
 
     return lines;
+  }
+
+  @ArtistCommand<DeleteAtomInput>({
+    name: "delete_atom", 
+    validate: (input: DeleteAtomInput) => {
+      if (!input || typeof input.atomId !== "number") {
+        throw new Error("delete_atom requires an atomId number.");
+      }
+    },
+  })
+  deleteAtom(input: DeleteAtomInput): void {
+    const atomMesh = this.scene.getMeshByUniqueId(input.atomId);
+    if (atomMesh) {
+      atomMesh.dispose();
+    }
   }
 }

@@ -289,16 +289,16 @@ class Molvis {
   }
 
   private _initializeArtists(): void {
-    const viewArtist = new InstancedArtist(this._world.scene, "basic");
-    this._artists.set("basic", viewArtist);
-    this._executor.registerArtist("basic", viewArtist);
+    const instancedArtist = new InstancedArtist(this._world.scene, "instanced");
+    this._artists.set("instanced", instancedArtist);
+    this._executor.registerArtist("instanced", instancedArtist);
 
-    const meshArtist = new DynamicArtist(this._world.scene, "mesh");
-    this._artists.set("mesh", meshArtist);
-    this._executor.registerArtist("mesh", meshArtist);
+    const dynamicArtist = new DynamicArtist(this._world.scene, "dynamic");
+    this._artists.set("dynamic", dynamicArtist);
+    this._executor.registerArtist("dynamic", dynamicArtist);
 
-    void viewArtist.init();
-    void meshArtist.init();
+    void instancedArtist.init();
+    void dynamicArtist.init();
   }
 
   get canvas(): HTMLCanvasElement {
@@ -372,36 +372,6 @@ class Molvis {
       return this._executor.execute(method, params);
     } catch (error) {
       logger.error("Method execution failed:", { method, params, error });
-      throw error;
-    }
-  }
-
-  public modify(name: string, args: Record<string, unknown>): void {
-    try {
-      const result = this._executor.execute(name, args);
-      const apply = (value: unknown) => {
-        const meshes = Array.isArray((value as { meshes?: unknown[] }).meshes)
-          ? (value as { meshes: unknown[] }).meshes
-          : Array.isArray((value as unknown[] | undefined)?.[0])
-            ? ((value as unknown[])[0] as unknown[])
-            : [];
-        const entities = Array.isArray((value as { entities?: unknown[] }).entities)
-          ? (value as { entities: unknown[] }).entities
-          : Array.isArray((value as unknown[] | undefined)?.[1])
-            ? ((value as unknown[])[1] as unknown[])
-            : [];
-        this._world.pipeline.modify(this, meshes, entities);
-      };
-
-      if (result instanceof Promise) {
-        result.then(apply).catch((error) => {
-          logger.error("Modifier execution failed:", { name, args, error });
-        });
-      } else {
-        apply(result);
-      }
-    } catch (error) {
-      logger.error("Method execution failed:", { name, args, error });
       throw error;
     }
   }

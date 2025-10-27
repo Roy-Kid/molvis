@@ -233,10 +233,7 @@ class ViewMode extends BaseMode {
     this.menu.show(100, 100);
   }
 
-  // Viewport manager not implemented yet
-
   public resetViewport(): void {
-    // 暂时注释掉这个方法，因为viewportManager不存在
     // this.world.viewportManager.resetToSingleViewport();
     // this._redrawAllViewports();
   }

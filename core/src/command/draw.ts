@@ -5,13 +5,12 @@ import type {
   DrawAtomInput,
   DrawBondInput,
   DrawBoxInput,
-  DrawFrameInput,
-  DrawSystemInput,
+  DrawFrameInput
 } from "../artist/types";
 import type { ArtistBase } from "../artist/base";
 
-const VIEW_ARTIST_NAME = "basic";
-const MESH_ARTIST_NAME = "mesh";
+const VIEW_ARTIST_NAME = "instanced";
+const MESH_ARTIST_NAME = "dynamic";
 
 const ensureArtist = (ctx: CommandExecutionContext, name: string): ArtistBase => {
   const artist = ctx.runtime.getArtist(name);
@@ -51,20 +50,6 @@ const toDrawBoxInput = (payload: unknown): DrawBoxInput => {
   return payload as DrawBoxInput;
 };
 
-const toDrawSystemInput = (payload: unknown): DrawSystemInput => {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("draw_system expects an object payload.");
-  }
-  if (!("atoms" in (payload as Record<string, unknown>))) {
-    throw new Error("draw_system payload must include atoms data.");
-  }
-  const systemPayload = payload as DrawSystemInput;
-  if (!Array.isArray(systemPayload.atoms.xyz)) {
-    throw new Error("draw_system atoms.xyz must be an array.");
-  }
-  return systemPayload;
-};
-
 const toDrawFrameInput = (payload: unknown): DrawFrameInput => {
   if (!payload || typeof payload !== "object") {
     throw new Error("draw_frame expects an object payload.");
@@ -83,6 +68,17 @@ defineCommand("draw_atom", async (ctx, payload) => {
     success: true,
     data: { meshName: mesh?.name, count: meshes.length },
     meshes,
+    entities: [],
+  };
+});
+
+defineCommand("delete_atom", async (ctx, payload) => {
+  const artist = ensureArtist(ctx, MESH_ARTIST_NAME);
+  const result = await artist.invoke<boolean>("delete_atom", payload);
+  return {
+    success: result,
+    data: { atomId: payload.atomId },
+    meshes: [],
     entities: [],
   };
 });

@@ -1,6 +1,7 @@
-import { Vector3 } from "@babylonjs/core";
+import { Color3, Vector3 } from "@babylonjs/core";
 import { mountMolvis } from "../src/app";
 import { AtomBlock, BondBlock, Frame } from "../src/structure";
+import { DynamicArtist } from "@molvis/core/artist";
 
 const ensureGlobalStyles = (): void => {
   if (document.getElementById("molvis-test-styles")) {
@@ -34,16 +35,23 @@ const initialize = async (): Promise<void> => {
     ["O", "H", "H"],
   );
   atomBlock.set<string[]>('element', ["O", "H", "H"]);
+  atomBlock.set<string[]>('name', ["O1", "H1", "H2"]);
 
   const bondBlock = new BondBlock([0, 0], [1, 2], [1, 1]);
   const frame = new Frame(atomBlock, bondBlock);
 
   try {
-    await app.executor.execute("draw_frame", {
-      frame,
-      options: { bonds: { radius: 0.08 } },
+    // await app.executor.execute("draw_frame", {
+    //   frame,
+    //   options: { bonds: { radius: 0.08 } },
+    // });
+    (app.artists.get("dynamic") as DynamicArtist).drawAtom({
+      id: 1,
+      name: "O1",
+      element: "O",
+      position: new Vector3(0.0, 0.75695, -0.75695),
+      options: { radius: 0.5, color: new Color3(1, 0, 0) },
     });
-
     app.world.camera.target = new Vector3(0, 0, 0);
     app.start();
   } catch (error) {

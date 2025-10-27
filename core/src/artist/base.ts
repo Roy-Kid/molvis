@@ -1,6 +1,7 @@
 import type { Scene, Material, Mesh } from "@babylonjs/core";
 import { VertexData } from "@babylonjs/core";
 import { Logger } from "tslog";
+import { defineCommand } from "../command/base";
 
 export interface ArtistContext {
   scene: Scene;
@@ -70,7 +71,7 @@ export function ArtistCommand<In = unknown>(
     });
   };
 
-  return (target, propertyKey, descriptor) => {
+  return (target, propertyKey) => {
     // Stage 3 decorator semantics - target is the method, propertyKey is the context object
     if (propertyKey && typeof propertyKey === "object" && "kind" in propertyKey) {
       const context = propertyKey as ClassMethodDecoratorContext;
@@ -85,20 +86,8 @@ export function ArtistCommand<In = unknown>(
         }
         registerMetadata(carrier, context.name);
       });
-
       return target;
     }
-
-    // Legacy decorator semantics (TypeScript experimentalDecorators)
-    if (typeof propertyKey !== "string") {
-      throw new Error("ArtistCommand decorator can only be applied to string named methods.");
-    }
-    if (!descriptor || typeof descriptor.value !== "function") {
-      throw new Error("ArtistCommand decorator can only be applied to method functions.");
-    }
-
-    const proto = target as ArtistCommandCarrier;
-    registerMetadata(proto, propertyKey);
   };
 }
 

@@ -40,17 +40,17 @@ export interface DrawBoxInput {
 }
 
 export interface DrawAtomsOption {
-  radius?: number[];
+  radii?: number[];
   color?: string[];
 }
 
 export interface DrawBondsOption {
-  radius?: number;
+  radii?: number;
 }
 
 export interface DrawFrameOption {
-  atoms?: DrawAtomOption;
-  bonds?: DrawBondOption;
+  atoms?: DrawAtomsOption;
+  bonds?: DrawBondsOption;
   box?: DrawBoxOption;
 }
 
@@ -66,3 +66,7 @@ export type DrawGridInput = {
   alpha?: number;
   name?: string;
 };
+
+export type DeleteAtomInput = {
+  atomId: number
+}
