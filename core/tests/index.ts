@@ -1,5 +1,5 @@
 import { Color3, Vector3 } from "@babylonjs/core";
-import { mountMolvis } from "../src/app";
+import { mountMolvis } from "../src";
 import { AtomBlock, BondBlock, Frame } from "../src/structure";
 import { DynamicArtist } from "@molvis/core/artist";
 
