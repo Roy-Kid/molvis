@@ -1,10 +1,5 @@
 import { KeyboardEventTypes, type KeyboardInfo } from "@babylonjs/core";
 
-import { Logger } from "tslog";
-import type { Molvis } from "@molvis/core";
-
-const logger = new Logger({ name: "molvis-core" });
-
 import type { BaseMode } from "./base";
 import { ModeType } from "./base";
 import { ViewMode } from "./view";
@@ -14,10 +9,10 @@ import { MeasureMode } from "./measure";
 import { EditMode } from "./edit";
 
 class ModeManager {
-  private _app: Molvis;
-  private _mode: BaseMode;
+  private _app: any;
+  private _mode: BaseMode | null = null;
 
-  constructor(app: Molvis) {
+  constructor(app: any) {
     this._app = app;
     this.switch_mode(ModeType.View);
     this._register_keyboard_events();
@@ -83,12 +78,12 @@ class ModeManager {
     }
   };
 
-  public get currentMode(): BaseMode {
+  public get currentMode(): BaseMode | null {
     return this._mode;
   }
 
   public get currentModeName(): string {
-    return this._mode.name;
+    return this._mode?.name || ModeType.View;
   }
 }
 

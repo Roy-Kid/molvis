@@ -69,9 +69,8 @@ export class DomManager {
   private _canvas: HTMLCanvasElement;
   private _uiContainer: HTMLElement;
   private _options: ResolvedMolvisOptions;
-  private _ownsRootContainer: boolean;
-  private _ownsUiContainer: boolean;
   private _resolutionManager: ResolutionManager;
+  private _layers: Map<string, HTMLElement> = new Map();
 
   constructor(canvas: HTMLCanvasElement, options: ResolvedMolvisOptions, dom: MolvisDomContext = {}) {
     this._canvas = canvas;
@@ -79,17 +78,18 @@ export class DomManager {
 
     this._rootContainer = dom.rootContainer ?? (canvas.parentElement as HTMLElement | undefined)!;
     this._mountPoint = dom.mountPoint ?? this._rootContainer?.parentElement ?? undefined!;
-    this._ownsRootContainer = dom.ownsRootContainer ?? false;
+
+    if (!this._rootContainer.contains(this._canvas)) {
+      this._rootContainer.appendChild(this._canvas);
+    }
 
     if (dom.uiContainer) {
       this._uiContainer = dom.uiContainer;
-      this._ownsUiContainer = dom.ownsUiContainer ?? false;
       if (this._options.showUI && this._rootContainer && !this._rootContainer.contains(this._uiContainer)) {
         this._rootContainer.appendChild(this._uiContainer);
       }
     } else {
       this._uiContainer = createUiContainer(this._options.showUI);
-      this._ownsUiContainer = true;
       if (this._options.showUI && this._rootContainer) {
         this._rootContainer.appendChild(this._uiContainer);
       }
@@ -131,6 +131,27 @@ export class DomManager {
     return this._uiContainer;
   }
 
+  public createLayer(id: string, styles: Partial<CSSStyleDeclaration> = {}): HTMLElement {
+    const layer = document.createElement('div');
+    layer.className = `ui-layer ${id}`;
+    layer.dataset.layerId = id;
+    Object.assign(layer.style, styles);
+    this._rootContainer.appendChild(layer);
+    this._layers.set(id, layer);
+    return layer;
+  }
+
+  public getLayer(id: string): HTMLElement | undefined {
+    return this._layers.get(id);
+  }
+
+  public enableLayer(id: string, enabled: boolean): void {
+    const layer = this._layers.get(id);
+    if (layer) {
+      layer.style.display = enabled ? 'block' : 'none';
+    }
+  }
+
   public get displaySize(): { width: number; height: number } {
     const element = this._rootContainer ?? this._canvas;
     const rect = element.getBoundingClientRect();
@@ -159,6 +180,11 @@ export class DomManager {
       this._rootContainer.style.height = `${displayHeight}px`;
     }
 
+    for (const layer of this._layers.values()) {
+      layer.style.width = `${displayWidth}px`;
+      layer.style.height = `${displayHeight}px`;
+    }
+
     this._resolutionManager.setSize(displayWidth, displayHeight);
   }
 
@@ -177,22 +203,34 @@ export class DomManager {
       this._rootContainer.style.width = "100%";
       this._rootContainer.style.height = "100%";
 
+      for (const layer of this._layers.values()) {
+        layer.style.width = "100%";
+        layer.style.height = "100%";
+      }
+
       this._resolutionManager.enableFitContainer(enabled);
     } else {
       const displayWidth = this._options.displayWidth;
       const displayHeight = this._options.displayHeight;
       this._rootContainer.style.width = `${displayWidth}px`;
       this._rootContainer.style.height = `${displayHeight}px`;
+
+      for (const layer of this._layers.values()) {
+        layer.style.width = `${displayWidth}px`;
+        layer.style.height = `${displayHeight}px`;
+      }
     }
   }
 
   public destroy(): void {
-    if (this._ownsUiContainer && this._uiContainer.parentElement) {
+    if (this._uiContainer.parentElement) {
       this._uiContainer.parentElement.removeChild(this._uiContainer);
     }
 
-    if (this._ownsRootContainer && this._rootContainer && this._mountPoint?.contains(this._rootContainer)) {
-      this._mountPoint.removeChild(this._rootContainer);
+    for (const layer of this._layers.values()) {
+      if (layer.parentElement) {
+        layer.parentElement.removeChild(layer);
+      }
     }
   }
 }

@@ -40,6 +40,15 @@ export const GUI_STYLES = {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  `,
+  
+  tabIndicator: `
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 6px;
+    padding: 4px;
   `
 };
 

@@ -12,6 +12,7 @@ import type {
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
 import { getPositionFromMatrix } from "./utils";
+import { Pane } from "tweakpane";
 
 enum ModeType {
   View = "view",
@@ -19,6 +20,113 @@ enum ModeType {
   Edit = "edit",
   Measure = "measure",
   Manupulate = "manupulate",
+}
+
+class BaseModeMenu {
+  private container: HTMLDivElement | null = null;
+  private pane: Pane | null = null;
+  private containerId: string;
+  private isBuilt: boolean;
+
+  constructor(private mode: BaseMode, containerId: string, private app: Molvis, private addCustomMenu?: (pane: any) => void) {
+    this.containerId = containerId;
+    this.isBuilt = false;
+  }
+
+  private build() {
+    // Check if container already exists
+    const existingContainer = this.app.uiContainer?.querySelector(`#${this.containerId}`) as HTMLDivElement;
+
+    if (existingContainer) {
+      // Reuse existing container
+      this.container = existingContainer;
+      // Clean up existing Pane
+      if (this.pane) {
+        this.pane.dispose();
+      }
+    } else {
+      // Create new menu container
+      this.container = document.createElement("div");
+      this.container.id = this.containerId;
+      this.container.className = "MolvisModeMenu";
+      this.container.style.position = "fixed";
+      this.container.style.zIndex = "99999";
+      this.container.style.pointerEvents = "auto";
+      this.container.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
+      this.container.style.borderRadius = "8px";
+      this.container.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.3)";
+
+      // Mount to app's uiContainer
+      if (this.app.uiContainer) {
+        this.app.uiContainer.appendChild(this.container);
+      } else {
+        document.body.appendChild(this.container);
+      }
+    }
+
+    this.pane = new Pane({
+      container: this.container,
+      title: "Mode Menu",
+      expanded: true
+    });
+    (this.pane as any).hidden = true;
+
+    // Build menu content
+    this.buildMenuContent();
+    this.isBuilt = true;
+  }
+
+  private buildMenuContent() {
+    if (!this.pane) return;
+
+    // Clear existing menu items
+    const paneAny = this.pane as any;
+    if (paneAny.children) {
+      for (const c of paneAny.children) {
+        paneAny.remove(c);
+      }
+    }
+
+    // Common actions
+    (this.pane as any).addButton({ title: "Snapshot" }).on("click", () => {
+      this.mode.takeScreenShot();
+    });
+
+    (this.pane as any).addButton({ title: "Split Right" }).on("click", () => {
+      this.mode.splitRight();
+    });
+
+    // Add custom menu items
+    if (this.addCustomMenu) {
+      this.addCustomMenu(this.pane);
+    }
+  }
+
+  public show(x: number, y: number) {
+    if (!this.isBuilt) {
+      this.build();
+    }
+    if (this.container && this.pane) {
+      this.container.style.left = `${x}px`;
+      this.container.style.top = `${y}px`;
+      (this.pane as any).hidden = false;
+    }
+  }
+
+  public hide() {
+    if (this.pane) {
+      (this.pane as any).hidden = true;
+    }
+  }
+
+  public dispose() {
+    if (this.pane) {
+      this.pane.dispose();
+    }
+    if (this.container && this.container.parentNode) {
+      this.container.parentNode.removeChild(this.container);
+    }
+  }
 }
 
 abstract class BaseMode {
@@ -30,6 +138,7 @@ abstract class BaseMode {
   protected _pointer_down_xy: Vector2 = new Vector2();
   protected _pointer_up_xy: Vector2 = new Vector2();
   private _contextMenuOpen = false;
+  protected contextMenu!: BaseModeMenu;
 
   constructor(name: ModeType, app: Molvis) {
     this._app = app;
@@ -63,7 +172,45 @@ abstract class BaseMode {
   //   return this.gui.contextMenu;
   // }
 
-  protected init_context_menu() { }
+  protected init_context_menu() {
+    this.contextMenu = new BaseModeMenu(this, "molvis-base-menu", this._app, this.getCustomMenuBuilder());
+  }
+
+  protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
+    return undefined;
+  }
+
+  public takeScreenShot(): void {
+    this.world?.takeScreenShot();
+  }
+
+  public splitRight(): void {
+    // Create a new scene with the same canvas
+    const sceneId = 'split-right-' + Date.now();
+    this._app.createScene(sceneId);
+
+    // Get all scene IDs
+    const allScenes = this._app.allSceneIds;
+
+    // Set viewports for split view
+    if (allScenes.length === 2) {
+      const leftSceneId = allScenes[0];
+      const rightSceneId = allScenes[1];
+
+      const leftWorld = this._app.getWorld(leftSceneId);
+      const rightWorld = this._app.getWorld(rightSceneId);
+
+      if (leftWorld && rightWorld) {
+        leftWorld.setViewport(0, 0, 0.5, 1);
+        rightWorld.setViewport(0.5, 0, 0.5, 1);
+      }
+    }
+
+    // Switch to the new scene
+    this._app.switchToScene(sceneId);
+
+    console.log(`Split right: created scene ${sceneId}`);
+  }
 
   public finish() {
     this.unregister_pointer_events();
@@ -154,8 +301,15 @@ abstract class BaseMode {
     });
   };
 
-  protected abstract showContextMenu(x: number, y: number): void;
-  protected abstract hideContextMenu(): void;
+  protected showContextMenu(x: number, y: number): void {
+    this.contextMenu.show(x, y);
+    this._contextMenuOpen = true;
+  }
+
+  protected hideContextMenu(): void {
+    this.contextMenu.hide();
+    this._contextMenuOpen = false;
+  }
   protected isContextMenuOpen(): boolean { return this._contextMenuOpen; }
   
   protected setContextMenuState(open: boolean): void {

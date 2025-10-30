@@ -10,6 +10,7 @@ export { ModeIndicator } from "./components/mode-indicator";
 export { ViewIndicator } from "./components/view-indicator";
 export { InfoPanel } from "./components/info-panel";
 export { FrameIndicator } from "./components/frame-indicator";
+export { TabIndicator } from "./components/tab-indicator";
 
 // Styles
 export { GUI_STYLES, applyStyles } from "./styles";

@@ -9,7 +9,6 @@ import {
   AbstractMesh
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { Pane } from "tweakpane";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
 
@@ -66,73 +65,6 @@ interface FrameLike {
 
 function makeId(prefix = "atom"): string {
   return `${prefix}:${Math.random().toString(36).substring(2, 6)}`;
-}
-
-/* ----------------------------------
- * Menu (Tweakpane)
- * ---------------------------------- */
-
-class EditModeMenu {
-  private container: HTMLDivElement;
-  private pane: Pane;
-
-  constructor(private em: EditMode) {
-    this.container = document.createElement("div");
-    this.container.style.position = "absolute";
-    document.body.appendChild(this.container);
-    this.pane = new Pane({ container: this.container, title: "Edit Mode" });
-    this.pane.hidden = true;
-    this.build();
-  }
-
-  private build() {
-    this.pane.children.forEach((c) => this.pane.remove(c));
-
-    const element = this.pane.addFolder({ title: "Atom" });
-    (element.addBlade({
-      view: "list",
-      label: "Type",
-      options: [
-        { text: "Carbon", value: "C" },
-        { text: "Nitrogen", value: "N" },
-        { text: "Oxygen", value: "O" },
-        { text: "Hydrogen", value: "H" },
-        { text: "Sulfur", value: "S" },
-        { text: "Phosphorus", value: "P" },
-        { text: "Fluorine", value: "F" },
-        { text: "Chlorine", value: "Cl" },
-        { text: "Bromine", value: "Br" },
-        { text: "Iodine", value: "I" },
-      ],
-      value: this.em.element,
-    }) as any).on("change", (ev: any) => {
-      this.em.element = ev.value;
-    });
-
-    const bond = this.pane.addFolder({ title: "Bond" });
-    (bond.addBlade({
-      view: "list",
-      label: "Order",
-      options: [
-        { text: "Single", value: 1 },
-        { text: "Double", value: 2 },
-        { text: "Triple", value: 3 },
-      ],
-      value: this.em.bondOrder,
-    }) as any).on("change", (ev: any) => {
-      this.em.bondOrder = ev.value;
-    });
-  }
-
-  public show(x: number, y: number) {
-    this.container.style.left = `${x}px`;
-    this.container.style.top = `${y}px`;
-    this.pane.hidden = false;
-  }
-
-  public hide() {
-    this.pane.hidden = true;
-  }
 }
 
 /* ----------------------------------
@@ -289,7 +221,6 @@ class EditMode extends BaseMode {
   private element_ = "C";
   private bondOrder_ = 1;
 
-  private menu?: EditModeMenu;
   private meshPool: MeshPool;
   private previews: PreviewManager;
 
@@ -311,9 +242,45 @@ class EditMode extends BaseMode {
     super(ModeType.Edit, app);
     this.meshPool = new MeshPool();
     this.previews = new PreviewManager(this.world.scene);
-    if (typeof document !== "undefined") {
-      this.menu = new EditModeMenu(this);
-    }
+  }
+
+  protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
+    return (pane: any) => {
+      const element = pane.addFolder({ title: "Atom" });
+      (element.addBlade({
+        view: "list",
+        label: "Type",
+        options: [
+          { text: "Carbon", value: "C" },
+          { text: "Nitrogen", value: "N" },
+          { text: "Oxygen", value: "O" },
+          { text: "Hydrogen", value: "H" },
+          { text: "Sulfur", value: "S" },
+          { text: "Phosphorus", value: "P" },
+          { text: "Fluorine", value: "F" },
+          { text: "Chlorine", value: "Cl" },
+          { text: "Bromine", value: "Br" },
+          { text: "Iodine", value: "I" },
+        ],
+        value: this.element,
+      }) as any).on("change", (ev: any) => {
+        this.element = ev.value;
+      });
+
+      const bond = pane.addFolder({ title: "Bond" });
+      (bond.addBlade({
+        view: "list",
+        label: "Order",
+        options: [
+          { text: "Single", value: 1 },
+          { text: "Double", value: 2 },
+          { text: "Triple", value: 3 },
+        ],
+        value: this.bondOrder,
+      }) as any).on("change", (ev: any) => {
+        this.bondOrder = ev.value;
+      });
+    };
   }
 
   /* ------------------------------
@@ -450,7 +417,7 @@ class EditMode extends BaseMode {
     super._on_pointer_down(pointerInfo);
 
     // [Branch] Left button → Hide context menu
-    if (pointerInfo.event.button === 0) this.menu?.hide();
+    if (pointerInfo.event.button === 0) this.hideContextMenu();
 
     // Early exit for non-left clicks
     if (pointerInfo.event.button !== 0) return;
@@ -610,7 +577,7 @@ class EditMode extends BaseMode {
         // [Branch] Right-click on blank → open menu
         pointerInfo.event.preventDefault();
         console.log("Showing context menu");
-        this.menu?.show(pointerInfo.event.clientX, pointerInfo.event.clientY);
+        this.showContextMenu(pointerInfo.event.clientX, pointerInfo.event.clientY);
       }
     }
   }
@@ -652,12 +619,12 @@ class EditMode extends BaseMode {
    * ------------------------------ */
 
   protected showContextMenu(x: number, y: number): void {
-    this.menu?.show(x, y);
+    this.contextMenu.show(x, y);
   }
 
   protected hideContextMenu(): void {
-    this.menu?.hide();
+    this.contextMenu.hide();
   }
 }
 
-export { EditMode, EditModeMenu, MeshPool, PreviewManager, EditCommandType };
+export { EditMode, MeshPool, PreviewManager, EditCommandType };

@@ -1,6 +1,5 @@
 import type { PointerInfo, AbstractMesh, Vector3 } from "@babylonjs/core";
 import { MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
-import { Pane } from "tweakpane";
 import { BaseMode, ModeType } from "./base";
 import type { Molvis } from "@molvis/core";
 
@@ -12,110 +11,9 @@ interface MeasurementData {
   distance: number;
 }
 
-class MeasureModeMenu {
-  private container: HTMLDivElement | null = null;
-  private pane: Pane | null = null;
-  private containerId: string;
-  private isBuilt = false;
-
-  constructor(private measureMode: MeasureMode) {
-    this.containerId = "molvis-measure-menu";
-  }
-
-  private build() {
-    const existingContainer = this.measureMode.molvisApp.uiContainer?.querySelector(`#${this.containerId}`) as HTMLDivElement;
-    
-    if (existingContainer) {
-      this.container = existingContainer;
-      if (this.pane) {
-        this.pane.dispose();
-      }
-    } else {
-      this.container = document.createElement("div");
-      this.container.id = this.containerId;
-      this.container.className = "MolvisModeMenu";
-      this.container.style.position = "fixed";
-      this.container.style.zIndex = "9999";
-      this.container.style.pointerEvents = "auto";
-      
-      if (this.measureMode.molvisApp.uiContainer) {
-        this.measureMode.molvisApp.uiContainer.appendChild(this.container);
-      }
-    }
-    
-    this.pane = new Pane({ container: this.container, title: "Measurement" });
-    this.pane.hidden = true;
-    this.buildMenuContent();
-    this.isBuilt = true;
-  }
-
-  private buildMenuContent() {
-    if (!this.pane) return;
-
-    // Unit selection
-    this.pane.addBinding(this.measureMode, "unit", {
-      view: "list",
-      label: "Unit",
-      options: [
-        { text: "Angstrom (Å)", value: "angstrom" },
-        { text: "Nanometer (nm)", value: "nanometer" },
-        { text: "Picometer (pm)", value: "picometer" }
-      ]
-    }).on('change', () => {
-      this.measureMode.updateAllLabels();
-    });
-
-    // Precision control
-    this.pane.addBinding(this.measureMode, "precision", {
-      label: "Precision",
-      min: 1,
-      max: 6,
-      step: 1
-    }).on('change', () => {
-      this.measureMode.updateAllLabels();
-    });
-
-    this.pane.addBlade({ view: 'separator' });
-
-    // Clear all measurements
-    this.pane.addButton({ title: "Clear All" }).on("click", () => {
-      this.measureMode.clearAllMeasurements();
-    });
-  }
-
-  public show(x: number, y: number) {
-    if (!this.isBuilt) {
-      this.build();
-    }
-    
-    if (this.container && this.pane) {
-      this.container.style.left = `${x}px`;
-      this.container.style.top = `${y}px`;
-      this.pane.hidden = false;
-    }
-  }
-
-  public hide() {
-    if (this.pane) {
-      this.pane.hidden = true;
-    }
-  }
-
-  public dispose() {
-    if (this.pane) {
-      this.pane.dispose();
-      this.pane = null;
-    }
-    this.container?.parentNode?.removeChild(this.container);
-    this.container = null;
-    this.isBuilt = false;
-  }
-}
-
 class MeasureMode extends BaseMode {
   private measurements: Map<string, MeasurementData> = new Map();
   private selectedAtom: AbstractMesh | null = null;
-  private menu: MeasureModeMenu;
   
   // Configuration properties
   public unit = "angstrom";
@@ -123,19 +21,48 @@ class MeasureMode extends BaseMode {
 
   constructor(app: Molvis) {
     super(ModeType.Measure, app);
-    this.menu = new MeasureModeMenu(this);
   }
 
-  public get molvisApp(): Molvis {
-    return this.app;
+  protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
+    return (pane: any) => {
+      // Unit selection
+      pane.addBinding(this, "unit", {
+        view: "list",
+        label: "Unit",
+        options: [
+          { text: "Angstrom (Å)", value: "angstrom" },
+          { text: "Nanometer (nm)", value: "nanometer" },
+          { text: "Picometer (pm)", value: "picometer" }
+        ]
+      }).on('change', () => {
+        this.updateAllLabels();
+      });
+
+      // Precision control
+      pane.addBinding(this, "precision", {
+        label: "Precision",
+        min: 1,
+        max: 6,
+        step: 1
+      }).on('change', () => {
+        this.updateAllLabels();
+      });
+
+      pane.addBlade({ view: 'separator' });
+
+      // Clear all measurements
+      pane.addButton({ title: "Clear All" }).on("click", () => {
+        this.clearAllMeasurements();
+      });
+    };
   }
 
   protected showContextMenu(x: number, y: number): void {
-    this.menu.show(x, y);
+    this.contextMenu.show(x, y);
   }
 
   protected hideContextMenu(): void {
-    this.menu.hide();
+    this.contextMenu.hide();
   }
 
   protected override _on_left_up(pointerInfo: PointerInfo): void {
@@ -299,8 +226,8 @@ class MeasureMode extends BaseMode {
     this.clearAllMeasurements();
     this.clearCurrentSelection();
     
-    if (this.menu) {
-      this.menu.dispose();
+    if (this.contextMenu) {
+      this.contextMenu.dispose();
     }
     
     super.finish();

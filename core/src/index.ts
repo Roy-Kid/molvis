@@ -12,8 +12,8 @@ export { createMolvisDom } from "./dom/dom-manager";
 export { resolveMolvisOptions } from "./dom/options";
 export { Frame, AtomBlock as Atom, BondBlock as Bond, Topology, Box } from "./structure";
 // System and Trajectory removed; use structure module only
-export { World } from "./world";
-export { GuiManager } from "./gui";
+export { World } from "./core";
+export { GuiManager } from "./dom/gui";
 export {
   ArtistBase,
   ArtistRegistry,
