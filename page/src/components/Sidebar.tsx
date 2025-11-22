@@ -30,8 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
         style={{
           position: 'fixed',
           top: 16,
-          right: isOpen ? 320 : 0,
-          zIndex: 10,
+          right: isOpen ? 320 : 0
         }}
       />
       
@@ -44,7 +43,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
           height: '100%',
           backgroundColor: 'white',
           borderLeft: '1px solid #333',
-          zIndex: 9,
           padding: 16,
           overflowY: 'auto',
           boxShadow: '0 0 10px rgba(0,0,0,0.4)'

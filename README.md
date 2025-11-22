@@ -50,9 +50,6 @@ water.add_atom(hydrogen2);
 const bond1 = new Bond(oxygen, hydrogen1);
 const bond2 = new Bond(oxygen, hydrogen2);
 
-console.log(`Molecular weight: ${water.getMolecularWeight()}`);
-console.log(`Bond lengths: ${bond1.getLength()}, ${bond2.getLength()}`);
-
 // Render the scene
 app.render();
 ```

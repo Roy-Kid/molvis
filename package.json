@@ -21,8 +21,5 @@
     "@biomejs/biome": "1.9.4",
     "@rsbuild/core": "^1.2.19",
     "@rslib/core": "^0.5.4"
-  },
-  "dependencies": {
-    "@fluentui/web-components": "^2.6.1"
   }
 }

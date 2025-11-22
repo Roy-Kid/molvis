@@ -35,7 +35,7 @@ class BaseModeMenu {
 
   private build() {
     // Check if container already exists
-    const existingContainer = this.app.uiContainer?.querySelector(`#${this.containerId}`) as HTMLDivElement;
+    const existingContainer = document.getElementById(this.containerId) as HTMLDivElement;
 
     if (existingContainer) {
       // Reuse existing container
@@ -49,19 +49,16 @@ class BaseModeMenu {
       this.container = document.createElement("div");
       this.container.id = this.containerId;
       this.container.className = "MolvisModeMenu";
-      this.container.style.position = "fixed";
-      this.container.style.zIndex = "99999";
+      this.container.style.position = "absolute"; // Absolute within UI overlay
       this.container.style.pointerEvents = "auto";
       this.container.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
       this.container.style.borderRadius = "8px";
       this.container.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.3)";
+      this.container.style.zIndex = "10000";
 
-      // Mount to app's uiContainer
-      if (this.app.uiContainer) {
-        this.app.uiContainer.appendChild(this.container);
-      } else {
-        document.body.appendChild(this.container);
-      }
+      // Mount to UI overlay container instead of body
+      // This ensures the menu works with the pointer-events setup
+      this.app.uiContainer.appendChild(this.container);
     }
 
     this.pane = new Pane({
@@ -92,10 +89,6 @@ class BaseModeMenu {
       this.mode.takeScreenShot();
     });
 
-    (this.pane as any).addButton({ title: "Split Right" }).on("click", () => {
-      this.mode.splitRight();
-    });
-
     // Add custom menu items
     if (this.addCustomMenu) {
       this.addCustomMenu(this.pane);
@@ -109,11 +102,15 @@ class BaseModeMenu {
     if (this.container && this.pane) {
       this.container.style.left = `${x}px`;
       this.container.style.top = `${y}px`;
+      this.container.style.display = 'block';
       (this.pane as any).hidden = false;
     }
   }
 
   public hide() {
+    if (this.container) {
+      this.container.style.display = 'none'; // Hide container
+    }
     if (this.pane) {
       (this.pane as any).hidden = true;
     }
@@ -168,10 +165,6 @@ abstract class BaseMode {
     return this._pointer_up_xy.subtract(this._pointer_down_xy).length() > 0.2;
   }
 
-  // protected get context_menu() {
-  //   return this.gui.contextMenu;
-  // }
-
   protected init_context_menu() {
     this.contextMenu = new BaseModeMenu(this, "molvis-base-menu", this._app, this.getCustomMenuBuilder());
   }
@@ -182,34 +175,6 @@ abstract class BaseMode {
 
   public takeScreenShot(): void {
     this.world?.takeScreenShot();
-  }
-
-  public splitRight(): void {
-    // Create a new scene with the same canvas
-    const sceneId = 'split-right-' + Date.now();
-    this._app.createScene(sceneId);
-
-    // Get all scene IDs
-    const allScenes = this._app.allSceneIds;
-
-    // Set viewports for split view
-    if (allScenes.length === 2) {
-      const leftSceneId = allScenes[0];
-      const rightSceneId = allScenes[1];
-
-      const leftWorld = this._app.getWorld(leftSceneId);
-      const rightWorld = this._app.getWorld(rightSceneId);
-
-      if (leftWorld && rightWorld) {
-        leftWorld.setViewport(0, 0, 0.5, 1);
-        rightWorld.setViewport(0.5, 0, 0.5, 1);
-      }
-    }
-
-    // Switch to the new scene
-    this._app.switchToScene(sceneId);
-
-    console.log(`Split right: created scene ${sceneId}`);
   }
 
   public finish() {
@@ -311,20 +276,28 @@ abstract class BaseMode {
     this._contextMenuOpen = false;
   }
   protected isContextMenuOpen(): boolean { return this._contextMenuOpen; }
-  
+
   protected setContextMenuState(open: boolean): void {
     this._contextMenuOpen = open;
   }
 
   _on_pointer_down(pointerInfo: PointerInfo): void {
     this._pointer_down_xy = this.get_pointer_xy();
-    
+
+    // Auto-switch active camera on click
+    const x = pointerInfo.event.clientX;
+    const y = pointerInfo.event.clientY;
+    const camIndex = this.world.viewManager.pickCamera(x, y);
+    if (camIndex !== -1) {
+      this.world.viewManager.setActiveCamera(camIndex);
+    }
+
     if (pointerInfo.event.button === 0) {
       this._on_left_down(pointerInfo);
     } else if (pointerInfo.event.button === 2) {
       this._on_right_down(pointerInfo);
     }
-    
+
     if (this._contextMenuOpen && pointerInfo.event.button === 0) {
       this.hideContextMenu();
       this._contextMenuOpen = false;
@@ -333,7 +306,7 @@ abstract class BaseMode {
 
   _on_pointer_up(pointerInfo: PointerInfo): void {
     this._pointer_up_xy = this.get_pointer_xy();
-    
+
     if (pointerInfo.event.button === 0) {
       this._on_left_up(pointerInfo);
     } else if (pointerInfo.event.button === 2) {
@@ -356,17 +329,17 @@ abstract class BaseMode {
 
   protected _on_right_up(pointerInfo: PointerInfo): void {
     if (!this._is_dragging) {
-              // Prevent default context menu
-        pointerInfo.event.preventDefault();
-        
-        if (this._contextMenuOpen) {
-          this.hideContextMenu();
-          this._contextMenuOpen = false;
-        } else {
-          const { x, y } = pointerInfo.event;
-          this.showContextMenu(x, y);
-          this._contextMenuOpen = true;
-        }
+      // Prevent default context menu
+      pointerInfo.event.preventDefault();
+
+      if (this._contextMenuOpen) {
+        this.hideContextMenu();
+        this._contextMenuOpen = false;
+      } else {
+        const { x, y } = pointerInfo.event;
+        this.showContextMenu(x, y);
+        this._contextMenuOpen = true;
+      }
     }
   }
 
@@ -408,21 +381,21 @@ abstract class BaseMode {
     }
   }
 
-  _on_pointer_wheel(_pointerInfo: PointerInfo): void {}
-  _on_pointer_pick(_pointerInfo: PointerInfo): void {}
-  _on_pointer_tap(_pointerInfo: PointerInfo): void {}
-  _on_pointer_double_tap(_pointerInfo: PointerInfo): void {}
-  _on_press_e(): void {}
-  
-  _on_press_q(): void {}
-  
+  _on_pointer_wheel(_pointerInfo: PointerInfo): void { }
+  _on_pointer_pick(_pointerInfo: PointerInfo): void { }
+  _on_pointer_tap(_pointerInfo: PointerInfo): void { }
+  _on_pointer_double_tap(_pointerInfo: PointerInfo): void { }
+  _on_press_e(): void { }
+
+  _on_press_q(): void { }
+
   protected _on_press_escape(): void {
     // Override in subclasses for custom escape behavior
   }
 
-  protected _on_press_ctrl_s(): void {}
-  protected _on_press_ctrl_z(): void {}
-  protected _on_press_ctrl_y(): void {}
+  protected _on_press_ctrl_s(): void { }
+  protected _on_press_ctrl_z(): void { }
+  protected _on_press_ctrl_y(): void { }
 
   protected get_pointer_xy(): Vector2 {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);
@@ -430,20 +403,21 @@ abstract class BaseMode {
 
   protected pick_mesh(type: "atom" | "bond"): AbstractMesh | null {
     const scene = this.world.scene;
-    
+
     const pickResult = scene.pick(
-      scene.pointerX, 
+      scene.pointerX,
       scene.pointerY,
       (mesh: AbstractMesh) => {
         const md: any = (mesh as any).metadata;
         const meshType = md?.meshType;
-        const byMeta = md && (meshType === type);
-        return byMeta && mesh.isEnabled() && mesh.isVisible;
+        if (meshType === type) {
+          return true;
+        }
+        return false;
       },
       false,
       this.world.camera
     );
-    console.log("Pick result:", pickResult);
     return pickResult.hit ? pickResult.pickedMesh : null;
   }
 }

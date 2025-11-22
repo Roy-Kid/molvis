@@ -1,4 +1,5 @@
 export { World } from "./world";
-export { AxisHelper } from "./axes";
-export { GridGround } from "./grid";
-export { MeshGroup } from "./group";
+export { MolvisApp } from "./app";
+export { GuiManager } from "./gui";
+export { ViewManager } from "./view_manager";
+export type { ResolvedMolvisOptions, MolvisOptions } from "./options";

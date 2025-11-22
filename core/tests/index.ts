@@ -1,6 +1,7 @@
 import { Color3, Vector3 } from "@babylonjs/core";
 import { mountMolvis } from "../src";
 import { AtomBlock, BondBlock, Frame } from "../src/structure";
+import { Box } from "molrs";
 
 const ensureGlobalStyles = (): void => {
   if (document.getElementById("molvis-test-styles")) {
@@ -63,15 +64,13 @@ const initialize = async (): Promise<void> => {
       frame: frameWater,
       options: { bonds: { radius: 0.08 } },
     });
-    const waterWorld = app.world;
-    if (waterWorld) {
+    const waterWorld = app.world; if (waterWorld) {
       waterWorld.camera.target = new Vector3(0, 0, 0);
     }
 
     // Create second scene with ethanol molecule
     app.world.createScene('ethanol-scene', app.canvas);
     app.world.switchToScene('ethanol-scene');
-    app.gui.updateTabIndicator('ethanol-scene', app.world.allSceneIds);
     await app.world.executor.execute("draw_frame", {
       frame: frameEthanol,
       options: { bonds: { radius: 0.08 } },
@@ -81,10 +80,16 @@ const initialize = async (): Promise<void> => {
       ethanolWorld.camera.target = new Vector3(1.5, 0, 0);
     }
 
+    // Draw Box
+    const box = Box.cube(10, new Float32Array([0, 0, 0]), true, true, true);
+    await app.world.executor.execute("draw_box", {
+      box,
+      color: Color3.Red(),
+    })
+
     app.start();
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to initialize Molvis demo frames:", error);
+    throw error;
   }
 };
 

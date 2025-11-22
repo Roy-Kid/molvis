@@ -73,19 +73,24 @@ function makeId(prefix = "atom"): string {
 
 class MeshPool {
   private stagedMeshes: Mesh[] = [];
+  private persistentMeshes: Mesh[] = []; // Meshes that should NOT be disposed on clean
   private commandStack: CommandRecord[] = [];
   private undoStack: CommandRecord[] = [];
 
-  addMesh(mesh: Mesh) {
-    this.stagedMeshes.push(mesh);
+  addMesh(mesh: Mesh, persistent: boolean = false) {
+    if (persistent) {
+      this.persistentMeshes.push(mesh);
+    } else {
+      this.stagedMeshes.push(mesh);
+    }
   }
 
   getStagedMeshes(): Mesh[] {
-    return this.stagedMeshes;
+    return [...this.persistentMeshes, ...this.stagedMeshes];
   }
 
   hasStagedContent(): boolean {
-    return this.stagedMeshes.length > 0;
+    return this.stagedMeshes.length > 0 || this.persistentMeshes.length > 0;
   }
 
   addCommand(record: CommandRecord) {
@@ -99,7 +104,11 @@ class MeshPool {
     if (record) {
       this.undoStack.push(record);
       // Dispose meshes & remove from staged
-      record.meshes.forEach((m) => m.dispose());
+      record.meshes.forEach((m) => {
+        if (!this.persistentMeshes.includes(m)) {
+          m.dispose();
+        }
+      });
       this.stagedMeshes = this.stagedMeshes.filter((m) => !record.meshes.includes(m));
     }
     return record || null;
@@ -115,6 +124,7 @@ class MeshPool {
   }
 
   saveToFrame(frame: FrameLike) {
+    // Only save staged (new) meshes, not persistent ones (unless modified? assuming read-only for now)
     for (const mesh of this.stagedMeshes) {
       const md = mesh.metadata || {};
       if (md.type === "atom") {
@@ -134,8 +144,11 @@ class MeshPool {
   }
 
   clean() {
+    // Dispose only staged (temporary) meshes
     this.stagedMeshes.forEach((m) => m.dispose());
     this.stagedMeshes = [];
+    // Clear persistent list but DO NOT dispose them
+    this.persistentMeshes = [];
     this.commandStack = [];
     this.undoStack = [];
   }
@@ -148,37 +161,53 @@ class MeshPool {
 class PreviewManager {
   private previewAtom: Mesh | null = null;
   private previewBond: Mesh | null = null;
-  private highlightedMesh: Mesh | null = null;
 
-  constructor(private scene: Scene) {}
+  constructor(private app: Molvis) { }
 
-  /** Highlight a mesh (outline). */
-  setHighlight(mesh: Mesh | null) {
-    // Clear existing highlight first
-    if (this.highlightedMesh) this.highlightedMesh.renderOutline = false;
-    this.highlightedMesh = null;
+  private get scene() {
+    return this.app.scene;
+  }
 
-    if (mesh) {
-      mesh.renderOutline = true;
-      this.highlightedMesh = mesh;
+  /** Show or update the preview atom at a given position with optional opacity and diameter. */
+  showAtom(position: Vector3, opacity: number = 1.0, diameter: number = 0.5) {
+    if (!this.previewAtom) {
+      // Create preview atom using Babylon.js directly
+      this.previewAtom = MeshBuilder.CreateSphere("preview_atom", { diameter }, this.scene);
+
+      const mat = new StandardMaterial("preview_atom_mat", this.scene);
+      mat.diffuseColor = new Color3(0.7, 0.7, 0.7);
+      mat.emissiveColor = new Color3(0.3, 0.3, 0.3);
+      mat.alpha = opacity;
+      mat.useAlphaFromDiffuseTexture = false;
+      mat.needDepthPrePass = true;
+
+      this.previewAtom.material = mat;
+      this.previewAtom.isPickable = false;
+      this.previewAtom.position = position;
+    } else {
+      // Update existing preview atom
+      this.previewAtom.position = position;
+      this.previewAtom.isVisible = true;
+
+      // Update material opacity if needed
+      const mat = this.previewAtom.material as StandardMaterial;
+      if (mat) {
+        mat.alpha = opacity;
+      }
     }
   }
 
-  /** Show or update the preview atom at a given position. */
-  showAtom(position: Vector3) {
-    if (!this.previewAtom) {
-      this.previewAtom = MeshBuilder.CreateSphere("preview_atom", { diameter: 0.5 }, this.scene);
-      const mat = new StandardMaterial("preview_atom_mat", this.scene);
-      mat.diffuseColor = new Color3(0.5, 0.5, 0.5);
-      this.previewAtom.material = mat;
+  /** Hide the preview atom. */
+  hideAtom() {
+    if (this.previewAtom) {
+      this.previewAtom.isVisible = false;
     }
-    this.previewAtom.position.copyFrom(position);
   }
 
   /** Show or update the preview bond along a path of two points. */
   showBond(path: Vector3[]) {
     if (this.previewBond) {
-      MeshBuilder.CreateTube("preview_bond", { path, instance: this.previewBond });
+      MeshBuilder.CreateTube("preview_bond", { path, instance: this.previewBond }, this.scene);
     } else {
       this.previewBond = MeshBuilder.CreateTube(
         "preview_bond",
@@ -191,7 +220,7 @@ class PreviewManager {
     }
   }
 
-  /** Clear previews and highlight. */
+  /** Clear previews. */
   clear() {
     if (this.previewAtom) {
       this.previewAtom.dispose();
@@ -200,10 +229,6 @@ class PreviewManager {
     if (this.previewBond) {
       this.previewBond.dispose();
       this.previewBond = null;
-    }
-    if (this.highlightedMesh) {
-      this.highlightedMesh.renderOutline = false;
-      this.highlightedMesh = null;
     }
   }
 }
@@ -241,7 +266,20 @@ class EditMode extends BaseMode {
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
     this.meshPool = new MeshPool();
-    this.previews = new PreviewManager(this.world.scene);
+
+    // Initialize MeshPool with existing atoms in the scene
+    this.world.scene.meshes.forEach((mesh) => {
+      if (mesh instanceof Mesh) {
+        const md = mesh.metadata;
+        // Check if it's an atom (either by metadata or name convention)
+        if ((md && md.meshType === "atom") || mesh.name.includes("atom") || mesh.name.includes("sphere")) {
+          this.meshPool.addMesh(mesh, true); // Add as persistent
+        }
+      }
+    });
+
+    // Initialize PreviewManager
+    this.previews = new PreviewManager(app);
   }
 
   protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
@@ -300,22 +338,19 @@ class EditMode extends BaseMode {
       }
 
       this.meshPool.addCommand(record);
-      // eslint-disable-next-line no-console
-      console.log(`Executed & staged: ${command}`, args);
     };
 
     try {
       const outcome = this.app.executor.execute(command, args);
-      console.log("Outcome:", outcome);
       if (outcome && typeof (outcome as Promise<any>).then === "function") {
         (outcome as Promise<any>).then(handleOutcome).catch((err) => {
-          console.error(`Command failed: ${command}`, err);
+          throw err;
         });
       } else {
         handleOutcome(outcome);
       }
     } catch (err) {
-      console.error(`Command threw: ${command}`, err);
+      throw err;
     }
 
     return record;
@@ -333,82 +368,6 @@ class EditMode extends BaseMode {
     return { meshes: [], entities: [] };
   }
 
-  // private createMetadata(command: EditCommandType | string, args: CommandArgs): any {
-  //   if (command === EditCommandType.DrawAtom || command === "draw_atom") {
-  //     const x = args.position.x;
-  //     const y = args.position.y;
-  //     const z = args.position.z;
-  //     return { type: "atom", command, args, name: args.name, element: args.element, x, y, z };
-  //   }
-  //   if (command === EditCommandType.DrawBond || command === "draw_bond") {
-  //     const x1 = args.start.x;
-  //     const y1 = args.start.y;
-  //     const z1 = args.start.z;
-  //     const x2 = args.end.x;
-  //     const y2 = args.end.y;
-  //     const z2 = args.end.z;
-  //     return {
-  //       type: "bond",
-  //       command,
-  //       args,
-  //       x1,
-  //       y1,
-  //       z1,
-  //       x2,
-  //       y2,
-  //       z2,
-  //       order: args.options?.order || 1,
-  //     };
-  //   }
-  //   if (command === EditCommandType.DeleteAtom || command === "delete_atom") {
-  //     return { type: "deleted_atom", command, args, atomName: args.atom?.name || args.atomName };
-  //   }
-  //   return { type: "unknown", command, args };
-  // }
-
-  /* ------------------------------
-   * Helpers
-   * ------------------------------ */
-
-  // private findAtomByName(name: string): Atom | null {
-  //   // 1) search in current frame
-  //   const a = this.world.currentFrame.atoms.find((it: any) => it.name === name);
-  //   if (a) return a;
-
-  //   // 2) search in staged meshes metadata
-  //   const staged = this.meshPool.getStagedMeshes();
-  //   const mesh = staged.find((m: any) => m.metadata?.name === name);
-  //   if (mesh && mesh.metadata) {
-  //     const { x, y, z } = mesh.metadata as any;
-  //     return {
-  //       name: mesh.metadata.name,
-  //       xyz: { x, y, z },
-  //       get: (k: string) => mesh.metadata[k],
-  //     } as any;
-  //   }
-  //   return null;
-  // }
-
-  private highlightAtom(atom: Atom | null) {
-    // Remove then set
-    this.previews.setHighlight(null);
-    if (!atom) return;
-
-    // find Babylon mesh by naming convention
-    let mesh = this.world.scene.getMeshByName(`atom:${atom.name}`) as Mesh | null;
-    if (!mesh) {
-      mesh = this.meshPool.getStagedMeshes().find((m) => m.metadata?.name === atom.name) || null;
-    }
-    if (mesh) this.previews.setHighlight(mesh);
-  }
-
-  private saveToFrame() {
-    if (!this.meshPool.hasStagedContent()) return;
-    this.meshPool.saveToFrame(this.world.currentFrame as unknown as FrameLike);
-    this.meshPool.clean();
-    console.log("Changes saved to current frame");
-  }
-
   /* ------------------------------
    * Pointer events (with branch comments)
    * ------------------------------ */
@@ -424,8 +383,8 @@ class EditMode extends BaseMode {
 
     // [Branch] Left click on atom mesh → start a bond from this atom
     const mesh = this.pick_mesh("atom");
-    console.log("Picked mesh on pointer down:", mesh);
-    if (mesh && mesh.metadata?.meshType === "atom") {
+    // Trust pick_mesh result (it handles metadata or name fallback)
+    if (mesh) {
       this.startAtom = mesh;
       if (this.startAtom) {
         this.world.camera.detachControl(); // lock camera during drag-bond
@@ -442,41 +401,44 @@ class EditMode extends BaseMode {
     super._on_pointer_move(pointerInfo);
 
     // Only react if we are dragging from an atom (drawing a bond)
-    if (!this.startAtom || pointerInfo.event.buttons !== 1) return;
+    // Check if left button is pressed (buttons === 1 means left button is down during move)
+    if (!this.startAtom) return;
+
+    // Calculate current cursor position in 3D space
+    // Use startAtom position as anchor to ensure the plane passes through the atom
+    const xyz = pointOnScreenAlignedPlane(
+      this.world.scene,
+      this.world.camera,
+      pointerInfo.event.clientX,
+      pointerInfo.event.clientY,
+      this.startAtom.position
+    );
 
     // Attempt to magnet to another atom under cursor
     const hit = this.pick_mesh("atom");
     let hover: AbstractMesh | null = null;
 
-    // [Branch] Cursor over another atom & not the start atom → lock hover target
-    if (hit && hit.metadata?.meshType === "atom") {
-      if (hit && hit !== this.startAtom) hover = hit;
-    }
-
-    // Update highlight only if changed
-    if (hover !== this.hoverAtom) {
-      this.hoverAtom = hover;
-      this.highlightAtom(hover);
-      // No need to keep preview atom when snapping to an existing atom
-      if (hover) this.previews.showAtom(new Vector3(0, 0, 0)); // no-op position (will be hidden by not drawing)
+    // [Branch] Cursor over another atom & not the start atom → magnetic snapping
+    // Trust pick_mesh result directly - if we hit an atom, we snap to it
+    if (hit && hit !== this.startAtom) {
+      hover = hit;
     }
 
     if (hover) {
-      // [Branch] Snapped to existing atom: show bond preview from start → hover
+      // [Branch] Snapped to existing atom: hide preview atom, show bond preview from start → hover
+      this.hoverAtom = hover; // Update state for _on_pointer_up
+      this.previews.hideAtom();
+
       const path = [
         new Vector3(this.startAtom.position.x, this.startAtom.position.y, this.startAtom.position.z),
         new Vector3(hover.position.x, hover.position.y, hover.position.z),
       ];
       this.previews.showBond(path);
     } else {
-      // [Branch] Not over an atom: show a preview atom + bond from start → preview point
-      const xyz = pointOnScreenAlignedPlane(
-        this.world.scene,
-        this.world.camera,
-        pointerInfo.event.clientX,
-        pointerInfo.event.clientY
-      );
-      this.previews.showAtom(xyz);
+      // [Branch] Not over an atom: show preview atom + bond from start → preview point
+      this.hoverAtom = null; // Clear hover state
+      console.log("showAtom", xyz);
+      this.previews.showAtom(xyz, 0.5, 0.5);
       const startPos = this.startAtom.position;
       const path = [
         new Vector3(startPos.x, startPos.y, startPos.z),
@@ -497,34 +459,32 @@ class EditMode extends BaseMode {
     // -----------------------------
     if (isLeft && this.startAtom) {
       // [Branch] Releasing after drag from an atom
+      const xyz = pointOnScreenAlignedPlane(
+        this.world.scene,
+        this.world.camera,
+        pointerInfo.event.clientX,
+        pointerInfo.event.clientY
+      );
       if (this.hoverAtom) {
-        // Case A: create bond between two existing atoms
+        // [Branch] Snapped to existing atom → create bond only
         this.executeAndStage(EditCommandType.DrawBond, {
-          start: [this.startAtom.position.x, this.startAtom.position.y, this.startAtom.position.z],
-          end: [this.hoverAtom.position.x, this.hoverAtom.position.y, this.hoverAtom.position.z],
+          start: this.startAtom.position.clone(),
+          end: this.hoverAtom.position.clone(),
           options: { order: this.bondOrder },
         });
       } else {
-        // Case B: create a new atom at preview position + a bond from start
-        const xyz = pointOnScreenAlignedPlane(
-          this.world.scene,
-          this.world.camera,
-          pointerInfo.event.clientX,
-          pointerInfo.event.clientY
-        );
+        // [Branch] Released in empty space → create new atom + bond
         const atomName = makeId("atom");
-
-        // draw atom
         this.executeAndStage(EditCommandType.DrawAtom, {
           name: atomName,
           element: this.element,
-          position: Vector3.FromArray([xyz.x, xyz.y, xyz.z]),
+          position: xyz,
           options: {},
         });
         // draw bond
         this.executeAndStage(EditCommandType.DrawBond, {
-          start: Vector3.FromArray([this.startAtom.position.x, this.startAtom.position.y, this.startAtom.position.z]),
-          end: Vector3.FromArray([xyz.x, xyz.y, xyz.z]),
+          start: this.startAtom.position.clone(),
+          end: xyz,
           options: { order: this.bondOrder },
         });
       }
@@ -568,22 +528,15 @@ class EditMode extends BaseMode {
     // -----------------------------
     if (isRight && !this._is_dragging) {
       const hit = this.pick_mesh("atom");
-      console.log("Picked mesh on right click:", hit);
       if (hit && hit.metadata?.meshType === "atom") {
         // [Branch] Right-click on atom → delete
-        console.log("Deleting atom:", hit);
         this.executeAndStage(EditCommandType.DeleteAtom, { atomId: hit.metadata.atomId ?? hit.uniqueId });
       } else if (!hit) {
         // [Branch] Right-click on blank → open menu
         pointerInfo.event.preventDefault();
-        console.log("Showing context menu");
         this.showContextMenu(pointerInfo.event.clientX, pointerInfo.event.clientY);
       }
     }
-  }
-
-  protected override _on_right_up(pointerInfo: PointerInfo): void {
-    
   }
 
   /* ------------------------------
@@ -601,11 +554,10 @@ class EditMode extends BaseMode {
     if (!redone) return;
     // re-execute to recreate meshes
     this.executeAndStage(redone.command, redone.args);
-    console.log("Redo:", redone.command);
   }
 
   _on_press_ctrl_s(): void {
-    this.saveToFrame();
+    // this.saveToFrame();
   }
 
   public finish() {

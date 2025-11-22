@@ -1,6 +1,7 @@
 import { BaseMode, ModeType } from "./base";
 import type { MolvisApp } from "../core/app";
 import type { PointerInfo } from "@babylonjs/core";
+// import { ViewLayout } from "../core/view_manager"; // Removed
 
 class ViewMode extends BaseMode {
   private viewMode = "persp";
@@ -30,6 +31,27 @@ class ViewMode extends BaseMode {
       pane.addBlade({
         view: 'separator',
       });
+
+      // Layout options removed as they are now handled by the recursive layout system
+      /*
+      const layoutFolder = pane.addFolder({ title: "Layout" });
+      const layoutOptions = [
+        { text: "Single", value: ViewLayout.Single },
+        { text: "Split Vertical", value: ViewLayout.SplitVertical },
+        { text: "Quad", value: ViewLayout.Quad },
+      ];
+
+      layoutFolder
+        .addBlade({
+          view: "list",
+          label: "layout",
+          options: layoutOptions,
+          value: ViewLayout.Single,
+        })
+        .on("change", (ev: any) => {
+          this.world.viewManager.setLayout(ev.value as ViewLayout);
+        });
+      */
     };
   }
 

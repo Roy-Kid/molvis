@@ -43,6 +43,7 @@ export function pointOnScreenAlignedPlane(
   camera: Camera,
   clientX: number,
   clientY: number,
+  anchor?: Vector3
 ): Vector3 {
   const engine = scene.getEngine();
   const canvas = engine.getRenderingCanvas();
@@ -57,7 +58,7 @@ export function pointOnScreenAlignedPlane(
 
   const forward = camera.getForwardRay().direction;
   const normal = forward.scale(-1).normalize();
-  const origin = (camera as any).target ?? camera.position.add(normal); // 支持非 ArcRotate
+  const origin = anchor ?? (camera as any).target ?? camera.position.add(normal); // 支持非 ArcRotate
   const plane = Plane.FromPositionAndNormal(origin, normal);
 
   const ray = scene.createPickingRay(rx, ry, Matrix.Identity(), camera);

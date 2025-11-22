@@ -1,7 +1,7 @@
-import { Logger } from "tslog";
+import { createLogger } from "../utils/logger";
 import "./draw";
 import "./select";
-import type { Molvis } from "../app";
+import type { MolvisApp as Molvis } from "../core/app";
 import type { ArtistBase } from "../artist/base";
 import { registerArtistDecoratedCommands } from "../artist/base";
 import {
@@ -69,7 +69,7 @@ const createObjectNamespace = (
 };
 
 class Executor implements CommandRuntime {
-  private readonly log = new Logger({ name: "molvis.command.executor" });
+  private readonly log = createLogger("molvis.command.executor");
   private readonly router = new CommandRouter();
   private readonly artists = new Map<string, ArtistBase>();
   private readonly artistCommandKeys = new Map<string, string[]>();

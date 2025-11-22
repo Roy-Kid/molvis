@@ -18,11 +18,12 @@ import { ModeManager } from "../mode";
 import { Executor } from "../command";
 import { InstancedArtist, DynamicArtist } from "../artist";
 import type { ArtistBase } from "../artist";
+import { ViewManager } from "./view_manager";
 
 
 interface SceneDataInternal {
   scene: Scene;
-  camera: ArcRotateCamera;
+  viewManager: ViewManager;
   axes: AxisHelper;
   gridGround: GridGround;
   pipeline: Pipeline;
@@ -30,13 +31,12 @@ interface SceneDataInternal {
   mode: ModeManager | null;
   executor: Executor;
   artists: Map<string, ArtistBase>;
-  viewport: Viewport;
   meshGroup: MeshGroup;
 }
 
 
-// import { Logger } from "tslog";
-// const logger = new Logger({ name: "molvis-world" });
+import { createLogger } from "../utils/logger";
+const logger = createLogger("molvis-world");
 
 class World {
   private _engine: Engine;
@@ -58,11 +58,11 @@ class World {
     }
 
     const scene = this._initScene(this._engine);
-    const camera = this._initCamera(canvas, scene);
+    const viewManager = new ViewManager(scene, this._engine);
     this._initLight(scene);
     const pipeline = new Pipeline();
-    const axes = this._initAxes(this._engine, camera);
-    const gridGround = new GridGround(scene, camera, this._engine);
+    const axes = this._initAxes(this._engine, viewManager); // Pass ViewManager
+    const gridGround = new GridGround(scene, viewManager.activeCamera, this._engine);
     const meshGroup = new MeshGroup("root", scene);
 
     const executor = new Executor(this._context);
@@ -81,7 +81,7 @@ class World {
 
     const sceneData: SceneDataInternal = {
       scene,
-      camera,
+      viewManager,
       axes,
       gridGround,
       pipeline,
@@ -89,7 +89,6 @@ class World {
       mode: null,
       executor,
       artists,
-      viewport: new Viewport(0, 0, 1, 1), // temporary
       meshGroup,
     };
 
@@ -98,9 +97,6 @@ class World {
     if (this._scenes.size === 1) {
       this._activeSceneId = sceneId;
     }
-
-    // Set autoClear and update viewports
-    this._updateSceneProperties();
   }
 
   public setMode(sceneId: string, mode: ModeManager): void {
@@ -129,25 +125,11 @@ class World {
   }
 
   public get camera(): ArcRotateCamera {
-    return this._scenes.get(this._activeSceneId)!.camera;
+    return this._scenes.get(this._activeSceneId)!.viewManager.activeCamera;
   }
 
-
-
-  private _initCamera(canvas: HTMLCanvasElement, scene: Scene) {
-    const camera = new ArcRotateCamera(
-      "Camera",
-      -Math.PI / 2,
-      Math.PI / 6,
-      12,
-      Vector3.Zero(),
-      scene,
-    );
-    camera.lowerRadiusLimit = 5;
-    camera.attachControl(canvas, false);
-    camera.inertia = 0;
-
-    return camera;
+  public get viewManager(): ViewManager {
+    return this._scenes.get(this._activeSceneId)!.viewManager;
   }
 
   private _initLight(scene: Scene) {
@@ -161,20 +143,12 @@ class World {
     return hemisphericLight;
   }
 
-  private _initAxes(engine: Engine, camera: ArcRotateCamera) {
-    return new AxisHelper(engine, camera);
+  private _initAxes(engine: Engine, viewManager: ViewManager) {
+    return new AxisHelper(engine, viewManager);
   }
 
   public append_modifier(name: string, args: Record<string, unknown>) {
     this._scenes.get(this._activeSceneId)!.pipeline.append(name, args);
-  }
-
-  public drawBox(box: Box, color: Color3 = Color3.White()) {
-    const active = this._scenes.get(this._activeSceneId)!;
-    if (active.boxMesh) {
-      active.boxMesh.dispose();
-    }
-    active.boxMesh = box.toLinesMesh(active.scene, "simulation_box", color);
   }
 
   public takeScreenShot() {
@@ -224,9 +198,9 @@ class World {
     if (this._isRunning) {
       return;
     }
-    
+
     this._isRunning = true;
-    
+
     this._engine.runRenderLoop(() => {
       const active = this._scenes.get(this._activeSceneId)!;
       active.scene.render();
@@ -235,6 +209,7 @@ class World {
     this._engine.resize();
     window.addEventListener("resize", () => {
       this._engine.resize();
+      this.viewManager.resize();
     });
   }
 
@@ -267,6 +242,7 @@ class World {
 
   public resize() {
     this._engine.resize();
+    this.viewManager.resize();
   }
 
   public isOrthographic(): boolean {
@@ -301,28 +277,14 @@ class World {
         const remaining = this.allSceneIds;
         this._activeSceneId = remaining.length > 0 ? remaining[0] : "";
       }
-      this._updateSceneProperties();
-    }
-  }
-
-  private _updateSceneProperties(): void {
-    const sceneCount = this._scenes.size;
-    let i = 0;
-    for (const sceneData of this._scenes.values()) {
-      // Set viewport
-      sceneData.viewport = new Viewport(i / sceneCount, 0, 1 / sceneCount, 1);
-      // Set autoClear: only first scene clears
-      sceneData.scene.autoClear = i === 0;
-      i++;
     }
   }
 
   public renderAll(): void {
-    console.log("Rendering all scenes");
     if (!this._engine) return;
     this._engine.runRenderLoop(() => {
       for (const sceneData of this._scenes.values()) {
-        sceneData.camera.viewport = sceneData.viewport;
+        // sceneData.camera.viewport = sceneData.viewport; // ViewManager handles this now
         sceneData.scene.render();
         sceneData.axes.render();
       }

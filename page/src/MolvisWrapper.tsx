@@ -23,7 +23,7 @@ const MolvisWrapper: React.FC = () => {
     try {
       molvisRef.current = mountMolvis(containerRef.current, options);
     } catch (e) {
-  console.error('Failed to init Molvis', e);
+      throw e;
     }
     const handleResize = () => {
       if (!containerRef.current || !molvisRef.current) return;
@@ -35,7 +35,7 @@ const MolvisWrapper: React.FC = () => {
       try {
         molvisRef.current?.destroy();
       } catch (e) {
-  console.error('Failed to destroy Molvis', e);
+        throw e;
       }
       molvisRef.current = null;
     };
@@ -52,8 +52,7 @@ const MolvisWrapper: React.FC = () => {
         height: '100%',
         overflow: 'hidden',
         background: '#000',
-        border: 'none',
-        zIndex: 0,
+        border: 'none'
       }}
     />
   );

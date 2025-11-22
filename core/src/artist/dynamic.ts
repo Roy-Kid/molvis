@@ -203,23 +203,27 @@ export class DynamicArtist extends ArtistBase {
 
     const edges = [
       [0, 1],
-      [1, 3],
-      [3, 2],
-      [2, 0],
+      [1, 2],
+      [2, 3],
+      [3, 0],
       [4, 5],
-      [5, 7],
-      [7, 6],
-      [6, 4],
+      [5, 6],
+      [6, 7],
+      [7, 4],
       [0, 4],
       [1, 5],
       [2, 6],
       [3, 7],
     ];
-
-    const corners = box.get_corners();
+    const corners = box.get_corners();  // Float32Array(24)
+    // reshape corners to 2D array
+    const corners2D = [];
+    for (let i = 0; i < corners.length; i += 3) {
+      corners2D.push([corners[i], corners[i + 1], corners[i + 2]]);
+    }
     for (let i = 0; i < edges.length; i++) {
       const [start, end] = edges[i];
-      const points = [corners[start], corners[end]];
+      const points = [Vector3.FromArray(corners2D[start]), Vector3.FromArray(corners2D[end])];
       const line = MeshBuilder.CreateLines(`box:edge:${i}`, { points }, this.scene);
       line.color = color;
       lines.push(line);
@@ -229,7 +233,7 @@ export class DynamicArtist extends ArtistBase {
   }
 
   @ArtistCommand<DeleteAtomInput>({
-    name: "delete_atom", 
+    name: "delete_atom",
     validate: (input: DeleteAtomInput) => {
       if (!input || typeof input.atomId !== "number") {
         throw new Error("delete_atom requires an atomId number.");

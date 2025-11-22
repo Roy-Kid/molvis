@@ -1,6 +1,7 @@
 import type { Scene, Material, Mesh } from "@babylonjs/core";
 import { VertexData } from "@babylonjs/core";
-import { Logger } from "tslog";
+import { Logger, type ILogObj } from "tslog";
+import { createLogger } from "../utils/logger";
 import { defineCommand } from "../command/base";
 
 export interface ArtistContext {
@@ -97,7 +98,7 @@ export abstract class ArtistBase {
   protected readonly ops: Map<string, ArtistOp>;
   readonly ctx: ArtistContext;
   readonly api: Record<string, ArtistApiInvoker>;
-  protected readonly logger: Logger<ArtistBase>;
+  protected readonly logger: Logger<ILogObj>;
   private readonly materialPool = new Map<
     string,
     {
@@ -119,7 +120,7 @@ export abstract class ArtistBase {
     this.ops = new Map<string, ArtistOp>();
     const state: Record<string, unknown> = {};
 
-    this.logger = new Logger({ name: `Artist:${this.id}` });
+    this.logger = createLogger(`Artist:${this.id}`);
 
     this.ctx = {
       scene: this.scene,
@@ -158,11 +159,11 @@ export abstract class ArtistBase {
 
   // Lifecycle hooks – subclasses can override as needed.
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  async init(): Promise<void> {}
+  async init(): Promise<void> { }
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  async clear(): Promise<void> {}
+  async clear(): Promise<void> { }
   // eslint-disable-next-line @typescript-eslint/no-empty-function
-  async dispose(): Promise<void> {}
+  async dispose(): Promise<void> { }
 
   protected registerOp<In, Out>(op: ArtistOp<In, Out>): void {
     if (this.ops.has(op.name)) {

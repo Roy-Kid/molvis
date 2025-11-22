@@ -1,19 +1,18 @@
-import { MolvisApp } from "./core/app";
-import { createMolvisDom } from "./dom/dom-manager";
-import type { MolvisOptions } from "./dom/options";
+import init from "molrs";
+await init();
 
-export function mountMolvis(mountPoint: HTMLElement, options: MolvisOptions = {}): MolvisApp {
-  const setup = createMolvisDom(mountPoint, options);
-  return new MolvisApp(setup.canvas, setup.options, setup.context);
+import { MolvisApp } from "./core/app";
+import type { MolvisOptions } from "./core/options";
+
+export function mountMolvis(container: HTMLElement, options: MolvisOptions = {}): MolvisApp {
+  return new MolvisApp(container, options);
 }
 
 export { MolvisApp as Molvis } from "./core/app";
-export { createMolvisDom } from "./dom/dom-manager";
-export { resolveMolvisOptions } from "./dom/options";
+export { resolveMolvisOptions } from "./core/options";
 export { Frame, AtomBlock as Atom, BondBlock as Bond, Topology, Box } from "./structure";
-// System and Trajectory removed; use structure module only
 export { World } from "./core";
-export { GuiManager } from "./dom/gui";
+export { GuiManager } from "./core/gui";
 export {
   ArtistBase,
   ArtistRegistry,
@@ -31,4 +30,4 @@ export type {
   DrawGridInput,
 } from "./artist";
 export { ModeType } from "./mode";
-export type { MolvisOptions, ResolvedMolvisOptions, MolvisDomContext } from "./dom/options";
+export type { MolvisOptions, ResolvedMolvisOptions } from "./core/options";
