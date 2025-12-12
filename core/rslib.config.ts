@@ -6,7 +6,7 @@ export default defineConfig({
       format: 'esm',
       source: {
         entry: {
-            index: './src/index.ts'
+          index: './src/index.ts'
         }
       },
       output: {

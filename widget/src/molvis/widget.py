@@ -11,12 +11,14 @@ import traitlets
 import logging
 import json
 import molpy as mp
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from .types import JsonRPCRequest
-import random
+import uuid
 from dataclasses import asdict
 import numpy as np
 import weakref
+import threading
+from collections import deque
 
 logger = logging.getLogger("molvis")
 
@@ -34,6 +36,12 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(o, np.floating):
             return float(o)
         return super().default(o)
+
+        
+module_dir = pathlib.Path(__file__).parent
+ESM_path = module_dir / "dist" / "index.js"
+if not ESM_path.exists():
+    raise FileNotFoundError(f"ESM file not found: {ESM_path}")
 
 
 class Molvis(anywidget.AnyWidget):
@@ -58,34 +66,35 @@ class Molvis(anywidget.AnyWidget):
         >>> widget
     """
     
-    width: Any = traitlets.Int(800).tag(sync=True)
-    height: Any = traitlets.Int(600).tag(sync=True)
-    session_id: Any = traitlets.Int().tag(sync=True)
-    ready: Any = traitlets.Bool(False).tag(sync=True)
+    width: int = traitlets.Int(800).tag(sync=True)
+    height: int = traitlets.Int(600).tag(sync=True)
+    session_id: int = traitlets.Int().tag(sync=True)
+    ready: bool = traitlets.Bool(False).tag(sync=True)
 
     # Class variable to track all widget instances using weak references
     _instances: weakref.WeakSet["Molvis"] = weakref.WeakSet()
 
+    _esm = ESM_path
+
     def __init__(self, width: int = 800, height: int = 600, **kwargs: Any) -> None:
-        # Generate unique session ID before calling parent constructor
+        # Generate unique session ID using UUID hash (convert to int for traitlets compatibility)
+        # Use hash of UUID to get a deterministic int while maintaining uniqueness
+        session_id = abs(hash(uuid.uuid4().hex)) % (2**31 - 1)
+        
         super().__init__(
             width=width,
             height=height,
-            session_id=random.randint(0, 99999),
+            session_id=session_id,
             **kwargs
         )
-        
-        # Add this instance to the class tracking set
         Molvis._instances.add(self)
         
-        # 设置 ESM
-        module_dir = pathlib.Path(__file__).parent
-        ESM_path = module_dir / "dist" / "index.js"
-        assert ESM_path.exists(), f"{ESM_path} not found"
-        self._esm = ESM_path.read_text()
+        # Add this instance to the class tracking set
         
-        # Don't wait for ready here - frontend hasn't initialized yet
-        # The ready state will be set by frontend when it initializes
+        # Response handling for bidirectional communication
+        self._response_queue: dict[int, deque[dict[str, Any]]] = {}
+        self._response_lock = threading.Lock()
+        self._request_counter = 0
         
         # Add observer for ready state changes
         self.observe(self._on_ready_changed, names=['ready'])
@@ -104,6 +113,7 @@ class Molvis(anywidget.AnyWidget):
             result = first_instance.send_cmd("get_instance_count", {})
             return result if isinstance(result, int) else 0
         except Exception as e:
+            logger.error(f"Failed to get frontend instance count: {e}")
             return 0
 
     @classmethod
@@ -120,7 +130,7 @@ class Molvis(anywidget.AnyWidget):
             first_instance = instances[0]
             first_instance.send_cmd("clear_all_instances", {})
         except Exception as e:
-            pass
+            logger.error(f"Failed to clear all frontend instances: {e}")
 
     @classmethod
     def clear_all_frontend_content(cls) -> None:
@@ -136,7 +146,7 @@ class Molvis(anywidget.AnyWidget):
             first_instance = instances[0]
             first_instance.send_cmd("clear_all_content", {})
         except Exception as e:
-            pass
+            logger.error(f"Failed to clear all frontend content: {e}")
 
     @classmethod
     def get_instance_count(cls) -> int:
@@ -152,8 +162,10 @@ class Molvis(anywidget.AnyWidget):
         self, 
         method: str, 
         params: dict[str, Any], 
-        buffers: list[Any] | None = None
-    ) -> "Molvis":
+        buffers: list[Any] | None = None,
+        wait_for_response: bool = False,
+        timeout: float = 5.0
+    ) -> "Molvis" | dict[str, Any]:
         """
         Send a command to the frontend.
         
@@ -161,21 +173,94 @@ class Molvis(anywidget.AnyWidget):
             method: RPC method name
             params: Method parameters
             buffers: Optional binary buffers
+            wait_for_response: If True, wait for and return the response
+            timeout: Maximum time to wait for response (seconds)
             
         Returns:
-            Self for method chaining
+            Self for method chaining (if wait_for_response=False),
+            or response dict (if wait_for_response=True)
         """
         if buffers is None:
             buffers = []
+        
+        # Generate unique request ID
+        with self._response_lock:
+            self._request_counter += 1
+            request_id = self._request_counter
+        
         jsonrpc = JsonRPCRequest(
             jsonrpc="2.0",
             method=method,
             params=params,
-            id=self.session_id,
+            id=request_id,
         )
+        
         # Use custom encoder to handle numpy arrays
         self.send(json.dumps(asdict(jsonrpc), cls=NumpyEncoder), buffers=buffers)
+        
+        if wait_for_response:
+            return self._wait_for_response(request_id, timeout)
         return self
+    
+    def _wait_for_response(self, request_id: int, timeout: float) -> dict[str, Any]:
+        """Wait for a response to a specific request."""
+        import time
+        
+        start_time = time.time()
+        queue = deque()
+        
+        with self._response_lock:
+            self._response_queue[request_id] = queue
+        
+        try:
+            while time.time() - start_time < timeout:
+                with self._response_lock:
+                    if queue:
+                        response = queue.popleft()
+                        return response
+                
+                time.sleep(0.01)  # Small sleep to avoid busy waiting
+            
+            raise TimeoutError(f"Request {request_id} timed out after {timeout}s")
+        finally:
+            with self._response_lock:
+                self._response_queue.pop(request_id, None)
+    
+    def _handle_custom_msg(self, content: bytes | dict[str, Any], buffers: list[Any]) -> None:
+        """
+        Handle custom messages from frontend (responses to our requests).
+        
+        This method is called by anywidget when a custom message is received
+        from the frontend via model.send("msg:custom", ...).
+        """
+        try:
+            # Parse the response - anywidget may pass bytes or dict
+            if isinstance(content, bytes):
+                response = json.loads(content.decode('utf-8'))
+            elif isinstance(content, str):
+                response = json.loads(content)
+            elif isinstance(content, dict):
+                response = content
+            else:
+                logger.warning(f"Unexpected response type: {type(content)}")
+                return
+            
+            # Extract request ID from response
+            request_id = response.get("id")
+            if request_id is None:
+                logger.debug("Response missing id field")
+                return
+            
+            # Check if we're waiting for this response
+            with self._response_lock:
+                if request_id in self._response_queue:
+                    self._response_queue[request_id].append(response)
+                else:
+                    logger.debug(f"No waiting queue for request {request_id}")
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.warning(f"Failed to parse response: {e}")
+        except Exception as e:
+            logger.warning(f"Error handling response: {e}")
 
     def new_frame(
         self, 
@@ -205,109 +290,333 @@ class Molvis(anywidget.AnyWidget):
         style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
         atom_radius: float | list[float] | None = None,
         bond_radius: float = 0.1,
-        show_box: bool = False  # Changed to False since we use draw_box separately
+        include_metadata: bool = False
     ) -> "Molvis":
         """
         Draw a molecular frame on the current frame (cumulative drawing).
         
+        This method uses the Frame's to_dict() method to extract all necessary data,
+        preserving the structure defined by molpy's Frame class.
+        
         Args:
-            frame: molpy Frame object
+            frame: molpy Frame object containing blocks (atoms, bonds, etc.)
             style: Visualization style ("ball_and_stick", "spacefill", "wireframe")
-            atom_radius: Global atom radius scaling or specific radii
+            atom_radius: Global atom radius scaling or list of specific radii per atom
             bond_radius: Global bond radius
-            show_box: Whether to show simulation box (deprecated, use draw_box)
+            include_metadata: Whether to include frame metadata in the draw command
             
         Returns:
             Self for method chaining
+            
+        Raises:
+            ValueError: If frame is invalid or missing required blocks
+            TypeError: If frame is not a Frame instance
         """
+        if not isinstance(frame, mp.Frame):
+            raise TypeError(f"frame must be a molpy.Frame instance, got {type(frame)}")
+        
         try:
             frame_dict = frame.to_dict()
+        except AttributeError:
+            raise ValueError("Frame object does not have to_dict() method")
         except Exception as e:
-            raise ValueError(f"Failed to convert frame to dict: {e}")
+            raise ValueError(f"Failed to convert frame to dict: {e}") from e
+            
+        if not isinstance(frame_dict, dict):
+            raise ValueError(f"Frame.to_dict() must return a dict, got {type(frame_dict)}")
             
         if "blocks" not in frame_dict:
             raise ValueError("Frame must contain 'blocks' data")
             
+        if not isinstance(frame_dict["blocks"], dict):
+            raise ValueError("Frame blocks must be a dictionary")
+            
+        # Validate atoms block
         if "atoms" not in frame_dict["blocks"]:
             raise ValueError("Frame must contain 'atoms' block to draw")
             
         atoms_block = frame_dict["blocks"]["atoms"]
+        if not isinstance(atoms_block, dict):
+            raise ValueError("Atoms block must be a dictionary")
+            
         if "xyz" not in atoms_block:
             raise ValueError("Atoms block must contain 'xyz' variable to draw")
-            
-        # Extract only the data we need for drawing
-        draw_data = {
-            "blocks": {
-                "atoms": {
-                    "xyz": atoms_block["xyz"],
-                    "element": atoms_block.get("element", []),
-                    "name": atoms_block.get("name", []),
-                    "type": atoms_block.get("type", [])
-                },
-                "bonds": {}
-            }
+        
+        # Use the full frame structure - let frontend handle what it needs
+        # This preserves all data from the Frame, not just a subset
+        draw_data: dict[str, Any] = {
+            "blocks": {}
         }
         
-        # Extract bonds if they exist
-        if "bonds" in frame_dict["blocks"]:
-            bonds_block = frame_dict["blocks"]["bonds"]
-            if "i" in bonds_block and "j" in bonds_block:
-                draw_data["blocks"]["bonds"] = {
-                    "i": bonds_block["i"],
-                    "j": bonds_block["j"],
-                    "order": bonds_block.get("order", [])
-                }
+        # Copy all blocks from frame (atoms, bonds, etc.)
+        for block_name, block_data in frame_dict["blocks"].items():
+            if isinstance(block_data, dict):
+                draw_data["blocks"][block_name] = block_data
         
-        # Note: Box is now handled separately via draw_box method
+        # Include metadata if requested
+        if include_metadata and "metadata" in frame_dict:
+            draw_data["metadata"] = frame_dict["metadata"]
         
         params = {
             "frameData": draw_data,
             "options": {
                 "atoms": {"radius": atom_radius},
                 "bonds": {"radius": bond_radius},
-                "box": {"visible": False},  # Always false, use draw_box for boxes
                 "style": style
             }
         }
+        
         self.send_cmd("draw_frame", params, [])
         return self
+
+    def draw_atomistic(
+        self,
+        atomistic: Any,  # mp.Atomistic, but avoid circular import
+        style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
+        atom_radius: float | list[float] | None = None,
+        bond_radius: float = 0.1,
+        include_metadata: bool = False,
+        atom_fields: list[str] | None = None
+    ) -> "Molvis":
+        """
+        Draw an Atomistic object (Molecule, Residue, Crystal, etc.) on the current frame.
+        
+        This is a convenience method that converts the Atomistic object to a Frame
+        using its to_frame() method and then calls draw_frame().
+        
+        Args:
+            atomistic: molpy Atomistic object (Molecule, Residue, Crystal, etc.)
+            style: Visualization style ("ball_and_stick", "spacefill", "wireframe")
+            atom_radius: Global atom radius scaling or list of specific radii per atom
+            bond_radius: Global bond radius
+            include_metadata: Whether to include frame metadata in the draw command
+            atom_fields: List of atom fields to extract (passed to to_frame())
+            
+        Returns:
+            Self for method chaining
+            
+        Raises:
+            TypeError: If atomistic is not an Atomistic instance
+            ValueError: If atomistic cannot be converted to Frame
+            
+        Examples:
+            >>> import molvis as mv
+            >>> import molpy as mp
+            >>> 
+            >>> # Create a molecule
+            >>> mol = mp.Molecule(name="water")
+            >>> o = mol.def_atom(element="O", xyz=[0, 0, 0])
+            >>> h1 = mol.def_atom(element="H", xyz=[0.96, 0, 0])
+            >>> h2 = mol.def_atom(element="H", xyz=[-0.24, 0.92, 0])
+            >>> mol.def_bond(o, h1)
+            >>> mol.def_bond(o, h2)
+            >>> 
+            >>> # Draw it
+            >>> widget = mv.Molvis(width=800, height=600)
+            >>> widget.draw_atomistic(mol, style="ball_and_stick")
+        """
+        # Check if it has to_frame method (duck typing)
+        if not hasattr(atomistic, 'to_frame'):
+            raise TypeError(
+                f"atomistic must have a to_frame() method, got {type(atomistic)}. "
+                "Expected a molpy.Atomistic subclass (Molecule, Residue, Crystal, etc.)"
+            )
+        
+        try:
+            # Convert Atomistic to Frame
+            if atom_fields is not None:
+                frame = atomistic.to_frame(atom_fields=atom_fields)
+            else:
+                frame = atomistic.to_frame()
+        except Exception as e:
+            raise ValueError(f"Failed to convert Atomistic to Frame: {e}") from e
+        
+        # Use existing draw_frame method
+        return self.draw_frame(
+            frame=frame,
+            style=style,
+            atom_radius=atom_radius,
+            bond_radius=bond_radius,
+            include_metadata=include_metadata
+        )
 
     def draw_box(
         self, 
         box: mp.Box,
         color: str | None = None,
-        line_width: float = 1.0
+        line_width: float = 1.0,
+        visible: bool = True
     ) -> "Molvis":
         """
         Draw simulation box on current canvas (cumulative drawing).
         
+        This method uses the Box's to_dict() method to extract all box properties
+        (matrix, pbc, origin) as defined by molpy's Box class.
+        
         Args:
-            box: molpy Box object
-            color: Box color (hex string)
-            line_width: Box line width
+            box: molpy Box object containing matrix, pbc, and origin
+            color: Box color (hex string, e.g., "#FF0000")
+            line_width: Box line width in pixels
+            visible: Whether the box should be visible
             
         Returns:
             Self for method chaining
+            
+        Raises:
+            ValueError: If box is invalid or missing required properties
+            TypeError: If box is not a Box instance
         """
+        if not isinstance(box, mp.Box):
+            raise TypeError(f"box must be a molpy.Box instance, got {type(box)}")
+        
         try:
             box_dict = box.to_dict()
+        except AttributeError:
+            raise ValueError("Box object does not have to_dict() method")
         except Exception as e:
-            raise ValueError(f"Failed to convert box to dict: {e}")
+            raise ValueError(f"Failed to convert box to dict: {e}") from e
             
-        # Ensure pbc field exists (Box.to_dict() should always include it)
-        if "pbc" not in box_dict:
-            box_dict["pbc"] = [True, True, True]  # Default to periodic in all directions
+        if not isinstance(box_dict, dict):
+            raise ValueError(f"Box.to_dict() must return a dict, got {type(box_dict)}")
+        
+        # Validate required fields (Box.to_dict() should always include these)
+        required_fields = ["matrix", "pbc", "origin"]
+        missing_fields = [field for field in required_fields if field not in box_dict]
+        if missing_fields:
+            raise ValueError(f"Box dict missing required fields: {missing_fields}")
+        
+        # Validate matrix shape
+        matrix = box_dict["matrix"]
+        if not isinstance(matrix, list) or len(matrix) != 3:
+            raise ValueError("Box matrix must be a 3x3 matrix (list of 3 lists)")
+        for row in matrix:
+            if not isinstance(row, list) or len(row) != 3:
+                raise ValueError("Box matrix must be a 3x3 matrix")
+        
+        # Validate pbc
+        pbc = box_dict["pbc"]
+        if not isinstance(pbc, list) or len(pbc) != 3:
+            raise ValueError("Box pbc must be a list of 3 booleans")
+        
+        # Validate origin
+        origin = box_dict["origin"]
+        if not isinstance(origin, list) or len(origin) != 3:
+            raise ValueError("Box origin must be a list of 3 floats")
             
         params = {
             "boxData": box_dict,
             "options": {
                 "color": color,
                 "lineWidth": line_width,
-                "visible": True
+                "visible": visible
             }
         }
+        
         self.send_cmd("draw_box", params, [])
         return self
+
+    def draw_atoms(
+        self,
+        atoms: Any | list[Any],  # mp.Atom or list[mp.Atom]
+        style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
+        atom_radius: float | list[float] | None = None,
+        color: str | list[str] | None = None
+    ) -> "Molvis":
+        """
+        Draw individual atoms or a list of atoms on the current frame.
+        
+        This method extracts atom properties (xyz, element, type, etc.) and creates
+        a temporary Frame to render them. Useful for highlighting specific atoms
+        or drawing partial structures.
+        
+        Args:
+            atoms: Single Atom object or list of Atom objects
+            style: Visualization style ("ball_and_stick", "spacefill", "wireframe")
+            atom_radius: Global atom radius scaling or list of specific radii per atom
+            color: Optional color override (hex string or list of hex strings)
+            
+        Returns:
+            Self for method chaining
+            
+        Raises:
+            TypeError: If atoms is not an Atom or list of Atoms
+            ValueError: If atoms are missing required properties (xyz)
+            
+        Examples:
+            >>> import molvis as mv
+            >>> import molpy as mp
+            >>> 
+            >>> mol = mp.Molecule(name="test")
+            >>> a1 = mol.def_atom(element="C", xyz=[0, 0, 0])
+            >>> a2 = mol.def_atom(element="H", xyz=[1, 0, 0])
+            >>> 
+            >>> widget = mv.Molvis()
+            >>> # Draw single atom
+            >>> widget.draw_atoms(a1, style="spacefill")
+            >>> # Draw multiple atoms
+            >>> widget.draw_atoms([a1, a2], atom_radius=0.5)
+        """
+        import numpy as np
+        
+        # Normalize to list
+        if not isinstance(atoms, list):
+            atoms = [atoms]
+        
+        if not atoms:
+            raise ValueError("atoms list cannot be empty")
+        
+        # Extract atom properties
+        xyz_list = []
+        element_list = []
+        type_list = []
+        
+        for atom in atoms:
+            # Check if it's an atom-like object (has 'get' method or dict-like)
+            if hasattr(atom, 'get'):
+                xyz = atom.get('xyz')
+                element = atom.get('element', atom.get('symbol', 'C'))
+                atom_type = atom.get('type', 1)
+            elif isinstance(atom, dict):
+                xyz = atom.get('xyz')
+                element = atom.get('element', atom.get('symbol', 'C'))
+                atom_type = atom.get('type', 1)
+            else:
+                raise TypeError(
+                    f"Each atom must have a 'get' method or be dict-like, got {type(atom)}"
+                )
+            
+            if xyz is None:
+                raise ValueError("Each atom must have 'xyz' coordinates")
+            
+            xyz_list.append(xyz)
+            element_list.append(element)
+            type_list.append(atom_type)
+        
+        # Convert to numpy arrays
+        xyz_array = np.array(xyz_list)
+        
+        # Create a temporary Frame
+        atoms_block = {
+            'xyz': xyz_array,
+            'element': np.array(element_list),
+            'type': np.array(type_list)
+        }
+        
+        # Add color if provided
+        if color is not None:
+            if isinstance(color, str):
+                color = [color] * len(atoms)
+            atoms_block['color'] = np.array(color)
+        
+        frame = mp.Frame(blocks={'atoms': atoms_block})
+        
+        # Use existing draw_frame method
+        return self.draw_frame(
+            frame=frame,
+            style=style,
+            atom_radius=atom_radius,
+            bond_radius=0.0  # No bonds for individual atoms
+        )
 
     def clear(self) -> "Molvis":
         """
@@ -370,153 +679,53 @@ class Molvis(anywidget.AnyWidget):
         self.send_cmd("set_view_mode", {"mode": mode}, [])
         return self
 
-    # ==================== Legacy Methods (Deprecated) ====================
-    
-    def draw_molecule(
-        self, 
-        molecule: mp.Atomistic,
-        style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
-        atom_radius: float | list[float] | None = None,
-        bond_radius: float = 0.1,
-        show_box: bool = False  # Updated to match draw_frame
-    ) -> "Molvis":
-        """
-        [DEPRECATED] Use clear() + draw_frame() instead.
-        Draw complete molecular structure - clear existing content and redraw.
-        
-        Note: To show simulation box, use draw_box() method separately.
-        """
-        import warnings
-        warnings.warn(
-            "draw_molecule is deprecated. Use clear() + draw_frame() instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        
-        self.clear()
-        frame = molecule.to_frame()
-        return self.draw_frame(frame, style, atom_radius, bond_radius, show_box)
-
-    def draw_atom(
-        self, 
-        name: str, 
-        x: float, 
-        y: float, 
-        z: float, 
-        element: str | None = None,
-        radius: float | None = None
-    ) -> "Molvis":
-        """
-        [DEPRECATED] Use draw_frame() with single atom frame instead.
-        Draw single atom - clear existing content and redraw.
-        """
-        import warnings
-        warnings.warn(
-            "draw_atom is deprecated. Use draw_frame() with single atom frame instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        
-        # Create a simple frame with one atom
-        atom = mp.Atom(name=name, element=element or "C", xyz=[x, y, z])
-        frame = mp.Frame()
-        frame["atoms"] = mp.Block({
-            "name": [name],
-            "element": [element or "C"],
-            "xyz": [[x, y, z]]
-        })
-        
-        self.clear()
-        return self.draw_frame(frame, atom_radius=radius)
-
-    def draw_grid(
-        self, 
-        size: int = 20,
-        min_spacing: float = 1.0,
-        max_spacing: float = 10.0,
-        color: str = "#4A4A4A",
-        visible: bool = True,
-        auto_update: bool = True
-    ) -> "Molvis":
-        """
-        Draw dynamic grid that adjusts density based on camera distance.
-        
-        Args:
-            size: Grid size (extends from -size/2 to +size/2)
-            min_spacing: Minimum grid spacing (when camera is close)
-            max_spacing: Maximum grid spacing (when camera is far)
-            color: Grid color (hex string)
-            visible: Whether grid is visible
-            auto_update: Whether to automatically update grid density
-            
-        Returns:
-            Self for method chaining
-        """
-        params = {
-            "size": size,
-            "minSpacing": min_spacing,
-            "maxSpacing": max_spacing,
-            "color": color,
-            "visible": visible,
-            "autoUpdate": auto_update
-        }
-        self.send_cmd("draw_grid", params, [])
-        return self
-
-    def show_grid(self) -> "Molvis":
-        """
-        Show the grid.
-        
-        Returns:
-            Self for method chaining
-        """
-        return self.draw_grid(visible=True)
-
-    def hide_grid(self) -> "Molvis":
-        """
-        Hide the grid.
-        
-        Returns:
-            Self for method chaining
-        """
-        return self.draw_grid(visible=False)
-
-    def toggle_grid(self) -> "Molvis":
-        """
-        Toggle grid visibility.
-        
-        Returns:
-            Self for method chaining
-        """
-        # This would need to query current state, for now just show
-        return self.show_grid()
-
     def get_current_frame(self) -> mp.Frame:
         """
         Get information about the current frame being displayed.
         
         Returns:
             mp.Frame: Current frame information including atoms, bonds, and metadata
+            
+        Raises:
+            TimeoutError: If the request times out
+            ValueError: If the response is invalid
         """
         try:
-            # Get current frame info from the system
             params = {}
-            result = self.send_cmd("get_current_frame", params, [])
+            result = self.send_cmd("get_current_frame", params, [], wait_for_response=True, timeout=5.0)
             
-            # Create a frame representation based on the result
-            current_frame = mp.Frame()
+            if not isinstance(result, dict):
+                raise ValueError(f"Invalid response type: {type(result)}")
             
-            # Add metadata about the current frame
-            current_frame.metadata = {
-                "method": "get_current_frame",
-                "note": "This is a representation of the current frame state",
-                "timestamp": result.get("timestamp", 0) if isinstance(result, dict) else 0
-            }
+            # Check for error in response
+            if "error" in result:
+                error_info = result["error"]
+                raise ValueError(f"Frontend error: {error_info.get('message', 'Unknown error')}")
+            
+            # Extract result data
+            frame_data = result.get("result", {})
+            if not isinstance(frame_data, dict):
+                raise ValueError(f"Invalid result format: {type(frame_data)}")
+            
+            # Reconstruct Frame from response
+            try:
+                current_frame = mp.Frame.from_dict(frame_data)
+            except Exception as e:
+                # Fallback: create empty frame with metadata
+                current_frame = mp.Frame()
+                current_frame.metadata = {
+                    "error": f"Failed to reconstruct frame: {str(e)}",
+                    "raw_data": frame_data
+                }
             
             return current_frame
             
+        except TimeoutError:
+            logger.error("Timeout waiting for get_current_frame response")
+            raise
         except Exception as e:
-            # Fallback: return empty frame with error info
+            logger.error(f"Error getting current frame: {e}")
+            # Return empty frame with error info
             error_frame = mp.Frame()
             error_frame.metadata = {
                 "error": f"Failed to get current frame: {str(e)}",
@@ -530,21 +739,45 @@ class Molvis(anywidget.AnyWidget):
         
         Returns:
             dict: Information about current frame including atom count, bond count, etc.
+            
+        Raises:
+            TimeoutError: If the request times out
         """
         try:
             params = {}
-            result = self.send_cmd("get_frame_info", params, [])
+            result = self.send_cmd("get_frame_info", params, [], wait_for_response=True, timeout=5.0)
             
-            # The result should contain detailed frame information
-            if isinstance(result, dict):
-                return result
+            if not isinstance(result, dict):
+                return {
+                    "error": f"Invalid response type: {type(result)}",
+                    "method": "get_frame_info"
+                }
+            
+            # Check for error in response
+            if "error" in result:
+                return {
+                    "error": result["error"].get("message", "Unknown error"),
+                    "method": "get_frame_info"
+                }
+            
+            # Return the result data
+            frame_info = result.get("result", {})
+            if isinstance(frame_info, dict):
+                return frame_info
             else:
                 return {
-                    "result": result,
+                    "result": frame_info,
                     "method": "get_frame_info",
                     "note": "Raw result from command execution"
                 }
+        except TimeoutError:
+            logger.error("Timeout waiting for get_frame_info response")
+            return {
+                "error": "Request timed out",
+                "method": "get_frame_info"
+            }
         except Exception as e:
+            logger.error(f"Error getting frame info: {e}")
             return {
                 "error": f"Failed to get frame info: {str(e)}",
                 "method": "get_frame_info"
@@ -630,19 +863,7 @@ class Molvis(anywidget.AnyWidget):
         self.send_cmd("enable_grid", grid_options, [])
         return self
 
-    def _get_default_grid_value(self, key: str) -> Any:
-        """Get default value for grid parameter."""
-        defaults = {
-            "mainColor": "#878787",
-            "lineColor": "#969696", 
-            "opacity": 0.98,
-            "majorUnitFrequency": 10,
-            "minorUnitVisibility": 0.7,
-            "distanceThreshold": 50.0,
-            "minGridStep": 1.0,
-            "size": 10000.0
-        }
-        return defaults.get(key)
+
 
     def disable_grid(self) -> "Molvis":
         """
@@ -660,68 +881,35 @@ class Molvis(anywidget.AnyWidget):
         
         Returns:
             True if grid is enabled, False otherwise
+            
+        Raises:
+            TimeoutError: If the request times out
+            ValueError: If the response is invalid
         """
-        # Send command to frontend to check grid status
-        # Note: This method currently doesn't return the actual status
-        # since send_cmd doesn't handle return values
-        self.send_cmd("is_grid_enabled", {}, [])
-        
-        # For now, return True as placeholder
-        # In the future, this could be enhanced to handle frontend responses
-        return True
+        try:
+            result = self.send_cmd("is_grid_enabled", {}, [], wait_for_response=True, timeout=2.0)
+            
+            if not isinstance(result, dict):
+                logger.warning(f"Invalid response type for is_grid_enabled: {type(result)}")
+                return False
+            
+            # Check for error
+            if "error" in result:
+                logger.warning(f"Error checking grid status: {result['error']}")
+                return False
+            
+            # Extract result
+            enabled = result.get("result", False)
+            return bool(enabled)
+            
+        except TimeoutError:
+            logger.warning("Timeout checking grid status")
+            return False
+        except Exception as e:
+            logger.warning(f"Error checking grid status: {e}")
+            return False
 
-    def update_grid_appearance(
-        self,
-        main_color: str | None = None,
-        line_color: str | None = None,
-        opacity: float | None = None,
-        major_unit_frequency: int | None = None,
-        minor_unit_visibility: float | None = None,
-        distance_threshold: float | None = None,
-        min_grid_step: float | None = None
-    ) -> "Molvis":
-        """
-        [DEPRECATED] Use enable_grid() with parameters instead.
-        Update grid appearance.
-        
-        This method is deprecated because enable_grid() now handles both
-        enabling and updating the grid in-place.
-        
-        Args:
-            main_color: Main grid color (hex string)
-            line_color: Grid line color (hex string)
-            opacity: Grid opacity (0.0 to 1.0)
-            major_unit_frequency: Frequency of major grid lines
-            minor_unit_visibility: Visibility of minor grid lines
-            distance_threshold: Distance threshold for locking grid step
-            min_grid_step: Minimum grid step when camera is close
-            
-        Returns:
-            Self for method chaining
-        """
-        import warnings
-        warnings.warn(
-            "update_grid_appearance is deprecated. Use enable_grid() with parameters instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        
-        # Convert to enable_grid call for backward compatibility
-        grid_options = {
-            "mainColor": main_color,
-            "lineColor": line_color,
-            "opacity": opacity,
-            "majorUnitFrequency": major_unit_frequency,
-            "minorUnitVisibility": minor_unit_visibility,
-            "distanceThreshold": distance_threshold,
-            "minGridStep": min_grid_step
-        }
-        
-        # Only include non-None values
-        params = {k: v for k, v in grid_options.items() if v is not None}
-            
-        self.send_cmd("update_grid_appearance", params, [])
-        return self
+
 
     def set_grid_size(self, size: float) -> "Molvis":
         """
@@ -768,7 +956,10 @@ class Molvis(anywidget.AnyWidget):
         Args:
             change: Traitlets change object containing old and new values
         """
-        pass
+        if change.get("new", False):
+            logger.info(f"Widget {self.session_id} is ready")
+        else:
+            logger.debug(f"Widget {self.session_id} ready state changed to False")
     
     def is_ready(self) -> bool:
         """
@@ -778,3 +969,184 @@ class Molvis(anywidget.AnyWidget):
             True if frontend is ready, False otherwise
         """
         return bool(self.ready)
+    
+    def highlight_atoms(
+        self,
+        atom_indices: list[int] | int,
+        color: str = "#FF0000",
+        scale: float = 1.2,
+        opacity: float = 1.0
+    ) -> "Molvis":
+        """
+        Highlight specific atoms by index with custom color and scaling.
+        
+        This method sends a command to the frontend to visually emphasize
+        selected atoms, useful for showing search results, selections, or
+        important structural features.
+        
+        Args:
+            atom_indices: Single atom index or list of atom indices to highlight
+            color: Highlight color (hex string, default: "#FF0000" red)
+            scale: Scale factor for highlighted atoms (default: 1.2)
+            opacity: Opacity of highlight (0.0 to 1.0, default: 1.0)
+            
+        Returns:
+            Self for method chaining
+            
+        Examples:
+            >>> widget = mv.Molvis()
+            >>> widget.draw_frame(frame)
+            >>> # Highlight first three atoms in red
+            >>> widget.highlight_atoms([0, 1, 2], color='#FF0000')
+            >>> # Highlight single atom in blue
+            >>> widget.highlight_atoms(5, color='#0000FF', scale=1.5)
+        """
+        # Normalize to list
+        if isinstance(atom_indices, int):
+            atom_indices = [atom_indices]
+        
+        params = {
+            "indices": atom_indices,
+            "color": color,
+            "scale": scale,
+            "opacity": opacity
+        }
+        
+        self.send_cmd("highlight_atoms", params, [])
+        return self
+    
+    def clear_highlights(self) -> "Molvis":
+        """
+        Clear all atom highlights.
+        
+        Returns:
+            Self for method chaining
+            
+        Examples:
+            >>> widget.clear_highlights()
+        """
+        self.send_cmd("clear_highlights", {}, [])
+        return self
+    
+    def draw_trajectory(
+        self,
+        trajectory: Any,  # mp.Trajectory or iterable of Frames
+        fps: int = 30,
+        loop: bool = True,
+        style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
+        atom_radius: float | None = None,
+        bond_radius: float = 0.1
+    ) -> "Molvis":
+        """
+        Load a trajectory for animation playback.
+        
+        This method sends all frames from a trajectory to the frontend for
+        animation playback. The trajectory can be a molpy Trajectory object
+        or any iterable of Frame objects.
+        
+        Args:
+            trajectory: molpy Trajectory object or iterable of Frames
+            fps: Frames per second for playback (default: 30)
+            loop: Whether to loop the animation (default: True)
+            style: Visualization style for all frames
+            atom_radius: Global atom radius scaling
+            bond_radius: Global bond radius
+            
+        Returns:
+            Self for method chaining
+            
+        Raises:
+            ValueError: If trajectory is empty or invalid
+            
+        Examples:
+            >>> import molpy as mp
+            >>> import molvis as mv
+            >>> 
+            >>> # Load trajectory from file
+            >>> traj = mp.Trajectory.from_file("traj.lammpstrj")
+            >>> 
+            >>> # Draw and play
+            >>> widget = mv.Molvis()
+            >>> widget.draw_trajectory(traj, fps=30, loop=True)
+            >>> widget.play_animation()
+        """
+        # Convert trajectory to list of frame dicts
+        frames_data = []
+        
+        try:
+            # Try to iterate over trajectory
+            for frame in trajectory:
+                if not isinstance(frame, mp.Frame):
+                    raise TypeError(f"Expected Frame object, got {type(frame)}")
+                
+                frame_dict = frame.to_dict()
+                frames_data.append(frame_dict)
+        except TypeError as e:
+            raise ValueError(f"trajectory must be iterable, got {type(trajectory)}") from e
+        
+        if not frames_data:
+            raise ValueError("trajectory is empty")
+        
+        params = {
+            "frames": frames_data,
+            "fps": fps,
+            "loop": loop,
+            "options": {
+                "style": style,
+                "atoms": {"radius": atom_radius},
+                "bonds": {"radius": bond_radius}
+            }
+        }
+        
+        self.send_cmd("draw_trajectory", params, [])
+        return self
+    
+    def play_animation(self, fps: int | None = None) -> "Molvis":
+        """
+        Start playing the loaded trajectory animation.
+        
+        Args:
+            fps: Optional frames per second override
+            
+        Returns:
+            Self for method chaining
+            
+        Examples:
+            >>> widget.play_animation(fps=60)
+        """
+        params = {}
+        if fps is not None:
+            params["fps"] = fps
+        
+        self.send_cmd("play_animation", params, [])
+        return self
+    
+    def pause_animation(self) -> "Molvis":
+        """
+        Pause the trajectory animation.
+        
+        Returns:
+            Self for method chaining
+            
+        Examples:
+            >>> widget.pause_animation()
+        """
+        self.send_cmd("pause_animation", {}, [])
+        return self
+    
+    def set_animation_frame(self, frame_index: int) -> "Molvis":
+        """
+        Jump to a specific frame in the trajectory.
+        
+        Args:
+            frame_index: Index of frame to display (0-based)
+            
+        Returns:
+            Self for method chaining
+            
+        Examples:
+            >>> widget.set_animation_frame(50)  # Jump to frame 50
+        """
+        params = {"frameIndex": frame_index}
+        self.send_cmd("set_animation_frame", params, [])
+        return self

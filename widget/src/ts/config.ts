@@ -1,32 +1,33 @@
 import { Logger } from "tslog";
+import type { BreakpointConfig, MolvisConfig, UIConfig, UILayerConfig } from "./types";
 
 const logger = new Logger({ name: "molvis-config" });
 
 // UI Layer Configuration
-export const DEFAULT_UI_LAYERS = {
-  canvas: { zIndex: 1, pointerEvents: 'auto' },
-  ui: { zIndex: 1000, pointerEvents: 'none' },
-  modeIndicator: { zIndex: 1001, pointerEvents: 'auto' },
-  viewIndicator: { zIndex: 1001, pointerEvents: 'auto' },
-  infoPanel: { zIndex: 1001, pointerEvents: 'auto' },
-  frameIndicator: { zIndex: 1001, pointerEvents: 'auto' }
+export const DEFAULT_UI_LAYERS: UILayerConfig = {
+  canvas: { zIndex: 1, pointerEvents: "auto" },
+  ui: { zIndex: 1000, pointerEvents: "none" },
+  modeIndicator: { zIndex: 1001, pointerEvents: "auto" },
+  viewIndicator: { zIndex: 1001, pointerEvents: "auto" },
+  infoPanel: { zIndex: 1001, pointerEvents: "auto" },
+  frameIndicator: { zIndex: 1001, pointerEvents: "auto" },
 };
 
 // Responsive Breakpoint Configuration
-export const DEFAULT_BREAKPOINTS = {
+export const DEFAULT_BREAKPOINTS: BreakpointConfig = {
   xs: 480,
   sm: 768,
   md: 1024,
   lg: 1200,
-  xl: 1400
+  xl: 1400,
 };
 
 // UI Component Configuration
-export const DEFAULT_UI_COMPONENTS = {
+export const DEFAULT_UI_COMPONENTS: UIConfig = {
   showModeIndicator: true,
   showViewIndicator: true,
   showInfoPanel: true,
-  showFrameIndicator: true
+  showFrameIndicator: true,
 };
 
 // Render Configuration
@@ -34,104 +35,70 @@ export const DEFAULT_RENDER_CONFIG = {
   fitContainer: true,
   autoRenderResolution: true,
   minPixelRatio: 0.5,
-  maxPixelRatio: 3.0
+  maxPixelRatio: 3.0,
 };
 
 // Performance Configuration
 export const DEFAULT_PERFORMANCE_CONFIG = {
-  debounceDelay: 100,      // Resize debounce delay
-  throttleLimit: 16,       // Resize throttle limit (~60fps)
-  maxResizeObservers: 10,  // Maximum resize observers count
-  cleanupTimeout: 5000     // Cleanup timeout
+  debounceDelay: 100, // Resize debounce delay
+  throttleLimit: 16, // Resize throttle limit (~60fps)
+  maxResizeObservers: 10, // Maximum resize observers count
+  cleanupTimeout: 5000, // Cleanup timeout
 };
 
 // Event Configuration
 export const DEFAULT_EVENT_CONFIG = {
   preventPropagation: true,
   stopImmediatePropagation: false,
-  capturePhase: false
+  capturePhase: false,
 };
 
 // Debug Configuration
 export const DEFAULT_DEBUG_CONFIG = {
   enabled: false,
-  logLevel: 'info',
-  showPerformanceMetrics: false
+  logLevel: "info",
+  showPerformanceMetrics: false,
 };
 
 // Environment Configuration
 export const DEFAULT_ENVIRONMENT_CONFIG = {
-  isJupyter: typeof window !== 'undefined' && window.location.href.includes('jupyter'),
-  isNotebook: typeof window !== 'undefined' && window.location.href.includes('notebook'),
-  isLab: typeof window !== 'undefined' && window.location.href.includes('lab')
+  isJupyter: typeof window !== "undefined" && window.location.href.includes("jupyter"),
+  isNotebook: typeof window !== "undefined" && window.location.href.includes("notebook"),
+  isLab: typeof window !== "undefined" && window.location.href.includes("lab"),
 };
 
 // Theme Configuration
 export const DEFAULT_THEME_CONFIG = {
-  currentTheme: 'auto',
+  currentTheme: "auto",
   themes: {
     light: {
-      background: '#ffffff',
-      foreground: '#000000',
-      primary: '#007acc',
-      secondary: '#6c757d',
-      accent: '#28a745'
+      background: "#ffffff",
+      foreground: "#000000",
+      primary: "#007acc",
+      secondary: "#6c757d",
+      accent: "#28a745",
     },
     dark: {
-      background: '#1e1e1e',
-      foreground: '#ffffff',
-      primary: '#007acc',
-      secondary: '#6c757d',
-      accent: '#28a745'
-    }
-  }
+      background: "#1e1e1e",
+      foreground: "#ffffff",
+      primary: "#007acc",
+      secondary: "#6c757d",
+      accent: "#28a745",
+    },
+  },
 };
-
-export interface MolvisConfig {
-  // Display settings
-  displayWidth: number;
-  displayHeight: number;
-  fitContainer: boolean;
-  
-  // Render settings
-  autoRenderResolution: boolean;
-  renderWidth?: number;
-  renderHeight?: number;
-  pixelRatio: number;
-  
-  // UI settings
-  showUI: boolean;
-  uiComponents: UIConfig;
-  
-  // Performance settings
-  enableVSync: boolean;
-  enableMSAA: boolean;
-  maxFPS: number;
-}
-
-export interface UIConfig {
-  showModeIndicator: boolean;
-  showViewIndicator: boolean;
-  showInfoPanel: boolean;
-  showFrameIndicator: boolean;
-}
 
 export const DEFAULT_CONFIG: MolvisConfig = {
   displayWidth: 800,
   displayHeight: 600,
   fitContainer: true,
-  
+
   autoRenderResolution: true,
   pixelRatio: window.devicePixelRatio || 1,
-  
+
   showUI: true,
-  uiComponents: {
-    showModeIndicator: true,
-    showViewIndicator: true,
-    showInfoPanel: true,
-    showFrameIndicator: true,
-  },
-  
+  uiComponents: DEFAULT_UI_COMPONENTS,
+
   enableVSync: true,
   enableMSAA: true,
   maxFPS: 60,
@@ -139,23 +106,23 @@ export const DEFAULT_CONFIG: MolvisConfig = {
 
 export class ConfigManager {
   private config: MolvisConfig;
-  
+
   constructor(initialConfig: Partial<MolvisConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...initialConfig };
   }
-  
+
   get<K extends keyof MolvisConfig>(key: K): MolvisConfig[K] {
     return this.config[key];
   }
-  
+
   set<K extends keyof MolvisConfig>(key: K, value: MolvisConfig[K]): void {
     this.config[key] = value;
   }
-  
+
   update(updates: Partial<MolvisConfig>): void {
     this.config = { ...this.config, ...updates };
   }
-  
+
   getConfig(): MolvisConfig {
     return { ...this.config };
   }
@@ -179,11 +146,11 @@ export class ThemeManager {
 
   private detectSystemTheme(): string {
     // Detect system theme preference
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      return darkModeQuery.matches ? 'dark' : 'light';
+    if (typeof window !== "undefined" && window.matchMedia) {
+      const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      return darkModeQuery.matches ? "dark" : "light";
     }
-    return 'light';
+    return "light";
   }
 
   public getCurrentTheme(): string {
@@ -191,21 +158,30 @@ export class ThemeManager {
   }
 
   public setTheme(theme: string): void {
-    if (['light', 'dark', 'auto'].includes(theme)) {
-      this.currentTheme = theme === 'auto' ? this.detectSystemTheme() : theme;
+    if (["light", "dark", "auto"].includes(theme)) {
+      this.currentTheme = theme === "auto" ? this.detectSystemTheme() : theme;
       logger.info(`Theme changed to: ${this.currentTheme}`);
     } else {
       logger.warn(`Invalid theme: ${theme}`);
     }
   }
 
-  public getThemeColors(theme?: string): any {
+  public getThemeColors(theme?: string): {
+    background: string;
+    foreground: string;
+    primary: string;
+    secondary: string;
+    accent: string;
+  } {
     const targetTheme = theme || this.currentTheme;
-    return DEFAULT_THEME_CONFIG.themes[targetTheme as keyof typeof DEFAULT_THEME_CONFIG.themes] || DEFAULT_THEME_CONFIG.themes.light;
+    return (
+      DEFAULT_THEME_CONFIG.themes[targetTheme as keyof typeof DEFAULT_THEME_CONFIG.themes] ||
+      DEFAULT_THEME_CONFIG.themes.light
+    );
   }
 
   public toggleTheme(): void {
-    this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
+    this.currentTheme = this.currentTheme === "light" ? "dark" : "light";
     logger.info(`Theme toggled to: ${this.currentTheme}`);
   }
 }
@@ -217,10 +193,10 @@ export const CONFIG = {
     DEFAULT_BREAKPOINTS,
     DEFAULT_UI_COMPONENTS,
     RENDER_CONFIG: DEFAULT_RENDER_CONFIG,
-    PERFORMANCE_CONFIG: DEFAULT_PERFORMANCE_CONFIG
+    PERFORMANCE_CONFIG: DEFAULT_PERFORMANCE_CONFIG,
   },
   events: DEFAULT_EVENT_CONFIG,
   debug: DEFAULT_DEBUG_CONFIG,
   environment: DEFAULT_ENVIRONMENT_CONFIG,
-  theme: ThemeManager.getInstance()
+  theme: ThemeManager.getInstance(),
 };

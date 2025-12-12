@@ -24,7 +24,7 @@
       "@molvis/core/*": ["./src/*"]
     }
   },
-  "include": ["src", "tests/index.ts"],
+  "include": ["src", "tests/index.ts", "molrs"],
   "types": [
     "babylonjs",
   ]

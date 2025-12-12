@@ -12,98 +12,59 @@ import {
 import { AxisHelper } from "./axes";
 import { GridGround } from "./grid";
 import { MeshGroup } from "./group";
-import { Pipeline } from "../pipeline";
-import type { Box } from "../structure/box";
+import { Executor } from "../commands";
 import { ModeManager } from "../mode";
-import { Executor } from "../command";
-import { InstancedArtist, DynamicArtist } from "../artist";
-import type { ArtistBase } from "../artist";
-import { ViewManager } from "./view_manager";
+import { MolecularTopology } from "./topology";
 
 
 interface SceneDataInternal {
   scene: Scene;
-  viewManager: ViewManager;
+  camera: ArcRotateCamera;
   axes: AxisHelper;
   gridGround: GridGround;
-  pipeline: Pipeline;
   boxMesh: LinesMesh | null;
   mode: ModeManager | null;
   executor: Executor;
-  artists: Map<string, ArtistBase>;
   meshGroup: MeshGroup;
 }
 
 
-import { createLogger } from "../utils/logger";
-const logger = createLogger("molvis-world");
 
 class World {
   private _engine: Engine;
-  private _scenes: Map<string, SceneDataInternal> = new Map();
-  private _activeSceneId: string = "";
+  private _sceneData: SceneDataInternal;
   private _context: any;
   private _isRunning = false;
+  private _topology: MolecularTopology = new MolecularTopology();
 
 
   constructor(canvas: HTMLCanvasElement, engine: Engine, context: any) {
     this._engine = engine;
     this._context = context;
-    this.createScene("default", canvas);
-  }
-
-  public createScene(sceneId: string, canvas: HTMLCanvasElement): void {
-    if (this._scenes.has(sceneId)) {
-      throw new Error(`Scene ${sceneId} already exists`);
-    }
 
     const scene = this._initScene(this._engine);
-    const viewManager = new ViewManager(scene, this._engine);
+    const camera = this._initCamera(scene, canvas);
     this._initLight(scene);
-    const pipeline = new Pipeline();
-    const axes = this._initAxes(this._engine, viewManager); // Pass ViewManager
-    const gridGround = new GridGround(scene, viewManager.activeCamera, this._engine);
+    const axes = this._initAxes(this._engine, camera);
+    const gridGround = new GridGround(scene, camera, this._engine);
     const meshGroup = new MeshGroup("root", scene);
 
     const executor = new Executor(this._context);
 
-    const artists = new Map<string, ArtistBase>();
-    const instancedArtist = new InstancedArtist(scene, "instanced");
-    artists.set("instanced", instancedArtist);
-    executor.registerArtist("instanced", instancedArtist);
-
-    const dynamicArtist = new DynamicArtist(scene, "dynamic");
-    artists.set("dynamic", dynamicArtist);
-    executor.registerArtist("dynamic", dynamicArtist);
-
-    void instancedArtist.init();
-    void dynamicArtist.init();
-
-    const sceneData: SceneDataInternal = {
+    this._sceneData = {
       scene,
-      viewManager,
+      camera,
       axes,
       gridGround,
-      pipeline,
       boxMesh: null,
       mode: null,
       executor,
-      artists,
       meshGroup,
     };
-
-    this._scenes.set(sceneId, sceneData);
-
-    if (this._scenes.size === 1) {
-      this._activeSceneId = sceneId;
-    }
   }
 
-  public setMode(sceneId: string, mode: ModeManager): void {
-    const sceneData = this._scenes.get(sceneId);
-    if (sceneData) {
-      sceneData.mode = mode;
-    }
+  public setMode(mode: ModeManager): void {
+    this._sceneData.mode = mode;
   }
 
   private _initScene = (engine: Engine) => {
@@ -113,23 +74,15 @@ class World {
   };
 
   get scene(): Scene {
-    return this._scenes.get(this._activeSceneId)!.scene;
+    return this._sceneData.scene;
   }
 
   get gridGround(): GridGround {
-    return this._scenes.get(this._activeSceneId)!.gridGround;
-  }
-
-  get pipeline(): Pipeline {
-    return this._scenes.get(this._activeSceneId)!.pipeline;
+    return this._sceneData.gridGround;
   }
 
   public get camera(): ArcRotateCamera {
-    return this._scenes.get(this._activeSceneId)!.viewManager.activeCamera;
-  }
-
-  public get viewManager(): ViewManager {
-    return this._scenes.get(this._activeSceneId)!.viewManager;
+    return this._sceneData.camera;
   }
 
   private _initLight(scene: Scene) {
@@ -143,13 +96,25 @@ class World {
     return hemisphericLight;
   }
 
-  private _initAxes(engine: Engine, viewManager: ViewManager) {
-    return new AxisHelper(engine, viewManager);
+  private _initCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
+    const camera = new ArcRotateCamera(
+      "camera",
+      -Math.PI / 2,
+      Math.PI / 3,
+      10,
+      Vector3.Zero(),
+      scene
+    );
+    camera.inertia = 0;
+    camera.attachControl(canvas, true);
+    scene.activeCamera = camera;
+    return camera;
   }
 
-  public append_modifier(name: string, args: Record<string, unknown>) {
-    this._scenes.get(this._activeSceneId)!.pipeline.append(name, args);
+  private _initAxes(engine: Engine, camera: ArcRotateCamera) {
+    return new AxisHelper(engine, camera);
   }
+
 
   public takeScreenShot() {
     Tools.CreateScreenshot(this._engine, this.camera, { precision: 1.0 });
@@ -202,21 +167,18 @@ class World {
     this._isRunning = true;
 
     this._engine.runRenderLoop(() => {
-      const active = this._scenes.get(this._activeSceneId)!;
-      active.scene.render();
-      active.axes.render();
+      this._sceneData.scene.render();
+      this._sceneData.axes.render();
     });
     this._engine.resize();
     window.addEventListener("resize", () => {
       this._engine.resize();
-      this.viewManager.resize();
     });
   }
 
   public renderOnce(): void {
-    const active = this._scenes.get(this._activeSceneId)!;
-    active.scene.render();
-    active.axes.render();
+    this._sceneData.scene.render();
+    this._sceneData.axes.render();
   }
 
   public stop(): void {
@@ -224,98 +186,51 @@ class World {
   }
 
   public clear() {
-    const active = this._scenes.get(this._activeSceneId)!;
-    while (active.scene.meshes.length) {
-      const mesh = active.scene.meshes[0];
+    // Clear topology
+    this._topology.clear();
+    
+    while (this._sceneData.scene.meshes.length) {
+      const mesh = this._sceneData.scene.meshes[0];
       mesh.dispose();
     }
-    if (active.boxMesh) {
-      active.boxMesh.dispose();
-      active.boxMesh = null;
+    if (this._sceneData.boxMesh) {
+      this._sceneData.boxMesh.dispose();
+      this._sceneData.boxMesh = null;
     }
     // Re-enable grid ground after clearing
-    if (active.gridGround.isEnabled) {
-      active.gridGround.disable();
-      active.gridGround.enable();
+    if (this._sceneData.gridGround.isEnabled) {
+      this._sceneData.gridGround.disable();
+      this._sceneData.gridGround.enable();
     }
   }
 
   public resize() {
     this._engine.resize();
-    this.viewManager.resize();
   }
 
   public isOrthographic(): boolean {
     return this.camera.mode === ArcRotateCamera.ORTHOGRAPHIC_CAMERA;
   }
 
-  public switchToScene(sceneId: string): void {
-    if (!this._scenes.has(sceneId)) {
-      throw new Error(`Scene ${sceneId} does not exist`);
-    }
-    this._activeSceneId = sceneId;
-  }
-
-  public get activeSceneId(): string {
-    return this._activeSceneId;
-  }
-
-  public getScene(sceneId: string): SceneDataInternal | undefined {
-    return this._scenes.get(sceneId);
-  }
-
-  public get allSceneIds(): string[] {
-    return Array.from(this._scenes.keys());
-  }
-
-  public destroyScene(sceneId: string): void {
-    const sceneData = this._scenes.get(sceneId);
-    if (sceneData) {
-      // TODO: proper cleanup
-      this._scenes.delete(sceneId);
-      if (this._activeSceneId === sceneId) {
-        const remaining = this.allSceneIds;
-        this._activeSceneId = remaining.length > 0 ? remaining[0] : "";
-      }
-    }
-  }
-
-  public renderAll(): void {
-    if (!this._engine) return;
-    this._engine.runRenderLoop(() => {
-      for (const sceneData of this._scenes.values()) {
-        // sceneData.camera.viewport = sceneData.viewport; // ViewManager handles this now
-        sceneData.scene.render();
-        sceneData.axes.render();
-      }
-    });
-    this._engine.resize();
-    window.addEventListener("resize", () => {
-      if (this._engine) this._engine.resize();
-    });
-  }
-
-  public stopAll(): void {
-    if (this._engine) {
-      this._engine.stopRenderLoop();
-    }
-  }
-
   public get mode(): ModeManager | null {
-    return this._scenes.get(this._activeSceneId)?.mode || null;
+    return this._sceneData.mode;
   }
 
   public get executor(): Executor {
-    return this._scenes.get(this._activeSceneId)!.executor;
-  }
-
-  public get artists(): Map<string, ArtistBase> {
-    return this._scenes.get(this._activeSceneId)?.artists || new Map();
+    return this._sceneData.executor;
   }
 
   public get meshGroup(): MeshGroup {
-    return this._scenes.get(this._activeSceneId)!.meshGroup;
+    return this._sceneData.meshGroup;
   }
+
+  /**
+   * Get the molecular topology graph.
+   */
+  public get topology(): MolecularTopology {
+    return this._topology;
+  }
+
 }
 
 export { World };

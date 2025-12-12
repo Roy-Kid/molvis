@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "description": "interactive molecule visulization package",
   "author": "Roy Kid",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "BSD-3-Clause",
   "workspaces": [
     "core",
     "widget",
-    "page"
+    "page",
+    "vsc-ext"
   ],
   "scripts": {
     "dev:widget": "npm run dev -w widget",

@@ -1,7 +1,64 @@
 import { BaseMode, ModeType } from "./base";
 import type { MolvisApp } from "../core/app";
 import type { PointerInfo } from "@babylonjs/core";
-// import { ViewLayout } from "../core/view_manager"; // Removed
+import { ContextMenuController } from "../core/context_menu_controller";
+import type { HitResult, MenuItem } from "./types";
+
+/**
+ * Context menu controller for View mode.
+ * Shows menu on any right-click (if not dragging).
+ */
+class ViewModeContextMenu extends ContextMenuController {
+  constructor(
+    app: MolvisApp,
+    private mode: ViewMode
+  ) {
+    super(app, "molvis-view-menu");
+  }
+
+  protected shouldShowMenu(_hit: HitResult | null, isDragging: boolean): boolean {
+    // Show menu on any right-click (if not dragging)
+    return !isDragging;
+  }
+
+  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
+    const items: MenuItem[] = [];
+
+    // Snapshot button
+    items.push({
+      type: "button",
+      title: "Snapshot",
+      action: () => {
+        this.mode.takeScreenShot();
+      }
+    });
+
+    items.push({ type: "separator" });
+
+    // View mode selector
+    items.push({
+      type: "binding",
+      bindingConfig: {
+        view: "list",
+        label: "View Mode",
+        options: [
+          { text: "Perspective", value: "persp" },
+          { text: "Orthographic", value: "ortho" },
+          { text: "Front", value: "front" },
+          { text: "Back", value: "back" },
+          { text: "Left", value: "left" },
+          { text: "Right", value: "right" },
+        ],
+        value: this.mode.currentViewMode,
+      },
+      action: (ev: any) => {
+        this.mode.currentViewMode = ev.value as string;
+      }
+    });
+
+    return items;
+  }
+}
 
 class ViewMode extends BaseMode {
   private viewMode = "persp";
@@ -10,49 +67,8 @@ class ViewMode extends BaseMode {
     super(ModeType.View, app);
   }
 
-  protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
-    return (pane: any) => {
-      // View Mode Section - Simple binding
-      pane.addBinding(this, "currentViewMode", {
-        view: "list",
-        label: "View Mode",
-        options: {
-          persp: "persp",
-          ortho: "ortho",
-          front: "front",
-          back: "back",
-          left: "left",
-          right: "right",
-        }
-      }).on("change", (ev: any) => {
-        this.currentViewMode = ev.value as string;
-      });
-
-      pane.addBlade({
-        view: 'separator',
-      });
-
-      // Layout options removed as they are now handled by the recursive layout system
-      /*
-      const layoutFolder = pane.addFolder({ title: "Layout" });
-      const layoutOptions = [
-        { text: "Single", value: ViewLayout.Single },
-        { text: "Split Vertical", value: ViewLayout.SplitVertical },
-        { text: "Quad", value: ViewLayout.Quad },
-      ];
-
-      layoutFolder
-        .addBlade({
-          view: "list",
-          label: "layout",
-          options: layoutOptions,
-          value: ViewLayout.Single,
-        })
-        .on("change", (ev: any) => {
-          this.world.viewManager.setLayout(ev.value as ViewLayout);
-        });
-      */
-    };
+  protected createContextMenuController(): ContextMenuController {
+    return new ViewModeContextMenu(this.app, this);
   }
 
   get currentViewMode(): string {
@@ -84,14 +100,6 @@ class ViewMode extends BaseMode {
         // Unknown view mode
         break;
     }
-  }
-
-  protected showContextMenu(x: number, y: number): void {
-    this.contextMenu.show(x, y);
-  }
-
-  protected hideContextMenu(): void {
-    this.contextMenu.hide();
   }
 
   public setPerspective(): void {
@@ -128,32 +136,12 @@ class ViewMode extends BaseMode {
     this.world.takeScreenShot();
   }
 
-  // Debug method to test menu manually
-  public testMenu(): void {
-    this.contextMenu.show(100, 100);
-  }
-
-  public resetViewport(): void {
-    // this.world.viewportManager.resetToSingleViewport();
-    // this._redrawAllViewports();
-  }
-
-  // private _redrawAllViewports(): void {}
-
   public override finish(): void {
-    // Clean up menu
-    if (this.contextMenu) {
-      this.contextMenu.dispose();
-    }
-
-    // Call parent finish method
     super.finish();
   }
 
   override _on_pointer_down(pointerInfo: PointerInfo) {
     super._on_pointer_down(pointerInfo);
-    if (pointerInfo.event.button === 0) {
-    }
   }
 
   override _on_pointer_up(pointerInfo: PointerInfo) {

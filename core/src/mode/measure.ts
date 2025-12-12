@@ -2,6 +2,8 @@ import type { PointerInfo, AbstractMesh, Vector3 } from "@babylonjs/core";
 import { MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
 import { BaseMode, ModeType } from "./base";
 import type { Molvis } from "@molvis/core";
+import { ContextMenuController } from "../core/context_menu_controller";
+import type { HitResult, MenuItem } from "./types";
 
 interface MeasurementData {
   id: string;
@@ -11,10 +13,78 @@ interface MeasurementData {
   distance: number;
 }
 
+/**
+ * Context menu controller for Measure mode.
+ */
+class MeasureModeContextMenu extends ContextMenuController {
+  constructor(
+    app: Molvis,
+    private mode: MeasureMode
+  ) {
+    super(app, "molvis-measure-menu");
+  }
+
+  protected shouldShowMenu(_hit: HitResult | null, isDragging: boolean): boolean {
+    return !isDragging;
+  }
+
+  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
+    return [
+      {
+        type: "button",
+        title: "Snapshot",
+        action: () => {
+          this.mode.takeScreenShot();
+        }
+      },
+      { type: "separator" },
+      {
+        type: "binding",
+        bindingConfig: {
+          view: "list",
+          label: "Unit",
+          options: [
+            { text: "Angstrom (Å)", value: "angstrom" },
+            { text: "Nanometer (nm)", value: "nanometer" },
+            { text: "Picometer (pm)", value: "picometer" }
+          ],
+          value: this.mode.unit,
+        },
+        action: (ev: any) => {
+          this.mode.unit = ev.value;
+          this.mode.updateAllLabels();
+        }
+      },
+      {
+        type: "binding",
+        bindingConfig: {
+          label: "Precision",
+          min: 1,
+          max: 6,
+          step: 1,
+          value: this.mode.precision,
+        },
+        action: (ev: any) => {
+          this.mode.precision = ev.value;
+          this.mode.updateAllLabels();
+        }
+      },
+      { type: "separator" },
+      {
+        type: "button",
+        title: "Clear All",
+        action: () => {
+          this.mode.clearAllMeasurements();
+        }
+      }
+    ];
+  }
+}
+
 class MeasureMode extends BaseMode {
   private measurements: Map<string, MeasurementData> = new Map();
   private selectedAtom: AbstractMesh | null = null;
-  
+
   // Configuration properties
   public unit = "angstrom";
   public precision = 2;
@@ -23,47 +93,11 @@ class MeasureMode extends BaseMode {
     super(ModeType.Measure, app);
   }
 
-  protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
-    return (pane: any) => {
-      // Unit selection
-      pane.addBinding(this, "unit", {
-        view: "list",
-        label: "Unit",
-        options: [
-          { text: "Angstrom (Å)", value: "angstrom" },
-          { text: "Nanometer (nm)", value: "nanometer" },
-          { text: "Picometer (pm)", value: "picometer" }
-        ]
-      }).on('change', () => {
-        this.updateAllLabels();
-      });
-
-      // Precision control
-      pane.addBinding(this, "precision", {
-        label: "Precision",
-        min: 1,
-        max: 6,
-        step: 1
-      }).on('change', () => {
-        this.updateAllLabels();
-      });
-
-      pane.addBlade({ view: 'separator' });
-
-      // Clear all measurements
-      pane.addButton({ title: "Clear All" }).on("click", () => {
-        this.clearAllMeasurements();
-      });
-    };
+  protected createContextMenuController(): ContextMenuController {
+    return new MeasureModeContextMenu(this.app, this);
   }
 
-  protected showContextMenu(x: number, y: number): void {
-    this.contextMenu.show(x, y);
-  }
 
-  protected hideContextMenu(): void {
-    this.contextMenu.hide();
-  }
 
   protected override _on_left_up(pointerInfo: PointerInfo): void {
     if (this._is_dragging) {
@@ -137,7 +171,7 @@ class MeasureMode extends BaseMode {
     };
 
     this.measurements.set(measurementId, measurement);
-    
+
     // Update info panel with current measurement
     this.updateInfoPanel();
   }
@@ -166,7 +200,7 @@ class MeasureMode extends BaseMode {
 
     const measurementTexts: string[] = [];
     let index = 1;
-    
+
     for (const measurement of this.measurements.values()) {
       const formattedDistance = this.formatDistance(measurement.distance);
       const atomName1 = measurement.startAtom.name.split(':')[1];
@@ -174,7 +208,7 @@ class MeasureMode extends BaseMode {
       measurementTexts.push(`[${index}] ${atomName1} - ${atomName2}: ${formattedDistance}`);
       index++;
     }
-    
+
     const infoText = `Measurements (${this.measurements.size}):\n${measurementTexts.join('\n')}`;
     this.gui?.updateInfoText(infoText);
   }
@@ -225,11 +259,6 @@ class MeasureMode extends BaseMode {
   public override finish(): void {
     this.clearAllMeasurements();
     this.clearCurrentSelection();
-    
-    if (this.contextMenu) {
-      this.contextMenu.dispose();
-    }
-    
     super.finish();
   }
 
@@ -242,13 +271,13 @@ class MeasureMode extends BaseMode {
         const formattedDistance = this.formatDistance(distance);
         const atomName1 = this.selectedAtom.name.split(':')[1];
         const atomName2 = mesh.name.split(':')[1];
-        
+
         // Show preview with existing measurements
         let previewText = `Preview: ${atomName1} - ${atomName2} = ${formattedDistance}`;
         if (this.measurements.size > 0) {
           const measurementTexts: string[] = [];
           let index = 1;
-          
+
           for (const measurement of this.measurements.values()) {
             const measuredDistance = this.formatDistance(measurement.distance);
             const measuredAtomName1 = measurement.startAtom.name.split(':')[1];
@@ -256,10 +285,10 @@ class MeasureMode extends BaseMode {
             measurementTexts.push(`[${index}] ${measuredAtomName1} - ${measuredAtomName2}: ${measuredDistance}`);
             index++;
           }
-          
+
           previewText = `${previewText}\n\nExisting Measurements:\n${measurementTexts.join('\n')}`;
         }
-        
+
         this.gui?.updateInfoText(previewText);
       } else if (!mesh) {
         // Just show existing measurements when not hovering over an atom
@@ -267,8 +296,8 @@ class MeasureMode extends BaseMode {
       }
     } else {
       // Show normal atom/bond info or measurements
-      const mesh = this.pick_mesh();
-      if (mesh?.metadata) {
+      const hit = this.pickHit();
+      if (hit && hit.type !== "empty") {
         // Call parent method to show atom/bond info
         super._on_pointer_move(_pointerInfo);
       } else if (this.measurements.size > 0) {

@@ -1,4 +1,5 @@
 import { Block } from './block';
+import type { Box } from 'molrs-wasm';
 
 
 class AtomBlock extends Block {
@@ -75,10 +76,14 @@ class Frame {
 
   private atoms: AtomBlock;
   private bonds: BondBlock | undefined;
+  public meta: Map<string, unknown>;
+  public box: Box | undefined;
 
   constructor(atoms: AtomBlock, bonds?: BondBlock) {
     this.atoms = atoms;
     this.bonds = bonds;
+    this.meta = new Map<string, unknown>();
+    this.box = undefined;
   }
 
   get atomBlock(): AtomBlock {

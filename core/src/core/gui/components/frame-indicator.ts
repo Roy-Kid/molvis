@@ -180,6 +180,6 @@ export class FrameIndicator extends BaseGuiComponent {
 
   private _renderFrame(frame: Frame): void {
     this._app.world.clear();
-    void this._app.executor.execute("draw_frame", { frame, options: { atoms: {}, bonds: {} } });
+    void this._app.execute("draw_frame", { frame, options: { atoms: {}, bonds: {} } });
   }
 }

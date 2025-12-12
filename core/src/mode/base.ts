@@ -12,120 +12,33 @@ import type {
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
 import { getPositionFromMatrix } from "./utils";
-import { Pane } from "tweakpane";
+import { ContextMenuController } from "../core/context_menu_controller";
+import type { HitResult } from "./types";
 
 enum ModeType {
   View = "view",
   Select = "select",
   Edit = "edit",
   Measure = "measure",
-  Manupulate = "manupulate",
+  Manipulate = "manipulate",
 }
 
-class BaseModeMenu {
-  private container: HTMLDivElement | null = null;
-  private pane: Pane | null = null;
-  private containerId: string;
-  private isBuilt: boolean;
-
-  constructor(private mode: BaseMode, containerId: string, private app: Molvis, private addCustomMenu?: (pane: any) => void) {
-    this.containerId = containerId;
-    this.isBuilt = false;
-  }
-
-  private build() {
-    // Check if container already exists
-    const existingContainer = document.getElementById(this.containerId) as HTMLDivElement;
-
-    if (existingContainer) {
-      // Reuse existing container
-      this.container = existingContainer;
-      // Clean up existing Pane
-      if (this.pane) {
-        this.pane.dispose();
-      }
-    } else {
-      // Create new menu container
-      this.container = document.createElement("div");
-      this.container.id = this.containerId;
-      this.container.className = "MolvisModeMenu";
-      this.container.style.position = "absolute"; // Absolute within UI overlay
-      this.container.style.pointerEvents = "auto";
-      this.container.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-      this.container.style.borderRadius = "8px";
-      this.container.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.3)";
-      this.container.style.zIndex = "10000";
-
-      // Mount to UI overlay container instead of body
-      // This ensures the menu works with the pointer-events setup
-      this.app.uiContainer.appendChild(this.container);
-    }
-
-    this.pane = new Pane({
-      container: this.container,
-      title: "Mode Menu",
-      expanded: true
-    });
-    (this.pane as any).hidden = true;
-
-    // Build menu content
-    this.buildMenuContent();
-    this.isBuilt = true;
-  }
-
-  private buildMenuContent() {
-    if (!this.pane) return;
-
-    // Clear existing menu items
-    const paneAny = this.pane as any;
-    if (paneAny.children) {
-      for (const c of paneAny.children) {
-        paneAny.remove(c);
-      }
-    }
-
-    // Common actions
-    (this.pane as any).addButton({ title: "Snapshot" }).on("click", () => {
-      this.mode.takeScreenShot();
-    });
-
-    // Add custom menu items
-    if (this.addCustomMenu) {
-      this.addCustomMenu(this.pane);
-    }
-  }
-
-  public show(x: number, y: number) {
-    if (!this.isBuilt) {
-      this.build();
-    }
-    if (this.container && this.pane) {
-      this.container.style.left = `${x}px`;
-      this.container.style.top = `${y}px`;
-      this.container.style.display = 'block';
-      (this.pane as any).hidden = false;
-    }
-  }
-
-  public hide() {
-    if (this.container) {
-      this.container.style.display = 'none'; // Hide container
-    }
-    if (this.pane) {
-      (this.pane as any).hidden = true;
-    }
-  }
-
-  public dispose() {
-    if (this.pane) {
-      this.pane.dispose();
-    }
-    if (this.container && this.container.parentNode) {
-      this.container.parentNode.removeChild(this.container);
-    }
-  }
-}
-
+/**
+ * Base class for all interaction modes.
+ * 
+ * Event Flow Architecture:
+ * ========================
+ * Right-click events follow a layered approach:
+ * 1. Event arrives at _on_right_up()
+ * 2. Mode picks the hit result (atom/bond/empty)
+ * 3. Context menu controller decides whether to show menu
+ * 4. If menu is shown, event is consumed
+ * 5. If not consumed, mode handles it via onRightClickNotConsumed()
+ * 
+ * Each mode must implement:
+ * - createContextMenuController(): Create mode-specific menu controller
+ * - onRightClickNotConsumed(): Handle right-click when menu doesn't consume it
+ */
 abstract class BaseMode {
   name: ModeType;
 
@@ -134,15 +47,16 @@ abstract class BaseMode {
   private _kb_observer: Observer<KeyboardInfo>;
   protected _pointer_down_xy: Vector2 = new Vector2();
   protected _pointer_up_xy: Vector2 = new Vector2();
-  private _contextMenuOpen = false;
-  protected contextMenu!: BaseModeMenu;
+
+  // Context menu controller (mode-specific)
+  protected contextMenuController!: ContextMenuController;
 
   constructor(name: ModeType, app: Molvis) {
     this._app = app;
     this.name = name;
     this._pointer_observer = this.register_pointer_events();
     this._kb_observer = this.register_keyboard_events();
-    this.init_context_menu();
+    this.initContextMenu();
   }
 
   protected get scene() {
@@ -165,12 +79,26 @@ abstract class BaseMode {
     return this._pointer_up_xy.subtract(this._pointer_down_xy).length() > 0.2;
   }
 
-  protected init_context_menu() {
-    this.contextMenu = new BaseModeMenu(this, "molvis-base-menu", this._app, this.getCustomMenuBuilder());
+  /**
+   * Initialize the context menu controller.
+   * Calls the abstract createContextMenuController() method.
+   */
+  private initContextMenu() {
+    this.contextMenuController = this.createContextMenuController();
   }
 
-  protected getCustomMenuBuilder(): ((pane: any) => void) | undefined {
-    return undefined;
+  /**
+   * Create mode-specific context menu controller.
+   * Must be implemented by each mode.
+   */
+  protected abstract createContextMenuController(): ContextMenuController;
+
+  /**
+   * Handle right-click when context menu doesn't consume the event.
+   * Override in subclasses for mode-specific right-click behavior.
+   */
+  protected onRightClickNotConsumed(_pointerInfo: PointerInfo, _hit: HitResult | null): void {
+    // Default: do nothing
   }
 
   public takeScreenShot(): void {
@@ -180,6 +108,9 @@ abstract class BaseMode {
   public finish() {
     this.unregister_pointer_events();
     this.unregister_keyboard_events();
+    if (this.contextMenuController) {
+      this.contextMenuController.dispose();
+    }
   }
 
   private unregister_pointer_events = () => {
@@ -187,6 +118,7 @@ abstract class BaseMode {
       this._pointer_observer,
     );
     if (!is_successful) {
+      // Observer removal failed
     }
   };
 
@@ -195,6 +127,7 @@ abstract class BaseMode {
       this._kb_observer,
     );
     if (!is_successful) {
+      // Observer removal failed
     }
   };
 
@@ -230,35 +163,30 @@ abstract class BaseMode {
     return this.scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
-          if ((kbInfo.event.key === "Escape" || kbInfo.event.key === "Enter") && this._contextMenuOpen) {
-            this.hideContextMenu();
-            this._contextMenuOpen = false;
+          // Handle Ctrl key combinations
+          if (kbInfo.event.ctrlKey) {
+            switch (kbInfo.event.key.toLowerCase()) {
+              case "s":
+                this._on_press_ctrl_s();
+                break;
+              case "z":
+                this._on_press_ctrl_z();
+                break;
+              case "y":
+                this._on_press_ctrl_y();
+                break;
+            }
           } else {
-            // Handle Ctrl key combinations
-            if (kbInfo.event.ctrlKey) {
-              switch (kbInfo.event.key.toLowerCase()) {
-                case "s":
-                  this._on_press_ctrl_s();
-                  break;
-                case "z":
-                  this._on_press_ctrl_z();
-                  break;
-                case "y":
-                  this._on_press_ctrl_y();
-                  break;
-              }
-            } else {
-              switch (kbInfo.event.key) {
-                case "e":
-                  this._on_press_e();
-                  break;
-                case "q":
-                  this._on_press_q();
-                  break;
-                case "Escape":
-                  this._on_press_escape();
-                  break;
-              }
+            switch (kbInfo.event.key) {
+              case "e":
+                this._on_press_e();
+                break;
+              case "q":
+                this._on_press_q();
+                break;
+              case "Escape":
+                this._on_press_escape();
+                break;
             }
           }
           break;
@@ -266,41 +194,53 @@ abstract class BaseMode {
     });
   };
 
-  protected showContextMenu(x: number, y: number): void {
-    this.contextMenu.show(x, y);
-    this._contextMenuOpen = true;
-  }
+  /**
+   * Pick and create a HitResult from the current pointer position.
+   * Returns hit information about what's under the cursor.
+   */
+  protected pickHit(): HitResult | null {
+    const scene = this.world.scene;
+    const pickResult = scene.pick(
+      scene.pointerX,
+      scene.pointerY,
+      undefined,
+      false,
+      this.world.camera
+    );
 
-  protected hideContextMenu(): void {
-    this.contextMenu.hide();
-    this._contextMenuOpen = false;
-  }
-  protected isContextMenuOpen(): boolean { return this._contextMenuOpen; }
+    if (!pickResult.hit || !pickResult.pickedMesh) {
+      return { type: "empty" };
+    }
 
-  protected setContextMenuState(open: boolean): void {
-    this._contextMenuOpen = open;
+    const mesh = pickResult.pickedMesh;
+    const metadata = mesh.metadata;
+
+    if (metadata?.meshType === "atom") {
+      return {
+        type: "atom",
+        mesh,
+        metadata,
+        thinInstanceIndex: pickResult.thinInstanceIndex ?? -1,
+      };
+    } else if (metadata?.meshType === "bond") {
+      return {
+        type: "bond",
+        mesh,
+        metadata,
+        thinInstanceIndex: pickResult.thinInstanceIndex ?? -1,
+      };
+    }
+
+    return { type: "empty" };
   }
 
   _on_pointer_down(pointerInfo: PointerInfo): void {
     this._pointer_down_xy = this.get_pointer_xy();
 
-    // Auto-switch active camera on click
-    const x = pointerInfo.event.clientX;
-    const y = pointerInfo.event.clientY;
-    const camIndex = this.world.viewManager.pickCamera(x, y);
-    if (camIndex !== -1) {
-      this.world.viewManager.setActiveCamera(camIndex);
-    }
-
     if (pointerInfo.event.button === 0) {
       this._on_left_down(pointerInfo);
     } else if (pointerInfo.event.button === 2) {
       this._on_right_down(pointerInfo);
-    }
-
-    if (this._contextMenuOpen && pointerInfo.event.button === 0) {
-      this.hideContextMenu();
-      this._contextMenuOpen = false;
     }
   }
 
@@ -315,31 +255,40 @@ abstract class BaseMode {
   }
 
   protected _on_left_down(_pointerInfo: PointerInfo): void {
+    // Override in subclasses
   }
 
   protected _on_left_up(_pointerInfo: PointerInfo): void {
-    if (this._contextMenuOpen) {
-      this.hideContextMenu();
-      this._contextMenuOpen = false;
-    }
+    // Override in subclasses
   }
 
   protected _on_right_down(_pointerInfo: PointerInfo): void {
+    // Override in subclasses
   }
 
+  /**
+   * Right-click handler with layered event flow.
+   * 
+   * Flow:
+   * 1. Pick what's under the cursor
+   * 2. Let context menu controller decide if it wants to handle this
+   * 3. If menu consumes event (shows menu), we're done
+   * 4. Otherwise, delegate to mode-specific logic via onRightClickNotConsumed()
+   */
   protected _on_right_up(pointerInfo: PointerInfo): void {
-    if (!this._is_dragging) {
-      // Prevent default context menu
-      pointerInfo.event.preventDefault();
+    // Pick what's under the cursor
+    const hit = this.pickHit();
 
-      if (this._contextMenuOpen) {
-        this.hideContextMenu();
-        this._contextMenuOpen = false;
-      } else {
-        const { x, y } = pointerInfo.event;
-        this.showContextMenu(x, y);
-        this._contextMenuOpen = true;
-      }
+    // Let context menu controller handle it first
+    const consumed = this.contextMenuController.handleRightClick(
+      pointerInfo.event,
+      hit,
+      this._is_dragging
+    );
+
+    // If not consumed by menu, let mode handle it
+    if (!consumed) {
+      this.onRightClickNotConsumed(pointerInfo, hit);
     }
   }
 
@@ -369,10 +318,18 @@ abstract class BaseMode {
         this.gui.updateInfoText(infoText);
       } else if (meshType === 'bond') {
         const bondData = mesh.metadata;
-        const i = bondData.i[pickResult.thinInstanceIndex!];
-        const j = bondData.j[pickResult.thinInstanceIndex!];
-        const infoText = `Bond: ${i} - ${j}`;
-        this.gui.updateInfoText(infoText);
+        const bondThinIndex = pickResult.thinInstanceIndex!;
+        if (bondThinIndex !== -1 && bondData.i && bondData.j) {
+          // Thin instance bond (instanced rendering)
+          const i = bondData.i[bondThinIndex];
+          const j = bondData.j[bondThinIndex];
+          const infoText = `Bond: ${i} - ${j}`;
+          this.gui.updateInfoText(infoText);
+        } else {
+          // Regular bond mesh (dynamic rendering)
+          const infoText = bondData.order ? `Bond (order: ${bondData.order})` : 'Bond';
+          this.gui.updateInfoText(infoText);
+        }
       } else {
         this.gui.updateInfoText(mesh.name);
       }

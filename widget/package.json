@@ -1,19 +1,27 @@
 {
-  "name": "widget",
-  "version": "1.0.0",
+  "name": "@molvis/widget",
+  "version": "0.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "rslib build -w",
-    "build": "rslib build"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "author": "Roy Kid",
-  "dependencies": {
-    "@anywidget/types": "^0.2.0",
-    "anywidget": "^0.9.15"
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rslib build",
+    "dev": "rslib build --watch"
   },
   "devDependencies": {
-    "@apache-arrow/ts": "^19.0.0",
-    "@molvis/core": "file:../core",
-    "@rslib/core": "^0.5.4"
+    "@anywidget/types": "^0.2.0",
+    "@rsbuild/core": "^1.6.9",
+    "@rslib/core": "^0.18.2",
+    "@types/node": "^24.10.1",
+    "anywidget": "^0.9.21",
+    "typescript": "^5.9.3"
   }
 }

@@ -5,6 +5,9 @@ import { World } from "./world";
 import { ModeManager, ModeType } from "../mode";
 import type { MolvisOptions, ResolvedMolvisOptions } from "./options";
 import { resolveMolvisOptions } from "./options";
+import { DataPipeline, RenderPipeline, CommandRegistry, commands } from "../commands";
+import type { DataPipelineContext, RenderPipelineContext } from "../commands";
+import type { Frame } from "../structure/frame";
 
 export class MolvisApp {
   // DOM elements
@@ -19,6 +22,14 @@ export class MolvisApp {
   private _world: World;
   private _gui: GuiManager;
   private _isRunning = false;
+  
+  // Pipelines
+  private _dataPipeline: DataPipeline;
+  private _renderPipeline: RenderPipeline;
+  private _currentFrame: number = 0;
+  
+  // Command registry
+  readonly commands: CommandRegistry;
 
   constructor(container: HTMLElement, options: MolvisOptions = {}) {
     this._options = resolveMolvisOptions(options);
@@ -54,7 +65,16 @@ export class MolvisApp {
     // Initialize default mode (Edit mode)
     const modeManager = new ModeManager(this);
     modeManager.switch_mode(ModeType.Edit);
-    this._world.setMode('default', modeManager);
+    this._world.setMode(modeManager);
+
+    // Initialize pipelines
+    this._dataPipeline = new DataPipeline();
+    this._renderPipeline = new RenderPipeline();
+    this._renderPipeline.scene = this._world.scene;
+    this._renderPipeline.world = this._world;
+    
+    // Initialize command registry (use shared singleton)
+    this.commands = commands;
   }
 
   private _createRoot(): HTMLElement {
@@ -140,13 +160,8 @@ export class MolvisApp {
     return this._world.mode;
   }
 
-  get executor() {
-    return this._world.executor;
-  }
 
-  get artists() {
-    return this._world.artists;
-  }
+  // Removed artists getter - artists are now integrated into RenderOps
 
   get gui(): GuiManager {
     return this._gui;
@@ -189,35 +204,45 @@ export class MolvisApp {
     return this._isRunning;
   }
 
-  // Public methods
-  public execute(method: string, params: unknown = {}): unknown {
-    try {
-      return this._world.executor.execute(method, params);
-    } catch (error) {
-      logger.error("Method execution failed:", { method, params, error });
-      throw error;
-    }
+  get dataPipeline(): DataPipeline {
+    return this._dataPipeline;
   }
+
+  get renderPipeline(): RenderPipeline {
+    return this._renderPipeline;
+  }
+
+  get currentFrame(): number {
+    return this._currentFrame;
+  }
+
+  set currentFrame(value: number) {
+    this._currentFrame = value;
+  }
+
+  // Public methods
+  /**
+   * Execute a command by name.
+   * @param name Command name
+   * @param args Command arguments
+   * @returns Promise if command is async, void otherwise
+   */
+  public execute<A>(name: string, args: A): void | Promise<void> {
+    return this.commands.execute(name, this, args);
+  }
+
 
   public start(): void {
     if (this._isRunning) return;
     this._isRunning = true;
-    if (this._world.allSceneIds.length > 1) {
-      this._world.renderAll();
-    } else {
-      this._world.render();
-    }
+    this._world.render();
     logger.info("Molvis started successfully");
   }
 
   public stop(): void {
     if (!this._isRunning) return;
     this._isRunning = false;
-    if (this._world.allSceneIds.length > 1) {
-      this._world.stopAll();
-    } else {
-      this._world.stop();
-    }
+    this._world.stop();
     logger.info("Molvis stopped successfully");
   }
 
@@ -306,7 +331,7 @@ export class MolvisApp {
     logger.info("Molvis destroyed and cleaned up");
   }
 
-  public setMode(sceneId: string, mode: string): void {
+  public setMode(mode: string): void {
     const modeManager = new ModeManager(this);
     switch (mode) {
       case "view":
@@ -315,6 +340,53 @@ export class MolvisApp {
       default:
         break;
     }
-    this._world.setMode(sceneId, modeManager);
+    this._world.setMode(modeManager);
+  }
+
+  /**
+   * Compute a frame using the data pipeline.
+   * @param frameIndex Index of frame to compute
+   * @param ctx Pipeline context (optional, uses pipeline source if not provided)
+   * @returns Promise resolving to the computed frame
+   */
+  public async computeFrame(
+    frameIndex: number,
+    ctx?: Partial<DataPipelineContext>
+  ): Promise<Frame> {
+    const pipelineCtx: DataPipelineContext = {
+      source: ctx?.source || this._dataPipeline.source!,
+    };
+    
+    if (!pipelineCtx.source) {
+      throw new Error("No frame source available. Set dataPipeline.source or provide source in context.");
+    }
+
+    const frame = await this._dataPipeline.compute(frameIndex, pipelineCtx);
+    this._currentFrame = frameIndex;
+    return frame;
+  }
+
+  /**
+   * Render a frame using the render pipeline.
+   * @param frame Frame to render
+   * @param ctx Pipeline context (optional, uses pipeline scene/world if not provided)
+   */
+  public renderFrame(
+    frame: Frame,
+    ctx?: Partial<RenderPipelineContext>
+  ): void {
+    const pipelineCtx: RenderPipelineContext = {
+      scene: ctx?.scene || this._renderPipeline.scene!,
+      world: ctx?.world || this._renderPipeline.world!,
+    };
+
+    if (!pipelineCtx.scene) {
+      throw new Error("No scene available. Set renderPipeline.scene or provide scene in context.");
+    }
+    if (!pipelineCtx.world) {
+      throw new Error("No world available. Set renderPipeline.world or provide world in context.");
+    }
+
+    this._renderPipeline.render(frame, pipelineCtx);
   }
 }

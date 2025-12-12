@@ -1,5 +1,5 @@
 import * as BABYLON from "@babylonjs/core";
-import { ViewManager } from "./view_manager";
+import type { ArcRotateCamera } from "@babylonjs/core";
 
 class AxisViewer {
   private _scene: BABYLON.Scene;
@@ -70,7 +70,7 @@ class AxisHelper {
   private _scene: BABYLON.Scene;
   private _cameraGizmo: BABYLON.ArcRotateCamera;
 
-  public constructor(engine: BABYLON.Engine, viewManager: ViewManager) {
+  public constructor(engine: BABYLON.Engine, camera: ArcRotateCamera) {
     const scene = new BABYLON.Scene(engine);
     this._scene = scene;
     scene.useRightHandedSystem = true;
@@ -101,10 +101,9 @@ class AxisHelper {
 
     // Clone active camera alpha and beta to axis camera
     scene.registerBeforeRender(() => {
-      const activeCamera = viewManager.activeCamera;
-      if (activeCamera) {
-        this._cameraGizmo.alpha = activeCamera.alpha;
-        this._cameraGizmo.beta = activeCamera.beta;
+      if (camera) {
+        this._cameraGizmo.alpha = camera.alpha;
+        this._cameraGizmo.beta = camera.beta;
       }
     });
   }

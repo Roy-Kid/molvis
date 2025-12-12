@@ -12,7 +12,10 @@ export default defineConfig({
   },
   source: {
     entry: {
-        index: "./tests/index.ts"
-    }
+      index: "./examples/index.ts"
+    },
+    define: {
+      __WASM_INLINE__: JSON.stringify(false),
+    },
   }
 });

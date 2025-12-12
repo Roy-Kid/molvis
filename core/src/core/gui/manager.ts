@@ -4,7 +4,6 @@ import { ModeIndicator } from "./components/mode-indicator";
 import { ViewIndicator } from "./components/view-indicator";
 import { InfoPanel } from "./components/info-panel";
 import { FrameIndicator } from "./components/frame-indicator";
-import { LayoutOverlay } from "./components/layout_overlay";
 import { createLogger } from "../../utils/logger";
 
 const logger = createLogger("molvis-gui");
@@ -20,7 +19,6 @@ export class GuiManager {
     private _viewIndicator!: ViewIndicator;
     private _infoPanel!: InfoPanel;
     private _frameIndicator!: FrameIndicator;
-    private _layoutOverlay?: LayoutOverlay;
 
     constructor(app: MolvisApp, overlay: HTMLElement, options: ResolvedMolvisOptions) {
         this._app = app;
@@ -36,16 +34,6 @@ export class GuiManager {
 
     private _initializeComponents(): void {
         const opts = this._options.uiComponents;
-
-        // Layout Overlay Layer (full screen, behind everything)
-        this.createLayer('layout-overlay', {
-            position: 'absolute',
-            top: '0',
-            left: '0',
-            width: '100%',
-            height: '100%',
-            pointerEvents: 'none',
-        });
 
         // Mode Indicator - Top Left
         const modeLayer = this.createLayer('mode-indicator', {
@@ -93,9 +81,6 @@ export class GuiManager {
         this.enableLayer('view-indicator', opts.showViewIndicator);
         this.enableLayer('info-panel', opts.showInfoPanel);
         this.enableLayer('frame-indicator', opts.showFrameIndicator);
-
-        // Initialize layout overlay
-        this._updateLayoutOverlay();
     }
 
     public initializeDefaultStates(): void {
@@ -130,23 +115,6 @@ export class GuiManager {
             this._frameIndicator.updateFrame(0, 1);
         }
 
-        // Initialize Layout Overlay
-        this._updateLayoutOverlay();
-    }
-
-    private _updateLayoutOverlay(): void {
-        if (this._layoutOverlay) {
-            this._layoutOverlay.dispose();
-            this._layoutOverlay = undefined;
-        }
-
-        if (this._app.world && this._app.world.viewManager) {
-            const layoutLayer = this._layers.get('layout-overlay');
-            if (layoutLayer) {
-                this._layoutOverlay = new LayoutOverlay(this._app.world.viewManager);
-                this._layoutOverlay.mount(layoutLayer);
-            }
-        }
     }
 
     // Public API methods
@@ -189,9 +157,6 @@ export class GuiManager {
     }
 
     public dispose(): void {
-        if (this._layoutOverlay) {
-            this._layoutOverlay.dispose();
-        }
         this._modeIndicator.dispose();
         this._viewIndicator.dispose();
         this._infoPanel.dispose();

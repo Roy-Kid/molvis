@@ -1,5 +1,3 @@
-import type { AnyModel } from "@anywidget/types";
-
 // Widget configuration interface
 export interface WidgetConfig {
   width: number;
@@ -36,11 +34,11 @@ export interface SizeConfig {
 
 // Widget model type
 export interface ModelType {
-  get(key: string): any;
-  set(key: string, value: any): void;
-  on(event: string, callback: Function): void;
-  off(event: string, callback: Function): void;
-  send(event: string, data: any): void;
+  get<T = unknown>(key: string): T;
+  set<T = unknown>(key: string, value: T): void;
+  on(event: string, callback: (...args: unknown[]) => void): void;
+  off(event: string, callback: (...args: unknown[]) => void): void;
+  send(event: string, data: unknown): void;
   save_changes(): void;
 }
 
@@ -48,25 +46,25 @@ export interface ModelType {
 export interface JsonRPCRequest {
   jsonrpc: "2.0";
   method: string;
-  params: Record<string, any>;
+  params: Record<string, unknown>;
   id: number;
 }
 
 export interface JsonRPCResponse {
   jsonrpc: "2.0";
   id: number;
-  result?: any;
+  result?: unknown;
   error?: {
     code: number;
     message: string;
-    data?: any;
+    data?: unknown;
   };
 }
 
 export interface JsonRPCError {
   code: number;
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 // Responsive breakpoints
@@ -78,6 +76,29 @@ export interface BreakpointConfig {
   xl: number;
 }
 
+// Molvis Configuration Interface
+export interface MolvisConfig {
+  // Display settings
+  displayWidth: number;
+  displayHeight: number;
+  fitContainer: boolean;
+
+  // Render settings
+  autoRenderResolution: boolean;
+  renderWidth?: number;
+  renderHeight?: number;
+  pixelRatio: number;
+
+  // UI settings
+  showUI: boolean;
+  uiComponents: UIConfig;
+
+  // Performance settings
+  enableVSync: boolean;
+  enableMSAA: boolean;
+  maxFPS: number;
+}
+
 // Utility functions
 export type SafeQuerySelector<T extends HTMLElement = HTMLElement> = (
   parent: Element,
@@ -85,40 +106,27 @@ export type SafeQuerySelector<T extends HTMLElement = HTMLElement> = (
 ) => T | null;
 
 // JSON-RPC utility functions
-export function createSuccessResponse(id: number, result: any): JsonRPCResponse {
+export function createSuccessResponse(id: number, result: unknown): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
     id,
-    result
+    result,
   };
 }
 
-export function createErrorResponse(id: number | null, code: number, message: string, data?: any): JsonRPCResponse {
+export function createErrorResponse(
+  id: number | null,
+  code: number,
+  message: string,
+  data?: unknown
+): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
     id: id || 0,
     error: {
       code,
       message,
-      data
-    }
+      data,
+    },
   };
 }
-
-// Default configurations
-export const DEFAULT_UI_LAYERS: UILayerConfig = {
-  canvas: { zIndex: 1, pointerEvents: 'auto' },
-  ui: { zIndex: 1000, pointerEvents: 'none' },
-  modeIndicator: { zIndex: 1001, pointerEvents: 'auto' },
-  viewIndicator: { zIndex: 1001, pointerEvents: 'auto' },
-  infoPanel: { zIndex: 1001, pointerEvents: 'auto' },
-  frameIndicator: { zIndex: 1001, pointerEvents: 'auto' }
-};
-
-export const DEFAULT_BREAKPOINTS: BreakpointConfig = {
-  xs: 480,
-  sm: 768,
-  md: 1024,
-  lg: 1200,
-  xl: 1400
-};

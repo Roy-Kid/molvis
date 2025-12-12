@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "lib": ["DOM", "ES2020"],
-    "target": "ES2020",
+    "lib": ["ESNext"],
+    "target": "ESNext",
     "noEmit": true,
     "skipLibCheck": true,
     "useDefineForClassFields": true,
@@ -12,13 +12,9 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "resolveJsonModule": true,
+    "esModuleInterop": true,
     "allowImportingTsExtensions": true,
-
-    /* type checking */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true
+    
   },
-  "include": ["src/ts"],
-  "exclude": ["src/molvis"]
+  "include": ["src/ts/**/*.ts"]
 }

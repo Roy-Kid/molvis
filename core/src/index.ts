@@ -1,5 +1,13 @@
-import init from "molrs";
-await init();
+import init from "molrs-wasm";
+
+declare const __WASM_INLINE__: boolean;
+
+if (__WASM_INLINE__) {
+  const { default: wasmUrl } = await import("molrs-wasm/molrs_bg.wasm");
+  await init(wasmUrl);
+} else {
+  await init();
+}
 
 import { MolvisApp } from "./core/app";
 import type { MolvisOptions } from "./core/options";
@@ -13,21 +21,5 @@ export { resolveMolvisOptions } from "./core/options";
 export { Frame, AtomBlock as Atom, BondBlock as Bond, Topology, Box } from "./structure";
 export { World } from "./core";
 export { GuiManager } from "./core/gui";
-export {
-  ArtistBase,
-  ArtistRegistry,
-  InstancedArtist,
-  ArtistCommand,
-} from "./artist";
-export type {
-  ArtistContext,
-  ArtistOp,
-  ArtistCtor,
-  DrawAtomInput,
-  DrawBondInput,
-  DrawBoxInput,
-  DrawFrameInput,
-  DrawGridInput,
-} from "./artist";
 export { ModeType } from "./mode";
 export type { MolvisOptions, ResolvedMolvisOptions } from "./core/options";

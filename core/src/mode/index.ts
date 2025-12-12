@@ -7,6 +7,7 @@ import { ViewMode } from "./view";
 import { SelectMode } from "./select";
 import { MeasureMode } from "./measure";
 import { EditMode } from "./edit";
+import { ManipulateMode } from "./manipulate";
 
 class ModeManager {
   private _app: any;
@@ -41,15 +42,16 @@ class ModeManager {
             case "4":
               this.switch_mode(ModeType.Measure);
               break;
-            // case "5":
-            //   this.switch_mode("manupulate");
+            case "5":
+              this.switch_mode(ModeType.Manipulate);
+              break;
           }
           break;
       }
     });
     // return new ViewMode(this);
-  };  
-  
+  };
+
   public switch_mode = (mode: ModeType) => {
     if (this._mode) this._mode.finish();
     switch (mode) {
@@ -66,12 +68,14 @@ class ModeManager {
       case ModeType.Measure:
         this._mode = new MeasureMode(this._app);
         break;
-      // case "manupulate":
+      case ModeType.Manipulate:
+        this._mode = new ManipulateMode(this._app);
+        break;
 
       default:
         throw new Error(`unknown mode: ${mode}`);
     }
-    
+
     // Update GUI mode indicator - add safety check
     if (this._app.gui) {
       this._app.gui.updateMode(mode);
