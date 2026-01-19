@@ -1,6 +1,8 @@
 import { Vector3 } from "@babylonjs/core";
-import { mountMolvis } from "../src";
-import { AtomBlock, BondBlock, Frame, Box } from "../src/structure";
+import { mountMolvis } from "@molvis/core";
+import { AtomBlock } from "@molvis/core";
+import { BondBlock } from "@molvis/core";
+import { Frame } from "@molvis/core";
 
 const ensureGlobalStyles = (): void => {
   if (document.getElementById("molvis-test-styles")) {
@@ -56,13 +58,13 @@ const initialize = async (): Promise<void> => {
   const frameEthanol = new Frame(atomBlockEthanol, bondBlockEthanol);
 
   // Create simulation box
-  const box = new Box(
-    new Float32Array([10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0]),
-    new Float32Array([0.0, 0.0, 0.0]),
-    true,
-    true,
-    true,
-  );
+  // const box = new Box(
+  //   new Float32Array([10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0]),
+  //   new Float32Array([0.0, 0.0, 0.0]),
+  //   true,
+  //   true,
+  //   true,
+  // );
 
   try {
     // Draw water molecule
@@ -70,7 +72,7 @@ const initialize = async (): Promise<void> => {
       frame: frameWater,
       options: { bonds: { radii: 0.08 } },
     });
-    
+
     // Set camera target
     app.world.camera.target = new Vector3(0, 0, 0);
 

@@ -1,22 +1,14 @@
-// React 18 entry
+import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { FluentProvider, webLightTheme } from '@fluentui/react-components';
 import App from './App';
-import './global.css';
+import './styles/tailwind.css';
 
-
-
-// Get root element
 const container = document.getElementById('root');
-if (!container) {
-  throw new Error('Root element #root not found');
+if (container) {
+  const root = createRoot(container);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
 }
-
-const root = createRoot(container);
-
-// Render app
-root.render(
-  <FluentProvider theme={webLightTheme}>
-    <App />
-  </FluentProvider>
-);

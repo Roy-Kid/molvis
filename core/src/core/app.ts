@@ -1,13 +1,17 @@
 import { Engine } from "@babylonjs/core";
 import { logger } from "../utils/logger";
-import { GuiManager } from "./gui/manager";
 import { World } from "./world";
 import { ModeManager, ModeType } from "../mode";
-import type { MolvisOptions, ResolvedMolvisOptions } from "./options";
-import { resolveMolvisOptions } from "./options";
-import { DataPipeline, RenderPipeline, CommandRegistry, commands } from "../commands";
-import type { DataPipelineContext, RenderPipelineContext } from "../commands";
-import type { Frame } from "../structure/frame";
+import { GUIManager } from "../gui";
+import { type MolvisConfig, mergeConfig } from "./config";
+import { Settings, type MolvisUserConfig } from "./settings";
+import { CommandRegistry, commands } from "../commands";
+import { EventEmitter } from "../events";
+import { ModifierPipeline } from "../pipeline";
+import { DefaultPalette, type Palette } from "../commands/palette";
+import { System } from "./system";
+
+import type { Frame } from "./system/frame";
 
 export class MolvisApp {
   // DOM elements
@@ -17,23 +21,45 @@ export class MolvisApp {
   private _uiOverlay: HTMLElement;
 
   // Core components
-  private _options: ResolvedMolvisOptions;
+  private _config: MolvisConfig;
   private _engine: Engine;
   private _world: World;
-  private _gui: GuiManager;
+  private _system: System;
+  private _modeManager!: ModeManager;
+  private _guiManager!: GUIManager;
   private _isRunning = false;
-  
+
   // Pipelines
-  private _dataPipeline: DataPipeline;
-  private _renderPipeline: RenderPipeline;
+  private _modifierPipeline: ModifierPipeline;
   private _currentFrame: number = 0;
-  
+
+  // Palette (OVITO-compatible colors)
+  private _palette: Palette;
+
   // Command registry
   readonly commands: CommandRegistry;
 
-  constructor(container: HTMLElement, options: MolvisOptions = {}) {
-    this._options = resolveMolvisOptions(options);
+  // Events
+  public readonly events = new EventEmitter();
+
+  // User settings (public API)
+  public readonly settings: Settings;
+
+  constructor(
+    container: HTMLElement,
+    config: MolvisConfig = {},
+    userConfig?: Partial<MolvisUserConfig>
+  ) {
+    this._config = mergeConfig(config);
     this._container = container;
+
+    // Register Web Components - Removed in favor of React UI
+    // Re-adding context menu web components
+    this.registerWebComponents();
+    // registerWebComponents();
+
+    // Initialize settings
+    this.settings = new Settings(userConfig);
 
     // Create DOM structure
     this._root = this._createRoot();
@@ -46,47 +72,79 @@ export class MolvisApp {
     this._container.appendChild(this._root);
 
     // Initialize Babylon engine
-    this._engine = new Engine(this._canvas, true, {
-      preserveDrawingBuffer: true,
-      stencil: true,
-      antialias: true,
-      alpha: false,
-      premultipliedAlpha: false,
-      doNotHandleContextLost: true
+    this._engine = new Engine(this._canvas, this._config.canvas?.antialias ?? true, {
+      preserveDrawingBuffer: this._config.canvas?.preserveDrawingBuffer ?? true,
+      stencil: this._config.canvas?.stencil ?? true,
+      alpha: this._config.canvas?.alpha ?? false
     });
 
     // Initialize World
     this._world = new World(this._canvas, this._engine, this);
 
+    // Initialize System
+    this._system = new System();
+
     // Initialize GUI
-    this._gui = new GuiManager(this, this._uiOverlay, this._options);
-    this._gui.initializeDefaultStates();
+    this._guiManager = new GUIManager(this._container, this, this._config);
+    this._guiManager.mount();
 
-    // Initialize default mode (Edit mode)
-    const modeManager = new ModeManager(this);
-    modeManager.switch_mode(ModeType.Edit);
-    this._world.setMode(modeManager);
+    // Initialize default mode (View mode)
+    this._modeManager = new ModeManager(this);
+    this._modeManager.switch_mode(ModeType.View);
+    this._world.setMode(this._modeManager);
 
-    // Initialize pipelines
-    this._dataPipeline = new DataPipeline();
-    this._renderPipeline = new RenderPipeline();
-    this._renderPipeline.scene = this._world.scene;
-    this._renderPipeline.world = this._world;
-    
+    // Initialize modifier pipeline
+    this._modifierPipeline = new ModifierPipeline();
+
+    // Initialize palette (OVITO-compatible)
+    this._palette = new DefaultPalette();
+
     // Initialize command registry (use shared singleton)
     this.commands = commands;
+  }
+
+  /**
+   * Register all web components for context menus
+   */
+  private registerWebComponents(): void {
+    // Import components
+    const {
+      MolvisContextMenu,
+      MolvisButton,
+      MolvisSeparator,
+      MolvisFolder,
+      MolvisSlider
+    } = require('../ui/components');
+
+    // Register custom elements
+    if (!customElements.get('molvis-context-menu')) {
+      customElements.define('molvis-context-menu', MolvisContextMenu);
+    }
+    if (!customElements.get('molvis-button')) {
+      customElements.define('molvis-button', MolvisButton);
+    }
+    if (!customElements.get('molvis-separator')) {
+      customElements.define('molvis-separator', MolvisSeparator);
+    }
+    if (!customElements.get('molvis-folder')) {
+      customElements.define('molvis-folder', MolvisFolder);
+    }
+    if (!customElements.get('molvis-slider')) {
+      customElements.define('molvis-slider', MolvisSlider);
+    }
   }
 
   private _createRoot(): HTMLElement {
     const root = document.createElement('div');
     root.className = 'molvis-root';
-    const opts = this._options;
 
-    // Simple: relative positioning, size from options or container
+    // Fill parent container completely (no scrollbars, no white edges)
     root.style.position = 'relative';
-    root.style.width = opts.fitContainer ? '100%' : `${opts.displayWidth}px`;
-    root.style.height = opts.fitContainer ? '100%' : `${opts.displayHeight}px`;
+    root.style.width = '100%';
+    root.style.height = '100%';
     root.style.overflow = 'hidden';
+    root.style.margin = '0';
+    root.style.padding = '0';
 
     return root;
   }
@@ -95,31 +153,23 @@ export class MolvisApp {
     const canvas = document.createElement('canvas');
     canvas.className = 'molvis-canvas';
 
-    // Simple: fill container
-    canvas.style.display = 'block';
+    // Canvas fills the root container
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
     canvas.style.width = '100%';
     canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    canvas.style.outline = 'none';
+    canvas.style.touchAction = 'none';
 
-    // Set canvas resolution
-    const opts = this._options;
-    const ratio = opts.pixelRatio;
+    // Set initial canvas resolution based on container size
+    const pixelRatio = window.devicePixelRatio || 1;
+    const width = this._container.clientWidth || 800;
+    const height = this._container.clientHeight || 600;
 
-    let width: number, height: number;
-    if (opts.fitContainer) {
-      width = this._container.clientWidth || opts.displayWidth;
-      height = this._container.clientHeight || opts.displayHeight;
-    } else {
-      width = opts.displayWidth;
-      height = opts.displayHeight;
-    }
-
-    if (opts.autoRenderResolution) {
-      canvas.width = Math.floor(width * ratio);
-      canvas.height = Math.floor(height * ratio);
-    } else {
-      canvas.width = opts.renderWidth ?? width;
-      canvas.height = opts.renderHeight ?? height;
-    }
+    canvas.width = Math.floor(width * pixelRatio);
+    canvas.height = Math.floor(height * pixelRatio);
 
     return canvas;
   }
@@ -136,7 +186,7 @@ export class MolvisApp {
     overlay.style.height = '100%';
     overlay.style.pointerEvents = 'none';
 
-    if (!this._options.showUI) {
+    if (this._config.showUI === false) {
       overlay.style.display = 'none';
     }
 
@@ -160,11 +210,16 @@ export class MolvisApp {
     return this._world.mode;
   }
 
+  get modifierPipeline() {
+    return this._modifierPipeline;
+  }
 
-  // Removed artists getter - artists are now integrated into RenderOps
+  get palette(): Palette {
+    return this._palette;
+  }
 
-  get gui(): GuiManager {
-    return this._gui;
+  get gui(): GUIManager {
+    return this._guiManager;
   }
 
   get rootContainer(): HTMLElement {
@@ -179,8 +234,8 @@ export class MolvisApp {
     return this._container;
   }
 
-  get options(): ResolvedMolvisOptions {
-    return this._options;
+  get config(): MolvisConfig {
+    return this._config;
   }
 
   get displaySize(): { width: number; height: number } {
@@ -194,22 +249,12 @@ export class MolvisApp {
 
   get pixelRatio(): number {
     const size = this.displaySize;
-    if (size.width === 0) {
-      return this._options.pixelRatio;
-    }
+    if (size.width === 0) return 1;
     return this._canvas.width / size.width;
   }
 
   get isRunning(): boolean {
     return this._isRunning;
-  }
-
-  get dataPipeline(): DataPipeline {
-    return this._dataPipeline;
-  }
-
-  get renderPipeline(): RenderPipeline {
-    return this._renderPipeline;
   }
 
   get currentFrame(): number {
@@ -218,6 +263,18 @@ export class MolvisApp {
 
   set currentFrame(value: number) {
     this._currentFrame = value;
+  }
+
+  get frame(): Frame | null {
+    return this._system.frame;
+  }
+
+  set frame(value: Frame | null) {
+    this._system.frame = value;
+  }
+
+  get system(): System {
+    return this._system;
   }
 
   // Public methods
@@ -231,11 +288,10 @@ export class MolvisApp {
     return this.commands.execute(name, this, args);
   }
 
-
   public start(): void {
     if (this._isRunning) return;
     this._isRunning = true;
-    this._world.render();
+    this._world.start();
     logger.info("Molvis started successfully");
   }
 
@@ -247,82 +303,39 @@ export class MolvisApp {
   }
 
   public resize = (): void => {
-    // Update canvas resolution
-    const opts = this._options;
-    const ratio = opts.pixelRatio;
+    // Update canvas resolution based on container size
+    const pixelRatio = window.devicePixelRatio || 1;
+    const width = this._container.clientWidth || 800;
+    const height = this._container.clientHeight || 600;
 
-    let width: number, height: number;
-    if (opts.fitContainer) {
-      width = this._container.clientWidth || opts.displayWidth;
-      height = this._container.clientHeight || opts.displayHeight;
-    } else {
-      width = opts.displayWidth;
-      height = opts.displayHeight;
-    }
-
-    if (opts.autoRenderResolution) {
-      this._canvas.width = Math.floor(width * ratio);
-      this._canvas.height = Math.floor(height * ratio);
-    }
+    this._canvas.width = Math.floor(width * pixelRatio);
+    this._canvas.height = Math.floor(height * pixelRatio);
 
     this._world.resize();
   };
 
   public setSize(displayWidth: number, displayHeight: number): void {
-    this._options.displayWidth = displayWidth;
-    this._options.displayHeight = displayHeight;
-    this._options.fitContainer = false;
-
     this._root.style.width = `${displayWidth}px`;
     this._root.style.height = `${displayHeight}px`;
-
-    const ratio = this._options.pixelRatio;
-    if (this._options.autoRenderResolution) {
-      this._canvas.width = Math.floor(displayWidth * ratio);
-      this._canvas.height = Math.floor(displayHeight * ratio);
-    }
-
-    this._world.resize();
+    this.resize();
   }
 
   public setRenderResolution(renderWidth: number, renderHeight: number): void {
-    this._options.renderWidth = renderWidth;
-    this._options.renderHeight = renderHeight;
-    this._options.autoRenderResolution = false;
-
     this._canvas.width = renderWidth;
     this._canvas.height = renderHeight;
-
     this._world.resize();
   }
 
   public enableFitContainer(enabled: boolean): void {
-    this._options.fitContainer = enabled;
-
     if (enabled) {
-      this._root.style.width = "100%";
-      this._root.style.height = "100%";
-
-      const ratio = this._options.pixelRatio;
-      const width = this._container.clientWidth || this._options.displayWidth;
-      const height = this._container.clientHeight || this._options.displayHeight;
-
-      if (this._options.autoRenderResolution) {
-        this._canvas.width = Math.floor(width * ratio);
-        this._canvas.height = Math.floor(height * ratio);
-      }
-    } else {
-      const width = this._options.displayWidth;
-      const height = this._options.displayHeight;
-      this._root.style.width = `${width}px`;
-      this._root.style.height = `${height}px`;
+      this._root.style.width = '100%';
+      this._root.style.height = '100%';
     }
-
-    this._world.resize();
+    this.resize();
   }
 
   public destroy(): void {
-    this._gui.dispose();
+    this._guiManager.unmount();
 
     if (this._root.parentElement) {
       this._root.parentElement.removeChild(this._root);
@@ -332,61 +345,51 @@ export class MolvisApp {
   }
 
   public setMode(mode: string): void {
-    const modeManager = new ModeManager(this);
     switch (mode) {
       case "view":
-        modeManager.switch_mode(ModeType.View);
+        this._modeManager.switch_mode(ModeType.View);
+        break;
+      case "select":
+        this._modeManager.switch_mode(ModeType.Select);
+        break;
+      case "edit":
+        this._modeManager.switch_mode(ModeType.Edit);
         break;
       default:
+        logger.warn(`Unknown mode: ${mode}`);
         break;
     }
-    this._world.setMode(modeManager);
   }
 
   /**
-   * Compute a frame using the data pipeline.
+   * Compute a frame using the modifier pipeline.
    * @param frameIndex Index of frame to compute
-   * @param ctx Pipeline context (optional, uses pipeline source if not provided)
+   * @param source Frame source
    * @returns Promise resolving to the computed frame
    */
   public async computeFrame(
     frameIndex: number,
-    ctx?: Partial<DataPipelineContext>
+    source?: any // TODO: Define FrameSource type properly
   ): Promise<Frame> {
-    const pipelineCtx: DataPipelineContext = {
-      source: ctx?.source || this._dataPipeline.source!,
-    };
-    
-    if (!pipelineCtx.source) {
-      throw new Error("No frame source available. Set dataPipeline.source or provide source in context.");
+    if (!source) {
+      throw new Error("computeFrame requires a source");
     }
 
-    const frame = await this._dataPipeline.compute(frameIndex, pipelineCtx);
+    const frame = await this._modifierPipeline.compute(source, frameIndex);
     this._currentFrame = frameIndex;
     return frame;
   }
 
   /**
-   * Render a frame using the render pipeline.
+   * Render a frame using the draw_frame command.
    * @param frame Frame to render
-   * @param ctx Pipeline context (optional, uses pipeline scene/world if not provided)
+   * @param options Drawing options
    */
   public renderFrame(
     frame: Frame,
-    ctx?: Partial<RenderPipelineContext>
+    options?: any
   ): void {
-    const pipelineCtx: RenderPipelineContext = {
-      scene: ctx?.scene || this._renderPipeline.scene!,
-      world: ctx?.world || this._renderPipeline.world!,
-    };
-
-    if (!pipelineCtx.scene) {
-      throw new Error("No scene available. Set renderPipeline.scene or provide scene in context.");
-    }
-    if (!pipelineCtx.world) {
-      throw new Error("No world available. Set renderPipeline.world or provide world in context.");
-    }
-
-    this._renderPipeline.render(frame, pipelineCtx);
+    this._system.frame = frame; // Store frame in System for later access
+    this.execute("draw_frame", { frame, options });
   }
 }

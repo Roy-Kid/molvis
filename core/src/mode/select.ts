@@ -1,11 +1,13 @@
-
 import type { PointerInfo } from "@babylonjs/core";
+import { Vector3 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
 
 import { BaseMode, ModeType } from "./base";
 import { ContextMenuController } from "../core/context_menu_controller";
-import { SelectionManager } from "../core/selection_manager";
+import type { SelectionOp } from "../core/selection_manager";
 import type { HitResult, MenuItem } from "./types";
+import { CommonMenuItems } from "./menu_items";
+
 
 /**
  * Context menu controller for Select mode.
@@ -21,27 +23,20 @@ class SelectModeContextMenu extends ContextMenuController {
 
   protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
     return [
-      {
-        type: "button",
-        title: "Snapshot",
-        action: () => {
-          this.app.world.takeScreenShot();
-        }
-      }
+      CommonMenuItems.clearSelection(this.app),
+      CommonMenuItems.separator(),
+      CommonMenuItems.snapshot(this.app)
     ];
   }
 }
 
 /**
- * SelectMode with per-instance color-based highlighting.
- * Uses SelectionManager for state management and highlighting.
+ * SelectMode with unified selection system.
+ * Uses SceneIndex for picking and SelectionManagerV2 for state management.
  */
 class SelectMode extends BaseMode {
-  private selectionManager: SelectionManager;
-
   constructor(app: Molvis) {
     super(ModeType.Select, app);
-    this.selectionManager = new SelectionManager(this.scene);
   }
 
   protected createContextMenuController(): ContextMenuController {
@@ -49,25 +44,31 @@ class SelectMode extends BaseMode {
   }
 
   /**
-   * Called when entering select mode - reapply highlights.
+   * Called when entering select mode
    */
-  onEnter(): void {
-    this.selectionManager.reapplyHighlights();
+  override start(): void {
+    super.start();
+    // Invalidate highlights for mode switch
+    this.app.world.highlighter.invalidateAndRebuild();
   }
 
   /**
-   * Called when exiting select mode - clear all highlights.
+   * Called when exiting select mode
    */
   override finish(): void {
-    this.selectionManager.clearAll();
+    this.app.world.selectionManager.apply({ type: 'clear' });
     super.finish();
   }
 
   /**
-   * Handle atom clicks to toggle selection.
+   * Handle clicks to select/deselect atoms and bonds.
+   * - Left-click: Select entity (clear previous selection if no Ctrl)
+   * - Ctrl+Left-click: Toggle entity in selection (incremental)
    */
-  override _on_pointer_pick(_pointerInfo: PointerInfo): void {
-    const pickResult = this.scene.pick(
+  override _on_pointer_pick(pointerInfo: PointerInfo): void {
+    const isCtrl = pointerInfo.event.ctrlKey;
+
+    const scenePick = this.scene.pick(
       this.scene.pointerX,
       this.scene.pointerY,
       undefined,
@@ -75,13 +76,87 @@ class SelectMode extends BaseMode {
       this.world.camera
     );
 
-    const mesh = pickResult.hit ? pickResult.pickedMesh : null;
-    if (!mesh?.metadata || mesh.metadata.meshType !== 'atom') return;
+    // One-step resolution to encoded ID
+    const encodedId = this.app.world.sceneIndex.resolvePickToId(
+      scenePick.pickedMesh,
+      scenePick.thinInstanceIndex
+    );
 
-    const instanceIndex = pickResult.thinInstanceIndex;
-    if (instanceIndex === undefined || instanceIndex === -1) return;
+    if (encodedId === null) {
+      // Empty click
+      if (!isCtrl) {
+        this.app.world.selectionManager.apply({ type: 'clear' });
+      }
+      return;
+    }
 
-    this.selectionManager.toggle(mesh, instanceIndex);
+    // Determine type and generate SelectionOp
+    const type = this.app.world.sceneIndex.getType(encodedId);
+    if (!type) return;
+
+    const op: SelectionOp = isCtrl
+      ? { type: 'toggle', [type + 's']: [encodedId] }
+      : { type: 'replace', [type + 's']: [encodedId] };
+
+    this.app.world.selectionManager.apply(op);
+  }
+
+  // TODO: Reimplement copy/paste with new selection system
+  /*
+  override _on_press_ctrl_c(): void {
+    const selected = this.selectionManager.getSelected();
+    if (selected.length === 0) return;
+
+    this.clipboard = this.serializeSelection(selected);
+    console.log(`Copied ${selected.length} entities to clipboard (placeholder)`);
+  }
+
+  override _on_press_ctrl_v(): void {
+    if (!this.clipboard) return;
+
+    const pastePosition = this.getWorldPositionFromScreen();
+    if (!pastePosition) return;
+
+    const pasteCommand = new PasteSelectionCommand(this.app, {
+      clipboardData: this.clipboard,
+      pastePosition
+    });
+    pasteCommand.do();
+
+    console.log('Paste functionality deferred - requires implementation');
+  }
+
+  private serializeSelection(selected: SelectedEntity[]): ClipboardData {
+    const atoms = selected.filter(e => e.type === 'atom');
+
+    const atomData = atoms.map((entity) => {
+      const mesh = this.scene.getMeshById(entity.meshId);
+      const element = mesh?.metadata?.element || 'C';
+
+      return {
+        element,
+        relativePosition: Vector3.Zero()
+      };
+    });
+
+    const bondData: Array<{ i: number; j: number; order: number }> = [];
+
+    return {
+      atoms: atomData,
+      bonds: bondData
+    };
+  }
+  */
+
+  private getWorldPositionFromScreen(): Vector3 | null {
+    const pickResult = this.scene.pick(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      undefined,
+      false,
+      this.world.camera
+    );
+    return pickResult.pickedPoint || null;
   }
 }
 

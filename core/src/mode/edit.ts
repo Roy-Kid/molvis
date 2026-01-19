@@ -9,10 +9,16 @@ import {
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
 import { BaseMode, ModeType } from "./base";
-import { pointOnScreenAlignedPlane, getPositionFromMatrix } from "./utils";
+import { pointOnScreenAlignedPlane } from "./utils";
+import { getPositionFromMatrix } from "../core/thin_instance";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
-import { draw_atom, draw_bond, delete_atom, delete_bond, change_atom_element, cycle_bond_order } from "../commands";
+import { CommonMenuItems } from "./menu_items";
+import type { MolvisMeshMetadata, AtomMetadata } from "../types/metadata";
+import { Artist } from "./artist";
+import { syncSceneToFrame } from "../core/scene_sync";
+import { logger } from "../utils/logger";
+
 
 /**
  * =============================
@@ -26,8 +32,6 @@ import { draw_atom, draw_bond, delete_atom, delete_bond, change_atom_element, cy
  * 
  * Mouse Interactions (Draw Tool):
  *  - Left click on empty space: Create new atom with current element
- *  - Left click on atom: Change atom element to current element
- *  - Left click on bond: Cycle bond order (1 → 2 → 3 → 1)
  *  - Left drag from atom: Draw new atom + bond (or bond to existing atom)
  *  - Left drag from empty space: Rotate camera
  *  - Right click on atom: Delete atom and connected bonds
@@ -35,44 +39,10 @@ import { draw_atom, draw_bond, delete_atom, delete_bond, change_atom_element, cy
  *  - Right drag: Pan/translate camera
  */
 
+
 /* ----------------------------------
  * Types & Interfaces
  * ---------------------------------- */
-
-enum EditCommandType {
-  DrawAtom = "draw_atom",
-  DrawBond = "draw_bond",
-  DeleteAtom = "delete_atom",
-  DeleteBond = "delete_bond",
-  ChangeAtomElement = "change_atom_element",
-  CycleBondOrder = "cycle_bond_order",
-}
-
-interface CommandArgs {
-  // Generic carrier for executor args; keep flexible for compatibility
-  [k: string]: any;
-}
-
-interface CommandOutcome {
-  meshes?: Mesh[];
-  entities?: any[];
-}
-
-interface CommandRecord {
-  command: EditCommandType | string;
-  args: CommandArgs;
-  meshes: Mesh[];
-  entities: any[];
-}
-
-interface FrameLike {
-  atoms: Array<{ name: string; element: string; xyz: { x: number; y: number; z: number } }>;
-  bonds: Array<{
-    start: { x: number; y: number; z: number };
-    end: { x: number; y: number; z: number };
-    order: number;
-  }>;
-}
 
 /* ----------------------------------
  * Utilities
@@ -80,82 +50,6 @@ interface FrameLike {
 
 function makeId(prefix = "atom"): string {
   return `${prefix}:${Math.random().toString(36).substring(2, 6)}`;
-}
-
-/* ----------------------------------
- * MeshStage (staging + undo/redo + save)
- * ---------------------------------- */
-
-class MeshStage {
-  private stagedMeshes: Mesh[] = [];
-  private commandStack: CommandRecord[] = [];
-  private undoStack: CommandRecord[] = [];
-
-  addMesh(mesh: Mesh) {
-    this.stagedMeshes.push(mesh);
-  }
-
-  getStagedMeshes(): Mesh[] {
-    return [...this.stagedMeshes];
-  }
-
-  hasStagedContent(): boolean {
-    return this.stagedMeshes.length > 0;
-  }
-
-  addCommand(record: CommandRecord) {
-    this.commandStack.push(record);
-    // Any successful command invalidates redo history normally
-    this.undoStack = [];
-  }
-
-  undo(): CommandRecord | null {
-    const record = this.commandStack.pop();
-    if (record) {
-      this.undoStack.push(record);
-      // Dispose meshes & remove from staged
-      record.meshes.forEach((m) => m.dispose());
-      this.stagedMeshes = this.stagedMeshes.filter((m) => !record.meshes.includes(m));
-    }
-    return record || null;
-  }
-
-  redo(): CommandRecord | null {
-    const record = this.undoStack.pop();
-    if (record) {
-      this.commandStack.push(record);
-      // NOTE: Mesh re-creation is handled by EditMode via re-execution.
-    }
-    return record || null;
-  }
-
-  saveToFrame(frame: FrameLike) {
-    // Save all staged meshes to frame
-    for (const mesh of this.stagedMeshes) {
-      const md = mesh.metadata || {};
-      if (md.type === "atom") {
-        frame.atoms.push({
-          name: md.name,
-          element: md.element,
-          xyz: { x: md.x, y: md.y, z: md.z },
-        });
-      } else if (md.type === "bond") {
-        frame.bonds.push({
-          start: { x: md.x1, y: md.y1, z: md.z1 },
-          end: { x: md.x2, y: md.y2, z: md.z2 },
-          order: md.order ?? 1,
-        });
-      }
-    }
-  }
-
-  clean() {
-    // Dispose all staged meshes and clear undo/redo history
-    this.stagedMeshes.forEach((m) => m.dispose());
-    this.stagedMeshes = [];
-    this.commandStack = [];
-    this.undoStack = [];
-  }
 }
 
 /* ----------------------------------
@@ -263,77 +157,57 @@ class EditModeContextMenu extends ContextMenuController {
 
     console.log("[EditModeContextMenu] Building menu, current element:", this.mode.element, "bondOrder:", this.mode.bondOrder);
 
-    // Atom element selector
-    const atomFolder: MenuItem = {
-      type: "folder",
-      title: "Atom",
-      items: [
-        {
-          type: "binding",
-          bindingConfig: {
-            view: "list",
-            label: "Element",
-            options: [
-              { text: "Carbon (C)", value: "C" },
-              { text: "Nitrogen (N)", value: "N" },
-              { text: "Oxygen (O)", value: "O" },
-              { text: "Hydrogen (H)", value: "H" },
-              { text: "Sulfur (S)", value: "S" },
-              { text: "Phosphorus (P)", value: "P" },
-              { text: "Fluorine (F)", value: "F" },
-              { text: "Chlorine (Cl)", value: "Cl" },
-              { text: "Bromine (Br)", value: "Br" },
-              { text: "Iodine (I)", value: "I" },
-            ],
-            value: this.mode.element,
-          },
-          action: (ev: any) => {
-            console.log("[EditModeContextMenu] Element changed from", this.mode.element, "to", ev.value);
-            this.mode.element = ev.value;
-            console.log("[EditModeContextMenu] Element is now:", this.mode.element);
-          }
-        }
-      ]
-    };
-    items.push(atomFolder);
-
-    // Bond configuration
-    const bondFolder: MenuItem = {
-      type: "folder",
-      title: "Bond",
-      items: [
-        {
-          type: "binding",
-          bindingConfig: {
-            view: "list",
-            label: "Order",
-            options: [
-              { text: "Single", value: 1 },
-              { text: "Double", value: 2 },
-              { text: "Triple", value: 3 },
-            ],
-            value: this.mode.bondOrder,
-          },
-          action: (ev: any) => {
-            console.log("[EditModeContextMenu] Bond order changed from", this.mode.bondOrder, "to", ev.value);
-            this.mode.bondOrder = ev.value;
-            console.log("[EditModeContextMenu] Bond order is now:", this.mode.bondOrder);
-          }
-        }
-      ]
-    };
-    items.push(bondFolder);
+    // Atom element selector (flat)
+    items.push({
+      type: "binding",
+      bindingConfig: {
+        view: "list",
+        label: "Element",
+        options: [
+          { text: "Carbon (C)", value: "C" },
+          { text: "Nitrogen (N)", value: "N" },
+          { text: "Oxygen (O)", value: "O" },
+          { text: "Hydrogen (H)", value: "H" },
+          { text: "Sulfur (S)", value: "S" },
+          { text: "Phosphorus (P)", value: "P" },
+          { text: "Fluorine (F)", value: "F" },
+          { text: "Chlorine (Cl)", value: "Cl" },
+          { text: "Bromine (Br)", value: "Br" },
+          { text: "Iodine (I)", value: "I" },
+        ],
+        value: this.mode.element,
+      },
+      action: (ev: any) => {
+        console.log("[EditModeContextMenu] Element changed from", this.mode.element, "to", ev.value);
+        this.mode.element = ev.value;
+      }
+    });
 
     items.push({ type: "separator" });
 
-    // Snapshot button
+    // Bond configuration (flat)
     items.push({
-      type: "button",
-      title: "Snapshot",
-      action: () => {
-        this.mode.takeScreenShot();
+      type: "binding",
+      bindingConfig: {
+        view: "list",
+        label: "Bond Order",
+        options: [
+          { text: "Single", value: 1 },
+          { text: "Double", value: 2 },
+          { text: "Triple", value: 3 },
+        ],
+        value: this.mode.bondOrder,
+      },
+      action: (ev: any) => {
+        console.log("[EditModeContextMenu] Bond order changed from", this.mode.bondOrder, "to", ev.value);
+        this.mode.bondOrder = ev.value;
       }
     });
+
+    items.push(CommonMenuItems.separator());
+
+    // Snapshot (using common item)
+    items.push(CommonMenuItems.snapshot(this.app));
 
     return items;
   }
@@ -354,7 +228,7 @@ class EditMode extends BaseMode {
   private element_ = "C";
   private bondOrder_ = 1;
 
-  private meshStage: MeshStage;
+  public artist: Artist;
   private previews: PreviewManager;
 
   get element(): string {
@@ -368,17 +242,32 @@ class EditMode extends BaseMode {
     return this.bondOrder_;
   }
   set bondOrder(v: number) {
+    console.log('[EditMode] bondOrder setter called, changing from', this.bondOrder_, 'to', v);
     this.bondOrder_ = v;
   }
 
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
-    this.meshStage = new MeshStage();
+    this.artist = new Artist({
+      palette: app.palette,
+      scene: app.world.scene,
+      app: app,
+    });
     this.previews = new PreviewManager(app);
   }
 
   protected createContextMenuController(): ContextMenuController {
     return new EditModeContextMenu(this.app, this);
+  }
+
+  /**
+   * Start EditMode - invalidate highlights for mode switch
+   */
+  override start(): void {
+    super.start();
+
+    // Invalidate highlights for mode switch (Edit uses individual meshes)
+    this.app.world.highlighter.invalidateAndRebuild();
   }
 
   /* ------------------------------
@@ -401,10 +290,10 @@ class EditMode extends BaseMode {
 
     // Check if this is a thin instance atom (from draw_frame)
     if (pickResult.hit && pickResult.thinInstanceIndex !== undefined && pickResult.thinInstanceIndex !== -1) {
-      const metadata = atomMesh.metadata;
-      if (metadata?.matrices) {
+      const metadata = atomMesh.metadata as MolvisMeshMetadata;
+      if (metadata?.meshType === "atom" && (metadata as AtomMetadata).matrices) {
         // Extract position from transformation matrix
-        return getPositionFromMatrix(metadata.matrices as Float32Array, pickResult.thinInstanceIndex);
+        return getPositionFromMatrix((metadata as AtomMetadata).matrices as Float32Array, pickResult.thinInstanceIndex);
       }
     }
 
@@ -412,91 +301,6 @@ class EditMode extends BaseMode {
     return atomMesh.position.clone();
   }
 
-  /* ------------------------------
-   * Command execution + staging
-   * ------------------------------ */
-
-  private executeAndStage(command: EditCommandType | string, args: CommandArgs): CommandRecord {
-    const record: CommandRecord = { command, args, meshes: [], entities: [] };
-
-    const handleOutcome = (outcome: any) => {
-      const { meshes, entities } = this.extractMeshesAndEntities(outcome);
-      record.meshes = meshes;
-      record.entities = entities;
-
-      for (const mesh of meshes) {
-        this.meshStage.addMesh(mesh);
-      }
-
-      this.meshStage.addCommand(record);
-    };
-
-    try {
-      let outcome: any;
-
-      // Direct function calls instead of app.execute
-      switch (command) {
-        case EditCommandType.DrawAtom:
-          outcome = draw_atom(
-            this.app,
-            args.position as Vector3,
-            {
-              ...(args.options || {}),
-              name: args.name as string,
-              element: args.element as string,
-            }
-          );
-          break;
-        case EditCommandType.DrawBond:
-          outcome = draw_bond(
-            this.app,
-            args.start as Vector3,
-            args.end as Vector3,
-            args.options || {}
-          );
-          break;
-        case EditCommandType.DeleteAtom:
-          outcome = delete_atom(this.app, args.atomId as number);
-          break;
-        case EditCommandType.DeleteBond:
-          outcome = delete_bond(this.app, args.bondId as number);
-          break;
-        case EditCommandType.ChangeAtomElement:
-          outcome = change_atom_element(this.app, args.atomId as number, args.element as string);
-          break;
-        case EditCommandType.CycleBondOrder:
-          outcome = cycle_bond_order(this.app, args.bondMesh as Mesh);
-          break;
-        default:
-          // Fallback to app.execute for unknown commands
-          outcome = this.app.execute(command, args);
-      }
-
-      if (outcome && typeof (outcome as Promise<any>).then === "function") {
-        (outcome as Promise<any>).then(handleOutcome).catch((err) => {
-          throw err;
-        });
-      } else {
-        handleOutcome(outcome);
-      }
-    } catch (err) {
-      throw err;
-    }
-
-    return record;
-  }
-
-  private extractMeshesAndEntities(result: any): Required<CommandOutcome> {
-    if (Array.isArray(result) && result.length === 2) {
-      return { meshes: (result[0] as Mesh[]) ?? [], entities: result[1] ?? [] };
-    }
-    if (result && typeof result === "object") {
-      const meshes = Array.isArray(result.meshes) ? (result.meshes as Mesh[]) : [];
-      const entities = Array.isArray(result.entities) ? result.entities : [];
-      return { meshes, entities };
-    }
-    return { meshes: [], entities: [] };
-  }
 
   /* ------------------------------
    * Pointer events (with branch comments)
@@ -597,19 +401,9 @@ class EditMode extends BaseMode {
     // Left-button release cases
     // -----------------------------
 
-    // [Branch] Left click on atom (no drag) → change element if different
+    // [Branch] Left click on atom (no drag) - removed change element feature
+    // Just cleanup and return
     if (isLeft && this.clickedAtom && !this._is_dragging && this.startAtom === this.clickedAtom) {
-      const atomMesh = this.clickedAtom;
-      const currentElement = atomMesh.metadata?.element;
-
-      // Only change if the current element is different from the paint element
-      if (currentElement && currentElement !== this.element) {
-        this.executeAndStage(EditCommandType.ChangeAtomElement, {
-          atomId: atomMesh.metadata?.atomId ?? atomMesh.uniqueId,
-          element: this.element,
-        });
-      }
-
       // Cleanup
       this.world.camera.attachControl(this.world.scene.getEngine().getRenderingCanvas(), false);
       this.startAtom = null;
@@ -617,11 +411,9 @@ class EditMode extends BaseMode {
       return;
     }
 
-    // [Branch] Left click on bond (no drag) → cycle bond order
+    // [Branch] Left click on bond (no drag) - removed cycle bond order feature
+    // Just cleanup and return
     if (isLeft && this.clickedBond && !this._is_dragging) {
-      this.executeAndStage(EditCommandType.CycleBondOrder, {
-        bondMesh: this.clickedBond as Mesh,
-      });
       this.clickedBond = null;
       return;
     }
@@ -638,26 +430,20 @@ class EditMode extends BaseMode {
         // [Branch] Snapped to existing atom → create bond only
         const startPos = this.getAtomPosition(this.startAtom);
         const endPos = this.getAtomPosition(this.hoverAtom);
-        this.executeAndStage(EditCommandType.DrawBond, {
-          start: startPos,
-          end: endPos,
-          options: { order: this.bondOrder },
+        this.artist.drawBond(startPos, endPos, {
+          order: this.bondOrder,
         });
       } else if (this._is_dragging) {
         // [Branch] Released in empty space after drag → create new atom + bond
         const atomName = makeId("atom");
-        this.executeAndStage(EditCommandType.DrawAtom, {
-          name: atomName,
+        this.artist.drawAtom(xyz, {
           element: this.element,
-          position: xyz,
-          options: {},
+          name: atomName,
         });
         // draw bond
         const startPos = this.getAtomPosition(this.startAtom);
-        this.executeAndStage(EditCommandType.DrawBond, {
-          start: startPos,
-          end: xyz,
-          options: { order: this.bondOrder },
+        this.artist.drawBond(startPos, xyz, {
+          order: this.bondOrder,
         });
       }
 
@@ -679,11 +465,9 @@ class EditMode extends BaseMode {
         pointerInfo.event.clientY
       );
       const atomName = makeId("atom");
-      this.executeAndStage(EditCommandType.DrawAtom, {
-        name: atomName,
+      this.artist.drawAtom(Vector3.FromArray([xyz.x, xyz.y, xyz.z]), {
         element: this.element,
-        position: Vector3.FromArray([xyz.x, xyz.y, xyz.z]),
-        options: {},
+        name: atomName,
       });
       this.pendingAtom = false;
       return;
@@ -706,18 +490,14 @@ class EditMode extends BaseMode {
     if (!hit) return;
 
     // Right-click on atom → delete atom and connected bonds
-    if (hit.type === "atom" && hit.metadata?.atomId !== undefined) {
-      this.executeAndStage(EditCommandType.DeleteAtom, {
-        atomId: hit.metadata.atomId ?? hit.mesh?.uniqueId
-      });
+    if (hit.type === "atom" && hit.mesh) {
+      this.artist.deleteAtom(hit.mesh as Mesh);
       return;
     }
 
     // Right-click on bond → delete bond only
-    if (hit.type === "bond" && hit.metadata?.bondId !== undefined) {
-      this.executeAndStage(EditCommandType.DeleteBond, {
-        bondId: hit.metadata.bondId ?? hit.mesh?.uniqueId
-      });
+    if (hit.type === "bond" && hit.mesh) {
+      this.artist.deleteBond(hit.mesh as Mesh);
       return;
     }
   }
@@ -727,30 +507,43 @@ class EditMode extends BaseMode {
    * ------------------------------ */
 
   _on_press_ctrl_z(): void {
-    const undone = this.meshStage.undo();
-    if (undone) console.log("Undo:", undone.command);
+    this.artist.undo();
   }
 
   _on_press_ctrl_y(): void {
-    // Redo: re-execute the command that was popped from undo stack
-    const redone = this.meshStage.redo();
-    if (!redone) return;
-    // Re-execute to recreate meshes
-    this.executeAndStage(redone.command, redone.args);
+    this.artist.redo();
   }
 
   _on_press_ctrl_s(): void {
-    // this.saveToFrame();
+    this.saveToFrame();
   }
 
+  /**
+   * Save current scene state to Frame.
+   * This makes Frame the single source of truth by synchronizing all scene data.
+   */
+  private saveToFrame(): void {
+    const frame = this.app.system.frame;
+
+    if (!frame) {
+      logger.warn('[EditMode] No Frame loaded, cannot save');
+      return;
+    }
+
+    logger.info('[EditMode] Saving scene to Frame...');
+    syncSceneToFrame(this.world.scene, frame);
+    logger.info('[EditMode] Successfully saved to Frame');
+  }
+
+
   public finish() {
-    // Clear preview meshes but preserve staged edits in the scene
+    // Clear preview meshes
+    // Note: Artist is NOT disposed to preserve material cache across mode switches
     this.previews.clear();
-    // Note: We do NOT call meshStage.clean() here to preserve edits
     super.finish();
   }
 
 
 }
 
-export { EditMode, MeshStage, PreviewManager, EditCommandType };
+export { EditMode, PreviewManager };

@@ -1,160 +1,76 @@
-import type { MolvisApp as Molvis } from "../core/app";
-import type { CommandFunction } from "./decorator";
-import { getCommand } from "./decorator";
-
-export type CommandPayload = unknown;
-export type CommandResult = unknown;
-
-export interface CommandRuntime {
-  readonly app: Molvis;
-}
-
-export interface CommandExecutionContext {
-  readonly app: Molvis;
-  readonly runtime: CommandRuntime;
-  readonly router: CommandRouter;
-}
-
-export type CommandNamespaceHandler = (
-  path: string[],
-  ctx: CommandExecutionContext,
-  payload?: CommandPayload,
-) => CommandResult | Promise<CommandResult>;
+import type { MolvisApp } from "../core/app";
 
 /**
- * Extract arguments from payload for a command function.
- * 
- * @param fn - The command function
- * @param app - The Molvis app instance
- * @param payload - The command payload
- * @param commandName - The command name (used to look up parameter names)
- * @returns Array of arguments to pass to the function
+ * Metadata for RPC-exposed commands
  */
-function extractArgs(fn: CommandFunction, app: Molvis, payload: unknown, commandName?: string): unknown[] {
-  const args = [app];
-  
-  if (payload === undefined || payload === null) {
-    return args;
-  }
-  
-  if (Array.isArray(payload)) {
-    // Array payload: pass as positional arguments
-    args.push(...payload);
-  } else if (typeof payload === "object") {
-    // Object payload: extract by parameter name
-    let paramNames: string[] | undefined;
-    
-    if (commandName) {
-      const cmdMeta = getCommand(commandName);
-      paramNames = cmdMeta?.paramNames;
-    }
-    
-    if (paramNames && paramNames.length > 1) {
-      // Skip first parameter (app)
-      for (let i = 1; i < paramNames.length; i++) {
-        const paramName = paramNames[i];
-        args.push((payload as Record<string, unknown>)[paramName]);
-      }
-    } else {
-      // Fallback: try to extract common parameter names
-      const payloadObj = payload as Record<string, unknown>;
-      // Try common parameter names
-      if ("box" in payloadObj) {
-        args.push(payloadObj.box);
-        if ("options" in payloadObj) args.push(payloadObj.options);
-      } else if ("frame" in payloadObj || "frameData" in payloadObj) {
-        args.push(payloadObj.frame || payloadObj.frameData);
-        if ("options" in payloadObj) args.push(payloadObj.options);
-      } else if ("mode" in payloadObj) {
-        args.push(payloadObj.mode);
-      } else if ("theme" in payloadObj) {
-        args.push(payloadObj.theme);
-      } else if ("size" in payloadObj) {
-        args.push(payloadObj.size);
-      } else if ("options" in payloadObj) {
-        args.push(payloadObj.options);
-      } else {
-        // If no specific parameter found, pass the whole payload as second argument
-        args.push(payload);
-      }
-    }
-  } else {
-    // Primitive value: pass as second argument
-    args.push(payload);
-  }
-  
-  return args;
+interface CommandMetadata {
+  name: string;
+  rpcExposed: boolean;
 }
 
-export class CommandRouter {
-  private readonly commands = new Map<string, CommandFunction>();
-  private readonly namespaces = new Map<string, CommandNamespaceHandler>();
+/**
+ * Global registry for command metadata
+ */
+const commandMetadataRegistry = new Map<Function, CommandMetadata>();
 
-  registerCommand(name: string, handler: CommandFunction): void {
-    if (!name || typeof name !== "string") {
-      throw new Error("Command name must be a non-empty string.");
-    }
-    this.commands.set(name, handler);
+import { commands } from "./registry";
+
+/**
+ * Decorator to expose a Command's do() method for RPC calls
+ * Usage: @command("command_name")
+ */
+export function command(name: string) {
+  return function <T extends { new(app: MolvisApp, args: any): Command }>(constructor: T) {
+    // Register metadata
+    commandMetadataRegistry.set(constructor, {
+      name,
+      rpcExposed: true,
+    });
+
+    // Register in global command registry
+    commands.register(name, (app, args) => {
+      const cmd = new constructor(app, args);
+      return cmd.do();
+    });
+
+    return constructor;
+  };
+}
+
+/**
+ * Get command metadata for a command class
+ */
+export function getCommandMetadata(commandClass: Function): CommandMetadata | undefined {
+  return commandMetadataRegistry.get(commandClass);
+}
+
+/**
+ * Base class for all commands
+ * 
+ * Commands encapsulate operations that can be executed, undone, and redone.
+ * Each command must implement:
+ * - do(): Execute the command and return a result
+ * - undo(): Undo the command by executing its inverse operation
+ * 
+ * Commands can be exposed for RPC using the @command decorator.
+ * All commands MUST be located in core/src/commands/ directory.
+ */
+export abstract class Command<TResult = any> {
+  protected app: MolvisApp;
+
+  constructor(app: MolvisApp) {
+    this.app = app;
   }
 
-  removeCommand(name: string): void {
-    this.commands.delete(name);
-  }
+  /**
+   * Execute the command
+   * @returns The result of the command execution
+   */
+  abstract do(): TResult | Promise<TResult>;
 
-  registerNamespace(prefix: string, handler: CommandNamespaceHandler): void {
-    if (!prefix || typeof prefix !== "string") {
-      throw new Error("Namespace prefix must be a non-empty string.");
-    }
-    this.namespaces.set(prefix, handler);
-  }
-
-  hasCommand(name: string): boolean {
-    return this.commands.has(name);
-  }
-
-  listCommands(): string[] {
-    return Array.from(this.commands.keys()).sort();
-  }
-
-  listNamespaces(): string[] {
-    return Array.from(this.namespaces.keys()).sort();
-  }
-
-  execute(
-    runtime: CommandRuntime,
-    name: string,
-    payload?: CommandPayload,
-  ): CommandResult | Promise<CommandResult> {
-    if (!runtime || !runtime.app) {
-      throw new Error("Command runtime is missing a valid application reference.");
-    }
-    if (!name) {
-      throw new Error("Command name must be provided.");
-    }
-
-    const ctx: CommandExecutionContext = {
-      app: runtime.app,
-      runtime,
-      router: this,
-    };
-
-    // Try to find a registered command function
-    const commandFn = this.commands.get(name);
-    if (commandFn) {
-      const args = extractArgs(commandFn, runtime.app, payload, name);
-      return commandFn(...args) as CommandResult | Promise<CommandResult>;
-    }
-
-    // Try namespace handlers
-    const segments = name.split(".");
-    if (segments.length > 1) {
-      const [namespace, ...path] = segments;
-      const nsHandler = this.namespaces.get(namespace);
-      if (nsHandler) {
-        return nsHandler(path, ctx, payload);
-      }
-    }
-
-    throw new Error(`Unknown command "${name}".`);
-  }
+  /**
+   * Undo the command by executing its inverse
+   * @returns The inverse command that was executed
+   */
+  abstract undo(): Command | Promise<Command>;
 }

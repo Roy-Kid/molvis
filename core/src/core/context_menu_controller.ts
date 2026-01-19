@@ -1,6 +1,7 @@
-import { Pane } from "tweakpane";
+
 import type { Molvis } from "@molvis/core";
 import type { HitResult, MenuItem } from "../mode/types";
+import type { MolvisContextMenu } from "../ui/components";
 
 /**
  * Base class for mode-specific context menu controllers.
@@ -14,8 +15,7 @@ import type { HitResult, MenuItem } from "../mode/types";
  * 5. If no: returns false, mode handles the event
  */
 export abstract class ContextMenuController {
-    private container: HTMLDivElement | null = null;
-    private pane: Pane | null = null;
+    private menu: MolvisContextMenu | null = null;
     private isVisible: boolean = false;
     private onCloseCallback: (() => void) | null = null;
 
@@ -78,23 +78,14 @@ export abstract class ContextMenuController {
      */
     public show(x: number, y: number, items: MenuItem[]): void {
         // Build menu if needed
-        if (!this.container) {
+        if (!this.menu) {
             this.buildContainer();
         }
 
-        if (!this.container || !this.pane) return;
+        if (!this.menu) return;
 
-        // Clear existing menu items
-        this.clearMenuItems();
-
-        // Add new menu items
-        this.addMenuItems(items);
-
-        // Position and show
-        this.container.style.left = `${x}px`;
-        this.container.style.top = `${y}px`;
-        this.container.style.display = 'block';
-        (this.pane as any).hidden = false;
+        // Show (the component handles clearing and rendering items)
+        this.menu.show(x, y, items);
         this.isVisible = true;
 
         // Add document listeners to handle click outside and ESC
@@ -109,11 +100,8 @@ export abstract class ContextMenuController {
     public hide(): void {
         this.removeDocumentListeners();
 
-        if (this.container) {
-            this.container.style.display = 'none';
-        }
-        if (this.pane) {
-            (this.pane as any).hidden = true;
+        if (this.menu) {
+            this.menu.hide();
         }
 
         const wasVisible = this.isVisible;
@@ -144,13 +132,9 @@ export abstract class ContextMenuController {
      */
     public dispose(): void {
         this.removeDocumentListeners();
-        if (this.pane) {
-            this.pane.dispose();
-            this.pane = null;
-        }
-        if (this.container && this.container.parentNode) {
-            this.container.parentNode.removeChild(this.container);
-            this.container = null;
+        if (this.menu) {
+            this.menu.remove();
+            this.menu = null;
         }
     }
 
@@ -158,100 +142,25 @@ export abstract class ContextMenuController {
 
     private buildContainer(): void {
         // Check if container already exists
-        const existingContainer = document.getElementById(this.containerId) as HTMLDivElement;
+        const existingMenu = document.getElementById(this.containerId) as MolvisContextMenu;
 
-        if (existingContainer) {
-            this.container = existingContainer;
-            if (this.pane) {
-                this.pane.dispose();
-            }
+        if (existingMenu) {
+            this.menu = existingMenu;
         } else {
             // Create new menu container
-            this.container = document.createElement("div");
-            this.container.id = this.containerId;
-            this.container.className = "MolvisContextMenu";
-            this.container.style.position = "absolute";
-            this.container.style.pointerEvents = "auto";
-            this.container.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
-            this.container.style.borderRadius = "8px";
-            this.container.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.3)";
-            this.container.style.zIndex = "10000";
-            this.container.style.display = "none";
+            this.menu = document.createElement("molvis-context-menu") as MolvisContextMenu;
+            this.menu.id = this.containerId;
 
             // Mount to UI overlay container
-            this.app.uiContainer.appendChild(this.container);
-        }
-
-        // Create Tweakpane
-        this.pane = new Pane({
-            container: this.container,
-            title: "Edit Tools",
-            expanded: true
-        });
-        (this.pane as any).hidden = true;
-    }
-
-    private clearMenuItems(): void {
-        if (!this.pane) return;
-
-        const paneAny = this.pane as any;
-        if (paneAny.children) {
-            // Remove all children
-            const children = [...paneAny.children];
-            for (const child of children) {
-                paneAny.remove(child);
-            }
-        }
-    }
-
-    private addMenuItems(items: MenuItem[]): void {
-        if (!this.pane) return;
-
-        for (const item of items) {
-            this.addMenuItem(item, this.pane);
-        }
-    }
-
-    private addMenuItem(item: MenuItem, parent: any): void {
-        switch (item.type) {
-            case "button":
-                parent.addButton({ title: item.title || "Button" }).on("click", () => {
-                    if (item.action) {
-                        item.action();
-                    }
-                    this.hide();
-                });
-                break;
-
-            case "separator":
-                parent.addBlade({ view: 'separator' });
-                break;
-
-            case "folder":
-                const folder = parent.addFolder({ title: item.title || "Folder" });
-                if (item.items) {
-                    for (const subItem of item.items) {
-                        this.addMenuItem(subItem, folder);
-                    }
-                }
-                break;
-
-            case "binding":
-                if (item.bindingConfig) {
-                    const blade = parent.addBlade(item.bindingConfig);
-                    if (blade && item.action) {
-                        blade.on("change", item.action);
-                    }
-                }
-                break;
+            this.app.uiContainer.appendChild(this.menu);
         }
     }
 
     private handleDocumentClick(e: MouseEvent): void {
-        if (!this.isVisible || !this.container) return;
+        if (!this.isVisible || !this.menu) return;
 
         // Check if click is inside the menu
-        const rect = this.container.getBoundingClientRect();
+        const rect = this.menu.getBoundingClientRect();
         const clickInside = (
             e.clientX >= rect.left &&
             e.clientX <= rect.right &&
@@ -259,10 +168,12 @@ export abstract class ContextMenuController {
             e.clientY <= rect.bottom
         );
 
+        console.log('[ContextMenuController] Click detected, inside menu:', clickInside);
+
         if (!clickInside) {
+            console.log('[ContextMenuController] Closing menu due to outside click');
             this.hide();
-            e.stopPropagation();
-            e.preventDefault();
+            // Don't prevent default or stop propagation - let the click go through
         }
     }
 
@@ -277,12 +188,15 @@ export abstract class ContextMenuController {
     }
 
     private addDocumentListeners(): void {
-        document.addEventListener('mousedown', this.boundHandleDocumentClick, true);
+        // Use 'click' instead of 'mousedown' to handle both left and right clicks
+        document.addEventListener('click', this.boundHandleDocumentClick, true);
+        document.addEventListener('contextmenu', this.boundHandleDocumentClick, true);
         document.addEventListener('keydown', this.boundHandleKeyDown, true);
     }
 
     private removeDocumentListeners(): void {
-        document.removeEventListener('mousedown', this.boundHandleDocumentClick, true);
+        document.removeEventListener('click', this.boundHandleDocumentClick, true);
+        document.removeEventListener('contextmenu', this.boundHandleDocumentClick, true);
         document.removeEventListener('keydown', this.boundHandleKeyDown, true);
     }
 }

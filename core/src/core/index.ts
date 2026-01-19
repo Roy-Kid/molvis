@@ -1,4 +1,4 @@
 export { World } from "./world";
 export { MolvisApp } from "./app";
-export { GuiManager } from "./gui";
-export type { ResolvedMolvisOptions, MolvisOptions } from "./options";
+export { mergeConfig, DEFAULT_CONFIG, type MolvisConfig } from "./config";
+export { Settings, type MolvisUserConfig } from "./settings";

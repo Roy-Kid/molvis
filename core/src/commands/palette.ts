@@ -1,4 +1,4 @@
-import { PeriodicTable } from "../structure/elements";
+import { PeriodicTable } from "../core/system/elements";
 
 export type ColorHex = string;
 

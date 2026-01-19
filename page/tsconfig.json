@@ -1,12 +1,14 @@
 {
   "compilerOptions": {
-    "lib": ["DOM", "ES2020"],
+    "lib": [
+      "DOM",
+      "ES2020"
+    ],
     "jsx": "react-jsx",
     "target": "ES2020",
     "noEmit": true,
     "skipLibCheck": true,
     "useDefineForClassFields": true,
-
     /* modules */
     "module": "ESNext",
     "isolatedModules": true,
@@ -15,13 +17,17 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
-
     /* type checking */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["src", "components/Logo.tsx"]
+  "include": [
+    "src",
+    "components/Logo.tsx"
+  ]
 }

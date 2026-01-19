@@ -1,162 +1,130 @@
-import { Scene, AbstractMesh, Mesh } from "@babylonjs/core";
+import type { SceneIndex } from "./scene_index";
 
-export interface SelectionOptions {
-    highlightColor?: [number, number, number, number];
+// ============ Types (Colocated) ============
+
+/**
+ * Selection state using encoded selection IDs.
+ */
+export interface SelectionState {
+    atoms: Set<number>;  // Encoded selection IDs for atoms
+    bonds: Set<number>;  // Encoded selection IDs for bonds
 }
 
 /**
- * Manages selection state and highlighting for atoms.
- * Used by both SelectMode (interactive) and SelectOps (programmatic).
+ * Selection operations.
+ */
+export type SelectionOp =
+    | { type: 'replace'; atoms?: number[]; bonds?: number[] }
+    | { type: 'add'; atoms?: number[]; bonds?: number[] }
+    | { type: 'remove'; atoms?: number[]; bonds?: number[] }
+    | { type: 'toggle'; atoms?: number[]; bonds?: number[] }
+    | { type: 'clear' };
+
+// ============ SelectionManager ============
+
+/**
+ * SelectionManager: Maintains selection state using encoded IDs.
+ * Emits events for highlighting.
+ * 
+ * Responsibilities:
+ * - Maintain selection state (atoms and bonds)
+ * - Apply selection operations
+ * - Emit change events for highlighting
  */
 export class SelectionManager {
-    private selectedAtoms: Set<string> = new Set();
-    private originalColorCache: Map<string, Float32Array> = new Map();
-    private scene: Scene;
-    private highlightColor: [number, number, number, number];
+    private state: SelectionState = { atoms: new Set(), bonds: new Set() };
+    private listeners: Array<(state: SelectionState) => void> = [];
+    private sceneIndex: SceneIndex;
 
-    constructor(scene: Scene, options?: SelectionOptions) {
-        this.scene = scene;
-        this.highlightColor = options?.highlightColor || [1.0, 1.0, 0.0, 1.0];
+    constructor(sceneIndex: SceneIndex) {
+        this.sceneIndex = sceneIndex;
     }
 
     /**
-     * Select an atom and apply highlight.
+     * Apply a selection operation.
+     * 
+     * @param op - The selection operation to apply
      */
-    select(mesh: AbstractMesh, instanceIndex: number): boolean {
-        if (!(mesh instanceof Mesh)) return false;
-        const key = `${mesh.id}:${instanceIndex}`;
-        if (this.selectedAtoms.has(key)) return false;
-        this.selectedAtoms.add(key);
-        this.applyHighlight(mesh, instanceIndex, key);
-        return true;
-    }
+    apply(op: SelectionOp): void {
+        switch (op.type) {
+            case 'replace':
+                this.state.atoms = new Set(op.atoms || []);
+                this.state.bonds = new Set(op.bonds || []);
+                break;
 
-    /**
-     * Deselect an atom and restore original color.
-     */
-    deselect(mesh: AbstractMesh, instanceIndex: number): boolean {
-        if (!(mesh instanceof Mesh)) return false;
-        const key = `${mesh.id}:${instanceIndex}`;
-        if (!this.selectedAtoms.has(key)) return false;
-        this.selectedAtoms.delete(key);
-        this.restoreColor(mesh, instanceIndex, key);
-        return true;
-    }
+            case 'add':
+                op.atoms?.forEach(id => this.state.atoms.add(id));
+                op.bonds?.forEach(id => this.state.bonds.add(id));
+                break;
 
-    /**
-     * Toggle selection state.
-     */
-    toggle(mesh: AbstractMesh, instanceIndex: number): boolean {
-        const key = `${mesh.id}:${instanceIndex}`;
-        if (this.selectedAtoms.has(key)) {
-            return this.deselect(mesh, instanceIndex);
-        } else {
-            return this.select(mesh, instanceIndex);
-        }
-    }
+            case 'remove':
+                op.atoms?.forEach(id => this.state.atoms.delete(id));
+                op.bonds?.forEach(id => this.state.bonds.delete(id));
+                break;
 
-    /**
-     * Check if an atom is selected.
-     */
-    isSelected(mesh: AbstractMesh, instanceIndex: number): boolean {
-        const key = `${mesh.id}:${instanceIndex}`;
-        return this.selectedAtoms.has(key);
-    }
+            case 'toggle':
+                op.atoms?.forEach(id => {
+                    if (this.state.atoms.has(id)) {
+                        this.state.atoms.delete(id);
+                    } else {
+                        this.state.atoms.add(id);
+                    }
+                });
+                op.bonds?.forEach(id => {
+                    if (this.state.bonds.has(id)) {
+                        this.state.bonds.delete(id);
+                    } else {
+                        this.state.bonds.add(id);
+                    }
+                });
+                break;
 
-    /**
-     * Get all selected atoms.
-     */
-    getSelected(): Array<{ meshId: string; instanceIndex: number }> {
-        return Array.from(this.selectedAtoms).map(key => {
-            const [meshId, indexStr] = key.split(':');
-            return { meshId, instanceIndex: parseInt(indexStr) };
-        });
-    }
-
-    /**
-     * Get selected atom indices.
-     */
-    getSelectedIndices(): number[] {
-        return this.getSelected().map(s => s.instanceIndex);
-    }
-
-    /**
-     * Clear all selections and restore colors.
-     */
-    clearAll(): void {
-        for (const key of this.selectedAtoms) {
-            const [meshId, indexStr] = key.split(':');
-            const instanceIndex = parseInt(indexStr);
-            const mesh = this.scene.getMeshById(meshId);
-            if (mesh instanceof Mesh) {
-                this.restoreColor(mesh, instanceIndex, key);
-            }
-        }
-        this.selectedAtoms.clear();
-        this.originalColorCache.clear();
-    }
-
-    /**
-     * Reapply highlights (e.g., after mode enter or scene change).
-     */
-    reapplyHighlights(): void {
-        for (const key of this.selectedAtoms) {
-            const [meshId, indexStr] = key.split(':');
-            const instanceIndex = parseInt(indexStr);
-            const mesh = this.scene.getMeshById(meshId);
-            if (mesh instanceof Mesh) {
-                this.applyHighlight(mesh, instanceIndex, key);
-            }
-        }
-    }
-
-    /**
-     * Set highlight color and reapply to all selected atoms.
-     */
-    setHighlightColor(color: [number, number, number, number]): void {
-        this.highlightColor = color;
-        this.reapplyHighlights();
-    }
-
-    private applyHighlight(mesh: Mesh, instanceIndex: number, key: string): void {
-        const colorBuffer = mesh.metadata?.colorBuffer as Float32Array;
-        if (!colorBuffer) return;
-
-        // Save original color if not already saved
-        if (!this.originalColorCache.has(key)) {
-            const offset = instanceIndex * 4;
-            this.originalColorCache.set(key, new Float32Array([
-                colorBuffer[offset],
-                colorBuffer[offset + 1],
-                colorBuffer[offset + 2],
-                colorBuffer[offset + 3]
-            ]));
+            case 'clear':
+                this.state.atoms.clear();
+                this.state.bonds.clear();
+                break;
         }
 
-        // Apply highlight color
-        const offset = instanceIndex * 4;
-        colorBuffer[offset] = this.highlightColor[0];
-        colorBuffer[offset + 1] = this.highlightColor[1];
-        colorBuffer[offset + 2] = this.highlightColor[2];
-        colorBuffer[offset + 3] = this.highlightColor[3];
-
-        mesh.thinInstanceBufferUpdated("color");
+        this.emit();
     }
 
-    private restoreColor(mesh: Mesh, instanceIndex: number, key: string): void {
-        const originalColor = this.originalColorCache.get(key);
-        if (!originalColor) return;
+    /**
+     * Check if an encoded ID is selected.
+     * 
+     * @param encodedId - The encoded selection ID
+     * @returns true if selected, false otherwise
+     */
+    isSelected(encodedId: number): boolean {
+        const type = this.sceneIndex.getType(encodedId);
+        if (!type) return false;
 
-        const colorBuffer = mesh.metadata?.colorBuffer as Float32Array;
-        if (!colorBuffer) return;
+        return type === 'atom'
+            ? this.state.atoms.has(encodedId)
+            : this.state.bonds.has(encodedId);
+    }
 
-        const offset = instanceIndex * 4;
-        colorBuffer[offset] = originalColor[0];
-        colorBuffer[offset + 1] = originalColor[1];
-        colorBuffer[offset + 2] = originalColor[2];
-        colorBuffer[offset + 3] = originalColor[3];
+    /**
+     * Get the current selection state.
+     * 
+     * @returns The current selection state
+     */
+    getState(): SelectionState {
+        return this.state;
+    }
 
-        mesh.thinInstanceBufferUpdated("color");
-        this.originalColorCache.delete(key);
+    /**
+     * Register a change event listener.
+     * 
+     * @param handler - Function to call when selection changes
+     */
+    on(handler: (state: SelectionState) => void): void {
+        this.listeners.push(handler);
+    }
+
+    /**
+     * Emit change event to all listeners.
+     */
+    private emit(): void {
+        this.listeners.forEach(fn => fn(this.state));
     }
 }

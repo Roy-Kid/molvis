@@ -194,7 +194,7 @@ class MeasureMode extends BaseMode {
 
   private updateInfoPanel(): void {
     if (this.measurements.size === 0) {
-      this.gui?.updateInfoText("");
+      this.app.events.emit('info-text-change', "");
       return;
     }
 
@@ -210,7 +210,7 @@ class MeasureMode extends BaseMode {
     }
 
     const infoText = `Measurements (${this.measurements.size}):\n${measurementTexts.join('\n')}`;
-    this.gui?.updateInfoText(infoText);
+    this.app.events.emit('info-text-change', infoText);
   }
 
   private formatDistance(distance: number): string {
@@ -244,7 +244,7 @@ class MeasureMode extends BaseMode {
       measurement.line.dispose();
     }
     this.measurements.clear();
-    this.gui?.updateInfoText("");
+    this.app.events.emit('info-text-change', "");
   }
 
   // Override to handle Escape key to clear current selection
@@ -289,7 +289,7 @@ class MeasureMode extends BaseMode {
           previewText = `${previewText}\n\nExisting Measurements:\n${measurementTexts.join('\n')}`;
         }
 
-        this.gui?.updateInfoText(previewText);
+        this.app.events.emit('info-text-change', previewText);
       } else if (!mesh) {
         // Just show existing measurements when not hovering over an atom
         this.updateInfoPanel();
@@ -305,7 +305,7 @@ class MeasureMode extends BaseMode {
         this.updateInfoPanel();
       } else {
         // Clear info when nothing to show
-        this.gui?.updateInfoText("");
+        this.app.events.emit('info-text-change', "");
       }
     }
   }

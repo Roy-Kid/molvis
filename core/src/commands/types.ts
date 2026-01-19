@@ -1,7 +1,7 @@
 import type { Scene } from "@babylonjs/core";
 import type { Color3, Vector3 } from "@babylonjs/core";
 import type { World } from "../core/world";
-import type { Frame } from "../structure/frame";
+import type { Frame } from "../core/system/frame";
 import type { Box } from "../structure";
 import type { SelectionManager } from "../core/selection_manager";
 
@@ -66,7 +66,10 @@ export interface RenderOp {
 // Artist types (from artist/types.ts)
 export interface DrawAtomOption {
   radius?: number;
-  color?: Color3;
+  color?: Color3 | string;
+  id?: number;
+  name?: string;
+  element?: string;
 }
 
 export interface DrawAtomInput {
@@ -83,6 +86,8 @@ export interface DrawBondOption {
   order?: number;
   i?: number;
   j?: number;
+  color?: Color3 | string;
+  bondId?: number;
 }
 
 export interface DrawBondInput {

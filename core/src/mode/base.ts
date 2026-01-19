@@ -11,7 +11,11 @@ import type {
   Vector3,
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { getPositionFromMatrix } from "./utils";
+import {
+  getAtomPositionFromThinInstance,
+  getBondEndpointsFromThinInstance
+} from "../core/thin_instance";
+import type { MeshMetadata } from "../commands/draw";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult } from "./types";
 
@@ -67,12 +71,14 @@ abstract class BaseMode {
     return this._app;
   }
 
-  protected get gui() {
-    return this._app.gui;
-  }
+
 
   protected get world() {
     return this._app.world;
+  }
+
+  get type(): ModeType {
+    return this.name;
   }
 
   protected get _is_dragging() {
@@ -103,6 +109,14 @@ abstract class BaseMode {
 
   public takeScreenShot(): void {
     this.world?.takeScreenShot();
+  }
+
+  /**
+   * Start the mode - called when mode is activated.
+   * Override in subclasses to initialize mode-specific features.
+   */
+  public start(): void {
+    // Default implementation - subclasses can override
   }
 
   public finish() {
@@ -175,6 +189,12 @@ abstract class BaseMode {
               case "y":
                 this._on_press_ctrl_y();
                 break;
+              case "c":
+                this._on_press_ctrl_c();
+                break;
+              case "v":
+                this._on_press_ctrl_v();
+                break;
             }
           } else {
             switch (kbInfo.event.key) {
@@ -186,6 +206,15 @@ abstract class BaseMode {
                 break;
               case "Escape":
                 this._on_press_escape();
+                break;
+              case "v":
+                this.app.setMode("view");
+                break;
+              case "s":
+                this.app.setMode("select");
+                break;
+              case "e":
+                this.app.setMode("edit");
                 break;
             }
           }
@@ -296,45 +325,69 @@ abstract class BaseMode {
     const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, undefined, false, this.world.camera);
     const mesh = pickResult.hit ? pickResult.pickedMesh : null;
     if (mesh?.metadata) {
-      const meshType = mesh.metadata.meshType;
+      const metadata = mesh.metadata as MeshMetadata;
+      const meshType = metadata.meshType;
 
       if (meshType === 'atom') {
-        const atomData = mesh.metadata;
-        const atomThinIndex = pickResult.thinInstanceIndex!;
+        const atomThinIndex = pickResult.thinInstanceIndex;
         let atomInfo = new Map<string, string>();
-        let pos: Vector3;
-        if (atomThinIndex != -1) {  // thin instances
-          const m = atomData.matrices as Float32Array;
-          pos = getPositionFromMatrix(m, atomThinIndex);
-        } else {
+        let pos: Vector3 | undefined;
+
+        if (atomThinIndex !== undefined && atomThinIndex >= 0) {  // thin instances
+          const position = getAtomPositionFromThinInstance(mesh, atomThinIndex);
+          if (position) {
+            pos = position;
+            // Try to get element type from atomBlock
+            if (metadata.atomBlock?.element) {
+              const element = metadata.atomBlock.element[atomThinIndex];
+              if (element) {
+                atomInfo.set("element", element);
+              }
+            }
+          }
+        }
+
+        // Fallback to mesh position if no thin instance position found
+        if (!pos) {
           pos = mesh.position;
         }
+
         atomInfo.set("xyz", `${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)}`);
 
         let infoText = `[Atom] `;
         atomInfo.forEach((value, key) => {
           infoText += `${key}: ${value} | `;
         });
-        this.gui.updateInfoText(infoText);
+        this.app.events.emit('info-text-change', infoText);
       } else if (meshType === 'bond') {
-        const bondData = mesh.metadata;
-        const bondThinIndex = pickResult.thinInstanceIndex!;
-        if (bondThinIndex !== -1 && bondData.i && bondData.j) {
-          // Thin instance bond (instanced rendering)
-          const i = bondData.i[bondThinIndex];
-          const j = bondData.j[bondThinIndex];
-          const infoText = `Bond: ${i} - ${j}`;
-          this.gui.updateInfoText(infoText);
+        const bondThinIndex = pickResult.thinInstanceIndex;
+        if (bondThinIndex !== undefined && bondThinIndex >= 0) {
+          // Thin instance bond - use new utility
+          const bondInfo = getBondEndpointsFromThinInstance(mesh, bondThinIndex);
+          if (bondInfo && metadata.i && metadata.j) {
+            const i = metadata.i[bondThinIndex];
+            const j = metadata.j[bondThinIndex];
+            const infoText = `[Bond] ${i}-${j} | ` +
+              `start: (${bondInfo.start.x.toFixed(2)}, ${bondInfo.start.y.toFixed(2)}, ${bondInfo.start.z.toFixed(2)}) | ` +
+              `end: (${bondInfo.end.x.toFixed(2)}, ${bondInfo.end.y.toFixed(2)}, ${bondInfo.end.z.toFixed(2)}) | ` +
+              `length: ${bondInfo.length.toFixed(2)} Å`;
+            this.app.events.emit('info-text-change', infoText);
+          } else if (metadata.i && metadata.j) {
+            const i = metadata.i[bondThinIndex];
+            const j = metadata.j[bondThinIndex];
+            const infoText = `Bond: ${i} - ${j}`;
+            this.app.events.emit('info-text-change', infoText);
+          }
         } else {
           // Regular bond mesh (dynamic rendering)
-          const infoText = bondData.order ? `Bond (order: ${bondData.order})` : 'Bond';
-          this.gui.updateInfoText(infoText);
+          const infoText = metadata.order ? `Bond (order: ${metadata.order})` : 'Bond';
+          this.app.events.emit('info-text-change', infoText);
         }
       } else {
-        this.gui.updateInfoText(mesh.name);
+        this.app.events.emit('info-text-change', mesh.name);
       }
     } else {
-      this.gui.updateInfoText("");
+      this.app.events.emit('info-text-change', "");
     }
   }
 
@@ -353,6 +406,8 @@ abstract class BaseMode {
   protected _on_press_ctrl_s(): void { }
   protected _on_press_ctrl_z(): void { }
   protected _on_press_ctrl_y(): void { }
+  protected _on_press_ctrl_c(): void { }
+  protected _on_press_ctrl_v(): void { }
 
   protected get_pointer_xy(): Vector2 {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);
@@ -365,7 +420,7 @@ abstract class BaseMode {
       scene.pointerX,
       scene.pointerY,
       (mesh: AbstractMesh) => {
-        const md: any = (mesh as any).metadata;
+        const md = mesh.metadata as MeshMetadata;
         const meshType = md?.meshType;
         if (meshType === type) {
           return true;

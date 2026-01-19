@@ -1,5 +1,5 @@
 import type { FrameSource } from "./types";
-import type { Frame } from "../structure/frame";
+import type { Frame } from "../core/system/frame";
 
 /**
  * ArrayFrameSource provides frames from an array of Frame objects.

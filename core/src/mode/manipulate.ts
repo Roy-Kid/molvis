@@ -132,7 +132,7 @@ class ManipulateModeContextMenu extends ContextMenuController {
                 title: "Reset Positions",
                 action: () => {
                     // TODO: Implement position reset
-                    this.app.gui?.updateInfoText("Reset not implemented yet");
+                    this.app.events.emit('info-text-change', "Reset not implemented yet");
                 }
             }
         ];
@@ -173,7 +173,7 @@ class ManipulateMode extends BaseMode {
         this.selectedAtom = null;
         this.selectedBond = null;
         this.selectionHighlight.hide();
-        this.gui?.updateInfoText("");
+        this.app.events.emit('info-text-change', "");
     }
 
     /**
@@ -190,7 +190,7 @@ class ManipulateMode extends BaseMode {
         // Update info panel
         const element = atom.metadata?.element ?? "?";
         const pos = atom.position;
-        this.gui?.updateInfoText(
+        this.app.events.emit('info-text-change',
             `Selected: ${element} at (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`
         );
     }
@@ -204,7 +204,7 @@ class ManipulateMode extends BaseMode {
 
         // Highlight the bond (could create a highlight tube, for now just update info)
         const order = bond.metadata?.order ?? 1;
-        this.gui?.updateInfoText(`Selected bond (order: ${order})`);
+        this.app.events.emit('info-text-change', `Selected bond (order: ${order})`);
     }
 
     /**
@@ -330,7 +330,7 @@ class ManipulateMode extends BaseMode {
 
         // Update info panel with new position
         const element = this.draggedAtom.metadata?.element ?? "?";
-        this.gui?.updateInfoText(
+        this.app.events.emit('info-text-change',
             `Moving ${element}: (${newPosition.x.toFixed(2)}, ${newPosition.y.toFixed(2)}, ${newPosition.z.toFixed(2)})`
         );
     }
@@ -345,7 +345,7 @@ class ManipulateMode extends BaseMode {
             // Keep the atom at its new position
             const element = this.draggedAtom.metadata?.element ?? "?";
             const pos = this.draggedAtom.position;
-            this.gui?.updateInfoText(
+            this.app.events.emit('info-text-change',
                 `Moved ${element} to (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`
             );
         }

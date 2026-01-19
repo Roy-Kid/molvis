@@ -3,6 +3,7 @@ import type { MolvisApp } from "../core/app";
 import type { PointerInfo } from "@babylonjs/core";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
+import { CommonMenuItems } from "./menu_items";
 
 /**
  * Context menu controller for View mode.
@@ -24,44 +25,39 @@ class ViewModeContextMenu extends ContextMenuController {
   protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
     const items: MenuItem[] = [];
 
-    // Snapshot button
-    items.push({
-      type: "button",
-      title: "Snapshot",
-      action: () => {
-        this.mode.takeScreenShot();
-      }
-    });
+    // Reset Camera (using common item)
+    items.push(CommonMenuItems.resetCamera(this.app));
 
-    items.push({ type: "separator" });
-
-    // View mode selector
+    // Enable/Disable Grid
     items.push({
       type: "binding",
       bindingConfig: {
-        view: "list",
-        label: "View Mode",
+        view: "checkbox",
+        label: "Grid",
         options: [
-          { text: "Perspective", value: "persp" },
-          { text: "Orthographic", value: "ortho" },
-          { text: "Front", value: "front" },
-          { text: "Back", value: "back" },
-          { text: "Left", value: "left" },
-          { text: "Right", value: "right" },
+          { text: "On", value: true },
+          { text: "Off", value: false },
         ],
-        value: this.mode.currentViewMode,
+        value: this.mode.isGridEnabled(),
       },
       action: (ev: any) => {
-        this.mode.currentViewMode = ev.value as string;
+        const enabled = ev.value === true || ev.value === "true";
+        this.mode.setGridEnabled(enabled);
       }
     });
+
+    items.push(CommonMenuItems.separator());
+
+    // Snapshot (using common item)
+    items.push(CommonMenuItems.snapshot(this.app));
 
     return items;
   }
 }
 
 class ViewMode extends BaseMode {
-  private viewMode = "persp";
+  private lastClickTime: number = 0;
+  private doubleClickThreshold: number = 300; // ms
 
   constructor(app: MolvisApp) {
     super(ModeType.View, app);
@@ -71,77 +67,80 @@ class ViewMode extends BaseMode {
     return new ViewModeContextMenu(this.app, this);
   }
 
-  get currentViewMode(): string {
-    return this.viewMode;
-  }
-
-  set currentViewMode(value: string) {
-    this.viewMode = value;
-    switch (value) {
-      case "persp":
-        this.setPerspective();
-        break;
-      case "ortho":
-        this.setOrthographic();
-        break;
-      case "front":
-        this.viewFront();
-        break;
-      case "back":
-        this.viewBack();
-        break;
-      case "left":
-        this.viewLeft();
-        break;
-      case "right":
-        this.viewRight();
-        break;
-      default:
-        // Unknown view mode
-        break;
+  public resetCamera(): void {
+    if (this.app.world.camera) {
+      this.app.world.camera.restoreState();
     }
   }
 
-  public setPerspective(): void {
-    this.world.setPerspective();
-    if (this.gui) {
-      this.gui.updateView(false); // false = persp
+  public isGridEnabled(): boolean {
+    return this.app.world.grid ? this.app.world.grid.isEnabled : false;
+  }
+
+  public setGridEnabled(enabled: boolean): void {
+    if (this.app.world.grid) {
+      if (enabled) {
+        this.app.world.grid.enable();
+      } else {
+        this.app.world.grid.disable();
+      }
     }
   }
 
-  public setOrthographic(): void {
-    this.world.setOrthographic();
-    if (this.gui) {
-      this.gui.updateView(true); // true = orthographic
-    }
+  /**
+   * Start ViewMode - activate 3D scene helpers
+   */
+  public start(): void {
+    console.log('[ViewMode] start() called');
+    super.start();
+
+    // Invalidate highlights for mode switch (View uses thin instances)
+    this.app.world.highlighter.invalidateAndRebuild();
   }
 
-  public viewFront(): void {
-    this.world.viewFront();
-  }
+  /**
+   * Finish ViewMode - deactivate 3D scene helpers
+   */
+  public finish(): void {
+    this.world.targetIndicator.hide();
 
-  public viewBack(): void {
-    this.world.viewBack();
-  }
-
-  public viewLeft(): void {
-    this.world.viewLeft();
-  }
-
-  public viewRight(): void {
-    this.world.viewRight();
-  }
-
-  public takeScreenShot(): void {
-    this.world.takeScreenShot();
-  }
-
-  public override finish(): void {
     super.finish();
   }
 
   override _on_pointer_down(pointerInfo: PointerInfo) {
     super._on_pointer_down(pointerInfo);
+
+    // Detect double-click
+    const now = Date.now();
+    const timeSinceLastClick = now - this.lastClickTime;
+
+    if (timeSinceLastClick < this.doubleClickThreshold &&
+      pointerInfo.event.button === 0) { // Left button only
+      this.handleDoubleClick();
+    }
+
+    this.lastClickTime = now;
+  }
+
+  /**
+   * Handle double-click to set camera target (like Ovito)
+   */
+  private handleDoubleClick(): void {
+    const pickResult = this.world.scene.pick(
+      this.world.scene.pointerX,
+      this.world.scene.pointerY,
+      undefined,
+      false,
+      this.world.camera
+    );
+
+    if (pickResult.hit && pickResult.pickedPoint) {
+      // Only set camera target, don't move camera position (Ovito-like behavior)
+      this.world.camera.setTarget(pickResult.pickedPoint);
+
+      // Show target indicator at the picked point
+      this.world.targetIndicator.show(pickResult.pickedPoint);
+    }
   }
 
   override _on_pointer_up(pointerInfo: PointerInfo) {

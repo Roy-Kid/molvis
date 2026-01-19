@@ -6,16 +6,16 @@
   "license": "BSD-3-Clause",
   "workspaces": [
     "core",
-    "widget",
+    "python",
     "page",
     "vsc-ext"
   ],
   "scripts": {
-    "dev:widget": "npm run dev -w widget",
-    "dev:standalone": "npm run dev -w standalone",
+    "dev:python": "npm run dev -w python",
+    "dev:page": "npm run dev -w page",
     "dev:core": "npm run dev -w core",
     "build:core": "npm run build -w core",
-    "build:widget": "npm run build -w widget",
+    "build:python": "npm run build -w python",
     "test": "npm run test -w core"
   },
   "devDependencies": {

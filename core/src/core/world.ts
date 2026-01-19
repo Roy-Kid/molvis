@@ -1,236 +1,161 @@
-import {
-  ArcRotateCamera,
-  Color3,
-  Engine,
-  HemisphericLight,
-  type LinesMesh,
-  Scene,
-  Vector3,
-  Tools,
-  Viewport,
-} from "@babylonjs/core";
-import { AxisHelper } from "./axes";
-import { GridGround } from "./grid";
-import { MeshGroup } from "./group";
-import { Executor } from "../commands";
+import { Scene, Engine, HemisphericLight, Vector3, ArcRotateCamera } from "@babylonjs/core";
+import { type MolvisApp } from "./app";
+import { ViewportSettings } from "./viewport_settings";
+import { TargetIndicator } from "./target_indicator";
 import { ModeManager } from "../mode";
-import { MolecularTopology } from "./topology";
+import { AxisHelper } from "./axis_helper";
+import { SceneIndex } from "./scene_index";
+import { SelectionManager } from "./selection_manager";
+import { Highlighter } from "./highlighter";
 
-
-interface SceneDataInternal {
-  scene: Scene;
-  camera: ArcRotateCamera;
-  axes: AxisHelper;
-  gridGround: GridGround;
-  boxMesh: LinesMesh | null;
-  mode: ModeManager | null;
-  executor: Executor;
-  meshGroup: MeshGroup;
-}
-
-
-
-class World {
+export class World {
   private _engine: Engine;
-  private _sceneData: SceneDataInternal;
-  private _context: any;
-  private _isRunning = false;
-  private _topology: MolecularTopology = new MolecularTopology();
+  private _sceneData: {
+    scene: Scene;
+    camera: ArcRotateCamera;
+    light: HemisphericLight;
+  };
+  private _modeManager?: ModeManager;
 
+  // Viewport/Camera settings
+  public viewportSettings: ViewportSettings;
+  public targetIndicator: TargetIndicator;
+  public axisHelper: AxisHelper;
 
-  constructor(canvas: HTMLCanvasElement, engine: Engine, context: any) {
+  // New unified selection system
+  public sceneIndex: SceneIndex;
+  public selectionManager: SelectionManager;
+  public highlighter: Highlighter;
+
+  constructor(canvas: HTMLCanvasElement, engine: Engine, app: MolvisApp) {
     this._engine = engine;
-    this._context = context;
 
-    const scene = this._initScene(this._engine);
-    const camera = this._initCamera(scene, canvas);
-    this._initLight(scene);
-    const axes = this._initAxes(this._engine, camera);
-    const gridGround = new GridGround(scene, camera, this._engine);
-    const meshGroup = new MeshGroup("root", scene);
+    // Initialize scene
+    const scene = new Scene(engine);
+    // Use Babylon.js default background color (blue-purple gradient)
 
-    const executor = new Executor(this._context);
+    // Scene optimization
+    scene.skipPointerMovePicking = true;
+    scene.autoClear = true;
+    scene.autoClearDepthAndStencil = true;
+
+    // Create ArcRotateCamera directly
+    const camera = new ArcRotateCamera(
+      "camera",
+      Math.PI / 4,  // alpha
+      Math.PI / 3,  // beta
+      10,           // radius
+      Vector3.Zero(),
+      scene
+    );
+    camera.attachControl(canvas, true);
+    camera.lowerRadiusLimit = 1;
+    camera.upperRadiusLimit = 100;
+    camera.wheelPrecision = 50;
+    camera.panningSensibility = 1000;
+
+    // Set as active camera
+    scene.activeCamera = camera;
+
+    // Viewport Settings
+    this.viewportSettings = new ViewportSettings(scene, camera);
+
+    // Visual Overlays
+    this.targetIndicator = new TargetIndicator(scene);
+    this.axisHelper = new AxisHelper(this._engine, camera);
+
+    // Basic lighting
+    const light = new HemisphericLight("light", new Vector3(0.5, 1, 0), scene);
+    light.intensity = 0.8;
+
+    // Initialize new unified selection system
+    this.sceneIndex = new SceneIndex();
+    this.selectionManager = new SelectionManager(this.sceneIndex);
+    this.highlighter = new Highlighter(this.sceneIndex, scene);
+
+    // Wire up event: selection changes trigger highlighting
+    this.selectionManager.on(state => this.highlighter.highlightSelection(state));
 
     this._sceneData = {
       scene,
-      camera,
-      axes,
-      gridGround,
-      boxMesh: null,
-      mode: null,
-      executor,
-      meshGroup,
+      light,
+      camera
     };
+
+    // Resize handling
+    window.addEventListener("resize", () => {
+      engine.resize();
+    });
   }
 
-  public setMode(mode: ModeManager): void {
-    this._sceneData.mode = mode;
-  }
-
-  private _initScene = (engine: Engine) => {
-    const scene = new Scene(engine);
-    scene.useRightHandedSystem = true;
-    return scene;
-  };
-
-  get scene(): Scene {
+  public get scene(): Scene {
     return this._sceneData.scene;
-  }
-
-  get gridGround(): GridGround {
-    return this._sceneData.gridGround;
   }
 
   public get camera(): ArcRotateCamera {
     return this._sceneData.camera;
   }
 
-  private _initLight(scene: Scene) {
-    const hemisphericLight = new HemisphericLight(
-      "ambientLight",
-      new Vector3(0, 1, 0),
-      scene,
-    );
-    hemisphericLight.diffuse = new Color3(1, 1, 1);
-    hemisphericLight.groundColor = new Color3(0, 0, 0);
-    return hemisphericLight;
+  public get mode() {
+    return this._modeManager?.currentMode;
   }
 
-  private _initCamera(scene: Scene, canvas: HTMLCanvasElement): ArcRotateCamera {
-    const camera = new ArcRotateCamera(
-      "camera",
-      -Math.PI / 2,
-      Math.PI / 3,
-      10,
-      Vector3.Zero(),
-      scene
-    );
-    camera.inertia = 0;
-    camera.attachControl(canvas, true);
-    scene.activeCamera = camera;
-    return camera;
+  public setMode(modeManager: ModeManager) {
+    this._modeManager = modeManager;
   }
 
-  private _initAxes(engine: Engine, camera: ArcRotateCamera) {
-    return new AxisHelper(engine, camera);
+  // Camera control methods
+  public focusOn(target: Vector3) {
+    this._sceneData.camera.setTarget(target);
   }
 
+  public resetCamera() {
+    this._sceneData.camera.alpha = Math.PI / 4;
+    this._sceneData.camera.beta = Math.PI / 3;
+    this._sceneData.camera.radius = 10;
+    this._sceneData.camera.setTarget(Vector3.Zero());
+  }
 
   public takeScreenShot() {
-    Tools.CreateScreenshot(this._engine, this.camera, { precision: 1.0 });
-  }
-
-  public setPerspective() {
-    this.camera.mode = ArcRotateCamera.PERSPECTIVE_CAMERA;
-  }
-
-  public setOrthographic() {
-    this.camera.mode = ArcRotateCamera.ORTHOGRAPHIC_CAMERA;
-    const ratio =
-      this._engine.getRenderWidth() / this._engine.getRenderHeight();
-    const ortho = this.camera.radius;
-    this.camera.orthoLeft = -ortho;
-    this.camera.orthoRight = ortho;
-    this.camera.orthoBottom = -ortho / ratio;
-    this.camera.orthoTop = ortho / ratio;
-  }
-
-  public viewFront() {
-    this.camera.alpha = -Math.PI / 2;
-    this.camera.beta = Math.PI / 2;
-  }
-
-  public viewBack() {
-    this.camera.alpha = Math.PI / 2;
-    this.camera.beta = Math.PI / 2;
-  }
-
-  public viewLeft() {
-    this.camera.alpha = Math.PI;
-    this.camera.beta = Math.PI / 2;
-  }
-
-  public viewRight() {
-    this.camera.alpha = 0;
-    this.camera.beta = Math.PI / 2;
-  }
-
-  public setViewport(x: number, y: number, width: number, height: number): void {
-    this.camera.viewport = new Viewport(x, y, width, height);
-  }
-
-  public render(): void {
-    if (this._isRunning) {
-      return;
-    }
-
-    this._isRunning = true;
-
-    this._engine.runRenderLoop(() => {
-      this._sceneData.scene.render();
-      this._sceneData.axes.render();
+    console.log('[World] Taking screenshot...');
+    import('@babylonjs/core').then(({ Tools }) => {
+      Tools.CreateScreenshotUsingRenderTarget(
+        this._engine,
+        this._sceneData.camera,
+        { precision: 1 },
+        (data) => {
+          const link = document.createElement('a');
+          link.download = `molvis-screenshot-${Date.now()}.png`;
+          link.href = data;
+          link.click();
+          console.log('[World] Screenshot downloaded');
+        }
+      );
     });
-    this._engine.resize();
-    window.addEventListener("resize", () => {
-      this._engine.resize();
-    });
-  }
-
-  public renderOnce(): void {
-    this._sceneData.scene.render();
-    this._sceneData.axes.render();
-  }
-
-  public stop(): void {
-    this._isRunning = false;
-  }
-
-  public clear() {
-    // Clear topology
-    this._topology.clear();
-    
-    while (this._sceneData.scene.meshes.length) {
-      const mesh = this._sceneData.scene.meshes[0];
-      mesh.dispose();
-    }
-    if (this._sceneData.boxMesh) {
-      this._sceneData.boxMesh.dispose();
-      this._sceneData.boxMesh = null;
-    }
-    // Re-enable grid ground after clearing
-    if (this._sceneData.gridGround.isEnabled) {
-      this._sceneData.gridGround.disable();
-      this._sceneData.gridGround.enable();
-    }
-  }
-
-  public resize() {
-    this._engine.resize();
-  }
-
-  public isOrthographic(): boolean {
-    return this.camera.mode === ArcRotateCamera.ORTHOGRAPHIC_CAMERA;
-  }
-
-  public get mode(): ModeManager | null {
-    return this._sceneData.mode;
-  }
-
-  public get executor(): Executor {
-    return this._sceneData.executor;
-  }
-
-  public get meshGroup(): MeshGroup {
-    return this._sceneData.meshGroup;
   }
 
   /**
-   * Get the molecular topology graph.
+   * Start the render loop
    */
-  public get topology(): MolecularTopology {
-    return this._topology;
+  public start() {
+    this._engine.runRenderLoop(() => {
+      this._sceneData.scene.render();
+      // Render axis helper in viewport corner
+      this.axisHelper.render();
+    });
   }
 
-}
+  /**
+   * Stop the render loop
+   */
+  public stop() {
+    this._engine.stopRenderLoop();
+  }
 
-export { World };
+  /**
+   * Resize the engine
+   */
+  public resize() {
+    this._engine.resize();
+  }
+}

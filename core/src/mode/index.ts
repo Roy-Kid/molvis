@@ -76,9 +76,14 @@ class ModeManager {
         throw new Error(`unknown mode: ${mode}`);
     }
 
-    // Update GUI mode indicator - add safety check
-    if (this._app.gui) {
-      this._app.gui.updateMode(mode);
+    // Call start() on the new mode
+    if (this._mode) {
+      this._mode.start();
+    }
+
+    // Emit mode change event
+    if (this._app.events) {
+      this._app.events.emit('mode-change', mode);
     }
   };
 

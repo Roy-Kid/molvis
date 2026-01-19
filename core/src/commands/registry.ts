@@ -20,7 +20,7 @@ export class CommandRegistry {
    * @param name Command name
    * @param fn Command function
    */
-  register<A>(name: string, fn: CommandFn<A>): void {
+  register<A>(name: string, fn: CommandFn<A>): CommandFn<A> {
     if (!name || typeof name !== "string") {
       throw new Error("Command name must be a non-empty string");
     }
@@ -28,6 +28,7 @@ export class CommandRegistry {
       throw new Error("Command must be a function");
     }
     this.commands.set(name, fn as CommandFn);
+    return fn;
   }
 
   /**

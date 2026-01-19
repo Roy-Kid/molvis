@@ -1,6 +1,6 @@
 {
   "name": "Molvis",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node",
+  "image": "mcr.microsoft.com/devcontainers/python:3",
   "features": {
     "ghcr.io/molcrafts/features/molvis:latest": {}
   },

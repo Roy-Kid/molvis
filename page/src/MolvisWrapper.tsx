@@ -2,16 +2,21 @@ import React, { useEffect, useRef } from 'react';
 import { Molvis, MolvisOptions, mountMolvis } from '@molvis/core';
 
 // Molvis wrapper: create / destroy core instance. Pure rendering area.
-const MolvisWrapper: React.FC = () => {
+interface MolvisWrapperProps {
+  onMount?: (app: Molvis) => void;
+}
+
+const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const molvisRef = useRef<Molvis | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-  // Default options: adaptive to container size
+    console.log('[MolvisWrapper] Mounting...', containerRef.current.getBoundingClientRect());
+
     const options: MolvisOptions = {
       fitContainer: true,
-      showUI: false,
+      showUI: true,
       grid: {
         enabled: true,
         mainColor: '#444',
@@ -22,19 +27,29 @@ const MolvisWrapper: React.FC = () => {
     };
     try {
       molvisRef.current = mountMolvis(containerRef.current, options);
+      console.log('[MolvisWrapper] Mounted successfully', molvisRef.current);
+      molvisRef.current.start();
+      if (onMount) onMount(molvisRef.current);
     } catch (e) {
+      console.error('[MolvisWrapper] Mount failed', e);
       throw e;
     }
-    const handleResize = () => {
-      if (!containerRef.current || !molvisRef.current) return;
-      molvisRef.current.resize();
-    };
-    window.addEventListener('resize', handleResize);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+            console.log('[MolvisWrapper] Resizing', entry.contentRect);
+            molvisRef.current?.resize();
+        }
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
-      window.removeEventListener('resize', handleResize);
+      console.log('[MolvisWrapper] Unmounting...');
+      resizeObserver.disconnect();
       try {
         molvisRef.current?.destroy();
       } catch (e) {
+        console.error('[MolvisWrapper] Destroy failed', e);
         throw e;
       }
       molvisRef.current = null;
@@ -44,6 +59,7 @@ const MolvisWrapper: React.FC = () => {
   return (
     <div
       ref={containerRef}
+      className="molvis-container"
       style={{
         position: 'absolute',
         top: 0,
@@ -52,7 +68,8 @@ const MolvisWrapper: React.FC = () => {
         height: '100%',
         overflow: 'hidden',
         background: '#000',
-        border: 'none'
+        border: 'none',
+        zIndex: 0
       }}
     />
   );

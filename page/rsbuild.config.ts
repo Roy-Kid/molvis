@@ -1,18 +1,26 @@
 import { defineConfig } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-export default defineConfig({
-  plugins: [pluginReact()],
-  source: {
-    entry: {
-      index: './src/index.tsx',
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Docs: https://rsbuild.rs/config/
+export default defineConfig(({ command }) => {
+  return {
+    plugins: [pluginReact()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+        'molrs-wasm': path.resolve(__dirname, '../../molrs/wasm/pkg'),
+      },
     },
-  },
-  html: {
-    title: 'MolVis page',
-    meta: {
-      charset: 'utf-8',
-      viewport: 'width=device-width, initial-scale=1.0'
-    }
-  },
+    source: {
+      define: {
+        // Core expects WASM to be fetched, not inlined as base64 or similar
+        __WASM_INLINE__: 'false',
+      },
+    },
+  };
 });
