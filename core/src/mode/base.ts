@@ -207,15 +207,6 @@ abstract class BaseMode {
               case "Escape":
                 this._on_press_escape();
                 break;
-              case "v":
-                this.app.setMode("view");
-                break;
-              case "s":
-                this.app.setMode("select");
-                break;
-              case "e":
-                this.app.setMode("edit");
-                break;
             }
           }
           break;
