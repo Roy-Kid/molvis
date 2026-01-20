@@ -1,71 +1,86 @@
-# molvis README
+# MolVis VSCode Extension
 
-This is the README for your extension "molvis". After writing up a brief description, we recommend including the following sections.
+A VSCode extension for visualizing molecular structures directly within your editor. Built on [Babylon.js](https://www.babylonjs.com/) and the MolVis rendering engine.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### 🔬 Molecular Visualization
 
-For example if there is an image subfolder under your extension project workspace:
+- **Custom Editor for .pdb files**: Open `.pdb` files in an interactive 3D viewer
+- **Side-by-side text/visualization**: Click the preview button in the editor title bar to view molecular structure alongside the text
+- **Command-based viewer**: Open an empty viewer and drag-and-drop molecular files
+- **Real-time updates**: Changes to the text file automatically update the visualization
 
-\!\[feature X\]\(images/feature-x.png\)
+### 🎯 Workflows
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+#### 1. Open .pdb file in MolVis viewer
+
+1. Open any `.pdb` file in VSCode
+2. Right-click the editor tab → **Reopen Editor With...** → **MolVis Viewer**
+3. The file will open in the 3D molecular viewer
+
+#### 2. Preview to the side (Markdown-style)
+
+1. Open a `.pdb` file in the text editor
+2. Click the **Open Preview to the Side** button (📖) in the editor title bar
+3. The molecular visualization will open in a split view alongside your text editor
+
+#### 3. Standalone viewer with drag-and-drop
+
+1. Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
+2. Run **MolVis: Open Viewer**
+3. Drag and drop a `.pdb` file from your file explorer into the viewer
+
+## Supported File Formats
+
+- **PDB** (`.pdb`) - Protein Data Bank format
+
+> **Note**: This extension currently supports small text-based molecular files (< 10MB). Support for additional formats (`.xyz`, `.cif`, `.mol2`) and large files is planned for future releases.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- VSCode 1.108.1 or higher
+- WebGL-capable browser engine (included in VSCode)
 
-## Extension Settings
+## Extension Commands
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- `MolVis: Open Viewer` - Open an empty molecular viewer
+- `Open Preview to the Side` - Open molecular visualization alongside text editor (available when a `.pdb` file is active)
 
-For example:
+## Known Limitations
 
-This extension contributes the following settings:
+- **Read-only visualization**: Editing molecular structures is not yet supported
+- **Small files only**: Files larger than 10MB may cause performance issues
+- **PDB format only**: Additional formats will be added in future releases
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## Development
 
-## Known Issues
+### Building the extension
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+```bash
+npm install
+npm run build
+```
 
-## Release Notes
+### Running in development
 
-Users appreciate release notes as you update your extension.
+1. Open this folder in VSCode
+2. Press `F5` to launch the Extension Development Host
+3. Test the extension in the new VSCode window
 
-### 1.0.0
+## Architecture
 
-Initial release of ...
+The extension uses a dual-webview strategy:
 
-### 1.0.1
+- **Custom Text Editor**: Integrates with VSCode's document model for `.pdb` files
+- **Webview Panel**: Standalone viewer for exploratory work
 
-Fixed issue #.
+Both webviews use the same Babylon.js-based rendering engine from `@molvis/core`, with message passing between the extension host (Node.js) and webview (browser) for file loading and state synchronization.
 
-### 1.1.0
+## License
 
-Added features X, Y, and Z.
+BSD-3-Clause - See [LICENSE](../LICENSE) for details.
 
----
+## Contributing
 
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+This extension is part of the MolVis monorepo. See the [main README](../README.md) for contribution guidelines.

@@ -12,6 +12,7 @@ import { DefaultPalette, type Palette } from "../commands/palette";
 import { System } from "./system";
 
 import type { Frame } from "./system/frame";
+import { MolvisContextMenu, MolvisButton, MolvisSeparator, MolvisFolder, MolvisSlider } from "../ui/components";
 
 export class MolvisApp {
   // DOM elements
@@ -107,14 +108,6 @@ export class MolvisApp {
    * Register all web components for context menus
    */
   private registerWebComponents(): void {
-    // Import components
-    const {
-      MolvisContextMenu,
-      MolvisButton,
-      MolvisSeparator,
-      MolvisFolder,
-      MolvisSlider
-    } = require('../ui/components');
 
     // Register custom elements
     if (!customElements.get('molvis-context-menu')) {

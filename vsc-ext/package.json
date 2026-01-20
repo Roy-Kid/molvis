@@ -6,9 +6,6 @@
   "engines": {
     "vscode": "^1.108.1"
   },
-  "categories": [
-    "Other"
-  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -18,9 +15,35 @@
       },
       {
         "command": "molvis.openViewer",
-        "title": "Molvis: Open Viewer"
+        "title": "MolVis: Open Viewer"
+      },
+      {
+        "command": "molvis.openPreviewToSide",
+        "title": "Open Preview to the Side",
+        "icon": "$(open-preview)"
       }
-    ]
+    ],
+    "customEditors": [
+      {
+        "viewType": "molvis.editor",
+        "displayName": "MolVis Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.pdb"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "molvis.openPreviewToSide",
+          "when": "resourceExtname == .pdb",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -31,11 +54,6 @@
     "watch:bundle": "npm run dev",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && npm run build",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "check-types": "tsc --noEmit",
-    "lint": "eslint src",
     "test": "vscode-test"
   },
   "devDependencies": {
@@ -47,10 +65,9 @@
     "@vscode/test-electron": "^2.5.2",
     "npm-run-all": "^4.1.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.3"
-  },
-  "dependencies": {
+    "typescript-eslint": "^8.46.3",
     "@molvis/core": "file:../core",
     "molrs-wasm": "file:../../molrs/wasm/pkg"
-  }
+  },
+  "dependencies": {}
 }

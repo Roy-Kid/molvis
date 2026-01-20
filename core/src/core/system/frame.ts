@@ -1,47 +1,59 @@
 import { Block } from './block';
+import { MrFrame, MrBlock } from 'molrs-wasm';
 import type { Box } from 'molrs-wasm';
 
 
 class AtomBlock extends Block {
 
-  constructor(x: number[], y: number[], z: number[], element?: string[]) {
+  constructor(x?: number[] | Float32Array, y?: number[] | Float32Array, z?: number[] | Float32Array, element?: string[]) {
     super();
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    if (element !== undefined) this.set('element', { kind: 'utf8', data: element });
+    if (x !== undefined) this.x = x;
+    if (y !== undefined) this.y = y;
+    if (z !== undefined) this.z = z;
+    if (element !== undefined) this.element = element;
+  }
+
+  /** Create AtomBlock from MrBlock */
+  static fromMrBlock(mrBlock: MrBlock): AtomBlock {
+    const block = new AtomBlock();
+    (block as any)._mrBlock = mrBlock;
+    return block;
   }
 
   get x(): Float32Array {
-    return this.get<Float32Array>('x');
+    return this.get_f32('x') ?? new Float32Array(0);
   }
 
   set x(v: number[] | Float32Array) {
-    this.set('x', { kind: 'float32', data: v instanceof Float32Array ? v : new Float32Array(v) });
+    this.set_f32('x', v);
   }
 
   get y(): Float32Array {
-    return this.get<Float32Array>('y');
+    return this.get_f32('y') ?? new Float32Array(0);
   }
 
   set y(v: number[] | Float32Array) {
-    this.set('y', { kind: 'float32', data: v instanceof Float32Array ? v : new Float32Array(v) });
+    this.set_f32('y', v);
   }
 
   get z(): Float32Array {
-    return this.get<Float32Array>('z');
+    return this.get_f32('z') ?? new Float32Array(0);
   }
 
   set z(v: number[] | Float32Array) {
-    this.set('z', { kind: 'float32', data: v instanceof Float32Array ? v : new Float32Array(v) });
+    this.set_f32('z', v);
   }
 
   get n_atoms(): number {
     return this.nrows;
   }
 
-  get element(): any { // TODO: Proper return type depending on Block implementation
-    return this.get('element');
+  get element(): string[] {
+    return this.get_strings('element') ?? [];
+  }
+
+  set element(v: string[]) {
+    this.set_strings('element', v);
   }
 
 }
@@ -52,22 +64,38 @@ class BondBlock extends Block {
     super();
     if (i !== undefined) this.i = i;
     if (j !== undefined) this.j = j;
-    if (order !== undefined) this.set('order', { kind: 'uint8', data: order instanceof Uint8Array ? order : new Uint8Array(order) });
+    if (order !== undefined) this.order = order;
+  }
+
+  /** Create BondBlock from MrBlock */
+  static fromMrBlock(mrBlock: MrBlock): BondBlock {
+    const block = new BondBlock();
+    (block as any)._mrBlock = mrBlock;
+    return block;
   }
 
   get i(): Uint32Array {
-    return this.get<Uint32Array>('i');
+    return this.get_u32('i') ?? new Uint32Array(0);
   }
 
   set i(v: number[] | Uint32Array) {
-    this.set('i', { kind: 'uint32', data: v instanceof Uint32Array ? v : new Uint32Array(v) });
+    this.set_u32('i', v);
   }
+
   get j(): Uint32Array {
-    return this.get<Uint32Array>('j');
+    return this.get_u32('j') ?? new Uint32Array(0);
   }
 
   set j(v: number[] | Uint32Array) {
-    this.set('j', { kind: 'uint32', data: v instanceof Uint32Array ? v : new Uint32Array(v) });
+    this.set_u32('j', v);
+  }
+
+  get order(): Uint8Array {
+    return this.get_u8('order') ?? new Uint8Array(0);
+  }
+
+  set order(v: number[] | Uint8Array) {
+    this.set_u8('order', v);
   }
 
   get n_bonds(): number {
@@ -78,24 +106,69 @@ class BondBlock extends Block {
 
 class Frame {
 
-  private atoms: AtomBlock;
-  private bonds: BondBlock | undefined;
-  public meta: Map<string, unknown>;
+  /** Internal MrFrame from molrs-wasm */
+  public readonly _mrFrame: MrFrame;
   public box: Box | undefined;
 
-  constructor(atoms: AtomBlock, bonds?: BondBlock) {
-    this.atoms = atoms;
-    this.bonds = bonds;
-    this.meta = new Map<string, unknown>();
+  constructor(atoms?: AtomBlock, bonds?: BondBlock, mrFrame?: MrFrame) {
+    if (mrFrame) {
+      this._mrFrame = mrFrame;
+    } else {
+      this._mrFrame = new MrFrame();
+      if (atoms) {
+        this._mrFrame.insert_block('atoms', atoms._mrBlock);
+      }
+      if (bonds) {
+        this._mrFrame.insert_block('bonds', bonds._mrBlock);
+      }
+    }
     this.box = undefined;
+  }
+
+  /** Create Frame from MrFrame */
+  static fromMrFrame(mrFrame: MrFrame): Frame {
+    return new Frame(undefined, undefined, mrFrame);
+  }
+
+  get atoms(): AtomBlock {
+    const mrBlock = this._mrFrame.get_block('atoms');
+    if (!mrBlock) {
+      // Create empty atoms block if not exists
+      const emptyBlock = new AtomBlock();
+      this._mrFrame.insert_block('atoms', emptyBlock._mrBlock);
+      return emptyBlock;
+    }
+    return AtomBlock.fromMrBlock(mrBlock);
+  }
+
+  set atoms(value: AtomBlock) {
+    this._mrFrame.insert_block('atoms', value._mrBlock);
   }
 
   get atomBlock(): AtomBlock {
     return this.atoms;
   }
 
+  get bonds(): BondBlock | undefined {
+    const mrBlock = this._mrFrame.get_block('bonds');
+    return mrBlock ? BondBlock.fromMrBlock(mrBlock) : undefined;
+  }
+
+  set bonds(value: BondBlock | undefined) {
+    if (value) {
+      this._mrFrame.insert_block('bonds', value._mrBlock);
+    } else {
+      this._mrFrame.remove_block('bonds');
+    }
+  }
+
   get bondBlock(): BondBlock | undefined {
     return this.bonds;
+  }
+
+  get meta(): Map<string, string> {
+    // For now, return empty map. We can enhance this later
+    return new Map<string, string>();
   }
 
   /**
@@ -121,13 +194,14 @@ class Frame {
    * @returns The atom ID (index) of the newly added atom
    */
   addAtom(x: number, y: number, z: number, element: string): number {
-    const currentCount = this.atoms.n_atoms;
+    const atoms = this.atoms;
+    const currentCount = atoms.n_atoms;
 
     // Get existing arrays or create new ones
-    const xArray = currentCount > 0 ? this.atoms.x : new Float32Array(0);
-    const yArray = currentCount > 0 ? this.atoms.y : new Float32Array(0);
-    const zArray = currentCount > 0 ? this.atoms.z : new Float32Array(0);
-    const elementArray = currentCount > 0 ? this.atoms.element : [];
+    const xArray = currentCount > 0 ? atoms.x : new Float32Array(0);
+    const yArray = currentCount > 0 ? atoms.y : new Float32Array(0);
+    const zArray = currentCount > 0 ? atoms.z : new Float32Array(0);
+    const elementArray = currentCount > 0 ? atoms.element : [];
 
     // Create new arrays with increased size
     const newX = new Float32Array(currentCount + 1);
@@ -147,10 +221,10 @@ class Frame {
     newElement.push(element);
 
     // Update the atom block
-    this.atoms.x = newX;
-    this.atoms.y = newY;
-    this.atoms.z = newZ;
-    this.atoms.set('element', { kind: 'utf8', data: newElement });
+    atoms.x = newX;
+    atoms.y = newY;
+    atoms.z = newZ;
+    atoms.element = newElement;
 
     return currentCount; // Return the new atom's ID
   }
@@ -201,7 +275,7 @@ class Frame {
     if (this.bonds && this.bonds.n_bonds > 0) {
       const iArray = this.bonds.i;
       const jArray = this.bonds.j;
-      const orderArray = this.bonds.get<Uint8Array>('order', new Uint8Array(0));
+      const orderArray = this.bonds.order ?? new Uint8Array(0);
 
       const newBonds: { i: number; j: number; order: number }[] = [];
 
@@ -259,7 +333,7 @@ class Frame {
     // Get existing arrays or create new ones
     const iArray = currentBondCount > 0 ? this.bonds.i : new Uint32Array(0);
     const jArray = currentBondCount > 0 ? this.bonds.j : new Uint32Array(0);
-    const orderArray = currentBondCount > 0 ? this.bonds.get<Uint8Array>('order', new Uint8Array(0)) : new Uint8Array(0);
+    const orderArray = currentBondCount > 0 ? (this.bonds.order ?? new Uint8Array(0)) : new Uint8Array(0);
 
     // Create new arrays with increased size
     const newI = new Uint32Array(currentBondCount + 1);
@@ -300,7 +374,7 @@ class Frame {
     // Get existing arrays
     const iArray = this.bonds.i;
     const jArray = this.bonds.j;
-    const orderArray = this.bonds.get<Uint8Array>('order', new Uint8Array(0));
+    const orderArray = this.bonds.order ?? new Uint8Array(0);
 
     // Create new arrays with decreased size
     const newI = new Uint32Array(currentBondCount - 1);

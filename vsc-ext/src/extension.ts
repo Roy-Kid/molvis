@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import { MolvisEditorProvider } from "./customEditor";
+import { sendToWebview } from "./webviewMessaging";
 
 function getNonce(): string {
 	let text = "";
@@ -43,10 +45,15 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 }
 
 export function activate(context: vscode.ExtensionContext) {
+	// Register Custom Text Editor Provider for .pdb files
+	context.subscriptions.push(MolvisEditorProvider.register(context));
+
+	// Command: Hello World (for testing)
 	const helloWorld = vscode.commands.registerCommand("molvis.helloWorld", () => {
 		vscode.window.showInformationMessage("Hello World from molvis!");
 	});
 
+	// Command: Open standalone viewer
 	const openViewer = vscode.commands.registerCommand("molvis.openViewer", () => {
 		const panel = vscode.window.createWebviewPanel(
 			"molvis.viewer",
@@ -62,10 +69,39 @@ export function activate(context: vscode.ExtensionContext) {
 		);
 
 		panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
+
+		// Send init message for standalone mode
+		sendToWebview(panel.webview, { type: "init", mode: "standalone" });
 	});
 
-	context.subscriptions.push(helloWorld, openViewer);
+	// Command: Open preview to the side
+	const openPreviewToSide = vscode.commands.registerCommand(
+		"molvis.openPreviewToSide",
+		async () => {
+			const activeEditor = vscode.window.activeTextEditor;
+			if (!activeEditor) {
+				return;
+			}
+
+			const document = activeEditor.document;
+			if (!document.fileName.endsWith(".pdb")) {
+				vscode.window.showWarningMessage(
+					"MolVis preview is only available for .pdb files"
+				);
+				return;
+			}
+
+			// Open the file in Custom Editor in a split view
+			await vscode.commands.executeCommand(
+				"vscode.openWith",
+				document.uri,
+				"molvis.editor",
+				vscode.ViewColumn.Beside
+			);
+		}
+	);
+
+	context.subscriptions.push(helloWorld, openViewer, openPreviewToSide);
 }
 
-export function deactivate() {}
-
+export function deactivate() { }

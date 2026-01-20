@@ -1,14 +1,14 @@
-import init from "molrs-wasm";
+import init, { type InitOutput } from "molrs-wasm";
 
 declare const __WASM_INLINE__: boolean;
 
-import { setSystemWasm } from "./core/system/block";
+export let wasmInstance: InitOutput;
 
 if (__WASM_INLINE__) {
   const { default: wasmUrl } = await import("molrs-wasm/molrs_bg.wasm");
-  setSystemWasm(await init(wasmUrl));
+  wasmInstance = await init(wasmUrl);
 } else {
-  setSystemWasm(await init());
+  wasmInstance = await init();
 }
 
 import { MolvisApp } from "./core/app";
