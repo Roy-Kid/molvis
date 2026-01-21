@@ -1,137 +1,322 @@
-import type { AbstractMesh, Mesh } from "@babylonjs/core";
+import type { Block, Box } from "molrs-wasm";
 
-// ============ Bit-Encoding Utilities ============
+// ============ Entity Types ============
+
+export type EntityType = 'atom' | 'bond' | 'box';
+
+// ============ Meta Types ============
 
 /**
- * Encode mesh.uniqueId and thinInstanceIndex into a single number.
- * 
- * Encoding scheme:
- * - High 32 bits: uniqueId
- * - Low 32 bits: thinIndex + 1 (so -1 becomes 0)
- * 
- * @param uniqueId - The mesh's uniqueId
- * @param thinIndex - Optional thin instance index
- * @returns Encoded selection ID as a single number
- * 
- * @example
- * encodeSelectionId(123) → 527765581824 (independent mesh)
- * encodeSelectionId(456, 5) → 1958505086982 (thin instance)
+ * Metadata for an atom entity.
  */
-export function encodeSelectionId(uniqueId: number, thinIndex?: number): number {
-    const index = thinIndex !== undefined ? thinIndex : -1;
-    return uniqueId * 0x100000000 + (index + 1);
+export interface AtomMeta {
+    type: 'atom';
+    atomId: number;
+    element: string;
+    position: { x: number; y: number; z: number };
 }
 
 /**
- * Decode an encoded selection ID back to uniqueId and optional thinIndex.
- * 
- * @param encoded - The encoded selection ID
- * @returns Object with uniqueId and optional thinIndex
+ * Metadata for a bond entity.
  */
-export function decodeSelectionId(encoded: number): { uniqueId: number; thinIndex?: number } {
-    const uniqueId = Math.floor(encoded / 0x100000000);
-    const indexPlusOne = encoded % 0x100000000;
-    const index = indexPlusOne - 1;
-
-    return index === -1
-        ? { uniqueId }
-        : { uniqueId, thinIndex: index };
+export interface BondMeta {
+    type: 'bond';
+    bondId: number;
+    atomId1: number;
+    atomId2: number;
+    order: number;
+    start: { x: number; y: number; z: number };
+    end: { x: number; y: number; z: number };
 }
+
+/**
+ * Metadata for a simulation box.
+ */
+export interface BoxMeta {
+    type: 'box';
+    dimensions: [number, number, number];
+}
+
+/**
+ * Union type for all entity metadata.
+ */
+export type EntityMeta = AtomMeta | BondMeta | BoxMeta;
+
+// ============ Registration Options ============
+
+/**
+ * Duck-typed mesh reference (Babylon decoupled).
+ */
+export interface MeshRef {
+    uniqueId: number;
+}
+
+/**
+ * Options for registering a frame (View mode thin instances).
+ */
+export interface RegisterFrameOptions {
+    atomMesh: MeshRef;
+    bondMesh?: MeshRef;
+    atomBlock: Block;
+    bondBlock?: Block;
+    box?: Box;
+}
+
+/**
+ * Options for registering an individual atom (Edit mode).
+ */
+export interface RegisterAtomOptions {
+    mesh: MeshRef;
+    meta: Omit<AtomMeta, 'type'>;
+}
+
+/**
+ * Options for registering an individual bond (Edit mode).
+ */
+export interface RegisterBondOptions {
+    mesh: MeshRef;
+    meta: Omit<BondMeta, 'type'>;
+}
+
+/**
+ * Options for registering a simulation box.
+ */
+export interface RegisterBoxOptions {
+    mesh: MeshRef;
+    meta: Omit<BoxMeta, 'type'>;
+}
+
+// ============ Internal Storage Types ============
+
+interface FrameAtomEntry {
+    kind: 'frame-atom';
+    atomBlock: Block;
+}
+
+interface FrameBondEntry {
+    kind: 'frame-bond';
+    bondBlock: Block;
+    atomBlock: Block;  // Need atom coords for bond positions
+}
+
+interface StaticAtomEntry {
+    kind: 'atom';
+    meta: AtomMeta;
+}
+
+interface StaticBondEntry {
+    kind: 'bond';
+    meta: BondMeta;
+}
+
+interface BoxEntry {
+    kind: 'box';
+    meta: BoxMeta;
+}
+
+type IndexEntry = FrameAtomEntry | FrameBondEntry | StaticAtomEntry | StaticBondEntry | BoxEntry;
 
 // ============ SceneIndex ============
 
 /**
- * SceneIndex: Bidirectional mapping using encoded selection IDs.
- * Supports both thin instances and independent meshes.
+ * SceneIndex: Pure index service mapping render objects to business metadata.
  * 
  * Responsibilities:
- * - Forward mapping: viewport pick → encoded selection ID
- * - Reverse mapping: encoded selection ID → render reference
- * - Registration of meshes (both thin instances and independent)
+ * - Register entities with chemistry-semantic APIs (registerFrame, registerAtom, registerBond, registerBox)
+ * - Query metadata via getMeta(meshId, subIndex?)
+ * - Lifecycle management (unregister, clear)
+ * 
+ * Does NOT:
+ * - Handle picking logic or events
+ * - Manage selection/highlight state
+ * - Know about Babylon types (accepts duck-typed MeshRef)
  */
 export class SceneIndex {
-    // Forward: mesh.uniqueId → type
-    private meshTypes = new Map<number, 'atom' | 'bond'>();
+    private entries = new Map<number, IndexEntry>();
 
-    // Reverse: mesh.uniqueId → mesh reference
-    private meshRefs = new Map<number, AbstractMesh>();
+    // ============ Registration APIs ============
 
     /**
-     * Resolve viewport pick to encoded selection ID (one-step).
-     * 
-     * @param mesh - The picked mesh
-     * @param thinIndex - Optional thin instance index from pick result
-     * @returns Encoded selection ID, or null if mesh not registered
+     * Register a frame (View mode) with thin instance atoms and bonds.
      */
-    resolvePickToId(mesh: AbstractMesh | null, thinIndex?: number): number | null {
-        if (!mesh) return null;
-        if (!this.meshTypes.has(mesh.uniqueId)) return null;
+    registerFrame(options: RegisterFrameOptions): void {
+        const { atomMesh, bondMesh, atomBlock, bondBlock } = options;
 
-        return encodeSelectionId(mesh.uniqueId, thinIndex);
+        // Register atom mesh
+        this.entries.set(atomMesh.uniqueId, {
+            kind: 'frame-atom',
+            atomBlock
+        });
+
+        // Register bond mesh if present
+        if (bondMesh && bondBlock) {
+            this.entries.set(bondMesh.uniqueId, {
+                kind: 'frame-bond',
+                bondBlock,
+                atomBlock  // Store for position lookup
+            });
+        }
     }
 
     /**
-     * Get type for encoded selection ID.
-     * 
-     * @param encodedId - The encoded selection ID
-     * @returns 'atom' or 'bond', or null if not found
+     * Register an individual atom (Edit mode).
      */
-    getType(encodedId: number): 'atom' | 'bond' | null {
-        const { uniqueId } = decodeSelectionId(encodedId);
-        return this.meshTypes.get(uniqueId) || null;
+    registerAtom(options: RegisterAtomOptions): void {
+        this.entries.set(options.mesh.uniqueId, {
+            kind: 'atom',
+            meta: { type: 'atom', ...options.meta }
+        });
     }
 
     /**
-     * Get render reference for highlighting.
-     * 
-     * @param encodedId - The encoded selection ID
-     * @returns Object with mesh and optional thinIndex, or null if not found
+     * Register an individual bond (Edit mode).
      */
-    getRenderRef(encodedId: number): { mesh: AbstractMesh; thinIndex?: number } | null {
-        const { uniqueId, thinIndex } = decodeSelectionId(encodedId);
-        const mesh = this.meshRefs.get(uniqueId);
-        if (!mesh) return null;
-
-        return { mesh, thinIndex };
+    registerBond(options: RegisterBondOptions): void {
+        this.entries.set(options.mesh.uniqueId, {
+            kind: 'bond',
+            meta: { type: 'bond', ...options.meta }
+        });
     }
 
     /**
-     * Register thin instance mesh (View mode).
-     * 
-     * @param mesh - The thin instance mesh
-     * @param type - 'atom' or 'bond'
+     * Register a simulation box.
      */
-    registerThinInstances(mesh: Mesh, type: 'atom' | 'bond'): void {
-        this.meshTypes.set(mesh.uniqueId, type);
-        this.meshRefs.set(mesh.uniqueId, mesh);
+    registerBox(options: RegisterBoxOptions): void {
+        this.entries.set(options.mesh.uniqueId, {
+            kind: 'box',
+            meta: { type: 'box', ...options.meta }
+        });
+    }
+
+    // ============ Query APIs ============
+
+    /**
+     * Get entity type for a mesh.
+     * 
+     * @param meshId - The mesh's uniqueId
+     * @returns 'atom', 'bond', or 'box', or null if not registered
+     */
+    getType(meshId: number): EntityType | null {
+        const entry = this.entries.get(meshId);
+        if (!entry) return null;
+
+        switch (entry.kind) {
+            case 'frame-atom':
+            case 'atom':
+                return 'atom';
+            case 'frame-bond':
+            case 'bond':
+                return 'bond';
+            case 'box':
+                return 'box';
+        }
     }
 
     /**
-     * Register individual mesh (Edit mode or user-created).
+     * Get metadata for a mesh, optionally with thin instance subIndex.
      * 
-     * @param mesh - The individual mesh
-     * @param type - 'atom' or 'bond'
+     * @param meshId - The mesh's uniqueId
+     * @param subIndex - Optional thin instance index
+     * @returns EntityMeta or null if not found/invalid
      */
-    registerMesh(mesh: Mesh, type: 'atom' | 'bond'): void {
-        this.meshTypes.set(mesh.uniqueId, type);
-        this.meshRefs.set(mesh.uniqueId, mesh);
+    getMeta(meshId: number, subIndex?: number): EntityMeta | null {
+        const entry = this.entries.get(meshId);
+        if (!entry) return null;
+
+        switch (entry.kind) {
+            case 'frame-atom':
+                return this.getFrameAtomMeta(entry, subIndex);
+            case 'frame-bond':
+                return this.getFrameBondMeta(entry, subIndex);
+            case 'atom':
+                return entry.meta;
+            case 'bond':
+                return entry.meta;
+            case 'box':
+                return entry.meta;
+        }
     }
+
+    private getFrameAtomMeta(entry: FrameAtomEntry, subIndex?: number): AtomMeta | null {
+        if (subIndex === undefined) return null;
+
+        const { atomBlock } = entry;
+        const count = atomBlock.nrows();
+        if (subIndex < 0 || subIndex >= count) return null;
+
+        const xCoords = atomBlock.col_f32('x');
+        const yCoords = atomBlock.col_f32('y');
+        const zCoords = atomBlock.col_f32('z');
+        const elements = atomBlock.col_strings('element');
+
+        if (!xCoords || !yCoords || !zCoords || !elements) return null;
+
+        return {
+            type: 'atom',
+            atomId: subIndex,
+            element: elements[subIndex] || 'C',
+            position: {
+                x: xCoords[subIndex],
+                y: yCoords[subIndex],
+                z: zCoords[subIndex]
+            }
+        };
+    }
+
+    private getFrameBondMeta(entry: FrameBondEntry, subIndex?: number): BondMeta | null {
+        if (subIndex === undefined) return null;
+
+        const { bondBlock, atomBlock } = entry;
+        const count = bondBlock.nrows();
+        if (subIndex < 0 || subIndex >= count) return null;
+
+        const iAtoms = bondBlock.col_u32('i');
+        const jAtoms = bondBlock.col_u32('j');
+        const orders = bondBlock.col_u8('order');
+
+        const xCoords = atomBlock.col_f32('x');
+        const yCoords = atomBlock.col_f32('y');
+        const zCoords = atomBlock.col_f32('z');
+
+        if (!iAtoms || !jAtoms || !xCoords || !yCoords || !zCoords) return null;
+
+        const i = iAtoms[subIndex];
+        const j = jAtoms[subIndex];
+
+        return {
+            type: 'bond',
+            bondId: subIndex,
+            atomId1: i,
+            atomId2: j,
+            order: orders ? orders[subIndex] : 1,
+            start: {
+                x: xCoords[i],
+                y: yCoords[i],
+                z: zCoords[i]
+            },
+            end: {
+                x: xCoords[j],
+                y: yCoords[j],
+                z: zCoords[j]
+            }
+        };
+    }
+
+    // ============ Lifecycle APIs ============
 
     /**
      * Unregister a mesh.
      * 
-     * @param mesh - The mesh to unregister
+     * @param meshId - The mesh's uniqueId
      */
-    unregister(mesh: Mesh): void {
-        this.meshTypes.delete(mesh.uniqueId);
-        this.meshRefs.delete(mesh.uniqueId);
+    unregister(meshId: number): void {
+        this.entries.delete(meshId);
     }
 
     /**
-     * Clear all registrations (called on mode switch).
+     * Clear all registrations.
      */
     clear(): void {
-        this.meshTypes.clear();
-        this.meshRefs.clear();
+        this.entries.clear();
     }
 }

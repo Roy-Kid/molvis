@@ -4,26 +4,39 @@ export default defineConfig({
   lib: [
     {
       format: 'esm',
-      syntax: 'esnext'
+      bundle: true,
+      autoExtension: false,
+      syntax: 'esnext',
+      source: {
+        entry: {
+          index: './src/ts/index.ts'
+        },
+        define: {
+          __WASM_INLINE__: JSON.stringify(true),
+        },
+      },
+      output: {
+        target: 'web',
+        externals: ['@rslib/core'],
+        distPath: {
+          root: 'src/molvis/dist'
+        }
+      }
     },
   ],
-  source: {
-    entry: {
-      index: './src/ts/index.ts'
-    },
-    // 设置 define flag：widget 使用内联 wasm
-    define: {
-      __WASM_INLINE__: JSON.stringify(true),
-    },
-  },
-  output: {
-    target: 'web',
-    distPath: {
-      root: 'src/molvis/dist'
-    }
-  },
   tools: {
     rspack(config, { addRules }) {
+      config.experiments = {
+        ...(config.experiments || {}),
+        outputModule: true,
+      };
+      config.output = {
+        ...(config.output || {}),
+        module: true,
+        library: {
+          type: 'module',
+        },
+      };
       addRules([
         {
           test: /\.wasm$/,

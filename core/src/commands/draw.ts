@@ -2,49 +2,23 @@ import * as BABYLON from "@babylonjs/core";
 import { Vector3, MeshBuilder, StandardMaterial, Color3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
 import { Command, command } from "./base";
-import type { Frame } from "../core/system/frame";
-import type { DrawFrameOption } from "./types";
-import type { AtomBlock, BondBlock } from "../core/system/frame";
-import type { Palette, ColorHex } from "./palette";
-import type { AtomMetadata, BondMetadata, MolvisMeshMetadata } from "../types/metadata";
+import { Frame, Block, type Box } from "molrs-wasm";
 
-/**
- * Metadata structure for meshes in MolVis.
- * Colocated with mesh creation code for better discoverability.
- * All fields are optional and present based on meshType.
- */
-export interface MeshMetadata {
-    meshType: "atom" | "bond" | "box" | "frame";
-
-    // Common fields
-    matrices?: Float32Array;
-
-    // Atom-specific fields
-    atomBlock?: AtomBlock;
-    atomCount?: number;
-    atomId?: number;
-    element?: string;
-    names?: string[];
-    name?: string;
-    colorBuffer?: Float32Array;  // Per-instance colors for highlighting
-
-    // Bond-specific fields
-    bondBlock?: BondBlock;
-    bondId?: number;
-    order?: number;
-    i?: Uint32Array;  // atom indices for thin instances
-    j?: Uint32Array;  // atom indices for thin instances
-    atomId1?: number;
-    atomId2?: number;
-
-    // For manually created bonds
-    x1?: number;
-    y1?: number;
-    z1?: number;
-    x2?: number;
-    y2?: number;
-    z2?: number;
+export interface DrawAtomsOption {
+    radii?: number[];
+    color?: string[];
 }
+
+export interface DrawBondsOption {
+    radii?: number;
+}
+
+export interface DrawFrameOption {
+    atoms?: DrawAtomsOption;
+    bonds?: DrawBondsOption;
+}
+import type { Palette, ColorHex } from "./palette";
+
 
 /**
  * Command to draw a simulation box (wireframe)
@@ -70,11 +44,13 @@ export class DrawBoxCommand extends Command<void> {
         // Clear existing box
         const existingBox = scene.getMeshByName("sim_box");
         if (existingBox) {
+            this.app.world.sceneIndex.unregister(existingBox.uniqueId);
             existingBox.dispose();
         }
 
         // Parse box dimensions
         let lx = 10, ly = 10, lz = 10;
+        let ox = 0, oy = 0, oz = 0;
         if (Array.isArray(this.box)) {
             if (this.box.length === 3) {
                 [lx, ly, lz] = this.box;
@@ -82,6 +58,14 @@ export class DrawBoxCommand extends Command<void> {
                 lx = this.box[0];
                 ly = this.box[4];
                 lz = this.box[8];
+            }
+        } else if (this.box && typeof this.box === "object") {
+            const maybeBox = this.box as { origin?: number[]; lengths?: number[] };
+            if (Array.isArray(maybeBox.lengths) && maybeBox.lengths.length >= 3) {
+                [lx, ly, lz] = maybeBox.lengths;
+            }
+            if (Array.isArray(maybeBox.origin) && maybeBox.origin.length >= 3) {
+                [ox, oy, oz] = maybeBox.origin;
             }
         }
 
@@ -92,7 +76,7 @@ export class DrawBoxCommand extends Command<void> {
             scene
         );
 
-        this.boxMesh.position = new BABYLON.Vector3(lx / 2, ly / 2, lz / 2);
+        this.boxMesh.position = new BABYLON.Vector3(ox + lx / 2, oy + ly / 2, oz + lz / 2);
 
         // Create wireframe material
         const wireframeMaterial = new BABYLON.StandardMaterial("boxMat", scene);
@@ -101,12 +85,20 @@ export class DrawBoxCommand extends Command<void> {
         this.boxMesh.material = wireframeMaterial;
         this.boxMesh.isVisible = true;
 
-        this.boxMesh.metadata = { meshType: "box" } as MeshMetadata;
         this.boxMesh.isPickable = false;
+
+        this.app.world.sceneIndex.registerBox({
+            mesh: { uniqueId: this.boxMesh.uniqueId },
+            meta: {
+                dimensions: [lx, ly, lz],
+                origin: [ox, oy, oz]
+            }
+        });
     }
 
     undo(): Command {
         if (this.boxMesh) {
+            this.app.world.sceneIndex.unregister(this.boxMesh.uniqueId);
             this.boxMesh.dispose();
             this.boxMesh = null;
         }
@@ -120,19 +112,94 @@ export class DrawBoxCommand extends Command<void> {
 @command("draw_frame")
 export class DrawFrameCommand extends Command<void> {
     private createdMeshes: BABYLON.AbstractMesh[] = [];
-    private frame: Frame;
+    private frame?: Frame;
+    private frameData?: {
+        blocks: {
+            atoms: {
+                x: number[] | Float32Array;
+                y: number[] | Float32Array;
+                z: number[] | Float32Array;
+                element: string[];
+            };
+            bonds?: {
+                i: number[] | Uint32Array;
+                j: number[] | Uint32Array;
+                order?: number[] | Uint8Array;
+            };
+        };
+        metadata?: Record<string, unknown>;
+        box?: unknown;
+    };
     private options?: DrawFrameOption;
 
     constructor(
         app: MolvisApp,
-        args: { frame: Frame; options?: DrawFrameOption }
+        args: {
+            frame?: Frame;
+            frameData?: {
+                blocks: {
+                    atoms: {
+                        x: number[] | Float32Array;
+                        y: number[] | Float32Array;
+                        z: number[] | Float32Array;
+                        element: string[];
+                    };
+                    bonds?: {
+                        i: number[] | Uint32Array;
+                        j: number[] | Uint32Array;
+                        order?: number[] | Uint8Array;
+                    };
+                };
+                metadata?: Record<string, unknown>;
+                box?: unknown;
+            };
+            options?: DrawFrameOption;
+        }
     ) {
         super(app);
         this.frame = args.frame;
+        this.frameData = args.frameData;
         this.options = args.options;
     }
 
     do(): void {
+        if (!this.frame && this.frameData) {
+            const atomsData = this.frameData.blocks.atoms;
+
+            // Create atoms block using WASM Block directly
+            const atomsBlock = new Block();
+            atomsBlock.set_col_f32("x", new Float32Array(atomsData.x), undefined);
+            atomsBlock.set_col_f32("y", new Float32Array(atomsData.y), undefined);
+            atomsBlock.set_col_f32("z", new Float32Array(atomsData.z), undefined);
+            atomsBlock.set_col_strings("element", atomsData.element, undefined);
+
+            // Create Frame and insert atoms block
+            this.frame = new Frame();
+            this.frame.insert_block("atoms", atomsBlock);
+
+            // Create bonds block if present
+            const bondsData = this.frameData.blocks.bonds;
+            if (bondsData) {
+                const bondsBlock = new Block();
+                bondsBlock.set_col_u32("i", new Uint32Array(bondsData.i), undefined);
+                bondsBlock.set_col_u32("j", new Uint32Array(bondsData.j), undefined);
+                if (bondsData.order) {
+                    bondsBlock.set_col_u8("order", new Uint8Array(bondsData.order), undefined);
+                }
+                this.frame.insert_block("bonds", bondsBlock);
+            }
+
+            if (this.frameData.box !== undefined) {
+                // Note: Frame doesn't have a box property in WASM, store in metadata
+                this.frame.set_meta("box", JSON.stringify(this.frameData.box));
+            }
+            if (this.frameData.metadata) {
+                Object.entries(this.frameData.metadata).forEach(([key, value]) => {
+                    this.frame!.set_meta(key, String(value));
+                });
+            }
+        }
+
         if (!this.frame) {
             throw new Error("draw_frame requires a frame");
         }
@@ -143,43 +210,59 @@ export class DrawFrameCommand extends Command<void> {
         // Clear existing atom/bond meshes
         const meshesToDispose: BABYLON.AbstractMesh[] = [];
         scene.meshes.forEach((mesh) => {
-            const metadata = mesh.metadata as MeshMetadata;
-            if (metadata?.meshType === "atom" || metadata?.meshType === "bond" || metadata?.meshType === "box") {
-                meshesToDispose.push(mesh);
-            }
-            if (mesh.name === "atom_base" || mesh.name === "bond_base") {
+            // Check if mesh is registered (atom, bond, or box meshes have names)
+            if (mesh.name === "atom_base" || mesh.name === "bond_base" || mesh.name.startsWith("box_")) {
                 meshesToDispose.push(mesh);
             }
         });
 
-        meshesToDispose.forEach((m) => m.dispose());
+        meshesToDispose.forEach((m) => {
+            this.app.world.sceneIndex.unregister(m.uniqueId);
+            m.dispose();
+        });
 
         // Render Atoms (Thin Instances)
-        const atomCount = this.frame.getAtomCount();
-        if (atomCount > 0) {
-            const atomMesh = this.createAtomMesh(scene, drawOptions);
+        const atomsBlock = this.frame.get_block("atoms");
+        let atomMesh: BABYLON.Mesh | undefined;
+        if (atomsBlock && atomsBlock.len() > 0) {
+            atomMesh = this.createAtomMesh(scene, drawOptions, atomsBlock);
             this.createdMeshes.push(atomMesh);
         }
 
         // Render Bonds (Thin Instances)
-        if (this.frame.bondBlock && this.frame.bondBlock.n_bonds > 0) {
-            const bondMesh = this.createBondMesh(scene, drawOptions);
+        const bondsBlock = this.frame.get_block("bonds");
+        let bondMesh: BABYLON.Mesh | undefined;
+        if (bondsBlock && bondsBlock.len() > 0) {
+            bondMesh = this.createBondMesh(scene, drawOptions, atomsBlock!, bondsBlock);
             this.createdMeshes.push(bondMesh);
         }
 
-        // Draw Box if present
-        if (this.frame.box) {
-            const boxCmd = new DrawBoxCommand(this.app, { box: this.frame.box });
-            boxCmd.do();
+        // Register frame with SceneIndex (single call for all thin instances)
+        if (atomMesh && atomsBlock) {
+            this.app.world.sceneIndex.registerFrame({
+                atomMesh: { uniqueId: atomMesh.uniqueId },
+                bondMesh: bondMesh ? { uniqueId: bondMesh.uniqueId } : undefined,
+                atomBlock: atomsBlock,
+                bondBlock: bondsBlock || undefined
+            });
+        }
+
+        // Draw Box if present or compute AABB fallback
+        if (atomsBlock) {
+            const boxData = this.getBoxData(this.frame, atomsBlock);
+            if (boxData) {
+                const boxCmd = new DrawBoxCommand(this.app, { box: boxData });
+                boxCmd.do();
+            }
         }
     }
 
-    private createAtomMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption): BABYLON.Mesh {
-        const atomCount = this.frame.getAtomCount();
-        const xCoords = this.frame.atomBlock.x;
-        const yCoords = this.frame.atomBlock.y;
-        const zCoords = this.frame.atomBlock.z;
-        const elements = this.frame.atomBlock.element;
+    private createAtomMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption, atomsBlock: Block): BABYLON.Mesh {
+        const atomCount = atomsBlock.nrows();
+        const xCoords = atomsBlock.col_f32("x")!;
+        const yCoords = atomsBlock.col_f32("y")!;
+        const zCoords = atomsBlock.col_f32("z")!;
+        const elements = atomsBlock.col_strings("element")! as string[];
 
         // Create material
         let atomMaterial = scene.getMaterialByName("atomMat") as BABYLON.StandardMaterial;
@@ -249,22 +332,12 @@ export class DrawFrameCommand extends Command<void> {
         // Enable thin instance picking
         sphereBase.alwaysSelectAsActiveMesh = true;  // Always consider for picking
 
-        sphereBase.metadata = {
-            meshType: "atom",
-            matrices: buffer,
-            colorBuffer: colorBuffer,
-            atomCount,
-            atomBlock: this.frame.atomBlock
-        } as MeshMetadata;
-
-        // Register with SceneIndex
-        this.app.world.sceneIndex.registerThinInstances(sphereBase, 'atom');
-
+        // Note: Registration happens in do() via registerFrame()
         return sphereBase;
     }
 
-    private createBondMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption): BABYLON.Mesh {
-        const bondCount = this.frame.bondBlock.n_bonds;
+    private createBondMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption, atomsBlock: Block, bondsBlock: Block): BABYLON.Mesh {
+        const bondCount = bondsBlock.nrows();
         const bondRadius = drawOptions.bonds?.radii ?? 0.1;
 
         // Create material
@@ -285,11 +358,11 @@ export class DrawFrameCommand extends Command<void> {
         // Create transformation matrices
         const buffer = new Float32Array(bondCount * 16);
 
-        const xCoords = this.frame.atomBlock.x;
-        const yCoords = this.frame.atomBlock.y;
-        const zCoords = this.frame.atomBlock.z;
-        const i_atoms = this.frame.bondBlock.i;
-        const j_atoms = this.frame.bondBlock.j;
+        const xCoords = atomsBlock.col_f32("x")!;
+        const yCoords = atomsBlock.col_f32("y")!;
+        const zCoords = atomsBlock.col_f32("z")!;
+        const i_atoms = bondsBlock.col_u32("i")!;
+        const j_atoms = bondsBlock.col_u32("j")!;
 
         const tempMatrix = BABYLON.Matrix.Identity();
         const up = new BABYLON.Vector3(0, 1, 0);
@@ -350,16 +423,7 @@ export class DrawFrameCommand extends Command<void> {
         // Enable thin instance picking
         cylinderBase.alwaysSelectAsActiveMesh = true;  // Always consider for picking
 
-        cylinderBase.metadata = {
-            meshType: "bond",
-            matrices: buffer,
-            colorBuffer: colorBuffer,
-            i: i_atoms,
-            j: j_atoms,
-            bondBlock: this.frame.bondBlock,
-            atomBlock: this.frame.atomBlock
-        } as MeshMetadata;
-
+        // Note: Registration happens in do() via registerFrame()
         return cylinderBase;
     }
 
@@ -367,6 +431,121 @@ export class DrawFrameCommand extends Command<void> {
         this.createdMeshes.forEach((mesh) => mesh.dispose());
         this.createdMeshes = [];
         return new NoOpCommand(this.app);
+    }
+
+    private getBoxData(
+        frame: Frame,
+        atomsBlock: Block
+    ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
+        const boxMeta = frame.get_meta("box");
+        const originMeta = frame.get_meta("box_origin");
+
+        if (boxMeta) {
+            const parsed = this.parseBoxMeta(boxMeta, originMeta);
+            if (parsed) {
+                return parsed;
+            }
+        }
+
+        return this.computeAabbBox(atomsBlock);
+    }
+
+    private parseBoxMeta(
+        boxMeta: string,
+        originMeta?: string | null
+    ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
+        let origin: [number, number, number] = [0, 0, 0];
+        if (originMeta) {
+            const originNums = this.parseNumberList(originMeta);
+            if (originNums.length >= 3) {
+                origin = [originNums[0], originNums[1], originNums[2]];
+            }
+        }
+
+        try {
+            const parsed = JSON.parse(boxMeta) as unknown;
+            if (Array.isArray(parsed)) {
+                const lengths = this.lengthsFromArray(parsed);
+                if (lengths) {
+                    return { origin, lengths };
+                }
+            } else if (parsed && typeof parsed === "object") {
+                const lengthsValue = (parsed as { lengths?: number[] }).lengths;
+                const originValue = (parsed as { origin?: number[] }).origin;
+                const lengths = lengthsValue ? this.lengthsFromArray(lengthsValue) : null;
+                if (originValue && originValue.length >= 3) {
+                    origin = [originValue[0], originValue[1], originValue[2]];
+                }
+                if (lengths) {
+                    return { origin, lengths };
+                }
+            }
+        } catch {
+            const nums = this.parseNumberList(boxMeta);
+            const lengths = this.lengthsFromArray(nums);
+            if (lengths) {
+                return { origin, lengths };
+            }
+        }
+
+        return null;
+    }
+
+    private lengthsFromArray(values: number[]): [number, number, number] | null {
+        if (values.length >= 3 && values.length !== 9) {
+            return [values[0], values[1], values[2]];
+        }
+        if (values.length >= 9) {
+            return [values[0], values[4], values[8]];
+        }
+        return null;
+    }
+
+    private parseNumberList(value: string): number[] {
+        return value
+            .trim()
+            .split(/\s+/)
+            .map((token) => Number(token))
+            .filter((num) => Number.isFinite(num));
+    }
+
+    private computeAabbBox(
+        atomsBlock: Block
+    ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
+        if (atomsBlock.nrows() === 0) {
+            return null;
+        }
+
+        const xCoords = atomsBlock.col_f32("x");
+        const yCoords = atomsBlock.col_f32("y");
+        const zCoords = atomsBlock.col_f32("z");
+        if (!xCoords || !yCoords || !zCoords) {
+            return null;
+        }
+
+        let minX = xCoords[0];
+        let maxX = xCoords[0];
+        let minY = yCoords[0];
+        let maxY = yCoords[0];
+        let minZ = zCoords[0];
+        let maxZ = zCoords[0];
+
+        for (let i = 1; i < atomsBlock.nrows(); i++) {
+            const x = xCoords[i];
+            const y = yCoords[i];
+            const z = zCoords[i];
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            if (z < minZ) minZ = z;
+            if (z > maxZ) maxZ = z;
+        }
+
+        return {
+            origin: [minX, minY, minZ],
+            lengths: [maxX - minX, maxY - minY, maxZ - minZ]
+        };
     }
 }
 
@@ -436,16 +615,15 @@ export class DrawAtomCommand extends Command<Mesh> {
         const material = this.getOrCreateMaterial(element, atomColor);
         this.mesh.material = material;
 
-        const metadata: AtomMetadata = {
-            meshType: "atom",
-            atomId: 0,
-            element,
-            name,
-        };
-        this.mesh.metadata = metadata;
-
-        // Register with SceneIndex
-        this.app.world.sceneIndex.registerMesh(this.mesh, 'atom');
+        // Register with SceneIndex using new chemistry-semantic API
+        this.app.world.sceneIndex.registerAtom({
+            mesh: { uniqueId: this.mesh.uniqueId },
+            meta: {
+                atomId: this.mesh.uniqueId,
+                element,
+                position: { x: this.position.x, y: this.position.y, z: this.position.z }
+            }
+        });
 
         return this.mesh;
     }
@@ -454,6 +632,7 @@ export class DrawAtomCommand extends Command<Mesh> {
         if (!this.mesh) {
             throw new Error("Cannot undo DrawAtomCommand: mesh not created");
         }
+        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
         return new NoOpCommand(this.app);
     }
@@ -492,30 +671,27 @@ export class DeleteAtomCommand extends Command<void> {
         const atomPos = this.mesh.position;
 
         this.scene.meshes.forEach((m) => {
-            const metadata = m.metadata as MolvisMeshMetadata;
-            if (metadata?.meshType === "bond") {
-                const bondMeta = metadata as BondMetadata;
-                if (bondMeta.x1 !== undefined) {
-                    const start = new Vector3(bondMeta.x1, bondMeta.y1!, bondMeta.z1!);
-                    const end = new Vector3(bondMeta.x2!, bondMeta.y2!, bondMeta.z2!);
-                    if (
-                        Vector3.Distance(start, atomPos) < 0.01 ||
-                        Vector3.Distance(end, atomPos) < 0.01
-                    ) {
-                        this.deletedBonds.push(m as Mesh);
-                    }
+            const bondMeta = this.app.world.sceneIndex.getMeta(m.uniqueId);
+            if (bondMeta && bondMeta.type === 'bond') {
+                const start = new Vector3(bondMeta.start.x, bondMeta.start.y, bondMeta.start.z);
+                const end = new Vector3(bondMeta.end.x, bondMeta.end.y, bondMeta.end.z);
+                if (
+                    Vector3.Distance(start, atomPos) < 0.01 ||
+                    Vector3.Distance(end, atomPos) < 0.01
+                ) {
+                    this.deletedBonds.push(m as Mesh);
                 }
             }
         });
 
         // Dispose bonds and unregister from SceneIndex
         this.deletedBonds.forEach((b) => {
-            this.app.world.sceneIndex.unregister(b);
+            this.app.world.sceneIndex.unregister(b.uniqueId);
             b.dispose();
         });
 
         // Unregister and dispose atom
-        this.app.world.sceneIndex.unregister(this.mesh);
+        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
     }
 
@@ -626,20 +802,18 @@ export class DrawBondCommand extends Command<Mesh> {
 
         this.mesh = parent;
 
-        const metadata: BondMetadata = {
-            meshType: "bond",
-            x1: this.start.x,
-            y1: this.start.y,
-            z1: this.start.z,
-            x2: this.end.x,
-            y2: this.end.y,
-            z2: this.end.z,
-            order,
-        };
-        this.mesh.metadata = metadata;
-
-        // Register with SceneIndex
-        this.app.world.sceneIndex.registerMesh(this.mesh, 'bond');
+        // Register with SceneIndex using new chemistry-semantic API
+        this.app.world.sceneIndex.registerBond({
+            mesh: { uniqueId: this.mesh.uniqueId },
+            meta: {
+                bondId: this.mesh.uniqueId,
+                atomId1: 0,  // Will be properly set when linking to atoms
+                atomId2: 0,
+                order,
+                start: { x: this.start.x, y: this.start.y, z: this.start.z },
+                end: { x: this.end.x, y: this.end.y, z: this.end.z }
+            }
+        });
 
         return this.mesh;
     }
@@ -648,6 +822,7 @@ export class DrawBondCommand extends Command<Mesh> {
         if (!this.mesh) {
             throw new Error("Cannot undo DrawBondCommand: mesh not created");
         }
+        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
         return new NoOpCommand(this.app);
     }
@@ -678,7 +853,7 @@ export class DeleteBondCommand extends Command<void> {
     }
 
     do(): void {
-        this.app.world.sceneIndex.unregister(this.mesh);
+        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
     }
 

@@ -29,20 +29,12 @@ class ViewModeContextMenu extends ContextMenuController {
     items.push(CommonMenuItems.resetCamera(this.app));
 
     // Enable/Disable Grid
+    const gridEnabled = this.mode.isGridEnabled();
     items.push({
-      type: "binding",
-      bindingConfig: {
-        view: "checkbox",
-        label: "Grid",
-        options: [
-          { text: "On", value: true },
-          { text: "Off", value: false },
-        ],
-        value: this.mode.isGridEnabled(),
-      },
-      action: (ev: any) => {
-        const enabled = ev.value === true || ev.value === "true";
-        this.mode.setGridEnabled(enabled);
+      type: "button",
+      title: gridEnabled ? "Grid On" : "Grid Off",
+      action: () => {
+        this.mode.setGridEnabled(!gridEnabled);
       }
     });
 

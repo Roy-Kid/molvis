@@ -1,5 +1,5 @@
-import { mountMolvis, type MolvisConfig, Frame, AtomBlock } from "@molvis/core";
-import { read_trajectory, read_frame } from "molrs-wasm";
+import { mountMolvis, type MolvisConfig, Frame } from "@molvis/core";
+import { PdbReader, XyzReader } from "molrs-wasm";
 
 const container = document.getElementById("molvis-container");
 if (!container) throw new Error("Missing container");
@@ -49,42 +49,40 @@ function detectFormat(filename: string): "pdb" | "xyz" | "unknown" {
 /**
  * Load and render a molecular file using molrs parsers
  */
-function loadFile(content: string, filename: string) {
-  try {
-    const format = detectFormat(filename);
-
-    if (format === "unknown") {
-      throw new Error(`Unsupported file format: ${filename}`);
+function readFrame(content: string, format: "pdb" | "xyz"): ReturnType<PdbReader["read"]> {
+  if (format === "pdb") {
+    const reader = new PdbReader(content);
+    const frame = reader.read(0);
+    if (!frame) {
+      throw new Error("Empty PDB file");
     }
-
-    console.log(`Loading ${filename} as ${format.toUpperCase()} format`);
-
-    // Use unified read_frame function
-    const mrFrame = read_frame(content, format);
-
-    // Convert MrFrame to Frame (now zero-copy!)
-    const frame = Frame.fromMrFrame(mrFrame);
-
-    // Set frame to system
-    app.system.frame = frame;
-
-    // Draw the frame using Command
-    app.execute("draw_frame", { frame });
-
-    // Switch to View mode and render
-    app.setMode("view");
-
-    console.log(`Loaded ${frame.getAtomCount()} atoms from ${filename}`);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    vscode.postMessage({ type: "error", message: `Failed to load file: ${errorMessage}` });
-
-    // Display error in UI
-    const errorDiv = document.createElement("div");
-    errorDiv.style.cssText = "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; background: rgba(255, 0, 0, 0.8); padding: 20px; border-radius: 8px; font-family: sans-serif;";
-    errorDiv.textContent = `Error: ${errorMessage}`;
-    container.appendChild(errorDiv);
+    return frame;
   }
+  const reader = new XyzReader(content);
+  const frame = reader.read(0);
+  if (!frame) {
+    throw new Error("Empty XYZ file");
+  }
+  return frame;
+}
+
+function loadFile(content: string, filename: string) {
+  const format = detectFormat(filename);
+
+  if (format === "unknown") {
+    throw new Error(`Unsupported file format: ${filename}`);
+  }
+
+  console.log(`Loading ${filename} as ${format.toUpperCase()} format`);
+
+  const wasmFrame = readFrame(content, format);
+  const frame = Frame.fromMrFrame(wasmFrame);
+
+  app.system.frame = frame;
+  app.execute("draw_frame", { frame });
+  app.setMode("view");
+
+  console.log(`Loaded ${frame.getAtomCount()} atoms from ${filename}`);
 }
 
 /**

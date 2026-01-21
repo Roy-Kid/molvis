@@ -10,11 +10,9 @@ import {
 import type { Molvis } from "@molvis/core";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
-import { getPositionFromMatrix } from "../core/thin_instance";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
 import { CommonMenuItems } from "./menu_items";
-import type { MolvisMeshMetadata, AtomMetadata } from "../types/metadata";
 import { Artist } from "./artist";
 import { syncSceneToFrame } from "../core/scene_sync";
 import { logger } from "../utils/logger";
@@ -278,7 +276,7 @@ class EditMode extends BaseMode {
    * Get the actual position of an atom mesh.
    * Handles both regular atom meshes and thin instance atoms from draw_frame.
    */
-  private getAtomPosition(atomMesh: AbstractMesh): Vector3 {
+    private getAtomPosition(atomMesh: AbstractMesh): Vector3 {
     const scene = this.world.scene;
     const pickResult = scene.pick(
       scene.pointerX,
@@ -290,10 +288,9 @@ class EditMode extends BaseMode {
 
     // Check if this is a thin instance atom (from draw_frame)
     if (pickResult.hit && pickResult.thinInstanceIndex !== undefined && pickResult.thinInstanceIndex !== -1) {
-      const metadata = atomMesh.metadata as MolvisMeshMetadata;
-      if (metadata?.meshType === "atom" && (metadata as AtomMetadata).matrices) {
-        // Extract position from transformation matrix
-        return getPositionFromMatrix((metadata as AtomMetadata).matrices as Float32Array, pickResult.thinInstanceIndex);
+      const meta = this.world.sceneIndex.getMeta(atomMesh.uniqueId, pickResult.thinInstanceIndex);
+      if (meta && meta.type === 'atom') {
+        return new Vector3(meta.position.x, meta.position.y, meta.position.z);
       }
     }
 
@@ -531,7 +528,7 @@ class EditMode extends BaseMode {
     }
 
     logger.info('[EditMode] Saving scene to Frame...');
-    syncSceneToFrame(this.world.scene, frame);
+    syncSceneToFrame(this.world.scene, this.world.sceneIndex, frame);
     logger.info('[EditMode] Successfully saved to Frame');
   }
 

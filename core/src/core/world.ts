@@ -5,11 +5,13 @@ import { TargetIndicator } from "./target_indicator";
 import { ModeManager } from "../mode";
 import { AxisHelper } from "./axis_helper";
 import { SceneIndex } from "./scene_index";
+import { GridGround } from "./grid";
 import { SelectionManager } from "./selection_manager";
 import { Highlighter } from "./highlighter";
 
 export class World {
   private _engine: Engine;
+  private _app: MolvisApp;
   private _sceneData: {
     scene: Scene;
     camera: ArcRotateCamera;
@@ -21,6 +23,7 @@ export class World {
   public viewportSettings: ViewportSettings;
   public targetIndicator: TargetIndicator;
   public axisHelper: AxisHelper;
+  public grid: GridGround;
 
   // New unified selection system
   public sceneIndex: SceneIndex;
@@ -29,6 +32,7 @@ export class World {
 
   constructor(canvas: HTMLCanvasElement, engine: Engine, app: MolvisApp) {
     this._engine = engine;
+    this._app = app;
 
     // Initialize scene
     const scene = new Scene(engine);
@@ -63,6 +67,10 @@ export class World {
     // Visual Overlays
     this.targetIndicator = new TargetIndicator(scene);
     this.axisHelper = new AxisHelper(this._engine, camera);
+    this.grid = new GridGround(scene, camera, this._engine);
+    if (this._app.config.grid?.enabled) {
+      this.grid.enable();
+    }
 
     // Basic lighting
     const light = new HemisphericLight("light", new Vector3(0.5, 1, 0), scene);
@@ -71,7 +79,7 @@ export class World {
     // Initialize new unified selection system
     this.sceneIndex = new SceneIndex();
     this.selectionManager = new SelectionManager(this.sceneIndex);
-    this.highlighter = new Highlighter(this.sceneIndex, scene);
+    this.highlighter = new Highlighter(scene);
 
     // Wire up event: selection changes trigger highlighting
     this.selectionManager.on(state => this.highlighter.highlightSelection(state));
@@ -142,6 +150,8 @@ export class World {
       this._sceneData.scene.render();
       // Render axis helper in viewport corner
       this.axisHelper.render();
+      const fps = this._engine.getFps();
+      this._app.events.emit('fps-change', fps);
     });
   }
 

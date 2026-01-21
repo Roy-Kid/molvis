@@ -1,5 +1,5 @@
 import { Vector3, type AbstractMesh, type Mesh } from "@babylonjs/core";
-import type { MeshMetadata } from "../commands/draw";
+import type { SceneIndex } from "./scene_index";
 import type { MolvisApp } from "./app";
 import type { EditMode } from "../mode/edit";
 import { logger } from "../utils/logger";
@@ -37,19 +37,23 @@ export function getPositionFromMatrix(buffer: Float32Array, thinIndex: number): 
  */
 export function getAtomPositionFromThinInstance(
     mesh: AbstractMesh,
-    instanceIndex: number
+    instanceIndex: number,
+    sceneIndex?: SceneIndex
 ): Vector3 | null {
-    const metadata = mesh.metadata as MeshMetadata;
-
-    if (!metadata || metadata.meshType !== "atom" || !metadata.matrices) {
+    if (!sceneIndex) {
         return null;
     }
 
-    if (instanceIndex < 0 || instanceIndex * 16 >= metadata.matrices.length) {
+    if (instanceIndex < 0) {
         return null;
     }
 
-    return getPositionFromMatrix(metadata.matrices, instanceIndex);
+    const meta = sceneIndex.getMeta(mesh.uniqueId, instanceIndex);
+    if (!meta || meta.type !== 'atom') {
+        return null;
+    }
+
+    return new Vector3(meta.position.x, meta.position.y, meta.position.z);
 }
 
 /**
@@ -70,40 +74,24 @@ export function getAtomPositionFromThinInstance(
  */
 export function getBondEndpointsFromThinInstance(
     mesh: AbstractMesh,
-    instanceIndex: number
+    instanceIndex: number,
+    sceneIndex?: SceneIndex
 ): { start: Vector3; end: Vector3; length: number } | null {
-    const metadata = mesh.metadata as MeshMetadata;
-
-    if (
-        !metadata ||
-        metadata.meshType !== "bond" ||
-        !metadata.i ||
-        !metadata.j ||
-        !metadata.atomBlock
-    ) {
+    if (!sceneIndex) {
         return null;
     }
 
-    if (instanceIndex < 0 || instanceIndex >= metadata.i.length) {
+    if (instanceIndex < 0) {
         return null;
     }
 
-    const i = metadata.i[instanceIndex];
-    const j = metadata.j[instanceIndex];
+    const meta = sceneIndex.getMeta(mesh.uniqueId, instanceIndex);
+    if (!meta || meta.type !== 'bond') {
+        return null;
+    }
 
-    const atomBlock = metadata.atomBlock;
-
-    const start = new Vector3(
-        atomBlock.x[i],
-        atomBlock.y[i],
-        atomBlock.z[i]
-    );
-
-    const end = new Vector3(
-        atomBlock.x[j],
-        atomBlock.y[j],
-        atomBlock.z[j]
-    );
+    const start = new Vector3(meta.start.x, meta.start.y, meta.start.z);
+    const end = new Vector3(meta.end.x, meta.end.y, meta.end.z);
 
     return {
         start,
@@ -112,23 +100,6 @@ export function getBondEndpointsFromThinInstance(
     };
 }
 
-/**
- * Get metadata for a thin instance mesh.
- * 
- * @param mesh - The mesh to get metadata from
- * @returns MeshMetadata or null if invalid
- */
-export function getThinInstanceMetadata(
-    mesh: AbstractMesh
-): MeshMetadata | null {
-    const metadata = mesh.metadata as MeshMetadata;
-
-    if (!metadata || !metadata.meshType) {
-        return null;
-    }
-
-    return metadata;
-}
 
 /**
  * Convert a specific thin instance to an editable mesh.
@@ -144,32 +115,20 @@ export function convertThinInstanceToMesh(
     instanceIndex: number,
     app: MolvisApp
 ): Mesh | null {
-    const metadata = thinInstanceMesh.metadata as MeshMetadata;
-
-    if (!metadata || metadata.meshType !== 'atom') {
-        console.error('[convertThinInstanceToMesh] Not an atom mesh');
-        return null;
-    }
-
-    if (!metadata.matrices || !metadata.atomBlock) {
+    const meta = app.world.sceneIndex.getMeta(thinInstanceMesh.uniqueId, instanceIndex);
+    if (!meta || meta.type !== 'atom') {
         console.error('[convertThinInstanceToMesh] Missing thin instance data');
         return null;
     }
 
-    if (instanceIndex < 0 || instanceIndex >= (metadata.atomCount || 0)) {
+    if (instanceIndex < 0) {
         console.error(`[convertThinInstanceToMesh] Invalid instance index: ${instanceIndex}`);
         return null;
     }
 
-    // Extract atom data from thin instance
-    const position = getPositionFromMatrix(metadata.matrices, instanceIndex);
-    const element = metadata.atomBlock.element[instanceIndex];
-    const name = metadata.names?.[instanceIndex];
-
-    // Get radius from transformation matrix (scale)
-    const offset = instanceIndex * 16;
-    const scale = metadata.matrices[offset]; // Assuming uniform scaling
-    const radius = scale / 2; // Convert diameter to radius
+    const position = new Vector3(meta.position.x, meta.position.y, meta.position.z);
+    const element = meta.element;
+    const radius = app.palette.getAtomRadius(element);
 
     console.log(`[convertThinInstanceToMesh] Converting thin instance ${instanceIndex}: ${element} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
 
@@ -183,7 +142,7 @@ export function convertThinInstanceToMesh(
     const editMode = mode as unknown as EditMode;
     const newMesh = editMode.artist?.drawAtom(position, {
         element,
-        name,
+        name: element,
         radius
     });
 
@@ -208,9 +167,17 @@ export function convertThinInstanceToMesh(
  * @param mesh The mesh to check
  * @returns True if the mesh is a thin instance base
  */
-export function isThinInstanceMesh(mesh: Mesh): boolean {
-    const metadata = mesh.metadata as MeshMetadata;
-    return !!(metadata?.matrices && metadata?.atomCount);
+export function isThinInstanceMesh(mesh: Mesh, sceneIndex?: SceneIndex): boolean {
+    if (!mesh.hasThinInstances) {
+        return false;
+    }
+
+    if (!sceneIndex) {
+        return true;
+    }
+
+    const type = sceneIndex.getType(mesh.uniqueId);
+    return type === 'atom' || type === 'bond';
 }
 
 /**
@@ -220,13 +187,18 @@ export function isThinInstanceMesh(mesh: Mesh): boolean {
  * @param thinInstanceIndex The thin instance index from the pick result
  * @returns The thin instance index, or -1 if not a thin instance
  */
-export function getThinInstanceIndex(mesh: Mesh, thinInstanceIndex?: number): number {
+export function getThinInstanceIndex(mesh: Mesh, thinInstanceIndex?: number, sceneIndex?: SceneIndex): number {
     if (thinInstanceIndex === undefined || thinInstanceIndex === -1) {
         return -1;
     }
 
-    if (!isThinInstanceMesh(mesh)) {
+    if (!mesh.hasThinInstances) {
         return -1;
+    }
+
+    if (sceneIndex) {
+        const meta = sceneIndex.getMeta(mesh.uniqueId, thinInstanceIndex);
+        if (!meta) return -1;
     }
 
     return thinInstanceIndex;

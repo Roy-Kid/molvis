@@ -188,7 +188,8 @@ class ManipulateMode extends BaseMode {
         this.selectionHighlight.showAtom(atom.position, scale);
 
         // Update info panel
-        const element = atom.metadata?.element ?? "?";
+        const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
+        const element = meta && meta.type === 'atom' ? meta.element : "?";
         const pos = atom.position;
         this.app.events.emit('info-text-change',
             `Selected: ${element} at (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`
@@ -203,7 +204,8 @@ class ManipulateMode extends BaseMode {
         this.selectedBond = bond;
 
         // Highlight the bond (could create a highlight tube, for now just update info)
-        const order = bond.metadata?.order ?? 1;
+        const meta = this.world.sceneIndex.getMeta(bond.uniqueId);
+        const order = meta && meta.type === 'bond' ? meta.order : 1;
         this.app.events.emit('info-text-change', `Selected bond (order: ${order})`);
     }
 
@@ -229,7 +231,8 @@ class ManipulateMode extends BaseMode {
         _oldPosition: Vector3,
         _newPosition: Vector3
     ): void {
-        const atomId = atom.metadata?.atomId ?? atom.uniqueId;
+        const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
+        const atomId = meta && meta.type === 'atom' ? meta.atomId : atom.uniqueId;
         const bondIds = this.world.topology.getBondsForAtom(atomId);
 
         for (const bondId of bondIds) {
@@ -242,8 +245,8 @@ class ManipulateMode extends BaseMode {
             // Find other atom mesh
             let otherAtomMesh: AbstractMesh | null = null;
             for (const mesh of this.scene.meshes) {
-                const md = mesh.metadata;
-                if (md?.meshType === "atom" && (md.atomId === otherAtomId || mesh.uniqueId === otherAtomId)) {
+                const otherMeta = this.world.sceneIndex.getMeta(mesh.uniqueId);
+                if (otherMeta?.type === 'atom' && (otherMeta.atomId === otherAtomId || mesh.uniqueId === otherAtomId)) {
                     otherAtomMesh = mesh;
                     break;
                 }
@@ -253,8 +256,8 @@ class ManipulateMode extends BaseMode {
 
             // Find and update bond mesh(es)
             for (const mesh of this.scene.meshes) {
-                const md = mesh.metadata;
-                if (md?.bondId === bondId || mesh.uniqueId === bondId) {
+                const bondMeta = this.world.sceneIndex.getMeta(mesh.uniqueId);
+                if ((bondMeta?.type === 'bond' && bondMeta.bondId === bondId) || mesh.uniqueId === bondId) {
                     // Recreate bond tube with new positions
                     // For simplicity, we update the tube path
                     const start = atom.position;
@@ -262,15 +265,10 @@ class ManipulateMode extends BaseMode {
 
                     // Update tube path if possible
                     if (mesh instanceof Mesh) {
-                        try {
-                            MeshBuilder.CreateTube(mesh.name, {
-                                path: [start, end],
-                                instance: mesh as Mesh,
-                            }, this.scene);
-                        } catch {
-                            // If tube update fails, mesh might need to be recreated
-                            // For now, we skip this case
-                        }
+                        MeshBuilder.CreateTube(mesh.name, {
+                            path: [start, end],
+                            instance: mesh as Mesh,
+                        }, this.scene);
                     }
                 }
             }
@@ -329,7 +327,8 @@ class ManipulateMode extends BaseMode {
         this.moveAtom(this.draggedAtom, newPosition);
 
         // Update info panel with new position
-        const element = this.draggedAtom.metadata?.element ?? "?";
+        const meta = this.world.sceneIndex.getMeta(this.draggedAtom.uniqueId);
+        const element = meta && meta.type === 'atom' ? meta.element : "?";
         this.app.events.emit('info-text-change',
             `Moving ${element}: (${newPosition.x.toFixed(2)}, ${newPosition.y.toFixed(2)}, ${newPosition.z.toFixed(2)})`
         );
@@ -343,7 +342,8 @@ class ManipulateMode extends BaseMode {
         // End drag operation
         if (this.draggedAtom && this.isDragging) {
             // Keep the atom at its new position
-            const element = this.draggedAtom.metadata?.element ?? "?";
+            const meta = this.world.sceneIndex.getMeta(this.draggedAtom.uniqueId);
+            const element = meta && meta.type === 'atom' ? meta.element : "?";
             const pos = this.draggedAtom.position;
             this.app.events.emit('info-text-change',
                 `Moved ${element} to (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`

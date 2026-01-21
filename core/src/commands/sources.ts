@@ -1,4 +1,4 @@
-import type { FrameSource } from "./types";
+import type { FrameSource } from "../pipeline/pipeline";
 import type { Frame } from "../core/system/frame";
 
 /**
@@ -69,4 +69,3 @@ export class AsyncFrameSource implements FrameSource {
     return this.frameCount;
   }
 }
-

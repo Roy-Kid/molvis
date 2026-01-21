@@ -16,6 +16,7 @@ export interface UIComponentsConfig {
     showModePanel?: boolean;
     showViewPanel?: boolean;
     showFrameIndicator?: boolean;
+    showPerfPanel?: boolean;
 }
 
 // Grid configuration
@@ -57,7 +58,8 @@ export const DEFAULT_CONFIG: Required<MolvisConfig> & {
         showModePanel: true,
         showViewPanel: true,
         showInfoPanel: true,
-        showFrameIndicator: true
+        showFrameIndicator: true,
+        showPerfPanel: true
     },
     canvas: {
         antialias: true,
@@ -86,7 +88,8 @@ export function mergeConfig(config: MolvisConfig = {}): MolvisConfig {
             showModePanel: config.uiComponents?.showModePanel ?? DEFAULT_CONFIG.uiComponents.showModePanel,
             showViewPanel: config.uiComponents?.showViewPanel ?? DEFAULT_CONFIG.uiComponents.showViewPanel,
             showInfoPanel: config.uiComponents?.showInfoPanel ?? DEFAULT_CONFIG.uiComponents.showInfoPanel,
-            showFrameIndicator: config.uiComponents?.showFrameIndicator ?? DEFAULT_CONFIG.uiComponents.showFrameIndicator
+            showFrameIndicator: config.uiComponents?.showFrameIndicator ?? DEFAULT_CONFIG.uiComponents.showFrameIndicator,
+            showPerfPanel: config.uiComponents?.showPerfPanel ?? DEFAULT_CONFIG.uiComponents.showPerfPanel
         },
         canvas: {
             antialias: config.canvas?.antialias ?? DEFAULT_CONFIG.canvas.antialias,

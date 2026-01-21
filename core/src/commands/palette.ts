@@ -165,7 +165,13 @@ export class Palette {
   }
 
   public getAtomColor(key: string): ColorHex {
-    return this.atomColorMap.get(key) || this.getDefaultAtomColor();
+    const existing = this.atomColorMap.get(key);
+    if (existing) {
+      return existing;
+    }
+    const random = this.randomColor();
+    this.atomColorMap.set(key, random);
+    return random;
   }
 
   public getAtomRadius(key: string): number {
@@ -190,6 +196,11 @@ export class Palette {
 
   public getDefaultBoxColor(): ColorHex {
     return this.defaultBoxColor;
+  }
+
+  private randomColor(): ColorHex {
+    const value = Math.floor(Math.random() * 0xffffff);
+    return `#${value.toString(16).padStart(6, "0")}` as ColorHex;
   }
 }
 

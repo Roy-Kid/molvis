@@ -1,29 +1,65 @@
 import type { SceneIndex } from "./scene_index";
 
+export type SelectionKey = string;
+
+export interface SelectionRef {
+    meshId: number;
+    subIndex?: number;
+}
+
+export function makeSelectionKey(meshId: number, subIndex?: number): SelectionKey {
+    return subIndex === undefined ? String(meshId) : `${meshId}:${subIndex}`;
+}
+
+export function parseSelectionKey(key: SelectionKey): SelectionRef | null {
+    const [meshPart, subPart] = key.split(":");
+    if (!meshPart) return null;
+
+    const meshId = Number(meshPart);
+    if (!Number.isFinite(meshId)) return null;
+
+    if (subPart === undefined || subPart === "") {
+        return { meshId };
+    }
+
+    const subIndex = Number(subPart);
+    if (!Number.isFinite(subIndex)) {
+        return { meshId };
+    }
+
+    return { meshId, subIndex };
+}
+
 // ============ Types (Colocated) ============
 
 /**
- * Selection state using encoded selection IDs.
+ * Selection state using selection keys.
  */
 export interface SelectionState {
-    atoms: Set<number>;  // Encoded selection IDs for atoms
-    bonds: Set<number>;  // Encoded selection IDs for bonds
+    atoms: Set<SelectionKey>;
+    bonds: Set<SelectionKey>;
+}
+
+export interface SelectedEntity {
+    type: 'atom' | 'bond';
+    meshId: number;
+    instanceIndex: number;
 }
 
 /**
  * Selection operations.
  */
 export type SelectionOp =
-    | { type: 'replace'; atoms?: number[]; bonds?: number[] }
-    | { type: 'add'; atoms?: number[]; bonds?: number[] }
-    | { type: 'remove'; atoms?: number[]; bonds?: number[] }
-    | { type: 'toggle'; atoms?: number[]; bonds?: number[] }
+    | { type: 'replace'; atoms?: SelectionKey[]; bonds?: SelectionKey[] }
+    | { type: 'add'; atoms?: SelectionKey[]; bonds?: SelectionKey[] }
+    | { type: 'remove'; atoms?: SelectionKey[]; bonds?: SelectionKey[] }
+    | { type: 'toggle'; atoms?: SelectionKey[]; bonds?: SelectionKey[] }
     | { type: 'clear' };
 
 // ============ SelectionManager ============
 
 /**
- * SelectionManager: Maintains selection state using encoded IDs.
+ * SelectionManager: Maintains selection state using selection keys.
  * Emits events for highlighting.
  * 
  * Responsibilities:
@@ -89,18 +125,25 @@ export class SelectionManager {
     }
 
     /**
-     * Check if an encoded ID is selected.
+     * Check if a selection key is selected.
      * 
-     * @param encodedId - The encoded selection ID
+     * @param key - The selection key
      * @returns true if selected, false otherwise
      */
-    isSelected(encodedId: number): boolean {
-        const type = this.sceneIndex.getType(encodedId);
-        if (!type) return false;
+    isSelected(key: SelectionKey): boolean {
+        const ref = parseSelectionKey(key);
+        if (!ref) return false;
 
-        return type === 'atom'
-            ? this.state.atoms.has(encodedId)
-            : this.state.bonds.has(encodedId);
+        const meta = this.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+        if (!meta) return false;
+
+        if (meta.type === 'atom') {
+            return this.state.atoms.has(key);
+        }
+        if (meta.type === 'bond') {
+            return this.state.bonds.has(key);
+        }
+        return false;
     }
 
     /**

@@ -18,5 +18,6 @@ export { DefaultPalette } from "./palette";
 export type { Palette, ColorHex } from "./palette";
 
 // Types
-export type { FrameSource, DrawFrameOption } from "./types";
+export type { FrameSource } from "../pipeline/pipeline";
+export type { DrawFrameOption } from "./draw";
 export { ArrayFrameSource, SingleFrameSource, AsyncFrameSource } from "./sources";

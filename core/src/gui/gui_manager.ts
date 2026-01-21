@@ -3,6 +3,7 @@ import type { MolvisConfig } from "../core/config";
 import { MOLVIS_UI_CSS } from "./styles";
 import { InfoPanel } from "./info_panel";
 import { ModePanel } from "./mode_panel";
+import { PerfPanel } from "./perf_panel";
 import { ViewPanel } from "./view_panel";
 
 /**
@@ -18,6 +19,7 @@ export class GUIManager {
     private infoPanel: InfoPanel | null = null;
     private modePanel: ModePanel | null = null;
     private viewPanel: ViewPanel | null = null;
+    private perfPanel: PerfPanel | null = null;
 
     constructor(
         container: HTMLElement,
@@ -62,6 +64,11 @@ export class GUIManager {
         if (this.viewPanel) {
             this.viewPanel.unmount();
             this.viewPanel = null;
+        }
+
+        if (this.perfPanel) {
+            this.perfPanel.unmount();
+            this.perfPanel = null;
         }
 
         if (this.uiOverlay) {
@@ -122,6 +129,12 @@ export class GUIManager {
             this.viewPanel.mount(this.uiOverlay);
         }
 
+        // PerfPanel (bottom-right)
+        if (components.showPerfPanel) {
+            this.perfPanel = new PerfPanel(this.app);
+            this.perfPanel.mount(this.uiOverlay);
+        }
+
         // PipelinePanel (right side) - Removed, handled by React UI
     }
 
@@ -131,6 +144,7 @@ export class GUIManager {
     private setupEventListeners(): void {
         this.app.events.on('info-text-change', this.handleInfoChange.bind(this));
         this.app.events.on('mode-change', this.handleModeChange.bind(this));
+        this.app.events.on('fps-change', this.handleFpsChange.bind(this));
     }
 
     /**
@@ -139,6 +153,7 @@ export class GUIManager {
     private removeEventListeners(): void {
         this.app.events.off('info-text-change', this.handleInfoChange.bind(this));
         this.app.events.off('mode-change', this.handleModeChange.bind(this));
+        this.app.events.off('fps-change', this.handleFpsChange.bind(this));
     }
 
     /**
@@ -156,6 +171,15 @@ export class GUIManager {
     private handleModeChange(mode: string): void {
         if (this.modePanel) {
             this.modePanel.update(mode as any);
+        }
+    }
+
+    /**
+     * Handle fps change event
+     */
+    private handleFpsChange(fps: number): void {
+        if (this.perfPanel) {
+            this.perfPanel.update(fps);
         }
     }
 }

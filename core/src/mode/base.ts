@@ -11,11 +11,6 @@ import type {
   Vector3,
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import {
-  getAtomPositionFromThinInstance,
-  getBondEndpointsFromThinInstance
-} from "../core/thin_instance";
-import type { MeshMetadata } from "../commands/draw";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult } from "./types";
 
@@ -233,25 +228,21 @@ abstract class BaseMode {
     }
 
     const mesh = pickResult.pickedMesh;
-    const metadata = mesh.metadata;
+    const thinIndex = pickResult.thinInstanceIndex ?? -1;
 
-    if (metadata?.meshType === "atom") {
-      return {
-        type: "atom",
-        mesh,
-        metadata,
-        thinInstanceIndex: pickResult.thinInstanceIndex ?? -1,
-      };
-    } else if (metadata?.meshType === "bond") {
-      return {
-        type: "bond",
-        mesh,
-        metadata,
-        thinInstanceIndex: pickResult.thinInstanceIndex ?? -1,
-      };
+    const meta = thinIndex >= 0
+      ? this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
+      : this.world.sceneIndex.getMeta(mesh.uniqueId);
+
+    if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
+      return { type: "empty" };
     }
 
-    return { type: "empty" };
+    return {
+      type: meta.type,
+      mesh,
+      thinInstanceIndex: thinIndex,
+    };
   }
 
   _on_pointer_down(pointerInfo: PointerInfo): void {
@@ -315,67 +306,33 @@ abstract class BaseMode {
   _on_pointer_move(_pointerInfo: PointerInfo): void {
     const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, undefined, false, this.world.camera);
     const mesh = pickResult.hit ? pickResult.pickedMesh : null;
-    if (mesh?.metadata) {
-      const metadata = mesh.metadata as MeshMetadata;
-      const meshType = metadata.meshType;
+    if (mesh) {
+      const thinIndex = pickResult.thinInstanceIndex ?? -1;
+      const meta = thinIndex >= 0
+        ? this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
+        : this.world.sceneIndex.getMeta(mesh.uniqueId);
 
-      if (meshType === 'atom') {
-        const atomThinIndex = pickResult.thinInstanceIndex;
-        let atomInfo = new Map<string, string>();
-        let pos: Vector3 | undefined;
-
-        if (atomThinIndex !== undefined && atomThinIndex >= 0) {  // thin instances
-          const position = getAtomPositionFromThinInstance(mesh, atomThinIndex);
-          if (position) {
-            pos = position;
-            // Try to get element type from atomBlock
-            if (metadata.atomBlock?.element) {
-              const element = metadata.atomBlock.element[atomThinIndex];
-              if (element) {
-                atomInfo.set("element", element);
-              }
-            }
-          }
-        }
-
-        // Fallback to mesh position if no thin instance position found
-        if (!pos) {
-          pos = mesh.position;
-        }
-
-        atomInfo.set("xyz", `${pos.x.toFixed(4)}, ${pos.y.toFixed(4)}, ${pos.z.toFixed(4)}`);
-
-        let infoText = `[Atom] `;
-        atomInfo.forEach((value, key) => {
-          infoText += `${key}: ${value} | `;
-        });
-        this.app.events.emit('info-text-change', infoText);
-      } else if (meshType === 'bond') {
-        const bondThinIndex = pickResult.thinInstanceIndex;
-        if (bondThinIndex !== undefined && bondThinIndex >= 0) {
-          // Thin instance bond - use new utility
-          const bondInfo = getBondEndpointsFromThinInstance(mesh, bondThinIndex);
-          if (bondInfo && metadata.i && metadata.j) {
-            const i = metadata.i[bondThinIndex];
-            const j = metadata.j[bondThinIndex];
-            const infoText = `[Bond] ${i}-${j} | ` +
-              `start: (${bondInfo.start.x.toFixed(2)}, ${bondInfo.start.y.toFixed(2)}, ${bondInfo.start.z.toFixed(2)}) | ` +
-              `end: (${bondInfo.end.x.toFixed(2)}, ${bondInfo.end.y.toFixed(2)}, ${bondInfo.end.z.toFixed(2)}) | ` +
-              `length: ${bondInfo.length.toFixed(2)} Å`;
-            this.app.events.emit('info-text-change', infoText);
-          } else if (metadata.i && metadata.j) {
-            const i = metadata.i[bondThinIndex];
-            const j = metadata.j[bondThinIndex];
-            const infoText = `Bond: ${i} - ${j}`;
-            this.app.events.emit('info-text-change', infoText);
-          }
-        } else {
-          // Regular bond mesh (dynamic rendering)
-          const infoText = metadata.order ? `Bond (order: ${metadata.order})` : 'Bond';
-          this.app.events.emit('info-text-change', infoText);
-        }
-      } else {
+      if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
         this.app.events.emit('info-text-change', mesh.name);
+        return;
+      }
+
+      if (meta.type === 'atom') {
+        const infoText = `[Atom] element: ${meta.element} | xyz: ${meta.position.x.toFixed(4)}, ${meta.position.y.toFixed(4)}, ${meta.position.z.toFixed(4)} | `;
+        this.app.events.emit('info-text-change', infoText);
+      } else {
+        const start = meta.start;
+        const end = meta.end;
+        const length = Vector3.Distance(
+          new Vector3(start.x, start.y, start.z),
+          new Vector3(end.x, end.y, end.z)
+        );
+        const infoText = `[Bond] ${meta.atomId1}-${meta.atomId2} | ` +
+          `start: (${start.x.toFixed(2)}, ${start.y.toFixed(2)}, ${start.z.toFixed(2)}) | ` +
+          `end: (${end.x.toFixed(2)}, ${end.y.toFixed(2)}, ${end.z.toFixed(2)}) | ` +
+          `length: ${length.toFixed(2)} Å` +
+          (meta.order ? ` | order: ${meta.order}` : '');
+        this.app.events.emit('info-text-change', infoText);
       }
     } else {
       this.app.events.emit('info-text-change', "");
@@ -411,10 +368,12 @@ abstract class BaseMode {
       scene.pointerX,
       scene.pointerY,
       (mesh: AbstractMesh) => {
-        const md = mesh.metadata as MeshMetadata;
-        const meshType = md?.meshType;
-        if (meshType === type) {
-          return true;
+        const metaType = this.world.sceneIndex.getType(mesh.uniqueId);
+
+        if (type === 'atom') {
+          return metaType === 'atom';
+        } else if (type === 'bond') {
+          return metaType === 'bond';
         }
         return false;
       },

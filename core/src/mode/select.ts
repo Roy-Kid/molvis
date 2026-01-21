@@ -5,6 +5,7 @@ import type { Molvis } from "@molvis/core";
 import { BaseMode, ModeType } from "./base";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { SelectionOp } from "../core/selection_manager";
+import { makeSelectionKey } from "../core/selection_manager";
 import type { HitResult, MenuItem } from "./types";
 import { CommonMenuItems } from "./menu_items";
 
@@ -76,13 +77,8 @@ class SelectMode extends BaseMode {
       this.world.camera
     );
 
-    // One-step resolution to encoded ID
-    const encodedId = this.app.world.sceneIndex.resolvePickToId(
-      scenePick.pickedMesh,
-      scenePick.thinInstanceIndex
-    );
-
-    if (encodedId === null) {
+    const mesh = scenePick.pickedMesh;
+    if (!mesh) {
       // Empty click
       if (!isCtrl) {
         this.app.world.selectionManager.apply({ type: 'clear' });
@@ -90,13 +86,23 @@ class SelectMode extends BaseMode {
       return;
     }
 
-    // Determine type and generate SelectionOp
-    const type = this.app.world.sceneIndex.getType(encodedId);
-    if (!type) return;
+    const thinIndex = scenePick.thinInstanceIndex ?? -1;
+    const meta = thinIndex >= 0
+      ? this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
+      : this.app.world.sceneIndex.getMeta(mesh.uniqueId);
+
+    if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
+      if (!isCtrl) {
+        this.app.world.selectionManager.apply({ type: 'clear' });
+      }
+      return;
+    }
+
+    const key = makeSelectionKey(mesh.uniqueId, thinIndex >= 0 ? thinIndex : undefined);
 
     const op: SelectionOp = isCtrl
-      ? { type: 'toggle', [type + 's']: [encodedId] }
-      : { type: 'replace', [type + 's']: [encodedId] };
+      ? { type: 'toggle', [meta.type + 's']: [key] }
+      : { type: 'replace', [meta.type + 's']: [key] };
 
     this.app.world.selectionManager.apply(op);
   }

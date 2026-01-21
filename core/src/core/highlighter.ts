@@ -1,7 +1,6 @@
 import type { Scene, Mesh, Material } from "@babylonjs/core";
 import { StandardMaterial, Color3 } from "@babylonjs/core";
-import type { SceneIndex } from "./scene_index";
-import type { SelectionState } from "./selection_manager";
+import { type SelectionState, parseSelectionKey } from "./selection_manager";
 
 /**
  * Highlighter: Mode-aware highlighting in a single module.
@@ -13,7 +12,6 @@ import type { SelectionState } from "./selection_manager";
  * - Handle mode switches (invalidate and rebuild)
  */
 export class Highlighter {
-    private sceneIndex: SceneIndex;
     private scene: Scene;
 
     // Sparse storage for thin instance original colors
@@ -27,8 +25,7 @@ export class Highlighter {
     // Shared highlight material for meshes
     private highlightMaterial: StandardMaterial;
 
-    constructor(sceneIndex: SceneIndex, scene: Scene) {
-        this.sceneIndex = sceneIndex;
+    constructor(scene: Scene) {
         this.scene = scene;
 
         // Create shared highlight material
@@ -46,26 +43,32 @@ export class Highlighter {
         this.clearAll();
 
         // Highlight atoms
-        for (const encodedId of state.atoms) {
-            const ref = this.sceneIndex.getRenderRef(encodedId);
+        for (const key of state.atoms) {
+            const ref = parseSelectionKey(key);
             if (!ref) continue;
 
-            if (ref.thinIndex !== undefined) {
-                this.highlightThinInstance(ref.mesh as Mesh, ref.thinIndex);
+            const mesh = this.scene.getMeshByUniqueId(ref.meshId) as Mesh;
+            if (!mesh) continue;
+
+            if (ref.subIndex !== undefined) {
+                this.highlightThinInstance(mesh, ref.subIndex);
             } else {
-                this.highlightMesh(ref.mesh as Mesh);
+                this.highlightMesh(mesh);
             }
         }
 
         // Highlight bonds
-        for (const encodedId of state.bonds) {
-            const ref = this.sceneIndex.getRenderRef(encodedId);
+        for (const key of state.bonds) {
+            const ref = parseSelectionKey(key);
             if (!ref) continue;
 
-            if (ref.thinIndex !== undefined) {
-                this.highlightThinInstance(ref.mesh as Mesh, ref.thinIndex);
+            const mesh = this.scene.getMeshByUniqueId(ref.meshId) as Mesh;
+            if (!mesh) continue;
+
+            if (ref.subIndex !== undefined) {
+                this.highlightThinInstance(mesh, ref.subIndex);
             } else {
-                this.highlightMesh(ref.mesh as Mesh);
+                this.highlightMesh(mesh);
             }
         }
     }
@@ -77,7 +80,7 @@ export class Highlighter {
      * @param thinIndex - The thin instance index
      */
     private highlightThinInstance(mesh: Mesh, thinIndex: number): void {
-        const colorBuffer = mesh.metadata?.colorBuffer as Float32Array;
+        const colorBuffer = this.getThinInstanceColorBuffer(mesh);
         if (!colorBuffer) return;
 
         const offset = thinIndex * 4;
@@ -124,7 +127,7 @@ export class Highlighter {
             const mesh = this.scene.getMeshByUniqueId(uniqueId) as Mesh;
             if (!mesh) continue;
 
-            const colorBuffer = mesh.metadata?.colorBuffer as Float32Array;
+            const colorBuffer = this.getThinInstanceColorBuffer(mesh);
             if (!colorBuffer) continue;
 
             const offset = thinIndex * 4;
@@ -164,5 +167,14 @@ export class Highlighter {
     dispose(): void {
         this.clearAll();
         this.highlightMaterial.dispose();
+    }
+
+    private getThinInstanceColorBuffer(mesh: Mesh): Float32Array | null {
+        const storage = (mesh as unknown as {
+            _userThinInstanceBuffersStorage?: { data?: Record<string, Float32Array> };
+        })._userThinInstanceBuffersStorage;
+
+        const buffer = storage?.data?.color ?? null;
+        return buffer instanceof Float32Array ? buffer : null;
     }
 }

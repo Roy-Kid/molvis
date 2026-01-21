@@ -30,6 +30,9 @@
         "selector": [
           {
             "filenamePattern": "*.pdb"
+          },
+          {
+            "filenamePattern": "*.xyz"
           }
         ],
         "priority": "option"
@@ -39,7 +42,7 @@
       "editor/title": [
         {
           "command": "molvis.openPreviewToSide",
-          "when": "resourceExtname == .pdb",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz",
           "group": "navigation"
         }
       ]

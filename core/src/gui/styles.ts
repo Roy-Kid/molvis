@@ -49,4 +49,12 @@ export const MOLVIS_UI_CSS = `
 .molvis-info-panel.visible {
   display: block;
 }
+
+/* PerfPanel - 右下角 */
+.molvis-perf-panel {
+  bottom: 10px;
+  right: 10px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+}
 `;

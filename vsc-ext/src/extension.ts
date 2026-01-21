@@ -84,9 +84,10 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 
 			const document = activeEditor.document;
-			if (!document.fileName.endsWith(".pdb")) {
+			const lowerName = document.fileName.toLowerCase();
+			if (!lowerName.endsWith(".pdb") && !lowerName.endsWith(".xyz")) {
 				vscode.window.showWarningMessage(
-					"MolVis preview is only available for .pdb files"
+					"MolVis preview is only available for .pdb or .xyz files"
 				);
 				return;
 			}

@@ -1,7 +1,5 @@
 import type { Frame } from "../core/system/frame";
-import type { SelectionManager } from "./selection_manager";
-import type { SceneIndex } from "./scene_index";
-import { encodeSelectionId } from "./scene_index";
+import { type SelectionManager, makeSelectionKey, type SelectionKey } from "./selection_manager";
 import { Vector3 } from "@babylonjs/core";
 
 // ============ Types (Colocated) ============
@@ -22,17 +20,14 @@ export type SelectionQuery =
  * 
  * Responsibilities:
  * - Evaluate selection queries on Frame data
- * - Generate encoded selection IDs
+ * - Generate selection keys
  * - Apply selection operations via SelectionManager
  */
 export class Selector {
     private frame: Frame | null = null;
     private selectionManager: SelectionManager;
-    private sceneIndex: SceneIndex;
-
-    constructor(selectionManager: SelectionManager, sceneIndex: SceneIndex) {
+    constructor(selectionManager: SelectionManager) {
         this.selectionManager = selectionManager;
-        this.sceneIndex = sceneIndex;
     }
 
     /**
@@ -141,34 +136,26 @@ export class Selector {
      * For thin instances, we need to find the atoms mesh and encode with its uniqueId.
      * 
      * @param indices - Frame atom indices
-     * @returns Array of encoded selection IDs
+     * @returns Array of selection keys
      */
-    private encodeAtomIndices(indices: number[]): number[] {
+    private encodeAtomIndices(indices: number[]): SelectionKey[] {
         // For thin instances, we need to get the atoms mesh uniqueId
         // This is a simplified implementation - in reality, we'd need to track
         // which mesh corresponds to the current frame
 
-        // For now, we'll just return the indices as-is and let the SceneIndex
-        // handle the encoding when it has the mesh reference
-        // This is a placeholder that works for the basic case
-        return indices.map(index => {
-            // We need the atoms mesh uniqueId here
-            // For now, return a placeholder - this will be fixed when we have
-            // better mesh tracking
-            return index;
-        });
+        // Placeholder: until we track the meshId for the current frame, encode
+        // with the atom index alone so selection stays functional for basics.
+        return indices.map(index => makeSelectionKey(index));
     }
 
     /**
      * Encode bond indices to selection IDs.
      * 
      * @param indices - Frame bond indices
-     * @returns Array of encoded selection IDs
+     * @returns Array of selection keys
      */
-    private encodeBondIndices(indices: number[]): number[] {
+    private encodeBondIndices(indices: number[]): SelectionKey[] {
         // Similar to encodeAtomIndices
-        return indices.map(index => {
-            return index;
-        });
+        return indices.map(index => makeSelectionKey(index));
     }
 }

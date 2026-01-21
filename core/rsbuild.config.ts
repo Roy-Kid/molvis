@@ -8,11 +8,12 @@ export default defineConfig({
         charset: 'UTF-8',
       },
       viewport: 'width=device-width, initial-scale=1.0',
-    }
+    },
+    template: './examples/index.html'
   },
   source: {
     entry: {
-      index: "./examples/index.ts"
+      index: "./examples/demo_frame.ts"
     },
     define: {
       __WASM_INLINE__: JSON.stringify(false),

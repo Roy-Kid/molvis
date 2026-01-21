@@ -29,11 +29,7 @@ export class EventEmitter {
         if (listeners) {
             // Create a copy to avoid issues if listeners unsubscribe during emission
             new Set(listeners).forEach((listener) => {
-                try {
-                    listener(data);
-                } catch (e) {
-                    console.error(`Error in event listener for ${event}:`, e);
-                }
+                listener(data);
             });
         }
     }

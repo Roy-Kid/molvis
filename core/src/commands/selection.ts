@@ -1,7 +1,30 @@
-import { Vector3, Mesh } from "@babylonjs/core";
+import { Vector3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
 import { Command } from "./base";
 import type { SelectedEntity } from "../core/selection_manager";
+import type { SceneIndex } from "../core/scene_index";
+
+function getThinInstanceMatrixBuffer(mesh: Mesh): Float32Array | null {
+    const storage = (mesh as unknown as { _thinInstanceDataStorage?: { matrixData?: Float32Array } })._thinInstanceDataStorage;
+    const buffer = storage?.matrixData ?? null;
+    return buffer instanceof Float32Array ? buffer : null;
+}
+
+function getThinInstanceColorBuffer(mesh: Mesh): Float32Array | null {
+    const storage = (mesh as unknown as { _userThinInstanceBuffersStorage?: { data?: Record<string, Float32Array> } })
+        ._userThinInstanceBuffersStorage;
+    const buffer = storage?.data?.color ?? null;
+    return buffer instanceof Float32Array ? buffer : null;
+}
+
+function findThinInstanceMesh(scene: Scene, sceneIndex: SceneIndex, type: 'atom' | 'bond'): Mesh | null {
+    return (scene.meshes.find(mesh => {
+        const asMesh = mesh as Mesh;
+        if (!asMesh.hasThinInstances) return false;
+        const meta = sceneIndex.getMeta(mesh.uniqueId, 0);
+        return meta?.type === type;
+    }) as Mesh | null) ?? null;
+}
 
 /**
  * Command to move selected atoms and bonds.
@@ -31,10 +54,9 @@ export class MoveSelectionCommand extends Command<void> {
         for (const entity of this.selectedEntities) {
             if (entity.type !== 'atom') continue;
 
-            const mesh = scene.getMeshById(entity.meshId) as Mesh;
-            if (!mesh?.metadata?.matrices) continue;
-
-            const matrices = mesh.metadata.matrices as Float32Array;
+            const mesh = scene.getMeshByUniqueId(entity.meshId) as Mesh;
+            const matrices = mesh ? getThinInstanceMatrixBuffer(mesh) : null;
+            if (!matrices) continue;
             const offset = entity.instanceIndex * 16;
 
             // Store original position
@@ -64,14 +86,14 @@ export class MoveSelectionCommand extends Command<void> {
         for (const entity of this.selectedEntities) {
             if (entity.type !== 'atom') continue;
 
-            const mesh = scene.getMeshById(entity.meshId) as Mesh;
-            if (!mesh?.metadata?.matrices) continue;
+            const mesh = scene.getMeshByUniqueId(entity.meshId) as Mesh;
+            const matrices = mesh ? getThinInstanceMatrixBuffer(mesh) : null;
+            if (!matrices) continue;
 
             const key = `${entity.meshId}:${entity.instanceIndex}`;
             const originalPos = this.originalPositions.get(key);
             if (!originalPos) continue;
 
-            const matrices = mesh.metadata.matrices as Float32Array;
             const offset = entity.instanceIndex * 16;
 
             matrices[offset + 12] = originalPos.x;
@@ -94,31 +116,33 @@ export class MoveSelectionCommand extends Command<void> {
     private updateConnectedBonds(): void {
         const scene = this.app.world.scene;
 
-        // Get all bond meshes
-        const bondMeshes = scene.meshes.filter(m => m.metadata?.meshType === 'bond') as Mesh[];
+        const atomMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'atom');
+        if (!atomMesh) return;
+
+        const atomMatrices = getThinInstanceMatrixBuffer(atomMesh);
+        if (!atomMatrices) return;
+
+        const bondMeshes = scene.meshes.filter(mesh => {
+            const asMesh = mesh as Mesh;
+            if (!asMesh.hasThinInstances) return false;
+            const meta = this.app.world.sceneIndex.getMeta(mesh.uniqueId, 0);
+            return meta?.type === 'bond';
+        }) as Mesh[];
 
         for (const bondMesh of bondMeshes) {
-            if (!bondMesh.metadata?.matrices || !bondMesh.metadata?.i || !bondMesh.metadata?.j) continue;
+            const matrices = getThinInstanceMatrixBuffer(bondMesh);
+            if (!matrices) continue;
 
-            const matrices = bondMesh.metadata.matrices as Float32Array;
-            const atomIndices_i = bondMesh.metadata.i as Uint32Array;
-            const atomIndices_j = bondMesh.metadata.j as Uint32Array;
-
-            // Get atom mesh (assuming single atom mesh for now)
-            const atomMesh = scene.meshes.find(m => m.metadata?.meshType === 'atom') as Mesh;
-            if (!atomMesh?.metadata?.matrices) continue;
-
-            const atomMatrices = atomMesh.metadata.matrices as Float32Array;
-
-            // Update each bond instance
-            const bondCount = atomIndices_i.length;
+            const bondCount = Math.floor(matrices.length / 16);
             for (let bondIdx = 0; bondIdx < bondCount; bondIdx++) {
-                const atomIdx1 = atomIndices_i[bondIdx];
-                const atomIdx2 = atomIndices_j[bondIdx];
+                const meta = this.app.world.sceneIndex.getMeta(bondMesh.uniqueId, bondIdx);
+                if (!meta || meta.type !== 'bond') continue;
 
-                // Get atom positions
-                const offset1 = atomIdx1 * 16;
-                const offset2 = atomIdx2 * 16;
+                const offset1 = meta.atomId1 * 16;
+                const offset2 = meta.atomId2 * 16;
+                if (offset1 + 14 >= atomMatrices.length || offset2 + 14 >= atomMatrices.length) {
+                    continue;
+                }
 
                 const pos1 = new Vector3(
                     atomMatrices[offset1 + 12],
@@ -132,20 +156,16 @@ export class MoveSelectionCommand extends Command<void> {
                     atomMatrices[offset2 + 14]
                 );
 
-                // Calculate bond transformation
                 const bondCenter = Vector3.Center(pos1, pos2);
                 const bondVector = pos2.subtract(pos1);
                 const bondLength = bondVector.length();
 
-                // Update bond matrix
                 const bondOffset = bondIdx * 16;
 
-                // Calculate rotation to align cylinder with bond vector
                 const up = new Vector3(0, 1, 0);
                 const axis = Vector3.Cross(up, bondVector.normalize());
                 const angle = Math.acos(Vector3.Dot(up, bondVector.normalize()));
 
-                // Build transformation matrix
                 const rotationMatrix = axis.length() > 0.001
                     ? BABYLON.Matrix.RotationAxis(axis.normalize(), angle)
                     : BABYLON.Matrix.Identity();
@@ -155,7 +175,6 @@ export class MoveSelectionCommand extends Command<void> {
 
                 const finalMatrix = scaleMatrix.multiply(rotationMatrix).multiply(translationMatrix);
 
-                // Copy to buffer
                 for (let i = 0; i < 16; i++) {
                     matrices[bondOffset + i] = finalMatrix.m[i];
                 }
@@ -203,15 +222,18 @@ export class PasteSelectionCommand extends Command<void> {
         const scene = this.app.world.scene;
 
         // Get atom mesh
-        const atomMesh = scene.meshes.find(m => m.metadata?.meshType === 'atom') as Mesh;
-        if (!atomMesh?.metadata?.matrices || !atomMesh.metadata?.colorBuffer) {
+        const atomMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'atom');
+        if (!atomMesh) {
             console.error("Cannot paste: atom mesh not found");
             return;
         }
 
-        const atomMatrices = atomMesh.metadata.matrices as Float32Array;
-        const atomColors = atomMesh.metadata.colorBuffer as Float32Array;
-        const atomElements = atomMesh.metadata.elements as string[];
+        const atomMatrices = getThinInstanceMatrixBuffer(atomMesh);
+        const atomColors = getThinInstanceColorBuffer(atomMesh);
+        if (!atomMatrices || !atomColors) {
+            console.error("Cannot paste: atom mesh missing buffers");
+            return;
+        }
 
         // Calculate current atom count
         const currentAtomCount = atomMatrices.length / 16;
@@ -254,11 +276,9 @@ export class PasteSelectionCommand extends Command<void> {
         extendedAtomColors.set(atomColors);
         extendedAtomColors.set(newAtomColors, atomColors.length);
 
-        // Update mesh metadata and buffers
-        atomMesh.metadata.matrices = extendedAtomMatrices;
-        atomMesh.metadata.colorBuffer = extendedAtomColors;
-        atomMesh.thinInstanceSetBuffer("matrix", extendedAtomMatrices, 16);
-        atomMesh.thinInstanceSetBuffer("color", extendedAtomColors, 4);
+        // Update mesh buffers
+        atomMesh.thinInstanceSetBuffer("matrix", extendedAtomMatrices, 16, true);
+        atomMesh.thinInstanceSetBuffer("color", extendedAtomColors, 4, true);
 
         // Create bonds if any
         if (this.clipboardData.bonds.length > 0) {
@@ -270,11 +290,13 @@ export class PasteSelectionCommand extends Command<void> {
         const scene = this.app.world.scene;
 
         // Remove created atoms
-        const atomMesh = scene.meshes.find(m => m.metadata?.meshType === 'atom') as Mesh;
-        if (atomMesh?.metadata?.matrices && atomMesh.metadata?.colorBuffer) {
-            const atomMatrices = atomMesh.metadata.matrices as Float32Array;
-            const atomColors = atomMesh.metadata.colorBuffer as Float32Array;
-            const atomElements = atomMesh.metadata.elements as string[];
+        const atomMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'atom');
+        if (atomMesh) {
+            const atomMatrices = getThinInstanceMatrixBuffer(atomMesh);
+            const atomColors = getThinInstanceColorBuffer(atomMesh);
+            if (!atomMatrices || !atomColors) {
+                return this;
+            }
 
             // Remove last N atoms
             const atomsToRemove = this.createdAtomIndices.length;
@@ -284,14 +306,9 @@ export class PasteSelectionCommand extends Command<void> {
             newAtomMatrices.set(atomMatrices.subarray(0, atomMatrices.length - atomsToRemove * 16));
             newAtomColors.set(atomColors.subarray(0, atomColors.length - atomsToRemove * 4));
 
-            // Remove elements
-            atomElements.splice(atomElements.length - atomsToRemove, atomsToRemove);
-
             // Update mesh
-            atomMesh.metadata.matrices = newAtomMatrices;
-            atomMesh.metadata.colorBuffer = newAtomColors;
-            atomMesh.thinInstanceSetBuffer("matrix", newAtomMatrices, 16);
-            atomMesh.thinInstanceSetBuffer("color", newAtomColors, 4);
+            atomMesh.thinInstanceSetBuffer("matrix", newAtomMatrices, 16, true);
+            atomMesh.thinInstanceSetBuffer("color", newAtomColors, 4, true);
         }
 
         // Remove created bonds
@@ -304,23 +321,25 @@ export class PasteSelectionCommand extends Command<void> {
 
     private createBonds(atomIndexOffset: number): void {
         const scene = this.app.world.scene;
-        const bondMesh = scene.meshes.find(m => m.metadata?.meshType === 'bond') as Mesh;
-        if (!bondMesh?.metadata?.matrices || !bondMesh.metadata?.i || !bondMesh.metadata?.j) {
+        const bondMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'bond');
+        if (!bondMesh) {
             return;
         }
 
-        const bondMatrices = bondMesh.metadata.matrices as Float32Array;
-        const bondIndices_i = bondMesh.metadata.i as Uint32Array;
-        const bondIndices_j = bondMesh.metadata.j as Uint32Array;
+        const bondMatrices = getThinInstanceMatrixBuffer(bondMesh);
+        if (!bondMatrices) {
+            return;
+        }
 
         const newBondMatrices: number[] = [];
-        const newBondIndices_i: number[] = [];
-        const newBondIndices_j: number[] = [];
 
         // Get atom positions
-        const atomMesh = scene.meshes.find(m => m.metadata?.meshType === 'atom') as Mesh;
-        if (!atomMesh?.metadata?.matrices) return;
-        const atomMatrices = atomMesh.metadata.matrices as Float32Array;
+        const atomMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'atom');
+        if (!atomMesh) return;
+        const atomMatrices = getThinInstanceMatrixBuffer(atomMesh);
+        if (!atomMatrices) return;
+
+        const baseBondCount = Math.floor(bondMatrices.length / 16);
 
         for (const bondData of this.clipboardData.bonds) {
             const atomIdx1 = atomIndexOffset + bondData.i;
@@ -365,10 +384,7 @@ export class PasteSelectionCommand extends Command<void> {
                 newBondMatrices.push(finalMatrix.m[i]);
             }
 
-            newBondIndices_i.push(atomIdx1);
-            newBondIndices_j.push(atomIdx2);
-
-            this.createdBondIndices.push(bondIndices_i.length + this.createdBondIndices.length);
+            this.createdBondIndices.push(baseBondCount + this.createdBondIndices.length);
         }
 
         // Extend bond buffers
@@ -376,46 +392,28 @@ export class PasteSelectionCommand extends Command<void> {
         extendedBondMatrices.set(bondMatrices);
         extendedBondMatrices.set(newBondMatrices, bondMatrices.length);
 
-        const extendedBondIndices_i = new Uint32Array(bondIndices_i.length + newBondIndices_i.length);
-        extendedBondIndices_i.set(bondIndices_i);
-        extendedBondIndices_i.set(newBondIndices_i, bondIndices_i.length);
-
-        const extendedBondIndices_j = new Uint32Array(bondIndices_j.length + newBondIndices_j.length);
-        extendedBondIndices_j.set(bondIndices_j);
-        extendedBondIndices_j.set(newBondIndices_j, bondIndices_j.length);
-
         // Update mesh
-        bondMesh.metadata.matrices = extendedBondMatrices;
-        bondMesh.metadata.i = extendedBondIndices_i;
-        bondMesh.metadata.j = extendedBondIndices_j;
-        bondMesh.thinInstanceSetBuffer("matrix", extendedBondMatrices, 16);
+        bondMesh.thinInstanceSetBuffer("matrix", extendedBondMatrices, 16, true);
     }
 
     private removeBonds(): void {
         const scene = this.app.world.scene;
-        const bondMesh = scene.meshes.find(m => m.metadata?.meshType === 'bond') as Mesh;
-        if (!bondMesh?.metadata?.matrices || !bondMesh.metadata?.i || !bondMesh.metadata?.j) {
+        const bondMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'bond');
+        if (!bondMesh) {
             return;
         }
 
-        const bondMatrices = bondMesh.metadata.matrices as Float32Array;
-        const bondIndices_i = bondMesh.metadata.i as Uint32Array;
-        const bondIndices_j = bondMesh.metadata.j as Uint32Array;
+        const bondMatrices = getThinInstanceMatrixBuffer(bondMesh);
+        if (!bondMatrices) {
+            return;
+        }
 
         const bondsToRemove = this.createdBondIndices.length;
 
         const newBondMatrices = new Float32Array(bondMatrices.length - bondsToRemove * 16);
-        const newBondIndices_i = new Uint32Array(bondIndices_i.length - bondsToRemove);
-        const newBondIndices_j = new Uint32Array(bondIndices_j.length - bondsToRemove);
 
         newBondMatrices.set(bondMatrices.subarray(0, bondMatrices.length - bondsToRemove * 16));
-        newBondIndices_i.set(bondIndices_i.subarray(0, bondIndices_i.length - bondsToRemove));
-        newBondIndices_j.set(bondIndices_j.subarray(0, bondIndices_j.length - bondsToRemove));
 
-        bondMesh.metadata.matrices = newBondMatrices;
-        bondMesh.metadata.i = newBondIndices_i;
-        bondMesh.metadata.j = newBondIndices_j;
-        bondMesh.thinInstanceSetBuffer("matrix", newBondMatrices, 16);
+        bondMesh.thinInstanceSetBuffer("matrix", newBondMatrices, 16, true);
     }
 }
-
