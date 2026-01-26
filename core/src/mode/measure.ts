@@ -1,16 +1,24 @@
-import type { PointerInfo, AbstractMesh, Vector3 } from "@babylonjs/core";
-import { MeshBuilder, StandardMaterial, Color3 } from "@babylonjs/core";
+import type { PointerInfo, AbstractMesh } from "@babylonjs/core";
+import { MeshBuilder, StandardMaterial, Color3, Vector3 } from "@babylonjs/core";
 import { BaseMode, ModeType } from "./base";
 import type { Molvis } from "@molvis/core";
 import { ContextMenuController } from "../core/context_menu_controller";
+import { makeSelectionKey } from "../core/selection_manager";
 import type { HitResult, MenuItem } from "./types";
 
 interface MeasurementData {
   id: string;
-  startAtom: AbstractMesh;
-  endAtom: AbstractMesh;
-  line: AbstractMesh;
-  distance: number;
+  type: 'distance' | 'angle' | 'dihedral';
+  atoms: number[]; // Store Atom Semantic IDs
+  visuals: AbstractMesh[];
+  value: number;
+}
+
+interface BufferItem {
+  id: number; // Semantic Atom ID
+  key: string; // Selection Key
+  position: Vector3; // Cached position
+  label: string;
 }
 
 /**
@@ -42,16 +50,32 @@ class MeasureModeContextMenu extends ContextMenuController {
         type: "binding",
         bindingConfig: {
           view: "list",
-          label: "Unit",
+          label: "Distance Unit",
           options: [
             { text: "Angstrom (Å)", value: "angstrom" },
             { text: "Nanometer (nm)", value: "nanometer" },
             { text: "Picometer (pm)", value: "picometer" }
           ],
-          value: this.mode.unit,
+          value: this.mode.distanceUnit,
         },
         action: (ev: any) => {
-          this.mode.unit = ev.value;
+          this.mode.distanceUnit = ev.value;
+          this.mode.updateAllLabels();
+        }
+      },
+      {
+        type: "binding",
+        bindingConfig: {
+          view: "list",
+          label: "Angle Unit",
+          options: [
+            { text: "Degrees (°)", value: "degrees" },
+            { text: "Radians (rad)", value: "radians" }
+          ],
+          value: this.mode.angleUnit,
+        },
+        action: (ev: any) => {
+          this.mode.angleUnit = ev.value;
           this.mode.updateAllLabels();
         }
       },
@@ -83,10 +107,12 @@ class MeasureModeContextMenu extends ContextMenuController {
 
 class MeasureMode extends BaseMode {
   private measurements: Map<string, MeasurementData> = new Map();
-  private selectedAtom: AbstractMesh | null = null;
+  // Selection buffer for sequential measurement (max 4 atoms)
+  private selectionBuffer: BufferItem[] = [];
 
   // Configuration properties
-  public unit = "angstrom";
+  public distanceUnit = "angstrom";
+  public angleUnit = "degrees";
   public precision = 2;
 
   constructor(app: Molvis) {
@@ -97,7 +123,18 @@ class MeasureMode extends BaseMode {
     return new MeasureModeContextMenu(this.app, this);
   }
 
+  public override start(): void {
+    super.start();
+    // Clear any existing selection to start fresh
+    this.app.world.selectionManager.apply({ type: 'clear' });
+    this.app.world.highlighter.invalidateAndRebuild();
+  }
 
+  public override finish(): void {
+    this.clearAllMeasurements();
+    this.app.world.selectionManager.apply({ type: 'clear' });
+    super.finish();
+  }
 
   protected override _on_left_up(pointerInfo: PointerInfo): void {
     if (this._is_dragging) {
@@ -105,89 +142,198 @@ class MeasureMode extends BaseMode {
       return;
     }
 
-    const mesh = this.pick_mesh("atom");
-    if (mesh?.name.startsWith("atom:")) {
-      this.handleAtomClick(mesh);
+    const hit = this.pickHit();
+
+    if (hit && hit.type === 'atom') {
+      this.handleAtomClick(hit);
     } else {
-      // Click on empty space - clear current selection
-      this.clearCurrentSelection();
+      // Clear All on Empty Click
+      this.clearAllMeasurements();
     }
 
     super._on_left_up(pointerInfo);
   }
 
-  private handleAtomClick(atom: AbstractMesh): void {
-    if (!this.selectedAtom) {
-      // First atom selection
-      this.selectAtom(atom);
-    } else if (this.selectedAtom === atom) {
-      // Same atom clicked - deselect
-      this.clearCurrentSelection();
+  private handleAtomClick(hit: HitResult): void {
+    if (!hit.mesh) return;
+
+    const thinIndex = hit.thinInstanceIndex ?? -1;
+    const meshId = hit.mesh.uniqueId;
+
+    const meta = thinIndex >= 0
+      ? this.world.sceneIndex.getMeta(meshId, thinIndex)
+      : this.world.sceneIndex.getMeta(meshId);
+
+    if (!meta || meta.type !== 'atom') {
+      return;
+    }
+
+    const atomId = meta.atomId;
+
+    // Repetitive click check
+    if (this.selectionBuffer.length > 0) {
+      const last = this.selectionBuffer[this.selectionBuffer.length - 1];
+      if (last.id === atomId) return;
+    }
+
+    // Auto-reset if 4 atoms already selected (start fresh with new atom)
+    if (this.selectionBuffer.length >= 4) {
+      this.clearAllMeasurements();
+    }
+
+    // Robust Position Logic
+    let position: Vector3;
+    if (thinIndex === -1) {
+      position = hit.mesh.absolutePosition.clone();
     } else {
-      // Second atom selected - create measurement
-      this.createMeasurement(this.selectedAtom, atom);
-      this.clearCurrentSelection();
+      // For thin instances, we assume they haven't moved individually
+      position = new Vector3(meta.position.x, meta.position.y, meta.position.z);
     }
-  }
 
-  private selectAtom(atom: AbstractMesh): void {
-    this.selectedAtom = atom;
-    this.highlightAtom(atom, true);
-  }
+    const label = meta.element;
+    const selectionKey = makeSelectionKey(meshId, thinIndex >= 0 ? thinIndex : undefined);
 
-  private clearCurrentSelection(): void {
-    if (this.selectedAtom) {
-      this.highlightAtom(this.selectedAtom, false);
-      this.selectedAtom = null;
-    }
-  }
-
-  private highlightAtom(atom: AbstractMesh, highlight: boolean): void {
-    const material = atom.material as StandardMaterial;
-    if (material) {
-      if (highlight) {
-        material.emissiveColor = new Color3(0.3, 0.3, 0.1);
-        material.specularColor = new Color3(1, 1, 1);
-      } else {
-        material.emissiveColor = new Color3(0, 0, 0);
-        material.specularColor = new Color3(0.2, 0.2, 0.2);
-      }
-    }
-  }
-
-  private createMeasurement(startAtom: AbstractMesh, endAtom: AbstractMesh): void {
-    const distance = startAtom.position.subtract(endAtom.position).length();
-    const measurementId = `measure_${Date.now()}`;
-
-    // Create measurement line
-    const line = this.createMeasurementLine(startAtom.position, endAtom.position);
-
-    const measurement: MeasurementData = {
-      id: measurementId,
-      startAtom,
-      endAtom,
-      line,
-      distance
+    const item: BufferItem = {
+      id: atomId,
+      key: selectionKey,
+      position,
+      label
     };
 
-    this.measurements.set(measurementId, measurement);
+    // Add to buffer
+    this.selectionBuffer.push(item);
 
-    // Update info panel with current measurement
+    // Highlight using SelectionManager
+    this.app.world.selectionManager.apply({ type: 'add', atoms: [selectionKey] });
+
+    // Trigger Measurements
+    this.processBuffer();
+  }
+
+  private processBuffer() {
+    const n = this.selectionBuffer.length;
+    if (n < 2) return;
+
+    // Always measure distance between last two
+    const last = this.selectionBuffer[n - 1];
+    const secondLast = this.selectionBuffer[n - 2];
+    this.createDistanceMeasurement(secondLast, last);
+
+    // Measure Angle if >= 3 (A-B-C)
+    if (n >= 3) {
+      const c = this.selectionBuffer[n - 1];
+      const b = this.selectionBuffer[n - 2];
+      const a = this.selectionBuffer[n - 3];
+      this.createAngleMeasurement(a, b, c);
+    }
+
+    // Measure Dihedral if >= 4 (A-B-C-D)
+    if (n >= 4) {
+      const d = this.selectionBuffer[n - 1];
+      const c = this.selectionBuffer[n - 2];
+      const b = this.selectionBuffer[n - 3];
+      const a = this.selectionBuffer[n - 4];
+      this.createDihedralMeasurement(a, b, c, d);
+    }
+
     this.updateInfoPanel();
   }
 
+  private clearSelectionBuffer(): void {
+    // Clear Visuals
+    this.app.world.selectionManager.apply({ type: 'clear' });
+    this.selectionBuffer = [];
+  }
+
+  // Override to prevent BaseMode from overwriting our measurement info with default hover text
+  override _on_pointer_move(_pointerInfo: PointerInfo): void {
+    // Do nothing intentionally to preserve measurement display
+  }
+
+  // --- Measurement Creation ---
+
+  private createDistanceMeasurement(start: BufferItem, end: BufferItem): void {
+    const distance = start.position.subtract(end.position).length();
+    const id = `measure_${Date.now()}_dist`;
+
+    const line = this.createMeasurementLine(start.position, end.position);
+
+    const measurement: MeasurementData = {
+      id,
+      type: 'distance',
+      atoms: [start.id, end.id],
+      visuals: [line],
+      value: distance
+    };
+
+    this.measurements.set(id, measurement);
+  }
+
+  private createAngleMeasurement(a: BufferItem, b: BufferItem, c: BufferItem): void {
+    const vBA = a.position.subtract(b.position).normalize();
+    const vBC = c.position.subtract(b.position).normalize();
+
+    const dot = Vector3.Dot(vBA, vBC);
+    const angleRad = Math.acos(Math.max(-1, Math.min(1, dot)));
+
+    const id = `measure_${Date.now()}_ang`;
+
+    const measurement: MeasurementData = {
+      id,
+      type: 'angle',
+      atoms: [a.id, b.id, c.id],
+      visuals: [],
+      value: angleRad
+    };
+
+    this.measurements.set(id, measurement);
+  }
+
+  private createDihedralMeasurement(a: BufferItem, b: BufferItem, c: BufferItem, d: BufferItem): void {
+    const b1 = b.position.subtract(a.position);
+    const b2 = c.position.subtract(b.position);
+    const b3 = d.position.subtract(c.position);
+
+    const b2Norm = b2.length();
+    if (b2Norm < 1e-6) return;
+
+    const n1 = Vector3.Cross(b1, b2).normalize();
+    const n2 = Vector3.Cross(b2, b3).normalize();
+    const m1 = Vector3.Cross(n1, b2.scale(1 / b2Norm)).normalize();
+
+    const x = Vector3.Dot(n1, n2);
+    const y = Vector3.Dot(m1, n2);
+
+    const angleRad = Math.atan2(y, x);
+
+    const id = `measure_${Date.now()}_dihedral`;
+
+    const measurement: MeasurementData = {
+      id,
+      type: 'dihedral',
+      atoms: [a.id, b.id, c.id, d.id],
+      visuals: [],
+      value: angleRad
+    };
+
+    this.measurements.set(id, measurement);
+  }
+
+
+  // Use Dashed Lines
   private createMeasurementLine(start: Vector3, end: Vector3): AbstractMesh {
-    const path = [start, end];
-    const line = MeshBuilder.CreateTube("measurement_line", {
-      path,
-      radius: 0.02,
-      updatable: true
+    const points = [start, end];
+    const line = MeshBuilder.CreateDashedLines("measurement_line", {
+      points,
+      dashSize: 3,
+      gapSize: 1,
+      dashNb: 20
     }, this.world.scene);
 
-    const material = new StandardMaterial("measurement_line_mat", this.world.scene);
-    material.diffuseColor = new Color3(1, 1, 0); // Yellow
-    material.alpha = 0.8;
-    line.material = material;
+    // Allow picking/color through standard material? 
+    // CreateDashedLines returns LinesMesh which uses color property, not material.diffuseColor in the same way.
+    line.color = new Color3(1, 1, 0);
+    line.alpha = 0.8;
 
     return line;
   }
@@ -198,26 +344,49 @@ class MeasureMode extends BaseMode {
       return;
     }
 
-    const measurementTexts: string[] = [];
-    let index = 1;
+    const dists: string[] = [];
+    const angles: string[] = [];
+    const dihedrals: string[] = [];
 
-    for (const measurement of this.measurements.values()) {
-      const formattedDistance = this.formatDistance(measurement.distance);
-      const atomName1 = measurement.startAtom.name.split(':')[1];
-      const atomName2 = measurement.endAtom.name.split(':')[1];
-      measurementTexts.push(`[${index}] ${atomName1} - ${atomName2}: ${formattedDistance}`);
-      index++;
+    // Prioritize newest (map handles insertion order)
+    for (const m of this.measurements.values()) {
+      const str = this.formatMeasurement(m);
+      if (m.type === 'distance') dists.push(str);
+      else if (m.type === 'angle') angles.push(str);
+      else if (m.type === 'dihedral') dihedrals.push(str);
     }
 
-    const infoText = `Measurements (${this.measurements.size}):\n${measurementTexts.join('\n')}`;
+    // "3+2+1" Rule (Show Last N)
+    const showDists = dists.slice(-3).reverse();
+    const showAngles = angles.slice(-2).reverse();
+    const showDihedrals = dihedrals.slice(-1).reverse();
+
+    const sections: string[] = [];
+    if (showDihedrals.length > 0) sections.push(...showDihedrals);
+    if (showAngles.length > 0) sections.push(...showAngles);
+    if (showDists.length > 0) sections.push(...showDists);
+
+    const infoText = `Active Measurements:\n${sections.join('\n')}`;
     this.app.events.emit('info-text-change', infoText);
+  }
+
+  private formatMeasurement(m: MeasurementData): string {
+    const ids = m.atoms.map(id => `Atom ${id}`);
+    if (m.type === 'distance') {
+      return `${ids[0]} - ${ids[1]}: ${this.formatDistance(m.value)}`;
+    } else if (m.type === 'angle') {
+      return `${ids[0]} - ${ids[1]} - ${ids[2]}: ${this.formatAngle(m.value)}`;
+    } else if (m.type === 'dihedral') {
+      return `${ids[0]} - ${ids[1]} - ${ids[2]} - ${ids[3]}: ${this.formatAngle(m.value)}`;
+    }
+    return "";
   }
 
   private formatDistance(distance: number): string {
     let convertedDistance = distance;
     let unitSymbol = "Å";
 
-    switch (this.unit) {
+    switch (this.distanceUnit) {
       case "nanometer":
         convertedDistance = distance / 10;
         unitSymbol = "nm";
@@ -234,79 +403,33 @@ class MeasureMode extends BaseMode {
     return `${convertedDistance.toFixed(this.precision)} ${unitSymbol}`;
   }
 
+  private formatAngle(radians: number): string {
+    if (this.angleUnit === 'degrees') {
+      const deg = radians * (180 / Math.PI);
+      return `${deg.toFixed(this.precision)}°`;
+    } else {
+      return `${radians.toFixed(this.precision)} rad`;
+    }
+  }
+
   public updateAllLabels(): void {
-    // Simply update the info panel with all measurements
     this.updateInfoPanel();
   }
 
   public clearAllMeasurements(): void {
     for (const measurement of this.measurements.values()) {
-      measurement.line.dispose();
+      measurement.visuals.forEach(v => v.dispose());
     }
     this.measurements.clear();
+    this.clearSelectionBuffer();
     this.app.events.emit('info-text-change', "");
   }
 
-  // Override to handle Escape key to clear current selection
   protected override _on_press_escape(): void {
-    if (this.selectedAtom) {
-      this.clearCurrentSelection();
+    if (this.selectionBuffer.length > 0) {
+      this.clearSelectionBuffer();
     } else {
       this.clearAllMeasurements();
-    }
-  }
-
-  public override finish(): void {
-    this.clearAllMeasurements();
-    this.clearCurrentSelection();
-    super.finish();
-  }
-
-  override _on_pointer_move(_pointerInfo: PointerInfo) {
-    // Show measurement preview when atom is selected
-    if (this.selectedAtom) {
-      const mesh = this.pick_mesh("atom");
-      if (mesh?.name.startsWith("atom:") && mesh !== this.selectedAtom) {
-        const distance = this.selectedAtom.position.subtract(mesh.position).length();
-        const formattedDistance = this.formatDistance(distance);
-        const atomName1 = this.selectedAtom.name.split(':')[1];
-        const atomName2 = mesh.name.split(':')[1];
-
-        // Show preview with existing measurements
-        let previewText = `Preview: ${atomName1} - ${atomName2} = ${formattedDistance}`;
-        if (this.measurements.size > 0) {
-          const measurementTexts: string[] = [];
-          let index = 1;
-
-          for (const measurement of this.measurements.values()) {
-            const measuredDistance = this.formatDistance(measurement.distance);
-            const measuredAtomName1 = measurement.startAtom.name.split(':')[1];
-            const measuredAtomName2 = measurement.endAtom.name.split(':')[1];
-            measurementTexts.push(`[${index}] ${measuredAtomName1} - ${measuredAtomName2}: ${measuredDistance}`);
-            index++;
-          }
-
-          previewText = `${previewText}\n\nExisting Measurements:\n${measurementTexts.join('\n')}`;
-        }
-
-        this.app.events.emit('info-text-change', previewText);
-      } else if (!mesh) {
-        // Just show existing measurements when not hovering over an atom
-        this.updateInfoPanel();
-      }
-    } else {
-      // Show normal atom/bond info or measurements
-      const hit = this.pickHit();
-      if (hit && hit.type !== "empty") {
-        // Call parent method to show atom/bond info
-        super._on_pointer_move(_pointerInfo);
-      } else if (this.measurements.size > 0) {
-        // Show measurements when not hovering over anything
-        this.updateInfoPanel();
-      } else {
-        // Clear info when nothing to show
-        this.app.events.emit('info-text-change', "");
-      }
     }
   }
 }
