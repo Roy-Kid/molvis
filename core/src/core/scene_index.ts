@@ -1,4 +1,5 @@
 import type { Block, Box } from "molrs-wasm";
+import { MolecularTopology } from "./topology";
 
 // ============ Entity Types ============
 
@@ -88,33 +89,33 @@ export interface RegisterBoxOptions {
 
 // ============ Internal Storage Types ============
 
-interface FrameAtomEntry {
+export interface FrameAtomEntry {
     kind: 'frame-atom';
     atomBlock: Block;
 }
 
-interface FrameBondEntry {
+export interface FrameBondEntry {
     kind: 'frame-bond';
     bondBlock: Block;
     atomBlock: Block;  // Need atom coords for bond positions
 }
 
-interface StaticAtomEntry {
+export interface StaticAtomEntry {
     kind: 'atom';
     meta: AtomMeta;
 }
 
-interface StaticBondEntry {
+export interface StaticBondEntry {
     kind: 'bond';
     meta: BondMeta;
 }
 
-interface BoxEntry {
+export interface BoxEntry {
     kind: 'box';
     meta: BoxMeta;
 }
 
-type IndexEntry = FrameAtomEntry | FrameBondEntry | StaticAtomEntry | StaticBondEntry | BoxEntry;
+export type IndexEntry = FrameAtomEntry | FrameBondEntry | StaticAtomEntry | StaticBondEntry | BoxEntry;
 
 // ============ SceneIndex ============
 
@@ -134,10 +135,35 @@ type IndexEntry = FrameAtomEntry | FrameBondEntry | StaticAtomEntry | StaticBond
 export class SceneIndex {
     private entries = new Map<number, IndexEntry>();
 
+    /**
+     * Get read-only iterator for all entries
+     */
+    get allEntries(): ReadonlyMap<number, IndexEntry> {
+        return this.entries;
+    }
+
+    /**
+     * Generate next safe atom ID (unified semantic ID)
+     * Scans existing atoms (frame and static) to find max ID.
+     */
+    getNextAtomId(): number {
+        let maxId = -1;
+        for (const entry of this.entries.values()) {
+            if (entry.kind === 'atom') {
+                maxId = Math.max(maxId, entry.meta.atomId);
+            } else if (entry.kind === 'frame-atom') {
+                maxId = Math.max(maxId, entry.atomBlock.nrows() - 1);
+            }
+        }
+        return maxId + 1;
+    }
+
+    public topology: MolecularTopology = new MolecularTopology();
+
     // ============ Registration APIs ============
 
     /**
-     * Register a frame (View mode) with thin instance atoms and bonds.
+     * Register a frame (View mode) with thin instances atoms and bonds.
      */
     registerFrame(options: RegisterFrameOptions): void {
         const { atomMesh, bondMesh, atomBlock, bondBlock } = options;
@@ -148,6 +174,12 @@ export class SceneIndex {
             atomBlock
         });
 
+        // Register atoms to topology
+        const atomCount = atomBlock.nrows();
+        for (let i = 0; i < atomCount; i++) {
+            this.topology.addAtom(i);
+        }
+
         // Register bond mesh if present
         if (bondMesh && bondBlock) {
             this.entries.set(bondMesh.uniqueId, {
@@ -155,6 +187,15 @@ export class SceneIndex {
                 bondBlock,
                 atomBlock  // Store for position lookup
             });
+
+            // Register bonds to topology
+            const bondCount = bondBlock.nrows();
+            const iAtoms = bondBlock.col_u32('i')!;
+            const jAtoms = bondBlock.col_u32('j')!;
+
+            for (let b = 0; b < bondCount; b++) {
+                this.topology.addBond(b, iAtoms[b], jAtoms[b]);
+            }
         }
     }
 
@@ -166,6 +207,7 @@ export class SceneIndex {
             kind: 'atom',
             meta: { type: 'atom', ...options.meta }
         });
+        this.topology.addAtom(options.meta.atomId);
     }
 
     /**
@@ -176,6 +218,11 @@ export class SceneIndex {
             kind: 'bond',
             meta: { type: 'bond', ...options.meta }
         });
+        this.topology.addBond(
+            options.meta.bondId,
+            options.meta.atomId1,
+            options.meta.atomId2
+        );
     }
 
     /**
@@ -310,6 +357,26 @@ export class SceneIndex {
      * @param meshId - The mesh's uniqueId
      */
     unregister(meshId: number): void {
+        const entry = this.entries.get(meshId);
+        if (!entry) return;
+
+        // Cleanup topology based on entry type
+        if (entry.kind === 'atom') {
+            this.topology.removeAtom(entry.meta.atomId);
+        } else if (entry.kind === 'bond') {
+            this.topology.removeBond(entry.meta.bondId);
+        } else if (entry.kind === 'frame-atom') {
+            const count = entry.atomBlock.nrows();
+            for (let i = 0; i < count; i++) {
+                this.topology.removeAtom(i);
+            }
+        } else if (entry.kind === 'frame-bond') {
+            const count = entry.bondBlock.nrows();
+            for (let b = 0; b < count; b++) {
+                this.topology.removeBond(b);
+            }
+        }
+
         this.entries.delete(meshId);
     }
 
@@ -318,5 +385,6 @@ export class SceneIndex {
      */
     clear(): void {
         this.entries.clear();
+        this.topology.clear();
     }
 }

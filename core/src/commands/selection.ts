@@ -1,8 +1,9 @@
 import { Vector3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
 import { Command } from "./base";
-import type { SelectedEntity } from "../core/selection_manager";
+import type { SelectedEntity, GetSelectedResponse } from "../core/selection_manager";
 import type { SceneIndex } from "../core/scene_index";
+import { commands } from "./registry";
 
 function getThinInstanceMatrixBuffer(mesh: Mesh): Float32Array | null {
     const storage = (mesh as unknown as { _thinInstanceDataStorage?: { matrixData?: Float32Array } })._thinInstanceDataStorage;
@@ -417,3 +418,16 @@ export class PasteSelectionCommand extends Command<void> {
         bondMesh.thinInstanceSetBuffer("matrix", newBondMatrices, 16, true);
     }
 }
+
+/**
+ * Get metadata for all currently selected entities.
+ * 
+ * @param app - MolvisApp instance
+ * @returns Object with arrays of selected atom and bond metadata
+ */
+export function getSelectedCommand(app: MolvisApp): GetSelectedResponse {
+    return app.world.selectionManager.getSelectedMeta();
+}
+
+// Register the command for RPC access
+commands.register("get_selected", getSelectedCommand);

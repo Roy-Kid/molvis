@@ -1,5 +1,5 @@
 import { mountMolvis, type MolvisConfig, Frame } from "@molvis/core";
-import { PdbReader, XyzReader } from "molrs-wasm";
+import { PdbReader, XyzReader, LammpsReader } from "molrs-wasm";
 
 const container = document.getElementById("molvis-container");
 if (!container) throw new Error("Missing container");
@@ -39,22 +39,31 @@ let mode: "standalone" | "editor" = "standalone";
 /**
  * Detect file format from filename extension
  */
-function detectFormat(filename: string): "pdb" | "xyz" | "unknown" {
+function detectFormat(filename: string): "pdb" | "xyz" | "lammps" | "unknown" {
   const ext = filename.toLowerCase().split('.').pop();
   if (ext === "pdb") return "pdb";
   if (ext === "xyz") return "xyz";
+  if (ext === "lmp" || ext === "data" || ext === "lammps") return "lammps";
   return "unknown";
 }
 
 /**
  * Load and render a molecular file using molrs parsers
  */
-function readFrame(content: string, format: "pdb" | "xyz"): ReturnType<PdbReader["read"]> {
+function readFrame(content: string, format: "pdb" | "xyz" | "lammps"): ReturnType<PdbReader["read"]> {
   if (format === "pdb") {
     const reader = new PdbReader(content);
     const frame = reader.read(0);
     if (!frame) {
       throw new Error("Empty PDB file");
+    }
+    return frame;
+  }
+  if (format === "lammps") {
+    const reader = new LammpsReader(content);
+    const frame = reader.read(0);
+    if (!frame) {
+      throw new Error("Empty LAMMPS data file");
     }
     return frame;
   }
@@ -76,13 +85,14 @@ function loadFile(content: string, filename: string) {
   console.log(`Loading ${filename} as ${format.toUpperCase()} format`);
 
   const wasmFrame = readFrame(content, format);
-  const frame = Frame.fromMrFrame(wasmFrame);
+  // WASM readers return Frame directly, no conversion needed
+  const frame = wasmFrame;
 
   app.system.frame = frame;
   app.execute("draw_frame", { frame });
   app.setMode("view");
 
-  console.log(`Loaded ${frame.getAtomCount()} atoms from ${filename}`);
+  console.log(`Loaded ${filename} successfully`);
 }
 
 /**

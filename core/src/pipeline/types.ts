@@ -1,4 +1,4 @@
-import type { Frame } from "../core/system/frame";
+import type { Frame } from "molrs-wasm";
 
 /**
  * Selection mask representing a subset of atoms/bonds.
@@ -164,9 +164,11 @@ export interface PipelineContext {
  * Create a default pipeline context for a frame.
  */
 export function createDefaultContext(frame: Frame, frameIndex?: number): PipelineContext {
+    const atomsBlock = frame.get_block("atoms");
+    const atomCount = atomsBlock?.nrows() ?? 0;
     return {
         selectionSet: new Map(),
-        currentSelection: SelectionMask.all(frame.getAtomCount()),
+        currentSelection: SelectionMask.all(atomCount),
         frameIndex,
     };
 }

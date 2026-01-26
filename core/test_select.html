@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Molvis Select Mode Test</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+        #canvas { width: 100vw; height: 100vh; display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        button { margin: 5px; padding: 5px 10px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div>
+            <button id="viewMode">View Mode</button>
+            <button id="selectMode">Select Mode</button>
+            <button id="editMode">Edit Mode</button>
+        </div>
+        <div id="info">Mode: <span id="currentMode">View</span></div>
+    </div>
+    <canvas id="canvas"></canvas>
+    
+    <script type="module">
+        import { createMolvis } from './dist/index.js';
+        
+        const canvas = document.getElementById('canvas');
+        const app = await createMolvis(canvas, {
+            grid: { enabled: true }
+        });
+        
+        // Create a simple test molecule (water)
+        const frameData = {
+            blocks: {
+                atoms: {
+                    x: [0, 0.757, -0.757],
+                    y: [0, 0.586, 0.586],
+                    z: [0, 0, 0],
+                    element: ['O', 'H', 'H']
+                },
+                bonds: {
+                    i: [0, 0],
+                    j: [1, 2],
+                    order: [1, 1]
+                }
+            }
+        };
+        
+        await app.execute('draw_frame', { frameData });
+        
+        // Mode switching
+        document.getElementById('viewMode').onclick = () => {
+            app.execute('set_mode', { mode: 'view' });
+            document.getElementById('currentMode').textContent = 'View';
+        };
+        
+        document.getElementById('selectMode').onclick = () => {
+            app.execute('set_mode', { mode: 'select' });
+            document.getElementById('currentMode').textContent = 'Select';
+        };
+        
+        document.getElementById('editMode').onclick = () => {
+            app.execute('set_mode', { mode: 'edit' });
+            document.getElementById('currentMode').textContent = 'Edit';
+        };
+        
+        // Start in select mode
+        app.execute('set_mode', { mode: 'select' });
+        document.getElementById('currentMode').textContent = 'Select';
+        
+        console.log('Molvis app initialized. Try clicking on atoms in Select mode.');
+    </script>
+</body>
+</html>

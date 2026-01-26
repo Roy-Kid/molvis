@@ -12,6 +12,8 @@ export type { CommandFn } from "./registry";
 
 // Command classes
 export { DrawBoxCommand, DrawFrameCommand } from "./draw";
+export { getSelectedCommand } from "./selection";
+export type { GetSelectedResponse } from "../core/selection_manager";
 
 // Utilities
 export { DefaultPalette } from "./palette";

@@ -1,4 +1,4 @@
-import type { Frame } from "../core/system/frame";
+import type { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
@@ -18,8 +18,10 @@ export class SelectModifier extends BaseModifier {
     validate(input: Frame, _context: PipelineContext): ValidationResult {
         if (Array.isArray(this.expression)) {
             // Validate indices
+            const atomsBlock = input.get_block("atoms");
+            const atomCount = atomsBlock?.nrows() ?? 0;
             const invalidIndices = this.expression.filter(
-                idx => idx < 0 || idx >= input.getAtomCount()
+                idx => idx < 0 || idx >= atomCount
             );
             if (invalidIndices.length > 0) {
                 return {
@@ -34,15 +36,17 @@ export class SelectModifier extends BaseModifier {
     apply(input: Frame, context: PipelineContext): Frame {
         // Evaluate selection
         let mask: SelectionMask;
+        const atomsBlock = input.get_block("atoms");
+        const atomCount = atomsBlock?.nrows() ?? 0;
 
         if (Array.isArray(this.expression)) {
             // Selection by indices
-            mask = SelectionMask.fromIndices(input.getAtomCount(), this.expression);
+            mask = SelectionMask.fromIndices(atomCount, this.expression);
         } else {
             // TODO: Expression-based selection (future enhancement)
             // For now, just select all
             console.warn("Expression-based selection not yet implemented, selecting all");
-            mask = SelectionMask.all(input.getAtomCount());
+            mask = SelectionMask.all(atomCount);
         }
 
         // Store in selectionSet if named
@@ -74,7 +78,9 @@ export class ClearSelectionModifier extends BaseModifier {
     }
 
     apply(input: Frame, context: PipelineContext): Frame {
-        context.currentSelection = SelectionMask.all(input.getAtomCount());
+        const atomsBlock = input.get_block("atoms");
+        const atomCount = atomsBlock?.nrows() ?? 0;
+        context.currentSelection = SelectionMask.all(atomCount);
         return input;
     }
 }

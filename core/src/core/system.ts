@@ -1,4 +1,4 @@
-import type { Frame } from "./system/frame";
+import type { Frame } from "molrs-wasm";
 import { logger } from "../utils/logger";
 
 /**
@@ -21,7 +21,11 @@ export class System {
     set frame(value: Frame | null) {
         this._currentFrame = value;
         if (value) {
-            logger.info(`[System] Frame set with ${value.getAtomCount()} atoms and ${value.getBondCount()} bonds`);
+            const atomsBlock = value.get_block("atoms");
+            const bondsBlock = value.get_block("bonds");
+            const atomCount = atomsBlock?.nrows() ?? 0;
+            const bondCount = bondsBlock?.nrows() ?? 0;
+            logger.info(`[System] Frame set with ${atomCount} atoms and ${bondCount} bonds`);
         } else {
             logger.info("[System] Frame cleared");
         }

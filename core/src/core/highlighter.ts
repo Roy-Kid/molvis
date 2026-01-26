@@ -81,18 +81,23 @@ export class Highlighter {
      */
     private highlightThinInstance(mesh: Mesh, thinIndex: number): void {
         const colorBuffer = this.getThinInstanceColorBuffer(mesh);
-        if (!colorBuffer) return;
+        if (!colorBuffer) {
+            console.log('[Highlighter] highlightThinInstance: colorBuffer is null');
+            return;
+        }
 
         const offset = thinIndex * 4;
         const key = `${mesh.uniqueId}:${thinIndex}`;
 
         // Store original color (sparse)
-        this.thinOriginalColors.set(key, {
-            r: colorBuffer[offset],
-            g: colorBuffer[offset + 1],
-            b: colorBuffer[offset + 2],
-            a: colorBuffer[offset + 3]
-        });
+        if (!this.thinOriginalColors.has(key)) {
+            this.thinOriginalColors.set(key, {
+                r: colorBuffer[offset],
+                g: colorBuffer[offset + 1],
+                b: colorBuffer[offset + 2],
+                a: colorBuffer[offset + 3]
+            });
+        }
 
         // Apply yellow highlight
         colorBuffer[offset] = 1.0;
@@ -101,6 +106,7 @@ export class Highlighter {
         colorBuffer[offset + 3] = 1.0;
 
         // CRITICAL: Must call thinInstanceSetBuffer to update, not just thinInstanceBufferUpdated
+        // Reverting to "color" for the public API call
         mesh.thinInstanceSetBuffer("color", colorBuffer, 4, false);
     }
 
@@ -174,7 +180,8 @@ export class Highlighter {
             _userThinInstanceBuffersStorage?: { data?: Record<string, Float32Array> };
         })._userThinInstanceBuffersStorage;
 
-        const buffer = storage?.data?.color ?? null;
+        // Key is 'instanceColor' in storage, but 'color' in public API
+        const buffer = storage?.data?.instanceColor ?? null;
         return buffer instanceof Float32Array ? buffer : null;
     }
 }

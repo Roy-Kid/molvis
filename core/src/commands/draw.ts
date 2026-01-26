@@ -247,13 +247,11 @@ export class DrawFrameCommand extends Command<void> {
             });
         }
 
-        // Draw Box if present or compute AABB fallback
-        if (atomsBlock) {
-            const boxData = this.getBoxData(this.frame, atomsBlock);
-            if (boxData) {
-                const boxCmd = new DrawBoxCommand(this.app, { box: boxData });
-                boxCmd.do();
-            }
+        // Draw Box if explicitly defined in frame metadata
+        const boxData = this.getBoxData(this.frame);
+        if (boxData) {
+            const boxCmd = new DrawBoxCommand(this.app, { box: boxData });
+            boxCmd.do();
         }
     }
 
@@ -346,7 +344,6 @@ export class DrawFrameCommand extends Command<void> {
             bondMaterial = new BABYLON.StandardMaterial("bondMat", scene);
             bondMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0); // White base for instance colors
         }
-
         // Create base mesh
         const cylinderBase = BABYLON.MeshBuilder.CreateCylinder(
             "bond_base",
@@ -363,6 +360,12 @@ export class DrawFrameCommand extends Command<void> {
         const zCoords = atomsBlock.col_f32("z")!;
         const i_atoms = bondsBlock.col_u32("i")!;
         const j_atoms = bondsBlock.col_u32("j")!;
+
+        console.log(i_atoms)
+        console.log(j_atoms)
+        console.log(xCoords)
+        console.log(yCoords)
+        console.log(zCoords)
 
         const tempMatrix = BABYLON.Matrix.Identity();
         const up = new BABYLON.Vector3(0, 1, 0);
@@ -434,8 +437,7 @@ export class DrawFrameCommand extends Command<void> {
     }
 
     private getBoxData(
-        frame: Frame,
-        atomsBlock: Block
+        frame: Frame
     ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
         const boxMeta = frame.get_meta("box");
         const originMeta = frame.get_meta("box_origin");
@@ -447,7 +449,8 @@ export class DrawFrameCommand extends Command<void> {
             }
         }
 
-        return this.computeAabbBox(atomsBlock);
+        // No box metadata found - don't draw a box
+        return null;
     }
 
     private parseBoxMeta(
@@ -509,44 +512,7 @@ export class DrawFrameCommand extends Command<void> {
             .filter((num) => Number.isFinite(num));
     }
 
-    private computeAabbBox(
-        atomsBlock: Block
-    ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
-        if (atomsBlock.nrows() === 0) {
-            return null;
-        }
 
-        const xCoords = atomsBlock.col_f32("x");
-        const yCoords = atomsBlock.col_f32("y");
-        const zCoords = atomsBlock.col_f32("z");
-        if (!xCoords || !yCoords || !zCoords) {
-            return null;
-        }
-
-        let minX = xCoords[0];
-        let maxX = xCoords[0];
-        let minY = yCoords[0];
-        let maxY = yCoords[0];
-        let minZ = zCoords[0];
-        let maxZ = zCoords[0];
-
-        for (let i = 1; i < atomsBlock.nrows(); i++) {
-            const x = xCoords[i];
-            const y = yCoords[i];
-            const z = zCoords[i];
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-            if (z < minZ) minZ = z;
-            if (z > maxZ) maxZ = z;
-        }
-
-        return {
-            origin: [minX, minY, minZ],
-            lengths: [maxX - minX, maxY - minY, maxZ - minZ]
-        };
-    }
 }
 
 /**
@@ -570,6 +536,7 @@ export interface DrawAtomOptions {
     name?: string;
     radius?: number;
     color?: ColorHex;
+    atomId?: number;
 }
 
 /**
@@ -579,6 +546,9 @@ export interface DrawBondOptions {
     order?: number;
     radius?: number;
     color?: ColorHex;
+    atomId1?: number;
+    atomId2?: number;
+    bondId?: number;
 }
 
 /**
@@ -619,7 +589,7 @@ export class DrawAtomCommand extends Command<Mesh> {
         this.app.world.sceneIndex.registerAtom({
             mesh: { uniqueId: this.mesh.uniqueId },
             meta: {
-                atomId: this.mesh.uniqueId,
+                atomId: this.options.atomId ?? this.mesh.uniqueId,
                 element,
                 position: { x: this.position.x, y: this.position.y, z: this.position.z }
             }
@@ -806,9 +776,9 @@ export class DrawBondCommand extends Command<Mesh> {
         this.app.world.sceneIndex.registerBond({
             mesh: { uniqueId: this.mesh.uniqueId },
             meta: {
-                bondId: this.mesh.uniqueId,
-                atomId1: 0,  // Will be properly set when linking to atoms
-                atomId2: 0,
+                bondId: this.options.bondId ?? this.mesh.uniqueId,
+                atomId1: this.options.atomId1 ?? 0,
+                atomId2: this.options.atomId2 ?? 0,
                 order,
                 start: { x: this.start.x, y: this.start.y, z: this.start.z },
                 end: { x: this.end.x, y: this.end.y, z: this.end.z }

@@ -2,9 +2,9 @@ import type { MolvisApp } from "../core/app";
 
 /**
  * Command function type that operates on MolvisApp.
- * Commands can be synchronous or asynchronous.
+ * Commands can be synchronous or asynchronous and may return values for RPC responses.
  */
-export type CommandFn<A = any> = (app: MolvisApp, args: A) => void | Promise<void>;
+export type CommandFn<A = any, R = any> = (app: MolvisApp, args: A) => R | Promise<R>;
 
 /**
  * CommandRegistry manages command registration and execution.

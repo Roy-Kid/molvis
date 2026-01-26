@@ -33,6 +33,15 @@
           },
           {
             "filenamePattern": "*.xyz"
+          },
+          {
+            "filenamePattern": "*.lmp"
+          },
+          {
+            "filenamePattern": "*.data"
+          },
+          {
+            "filenamePattern": "*.lammps"
           }
         ],
         "priority": "option"
@@ -42,7 +51,7 @@
       "editor/title": [
         {
           "command": "molvis.openPreviewToSide",
-          "when": "resourceExtname == .pdb || resourceExtname == .xyz",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .lmp || resourceExtname == .data || resourceExtname == .lammps",
           "group": "navigation"
         }
       ]

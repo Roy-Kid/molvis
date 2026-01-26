@@ -87,9 +87,12 @@ class SelectMode extends BaseMode {
     }
 
     const thinIndex = scenePick.thinInstanceIndex ?? -1;
+
     const meta = thinIndex >= 0
       ? this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
       : this.app.world.sceneIndex.getMeta(mesh.uniqueId);
+
+
 
     if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
       if (!isCtrl) {
@@ -103,6 +106,7 @@ class SelectMode extends BaseMode {
     const op: SelectionOp = isCtrl
       ? { type: 'toggle', [meta.type + 's']: [key] }
       : { type: 'replace', [meta.type + 's']: [key] };
+
 
     this.app.world.selectionManager.apply(op);
   }

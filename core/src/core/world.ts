@@ -8,6 +8,7 @@ import { SceneIndex } from "./scene_index";
 import { GridGround } from "./grid";
 import { SelectionManager } from "./selection_manager";
 import { Highlighter } from "./highlighter";
+import { MolecularTopology } from "./topology";
 
 export class World {
   private _engine: Engine;
@@ -29,6 +30,7 @@ export class World {
   public sceneIndex: SceneIndex;
   public selectionManager: SelectionManager;
   public highlighter: Highlighter;
+  public topology: MolecularTopology;
 
   constructor(canvas: HTMLCanvasElement, engine: Engine, app: MolvisApp) {
     this._engine = engine;
@@ -80,6 +82,8 @@ export class World {
     this.sceneIndex = new SceneIndex();
     this.selectionManager = new SelectionManager(this.sceneIndex);
     this.highlighter = new Highlighter(scene);
+    // Alias topology to the one managed by SceneIndex
+    this.topology = this.sceneIndex.topology;
 
     // Wire up event: selection changes trigger highlighting
     this.selectionManager.on(state => this.highlighter.highlightSelection(state));

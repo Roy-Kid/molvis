@@ -47,6 +47,32 @@ export interface SelectedEntity {
 }
 
 /**
+ * Response structure for get_selected command.
+ * Format is compatible with molpy.Frame construction.
+ */
+export interface GetSelectedResponse {
+    atoms: {
+        atomId: number[];
+        element: string[];
+        x: number[];
+        y: number[];
+        z: number[];
+    };
+    bonds: {
+        bondId: number[];
+        atomId1: number[];
+        atomId2: number[];
+        order: number[];
+        start_x: number[];
+        start_y: number[];
+        start_z: number[];
+        end_x: number[];
+        end_y: number[];
+        end_z: number[];
+    };
+}
+
+/**
  * Selection operations.
  */
 export type SelectionOp =
@@ -153,6 +179,88 @@ export class SelectionManager {
      */
     getState(): SelectionState {
         return this.state;
+    }
+
+    /**
+     * Get metadata for all selected entities.
+     * Returns data in molpy.Frame compatible format.
+     * 
+     * @returns Object with columnar arrays of atom and bond metadata
+     */
+    getSelectedMeta(): GetSelectedResponse {
+        const atomIds: number[] = [];
+        const elements: string[] = [];
+        const xs: number[] = [];
+        const ys: number[] = [];
+        const zs: number[] = [];
+
+        const bondIds: number[] = [];
+        const atomId1s: number[] = [];
+        const atomId2s: number[] = [];
+        const orders: number[] = [];
+        const startXs: number[] = [];
+        const startYs: number[] = [];
+        const startZs: number[] = [];
+        const endXs: number[] = [];
+        const endYs: number[] = [];
+        const endZs: number[] = [];
+
+        // Collect atom metadata
+        for (const key of this.state.atoms) {
+            const ref = parseSelectionKey(key);
+            if (!ref) continue;
+
+            const meta = this.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+            if (meta?.type === 'atom') {
+                atomIds.push(meta.atomId);
+                elements.push(meta.element);
+                xs.push(meta.position.x);
+                ys.push(meta.position.y);
+                zs.push(meta.position.z);
+            }
+        }
+
+        // Collect bond metadata
+        for (const key of this.state.bonds) {
+            const ref = parseSelectionKey(key);
+            if (!ref) continue;
+
+            const meta = this.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+            if (meta?.type === 'bond') {
+                bondIds.push(meta.bondId);
+                atomId1s.push(meta.atomId1);
+                atomId2s.push(meta.atomId2);
+                orders.push(meta.order);
+                startXs.push(meta.start.x);
+                startYs.push(meta.start.y);
+                startZs.push(meta.start.z);
+                endXs.push(meta.end.x);
+                endYs.push(meta.end.y);
+                endZs.push(meta.end.z);
+            }
+        }
+
+        return {
+            atoms: {
+                atomId: atomIds,
+                element: elements,
+                x: xs,
+                y: ys,
+                z: zs
+            },
+            bonds: {
+                bondId: bondIds,
+                atomId1: atomId1s,
+                atomId2: atomId2s,
+                order: orders,
+                start_x: startXs,
+                start_y: startYs,
+                start_z: startZs,
+                end_x: endXs,
+                end_y: endYs,
+                end_z: endZs
+            }
+        };
     }
 
     /**

@@ -7,11 +7,14 @@ import {
     Mesh,
     MeshBuilder,
 } from "@babylonjs/core";
+import { Block } from "molrs-wasm";
 import type { Molvis } from "@molvis/core";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
+import { DrawAtomCommand, DrawBondCommand, DrawFrameCommand } from "../commands/draw";
+import { syncSceneToFrame } from "../core/scene_sync";
 
 /**
  * =============================
@@ -58,8 +61,8 @@ class SelectionHighlight {
 
             const material = new StandardMaterial("selection_highlight_mat", this.scene);
             material.diffuseColor = new Color3(1, 0.8, 0);
-            material.alpha = 0.3;
-            material.wireframe = true;
+            material.alpha = 0.4;
+            material.wireframe = false;
             this.highlightMesh.material = material;
             this.highlightMesh.isPickable = false;
         }
@@ -110,7 +113,29 @@ class ManipulateModeContextMenu extends ContextMenuController {
     }
 
     protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
-        return [
+        const items: MenuItem[] = [];
+
+        if (this.mode.hasUnsavedChanges()) {
+            items.push(
+                {
+                    type: "button",
+                    title: "Save Changes",
+                    action: () => {
+                        this.mode.saveChanges();
+                    }
+                },
+                {
+                    type: "button",
+                    title: "Discard Changes",
+                    action: () => {
+                        this.mode.discardChanges();
+                    }
+                },
+                { type: "separator" }
+            );
+        }
+
+        items.push(
             {
                 type: "button",
                 title: "Snapshot",
@@ -135,7 +160,9 @@ class ManipulateModeContextMenu extends ContextMenuController {
                     this.app.events.emit('info-text-change', "Reset not implemented yet");
                 }
             }
-        ];
+        );
+
+        return items;
     }
 }
 
@@ -155,16 +182,188 @@ class ManipulateMode extends BaseMode {
     // Visual feedback
     private selectionHighlight: SelectionHighlight;
 
+    // Frame conversion state
+    private originalFrameData: {
+        atomBlock: Block;
+        bondBlock?: Block;
+        atomMeshId: number;
+        bondMeshId?: number;
+    } | null = null;
+    private convertedToMeshes = false;
+    private materialCache: Map<string, StandardMaterial> = new Map();
+
     constructor(app: Molvis) {
         super(ModeType.Manipulate, app);
         this.selectionHighlight = new SelectionHighlight(app.scene);
     }
 
+    public override start(): void {
+        super.start();
+
+        // Convert any frame-based entities found in SceneIndex
+        // Topology is automatically managed by SceneIndex during conversion (unregister Frame -> register Mesh)
+        this.convertFromSceneIndex().catch(console.error);
+    }
+
+    /**
+     * Convert Frame entities from SceneIndex to editable meshes
+     * Implementation of User Requirement: "Convert from SceneIndex, not Scene"
+     */
+    private async convertFromSceneIndex(): Promise<void> {
+        const toDispose: number[] = [];
+        const atomBlocks: Block[] = [];
+        const bondBlocks: Block[] = [];
+
+        // 1. Identify Frame entities
+        // Iterate over SceneIndex entries
+        for (const [uniqueId, entry] of this.world.sceneIndex.allEntries) {
+            if (entry.kind === 'frame-atom') {
+                atomBlocks.push(entry.atomBlock);
+                toDispose.push(uniqueId);
+
+                // Track for discard: (Simplified: assumes 1 frame for now, or last one wins)
+                this.originalFrameData = {
+                    atomBlock: entry.atomBlock,
+                    bondBlock: undefined, // Will fill if bond found
+                    atomMeshId: uniqueId,
+                    bondMeshId: undefined
+                };
+            } else if (entry.kind === 'frame-bond') {
+                bondBlocks.push(entry.bondBlock);
+                toDispose.push(uniqueId);
+
+                if (this.originalFrameData) {
+                    this.originalFrameData.bondBlock = entry.bondBlock;
+                    this.originalFrameData.bondMeshId = uniqueId;
+                }
+            }
+        }
+
+        if (atomBlocks.length === 0) {
+            // Starting in Mesh Mode (hand-drawn only)
+            this.originalFrameData = null;
+            return;
+        }
+
+        // 2. Unregister ALL Frame entities/topology FIRST
+        // This ensures clean slate and prevents "Delete after Add" topology bugs
+        toDispose.forEach(uid => {
+            const mesh = this.scene.getMeshByUniqueId(uid);
+            this.world.sceneIndex.unregister(uid);
+            if (mesh) mesh.dispose();
+        });
+
+        // 3. Convert Atoms (Populates Topology)
+        for (const atomBlock of atomBlocks) {
+            const count = atomBlock.nrows();
+            const xCoords = atomBlock.col_f32('x')!;
+            const yCoords = atomBlock.col_f32('y')!;
+            const zCoords = atomBlock.col_f32('z')!;
+            const elements = atomBlock.col_strings('element')!;
+
+            for (let i = 0; i < count; i++) {
+                const position = new Vector3(xCoords[i], yCoords[i], zCoords[i]);
+                const element = elements[i];
+
+
+
+                // Create command using explicit Semantic ID (index i)
+                try {
+                    const cmd = new DrawAtomCommand(
+                        this.app,
+                        position,
+                        {
+                            element,
+                            atomId: i // Preserving Semantic ID 0..N
+                        },
+                        this.app.palette,
+                        this.scene,
+                        this.materialCache
+                    );
+                    cmd.do();
+
+                    if (i === 55) {
+                        // console.log(`[ManipulateMode] SUCCESS Atom 55 created. UID: ${mesh.uniqueId}`);
+                    }
+                } catch (err) {
+                    console.error(`[ManipulateMode] FAIL creating Atom ${i}:`, err);
+                }
+            }
+        }
+
+        // 4. Convert Bonds (Populates Topology)
+        for (const bondBlock of bondBlocks) {
+            const count = bondBlock.nrows();
+            const iAtoms = bondBlock.col_u32('i')!;
+            const jAtoms = bondBlock.col_u32('j')!;
+            const orders = bondBlock.col_u8('order');
+
+            // We need coordinates for the bond endpoints.
+            // Since we just created Atom meshes for these indices (0..N),
+            // we can look them up by atomId?
+            // Expensive to search?
+            // SceneIndex has the newly registered atoms.
+            // But we can also use the coordinates from the atomBlock corresponding to this bondBlock?
+            // The bond entry in SceneIndex has `atomBlock` reference!
+
+            // Let's find the corresponding atomBlock for coordinates.
+            // We iterate bondBlocks. We need the atomBlock.
+            // We can re-fetch it from the sceneIndex entry if we had the ID.
+            // Or we check our `atomBlocks` array.
+            // Typically 1 atomBlock per 1 bondBlock.
+
+            // For now, assume 1-to-1 mapping or single frame. Use the first atomBlock?
+            // Robust way: Use the coordinates of the NEWLY CREATED MESHES.
+            // The `reconstruct` phase will fix topology. But we need to create the meshes first.
+            // To create meshes we need positions.
+
+            // Let's use `this.findAtomMeshByIndex` helper which searches by `atomId`.
+
+            for (let b = 0; b < count; b++) {
+                // Verify atoms exist in SceneIndex (created in step 3)
+                const atomIMesh = this.findAtomMeshByIndex(iAtoms[b]);
+                const atomJMesh = this.findAtomMeshByIndex(jAtoms[b]);
+
+                if (!atomIMesh || !atomJMesh) {
+                    console.warn(`[ManipulateMode] Skipping Bond ${b}: Atoms ${iAtoms[b]} or ${jAtoms[b]} missing.`);
+                    continue;
+                }
+
+                const cmd = new DrawBondCommand(
+                    this.app,
+                    atomIMesh.position,
+                    atomJMesh.position,
+                    {
+                        order: orders ? orders[b] : 1,
+                        bondId: b, // Preserving Semantic ID
+                        atomId1: iAtoms[b],
+                        atomId2: jAtoms[b]
+                    },
+                    this.app.palette,
+                    this.scene,
+                    this.materialCache
+                );
+                cmd.do();
+            }
+        }
+
+        this.convertedToMeshes = true;
+    }
+
+    private findAtomMeshByIndex(atomId: number): AbstractMesh | undefined {
+        // Find mesh in SceneIndex with type='atom' and atomId=atomId
+        // We can scan sceneIndex.allEntries now!
+        for (const [uid, entry] of this.world.sceneIndex.allEntries) {
+            if (entry.kind === 'atom' && entry.meta.atomId === atomId) {
+                return this.scene.getMeshByUniqueId(uid) || undefined;
+            }
+        }
+        return undefined;
+    }
+
     protected createContextMenuController(): ContextMenuController {
         return new ManipulateModeContextMenu(this.app, this);
     }
-
-
 
     /**
      * Clear current selection and hide highlight
@@ -226,51 +425,91 @@ class ManipulateMode extends BaseMode {
     /**
      * Update bond meshes connected to a moved atom
      */
+    /**
+     * Update bond meshes connected to a moved atom
+     */
     private updateConnectedBonds(
         atom: AbstractMesh,
         _oldPosition: Vector3,
         _newPosition: Vector3
     ): void {
         const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
-        const atomId = meta && meta.type === 'atom' ? meta.atomId : atom.uniqueId;
+        const atomId = meta && meta.type === 'atom' ? meta.atomId : -1;
+        if (atomId === -1) {
+            console.warn('[ManipulateMode] updateConnectedBonds: moved atom has invalid ID');
+            return;
+        }
+
         const bondIds = this.world.topology.getBondsForAtom(atomId);
+
 
         for (const bondId of bondIds) {
             const bondInfo = this.world.topology.getAtomsForBond(bondId);
-            if (!bondInfo) continue;
-
-            // Find the other atom
-            const otherAtomId = bondInfo.atom1 === atomId ? bondInfo.atom2 : bondInfo.atom1;
-
-            // Find other atom mesh
-            let otherAtomMesh: AbstractMesh | null = null;
-            for (const mesh of this.scene.meshes) {
-                const otherMeta = this.world.sceneIndex.getMeta(mesh.uniqueId);
-                if (otherMeta?.type === 'atom' && (otherMeta.atomId === otherAtomId || mesh.uniqueId === otherAtomId)) {
-                    otherAtomMesh = mesh;
-                    break;
-                }
+            if (!bondInfo) {
+                console.warn(`[ManipulateMode] No topology info for bond ${bondId}`);
+                continue;
             }
 
-            if (!otherAtomMesh) continue;
+            const otherAtomId = bondInfo.atom1 === atomId ? bondInfo.atom2 : bondInfo.atom1;
+            const otherAtomMesh = this.scene.meshes.find(m => {
+                const mMeta = this.world.sceneIndex.getMeta(m.uniqueId);
+                return mMeta?.type === 'atom' && mMeta.atomId == otherAtomId; // Relaxed check
+            });
 
-            // Find and update bond mesh(es)
-            for (const mesh of this.scene.meshes) {
-                const bondMeta = this.world.sceneIndex.getMeta(mesh.uniqueId);
-                if ((bondMeta?.type === 'bond' && bondMeta.bondId === bondId) || mesh.uniqueId === bondId) {
-                    // Recreate bond tube with new positions
-                    // For simplicity, we update the tube path
-                    const start = atom.position;
-                    const end = otherAtomMesh.position;
+            if (!otherAtomMesh) {
+                console.warn(`[ManipulateMode] Could not find mesh for neighbor atom ${otherAtomId}`);
 
-                    // Update tube path if possible
-                    if (mesh instanceof Mesh) {
-                        MeshBuilder.CreateTube(mesh.name, {
-                            path: [start, end],
-                            instance: mesh as Mesh,
-                        }, this.scene);
+                // Deep diagnosis logic removed
+                continue;
+            }
+
+            // Find existing bond mesh to update (dispose and recreate)
+            const bondMesh = this.scene.meshes.find(m => {
+                const bMeta = this.world.sceneIndex.getMeta(m.uniqueId);
+                // Log failing comparisons if needed
+                // console.log(`Checking mesh ${m.uniqueId}:`, bMeta);
+                // Strict equality might fail if types differ?
+                return bMeta?.type === 'bond' && bMeta.bondId == bondId; // Loose equality check safely
+            });
+
+            if (bondMesh) {
+
+                const bondMeta = this.world.sceneIndex.getMeta(bondMesh.uniqueId);
+                const order = bondMeta?.type === 'bond' ? bondMeta.order : 1;
+
+                // Dispose old mesh
+                this.world.sceneIndex.unregister(bondMesh.uniqueId);
+                bondMesh.dispose();
+
+                // Create new mesh
+                const cmd = new DrawBondCommand(
+                    this.app,
+                    atom.position,
+                    otherAtomMesh.position,
+                    {
+                        order,
+                        bondId: bondId,
+                        atomId1: atomId,
+                        atomId2: otherAtomId
+                    },
+                    this.app.palette,
+                    this.scene,
+                    this.materialCache
+                );
+                const newMesh = cmd.do();
+
+                // Register new mesh with correct ID
+                this.world.sceneIndex.registerBond({
+                    mesh: { uniqueId: newMesh.uniqueId },
+                    meta: {
+                        bondId: bondId,
+                        atomId1: atomId,
+                        atomId2: otherAtomId,
+                        order,
+                        start: { x: atom.position.x, y: atom.position.y, z: atom.position.z },
+                        end: { x: otherAtomMesh.position.x, y: otherAtomMesh.position.y, z: otherAtomMesh.position.z }
                     }
-                }
+                });
             }
         }
     }
@@ -360,8 +599,128 @@ class ManipulateMode extends BaseMode {
     }
 
     // --------------------------------
-    // Keyboard Event Handlers
+    // Frame Conversion Methods
     // --------------------------------
+
+    /**
+     * Check if there are unsaved changes
+     */
+    public hasUnsavedChanges(): boolean {
+        return this.convertedToMeshes && this.originalFrameData !== null;
+    }
+
+
+
+    /**
+     * Save changes: convert meshes back to frame
+     */
+    public async saveChanges(): Promise<void> {
+        // Allow saving even if originalFrameData is missing (Mesh mode)
+        if (!this.convertedToMeshes && !this.originalFrameData) {
+            // Check if we have any atoms
+            const hasAtoms = this.scene.meshes.some(m => {
+                const meta = this.world.sceneIndex.getMeta(m.uniqueId);
+                return meta?.type === 'atom';
+            });
+            if (!hasAtoms) return;
+        }
+
+        // Use syncSceneToFrame to update global system frame
+        const frame = this.app.system.frame;
+        if (!frame) {
+            console.warn('[ManipulateMode] No system frame to save to');
+            return;
+        }
+
+        syncSceneToFrame(this.scene, this.world.sceneIndex, frame);
+
+        // Dispose individual meshes
+        this.disposeAllAtomAndBondMeshes();
+
+        // Redraw thin instances from the updated frame
+        const { DrawFrameCommand } = await import('../commands/draw');
+        // Note: DrawFrameCommand constructor expects frameData to create a new Frame internally
+        // BUT we want to use our updated 'frame' directly.
+        // We modify DrawFrameCommand usage to pass the frame
+        const cmd = new DrawFrameCommand(this.app, {
+            frame: frame
+        });
+        cmd.do();
+
+        // Cleanup
+        this.originalFrameData = null;
+        this.convertedToMeshes = false;
+        this.world.topology.clear();
+        console.log('[ManipulateMode] Saved changes using syncSceneToFrame');
+    }
+
+    protected override _on_press_ctrl_s(): void {
+        this.saveChanges().catch(console.error);
+    }
+
+    /**
+     * Discard changes: restore original frame
+     */
+    public async discardChanges(): Promise<void> {
+        if (!this.convertedToMeshes || !this.originalFrameData) {
+            return;
+        }
+
+        // Dispose individual meshes
+        this.disposeAllAtomAndBondMeshes();
+
+        // Restore original frame
+        const cmd = new DrawFrameCommand(this.app, {
+            frameData: {
+                blocks: {
+                    atoms: {
+                        x: this.originalFrameData.atomBlock.col_f32('x')!,
+                        y: this.originalFrameData.atomBlock.col_f32('y')!,
+                        z: this.originalFrameData.atomBlock.col_f32('z')!,
+                        element: this.originalFrameData.atomBlock.col_strings('element') as string[]
+                    },
+                    bonds: this.originalFrameData.bondBlock ? {
+                        i: this.originalFrameData.bondBlock.col_u32('i')!,
+                        j: this.originalFrameData.bondBlock.col_u32('j')!,
+                        order: this.originalFrameData.bondBlock.col_u8('order')
+                    } : undefined
+                },
+                metadata: {}
+            }
+        });
+        cmd.do();
+
+        // Cleanup
+        this.originalFrameData = null;
+        this.convertedToMeshes = false;
+        this.world.topology.clear();
+        console.log('[ManipulateMode] Discarded changes and restored original frame');
+    }
+
+
+
+
+
+    /**
+     * Helper: Dispose all atom and bond meshes
+     */
+    private disposeAllAtomAndBondMeshes(): void {
+        const meshesToDispose: AbstractMesh[] = [];
+
+        this.scene.meshes.forEach(mesh => {
+            const meta = this.world.sceneIndex.getMeta(mesh.uniqueId);
+            if (meta?.type === 'atom' || meta?.type === 'bond') {
+                meshesToDispose.push(mesh);
+            }
+        });
+
+        meshesToDispose.forEach(mesh => {
+            this.world.sceneIndex.unregister(mesh.uniqueId);
+            mesh.dispose();
+        });
+
+        this.world.topology.clear();
+    }
 
     protected override _on_press_escape(): void {
         this.clearSelection();
@@ -372,6 +731,8 @@ class ManipulateMode extends BaseMode {
     // --------------------------------
 
     public override finish(): void {
+        // Do not auto-discard. Preserving meshes allows seamless mode switching.
+        // User must explicitly Discard or Save if they want to revert or optimize.
         this.clearSelection();
         this.selectionHighlight.dispose();
         super.finish();
