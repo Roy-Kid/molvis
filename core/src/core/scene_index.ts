@@ -1,5 +1,6 @@
+import type { Mesh } from "@babylonjs/core";
 import type { Block, Box } from "molrs-wasm";
-import { MolecularTopology } from "./topology";
+import { Topology } from "./system/topology";
 
 // ============ Entity Types ============
 
@@ -32,10 +33,12 @@ export interface BondMeta {
 
 /**
  * Metadata for a simulation box.
+ * STRICT: Must include dimensions and origin.
  */
 export interface BoxMeta {
     type: 'box';
     dimensions: [number, number, number];
+    origin: [number, number, number];
 }
 
 /**
@@ -46,18 +49,11 @@ export type EntityMeta = AtomMeta | BondMeta | BoxMeta;
 // ============ Registration Options ============
 
 /**
- * Duck-typed mesh reference (Babylon decoupled).
- */
-export interface MeshRef {
-    uniqueId: number;
-}
-
-/**
  * Options for registering a frame (View mode thin instances).
  */
 export interface RegisterFrameOptions {
-    atomMesh: MeshRef;
-    bondMesh?: MeshRef;
+    atomMesh: Mesh;
+    bondMesh?: Mesh;
     atomBlock: Block;
     bondBlock?: Block;
     box?: Box;
@@ -67,7 +63,7 @@ export interface RegisterFrameOptions {
  * Options for registering an individual atom (Edit mode).
  */
 export interface RegisterAtomOptions {
-    mesh: MeshRef;
+    mesh: Mesh;
     meta: Omit<AtomMeta, 'type'>;
 }
 
@@ -75,7 +71,7 @@ export interface RegisterAtomOptions {
  * Options for registering an individual bond (Edit mode).
  */
 export interface RegisterBondOptions {
-    mesh: MeshRef;
+    mesh: Mesh;
     meta: Omit<BondMeta, 'type'>;
 }
 
@@ -83,34 +79,49 @@ export interface RegisterBondOptions {
  * Options for registering a simulation box.
  */
 export interface RegisterBoxOptions {
-    mesh: MeshRef;
+    mesh: Mesh;
     meta: Omit<BoxMeta, 'type'>;
 }
 
 // ============ Internal Storage Types ============
 
-export interface FrameAtomEntry {
+/**
+ * Renderable primitive instance handle.
+ * Stores render-side references (Mesh, material, highlight, pick mapping).
+ */
+export interface MeshEntity {
+    mesh: Mesh;
+    material?: unknown;
+    highlightRef?: unknown;
+    pickKey?: string;
+}
+
+interface EntityEntryBase {
+    isSaved: boolean;
+}
+
+export interface FrameAtomEntry extends EntityEntryBase {
     kind: 'frame-atom';
     atomBlock: Block;
 }
 
-export interface FrameBondEntry {
+export interface FrameBondEntry extends EntityEntryBase {
     kind: 'frame-bond';
     bondBlock: Block;
     atomBlock: Block;  // Need atom coords for bond positions
 }
 
-export interface StaticAtomEntry {
+export interface StaticAtomEntry extends EntityEntryBase {
     kind: 'atom';
     meta: AtomMeta;
 }
 
-export interface StaticBondEntry {
+export interface StaticBondEntry extends EntityEntryBase {
     kind: 'bond';
     meta: BondMeta;
 }
 
-export interface BoxEntry {
+export interface BoxEntry extends EntityEntryBase {
     kind: 'box';
     meta: BoxMeta;
 }
@@ -120,26 +131,41 @@ export type IndexEntry = FrameAtomEntry | FrameBondEntry | StaticAtomEntry | Sta
 // ============ SceneIndex ============
 
 /**
- * SceneIndex: Pure index service mapping render objects to business metadata.
+ * SceneIndex: Single Truth for Entity Metadata.
  * 
  * Responsibilities:
- * - Register entities with chemistry-semantic APIs (registerFrame, registerAtom, registerBond, registerBox)
- * - Query metadata via getMeta(meshId, subIndex?)
- * - Lifecycle management (unregister, clear)
+ * - Maps render objects (Meshes) to business entities (Atoms, Bonds).
+ * - Provides Chemistry-Semantic Metadata via `getMeta()`.
+ * - Manages Molecular Topology (Connectivity).
  * 
- * Does NOT:
- * - Handle picking logic or events
- * - Manage selection/highlight state
- * - Know about Babylon types (accepts duck-typed MeshRef)
+ * Strict Mode:
+ * - No fallbacks for malformed data.
+ * - Enforces valid IDs and indices.
  */
 export class SceneIndex {
-    private entries = new Map<number, IndexEntry>();
+    private meshRegistry = new Map<number, MeshEntity>();
+    private entityRegistry = new Map<number, IndexEntry>();
+    private allUnsaved = false;
 
     /**
      * Get read-only iterator for all entries
      */
     get allEntries(): ReadonlyMap<number, IndexEntry> {
-        return this.entries;
+        return this.entityRegistry;
+    }
+
+    /**
+     * Get Mesh for a registered mesh ID.
+     */
+    getMesh(meshId: number): Mesh | null {
+        return this.meshRegistry.get(meshId)?.mesh ?? null;
+    }
+
+    /**
+     * Get MeshEntity for a registered mesh ID.
+     */
+    getMeshEntity(meshId: number): MeshEntity | null {
+        return this.meshRegistry.get(meshId) ?? null;
     }
 
     /**
@@ -148,7 +174,7 @@ export class SceneIndex {
      */
     getNextAtomId(): number {
         let maxId = -1;
-        for (const entry of this.entries.values()) {
+        for (const entry of this.entityRegistry.values()) {
             if (entry.kind === 'atom') {
                 maxId = Math.max(maxId, entry.meta.atomId);
             } else if (entry.kind === 'frame-atom') {
@@ -158,7 +184,7 @@ export class SceneIndex {
         return maxId + 1;
     }
 
-    public topology: MolecularTopology = new MolecularTopology();
+    public topology: Topology = new Topology();
 
     // ============ Registration APIs ============
 
@@ -169,10 +195,15 @@ export class SceneIndex {
         const { atomMesh, bondMesh, atomBlock, bondBlock } = options;
 
         // Register atom mesh
-        this.entries.set(atomMesh.uniqueId, {
+        if (!atomBlock) throw new Error("SceneIndex: atomBlock is required for frame registration");
+
+        this.meshRegistry.set(atomMesh.uniqueId, { mesh: atomMesh });
+        this.entityRegistry.set(atomMesh.uniqueId, {
             kind: 'frame-atom',
-            atomBlock
+            atomBlock,
+            isSaved: true
         });
+        this.allUnsaved = false;
 
         // Register atoms to topology
         const atomCount = atomBlock.nrows();
@@ -182,10 +213,12 @@ export class SceneIndex {
 
         // Register bond mesh if present
         if (bondMesh && bondBlock) {
-            this.entries.set(bondMesh.uniqueId, {
+            this.meshRegistry.set(bondMesh.uniqueId, { mesh: bondMesh });
+            this.entityRegistry.set(bondMesh.uniqueId, {
                 kind: 'frame-bond',
                 bondBlock,
-                atomBlock  // Store for position lookup
+                atomBlock,  // Store for position lookup
+                isSaved: true
             });
 
             // Register bonds to topology
@@ -203,36 +236,58 @@ export class SceneIndex {
      * Register an individual atom (Edit mode).
      */
     registerAtom(options: RegisterAtomOptions): void {
-        this.entries.set(options.mesh.uniqueId, {
+        this.meshRegistry.set(options.mesh.uniqueId, { mesh: options.mesh });
+        this.entityRegistry.set(options.mesh.uniqueId, {
             kind: 'atom',
-            meta: { type: 'atom', ...options.meta }
+            meta: { type: 'atom', ...options.meta },
+            isSaved: false
         });
         this.topology.addAtom(options.meta.atomId);
+        this.markAllUnsaved();
     }
 
     /**
      * Register an individual bond (Edit mode).
      */
     registerBond(options: RegisterBondOptions): void {
-        this.entries.set(options.mesh.uniqueId, {
+        this.meshRegistry.set(options.mesh.uniqueId, { mesh: options.mesh });
+        this.entityRegistry.set(options.mesh.uniqueId, {
             kind: 'bond',
-            meta: { type: 'bond', ...options.meta }
+            meta: { type: 'bond', ...options.meta },
+            isSaved: false
         });
         this.topology.addBond(
             options.meta.bondId,
             options.meta.atomId1,
             options.meta.atomId2
         );
+        this.markAllUnsaved();
     }
 
     /**
      * Register a simulation box.
      */
     registerBox(options: RegisterBoxOptions): void {
-        this.entries.set(options.mesh.uniqueId, {
+        this.meshRegistry.set(options.mesh.uniqueId, { mesh: options.mesh });
+        this.entityRegistry.set(options.mesh.uniqueId, {
             kind: 'box',
-            meta: { type: 'box', ...options.meta }
+            meta: { type: 'box', ...options.meta },
+            isSaved: false
         });
+        this.markAllUnsaved();
+    }
+
+    /**
+     * Register a simulation box sourced from a Frame.
+     */
+    registerBoxFromFrame(mesh: Mesh, meta: Omit<BoxMeta, 'type'>): void {
+        this.meshRegistry.set(mesh.uniqueId, { mesh });
+        this.entityRegistry.set(mesh.uniqueId, {
+            kind: 'box',
+            meta: { type: 'box', ...meta },
+            isSaved: true
+        });
+        this.allUnsaved = false;
     }
 
     // ============ Query APIs ============
@@ -241,10 +296,10 @@ export class SceneIndex {
      * Get entity type for a mesh.
      * 
      * @param meshId - The mesh's uniqueId
-     * @returns 'atom', 'bond', or 'box', or null if not registered
+     * @returns 'atom' | 'bond' | 'box' | null
      */
     getType(meshId: number): EntityType | null {
-        const entry = this.entries.get(meshId);
+        const entry = this.entityRegistry.get(meshId);
         if (!entry) return null;
 
         switch (entry.kind) {
@@ -267,7 +322,7 @@ export class SceneIndex {
      * @returns EntityMeta or null if not found/invalid
      */
     getMeta(meshId: number, subIndex?: number): EntityMeta | null {
-        const entry = this.entries.get(meshId);
+        const entry = this.entityRegistry.get(meshId);
         if (!entry) return null;
 
         switch (entry.kind) {
@@ -285,11 +340,11 @@ export class SceneIndex {
     }
 
     private getFrameAtomMeta(entry: FrameAtomEntry, subIndex?: number): AtomMeta | null {
-        if (subIndex === undefined) return null;
+        if (subIndex === undefined || subIndex < 0) return null;
 
         const { atomBlock } = entry;
         const count = atomBlock.nrows();
-        if (subIndex < 0 || subIndex >= count) return null;
+        if (subIndex >= count) return null;
 
         const xCoords = atomBlock.col_f32('x');
         const yCoords = atomBlock.col_f32('y');
@@ -298,6 +353,7 @@ export class SceneIndex {
 
         if (!xCoords || !yCoords || !zCoords || !elements) return null;
 
+        // Valid data found
         return {
             type: 'atom',
             atomId: subIndex,
@@ -357,7 +413,7 @@ export class SceneIndex {
      * @param meshId - The mesh's uniqueId
      */
     unregister(meshId: number): void {
-        const entry = this.entries.get(meshId);
+        const entry = this.entityRegistry.get(meshId);
         if (!entry) return;
 
         // Cleanup topology based on entry type
@@ -377,14 +433,71 @@ export class SceneIndex {
             }
         }
 
-        this.entries.delete(meshId);
+        this.entityRegistry.delete(meshId);
+        this.meshRegistry.delete(meshId);
     }
 
     /**
      * Clear all registrations.
      */
     clear(): void {
-        this.entries.clear();
+        this.entityRegistry.clear();
+        this.meshRegistry.clear();
         this.topology.clear();
+        this.allUnsaved = false;
+    }
+
+    // ============ Saved State APIs ============
+
+    /**
+     * Check saved state for a specific mesh ID.
+     */
+    isSaved(meshId: number): boolean | null {
+        const entry = this.entityRegistry.get(meshId);
+        return entry ? entry.isSaved : null;
+    }
+
+    /**
+     * Check if any entities are unsaved.
+     */
+    hasUnsaved(): boolean {
+        if (this.allUnsaved) {
+            return this.entityRegistry.size > 0;
+        }
+        for (const entry of this.entityRegistry.values()) {
+            if (!entry.isSaved) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Mark a specific entity as unsaved.
+     */
+    markUnsaved(meshId: number): void {
+        const entry = this.entityRegistry.get(meshId);
+        if (entry) {
+            entry.isSaved = false;
+        }
+    }
+
+    /**
+     * Mark all entities as unsaved.
+     */
+    markAllUnsaved(): void {
+        if (this.allUnsaved) return;
+        for (const entry of this.entityRegistry.values()) {
+            entry.isSaved = false;
+        }
+        this.allUnsaved = true;
+    }
+
+    /**
+     * Mark all entities as saved.
+     */
+    markAllSaved(): void {
+        for (const entry of this.entityRegistry.values()) {
+            entry.isSaved = true;
+        }
+        this.allUnsaved = false;
     }
 }

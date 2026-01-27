@@ -38,12 +38,7 @@ class ViewModeContextMenu extends ContextMenuController {
       }
     });
 
-    items.push(CommonMenuItems.separator());
-
-    // Snapshot (using common item)
-    items.push(CommonMenuItems.snapshot(this.app));
-
-    return items;
+    return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
 

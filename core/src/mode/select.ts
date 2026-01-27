@@ -1,5 +1,5 @@
 import type { PointerInfo } from "@babylonjs/core";
-import { Vector3 } from "@babylonjs/core";
+
 import type { Molvis } from "@molvis/core";
 
 import { BaseMode, ModeType } from "./base";
@@ -23,11 +23,10 @@ class SelectModeContextMenu extends ContextMenuController {
   }
 
   protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
-    return [
-      CommonMenuItems.clearSelection(this.app),
-      CommonMenuItems.separator(),
-      CommonMenuItems.snapshot(this.app)
+    const items: MenuItem[] = [
+      CommonMenuItems.clearSelection(this.app)
     ];
+    return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
 
@@ -103,9 +102,20 @@ class SelectMode extends BaseMode {
 
     const key = makeSelectionKey(mesh.uniqueId, thinIndex >= 0 ? thinIndex : undefined);
 
-    const op: SelectionOp = isCtrl
-      ? { type: 'toggle', [meta.type + 's']: [key] }
-      : { type: 'replace', [meta.type + 's']: [key] };
+    const isSelected = this.app.world.selectionManager.isSelected(key);
+    let op: SelectionOp;
+
+    if (isCtrl) {
+      op = { type: 'toggle', [meta.type + 's']: [key] };
+    } else {
+      if (isSelected) {
+        // If already selected, deselect it (remove)
+        op = { type: 'remove', [meta.type + 's']: [key] };
+      } else {
+        // If not selected, standard replace
+        op = { type: 'replace', [meta.type + 's']: [key] };
+      }
+    }
 
 
     this.app.world.selectionManager.apply(op);
@@ -158,16 +168,7 @@ class SelectMode extends BaseMode {
   }
   */
 
-  private getWorldPositionFromScreen(): Vector3 | null {
-    const pickResult = this.scene.pick(
-      this.scene.pointerX,
-      this.scene.pointerY,
-      undefined,
-      false,
-      this.world.camera
-    );
-    return pickResult.pickedPoint || null;
-  }
+
 }
 
 export { SelectMode };

@@ -1,4 +1,4 @@
-import { Scene, Engine, HemisphericLight, Vector3, ArcRotateCamera } from "@babylonjs/core";
+import { Scene, Engine, HemisphericLight, DirectionalLight, Vector3, Color3, ArcRotateCamera } from "@babylonjs/core";
 import { type MolvisApp } from "./app";
 import { ViewportSettings } from "./viewport_settings";
 import { TargetIndicator } from "./target_indicator";
@@ -8,7 +8,7 @@ import { SceneIndex } from "./scene_index";
 import { GridGround } from "./grid";
 import { SelectionManager } from "./selection_manager";
 import { Highlighter } from "./highlighter";
-import { MolecularTopology } from "./topology";
+import { Topology } from "./system/topology";
 
 export class World {
   private _engine: Engine;
@@ -30,7 +30,7 @@ export class World {
   public sceneIndex: SceneIndex;
   public selectionManager: SelectionManager;
   public highlighter: Highlighter;
-  public topology: MolecularTopology;
+  public topology: Topology;
 
   constructor(canvas: HTMLCanvasElement, engine: Engine, app: MolvisApp) {
     this._engine = engine;
@@ -74,9 +74,20 @@ export class World {
       this.grid.enable();
     }
 
-    // Basic lighting
-    const light = new HemisphericLight("light", new Vector3(0.5, 1, 0), scene);
-    light.intensity = 0.8;
+    // Lighting setup for depth with minimal shadows
+    // 1. Hemispheric light for soft global illumination (fill)
+    // High intensity and bright ground color ensures atoms look fully lit even in crevices
+    const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), scene);
+    hemiLight.intensity = 0.7;
+    hemiLight.groundColor = new Color3(0.6, 0.6, 0.6); // Strong bounce light to remove dark under-sides
+    hemiLight.specular = Color3.Black(); // Reduce specular on hemi to avoid washout
+
+    // 2. Directional light for definition (key light)
+    // Attached to camera to ensure viewed side is always lit ("Headlamp")
+    const dirLight = new DirectionalLight("dirLight", new Vector3(0, 0, 1), scene);
+    dirLight.parent = camera;
+    dirLight.intensity = 0.4; // Slightly reduced to balance with stronger ambient
+    dirLight.specular = new Color3(0.5, 0.5, 0.5); // Add some shine for "stereoscopic" feel
 
     // Initialize new unified selection system
     this.sceneIndex = new SceneIndex();
@@ -90,7 +101,7 @@ export class World {
 
     this._sceneData = {
       scene,
-      light,
+      light: hemiLight,
       camera
     };
 

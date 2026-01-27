@@ -261,8 +261,8 @@ export class PasteSelectionCommand extends Command<void> {
             // Add color (default white for now, could be element-based)
             newAtomColors.push(1.0, 1.0, 1.0, 1.0);
 
-            // Add element
-            atomElements.push(atomData.element);
+            // TODO: Update SceneIndex with new elements?
+            // atomElements.push(atomData.element);
 
             // Track created atom index
             this.createdAtomIndices.push(currentAtomCount + this.createdAtomIndices.length);

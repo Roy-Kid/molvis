@@ -22,74 +22,95 @@ export class Highlighter {
     // Key: uniqueId
     private meshOriginalMaterials = new Map<number, Material | null>();
 
-    // Shared highlight material for meshes
-    private highlightMaterial: StandardMaterial;
+    // Shared highlight materials
+    private selectionMaterial: StandardMaterial;
+    private previewMaterial: StandardMaterial;
+
+    // State
+    private lastSelectionState: SelectionState = { atoms: new Set(), bonds: new Set() };
+    private previewKeys: Set<string> = new Set();
 
     constructor(scene: Scene) {
         this.scene = scene;
 
-        // Create shared highlight material
-        this.highlightMaterial = new StandardMaterial("highlight", scene);
-        this.highlightMaterial.diffuseColor = Color3.Yellow();
-        this.highlightMaterial.emissiveColor = new Color3(0.5, 0.5, 0);
+        // Selection = Yellow
+        this.selectionMaterial = new StandardMaterial("highlight_select", scene);
+        this.selectionMaterial.diffuseColor = Color3.Yellow();
+        this.selectionMaterial.emissiveColor = new Color3(0.5, 0.5, 0);
+
+        // Preview = Cyan/Light Blue (distinct from selection)
+        this.previewMaterial = new StandardMaterial("highlight_preview", scene);
+        this.previewMaterial.diffuseColor = Color3.Teal();
+        this.previewMaterial.emissiveColor = new Color3(0, 0.3, 0.3);
+        this.previewMaterial.alpha = 0.8;
     }
 
     /**
-     * Highlight all selected entities.
-     * 
-     * @param state - The current selection state
+     * Set the current selection state (redrawn immediately).
      */
     highlightSelection(state: SelectionState): void {
+        this.lastSelectionState = state;
+        this.render();
+    }
+
+    /**
+     * Set the current preview (hover) keys.
+     */
+    highlightPreview(keys: string[]): void {
+        this.previewKeys.clear();
+        keys.forEach(k => this.previewKeys.add(k));
+        this.render();
+    }
+
+    /**
+     * Main render loop: Clears all, then applies Preview, then Selection (Selection overrides Preview).
+     */
+    private render(): void {
         this.clearAll();
 
-        // Highlight atoms
-        for (const key of state.atoms) {
-            const ref = parseSelectionKey(key);
-            if (!ref) continue;
-
-            const mesh = this.scene.getMeshByUniqueId(ref.meshId) as Mesh;
-            if (!mesh) continue;
-
-            if (ref.subIndex !== undefined) {
-                this.highlightThinInstance(mesh, ref.subIndex);
-            } else {
-                this.highlightMesh(mesh);
+        // 1. Apply Preview
+        for (const key of this.previewKeys) {
+            // If already selected, skip preview (Selection wins)
+            if (this.lastSelectionState.atoms.has(key) || this.lastSelectionState.bonds.has(key)) {
+                continue;
             }
+            this.applyHighlight(key, this.previewMaterial, [0.0, 1.0, 1.0, 1.0]); // Cyan
         }
 
-        // Highlight bonds
-        for (const key of state.bonds) {
-            const ref = parseSelectionKey(key);
-            if (!ref) continue;
+        // 2. Apply Selection
+        for (const key of this.lastSelectionState.atoms) {
+            this.applyHighlight(key, this.selectionMaterial, [1.0, 1.0, 0.0, 1.0]); // Yellow
+        }
+        for (const key of this.lastSelectionState.bonds) {
+            this.applyHighlight(key, this.selectionMaterial, [1.0, 1.0, 0.0, 1.0]); // Yellow
+        }
+    }
 
-            const mesh = this.scene.getMeshByUniqueId(ref.meshId) as Mesh;
-            if (!mesh) continue;
+    private applyHighlight(key: string, material: StandardMaterial, colorBufferVal: number[]): void {
+        const ref = parseSelectionKey(key);
+        if (!ref) return;
 
-            if (ref.subIndex !== undefined) {
-                this.highlightThinInstance(mesh, ref.subIndex);
-            } else {
-                this.highlightMesh(mesh);
-            }
+        const mesh = this.scene.getMeshByUniqueId(ref.meshId) as Mesh;
+        if (!mesh) return;
+
+        if (ref.subIndex !== undefined) {
+            this.highlightThinInstance(mesh, ref.subIndex, colorBufferVal);
+        } else {
+            this.highlightMesh(mesh, material);
         }
     }
 
     /**
-     * Highlight a thin instance by modifying its color in the colorBuffer.
-     * 
-     * @param mesh - The thin instance mesh
-     * @param thinIndex - The thin instance index
+     * Highlight a thin instance.
      */
-    private highlightThinInstance(mesh: Mesh, thinIndex: number): void {
+    private highlightThinInstance(mesh: Mesh, thinIndex: number, color: number[]): void {
         const colorBuffer = this.getThinInstanceColorBuffer(mesh);
-        if (!colorBuffer) {
-            console.log('[Highlighter] highlightThinInstance: colorBuffer is null');
-            return;
-        }
+        if (!colorBuffer) return;
 
         const offset = thinIndex * 4;
         const key = `${mesh.uniqueId}:${thinIndex}`;
 
-        // Store original color (sparse)
+        // Store original color (sparse) if not already stored
         if (!this.thinOriginalColors.has(key)) {
             this.thinOriginalColors.set(key, {
                 r: colorBuffer[offset],
@@ -99,25 +120,21 @@ export class Highlighter {
             });
         }
 
-        // Apply yellow highlight
-        colorBuffer[offset] = 1.0;
-        colorBuffer[offset + 1] = 1.0;
-        colorBuffer[offset + 2] = 0.0;
-        colorBuffer[offset + 3] = 1.0;
+        // Apply visual
+        colorBuffer.set(color, offset);
 
-        // CRITICAL: Must call thinInstanceSetBuffer to update, not just thinInstanceBufferUpdated
-        // Reverting to "color" for the public API call
         mesh.thinInstanceSetBuffer("color", colorBuffer, 4, false);
     }
 
     /**
-     * Highlight a mesh by swapping its material.
-     * 
-     * @param mesh - The mesh to highlight
+     * Highlight a mesh.
      */
-    private highlightMesh(mesh: Mesh): void {
-        this.meshOriginalMaterials.set(mesh.uniqueId, mesh.material);
-        mesh.material = this.highlightMaterial;
+    private highlightMesh(mesh: Mesh, material: StandardMaterial): void {
+        // Store original material if not already stored
+        if (!this.meshOriginalMaterials.has(mesh.uniqueId)) {
+            this.meshOriginalMaterials.set(mesh.uniqueId, mesh.material);
+        }
+        mesh.material = material;
     }
 
     /**
@@ -142,7 +159,6 @@ export class Highlighter {
             colorBuffer[offset + 2] = color.b;
             colorBuffer[offset + 3] = color.a;
 
-            // CRITICAL: Must call thinInstanceSetBuffer to update
             mesh.thinInstanceSetBuffer("color", colorBuffer, 4, false);
         }
         this.thinOriginalColors.clear();
@@ -159,12 +175,14 @@ export class Highlighter {
 
     /**
      * Invalidate and rebuild highlights (called on mode switch).
-     * Clears old highlights and re-emits selection state to trigger re-highlighting.
      */
     invalidateAndRebuild(): void {
         this.clearAll();
-        // Re-emit current selection state to trigger re-highlighting
-        // This is needed because mode switch changes mesh types (thin instances vs individual meshes)
+        // Since we store state, we can just re-render
+        // But invalidation usually implies scene geometry changed
+        // So we might need to filter out keys that no longer exist?
+        // For now, re-render catches up.
+        this.render();
     }
 
     /**
@@ -172,7 +190,8 @@ export class Highlighter {
      */
     dispose(): void {
         this.clearAll();
-        this.highlightMaterial.dispose();
+        this.selectionMaterial.dispose();
+        this.previewMaterial.dispose();
     }
 
     private getThinInstanceColorBuffer(mesh: Mesh): Float32Array | null {

@@ -1,8 +1,8 @@
 import * as BABYLON from "@babylonjs/core";
-import { Vector3, MeshBuilder, StandardMaterial, Color3, Mesh, type Scene } from "@babylonjs/core";
+import { Vector3, MeshBuilder, Color3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
 import { Command, command } from "./base";
-import { Frame, Block, type Box } from "molrs-wasm";
+import { Frame, Block } from "molrs-wasm";
 
 export interface DrawAtomsOption {
     radii?: number[];
@@ -17,8 +17,6 @@ export interface DrawFrameOption {
     atoms?: DrawAtomsOption;
     bonds?: DrawBondsOption;
 }
-import type { Palette, ColorHex } from "./palette";
-
 
 /**
  * Command to draw a simulation box (wireframe)
@@ -27,7 +25,6 @@ import type { Palette, ColorHex } from "./palette";
 export class DrawBoxCommand extends Command<void> {
     private boxMesh: BABYLON.Mesh | null = null;
     private box: any;
-    private options?: any;
 
     constructor(
         app: MolvisApp,
@@ -35,7 +32,6 @@ export class DrawBoxCommand extends Command<void> {
     ) {
         super(app);
         this.box = args.box;
-        this.options = args.options;
     }
 
     do(): void {
@@ -79,16 +75,14 @@ export class DrawBoxCommand extends Command<void> {
         this.boxMesh.position = new BABYLON.Vector3(ox + lx / 2, oy + ly / 2, oz + lz / 2);
 
         // Create wireframe material
-        const wireframeMaterial = new BABYLON.StandardMaterial("boxMat", scene);
-        wireframeMaterial.wireframe = true;
-        wireframeMaterial.diffuseColor = new BABYLON.Color3(0, 0, 0);
+        const wireframeMaterial = this.app.styleManager.getBoxMaterial();
         this.boxMesh.material = wireframeMaterial;
         this.boxMesh.isVisible = true;
 
         this.boxMesh.isPickable = false;
 
         this.app.world.sceneIndex.registerBox({
-            mesh: { uniqueId: this.boxMesh.uniqueId },
+            mesh: this.boxMesh,
             meta: {
                 dimensions: [lx, ly, lz],
                 origin: [ox, oy, oz]
@@ -240,8 +234,8 @@ export class DrawFrameCommand extends Command<void> {
         // Register frame with SceneIndex (single call for all thin instances)
         if (atomMesh && atomsBlock) {
             this.app.world.sceneIndex.registerFrame({
-                atomMesh: { uniqueId: atomMesh.uniqueId },
-                bondMesh: bondMesh ? { uniqueId: bondMesh.uniqueId } : undefined,
+                atomMesh,
+                bondMesh: bondMesh ?? undefined,
                 atomBlock: atomsBlock,
                 bondBlock: bondsBlock || undefined
             });
@@ -250,8 +244,31 @@ export class DrawFrameCommand extends Command<void> {
         // Draw Box if explicitly defined in frame metadata
         const boxData = this.getBoxData(this.frame);
         if (boxData) {
-            const boxCmd = new DrawBoxCommand(this.app, { box: boxData });
-            boxCmd.do();
+            const existingBox = scene.getMeshByName("sim_box");
+            if (existingBox) {
+                this.app.world.sceneIndex.unregister(existingBox.uniqueId);
+                existingBox.dispose();
+            }
+
+            const [lx, ly, lz] = boxData.lengths;
+            const [ox, oy, oz] = boxData.origin;
+
+            const boxMesh = BABYLON.MeshBuilder.CreateBox(
+                "sim_box",
+                { width: lx, height: ly, depth: lz },
+                scene
+            );
+            boxMesh.position = new BABYLON.Vector3(ox + lx / 2, oy + ly / 2, oz + lz / 2);
+
+            const wireframeMaterial = this.app.styleManager.getBoxMaterial();
+            boxMesh.material = wireframeMaterial;
+            boxMesh.isVisible = true;
+            boxMesh.isPickable = false;
+
+            this.app.world.sceneIndex.registerBoxFromFrame(boxMesh, {
+                dimensions: [lx, ly, lz],
+                origin: [ox, oy, oz]
+            });
         }
     }
 
@@ -263,11 +280,22 @@ export class DrawFrameCommand extends Command<void> {
         const elements = atomsBlock.col_strings("element")! as string[];
 
         // Create material
-        let atomMaterial = scene.getMaterialByName("atomMat") as BABYLON.StandardMaterial;
+        // Thin instances share one material, but use per-instance color buffers.
+        // We use a base white material so vertex colors show through correctly.
+        // However, we still need to get material properties from the theme (like specular).
+
+        // WARN: With thin instances + color buffer, the material diffuse is multiplied.
+        // So we need a "base" material that respects the current theme's lighting props
+        // but has white diffuse.
+
+        let atomMaterial = scene.getMaterialByName("atomMat_instanced") as BABYLON.StandardMaterial;
         if (!atomMaterial) {
-            atomMaterial = new BABYLON.StandardMaterial("atomMat", scene);
-            atomMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0); // White base for instance colors
-            atomMaterial.specularColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+            atomMaterial = new BABYLON.StandardMaterial("atomMat_instanced", scene);
+            atomMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
+
+            // Apply default specular from theme
+            const theme = this.app.styleManager.getTheme();
+            atomMaterial.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
         }
 
         // Create base mesh
@@ -288,8 +316,9 @@ export class DrawFrameCommand extends Command<void> {
             const z = zCoords[i];
             const element = elements[i];
 
-            // Use Palette to get radius for this element
-            const radius = drawOptions.atoms?.radii?.[i] ?? this.app.palette.getAtomRadius(element);
+            // Use StyleManager to get radius for this element
+            const style = this.app.styleManager.getAtomStyle(element);
+            const radius = drawOptions.atoms?.radii?.[i] ?? style.radius;
             const scale = radius * 2;
 
             const offset = i * 16;
@@ -312,14 +341,14 @@ export class DrawFrameCommand extends Command<void> {
             const element = elements[i];
             const offset = i * 4;
 
-            // Use Palette to get color for this element
-            const colorHex = this.app.palette.getAtomColor(element);
-            const color = BABYLON.Color3.FromHexString(colorHex);
+            // Use StyleManager to get color for this element
+            const style = this.app.styleManager.getAtomStyle(element);
+            const color = BABYLON.Color3.FromHexString(style.color);
 
             colorBuffer[offset] = color.r;
             colorBuffer[offset + 1] = color.g;
             colorBuffer[offset + 2] = color.b;
-            colorBuffer[offset + 3] = 1.0; // Alpha
+            colorBuffer[offset + 3] = style.alpha ?? 1.0;
         }
 
         sphereBase.thinInstanceSetBuffer("matrix", buffer, 16, true);
@@ -339,10 +368,14 @@ export class DrawFrameCommand extends Command<void> {
         const bondRadius = drawOptions.bonds?.radii ?? 0.1;
 
         // Create material
-        let bondMaterial = scene.getMaterialByName("bondMat") as BABYLON.StandardMaterial;
+        let bondMaterial = scene.getMaterialByName("bondMat_instanced") as BABYLON.StandardMaterial;
         if (!bondMaterial) {
-            bondMaterial = new BABYLON.StandardMaterial("bondMat", scene);
-            bondMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0); // White base for instance colors
+            bondMaterial = new BABYLON.StandardMaterial("bondMat_instanced", scene);
+            bondMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
+
+            // Apply default specular from theme
+            const theme = this.app.styleManager.getTheme();
+            bondMaterial.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
         }
         // Create base mesh
         const cylinderBase = BABYLON.MeshBuilder.CreateCylinder(
@@ -360,12 +393,6 @@ export class DrawFrameCommand extends Command<void> {
         const zCoords = atomsBlock.col_f32("z")!;
         const i_atoms = bondsBlock.col_u32("i")!;
         const j_atoms = bondsBlock.col_u32("j")!;
-
-        console.log(i_atoms)
-        console.log(j_atoms)
-        console.log(xCoords)
-        console.log(yCoords)
-        console.log(zCoords)
 
         const tempMatrix = BABYLON.Matrix.Identity();
         const up = new BABYLON.Vector3(0, 1, 0);
@@ -411,11 +438,14 @@ export class DrawFrameCommand extends Command<void> {
         const colorBuffer = new Float32Array(bondCount * 4);
         for (let b = 0; b < bondCount; b++) {
             const offset = b * 4;
-            // Default gray color for bonds
-            colorBuffer[offset] = 0.6;
-            colorBuffer[offset + 1] = 0.6;
-            colorBuffer[offset + 2] = 0.6;
-            colorBuffer[offset + 3] = 1.0;
+            // Default gray color for bonds (get from StyleManager)
+            const style = this.app.styleManager.getBondStyle(1); // Default single bond style
+            const color = BABYLON.Color3.FromHexString(style.color);
+
+            colorBuffer[offset] = color.r;
+            colorBuffer[offset + 1] = color.g;
+            colorBuffer[offset + 2] = color.b;
+            colorBuffer[offset + 3] = style.alpha ?? 1.0;
         }
 
         cylinderBase.thinInstanceSetBuffer("matrix", buffer, 16, true);
@@ -439,80 +469,49 @@ export class DrawFrameCommand extends Command<void> {
     private getBoxData(
         frame: Frame
     ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
+        // Strict: Only look for standard 'box' metadata
         const boxMeta = frame.get_meta("box");
-        const originMeta = frame.get_meta("box_origin");
+        if (!boxMeta) return null;
 
-        if (boxMeta) {
-            const parsed = this.parseBoxMeta(boxMeta, originMeta);
-            if (parsed) {
-                return parsed;
-            }
-        }
-
-        // No box metadata found - don't draw a box
-        return null;
+        return this.parseBoxMeta(boxMeta);
     }
 
+    /**
+     * Parse box metadata.
+     * STRICT MODE: Expects valid valid JSON object with 'dimensions' (or 'lengths') and optional 'origin'.
+     * No fallbacks for array strings or raw number lists.
+     */
     private parseBoxMeta(
-        boxMeta: string,
-        originMeta?: string | null
+        boxMeta: string
     ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
+        const parsed = JSON.parse(boxMeta) as unknown;
+
+        if (!parsed || typeof parsed !== 'object') {
+            throw new Error("[DrawBox] Invalid box metadata: expected JSON object");
+        }
+
+        // Duck typing check for Box interface
+        const maybeBox = parsed as {
+            dimensions?: number[];
+            origin?: number[]
+        };
+
+        // Strict: only support 'dimensions'
+        const dims = maybeBox.dimensions;
+        if (!Array.isArray(dims) || dims.length < 3) {
+            throw new Error("[DrawBox] Invalid box metadata: missing valid dimensions array");
+        }
+
+        const lengths: [number, number, number] = [dims[0], dims[1], dims[2]];
+
+        // Optional origin
         let origin: [number, number, number] = [0, 0, 0];
-        if (originMeta) {
-            const originNums = this.parseNumberList(originMeta);
-            if (originNums.length >= 3) {
-                origin = [originNums[0], originNums[1], originNums[2]];
-            }
+        if (Array.isArray(maybeBox.origin) && maybeBox.origin.length >= 3) {
+            origin = [maybeBox.origin[0], maybeBox.origin[1], maybeBox.origin[2]];
         }
 
-        try {
-            const parsed = JSON.parse(boxMeta) as unknown;
-            if (Array.isArray(parsed)) {
-                const lengths = this.lengthsFromArray(parsed);
-                if (lengths) {
-                    return { origin, lengths };
-                }
-            } else if (parsed && typeof parsed === "object") {
-                const lengthsValue = (parsed as { lengths?: number[] }).lengths;
-                const originValue = (parsed as { origin?: number[] }).origin;
-                const lengths = lengthsValue ? this.lengthsFromArray(lengthsValue) : null;
-                if (originValue && originValue.length >= 3) {
-                    origin = [originValue[0], originValue[1], originValue[2]];
-                }
-                if (lengths) {
-                    return { origin, lengths };
-                }
-            }
-        } catch {
-            const nums = this.parseNumberList(boxMeta);
-            const lengths = this.lengthsFromArray(nums);
-            if (lengths) {
-                return { origin, lengths };
-            }
-        }
-
-        return null;
+        return { origin, lengths };
     }
-
-    private lengthsFromArray(values: number[]): [number, number, number] | null {
-        if (values.length >= 3 && values.length !== 9) {
-            return [values[0], values[1], values[2]];
-        }
-        if (values.length >= 9) {
-            return [values[0], values[4], values[8]];
-        }
-        return null;
-    }
-
-    private parseNumberList(value: string): number[] {
-        return value
-            .trim()
-            .split(/\s+/)
-            .map((token) => Number(token))
-            .filter((num) => Number.isFinite(num));
-    }
-
-
 }
 
 /**
@@ -529,13 +528,13 @@ class NoOpCommand extends Command<void> {
 }
 
 /**
- * Options for drawing an atom
+ * Command to draw an atom
  */
 export interface DrawAtomOptions {
     element: string;
     name?: string;
     radius?: number;
-    color?: ColorHex;
+    color?: string;
     atomId?: number;
 }
 
@@ -545,7 +544,7 @@ export interface DrawAtomOptions {
 export interface DrawBondOptions {
     order?: number;
     radius?: number;
-    color?: ColorHex;
+    color?: string;
     atomId1?: number;
     atomId2?: number;
     bondId?: number;
@@ -561,9 +560,7 @@ export class DrawAtomCommand extends Command<Mesh> {
         app: MolvisApp,
         private position: Vector3,
         private options: DrawAtomOptions,
-        private palette: Palette,
-        private scene: Scene,
-        private materialCache: Map<string, StandardMaterial>
+        private scene: Scene
     ) {
         super(app);
     }
@@ -571,8 +568,8 @@ export class DrawAtomCommand extends Command<Mesh> {
     do(): Mesh {
         const { element, name, radius, color } = this.options;
 
-        const atomColor = color || this.palette.getAtomColor(element);
-        const atomRadius = radius || this.palette.getAtomRadius(element);
+        const style = this.app.styleManager.getAtomStyle(element);
+        const atomRadius = radius || style.radius;
 
         this.mesh = MeshBuilder.CreateSphere(
             name || `atom_${element}_${Date.now()}`,
@@ -582,12 +579,19 @@ export class DrawAtomCommand extends Command<Mesh> {
 
         this.mesh.position = this.position.clone();
 
-        const material = this.getOrCreateMaterial(element, atomColor);
-        this.mesh.material = material;
+        const material = this.app.styleManager.getAtomMaterial(element);
+        // If custom color is provided, we clone and set it (rare case in Edit mode)
+        if (color) {
+            const customMat = material.clone(`${material.name}_custom_${Date.now()}`);
+            customMat.diffuseColor = Color3.FromHexString(color);
+            this.mesh.material = customMat;
+        } else {
+            this.mesh.material = material;
+        }
 
         // Register with SceneIndex using new chemistry-semantic API
         this.app.world.sceneIndex.registerAtom({
-            mesh: { uniqueId: this.mesh.uniqueId },
+            mesh: this.mesh,
             meta: {
                 atomId: this.options.atomId ?? this.mesh.uniqueId,
                 element,
@@ -604,20 +608,9 @@ export class DrawAtomCommand extends Command<Mesh> {
         }
         this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
+        // Mark as unsaved when undoing an addition
+        this.app.world.sceneIndex.markAllUnsaved();
         return new NoOpCommand(this.app);
-    }
-
-    private getOrCreateMaterial(key: string, color: ColorHex): StandardMaterial {
-        if (this.materialCache.has(key)) {
-            return this.materialCache.get(key)!;
-        }
-
-        const mat = new StandardMaterial(`${key}_mat`, this.scene);
-        mat.diffuseColor = Color3.FromHexString(color);
-        mat.specularColor = new Color3(0.3, 0.3, 0.3);
-
-        this.materialCache.set(key, mat);
-        return mat;
     }
 }
 
@@ -663,6 +656,7 @@ export class DeleteAtomCommand extends Command<void> {
         // Unregister and dispose atom
         this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
+        this.app.world.sceneIndex.markAllUnsaved();
     }
 
     undo(): Command {
@@ -681,9 +675,7 @@ export class DrawBondCommand extends Command<Mesh> {
         private start: Vector3,
         private end: Vector3,
         private options: DrawBondOptions,
-        private palette: Palette,
-        private scene: Scene,
-        private materialCache: Map<string, StandardMaterial>
+        private scene: Scene
     ) {
         super(app);
     }
@@ -693,8 +685,9 @@ export class DrawBondCommand extends Command<Mesh> {
 
         console.log('[DrawBondCommand] Drawing bond with order:', order);
 
-        const bondColor = color || this.palette.getDefaultBondColor();
-        const bondRadius = radius || this.palette.getDefaultBondRadius();
+        const style = this.app.styleManager.getBondStyle(order);
+
+        const bondRadius = radius || style.radius;
 
         const direction = this.end.subtract(this.start);
         const length = direction.length();
@@ -714,7 +707,12 @@ export class DrawBondCommand extends Command<Mesh> {
         }
 
         // Create material
-        const material = this.getOrCreateMaterial("bond", bondColor);
+        let material = this.app.styleManager.getBondMaterial(order);
+        if (color) {
+            const customMat = material.clone(`${material.name}_custom_${Date.now()}`);
+            customMat.diffuseColor = Color3.FromHexString(color);
+            material = customMat;
+        }
 
         // Draw cylinders based on bond order
         if (order === 1) {
@@ -774,7 +772,7 @@ export class DrawBondCommand extends Command<Mesh> {
 
         // Register with SceneIndex using new chemistry-semantic API
         this.app.world.sceneIndex.registerBond({
-            mesh: { uniqueId: this.mesh.uniqueId },
+            mesh: this.mesh,
             meta: {
                 bondId: this.options.bondId ?? this.mesh.uniqueId,
                 atomId1: this.options.atomId1 ?? 0,
@@ -796,19 +794,6 @@ export class DrawBondCommand extends Command<Mesh> {
         this.mesh.dispose();
         return new NoOpCommand(this.app);
     }
-
-    private getOrCreateMaterial(key: string, color: ColorHex): StandardMaterial {
-        if (this.materialCache.has(key)) {
-            return this.materialCache.get(key)!;
-        }
-
-        const mat = new StandardMaterial(`${key}_mat`, this.scene);
-        mat.diffuseColor = Color3.FromHexString(color);
-        mat.specularColor = new Color3(0.3, 0.3, 0.3);
-
-        this.materialCache.set(key, mat);
-        return mat;
-    }
 }
 
 /**
@@ -825,6 +810,7 @@ export class DeleteBondCommand extends Command<void> {
     do(): void {
         this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
         this.mesh.dispose();
+        this.app.world.sceneIndex.markAllUnsaved();
     }
 
     undo(): Command {

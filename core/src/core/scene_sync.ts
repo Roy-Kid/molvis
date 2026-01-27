@@ -1,6 +1,6 @@
 import type { Scene, Mesh } from "@babylonjs/core";
 import { Vector3 } from "@babylonjs/core";
-import type { Frame } from "../core/system/frame";
+import { Frame, Block } from "molrs-wasm";
 import type { SceneIndex } from "./scene_index";
 
 /**
@@ -131,13 +131,50 @@ export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Fr
     }
 
     // 3. Populate Frame
-    atoms.forEach(atom => {
-        frame.addAtom(atom.x, atom.y, atom.z, atom.element);
-    });
+    // 3. Populate Frame using Blocks
+    const atomCount = atoms.length;
+    if (atomCount > 0) {
+        const atomBlock = new Block();
+        const x = new Float32Array(atomCount);
+        const y = new Float32Array(atomCount);
+        const z = new Float32Array(atomCount);
+        const elements: string[] = [];
 
-    bonds.forEach(bond => {
-        frame.addBond(bond.atomId1, bond.atomId2, bond.order);
-    });
+        atoms.forEach((atom, i) => {
+            x[i] = atom.x;
+            y[i] = atom.y;
+            z[i] = atom.z;
+            elements.push(atom.element);
+        });
 
-    console.log(`[syncSceneToFrame] Synchronized ${atoms.length} atoms and ${bonds.length} bonds using strict SceneIndex topology.`);
+        atomBlock.set_col_f32('x', x, undefined);
+        atomBlock.set_col_f32('y', y, undefined);
+        atomBlock.set_col_f32('z', z, undefined);
+        atomBlock.set_col_strings('element', elements, undefined);
+
+        frame.insert_block('atoms', atomBlock);
+    }
+
+    const bondCount = bonds.length;
+    if (bondCount > 0) {
+        const bondBlock = new Block();
+        const iArr = new Uint32Array(bondCount);
+        const jArr = new Uint32Array(bondCount);
+        const orderArr = new Uint8Array(bondCount);
+
+        bonds.forEach((bond, idx) => {
+            iArr[idx] = bond.atomId1;
+            jArr[idx] = bond.atomId2;
+            orderArr[idx] = bond.order;
+        });
+
+        bondBlock.set_col_u32('i', iArr, undefined);
+        bondBlock.set_col_u32('j', jArr, undefined);
+        bondBlock.set_col_u8('order', orderArr, undefined);
+
+        frame.insert_block('bonds', bondBlock);
+    }
+
+    console.log(`[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds using strict SceneIndex topology.`);
+    sceneIndex.markAllSaved();
 }

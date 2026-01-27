@@ -2,13 +2,13 @@ import {
   PointerEventTypes,
   KeyboardEventTypes,
   Vector2,
+  Vector3,
 } from "@babylonjs/core";
 import type {
   PointerInfo,
   KeyboardInfo,
   AbstractMesh,
   Observer,
-  Vector3,
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
 import { ContextMenuController } from "../core/context_menu_controller";
@@ -46,6 +46,12 @@ abstract class BaseMode {
   private _kb_observer: Observer<KeyboardInfo>;
   protected _pointer_down_xy: Vector2 = new Vector2();
   protected _pointer_up_xy: Vector2 = new Vector2();
+
+  /**
+   * Flag to enable/disable hover highlighting.
+   * Defaults to false. Subclasses can enable it.
+   */
+  protected enableHoverHighlight: boolean = false;
 
   // Context menu controller (mode-specific)
   protected contextMenuController!: ContextMenuController;

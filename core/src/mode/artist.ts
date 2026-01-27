@@ -1,6 +1,5 @@
-import { Vector3, type Scene, type Mesh, type StandardMaterial } from "@babylonjs/core";
+import { Vector3, type Scene, type Mesh } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
-import type { Palette } from "../commands/palette";
 import { Command } from "../commands/base";
 import {
     DrawAtomCommand,
@@ -15,7 +14,6 @@ import {
  * Artist options for initialization
  */
 export interface ArtistOptions {
-    palette: Palette;
     scene: Scene;
     app: MolvisApp;
 }
@@ -27,20 +25,16 @@ export interface ArtistOptions {
  * Manages undo/redo stacks.
  */
 export class Artist {
-    private palette: Palette;
     private scene: Scene;
     private app: MolvisApp;
-    private materialCache: Map<string, StandardMaterial>;
 
     // Undo/Redo stacks store Command instances
     private undoStack: Command[];
     private redoStack: Command[];
 
     constructor(options: ArtistOptions) {
-        this.palette = options.palette;
         this.scene = options.scene;
         this.app = options.app;
-        this.materialCache = new Map();
         this.undoStack = [];
         this.redoStack = [];
     }
@@ -55,9 +49,7 @@ export class Artist {
             this.app,
             position,
             options,
-            this.palette,
-            this.scene,
-            this.materialCache
+            this.scene
         );
 
         const mesh = command.do();
@@ -76,9 +68,7 @@ export class Artist {
             start,
             end,
             options,
-            this.palette,
-            this.scene,
-            this.materialCache
+            this.scene
         );
 
         const mesh = command.do();
@@ -154,8 +144,6 @@ export class Artist {
      * Dispose of all resources
      */
     dispose(): void {
-        this.materialCache.forEach(mat => mat.dispose());
-        this.materialCache.clear();
         this.clearHistory();
     }
 }

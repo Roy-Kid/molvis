@@ -16,8 +16,6 @@ export { getSelectedCommand } from "./selection";
 export type { GetSelectedResponse } from "../core/selection_manager";
 
 // Utilities
-export { DefaultPalette } from "./palette";
-export type { Palette, ColorHex } from "./palette";
 
 // Types
 export type { FrameSource } from "../pipeline/pipeline";

@@ -149,9 +149,7 @@ class EditModeContextMenu extends ContextMenuController {
       },
       action: (ev: any) => { this.mode.bondOrder = ev.value; }
     });
-    items.push(CommonMenuItems.separator());
-    items.push(CommonMenuItems.snapshot(this.app));
-    return items;
+    return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
 
@@ -184,7 +182,6 @@ class EditMode extends BaseMode {
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
     this.artist = new Artist({
-      palette: app.palette,
       scene: app.world.scene,
       app: app,
     });
@@ -194,6 +191,7 @@ class EditMode extends BaseMode {
   protected createContextMenuController(): ContextMenuController {
     return new EditModeContextMenu(this.app, this);
   }
+
   /**
    * Get the actual position of an atom mesh.
    * Handles both regular atom meshes and thin instance atoms from draw_frame.

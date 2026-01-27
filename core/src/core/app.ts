@@ -8,10 +8,11 @@ import { Settings, type MolvisUserConfig } from "./settings";
 import { CommandRegistry, commands } from "../commands";
 import { EventEmitter } from "../events";
 import { ModifierPipeline } from "../pipeline";
-import { DefaultPalette, type Palette } from "../commands/palette";
+import { StyleManager } from "./style";
+import { Theme } from "./style/theme";
 import { System } from "./system";
 
-import type { Frame } from "./system/frame";
+import { Frame } from "molrs-wasm";
 import { MolvisContextMenu, MolvisButton, MolvisSeparator, MolvisFolder, MolvisSlider } from "../ui/components";
 
 export class MolvisApp {
@@ -34,8 +35,8 @@ export class MolvisApp {
   private _modifierPipeline: ModifierPipeline;
   private _currentFrame: number = 0;
 
-  // Palette (OVITO-compatible colors)
-  private _palette: Palette;
+  // Style System
+  private _styleManager: StyleManager;
 
   // Command registry
   readonly commands: CommandRegistry;
@@ -54,10 +55,8 @@ export class MolvisApp {
     this._config = mergeConfig(config);
     this._container = container;
 
-    // Register Web Components - Removed in favor of React UI
-    // Re-adding context menu web components
+    // Register Web Components
     this.registerWebComponents();
-    // registerWebComponents();
 
     // Initialize settings
     this.settings = new Settings(userConfig);
@@ -97,8 +96,8 @@ export class MolvisApp {
     // Initialize modifier pipeline
     this._modifierPipeline = new ModifierPipeline();
 
-    // Initialize palette (OVITO-compatible)
-    this._palette = new DefaultPalette();
+    // Initialize Style Manager
+    this._styleManager = new StyleManager(this._world.scene);
 
     // Initialize command registry (use shared singleton)
     this.commands = commands;
@@ -207,8 +206,8 @@ export class MolvisApp {
     return this._modifierPipeline;
   }
 
-  get palette(): Palette {
-    return this._palette;
+  get styleManager(): StyleManager {
+    return this._styleManager;
   }
 
   get gui(): GUIManager {
@@ -354,6 +353,14 @@ export class MolvisApp {
     }
   }
 
+  public setTheme(theme: Theme): void {
+    this._styleManager.setTheme(theme);
+    // Request redraw if frame is loaded
+    if (this._system.frame) {
+      this.renderFrame(this._system.frame);
+    }
+  }
+
   /**
    * Compute a frame using the modifier pipeline.
    * @param frameIndex Index of frame to compute
@@ -362,7 +369,7 @@ export class MolvisApp {
    */
   public async computeFrame(
     frameIndex: number,
-    source?: any // TODO: Define FrameSource type properly
+    source?: any
   ): Promise<Frame> {
     if (!source) {
       throw new Error("computeFrame requires a source");

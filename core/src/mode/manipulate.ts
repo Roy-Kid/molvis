@@ -3,9 +3,6 @@ import {
     Vector3,
     AbstractMesh,
     StandardMaterial,
-    Color3,
-    Mesh,
-    MeshBuilder,
 } from "@babylonjs/core";
 import { Block } from "molrs-wasm";
 import type { Molvis } from "@molvis/core";
@@ -15,6 +12,7 @@ import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
 import { DrawAtomCommand, DrawBondCommand, DrawFrameCommand } from "../commands/draw";
 import { syncSceneToFrame } from "../core/scene_sync";
+import { CommonMenuItems } from "./menu_items";
 
 /**
  * =============================
@@ -32,70 +30,7 @@ import { syncSceneToFrame } from "../core/scene_sync";
  * The mode reuses the existing picking utilities from BaseMode.
  */
 
-/**
- * Visual highlight for selected entities
- */
-class SelectionHighlight {
-    private highlightMesh: Mesh | null = null;
 
-    constructor(private scene: any) { }
-
-    /**
-     * Show selection highlight around an atom
-     */
-    showAtom(position: Vector3, radius: number) {
-        if (this.highlightMesh) {
-            // Update existing highlight
-            this.highlightMesh.position = position;
-            this.highlightMesh.scaling.setAll(radius * 1.3);
-            this.highlightMesh.isVisible = true;
-        } else {
-            // Create new highlight sphere
-            this.highlightMesh = MeshBuilder.CreateSphere(
-                "selection_highlight",
-                { diameter: 1, segments: 16 },
-                this.scene
-            );
-            this.highlightMesh.position = position;
-            this.highlightMesh.scaling.setAll(radius * 1.3);
-
-            const material = new StandardMaterial("selection_highlight_mat", this.scene);
-            material.diffuseColor = new Color3(1, 0.8, 0);
-            material.alpha = 0.4;
-            material.wireframe = false;
-            this.highlightMesh.material = material;
-            this.highlightMesh.isPickable = false;
-        }
-    }
-
-    /**
-     * Hide the selection highlight
-     */
-    hide() {
-        if (this.highlightMesh) {
-            this.highlightMesh.isVisible = false;
-        }
-    }
-
-    /**
-     * Dispose the highlight mesh
-     */
-    dispose() {
-        if (this.highlightMesh) {
-            this.highlightMesh.dispose();
-            this.highlightMesh = null;
-        }
-    }
-
-    /**
-     * Update highlight position (for tracking during drag)
-     */
-    updatePosition(position: Vector3) {
-        if (this.highlightMesh) {
-            this.highlightMesh.position = position;
-        }
-    }
-}
 
 /**
  * Context menu controller for Manipulate mode.
@@ -138,14 +73,6 @@ class ManipulateModeContextMenu extends ContextMenuController {
         items.push(
             {
                 type: "button",
-                title: "Snapshot",
-                action: () => {
-                    this.mode.takeScreenShot();
-                }
-            },
-            { type: "separator" },
-            {
-                type: "button",
                 title: "Clear Selection",
                 action: () => {
                     this.mode.clearSelection();
@@ -161,8 +88,7 @@ class ManipulateModeContextMenu extends ContextMenuController {
                 }
             }
         );
-
-        return items;
+        return CommonMenuItems.appendCommonTail(items, this.app);
     }
 }
 
@@ -170,17 +96,13 @@ class ManipulateModeContextMenu extends ContextMenuController {
  * ManipulateMode - for moving atoms and adjusting geometry
  */
 class ManipulateMode extends BaseMode {
-    // Selection state
-    private selectedAtom: AbstractMesh | null = null;
-    private selectedBond: AbstractMesh | null = null;
+    // Selection state managed by SelectionManager
+
 
     // Drag state
     private isDragging = false;
     private dragStartPosition: Vector3 | null = null;
     private draggedAtom: AbstractMesh | null = null;
-
-    // Visual feedback
-    private selectionHighlight: SelectionHighlight;
 
     // Frame conversion state
     private originalFrameData: {
@@ -194,11 +116,12 @@ class ManipulateMode extends BaseMode {
 
     constructor(app: Molvis) {
         super(ModeType.Manipulate, app);
-        this.selectionHighlight = new SelectionHighlight(app.scene);
     }
 
     public override start(): void {
         super.start();
+        // Clear global selection
+        this.app.world.selectionManager.apply({ type: 'clear' });
 
         // Convert any frame-based entities found in SceneIndex
         // Topology is automatically managed by SceneIndex during conversion (unregister Frame -> register Mesh)
@@ -206,8 +129,8 @@ class ManipulateMode extends BaseMode {
     }
 
     /**
-     * Convert Frame entities from SceneIndex to editable meshes
-     * Implementation of User Requirement: "Convert from SceneIndex, not Scene"
+     * Convert Frame entities from SceneIndex to editable meshes.
+     * Replaces thin instances with individual meshes for manipulation.
      */
     private async convertFromSceneIndex(): Promise<void> {
         const toDispose: number[] = [];
@@ -268,26 +191,18 @@ class ManipulateMode extends BaseMode {
 
 
                 // Create command using explicit Semantic ID (index i)
-                try {
-                    const cmd = new DrawAtomCommand(
-                        this.app,
-                        position,
-                        {
-                            element,
-                            atomId: i // Preserving Semantic ID 0..N
-                        },
-                        this.app.palette,
-                        this.scene,
-                        this.materialCache
-                    );
-                    cmd.do();
-
-                    if (i === 55) {
-                        // console.log(`[ManipulateMode] SUCCESS Atom 55 created. UID: ${mesh.uniqueId}`);
-                    }
-                } catch (err) {
-                    console.error(`[ManipulateMode] FAIL creating Atom ${i}:`, err);
-                }
+                const cmd = new DrawAtomCommand(
+                    this.app,
+                    position,
+                    {
+                        element,
+                        atomId: i // Preserving Semantic ID 0..N
+                    },
+                    this.app.palette,
+                    this.scene,
+                    this.materialCache
+                );
+                cmd.do();
             }
         }
 
@@ -348,6 +263,7 @@ class ManipulateMode extends BaseMode {
         }
 
         this.convertedToMeshes = true;
+        this.world.sceneIndex.markAllUnsaved();
     }
 
     private findAtomMeshByIndex(atomId: number): AbstractMesh | undefined {
@@ -369,9 +285,8 @@ class ManipulateMode extends BaseMode {
      * Clear current selection and hide highlight
      */
     public clearSelection(): void {
-        this.selectedAtom = null;
-        this.selectedBond = null;
-        this.selectionHighlight.hide();
+
+        this.app.world.selectionManager.apply({ type: 'clear' });
         this.app.events.emit('info-text-change', "");
     }
 
@@ -380,11 +295,11 @@ class ManipulateMode extends BaseMode {
      */
     private selectAtom(atom: AbstractMesh): void {
         this.clearSelection();
-        this.selectedAtom = atom;
 
-        // Get atom radius from scaling or use default
-        const scale = atom.scaling?.x ?? 0.5;
-        this.selectionHighlight.showAtom(atom.position, scale);
+
+        // Use SelectionManager
+        const key = String(atom.uniqueId); // Plain mesh selection
+        this.app.world.selectionManager.apply({ type: 'replace', atoms: [key] });
 
         // Update info panel
         const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
@@ -400,9 +315,11 @@ class ManipulateMode extends BaseMode {
      */
     private selectBond(bond: AbstractMesh): void {
         this.clearSelection();
-        this.selectedBond = bond;
 
-        // Highlight the bond (could create a highlight tube, for now just update info)
+        // Use SelectionManager
+        const key = String(bond.uniqueId);
+        this.app.world.selectionManager.apply({ type: 'replace', bonds: [key] });
+
         const meta = this.world.sceneIndex.getMeta(bond.uniqueId);
         const order = meta && meta.type === 'bond' ? meta.order : 1;
         this.app.events.emit('info-text-change', `Selected bond (order: ${order})`);
@@ -417,9 +334,7 @@ class ManipulateMode extends BaseMode {
 
         // Update connected bonds
         this.updateConnectedBonds(atom, oldPosition, newPosition);
-
-        // Update selection highlight
-        this.selectionHighlight.updatePosition(newPosition);
+        this.world.sceneIndex.markAllUnsaved();
     }
 
     /**
@@ -453,23 +368,18 @@ class ManipulateMode extends BaseMode {
             const otherAtomId = bondInfo.atom1 === atomId ? bondInfo.atom2 : bondInfo.atom1;
             const otherAtomMesh = this.scene.meshes.find(m => {
                 const mMeta = this.world.sceneIndex.getMeta(m.uniqueId);
-                return mMeta?.type === 'atom' && mMeta.atomId == otherAtomId; // Relaxed check
+                return mMeta?.type === 'atom' && mMeta.atomId === otherAtomId;
             });
 
             if (!otherAtomMesh) {
                 console.warn(`[ManipulateMode] Could not find mesh for neighbor atom ${otherAtomId}`);
-
-                // Deep diagnosis logic removed
                 continue;
             }
 
             // Find existing bond mesh to update (dispose and recreate)
             const bondMesh = this.scene.meshes.find(m => {
                 const bMeta = this.world.sceneIndex.getMeta(m.uniqueId);
-                // Log failing comparisons if needed
-                // console.log(`Checking mesh ${m.uniqueId}:`, bMeta);
-                // Strict equality might fail if types differ?
-                return bMeta?.type === 'bond' && bMeta.bondId == bondId; // Loose equality check safely
+                return bMeta?.type === 'bond' && bMeta.bondId === bondId;
             });
 
             if (bondMesh) {
@@ -500,7 +410,7 @@ class ManipulateMode extends BaseMode {
 
                 // Register new mesh with correct ID
                 this.world.sceneIndex.registerBond({
-                    mesh: { uniqueId: newMesh.uniqueId },
+                    mesh: newMesh,
                     meta: {
                         bondId: bondId,
                         atomId1: atomId,
@@ -734,7 +644,6 @@ class ManipulateMode extends BaseMode {
         // Do not auto-discard. Preserving meshes allows seamless mode switching.
         // User must explicitly Discard or Save if they want to revert or optimize.
         this.clearSelection();
-        this.selectionHighlight.dispose();
         super.finish();
     }
 }

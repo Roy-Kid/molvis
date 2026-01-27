@@ -5,6 +5,7 @@ import type { Molvis } from "@molvis/core";
 import { ContextMenuController } from "../core/context_menu_controller";
 import { makeSelectionKey } from "../core/selection_manager";
 import type { HitResult, MenuItem } from "./types";
+import { CommonMenuItems } from "./menu_items";
 
 interface MeasurementData {
   id: string;
@@ -37,15 +38,7 @@ class MeasureModeContextMenu extends ContextMenuController {
   }
 
   protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
-    return [
-      {
-        type: "button",
-        title: "Snapshot",
-        action: () => {
-          this.mode.takeScreenShot();
-        }
-      },
-      { type: "separator" },
+    const items: MenuItem[] = [
       {
         type: "binding",
         bindingConfig: {
@@ -102,6 +95,7 @@ class MeasureModeContextMenu extends ContextMenuController {
         }
       }
     ];
+    return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
 
@@ -246,8 +240,19 @@ class MeasureMode extends BaseMode {
   }
 
   // Override to prevent BaseMode from overwriting our measurement info with default hover text
-  override _on_pointer_move(_pointerInfo: PointerInfo): void {
-    // Do nothing intentionally to preserve measurement display
+  // BUT we now add hover highlighting via Highlighter
+  override _on_pointer_move(pointerInfo: PointerInfo): void {
+    const hit = this.pickHit();
+
+    if (this.enableHoverHighlight) {
+      if (hit && hit.type === 'atom' && hit.mesh) {
+        const thinIndex = hit.thinInstanceIndex ?? -1;
+        const key = makeSelectionKey(hit.mesh.uniqueId, thinIndex >= 0 ? thinIndex : undefined);
+        this.app.world.highlighter.highlightPreview([key]);
+      } else {
+        this.app.world.highlighter.highlightPreview([]);
+      }
+    }
   }
 
   // --- Measurement Creation ---

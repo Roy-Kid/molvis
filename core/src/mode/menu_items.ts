@@ -1,5 +1,7 @@
 import type { MenuItem } from './types';
 import type { MolvisApp } from '../core/app';
+import { writeFrame, inferFormatFromFilename } from '../core/serialization';
+import { syncSceneToFrame } from '../core/scene_sync';
 
 /**
  * Common menu item factory functions
@@ -16,6 +18,45 @@ export class CommonMenuItems {
             action: () => {
                 console.log('[CommonMenuItems] Snapshot clicked');
                 app.world.takeScreenShot();
+            }
+        };
+    }
+
+    /**
+     * Export menu item - prompts for filename, syncs, writes, downloads
+     */
+    static export(app: MolvisApp): MenuItem {
+        return {
+            type: "button",
+            title: "Export",
+            action: () => {
+                const frame = app.system.frame;
+                if (!frame) {
+                    console.warn('[CommonMenuItems] No Frame loaded, cannot export');
+                    return;
+                }
+
+                const filename = window.prompt(
+                    "Enter file name (e.g. model.pdb / model.xyz / model.lammps)",
+                    "molvis.pdb"
+                );
+                if (!filename) {
+                    return;
+                }
+
+                const format = inferFormatFromFilename(filename, "pdb");
+                syncSceneToFrame(app.world.scene, app.world.sceneIndex, frame);
+
+                const payload = writeFrame(frame, { format, filename });
+                const blob = new Blob([payload.content], { type: payload.mime });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = payload.suggestedName;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
             }
         };
     }
@@ -53,5 +94,14 @@ export class CommonMenuItems {
      */
     static separator(): MenuItem {
         return { type: "separator" };
+    }
+
+    /**
+     * Append export + snapshot as the final menu items.
+     */
+    static appendCommonTail(items: MenuItem[], app: MolvisApp): MenuItem[] {
+        items.push(CommonMenuItems.export(app));
+        items.push(CommonMenuItems.snapshot(app));
+        return items;
     }
 }
