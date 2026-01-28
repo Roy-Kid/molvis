@@ -1,4 +1,5 @@
 import { writeFrame as wasmWriteFrame, Frame } from "molrs-wasm";
+import { logger } from "../utils/logger";
 
 export type ExportFormat = "pdb" | "xyz" | "lammps";
 
@@ -39,7 +40,7 @@ export function writeFrame(frame: Frame, opts: WriteFrameOptions): ExportPayload
     try {
         content = wasmWriteFrame(frame, format);
     } catch (e) {
-        console.warn(`[writer] WASM writeFrame not yet implemented: ${e}`);
+        logger.warn(`[writer] WASM writeFrame not yet implemented: ${e}`);
         content = ""; // Placeholder until writeFrame is fully implemented
         warnings.push("writer-not-implemented");
     }

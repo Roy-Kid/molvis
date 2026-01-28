@@ -9,10 +9,7 @@ import type { ModeType } from "../mode";
  */
 export class ModePanel implements GUIComponent {
     public element: HTMLElement;
-    private app: MolvisApp;
-
-    constructor(app: MolvisApp) {
-        this.app = app;
+    constructor(_app: MolvisApp) {
         this.element = this.createPanel();
     }
 

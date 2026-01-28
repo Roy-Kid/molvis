@@ -1,5 +1,5 @@
 import type { PointerInfo, AbstractMesh } from "@babylonjs/core";
-import { MeshBuilder, StandardMaterial, Color3, Vector3 } from "@babylonjs/core";
+import { MeshBuilder, Color3, Vector3 } from "@babylonjs/core";
 import { BaseMode, ModeType } from "./base";
 import type { Molvis } from "@molvis/core";
 import { ContextMenuController } from "../core/context_menu_controller";
@@ -241,7 +241,7 @@ class MeasureMode extends BaseMode {
 
   // Override to prevent BaseMode from overwriting our measurement info with default hover text
   // BUT we now add hover highlighting via Highlighter
-  override _on_pointer_move(pointerInfo: PointerInfo): void {
+  override _on_pointer_move(_pointerInfo: PointerInfo): void {
     const hit = this.pickHit();
 
     if (this.enableHoverHighlight) {

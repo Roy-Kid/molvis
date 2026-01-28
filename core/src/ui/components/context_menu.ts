@@ -1,6 +1,7 @@
 import { MolvisElement } from '../base';
 import type { MenuItem } from '../../mode/types';
 import { createControl } from '../builder';
+import { logger } from "../../utils/logger";
 
 /**
  * MolvisContextMenu - Main context menu web component
@@ -17,28 +18,24 @@ export class MolvisContextMenu extends MolvisElement {
      * Show the context menu at the specified position with menu items
      */
     public show(x: number, y: number, items: MenuItem[]): void {
-        console.log('[MolvisContextMenu] show() called with', items.length, 'items');
         this.render();
 
         if (!this.container) {
-            console.error('[MolvisContextMenu] Container is null after render!');
+            logger.error('[MolvisContextMenu] Container is null after render!');
             return;
         }
 
         // Clear previous items
-        console.log('[MolvisContextMenu] Clearing container, current children:', this.container.children.length);
+        // Clear previous items
         this.container.innerHTML = '';
 
         // Render menu items
-        items.forEach((item, index) => {
+        items.forEach((item, _index) => {
             const control = createControl(item);
             if (control) {
-                console.log(`[MolvisContextMenu] Adding item ${index}:`, item.type, (item as any).title || (item as any).bindingConfig?.label);
                 this.container!.appendChild(control);
             }
         });
-
-        console.log('[MolvisContextMenu] Final children count:', this.container.children.length);
 
         // Position menu
         this.style.left = `${x}px`;

@@ -1,5 +1,5 @@
 import type { FrameSource } from "../pipeline/pipeline";
-import type { Frame } from "../core/system/frame";
+import { Frame } from "molrs-wasm";
 
 /**
  * ArrayFrameSource provides frames from an array of Frame objects.

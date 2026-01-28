@@ -33,7 +33,7 @@ export class ModernTheme implements Theme {
         };
     }
 
-    public getBondStyle(order: number, type?: string): BondStyle {
+    public getBondStyle(_order: number, _type?: string): BondStyle {
         return {
             color: "#BDC3C7", // Light gray bond
             radius: 0.12, // Thicker bonds

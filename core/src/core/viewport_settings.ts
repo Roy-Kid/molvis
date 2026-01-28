@@ -1,4 +1,5 @@
 import { Color4, ArcRotateCamera } from "@babylonjs/core";
+import { logger } from "../utils/logger";
 import type { Scene } from "@babylonjs/core";
 
 /**
@@ -32,11 +33,9 @@ export const DEFAULT_VIEWPORT_CONFIG: ViewportConfig = {
  */
 export class ViewportSettings {
     private config: ViewportConfig;
-    private scene: Scene;
     private camera: ArcRotateCamera;
 
-    constructor(scene: Scene, camera: ArcRotateCamera, initialConfig?: Partial<ViewportConfig>) {
-        this.scene = scene;
+    constructor(_scene: Scene, camera: ArcRotateCamera, initialConfig?: Partial<ViewportConfig>) {
         this.camera = camera;
         this.config = { ...DEFAULT_VIEWPORT_CONFIG, ...initialConfig };
         this.applyConfig();
@@ -68,7 +67,7 @@ export class ViewportSettings {
      */
     public setBackgroundColor(_color: Color4): void {
         // Deprecated: No longer setting background color
-        console.warn('setBackgroundColor is deprecated. Using Babylon.js default background.');
+        logger.warn('setBackgroundColor is deprecated. Using Babylon.js default background.');
     }
 
     /**

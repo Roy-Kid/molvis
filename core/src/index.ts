@@ -5,6 +5,7 @@ export let wasmInstance: InitOutput;
 
 if (__WASM_INLINE__) {
 	const { default: wasmUrl } = await import(
+    // @ts-ignore
     /* webpackMode: "eager" */ "molrs-wasm/molrs_bg.wasm?inline"
 	);
 	wasmInstance = await init(wasmUrl);
@@ -25,7 +26,7 @@ export function mountMolvis(
 export { MolvisApp as Molvis } from "./core/app";
 export { mergeConfig, DEFAULT_CONFIG, type MolvisConfig } from "./core/config";
 export { Settings, type MolvisUserConfig } from "./core/settings";
-export { Frame, Block, Box } from "./core/system/";
+export { Frame, Block, Box, Trajectory } from "./core/system/";
 export { Topology } from "./core/system/topology";
 export { System } from "./core/system";
 export { World } from "./core";

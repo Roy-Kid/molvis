@@ -67,8 +67,8 @@ export function getAtomPositionFromThinInstance(
  * ```typescript
  * const bondInfo = getBondEndpointsFromThinInstance(bondMesh, 10);
  * if (bondInfo) {
- *   console.log(`Bond from ${bondInfo.start} to ${bondInfo.end}`);
- *   console.log(`Length: ${bondInfo.length.toFixed(2)} Å`);
+ *
+ *   const bondInfo = meta; // meta is bond info for 'bond' type
  * }
  * ```
  */
@@ -117,25 +117,23 @@ export function convertThinInstanceToMesh(
 ): Mesh | null {
     const meta = app.world.sceneIndex.getMeta(thinInstanceMesh.uniqueId, instanceIndex);
     if (!meta || meta.type !== 'atom') {
-        console.error('[convertThinInstanceToMesh] Missing thin instance data');
+        logger.error('[convertThinInstanceToMesh] Missing thin instance data');
         return null;
     }
 
     if (instanceIndex < 0) {
-        console.error(`[convertThinInstanceToMesh] Invalid instance index: ${instanceIndex}`);
+        logger.error(`[convertThinInstanceToMesh] Invalid instance index: ${instanceIndex}`);
         return null;
     }
 
     const position = new Vector3(meta.position.x, meta.position.y, meta.position.z);
     const element = meta.element;
-    const radius = app.palette.getAtomRadius(element);
-
-    console.log(`[convertThinInstanceToMesh] Converting thin instance ${instanceIndex}: ${element} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    const radius = app.styleManager.getAtomStyle(element).radius;
 
     // Create new mesh using Artist (only available in Edit mode)
     const mode = app.mode;
     if (!mode || mode.type !== 'edit') {
-        console.error('[convertThinInstanceToMesh] Can only convert thin instances in Edit mode');
+        logger.error('[convertThinInstanceToMesh] Can only convert thin instances in Edit mode');
         return null;
     }
 
@@ -147,7 +145,7 @@ export function convertThinInstanceToMesh(
     });
 
     if (!newMesh) {
-        console.error('[convertThinInstanceToMesh] Failed to create mesh via Artist');
+        logger.error('[convertThinInstanceToMesh] Failed to create mesh via Artist');
         return null;
     }
 
@@ -156,7 +154,7 @@ export function convertThinInstanceToMesh(
     // handle it during the next frame redraw.
     // For now, the thin instance will remain visible but the mesh will be on top.
 
-    console.log(`[convertThinInstanceToMesh] Successfully converted to mesh: ${newMesh.name}`);
+    newMesh.refreshBoundingInfo();
 
     return newMesh;
 }

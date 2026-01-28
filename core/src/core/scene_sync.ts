@@ -2,6 +2,7 @@ import type { Scene, Mesh } from "@babylonjs/core";
 import { Vector3 } from "@babylonjs/core";
 import { Frame, Block } from "molrs-wasm";
 import type { SceneIndex } from "./scene_index";
+import { logger } from "../utils/logger";
 
 /**
  * Synchronize scene data (meshes and thin instances) back to Frame.
@@ -20,7 +21,7 @@ export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Fr
     // Helper to add atom and record mapping
     const addAtom = (id: number, position: Vector3, element: string) => {
         if (atomIdToFrameIndex.has(id)) {
-            console.warn(`[syncSceneToFrame] Duplicate atom ID found: ${id}. Skipping.`);
+            logger.warn(`[syncSceneToFrame] Duplicate atom ID found: ${id}. Skipping.`);
             return;
         }
         atomIdToFrameIndex.set(id, atoms.length);
@@ -32,7 +33,7 @@ export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Fr
         if (entry.kind === 'atom') {
             const mesh = scene.getMeshByUniqueId(uid);
             if (!mesh) {
-                console.warn(`[syncSceneToFrame] Stale atom entry in SceneIndex: ${uid}`);
+                logger.warn(`[syncSceneToFrame] Stale atom entry in SceneIndex: ${uid}`);
                 continue;
             }
             addAtom(entry.meta.atomId, mesh.position, entry.meta.element);
@@ -76,7 +77,7 @@ export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Fr
             if (idx1 !== undefined && idx2 !== undefined) {
                 bonds.push({ atomId1: idx1, atomId2: idx2, order });
             } else {
-                console.warn(`[syncSceneToFrame] Bond ${entry.meta.bondId} refers to unknown atoms ${atomId1}, ${atomId2}`);
+                logger.warn(`[syncSceneToFrame] Bond ${entry.meta.bondId} refers to unknown atoms ${atomId1}, ${atomId2}`);
             }
 
         } else if (entry.kind === 'frame-bond') {
@@ -144,6 +145,7 @@ export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Fr
         frame.insertBlock('bonds', bondBlock);
     }
 
-    console.log(`[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds using strict SceneIndex topology.`);
+
+    logger.info(`[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds using strict SceneIndex topology.`);
     sceneIndex.markAllSaved();
 }

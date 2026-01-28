@@ -11,6 +11,7 @@ import { ModifierPipeline } from "../pipeline";
 import { StyleManager } from "./style";
 import { Theme } from "./style/theme";
 import { System } from "./system";
+import { Trajectory } from "./system/trajectory";
 
 import { Frame } from "molrs-wasm";
 import { MolvisContextMenu, MolvisButton, MolvisSeparator, MolvisFolder, MolvisSlider } from "../ui/components";
@@ -391,5 +392,45 @@ export class MolvisApp {
   ): void {
     this._system.frame = frame; // Store frame in System for later access
     this.execute("draw_frame", { frame, options });
+  }
+
+  /**
+   * Set the current trajectory and update the system.
+   * Emits 'trajectory-change' event.
+   */
+  public setTrajectory(trajectory: Trajectory): void {
+    this._system.trajectory = trajectory;
+    this.events.emit('trajectory-change', trajectory);
+    // Reset to first frame (or keep current if valid?)
+    // System.trajectory setter doesn't reset index in Trajectory class usually (it's new instance)
+    // So index is 0.
+    this.events.emit('frame-change', 0);
+  }
+
+  /**
+   * Navigate to the next frame.
+   */
+  public nextFrame(): void {
+    if (this._system.trajectory.next()) {
+      this.events.emit('frame-change', this._system.trajectory.currentIndex);
+    }
+  }
+
+  /**
+  * Navigate to the previous frame.
+  */
+  public prevFrame(): void {
+    if (this._system.trajectory.prev()) {
+      this.events.emit('frame-change', this._system.trajectory.currentIndex);
+    }
+  }
+
+  /**
+   * Seek to a specific frame index.
+   */
+  public seekFrame(index: number): void {
+    if (this._system.trajectory.seek(index)) {
+      this.events.emit('frame-change', this._system.trajectory.currentIndex);
+    }
   }
 }

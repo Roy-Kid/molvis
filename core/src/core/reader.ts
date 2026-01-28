@@ -1,4 +1,5 @@
 import { Frame, PdbReader, XyzReader, LammpsReader } from "molrs-wasm";
+import { logger } from "../utils/logger";
 
 /**
  * Reads a frame from file content.
@@ -8,8 +9,6 @@ import { Frame, PdbReader, XyzReader, LammpsReader } from "molrs-wasm";
  * @returns Frame object
  */
 export function readFrame(content: string, format: string): Frame {
-    console.log(`[reader] readFrame called with format: ${format}, content length: ${content.length}`);
-
     try {
         const lower = format.toLowerCase();
         let frame: Frame | undefined;
@@ -31,14 +30,14 @@ export function readFrame(content: string, format: string): Frame {
         }
 
         if (frame) {
-            console.log(`[reader] Successfully read frame with format: ${format}`);
+            logger.info(`[reader] Successfully read frame with format: ${format}`);
             return frame;
         } else {
-            console.warn(`[reader] Failed to read frame for format ${format}`);
+            logger.warn(`[reader] Failed to read frame for format ${format}`);
             return new Frame();
         }
     } catch (e) {
-        console.error("[reader] Error reading frame via WASM:", e);
+        logger.error("[reader] Error reading frame via WASM:", e);
         return new Frame();
     }
 }

@@ -1,5 +1,6 @@
-import type { Frame } from "../core/system/frame";
+import { Frame } from "molrs-wasm";
 import { type SelectionManager, makeSelectionKey, type SelectionKey } from "./selection_manager";
+import { logger } from "../utils/logger";
 import { Vector3 } from "@babylonjs/core";
 
 // ============ Types (Colocated) ============
@@ -46,7 +47,7 @@ export class Selector {
      */
     selectByQuery(query: SelectionQuery): void {
         if (!this.frame) {
-            console.warn('Selector: No frame set, cannot execute query');
+            logger.warn('Selector: No frame set, cannot execute query');
             return;
         }
 
@@ -92,7 +93,12 @@ export class Selector {
     private selectByElement(element: string): number[] {
         if (!this.frame) return [];
 
-        const elements = this.frame.atomBlock.element;
+        const atomBlock = this.frame.getBlock("atoms");
+        if (!atomBlock) return [];
+
+        const elements = atomBlock.getColumnStrings("element");
+        if (!elements) return [];
+
         const indices: number[] = [];
 
         for (let i = 0; i < elements.length; i++) {
@@ -114,9 +120,12 @@ export class Selector {
     private selectWithinRadius(center: Vector3, radius: number): number[] {
         if (!this.frame) return [];
 
-        const xCoords = this.frame.atomBlock.x;
-        const yCoords = this.frame.atomBlock.y;
-        const zCoords = this.frame.atomBlock.z;
+        const atomBlock = this.frame.getBlock("atoms");
+        if (!atomBlock) return [];
+
+        const xCoords = atomBlock.getColumnF32("x");
+        const yCoords = atomBlock.getColumnF32("y");
+        const zCoords = atomBlock.getColumnF32("z");
         const indices: number[] = [];
 
         for (let i = 0; i < xCoords.length; i++) {

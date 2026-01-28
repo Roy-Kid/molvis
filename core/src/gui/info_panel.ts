@@ -7,10 +7,7 @@ import type { GUIComponent } from "./types";
  */
 export class InfoPanel implements GUIComponent {
     public element: HTMLElement;
-    private app: MolvisApp;
-
-    constructor(app: MolvisApp) {
-        this.app = app;
+    constructor(_app: MolvisApp) {
         this.element = this.createPanel();
     }
 

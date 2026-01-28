@@ -1,5 +1,5 @@
 import { BaseModifier, ModifierCategory } from './modifier';
-import type { Frame } from '../structure/frame';
+import { Frame } from "molrs-wasm";
 import type { PipelineContext } from './types';
 
 // TODO: These should interact with the main rendering system, not just modify the frame.

@@ -1,5 +1,5 @@
 
-import type { MenuItem } from '../../mode/types';
+import type { MenuItem } from '../mode/types';
 
 export function createControl(item: MenuItem): HTMLElement | null {
     let el: HTMLElement | null = null;

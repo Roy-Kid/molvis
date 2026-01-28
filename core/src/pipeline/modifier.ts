@@ -1,4 +1,4 @@
-import type { Frame } from "../core/system/frame";
+import { Frame } from "molrs-wasm";
 import type { PipelineContext, ValidationResult } from "./types";
 
 /**

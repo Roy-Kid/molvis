@@ -3,6 +3,7 @@ import type { MolvisApp } from '../core/app';
 import { inferFormatFromFilename } from '../core/reader';
 import { writeFrame } from '../core/writer';
 import { syncSceneToFrame } from '../core/scene_sync';
+import { logger } from "../utils/logger";
 
 /**
  * Common menu item factory functions
@@ -17,7 +18,6 @@ export class CommonMenuItems {
             type: "button",
             title: "Snapshot",
             action: () => {
-                console.log('[CommonMenuItems] Snapshot clicked');
                 app.world.takeScreenShot();
             }
         };
@@ -33,7 +33,7 @@ export class CommonMenuItems {
             action: () => {
                 const frame = app.system.frame;
                 if (!frame) {
-                    console.warn('[CommonMenuItems] No Frame loaded, cannot export');
+                    logger.warn('[CommonMenuItems] No Frame loaded, cannot export');
                     return;
                 }
 
@@ -70,7 +70,6 @@ export class CommonMenuItems {
             type: "button",
             title: "Reset Camera",
             action: () => {
-                console.log('[CommonMenuItems] Reset Camera clicked');
                 app.world.resetCamera();
             }
         };
@@ -84,7 +83,6 @@ export class CommonMenuItems {
             type: "button",
             title: "Clear Selection",
             action: () => {
-                console.log('[CommonMenuItems] Clear Selection clicked');
                 app.world.selectionManager.apply({ type: 'clear' });
             }
         };

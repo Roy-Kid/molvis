@@ -1,6 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import { Vector3, MeshBuilder, Color3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
+import { logger } from "../utils/logger";
 import { Command, command } from "./base";
 import { Frame, Block } from "molrs-wasm";
 
@@ -281,7 +282,7 @@ export class DrawFrameCommand extends Command<void> {
 
         // Fallback for missing element column (render as Carbon)
         if (!elements || elements.length < atomCount) {
-            console.warn("[DrawFrame] Missing 'element' column, falling back to 'C'");
+            logger.warn("[DrawFrame] Missing 'element' column, falling back to 'C'");
             elements = new Array(atomCount).fill("C");
         }
 
@@ -688,8 +689,6 @@ export class DrawBondCommand extends Command<Mesh> {
 
     do(): Mesh {
         const { order = 1, radius, color } = this.options;
-
-        console.log('[DrawBondCommand] Drawing bond with order:', order);
 
         const style = this.app.styleManager.getBondStyle(order);
 

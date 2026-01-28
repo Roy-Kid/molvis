@@ -2,10 +2,10 @@ import {
     PointerInfo,
     Vector3,
     AbstractMesh,
-    StandardMaterial,
 } from "@babylonjs/core";
 import { Block } from "molrs-wasm";
 import type { Molvis } from "@molvis/core";
+import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
 import { ContextMenuController } from "../core/context_menu_controller";
@@ -112,7 +112,7 @@ class ManipulateMode extends BaseMode {
         bondMeshId?: number;
     } | null = null;
     private convertedToMeshes = false;
-    private materialCache: Map<string, StandardMaterial> = new Map();
+
 
     constructor(app: Molvis) {
         super(ModeType.Manipulate, app);
@@ -125,7 +125,8 @@ class ManipulateMode extends BaseMode {
 
         // Convert any frame-based entities found in SceneIndex
         // Topology is automatically managed by SceneIndex during conversion (unregister Frame -> register Mesh)
-        this.convertFromSceneIndex().catch(console.error);
+        // Convert SceneIndex to Meshes (if any)
+        this.convertFromSceneIndex().catch(err => logger.error("[ManipulateMode] Conversion failed", err));
     }
 
     /**
@@ -198,9 +199,7 @@ class ManipulateMode extends BaseMode {
                         element,
                         atomId: i // Preserving Semantic ID 0..N
                     },
-                    this.app.palette,
-                    this.scene,
-                    this.materialCache
+                    this.scene
                 );
                 cmd.do();
             }
@@ -240,7 +239,7 @@ class ManipulateMode extends BaseMode {
                 const atomJMesh = this.findAtomMeshByIndex(jAtoms[b]);
 
                 if (!atomIMesh || !atomJMesh) {
-                    console.warn(`[ManipulateMode] Skipping Bond ${b}: Atoms ${iAtoms[b]} or ${jAtoms[b]} missing.`);
+                    logger.warn(`[ManipulateMode] Skipping Bond ${b}: Atoms ${iAtoms[b]} or ${jAtoms[b]} missing.`);
                     continue;
                 }
 
@@ -254,9 +253,7 @@ class ManipulateMode extends BaseMode {
                         atomId1: iAtoms[b],
                         atomId2: jAtoms[b]
                     },
-                    this.app.palette,
-                    this.scene,
-                    this.materialCache
+                    this.scene
                 );
                 cmd.do();
             }
@@ -351,28 +348,28 @@ class ManipulateMode extends BaseMode {
         const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
         const atomId = meta && meta.type === 'atom' ? meta.atomId : -1;
         if (atomId === -1) {
-            console.warn('[ManipulateMode] updateConnectedBonds: moved atom has invalid ID');
+            logger.warn('[ManipulateMode] updateConnectedBonds: moved atom has invalid ID');
             return;
         }
 
-        const bondIds = this.world.topology.getBondsForAtom(atomId);
+        const bondIds = this.world.topology.incident(atomId);
 
 
         for (const bondId of bondIds) {
-            const bondInfo = this.world.topology.getAtomsForBond(bondId);
+            const bondInfo = this.world.topology.endpoints(bondId);
             if (!bondInfo) {
-                console.warn(`[ManipulateMode] No topology info for bond ${bondId}`);
+                logger.warn(`[ManipulateMode] No topology info for bond ${bondId}`);
                 continue;
             }
 
-            const otherAtomId = bondInfo.atom1 === atomId ? bondInfo.atom2 : bondInfo.atom1;
+            const otherAtomId = bondInfo[0] === atomId ? bondInfo[1] : bondInfo[0];
             const otherAtomMesh = this.scene.meshes.find(m => {
                 const mMeta = this.world.sceneIndex.getMeta(m.uniqueId);
                 return mMeta?.type === 'atom' && mMeta.atomId === otherAtomId;
             });
 
             if (!otherAtomMesh) {
-                console.warn(`[ManipulateMode] Could not find mesh for neighbor atom ${otherAtomId}`);
+                logger.warn(`[ManipulateMode] Could not find mesh for neighbor atom ${otherAtomId}`);
                 continue;
             }
 
@@ -402,9 +399,7 @@ class ManipulateMode extends BaseMode {
                         atomId1: atomId,
                         atomId2: otherAtomId
                     },
-                    this.app.palette,
-                    this.scene,
-                    this.materialCache
+                    this.scene
                 );
                 const newMesh = cmd.do();
 
@@ -497,6 +492,9 @@ class ManipulateMode extends BaseMode {
             this.app.events.emit('info-text-change',
                 `Moved ${element} to (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`
             );
+
+            // Clear selection (highlight) after drag
+            this.clearSelection();
         }
 
         // Re-enable camera controls
@@ -538,7 +536,7 @@ class ManipulateMode extends BaseMode {
         // Use syncSceneToFrame to update global system frame
         const frame = this.app.system.frame;
         if (!frame) {
-            console.warn('[ManipulateMode] No system frame to save to');
+            logger.warn('[ManipulateMode] No system frame to save to');
             return;
         }
 
@@ -561,11 +559,11 @@ class ManipulateMode extends BaseMode {
         this.originalFrameData = null;
         this.convertedToMeshes = false;
         this.world.topology.clear();
-        console.log('[ManipulateMode] Saved changes using syncSceneToFrame');
+        logger.info('[ManipulateMode] Saved changes using syncSceneToFrame');
     }
 
     protected override _on_press_ctrl_s(): void {
-        this.saveChanges().catch(console.error);
+        this.saveChanges().catch(err => logger.error("[ManipulateMode] Save failed", err));
     }
 
     /**

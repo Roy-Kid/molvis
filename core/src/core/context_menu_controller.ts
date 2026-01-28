@@ -1,4 +1,3 @@
-
 import type { Molvis } from "@molvis/core";
 import type { HitResult, MenuItem } from "../mode/types";
 import type { MolvisContextMenu } from "../ui/components";
@@ -167,11 +166,7 @@ export abstract class ContextMenuController {
             e.clientY >= rect.top &&
             e.clientY <= rect.bottom
         );
-
-        console.log('[ContextMenuController] Click detected, inside menu:', clickInside);
-
         if (!clickInside) {
-            console.log('[ContextMenuController] Closing menu due to outside click');
             this.hide();
             // Don't prevent default or stop propagation - let the click go through
         }

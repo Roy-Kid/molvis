@@ -1,4 +1,5 @@
 import type { Modifier } from "./modifier";
+import { logger } from "../utils/logger";
 
 /**
  * Modifier registry for dynamic modifier discovery and instantiation.
@@ -26,7 +27,7 @@ export class ModifierRegistry {
     create(type: string, params: ModifierParams): Modifier | null {
         const factory = this.factories.get(type);
         if (!factory) {
-            console.warn(`Modifier type '${type}' not registered`);
+            logger.warn(`Modifier type '${type}' not registered`);
             return null;
         }
         return factory(params);

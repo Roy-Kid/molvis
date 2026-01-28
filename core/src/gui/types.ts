@@ -1,4 +1,4 @@
-import type { MolvisApp } from "../core/app";
+
 
 /**
  * Base interface for all GUI components

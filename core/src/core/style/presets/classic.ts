@@ -139,7 +139,7 @@ export class ClassicTheme implements Theme {
         };
     }
 
-    public getBondStyle(order: number, type?: string): BondStyle {
+    public getBondStyle(_order: number, _type?: string): BondStyle {
         return {
             color: "#808080", // Standard gray bond
             radius: 0.1

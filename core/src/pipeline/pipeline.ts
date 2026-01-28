@@ -1,6 +1,7 @@
-import type { Frame } from "../core/system/frame";
+import { Frame } from "molrs-wasm";
 import type { Modifier } from "./modifier";
-import { createDefaultContext, type PipelineContext } from "./types";
+import { createDefaultContext } from "./types";
+import { logger } from "../utils/logger";
 
 /**
  * Frame source interface for loading frames.
@@ -97,7 +98,7 @@ export class ModifierPipeline extends EventEmitter {
             // Validate modifier
             const validation = modifier.validate(frame, context);
             if (!validation.valid) {
-                console.warn(`Modifier ${modifier.name} validation failed:`, validation.errors);
+                logger.warn(`Modifier ${modifier.name} validation failed:`, validation.errors);
                 continue;
             }
 

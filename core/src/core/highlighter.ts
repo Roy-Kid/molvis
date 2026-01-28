@@ -33,16 +33,18 @@ export class Highlighter {
     constructor(scene: Scene) {
         this.scene = scene;
 
-        // Selection = Yellow
+        // Selection = Golden Orange (Premium look)
         this.selectionMaterial = new StandardMaterial("highlight_select", scene);
-        this.selectionMaterial.diffuseColor = Color3.Yellow();
-        this.selectionMaterial.emissiveColor = new Color3(0.5, 0.5, 0);
+        this.selectionMaterial.diffuseColor = new Color3(1.0, 0.7, 0.0); // Golden Orange
+        this.selectionMaterial.emissiveColor = new Color3(0.4, 0.2, 0.0); // Subtle self-illumination
+        this.selectionMaterial.specularColor = new Color3(1.0, 1.0, 1.0); // High specular for "shiny" look
+        this.selectionMaterial.alpha = 1.0;
 
-        // Preview = Cyan/Light Blue (distinct from selection)
+        // Preview = Soft Sky Blue (Subtle)
         this.previewMaterial = new StandardMaterial("highlight_preview", scene);
-        this.previewMaterial.diffuseColor = Color3.Teal();
-        this.previewMaterial.emissiveColor = new Color3(0, 0.3, 0.3);
-        this.previewMaterial.alpha = 0.8;
+        this.previewMaterial.diffuseColor = new Color3(0.4, 0.8, 1.0); // Soft Cyan
+        this.previewMaterial.emissiveColor = new Color3(0.0, 0.2, 0.3); // Very subtle glow
+        this.previewMaterial.alpha = 0.5; // More transparent
     }
 
     /**
@@ -74,15 +76,15 @@ export class Highlighter {
             if (this.lastSelectionState.atoms.has(key) || this.lastSelectionState.bonds.has(key)) {
                 continue;
             }
-            this.applyHighlight(key, this.previewMaterial, [0.0, 1.0, 1.0, 1.0]); // Cyan
+            this.applyHighlight(key, this.previewMaterial, [0.4, 0.8, 1.0, 0.8]); // Soft Cyan (with alpha)
         }
 
         // 2. Apply Selection
         for (const key of this.lastSelectionState.atoms) {
-            this.applyHighlight(key, this.selectionMaterial, [1.0, 1.0, 0.0, 1.0]); // Yellow
+            this.applyHighlight(key, this.selectionMaterial, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
         }
         for (const key of this.lastSelectionState.bonds) {
-            this.applyHighlight(key, this.selectionMaterial, [1.0, 1.0, 0.0, 1.0]); // Yellow
+            this.applyHighlight(key, this.selectionMaterial, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
         }
     }
 

@@ -9,6 +9,7 @@ import { GridGround } from "./grid";
 import { SelectionManager } from "./selection_manager";
 import { Highlighter } from "./highlighter";
 import { Topology } from "./system/topology";
+import { logger } from "../utils/logger";
 
 export class World {
   private _engine: Engine;
@@ -140,7 +141,7 @@ export class World {
   }
 
   public takeScreenShot() {
-    console.log('[World] Taking screenshot...');
+    logger.info('[World] Taking screenshot...');
     import('@babylonjs/core').then(({ Tools }) => {
       Tools.CreateScreenshotUsingRenderTarget(
         this._engine,
@@ -151,7 +152,7 @@ export class World {
           link.download = `molvis-screenshot-${Date.now()}.png`;
           link.href = data;
           link.click();
-          console.log('[World] Screenshot downloaded');
+          logger.info('[World] Screenshot downloaded');
         }
       );
     });

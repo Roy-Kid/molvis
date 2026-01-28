@@ -2,6 +2,7 @@ import type { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
+import { logger } from "../utils/logger";
 
 /**
  * Selection modifier that creates or updates a named selection.
@@ -45,7 +46,7 @@ export class SelectModifier extends BaseModifier {
         } else {
             // TODO: Expression-based selection (future enhancement)
             // For now, just select all
-            console.warn("Expression-based selection not yet implemented, selecting all");
+            logger.warn("Expression-based selection not yet implemented, selecting all");
             mask = SelectionMask.all(atomCount);
         }
 

@@ -78,17 +78,20 @@ class ViewMode extends BaseMode {
    * Start ViewMode - activate 3D scene helpers
    */
   public start(): void {
-    console.log('[ViewMode] start() called');
     super.start();
 
     // Invalidate highlights for mode switch (View uses thin instances)
     this.app.world.highlighter.invalidateAndRebuild();
+
+    // Listen for frame changes (from System or UI)
+    this.app.events.on('frame-change', this.onFrameChange);
   }
 
   /**
    * Finish ViewMode - deactivate 3D scene helpers
    */
   public finish(): void {
+    this.app.events.off('frame-change', this.onFrameChange);
     this.world.targetIndicator.hide();
 
     super.finish();
@@ -137,6 +140,43 @@ class ViewMode extends BaseMode {
   override _on_pointer_move(_pointerInfo: PointerInfo) {
     // ViewMode inherits atom info display functionality from BaseMode
     super._on_pointer_move(_pointerInfo);
+  }
+
+  private onFrameChange = () => {
+    this.redrawFrame();
+  };
+
+  override _on_press_q(): void {
+    this.app.prevFrame();
+  }
+
+  override _on_press_e(): void {
+    this.app.nextFrame();
+  }
+
+  private async redrawFrame() {
+    const frame = this.app.system.frame;
+
+    try {
+      const { UpdateFrameCommand } = await import("../commands/update_frame");
+      const updateCmd = new UpdateFrameCommand(this.app, { frame });
+      const result = await updateCmd.do();
+
+      if (result.success) {
+        return;
+      }
+      // console.log("UpdateFrame failed, falling back to DrawFrame:", result.reason);
+    } catch (e) {
+      // Ignore error and fall back
+      // console.warn("UpdateFrameCommand error:", e);
+    }
+
+    // Fallback to full rebuild
+    const { DrawFrameCommand } = await import("../commands/draw");
+    const cmd = new DrawFrameCommand(this.app, {
+      frame
+    });
+    await cmd.do();
   }
 }
 

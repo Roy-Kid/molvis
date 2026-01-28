@@ -1,6 +1,7 @@
-import type { Frame } from "../core/system/frame";
+import { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { logger } from "../utils/logger";
 
 /**
  * WrapPBC modifier wraps atoms into the periodic box.
@@ -14,13 +15,13 @@ export class WrapPBCModifier extends BaseModifier {
     apply(input: Frame, _context: PipelineContext): Frame {
         // Check if frame has a box
         if (!input.box) {
-            console.warn("WrapPBC: Frame has no box, skipping");
+            logger.warn("WrapPBC: Frame has no box, skipping");
             return input;
         }
 
         // TODO: Implement actual PBC wrapping logic
         // For now, this is a placeholder that returns the input unchanged
-        console.log("WrapPBC: Wrapping atoms into periodic box (placeholder)");
+        logger.info("WrapPBC: Wrapping atoms into periodic box (placeholder)");
 
         // In a real implementation, this would:
         // 1. Clone the frame

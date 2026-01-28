@@ -3,6 +3,7 @@ import type { MolvisApp } from "../core/app";
 import { Command } from "./base";
 import type { SelectedEntity, GetSelectedResponse } from "../core/selection_manager";
 import type { SceneIndex } from "../core/scene_index";
+import { logger } from "../utils/logger";
 import { commands } from "./registry";
 
 function getThinInstanceMatrixBuffer(mesh: Mesh): Float32Array | null {
@@ -225,14 +226,14 @@ export class PasteSelectionCommand extends Command<void> {
         // Get atom mesh
         const atomMesh = findThinInstanceMesh(scene, this.app.world.sceneIndex, 'atom');
         if (!atomMesh) {
-            console.error("Cannot paste: atom mesh not found");
+            logger.error("Cannot paste: atom mesh not found");
             return;
         }
 
         const atomMatrices = getThinInstanceMatrixBuffer(atomMesh);
         const atomColors = getThinInstanceColorBuffer(atomMesh);
         if (!atomMatrices || !atomColors) {
-            console.error("Cannot paste: atom mesh missing buffers");
+            logger.error("Cannot paste: atom mesh missing buffers");
             return;
         }
 

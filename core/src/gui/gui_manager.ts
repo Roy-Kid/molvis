@@ -5,6 +5,8 @@ import { InfoPanel } from "./info_panel";
 import { ModePanel } from "./mode_panel";
 import { PerfPanel } from "./perf_panel";
 import { ViewPanel } from "./view_panel";
+import { MolvisTrajectoryPanel } from "./trajectory_panel";
+import { Trajectory } from "../core/system/trajectory";
 
 /**
  * GUIManager - manages all UI overlay components
@@ -20,6 +22,11 @@ export class GUIManager {
     private modePanel: ModePanel | null = null;
     private viewPanel: ViewPanel | null = null;
     private perfPanel: PerfPanel | null = null;
+    private trajectoryPanel: MolvisTrajectoryPanel | null = null;
+
+    // Playback state
+    private playbackInterval: any = null;
+    private playbackSpeed = 100; // ms per frame
 
     constructor(
         container: HTMLElement,
@@ -39,6 +46,11 @@ export class GUIManager {
             return;
         }
 
+        // Register custom element first
+        if (!customElements.get('molvis-trajectory-panel')) {
+            customElements.define('molvis-trajectory-panel', MolvisTrajectoryPanel);
+        }
+
         this.injectStyles();
         this.createOverlay();
         this.initComponents();
@@ -50,6 +62,7 @@ export class GUIManager {
      */
     public unmount(): void {
         this.removeEventListeners();
+        this.stopPlayback();
 
         if (this.infoPanel) {
             this.infoPanel.unmount();
@@ -69,6 +82,11 @@ export class GUIManager {
         if (this.perfPanel) {
             this.perfPanel.unmount();
             this.perfPanel = null;
+        }
+
+        if (this.trajectoryPanel) {
+            this.trajectoryPanel.remove();
+            this.trajectoryPanel = null;
         }
 
         if (this.uiOverlay) {
@@ -135,7 +153,31 @@ export class GUIManager {
             this.perfPanel.mount(this.uiOverlay);
         }
 
-        // PipelinePanel (right side) - Removed, handled by React UI
+        // TrajectoryPanel (bottom-center, auto-show)
+        // We always creating it but it hides itself if length <= 1
+        this.trajectoryPanel = document.createElement('molvis-trajectory-panel') as MolvisTrajectoryPanel;
+        this.uiOverlay.appendChild(this.trajectoryPanel);
+
+        // Bind panel events
+        this.trajectoryPanel.addEventListener('seek', (e: any) => {
+            this.app.seekFrame(e.detail);
+        });
+
+        this.trajectoryPanel.addEventListener('prev', () => {
+            this.app.prevFrame();
+        });
+
+        this.trajectoryPanel.addEventListener('next', () => {
+            this.app.nextFrame();
+        });
+
+        this.trajectoryPanel.addEventListener('play', () => {
+            this.startPlayback();
+        });
+
+        this.trajectoryPanel.addEventListener('pause', () => {
+            this.stopPlayback();
+        });
     }
 
     /**
@@ -145,6 +187,9 @@ export class GUIManager {
         this.app.events.on('info-text-change', this.handleInfoChange.bind(this));
         this.app.events.on('mode-change', this.handleModeChange.bind(this));
         this.app.events.on('fps-change', this.handleFpsChange.bind(this));
+
+        this.app.events.on('trajectory-change', this.handleTrajectoryChange.bind(this));
+        this.app.events.on('frame-change', this.handleFrameChange.bind(this));
     }
 
     /**
@@ -154,6 +199,9 @@ export class GUIManager {
         this.app.events.off('info-text-change', this.handleInfoChange.bind(this));
         this.app.events.off('mode-change', this.handleModeChange.bind(this));
         this.app.events.off('fps-change', this.handleFpsChange.bind(this));
+
+        this.app.events.off('trajectory-change', this.handleTrajectoryChange.bind(this));
+        this.app.events.off('frame-change', this.handleFrameChange.bind(this));
     }
 
     /**
@@ -180,6 +228,44 @@ export class GUIManager {
     private handleFpsChange(fps: number): void {
         if (this.perfPanel) {
             this.perfPanel.update(fps);
+        }
+    }
+
+    private handleTrajectoryChange(traj: Trajectory): void {
+        if (this.trajectoryPanel) {
+            this.trajectoryPanel.length = traj.length;
+            this.stopPlayback(); // Stop ensuring no weirdness
+        }
+    }
+
+    private handleFrameChange(index: number): void {
+        if (this.trajectoryPanel) {
+            this.trajectoryPanel.current = index;
+        }
+    }
+
+    private startPlayback() {
+        if (this.playbackInterval) return;
+
+        this.trajectoryPanel!.playing = true;
+        this.playbackInterval = setInterval(() => {
+            const sys = this.app.system;
+            if (sys.trajectory.currentIndex >= sys.trajectory.length - 1) {
+                // Loop or stop? Let's loop
+                this.app.seekFrame(0);
+            } else {
+                this.app.nextFrame();
+            }
+        }, this.playbackSpeed);
+    }
+
+    private stopPlayback() {
+        if (this.playbackInterval) {
+            clearInterval(this.playbackInterval);
+            this.playbackInterval = null;
+        }
+        if (this.trajectoryPanel) {
+            this.trajectoryPanel.playing = false;
         }
     }
 }
