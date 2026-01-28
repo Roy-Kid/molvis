@@ -1,4 +1,4 @@
-import { Scene, Engine, HemisphericLight, DirectionalLight, Vector3, Color3, ArcRotateCamera } from "@babylonjs/core";
+import { Scene, Engine, HemisphericLight, DirectionalLight, Vector3, Color3, ArcRotateCamera, FxaaPostProcess } from "@babylonjs/core";
 import { type MolvisApp } from "./app";
 import { ViewportSettings } from "./viewport_settings";
 import { TargetIndicator } from "./target_indicator";
@@ -19,6 +19,7 @@ export class World {
     camera: ArcRotateCamera;
     light: HemisphericLight;
   };
+  private _fxaa?: FxaaPostProcess;
   private _modeManager?: ModeManager;
 
   // Viewport/Camera settings
@@ -110,6 +111,9 @@ export class World {
     window.addEventListener("resize", () => {
       engine.resize();
     });
+
+    // Apply initial graphics config
+    this.applyGraphicsConfig();
   }
 
   public get scene(): Scene {
@@ -183,5 +187,37 @@ export class World {
    */
   public resize() {
     this._engine.resize();
+  }
+
+  /**
+   * Apply graphics configuration from App.config.graphics
+   */
+  public applyGraphicsConfig() {
+    const config = this._app.config.graphics;
+    if (!config) return;
+
+    // 1. Hardware Scaling (Resolution)
+    // config.hardwareScaling: 1.0 = native, 0.5 = half res
+    // engine.setHardwareScalingLevel: 1.0 = native, 2.0 = half res (it's inverse)
+    if (config.hardwareScaling) {
+      this._engine.setHardwareScalingLevel(1.0 / config.hardwareScaling);
+    }
+
+    // 2. FXAA
+    if (config.fxaa) {
+      if (!this._fxaa) {
+        this._fxaa = new FxaaPostProcess("fxaa", 1.0, this._sceneData.camera);
+      }
+    } else {
+      if (this._fxaa) {
+        this._fxaa.dispose();
+        this._fxaa = undefined;
+      }
+    }
+
+    // 3. Shadows & Post-Processing
+    // Currently we don't use ShadowGenerator or Pipeline, so these flags 
+    // (shadows, ssao, bloom, etc.) are implicitly respected (they are off).
+    // Future implementations should check these flags.
   }
 }

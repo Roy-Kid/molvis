@@ -30,6 +30,18 @@ export interface GridConfig {
     size?: number;
 }
 
+// Graphics configuration
+export interface GraphicsConfig {
+    shadows?: boolean;
+    postProcessing?: boolean;
+    ssao?: boolean;
+    bloom?: boolean;
+    ssr?: boolean;
+    dof?: boolean;
+    fxaa?: boolean;
+    hardwareScaling?: number;
+}
+
 /**
  * Molvis configuration
  */
@@ -43,6 +55,9 @@ export interface MolvisConfig {
 
     // Grid settings
     grid?: GridConfig;
+
+    // Graphics settings
+    graphics?: GraphicsConfig;
 }
 
 /**
@@ -52,6 +67,7 @@ export const DEFAULT_CONFIG: Required<MolvisConfig> & {
     uiComponents: Required<UIComponentsConfig>;
     canvas: Required<CanvasConfig>;
     grid: Required<GridConfig>;
+    graphics: Required<GraphicsConfig>;
 } = {
     showUI: true,
     uiComponents: {
@@ -75,6 +91,16 @@ export const DEFAULT_CONFIG: Required<MolvisConfig> & {
         majorUnitFrequency: 10,
         minorUnitVisibility: 0.5,
         size: 100
+    },
+    graphics: {
+        shadows: false,
+        postProcessing: false,
+        ssao: false,
+        bloom: false,
+        ssr: false,
+        dof: false,
+        fxaa: false, // Low-cost AA
+        hardwareScaling: 1.0 // 1.0 = native, 2.0 = Retina (High Quality, Low Perf)
     }
 };
 
@@ -105,6 +131,16 @@ export function mergeConfig(config: MolvisConfig = {}): MolvisConfig {
             majorUnitFrequency: config.grid?.majorUnitFrequency ?? DEFAULT_CONFIG.grid.majorUnitFrequency,
             minorUnitVisibility: config.grid?.minorUnitVisibility ?? DEFAULT_CONFIG.grid.minorUnitVisibility,
             size: config.grid?.size ?? DEFAULT_CONFIG.grid.size
+        },
+        graphics: {
+            shadows: config.graphics?.shadows ?? DEFAULT_CONFIG.graphics.shadows,
+            postProcessing: config.graphics?.postProcessing ?? DEFAULT_CONFIG.graphics.postProcessing,
+            ssao: config.graphics?.ssao ?? DEFAULT_CONFIG.graphics.ssao,
+            bloom: config.graphics?.bloom ?? DEFAULT_CONFIG.graphics.bloom,
+            ssr: config.graphics?.ssr ?? DEFAULT_CONFIG.graphics.ssr,
+            dof: config.graphics?.dof ?? DEFAULT_CONFIG.graphics.dof,
+            fxaa: config.graphics?.fxaa ?? DEFAULT_CONFIG.graphics.fxaa,
+            hardwareScaling: config.graphics?.hardwareScaling ?? DEFAULT_CONFIG.graphics.hardwareScaling
         }
     };
 }

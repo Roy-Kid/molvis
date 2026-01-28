@@ -3,14 +3,14 @@ import {
     Vector3,
     AbstractMesh,
 } from "@babylonjs/core";
-import { Block } from "molrs-wasm";
+import { Frame, Block } from "molrs-wasm";
 import type { Molvis } from "@molvis/core";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
-import { DrawAtomCommand, DrawBondCommand, DrawFrameCommand } from "../commands/draw";
+import { DrawAtomCommand, DrawBondCommand } from "../commands/draw";
 import { syncSceneToFrame } from "../core/scene_sync";
 import { CommonMenuItems } from "./menu_items";
 
@@ -545,11 +545,13 @@ class ManipulateMode extends BaseMode {
         // Dispose individual meshes
         this.disposeAllAtomAndBondMeshes();
 
+        // Clear scene before redrawing
+        const { ClearSceneCommand } = await import('../commands/clear');
+        const clearCmd = new ClearSceneCommand(this.app);
+        clearCmd.do();
+
         // Redraw thin instances from the updated frame
         const { DrawFrameCommand } = await import('../commands/draw');
-        // Note: DrawFrameCommand constructor expects frameData to create a new Frame internally
-        // BUT we want to use our updated 'frame' directly.
-        // We modify DrawFrameCommand usage to pass the frame
         const cmd = new DrawFrameCommand(this.app, {
             frame: frame
         });
@@ -577,25 +579,20 @@ class ManipulateMode extends BaseMode {
         // Dispose individual meshes
         this.disposeAllAtomAndBondMeshes();
 
-        // Restore original frame
-        const cmd = new DrawFrameCommand(this.app, {
-            frameData: {
-                blocks: {
-                    atoms: {
-                        x: this.originalFrameData.atomBlock.getColumnF32('x')!,
-                        y: this.originalFrameData.atomBlock.getColumnF32('y')!,
-                        z: this.originalFrameData.atomBlock.getColumnF32('z')!,
-                        element: this.originalFrameData.atomBlock.getColumnStrings('element') as string[]
-                    },
-                    bonds: this.originalFrameData.bondBlock ? {
-                        i: this.originalFrameData.bondBlock.getColumnU32('i')!,
-                        j: this.originalFrameData.bondBlock.getColumnU32('j')!,
-                        order: this.originalFrameData.bondBlock.getColumnU8('order')
-                    } : undefined
-                },
-                metadata: {}
-            }
-        });
+        const frame = new Frame();
+        frame.insertBlock('atoms', this.originalFrameData.atomBlock);
+        if (this.originalFrameData.bondBlock) {
+            frame.insertBlock('bonds', this.originalFrameData.bondBlock);
+        }
+
+        // Clear scene before drawing
+        const { ClearSceneCommand } = await import('../commands/clear');
+        const clearCmd = new ClearSceneCommand(this.app);
+        clearCmd.do();
+
+        // Redraw the original frame
+        const { DrawFrameCommand } = await import('../commands/draw');
+        const cmd = new DrawFrameCommand(this.app, { frame });
         cmd.do();
 
         // Cleanup

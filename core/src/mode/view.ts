@@ -171,7 +171,11 @@ class ViewMode extends BaseMode {
       // console.warn("UpdateFrameCommand error:", e);
     }
 
-    // Fallback to full rebuild
+    // Fallback to full rebuild - clear scene first, then draw
+    const { ClearSceneCommand } = await import("../commands/clear");
+    const clearCmd = new ClearSceneCommand(this.app);
+    clearCmd.do();
+
     const { DrawFrameCommand } = await import("../commands/draw");
     const cmd = new DrawFrameCommand(this.app, {
       frame

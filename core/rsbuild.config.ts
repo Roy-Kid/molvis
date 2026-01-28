@@ -13,7 +13,7 @@ export default defineConfig({
   },
   source: {
     entry: {
-      index: "./examples/demo_traj.ts"
+      index: "./examples/demo_perf.ts"
     },
     define: {
       __WASM_INLINE__: JSON.stringify(false),

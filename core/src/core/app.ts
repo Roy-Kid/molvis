@@ -363,6 +363,38 @@ export class MolvisApp {
   }
 
   /**
+   * Update configuration at runtime.
+   * Merges with existing config and propagates changes.
+   */
+  public setConfig(newConfig: Partial<MolvisConfig>): void {
+    // Deep merge would be better but simple merge works for top-level sections if we are careful
+    // Actually mergeConfig in config.ts handles per-section defaults but not deep merging of partial user text.
+    // For now we assume we replace the section or use helper.
+
+    // Simplistic merge:
+    this._config = mergeConfig({ ...this._config, ...newConfig });
+
+    // 1. Graphics
+    if (newConfig.graphics) {
+      this._world.applyGraphicsConfig();
+    }
+
+    // 2. Grid
+    if (newConfig.grid) {
+      if (this._config.grid?.enabled) {
+        this._world.grid.enable();
+      } else {
+        this._world.grid.disable();
+      }
+    }
+
+    // 3. UI
+    if (newConfig.showUI !== undefined) {
+      this._uiOverlay.style.display = this._config.showUI ? 'block' : 'none';
+    }
+  }
+
+  /**
    * Compute a frame using the modifier pipeline.
    * @param frameIndex Index of frame to compute
    * @param source Frame source

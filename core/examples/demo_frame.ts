@@ -1,5 +1,6 @@
 import { Molvis } from "@molvis/core";
 import { DrawFrameCommand } from "@molvis/core/commands/draw";
+import { Frame, Block } from "molrs-wasm";
 
 /**
  * Demo: Single frame rendering
@@ -18,24 +19,23 @@ async function main() {
 
     const app = new Molvis(canvas);
 
-    // Create a simple H2O molecule using frameData format
-    const drawCmd = new DrawFrameCommand(app, {
-        frameData: {
-            blocks: {
-                atoms: {
-                    x: [0.0, 0.757, -0.757],
-                    y: [0.0, 0.586, 0.586],
-                    z: [0.0, 0.0, 0.0],
-                    element: ["O", "H", "H"]
-                },
-                bonds: {
-                    i: [0, 0],
-                    j: [1, 2],
-                    order: [1, 1]
-                }
-            }
-        }
-    });
+    // Create a simple H2O molecule using Frame
+    const atomsBlock = new Block();
+    atomsBlock.setColumnF32("x", new Float32Array([0.0, 0.757, -0.757]));
+    atomsBlock.setColumnF32("y", new Float32Array([0.0, 0.586, 0.586]));
+    atomsBlock.setColumnF32("z", new Float32Array([0.0, 0.0, 0.0]));
+    atomsBlock.setColumnStrings("element", ["O", "H", "H"]);
+
+    const bondsBlock = new Block();
+    bondsBlock.setColumnU32("i", new Uint32Array([0, 0]));
+    bondsBlock.setColumnU32("j", new Uint32Array([1, 2]));
+    bondsBlock.setColumnU8("order", new Uint8Array([1, 1]));
+
+    const frame = new Frame();
+    frame.insertBlock("atoms", atomsBlock);
+    frame.insertBlock("bonds", bondsBlock);
+
+    const drawCmd = new DrawFrameCommand(app, { frame });
 
     await drawCmd.do();
 
