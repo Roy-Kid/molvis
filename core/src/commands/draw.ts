@@ -1,9 +1,9 @@
 import * as BABYLON from "@babylonjs/core";
 import { Vector3, MeshBuilder, Color3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
-import { logger } from "../utils/logger";
 import { Command, command } from "./base";
 import { Frame, Block } from "molrs-wasm";
+import "../shaders/impostor"; // Register shaders
 
 // Reusable scratch variables to avoid GC in tight loops
 const TMP_VEC_0 = new Vector3();
@@ -15,9 +15,6 @@ const TMP_VEC_AXIS = new Vector3();
 const TMP_MAT = BABYLON.Matrix.Identity();
 const TMP_QUAT = BABYLON.Quaternion.Identity();
 const UP_VECTOR = new Vector3(0, 1, 0);
-
-// Simple cache for atom colors [r, g, b, a] and radii
-type AtomStyleCache = Map<string, { radius: number; color: Float32Array }>;
 
 export interface DrawAtomsOption {
     radii?: number[];
@@ -204,12 +201,6 @@ export class DrawFrameCommand extends Command<void> {
         const zCoords = atomsBlock.getColumnF32("z")!;
         let elements = atomsBlock.getColumnStrings("element");
 
-        // Fallback for missing element column (render as Carbon)
-        if (!elements || elements.length < atomCount) {
-            logger.warn("[DrawFrame] Missing 'element' column, falling back to 'C'");
-            elements = new Array(atomCount).fill("C");
-        }
-
         // Create material
         let atomMaterial = scene.getMaterialByName("atomMat_instanced") as BABYLON.StandardMaterial;
         if (!atomMaterial) {
@@ -217,68 +208,49 @@ export class DrawFrameCommand extends Command<void> {
             atomMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
             const theme = this.app.styleManager.getTheme();
             atomMaterial.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
-            atomMaterial.freeze(); // Optimize material
+            atomMaterial.freeze();
         }
 
-        // ADAPTIVE QUALITY: Reduce segments for large systems to maintain fps
-        // > 10k atoms: low poly (6)
-        // > 2k atoms: medium poly (10)
-        // < 2k atoms: high poly (16)
-        let segments = 12;
-        // Create base mesh
+        // Fallback to Geometry-based rendering (Safe Mode)
+        // segments = 8 is a good balance between perf and shape for 10k+ atoms
         const sphereBase = BABYLON.MeshBuilder.CreateSphere(
             "atom_base",
-            { diameter: 1.0, segments },
+            { diameter: 1.0, segments: 8 },
             scene
         );
         sphereBase.material = atomMaterial;
 
-        // Critical optimizations for static instances
+        // Optimization flags
         sphereBase.isPickable = true;
-        sphereBase.doNotSyncBoundingInfo = true; // We accept the initial bounding info calc
-        sphereBase.alwaysSelectAsActiveMesh = true; // Skip frustum culling for the base (instances handle it?) 
-        // Actually for thin instances, frustum culling can be expensive if not careful. 
-        // BabylonJS handles thin instance culling if enabled, but for 10k items, static is better.
+        sphereBase.doNotSyncBoundingInfo = true;
+        sphereBase.alwaysSelectAsActiveMesh = true;
+        sphereBase.freezeWorldMatrix();
 
-        // Initialize caching
-        const styleCache: AtomStyleCache = new Map();
-
-        // Create buffers
-        // Use a single loop to fill both buffers for better cache locality (if JS engine optimizes it)
-        // or keep separate if we want clean logical separation. 
-        // In JS/V8, separating simple tight loops might be faster due to register allocation.
-        // Let's maximize speed by minimizing lookups.
-
+        // Buffers
         const matrixBuffer = new Float32Array(atomCount * 16);
         const colorBuffer = new Float32Array(atomCount * 4);
 
-        // Pre-fetch theme info
         const styleManager = this.app.styleManager;
+        const styleCache = new Map<string, { r: number, g: number, b: number, a: number, radius: number }>();
         const customRadii = drawOptions.atoms?.radii;
 
         for (let i = 0; i < atomCount; i++) {
             const element = elements[i];
 
-            // 1. Style Lookup with Cache
-            let styleData = styleCache.get(element);
-            if (!styleData) {
-                const style = styleManager.getAtomStyle(element);
-                const color = BABYLON.Color3.FromHexString(style.color);
-                const colorArr = new Float32Array([color.r, color.g, color.b, style.alpha ?? 1.0]);
-                styleData = {
-                    radius: style.radius,
-                    color: colorArr
-                };
-                styleCache.set(element, styleData);
+            let style = styleCache.get(element);
+            if (!style) {
+                const s = styleManager.getAtomStyle(element);
+                const c = BABYLON.Color3.FromHexString(s.color);
+                style = { r: c.r, g: c.g, b: c.b, a: s.alpha ?? 1.0, radius: s.radius };
+                styleCache.set(element, style);
             }
 
-            // 2. Matrix Calculation
-            const radius = customRadii?.[i] ?? styleData.radius;
+            const radius = customRadii?.[i] ?? style.radius;
             const scale = radius * 2;
 
             const matOffset = i * 16;
 
-            // Inline matrix population (faster than function calls)
+            // Build Matrix (Scale + Translation)
             matrixBuffer[matOffset + 0] = scale;
             matrixBuffer[matOffset + 1] = 0;
             matrixBuffer[matOffset + 2] = 0;
@@ -299,24 +271,17 @@ export class DrawFrameCommand extends Command<void> {
             matrixBuffer[matOffset + 14] = zCoords[i];
             matrixBuffer[matOffset + 15] = 1;
 
-            // 3. Color Population
-            const colOffset = i * 4;
-            const c = styleData.color;
-            colorBuffer[colOffset + 0] = c[0];
-            colorBuffer[colOffset + 1] = c[1];
-            colorBuffer[colOffset + 2] = c[2];
-            colorBuffer[colOffset + 3] = c[3];
+            const idx4 = i * 4;
+            colorBuffer[idx4 + 0] = style.r;
+            colorBuffer[idx4 + 1] = style.g;
+            colorBuffer[idx4 + 2] = style.b;
+            colorBuffer[idx4 + 3] = style.a;
         }
 
         sphereBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
         sphereBase.thinInstanceSetBuffer("color", colorBuffer, 4, true);
-
-        // Optimizations after loading
-        sphereBase.freezeWorldMatrix(); // The base mesh doesn't move
-
-        // Only refresh bounding info once
-        sphereBase.thinInstanceRefreshBoundingInfo(true);
         sphereBase.thinInstanceEnablePicking = true;
+        // sphereBase.thinInstanceRefreshBoundingInfo(true);
 
         return sphereBase;
     }
@@ -405,6 +370,7 @@ export class DrawFrameCommand extends Command<void> {
                 TMP_MAT
             );
 
+
             // Copy to buffer
             TMP_MAT.copyToArray(matrixBuffer, b * 16);
 
@@ -432,7 +398,7 @@ export class DrawFrameCommand extends Command<void> {
         cylinderBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
         cylinderBase.thinInstanceSetBuffer("color", colorBuffer, 4, true);
         cylinderBase.thinInstanceEnablePicking = true;
-        cylinderBase.thinInstanceRefreshBoundingInfo(true);
+        // cylinderBase.thinInstanceRefreshBoundingInfo(true);
 
         return cylinderBase;
     }
