@@ -162,34 +162,34 @@ export class DrawFrameCommand extends Command<void> {
 
             // Create atoms block using WASM Block directly
             const atomsBlock = new Block();
-            atomsBlock.set_col_f32("x", new Float32Array(atomsData.x), undefined);
-            atomsBlock.set_col_f32("y", new Float32Array(atomsData.y), undefined);
-            atomsBlock.set_col_f32("z", new Float32Array(atomsData.z), undefined);
-            atomsBlock.set_col_strings("element", atomsData.element, undefined);
+            atomsBlock.setColumnF32("x", new Float32Array(atomsData.x), undefined);
+            atomsBlock.setColumnF32("y", new Float32Array(atomsData.y), undefined);
+            atomsBlock.setColumnF32("z", new Float32Array(atomsData.z), undefined);
+            atomsBlock.setColumnStrings("element", atomsData.element, undefined);
 
             // Create Frame and insert atoms block
             this.frame = new Frame();
-            this.frame.insert_block("atoms", atomsBlock);
+            this.frame.insertBlock("atoms", atomsBlock);
 
             // Create bonds block if present
             const bondsData = this.frameData.blocks.bonds;
             if (bondsData) {
                 const bondsBlock = new Block();
-                bondsBlock.set_col_u32("i", new Uint32Array(bondsData.i), undefined);
-                bondsBlock.set_col_u32("j", new Uint32Array(bondsData.j), undefined);
+                bondsBlock.setColumnU32("i", new Uint32Array(bondsData.i), undefined);
+                bondsBlock.setColumnU32("j", new Uint32Array(bondsData.j), undefined);
                 if (bondsData.order) {
-                    bondsBlock.set_col_u8("order", new Uint8Array(bondsData.order), undefined);
+                    bondsBlock.setColumnU8("order", new Uint8Array(bondsData.order), undefined);
                 }
-                this.frame.insert_block("bonds", bondsBlock);
+                this.frame.insertBlock("bonds", bondsBlock);
             }
 
             if (this.frameData.box !== undefined) {
                 // Note: Frame doesn't have a box property in WASM, store in metadata
-                this.frame.set_meta("box", JSON.stringify(this.frameData.box));
+                this.frame.setMeta("box", JSON.stringify(this.frameData.box));
             }
             if (this.frameData.metadata) {
                 Object.entries(this.frameData.metadata).forEach(([key, value]) => {
-                    this.frame!.set_meta(key, String(value));
+                    this.frame!.setMeta(key, String(value));
                 });
             }
         }
@@ -216,17 +216,17 @@ export class DrawFrameCommand extends Command<void> {
         });
 
         // Render Atoms (Thin Instances)
-        const atomsBlock = this.frame.get_block("atoms");
+        const atomsBlock = this.frame.getBlock("atoms");
         let atomMesh: BABYLON.Mesh | undefined;
-        if (atomsBlock && atomsBlock.len() > 0) {
+        if (atomsBlock && atomsBlock.len()! > 0) {
             atomMesh = this.createAtomMesh(scene, drawOptions, atomsBlock);
             this.createdMeshes.push(atomMesh);
         }
 
         // Render Bonds (Thin Instances)
-        const bondsBlock = this.frame.get_block("bonds");
+        const bondsBlock = this.frame.getBlock("bonds");
         let bondMesh: BABYLON.Mesh | undefined;
-        if (bondsBlock && bondsBlock.len() > 0) {
+        if (bondsBlock && bondsBlock.len()! > 0) {
             bondMesh = this.createBondMesh(scene, drawOptions, atomsBlock!, bondsBlock);
             this.createdMeshes.push(bondMesh);
         }
@@ -273,11 +273,17 @@ export class DrawFrameCommand extends Command<void> {
     }
 
     private createAtomMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption, atomsBlock: Block): BABYLON.Mesh {
-        const atomCount = atomsBlock.nrows();
-        const xCoords = atomsBlock.col_f32("x")!;
-        const yCoords = atomsBlock.col_f32("y")!;
-        const zCoords = atomsBlock.col_f32("z")!;
-        const elements = atomsBlock.col_strings("element")! as string[];
+        const atomCount = atomsBlock.nrows()!;
+        const xCoords = atomsBlock.getColumnF32("x")!;
+        const yCoords = atomsBlock.getColumnF32("y")!;
+        const zCoords = atomsBlock.getColumnF32("z")!;
+        let elements = atomsBlock.getColumnStrings("element");
+
+        // Fallback for missing element column (render as Carbon)
+        if (!elements || elements.length < atomCount) {
+            console.warn("[DrawFrame] Missing 'element' column, falling back to 'C'");
+            elements = new Array(atomCount).fill("C");
+        }
 
         // Create material
         // Thin instances share one material, but use per-instance color buffers.
@@ -388,11 +394,11 @@ export class DrawFrameCommand extends Command<void> {
         // Create transformation matrices
         const buffer = new Float32Array(bondCount * 16);
 
-        const xCoords = atomsBlock.col_f32("x")!;
-        const yCoords = atomsBlock.col_f32("y")!;
-        const zCoords = atomsBlock.col_f32("z")!;
-        const i_atoms = bondsBlock.col_u32("i")!;
-        const j_atoms = bondsBlock.col_u32("j")!;
+        const xCoords = atomsBlock.getColumnF32("x")!;
+        const yCoords = atomsBlock.getColumnF32("y")!;
+        const zCoords = atomsBlock.getColumnF32("z")!;
+        const i_atoms = bondsBlock.getColumnU32("i")!;
+        const j_atoms = bondsBlock.getColumnU32("j")!;
 
         const tempMatrix = BABYLON.Matrix.Identity();
         const up = new BABYLON.Vector3(0, 1, 0);
@@ -470,7 +476,7 @@ export class DrawFrameCommand extends Command<void> {
         frame: Frame
     ): { origin: [number, number, number]; lengths: [number, number, number] } | null {
         // Strict: Only look for standard 'box' metadata
-        const boxMeta = frame.get_meta("box");
+        const boxMeta = frame.getMeta("box");
         if (!boxMeta) return null;
 
         return this.parseBoxMeta(boxMeta);

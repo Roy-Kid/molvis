@@ -1,6 +1,7 @@
 import type { MenuItem } from './types';
 import type { MolvisApp } from '../core/app';
-import { writeFrame, inferFormatFromFilename } from '../core/serialization';
+import { inferFormatFromFilename } from '../core/reader';
+import { writeFrame } from '../core/writer';
 import { syncSceneToFrame } from '../core/scene_sync';
 
 /**

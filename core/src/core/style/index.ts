@@ -7,6 +7,9 @@ export class StyleManager {
     private scene: Scene;
     private materialCache: Map<string, StandardMaterial> = new Map();
 
+    private globalAtomRadiusScale: number = 1.0;
+    private globalBondRadiusScale: number = 1.0;
+
     constructor(scene: Scene) {
         this.scene = scene;
         // Default to ClassicTheme for backward compatibility during init
@@ -20,16 +23,32 @@ export class StyleManager {
         this.applyGlobalStyles();
     }
 
+    public setAtomRadiusScale(scale: number) {
+        this.globalAtomRadiusScale = scale;
+    }
+
+    public setBondRadiusScale(scale: number) {
+        this.globalBondRadiusScale = scale;
+    }
+
     public getTheme(): Theme {
         return this.currentTheme;
     }
 
     public getAtomStyle(element: string): AtomStyle {
-        return this.currentTheme.getAtomStyle(element);
+        const style = this.currentTheme.getAtomStyle(element);
+        return {
+            ...style,
+            radius: style.radius * this.globalAtomRadiusScale
+        };
     }
 
     public getBondStyle(order: number): BondStyle {
-        return this.currentTheme.getBondStyle(order);
+        const style = this.currentTheme.getBondStyle(order);
+        return {
+            ...style,
+            radius: style.radius * this.globalBondRadiusScale
+        };
     }
 
     public getAtomMaterial(element: string): StandardMaterial {

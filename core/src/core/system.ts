@@ -26,8 +26,8 @@ export class System {
     set frame(value: Frame | null) {
         this._currentFrame = value ?? new Frame();
         if (value) {
-            const atomsBlock = value.get_block("atoms");
-            const bondsBlock = value.get_block("bonds");
+            const atomsBlock = value.getBlock("atoms");
+            const bondsBlock = value.getBlock("bonds");
             const atomCount = atomsBlock?.nrows() ?? 0;
             const bondCount = bondsBlock?.nrows() ?? 0;
             logger.info(`[System] Frame set with ${atomCount} atoms and ${bondCount} bonds`);

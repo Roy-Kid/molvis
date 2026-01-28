@@ -179,10 +179,10 @@ class ManipulateMode extends BaseMode {
         // 3. Convert Atoms (Populates Topology)
         for (const atomBlock of atomBlocks) {
             const count = atomBlock.nrows();
-            const xCoords = atomBlock.col_f32('x')!;
-            const yCoords = atomBlock.col_f32('y')!;
-            const zCoords = atomBlock.col_f32('z')!;
-            const elements = atomBlock.col_strings('element')!;
+            const xCoords = atomBlock.getColumnF32('x')!;
+            const yCoords = atomBlock.getColumnF32('y')!;
+            const zCoords = atomBlock.getColumnF32('z')!;
+            const elements = atomBlock.getColumnStrings('element')!;
 
             for (let i = 0; i < count; i++) {
                 const position = new Vector3(xCoords[i], yCoords[i], zCoords[i]);
@@ -209,9 +209,9 @@ class ManipulateMode extends BaseMode {
         // 4. Convert Bonds (Populates Topology)
         for (const bondBlock of bondBlocks) {
             const count = bondBlock.nrows();
-            const iAtoms = bondBlock.col_u32('i')!;
-            const jAtoms = bondBlock.col_u32('j')!;
-            const orders = bondBlock.col_u8('order');
+            const iAtoms = bondBlock.getColumnU32('i')!;
+            const jAtoms = bondBlock.getColumnU32('j')!;
+            const orders = bondBlock.getColumnU8('order');
 
             // We need coordinates for the bond endpoints.
             // Since we just created Atom meshes for these indices (0..N),
@@ -584,15 +584,15 @@ class ManipulateMode extends BaseMode {
             frameData: {
                 blocks: {
                     atoms: {
-                        x: this.originalFrameData.atomBlock.col_f32('x')!,
-                        y: this.originalFrameData.atomBlock.col_f32('y')!,
-                        z: this.originalFrameData.atomBlock.col_f32('z')!,
-                        element: this.originalFrameData.atomBlock.col_strings('element') as string[]
+                        x: this.originalFrameData.atomBlock.getColumnF32('x')!,
+                        y: this.originalFrameData.atomBlock.getColumnF32('y')!,
+                        z: this.originalFrameData.atomBlock.getColumnF32('z')!,
+                        element: this.originalFrameData.atomBlock.getColumnStrings('element') as string[]
                     },
                     bonds: this.originalFrameData.bondBlock ? {
-                        i: this.originalFrameData.bondBlock.col_u32('i')!,
-                        j: this.originalFrameData.bondBlock.col_u32('j')!,
-                        order: this.originalFrameData.bondBlock.col_u8('order')
+                        i: this.originalFrameData.bondBlock.getColumnU32('i')!,
+                        j: this.originalFrameData.bondBlock.getColumnU32('j')!,
+                        order: this.originalFrameData.bondBlock.getColumnU8('order')
                     } : undefined
                 },
                 metadata: {}

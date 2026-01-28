@@ -9,7 +9,7 @@ interface TimelineControlProps {
   totalFrames?: number;
 }
 
-export const TimelineControl: React.FC<TimelineControlProps> = ({ app, totalFrames = 100 }) => {
+export const TimelineControl: React.FC<TimelineControlProps> = ({ app, totalFrames = 1 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
   const requestRef = useRef<number | null>(null);

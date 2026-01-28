@@ -102,7 +102,31 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	);
 
-	context.subscriptions.push(helloWorld, openViewer, openPreviewToSide);
+	// Command: Open Full App
+	const openApp = vscode.commands.registerCommand("molvis.openApp", () => {
+		const panel = vscode.window.createWebviewPanel(
+			"molvis.app",
+			"MolVis App",
+			vscode.ViewColumn.Active,
+			{
+				enableScripts: true,
+				retainContextWhenHidden: true,
+				localResourceRoots: [
+					vscode.Uri.joinPath(context.extensionUri, "out"),
+					// Allow access to page dist if we can find it (dev mode hack or strictly strictly packaged)
+					// For now, we reuse the existing webview but tell it to be "app" mode
+				],
+			}
+		);
+
+		panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
+
+		// Send init message for app mode
+		// The webview wrapper needs to handle 'app' mode by rendering the full UI
+		sendToWebview(panel.webview, { type: "init", mode: "app" });
+	});
+
+	context.subscriptions.push(helloWorld, openViewer, openPreviewToSide, openApp);
 }
 
 export function deactivate() { }

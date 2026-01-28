@@ -84,17 +84,19 @@ const SortableModifierItem = ({ modifier, selected, onSelect, onToggle, onRemove
       </span>
 
       <div className="flex items-center gap-1">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={(e) => {
-             e.stopPropagation();
-             onRemove(e);
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {modifier.name !== 'Data Source' && (
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(e);
+                }}
+            >
+                <Trash2 className="h-4 w-4" />
+            </Button>
+        )}
       </div>
     </div>
   );
@@ -194,22 +196,6 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({ app }) => {
          
          <ScrollArea className="flex-1 bg-background">
              <div className="flex flex-col">
-                {/* Fixed Source Item */}
-                <div className="flex items-center gap-3 p-2 border-b bg-muted/10">
-                    <div className="w-4 flex justify-center text-muted-foreground">
-                        {/* No grip for source */}
-                    </div>
-                    <div className="flex items-center justify-center">
-                        <div className="h-4 w-4 rounded-sm border border-primary/20 bg-primary/10 flex items-center justify-center">
-                             <span className="text-[8px] font-bold">S</span>
-                        </div>
-                    </div>
-                    <span className="flex-1 text-sm font-medium truncate opacity-80">
-                        Demo Data Source
-                    </span>
-                    <div className="w-7"></div> {/* Spacer for delete button */}
-                </div>
-
                 {/* Draggable Modifiers */}
                 <DndContext 
                     sensors={sensors}
@@ -259,6 +245,7 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({ app }) => {
           <div className="h-[200px] shrink-0 border-t bg-background flex flex-col">
               <ModifierProperties 
                   modifier={selectedModifier} 
+                  app={app}
                   onUpdate={() => setModifiers([...modifiers])} 
               />
           </div>

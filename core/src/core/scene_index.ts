@@ -223,8 +223,8 @@ export class SceneIndex {
 
             // Register bonds to topology
             const bondCount = bondBlock.nrows();
-            const iAtoms = bondBlock.col_u32('i')!;
-            const jAtoms = bondBlock.col_u32('j')!;
+            const iAtoms = bondBlock.getColumnU32('i')!;
+            const jAtoms = bondBlock.getColumnU32('j')!;
 
             for (let b = 0; b < bondCount; b++) {
                 this.topology.addBond(b, iAtoms[b], jAtoms[b]);
@@ -346,10 +346,10 @@ export class SceneIndex {
         const count = atomBlock.nrows();
         if (subIndex >= count) return null;
 
-        const xCoords = atomBlock.col_f32('x');
-        const yCoords = atomBlock.col_f32('y');
-        const zCoords = atomBlock.col_f32('z');
-        const elements = atomBlock.col_strings('element');
+        const xCoords = atomBlock.getColumnF32('x');
+        const yCoords = atomBlock.getColumnF32('y');
+        const zCoords = atomBlock.getColumnF32('z');
+        const elements = atomBlock.getColumnStrings('element');
 
         if (!xCoords || !yCoords || !zCoords || !elements) return null;
 
@@ -373,13 +373,13 @@ export class SceneIndex {
         const count = bondBlock.nrows();
         if (subIndex < 0 || subIndex >= count) return null;
 
-        const iAtoms = bondBlock.col_u32('i');
-        const jAtoms = bondBlock.col_u32('j');
-        const orders = bondBlock.col_u8('order');
+        const iAtoms = bondBlock.getColumnU32('i');
+        const jAtoms = bondBlock.getColumnU32('j');
+        const orders = bondBlock.getColumnU8('order');
 
-        const xCoords = atomBlock.col_f32('x');
-        const yCoords = atomBlock.col_f32('y');
-        const zCoords = atomBlock.col_f32('z');
+        const xCoords = atomBlock.getColumnF32('x');
+        const yCoords = atomBlock.getColumnF32('y');
+        const zCoords = atomBlock.getColumnF32('z');
 
         if (!iAtoms || !jAtoms || !xCoords || !yCoords || !zCoords) return null;
 

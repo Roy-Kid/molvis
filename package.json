@@ -8,11 +8,13 @@
     "core",
     "python",
     "page",
-    "vsc-ext"
+    "vsc-ext",
+    "electron"
   ],
   "scripts": {
     "dev:python": "npm run dev -w python",
     "dev:page": "npm run dev -w page",
+    "dev:electron": "concurrently \"npm run dev -w page\" \"wait-on tcp:3000 && npm start -w electron\"",
     "dev:core": "npm run dev -w core",
     "build:core": "npm run build -w core",
     "build:python": "npm run build -w python",
@@ -21,6 +23,8 @@
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@rsbuild/core": "^1.2.19",
-    "@rslib/core": "^0.5.4"
+    "@rslib/core": "^0.5.4",
+    "concurrently": "^9.2.1",
+    "wait-on": "^9.0.3"
   }
 }

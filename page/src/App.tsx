@@ -8,52 +8,83 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TimelineControl } from "@/components/TimelineControl";
 import { PipelinePanel } from "@/components/PipelinePanel";
+import { EditorPanel } from "@/components/EditorPanel";
 
 const App: React.FC = () => {
   const [app, setApp] = useState<Molvis | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("Ready");
+  const [statusType, setStatusType] = useState<"info" | "error">("info");
+
+  React.useEffect(() => {
+    // Global error listener
+    const handleGlobalError = (event: ErrorEvent) => {
+        setStatusMessage(`Error: ${event.message}`);
+        setStatusType("error");
+    };
+
+    // Global poll rejection listener
+    const handleRejection = (event: PromiseRejectionEvent) => {
+        let msg = "Unknown error";
+        if (event.reason instanceof Error) {
+            msg = event.reason.message;
+        } else if (typeof event.reason === 'string') {
+            msg = event.reason;
+        }
+        setStatusMessage(`Async Error: ${msg}`);
+        setStatusType("error");
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleRejection);
+
+    if (!app) return;
+    
+    // Status message listener
+    const handleStatus = (event: any) => {
+        setStatusMessage(event.text);
+        setStatusType(event.type || "info");
+        
+        // Auto-clear success/info messages after 5s, keep errors
+        if (!event.type || event.type === 'info') {
+            setTimeout(() => {
+                setStatusMessage("Ready");
+            }, 5000);
+        }
+    };
+    
+    app.events.on('status-message', handleStatus);
+    
+    return () => {
+        window.removeEventListener('error', handleGlobalError);
+        window.removeEventListener('unhandledrejection', handleRejection);
+        app.events.off('status-message', handleStatus);
+    };
+  }, [app]);
+
 
   React.useEffect(() => {
     if (!app) return;
     
-    // Demo Data Loading
-    const loadDemo = async () => {
-      try {
-        console.log("Loading demo data...");
-        // Core exports AtomBlock as Atom and BondBlock as Bond
-        const { Atom, Bond, Frame, ArrayFrameSource, DrawAtomsModifier, DrawBondsModifier, DrawBoxModifier } = await import('@molvis/core');
-        
-        // Water
-        const atomBlockWater = new Atom(
-          [0.0, 0.75695, -0.75695],
-          [-0.06556, 0.52032, 0.52032],
-          [0.0, 0.0, 0.0],
-          ["O", "H", "H"],
-        );
-        const bondBlockWater = new Bond([0, 0], [1, 2], [1, 1]);
-        const frame = new Frame(atomBlockWater, bondBlockWater);
-        
-        // Create source and populate pipeline
-        const source = new ArrayFrameSource([frame]);
-        
-        const pipeline = (app as any).modifierPipeline;
-        if (pipeline) {
-             pipeline.clear();
-             pipeline.addModifier(new DrawAtomsModifier());
-             pipeline.addModifier(new DrawBondsModifier());
-             pipeline.addModifier(new DrawBoxModifier());
-        
-             // Compute and render
-             const computedFrame = await (app as any).computeFrame(0, source);
-             (app as any).renderFrame(computedFrame);
-        }
-
-        console.log("Demo data loaded");
-      } catch (e) {
-        console.error("Failed to load demo data", e);
+    // Initialize Pipeline
+    const initPipeline = async () => {
+      if (!app) return;
+      
+      const { DataSourceModifier } = await import('@molvis/core');
+      const pipeline = (app as any).modifierPipeline;
+      
+      if (pipeline && pipeline.getModifiers().length === 0) {
+           console.log("Initializing pipeline...");
+           pipeline.addModifier(new DataSourceModifier());
+           
+           // Draw modifiers are no longer added by default.
+           // They can be added manually by the user to override global settings.
+           
+           // Default to edit mode empty
+           app.setMode('edit');
       }
     };
     
-    loadDemo();
+    initPipeline();
   }, [app]);
 
 
@@ -71,10 +102,12 @@ const App: React.FC = () => {
                 <MolvisWrapper onMount={setApp} />
               </div>
               
-              {/* Timeline Control Bar */}
-              <div className="h-14 border-t bg-muted/20 shrink-0 z-10">
-                 <TimelineControl app={app} totalFrames={100} />
-              </div>
+              {/* Timeline Control Bar - Only show if multiple frames */}
+              {(app as any)?.frameCount > 1 && (
+                  <div className="h-14 border-t bg-muted/20 shrink-0 z-10">
+                     <TimelineControl app={app} totalFrames={(app as any)?.frameCount || 1} />
+                  </div>
+              )}
             </ResizablePanel>
 
             <ResizableHandle withHandle />
@@ -92,8 +125,9 @@ const App: React.FC = () => {
             >
               <Tabs defaultValue="pipeline" className="flex-1 flex flex-col h-full w-full">
                 <div className="border-b px-2 py-2 bg-muted/10 shrink-0">
-                  <TabsList className="w-full grid grid-cols-3">
+                  <TabsList className="w-full grid grid-cols-4">
                     <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+                    <TabsTrigger value="editor">Editor</TabsTrigger>
                     <TabsTrigger value="rendering">Rendering</TabsTrigger>
                     <TabsTrigger value="props">Props</TabsTrigger>
                   </TabsList>
@@ -102,6 +136,12 @@ const App: React.FC = () => {
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="pipeline" className="h-full m-0 border-0">
                     <PipelinePanel app={app} />
+                  </TabsContent>
+
+                  <TabsContent value="editor" className="h-full m-0 border-0">
+                    <ScrollArea className="h-full">
+                       <EditorPanel app={app} />
+                    </ScrollArea>
                   </TabsContent>
 
                   <TabsContent value="rendering" className="h-full m-0 border-0">
@@ -127,8 +167,8 @@ const App: React.FC = () => {
           </ResizablePanelGroup>
           
           {/* Bottom Status Bar */}
-          <div className="h-6 border-t bg-muted/60 flex items-center px-2 text-[10px] text-muted-foreground shrink-0">
-            Ready
+          <div className={`h-6 border-t bg-muted/60 flex items-center px-2 text-[10px] shrink-0 ${statusType === 'error' ? 'text-red-500 font-bold bg-red-100/10' : 'text-muted-foreground'}`}>
+            {statusMessage}
           </div>
         </div>
       </MolvisContext.Provider>

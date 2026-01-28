@@ -19,8 +19,12 @@
       },
       {
         "command": "molvis.openPreviewToSide",
-        "title": "Open Preview to the Side",
+        "title": "MolVis: Open Preview",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "molvis.openApp",
+        "title": "MolVis: Open App"
       }
     ],
     "customEditors": [
@@ -61,6 +65,7 @@
     "vscode:prepublish": "npm run package",
     "build": "rslib build",
     "dev": "rslib build --watch",
+    "check-types": "tsc --noEmit",
     "compile": "npm run check-types && npm run lint && npm run build",
     "watch": "npm-run-all -p watch:*",
     "watch:bundle": "npm run dev",

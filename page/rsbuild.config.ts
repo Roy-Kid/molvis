@@ -9,6 +9,9 @@ const __dirname = path.dirname(__filename);
 // Docs: https://rsbuild.rs/config/
 export default defineConfig(({ command }) => {
   return {
+    server: {
+      port: 3000,
+    },
     plugins: [pluginReact()],
     resolve: {
       alias: {

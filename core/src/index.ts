@@ -31,12 +31,16 @@ export { System } from "./core/system";
 export { World } from "./core";
 export {
 	writeFrame,
-	serializeFrame,
-	buildExportPayload,
-	inferFormatFromFilename,
+	type ExportFormat,
+	type ExportPayload,
+	type WriteFrameOptions,
 	defaultExtensionForFormat,
 	mimeForFormat
-} from "./core/serialization";
+} from "./core/writer";
+export {
+	readFrame,
+	inferFormatFromFilename
+} from "./core/reader";
 
 export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";
@@ -48,3 +52,4 @@ export {
 	DrawBondsModifier,
 	DrawBoxModifier,
 } from "./pipeline/rendering_modifiers";
+export { DataSourceModifier } from "./pipeline/data_source_modifier";

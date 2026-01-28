@@ -164,7 +164,7 @@ export interface PipelineContext {
  * Create a default pipeline context for a frame.
  */
 export function createDefaultContext(frame: Frame, frameIndex?: number): PipelineContext {
-    const atomsBlock = frame.get_block("atoms");
+    const atomsBlock = frame.getBlock("atoms");
     const atomCount = atomsBlock?.nrows() ?? 0;
     return {
         selectionSet: new Map(),
