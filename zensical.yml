@@ -1,0 +1,19 @@
+site_name: Molvis Documentation
+site_description: Interactive molecular visualization for everyone.
+site_url: https://molvis.molcrafts.org
+
+nav:
+  - Home: index.md
+  - Tutorials:
+    - Overview: tutorial/index.md
+    - Python (Jupyter): tutorial/python.md
+    - Web (Core): tutorial/core.md
+  - User Guide:
+    - Overview: user-guide/index.md
+    - Scene Management: user-guide/scene.md
+    - Data & Drawing: user-guide/data.md
+    - Interaction: user-guide/interaction.md
+  - API Reference:
+    - Overview: api/index.md
+    - Python SDK: api/python.md
+    - Core Library: api/core.md
