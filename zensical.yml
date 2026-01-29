@@ -8,6 +8,8 @@ plugins:
       handlers:
         python:
           paths: [python/src]
+        typescript:
+          tsconfig_file: core/tsconfig.json
 
 nav:
   - Home: index.md
