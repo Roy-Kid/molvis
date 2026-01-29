@@ -19,10 +19,13 @@ const UP_VECTOR = new Vector3(0, 1, 0);
 export interface DrawAtomsOption {
     radii?: number[];
     color?: string[];
+    impostor?: boolean;
 }
 
 export interface DrawBondsOption {
     radii?: number;
+    impostor?: boolean;
+    bicolor?: boolean;
 }
 
 export interface DrawFrameOption {
@@ -118,6 +121,7 @@ export class DrawBoxCommand extends Command<void> {
 @command("draw_frame")
 export class DrawFrameCommand extends Command<void> {
     private createdMeshes: BABYLON.AbstractMesh[] = [];
+    private boxMesh: BABYLON.Mesh | null = null;
     private frame: Frame;
     private options?: DrawFrameOption;
 
@@ -149,8 +153,12 @@ export class DrawFrameCommand extends Command<void> {
         const bondsBlock = this.frame.getBlock("bonds");
         let bondMesh: BABYLON.Mesh | undefined;
         if (bondsBlock && bondsBlock.len()! > 0) {
-            bondMesh = this.createBondMesh(scene, drawOptions, atomsBlock!, bondsBlock);
-            this.createdMeshes.push(bondMesh);
+            if (!atomsBlock || atomsBlock.len() === 0) {
+                console.warn("[DrawFrame] Bonds present without atoms; skipping bond rendering.");
+            } else {
+                bondMesh = this.createBondMesh(scene, drawOptions, atomsBlock, bondsBlock);
+                this.createdMeshes.push(bondMesh);
+            }
         }
 
         // Register frame with SceneIndex (single call for all thin instances)
@@ -191,6 +199,7 @@ export class DrawFrameCommand extends Command<void> {
                 dimensions: [lx, ly, lz],
                 origin: [ox, oy, oz]
             });
+            this.boxMesh = boxMesh;
         }
     }
 
@@ -199,53 +208,88 @@ export class DrawFrameCommand extends Command<void> {
         const xCoords = atomsBlock.getColumnF32("x")!;
         const yCoords = atomsBlock.getColumnF32("y")!;
         const zCoords = atomsBlock.getColumnF32("z")!;
-        let elements = atomsBlock.getColumnStrings("element");
-
-        // Create material
-        let atomMaterial = scene.getMaterialByName("atomMat_instanced") as BABYLON.StandardMaterial;
-        if (!atomMaterial) {
-            atomMaterial = new BABYLON.StandardMaterial("atomMat_instanced", scene);
-            atomMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
-            const theme = this.app.styleManager.getTheme();
-            atomMaterial.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
-            atomMaterial.freeze();
+        const elements = atomsBlock.getColumnStrings("element");
+        if (!elements) {
+            console.warn("[DrawFrame] Missing element column; defaulting to C for all atoms.");
         }
 
-        // Fallback to Geometry-based rendering (Safe Mode)
-        // segments = 8 is a good balance between perf and shape for 10k+ atoms
-        const sphereBase = BABYLON.MeshBuilder.CreateSphere(
-            "atom_base",
-            { diameter: 1.0, segments: 8 },
-            scene
-        );
+        // const useImpostor = drawOptions.atoms?.impostor === true;
+        const useImpostor = true;
+
+        let atomMaterial: BABYLON.Material;
+        if (useImpostor) {
+            let shaderMat = scene.getMaterialByName("atomMat_impostor") as BABYLON.ShaderMaterial;
+            if (!shaderMat) {
+                shaderMat = new BABYLON.ShaderMaterial(
+                    "atomMat_impostor",
+                    scene,
+                    { vertex: "sphereImpostor", fragment: "sphereImpostor" },
+                    {
+                        attributes: ["position", "uv", "instanceData", "instanceColor"],
+                        uniforms: ["view", "projection", "lightDir", "lightAmbient", "lightDiffuse", "lightSpecular", "lightSpecularPower"]
+                    }
+                );
+                shaderMat.backFaceCulling = false;
+                shaderMat.alphaMode = BABYLON.Engine.ALPHA_DISABLE;
+                shaderMat.disableDepthWrite = false;
+                shaderMat.onBindObservable.add(() => {
+                    shaderMat.setMatrix("view", scene.getViewMatrix());
+                    shaderMat.setMatrix("projection", scene.getProjectionMatrix());
+
+                    const lighting = this.app.settings.getLighting();
+                    shaderMat.setVector3("lightDir", new BABYLON.Vector3(lighting.lightDir[0], lighting.lightDir[1], lighting.lightDir[2]));
+                    shaderMat.setFloat("lightAmbient", lighting.ambient);
+                    shaderMat.setFloat("lightDiffuse", lighting.diffuse);
+                    shaderMat.setFloat("lightSpecular", lighting.specular);
+                    shaderMat.setFloat("lightSpecularPower", lighting.specularPower);
+                });
+            }
+            atomMaterial = shaderMat;
+        } else {
+            let standardMat = scene.getMaterialByName("atomMat_instanced") as BABYLON.StandardMaterial;
+            if (!standardMat) {
+                standardMat = new BABYLON.StandardMaterial("atomMat_instanced", scene);
+                standardMat.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
+                const theme = this.app.styleManager.getTheme();
+                standardMat.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
+                standardMat.freeze();
+            }
+            atomMaterial = standardMat;
+        }
+
+        const sphereBase = useImpostor
+            ? BABYLON.MeshBuilder.CreatePlane("atom_base", { size: 1.0 }, scene)
+            // segments = 8 is a good balance between perf and shape for 10k+ atoms
+            : BABYLON.MeshBuilder.CreateSphere("atom_base", { diameter: 1.0, segments: 12 }, scene);
         sphereBase.material = atomMaterial;
 
         // Optimization flags
-        sphereBase.isPickable = true;
-        sphereBase.doNotSyncBoundingInfo = true;
-        sphereBase.alwaysSelectAsActiveMesh = true;
+        // sphereBase.isPickable = true;
+        // sphereBase.doNotSyncBoundingInfo = true;
         sphereBase.freezeWorldMatrix();
 
         // Buffers
         const matrixBuffer = new Float32Array(atomCount * 16);
         const colorBuffer = new Float32Array(atomCount * 4);
+        const instanceDataBuffer = useImpostor ? new Float32Array(atomCount * 4) : null;
 
         const styleManager = this.app.styleManager;
         const styleCache = new Map<string, { r: number, g: number, b: number, a: number, radius: number }>();
         const customRadii = drawOptions.atoms?.radii;
 
         for (let i = 0; i < atomCount; i++) {
-            const element = elements[i];
+            const element = elements ? elements[i] : "C";
 
             let style = styleCache.get(element);
             if (!style) {
                 const s = styleManager.getAtomStyle(element);
                 const c = BABYLON.Color3.FromHexString(s.color);
-                style = { r: c.r, g: c.g, b: c.b, a: s.alpha ?? 1.0, radius: s.radius };
+                const color = useImpostor ? c.toLinearSpace() : c;
+                style = { r: color.r, g: color.g, b: color.b, a: s.alpha ?? 1.0, radius: s.radius };
                 styleCache.set(element, style);
             }
 
-            const radius = customRadii?.[i] ?? style.radius;
+            const radius = customRadii?.[i] ?? style.radius * 0.6;
             const scale = radius * 2;
 
             const matOffset = i * 16;
@@ -276,11 +320,23 @@ export class DrawFrameCommand extends Command<void> {
             colorBuffer[idx4 + 1] = style.g;
             colorBuffer[idx4 + 2] = style.b;
             colorBuffer[idx4 + 3] = style.a;
+
+            if (instanceDataBuffer) {
+                instanceDataBuffer[idx4 + 0] = xCoords[i];
+                instanceDataBuffer[idx4 + 1] = yCoords[i];
+                instanceDataBuffer[idx4 + 2] = zCoords[i];
+                instanceDataBuffer[idx4 + 3] = radius;
+            }
         }
 
         sphereBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-        sphereBase.thinInstanceSetBuffer("color", colorBuffer, 4, true);
-        sphereBase.thinInstanceEnablePicking = true;
+        if (instanceDataBuffer) {
+            sphereBase.thinInstanceSetBuffer("instanceData", instanceDataBuffer, 4, true);
+            sphereBase.thinInstanceSetBuffer("instanceColor", colorBuffer, 4, true);
+        } else {
+            sphereBase.thinInstanceSetBuffer("color", colorBuffer, 4, true);
+        }
+        // sphereBase.thinInstanceEnablePicking = true;
         // sphereBase.thinInstanceRefreshBoundingInfo(true);
 
         return sphereBase;
@@ -289,32 +345,68 @@ export class DrawFrameCommand extends Command<void> {
     private createBondMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption, atomsBlock: Block, bondsBlock: Block): BABYLON.Mesh {
         const bondCount = bondsBlock.nrows();
         const bondRadius = drawOptions.bonds?.radii ?? 0.1;
+        // Force Impostor for Bonds to match Atoms depth logic
+        const useImpostor = true;
+        // const useBicolor = drawOptions.bonds?.bicolor === true;
+        const useBicolor = true;
 
-        // Create material
-        let bondMaterial = scene.getMaterialByName("bondMat_instanced") as BABYLON.StandardMaterial;
-        if (!bondMaterial) {
-            bondMaterial = new BABYLON.StandardMaterial("bondMat_instanced", scene);
-            bondMaterial.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
-            const theme = this.app.styleManager.getTheme();
-            bondMaterial.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
-            bondMaterial.freeze();
+        let bondMaterial: BABYLON.Material;
+        if (useImpostor) {
+            let shaderMat = scene.getMaterialByName("bondMat_impostor") as BABYLON.ShaderMaterial;
+            if (!shaderMat) {
+                shaderMat = new BABYLON.ShaderMaterial(
+                    "bondMat_impostor",
+                    scene,
+                    { vertex: "bondImpostor", fragment: "bondImpostor" },
+                    {
+                        attributes: ["position", "uv", "instanceData0", "instanceData1", "instanceColor0", "instanceColor1", "instanceSplit"],
+                        uniforms: ["view", "projection", "lightDir", "lightAmbient", "lightDiffuse", "lightSpecular", "lightSpecularPower"]
+                    }
+                );
+                shaderMat.backFaceCulling = false;
+                shaderMat.alphaMode = BABYLON.Engine.ALPHA_DISABLE;
+                shaderMat.disableDepthWrite = false;
+                shaderMat.onBindObservable.add(() => {
+                    shaderMat.setMatrix("view", scene.getViewMatrix());
+                    shaderMat.setMatrix("projection", scene.getProjectionMatrix());
+
+                    const lighting = this.app.settings.getLighting();
+                    shaderMat.setVector3("lightDir", new BABYLON.Vector3(lighting.lightDir[0], lighting.lightDir[1], lighting.lightDir[2]));
+                    shaderMat.setFloat("lightAmbient", lighting.ambient);
+                    shaderMat.setFloat("lightDiffuse", lighting.diffuse);
+                    shaderMat.setFloat("lightSpecular", lighting.specular);
+                    shaderMat.setFloat("lightSpecularPower", lighting.specularPower);
+                });
+            }
+            bondMaterial = shaderMat;
+        } else {
+            let standardMat = scene.getMaterialByName("bondMat_instanced") as BABYLON.StandardMaterial;
+            if (!standardMat) {
+                standardMat = new BABYLON.StandardMaterial("bondMat_instanced", scene);
+                standardMat.diffuseColor = new BABYLON.Color3(1.0, 1.0, 1.0);
+                const theme = this.app.styleManager.getTheme();
+                standardMat.specularColor = BABYLON.Color3.FromHexString(theme.defaultSpecular);
+                standardMat.freeze();
+            }
+            bondMaterial = standardMat;
         }
 
-        let tessellation = 8;
-        // Create base mesh
-        const cylinderBase = BABYLON.MeshBuilder.CreateCylinder(
-            "bond_base",
-            { height: 1.0, diameter: 1.0, tessellation },
-            scene
-        );
+        let tessellation = 6;
+        const cylinderBase = useImpostor
+            ? BABYLON.MeshBuilder.CreatePlane("bond_base", { size: 1.0 }, scene)
+            : BABYLON.MeshBuilder.CreateCylinder("bond_base", { height: 1.0, diameter: 1.0, tessellation }, scene);
         cylinderBase.material = bondMaterial;
-        cylinderBase.doNotSyncBoundingInfo = true;
-        cylinderBase.alwaysSelectAsActiveMesh = true;
+        cylinderBase.doNotSyncBoundingInfo = false;
         cylinderBase.freezeWorldMatrix();
 
         // Buffers
         const matrixBuffer = new Float32Array(bondCount * 16);
         const colorBuffer = new Float32Array(bondCount * 4);
+        const instanceData0 = useImpostor ? new Float32Array(bondCount * 4) : null;
+        const instanceData1 = useImpostor ? new Float32Array(bondCount * 4) : null;
+        const instanceColor0 = useImpostor ? new Float32Array(bondCount * 4) : null;
+        const instanceColor1 = useImpostor ? new Float32Array(bondCount * 4) : null;
+        const instanceSplit = useImpostor ? new Float32Array(bondCount * 4) : null;
 
         const xCoords = atomsBlock.getColumnF32("x")!;
         const yCoords = atomsBlock.getColumnF32("y")!;
@@ -322,65 +414,123 @@ export class DrawFrameCommand extends Command<void> {
         const i_atoms = bondsBlock.getColumnU32("i")!;
         const j_atoms = bondsBlock.getColumnU32("j")!;
 
-        // Cache for bond style
+        // Cache for bond style / atom colors
         const styleManager = this.app.styleManager;
-        // Optimization: For single bond order (1), cache the color
-        // If we support multiple orders mixed, we'd cache by order.
         let cachedBondColor: Float32Array | null = null;
-
+        const elementColors = new Map<string, Float32Array>();
+        const elementRadii = new Map<string, number>();
+        const elements = atomsBlock.getColumnStrings("element");
+        const customAtomRadii = drawOptions.atoms?.radii;
 
         for (let b = 0; b < bondCount; b++) {
             const i = i_atoms[b];
             const j = j_atoms[b];
 
-            // 1. Math Optimization: Reusing static vectors
+            // Reusing static vectors
             TMP_VEC_1.set(xCoords[i], yCoords[i], zCoords[i]); // p1
             TMP_VEC_2.set(xCoords[j], yCoords[j], zCoords[j]); // p2
-
-            const distance = BABYLON.Vector3.Distance(TMP_VEC_1, TMP_VEC_2);
 
             // center = (p1 + p2) * 0.5
             TMP_VEC_CENTER.copyFrom(TMP_VEC_1).addInPlace(TMP_VEC_2).scaleInPlace(0.5);
 
             // direction = (p2 - p1).normalize()
-            TMP_VEC_DIR.copyFrom(TMP_VEC_2).subtractInPlace(TMP_VEC_1).normalize();
-
-            // Calculate rotation
-            // axis = cross(up, direction)
-            BABYLON.Vector3.CrossToRef(UP_VECTOR, TMP_VEC_DIR, TMP_VEC_AXIS);
-            const angle = Math.acos(BABYLON.Vector3.Dot(UP_VECTOR, TMP_VEC_DIR));
-
-            if (Math.abs(angle) < 0.0001) {
-                TMP_QUAT.copyFrom(BABYLON.Quaternion.Identity());
-            } else if (Math.abs(angle - Math.PI) < 0.0001) {
-                // Anti-parallel, flip 180 deg around X
-                BABYLON.Quaternion.FromEulerAnglesToRef(Math.PI, 0, 0, TMP_QUAT);
+            TMP_VEC_DIR.copyFrom(TMP_VEC_2).subtractInPlace(TMP_VEC_1);
+            const distance = TMP_VEC_DIR.length();
+            if (distance > 1e-8) {
+                TMP_VEC_DIR.scaleInPlace(1 / distance);
             } else {
-                BABYLON.Quaternion.RotationAxisToRef(TMP_VEC_AXIS, angle, TMP_QUAT);
+                TMP_VEC_DIR.set(0, 1, 0);
             }
 
-            // Compose matrix directly to buffer would be hard, so use ComposeToRef
-            // Scale: (bondRadius*2, distance, bondRadius*2)
-            TMP_VEC_0.set(bondRadius * 2, distance, bondRadius * 2);
+            if (useImpostor) {
+                const idx4 = b * 4;
+                instanceData0![idx4 + 0] = TMP_VEC_CENTER.x;
+                instanceData0![idx4 + 1] = TMP_VEC_CENTER.y;
+                instanceData0![idx4 + 2] = TMP_VEC_CENTER.z;
+                instanceData0![idx4 + 3] = bondRadius;
 
-            BABYLON.Matrix.ComposeToRef(
-                TMP_VEC_0,
-                TMP_QUAT,
-                TMP_VEC_CENTER,
-                TMP_MAT
-            );
+                instanceData1![idx4 + 0] = TMP_VEC_DIR.x;
+                instanceData1![idx4 + 1] = TMP_VEC_DIR.y;
+                instanceData1![idx4 + 2] = TMP_VEC_DIR.z;
+                instanceData1![idx4 + 3] = distance;
 
+                const matOffset = b * 16;
+                const scale = distance + bondRadius * 2;
+                matrixBuffer[matOffset + 0] = scale;
+                matrixBuffer[matOffset + 1] = 0;
+                matrixBuffer[matOffset + 2] = 0;
+                matrixBuffer[matOffset + 3] = 0;
+                matrixBuffer[matOffset + 4] = 0;
+                matrixBuffer[matOffset + 5] = scale;
+                matrixBuffer[matOffset + 6] = 0;
+                matrixBuffer[matOffset + 7] = 0;
+                matrixBuffer[matOffset + 8] = 0;
+                matrixBuffer[matOffset + 9] = 0;
+                matrixBuffer[matOffset + 10] = scale;
+                matrixBuffer[matOffset + 11] = 0;
+                matrixBuffer[matOffset + 12] = TMP_VEC_CENTER.x;
+                matrixBuffer[matOffset + 13] = TMP_VEC_CENTER.y;
+                matrixBuffer[matOffset + 14] = TMP_VEC_CENTER.z;
+                matrixBuffer[matOffset + 15] = 1;
 
-            // Copy to buffer
-            TMP_MAT.copyToArray(matrixBuffer, b * 16);
+                if (instanceSplit) {
+                    let r0 = 0;
+                    let r1 = 0;
+                    if (elements) {
+                        const e0 = elements[i] ?? "C";
+                        const e1 = elements[j] ?? "C";
+                        let cachedR0 = elementRadii.get(e0);
+                        if (cachedR0 === undefined) {
+                            const s0 = styleManager.getAtomStyle(e0);
+                            cachedR0 = s0.radius;
+                            elementRadii.set(e0, cachedR0);
+                        }
+                        let cachedR1 = elementRadii.get(e1);
+                        if (cachedR1 === undefined) {
+                            const s1 = styleManager.getAtomStyle(e1);
+                            cachedR1 = s1.radius;
+                            elementRadii.set(e1, cachedR1);
+                        }
+                        r0 = cachedR0;
+                        r1 = cachedR1;
+                    }
+                    if (customAtomRadii) {
+                        r0 = customAtomRadii[i] ?? r0;
+                        r1 = customAtomRadii[j] ?? r1;
+                    }
+                    const splitOffset = (r0 - r1) * 0.4;
+                    instanceSplit[idx4 + 0] = splitOffset;
+                    instanceSplit[idx4 + 1] = 0;
+                    instanceSplit[idx4 + 2] = 0;
+                    instanceSplit[idx4 + 3] = 0;
+                }
+            } else {
+                // Fast rotation: quaternion from unit vectors (no acos)
+                let dot = BABYLON.Vector3.Dot(UP_VECTOR, TMP_VEC_DIR);
+                if (dot < -0.999999) {
+                    // Anti-parallel, flip 180 deg around X
+                    BABYLON.Quaternion.FromEulerAnglesToRef(Math.PI, 0, 0, TMP_QUAT);
+                } else {
+                    BABYLON.Vector3.CrossToRef(UP_VECTOR, TMP_VEC_DIR, TMP_VEC_AXIS);
+                    TMP_QUAT.x = TMP_VEC_AXIS.x;
+                    TMP_QUAT.y = TMP_VEC_AXIS.y;
+                    TMP_QUAT.z = TMP_VEC_AXIS.z;
+                    TMP_QUAT.w = 1 + dot;
+                    TMP_QUAT.normalize();
+                }
 
-            // 2. Color Optimization
-            // For now assuming all bonds are order 1 or we need to look it up?
-            // The original code passed 'order' from frame but didn't actually read it inside the loop correctly?
-            // Ah, the original code used default order 1.
-            // "const style = this.app.styleManager.getBondStyle(1);" inside the loop.
-            // If we want to support order from block we should read it.
-            // But let's stick to the previous logic but cached.
+                // Scale: (bondRadius*2, distance, bondRadius*2)
+                TMP_VEC_0.set(bondRadius * 2, distance, bondRadius * 2);
+
+                BABYLON.Matrix.ComposeToRef(
+                    TMP_VEC_0,
+                    TMP_QUAT,
+                    TMP_VEC_CENTER,
+                    TMP_MAT
+                );
+
+                TMP_MAT.copyToArray(matrixBuffer, b * 16);
+            }
 
             if (!cachedBondColor) {
                 const style = styleManager.getBondStyle(1);
@@ -389,15 +539,59 @@ export class DrawFrameCommand extends Command<void> {
             }
 
             const colOffset = b * 4;
-            colorBuffer[colOffset + 0] = cachedBondColor[0];
-            colorBuffer[colOffset + 1] = cachedBondColor[1];
-            colorBuffer[colOffset + 2] = cachedBondColor[2];
-            colorBuffer[colOffset + 3] = cachedBondColor[3];
+            if (useImpostor && instanceColor0 && instanceColor1) {
+                let c0 = cachedBondColor;
+                let c1 = cachedBondColor;
+                if (useBicolor && elements) {
+                    const e0 = elements[i] ?? "C";
+                    const e1 = elements[j] ?? "C";
+                    let cached0 = elementColors.get(e0);
+                    if (!cached0) {
+                        const s0 = styleManager.getAtomStyle(e0);
+                        const col0 = BABYLON.Color3.FromHexString(s0.color);
+                        const c = col0.toLinearSpace();
+                        cached0 = new Float32Array([c.r, c.g, c.b, s0.alpha ?? 1.0]);
+                        elementColors.set(e0, cached0);
+                    }
+                    let cached1 = elementColors.get(e1);
+                    if (!cached1) {
+                        const s1 = styleManager.getAtomStyle(e1);
+                        const col1 = BABYLON.Color3.FromHexString(s1.color);
+                        const c = col1.toLinearSpace();
+                        cached1 = new Float32Array([c.r, c.g, c.b, s1.alpha ?? 1.0]);
+                        elementColors.set(e1, cached1);
+                    }
+                    c0 = cached0;
+                    c1 = cached1;
+                }
+                instanceColor0[colOffset + 0] = c0[0];
+                instanceColor0[colOffset + 1] = c0[1];
+                instanceColor0[colOffset + 2] = c0[2];
+                instanceColor0[colOffset + 3] = c0[3];
+
+                instanceColor1[colOffset + 0] = c1[0];
+                instanceColor1[colOffset + 1] = c1[1];
+                instanceColor1[colOffset + 2] = c1[2];
+                instanceColor1[colOffset + 3] = c1[3];
+            } else {
+                colorBuffer[colOffset + 0] = cachedBondColor[0];
+                colorBuffer[colOffset + 1] = cachedBondColor[1];
+                colorBuffer[colOffset + 2] = cachedBondColor[2];
+                colorBuffer[colOffset + 3] = cachedBondColor[3];
+            }
         }
 
         cylinderBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-        cylinderBase.thinInstanceSetBuffer("color", colorBuffer, 4, true);
-        cylinderBase.thinInstanceEnablePicking = true;
+        if (instanceData0 && instanceData1 && instanceColor0 && instanceColor1 && instanceSplit) {
+            cylinderBase.thinInstanceSetBuffer("instanceData0", instanceData0, 4, true);
+            cylinderBase.thinInstanceSetBuffer("instanceData1", instanceData1, 4, true);
+            cylinderBase.thinInstanceSetBuffer("instanceColor0", instanceColor0, 4, true);
+            cylinderBase.thinInstanceSetBuffer("instanceColor1", instanceColor1, 4, true);
+            cylinderBase.thinInstanceSetBuffer("instanceSplit", instanceSplit, 4, true);
+        } else {
+            cylinderBase.thinInstanceSetBuffer("color", colorBuffer, 4, true);
+        }
+        // cylinderBase.thinInstanceEnablePicking = true;
         // cylinderBase.thinInstanceRefreshBoundingInfo(true);
 
         return cylinderBase;
@@ -406,6 +600,11 @@ export class DrawFrameCommand extends Command<void> {
     undo(): Command {
         this.createdMeshes.forEach((mesh) => mesh.dispose());
         this.createdMeshes = [];
+        if (this.boxMesh) {
+            this.app.world.sceneIndex.unregister(this.boxMesh.uniqueId);
+            this.boxMesh.dispose();
+            this.boxMesh = null;
+        }
         return new NoOpCommand(this.app);
     }
 

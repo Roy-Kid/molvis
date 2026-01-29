@@ -205,6 +205,9 @@ abstract class BaseMode {
               case "q":
                 this._on_press_q();
                 break;
+              case "i":
+                this._on_press_i();
+                break;
               case "Escape":
                 this._on_press_escape();
                 break;
@@ -352,6 +355,10 @@ abstract class BaseMode {
   _on_press_e(): void { }
 
   _on_press_q(): void { }
+
+  protected _on_press_i(): void {
+    this.world.toggleInspector();
+  }
 
   protected _on_press_escape(): void {
     // Override in subclasses for custom escape behavior

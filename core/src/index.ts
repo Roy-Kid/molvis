@@ -25,7 +25,7 @@ export function mountMolvis(
 
 export { MolvisApp as Molvis } from "./core/app";
 export { mergeConfig, DEFAULT_CONFIG, type MolvisConfig } from "./core/config";
-export { Settings, type MolvisUserConfig } from "./core/settings";
+export { Settings, DEFAULT_SETTING, type MolvisSetting } from "./core/settings";
 export { Frame, Block, Box, Trajectory } from "./core/system/";
 export { Topology } from "./core/system/topology";
 export { System } from "./core/system";

@@ -1,4 +1,5 @@
-import { Scene, Engine, HemisphericLight, DirectionalLight, Vector3, Color3, ArcRotateCamera, FxaaPostProcess } from "@babylonjs/core";
+import { Scene, Engine, HemisphericLight, DirectionalLight, Vector3, Color3, ArcRotateCamera, FxaaPostProcess, Tools } from "@babylonjs/core";
+import { Inspector } from '@babylonjs/inspector';
 import { type MolvisApp } from "./app";
 import { ViewportSettings } from "./viewport_settings";
 import { TargetIndicator } from "./target_indicator";
@@ -57,10 +58,6 @@ export class World {
       scene
     );
     camera.attachControl(canvas, true);
-    camera.lowerRadiusLimit = 1;
-    camera.upperRadiusLimit = 100;
-    camera.wheelPrecision = 50;
-    camera.panningSensibility = 1000;
 
     // Set as active camera
     scene.activeCamera = camera;
@@ -146,20 +143,18 @@ export class World {
 
   public takeScreenShot() {
     logger.info('[World] Taking screenshot...');
-    import('@babylonjs/core').then(({ Tools }) => {
-      Tools.CreateScreenshotUsingRenderTarget(
-        this._engine,
-        this._sceneData.camera,
-        { precision: 1 },
-        (data) => {
-          const link = document.createElement('a');
-          link.download = `molvis-screenshot-${Date.now()}.png`;
-          link.href = data;
-          link.click();
-          logger.info('[World] Screenshot downloaded');
-        }
-      );
-    });
+    Tools.CreateScreenshotUsingRenderTarget(
+      this._engine,
+      this._sceneData.camera,
+      { precision: 1 },
+      (data) => {
+        const link = document.createElement('a');
+        link.download = `molvis-screenshot-${Date.now()}.png`;
+        link.href = data;
+        link.click();
+        logger.info('[World] Screenshot downloaded');
+      }
+    );
   }
 
   /**
@@ -180,6 +175,17 @@ export class World {
    */
   public stop() {
     this._engine.stopRenderLoop();
+  }
+
+  public toggleInspector() {
+    const scene = this._sceneData.scene;
+    if (scene.debugLayer.isVisible()) {
+      scene.debugLayer.hide();
+      return;
+    }
+    Inspector.Show(scene, {
+      embedMode: true,
+    });
   }
 
   /**

@@ -16,6 +16,7 @@
   "dependencies": {
     "@babylonjs/core": "^7.52.2",
     "@babylonjs/gui": "^7.52.2",
+    "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
     "molrs-wasm": "file:../../molrs/wasm/pkg",
     "tslog": "^4.9.3"

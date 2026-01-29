@@ -4,7 +4,7 @@ import { World } from "./world";
 import { ModeManager, ModeType } from "../mode";
 import { GUIManager } from "../gui";
 import { type MolvisConfig, mergeConfig } from "./config";
-import { Settings, type MolvisUserConfig } from "./settings";
+import { Settings, type MolvisSetting } from "./settings";
 import { CommandRegistry, commands } from "../commands";
 import { EventEmitter } from "../events";
 import { ModifierPipeline } from "../pipeline";
@@ -51,7 +51,7 @@ export class MolvisApp {
   constructor(
     container: HTMLElement,
     config: MolvisConfig = {},
-    userConfig?: Partial<MolvisUserConfig>
+    setting?: Partial<MolvisSetting>
   ) {
     this._config = mergeConfig(config);
     this._container = container;
@@ -59,8 +59,6 @@ export class MolvisApp {
     // Register Web Components
     this.registerWebComponents();
 
-    // Initialize settings
-    this.settings = new Settings(userConfig);
 
     // Create DOM structure
     this._root = this._createRoot();
@@ -81,6 +79,9 @@ export class MolvisApp {
 
     // Initialize World
     this._world = new World(this._canvas, this._engine, this);
+
+    // Initialize settings
+    this.settings = new Settings(this, setting);
 
     // Initialize System
     this._system = new System();

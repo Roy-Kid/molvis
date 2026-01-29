@@ -1,7 +1,10 @@
+import type { ArcRotateCamera } from "@babylonjs/core";
+import type { MolvisApp } from "./app";
+
 /**
  * User settings that can be adjusted at runtime
  */
-export interface MolvisUserConfig {
+export interface MolvisSetting {
     // Camera Controls
     cameraPanSpeed: number;
     cameraRotateSpeed: number;
@@ -10,106 +13,193 @@ export interface MolvisUserConfig {
 
     // Camera Limits
     cameraMinRadius: number;
-    cameraMaxRadius: number;
+    cameraMaxRadius: number | null;
+
+    // Lighting
+    lighting: LightingSettings;
+}
+
+export interface LightingSettings {
+    lightDir: [number, number, number];
+    ambient: number;
+    diffuse: number;
+    specular: number;
+    specularPower: number;
 }
 
 /**
  * Default user settings
  */
-export const DEFAULT_USER_CONFIG: MolvisUserConfig = {
-    cameraPanSpeed: 0.8,
-    cameraRotateSpeed: 0.8,
-    cameraZoomSpeed: 1.2,
-    cameraInertia: 0.0,
-    cameraMinRadius: 0.1,
-    cameraMaxRadius: 1000
+export const DEFAULT_SETTING: MolvisSetting = {
+    cameraPanSpeed: 1000,
+    cameraRotateSpeed: 1000,
+    cameraZoomSpeed: 50,
+    cameraInertia: 0.9,
+    cameraMinRadius: 1,
+    cameraMaxRadius: null,
+    lighting: {
+        lightDir: [0.5, 0.5, 1.0],
+        ambient: 0.5,
+        diffuse: 1.0,
+        specular: 0.1,
+        specularPower: 4
+    }
 };
 
 /**
  * Settings manager for runtime user preferences
  */
 export class Settings {
-    private values: MolvisUserConfig;
-    private defaults: MolvisUserConfig;
-    private listeners: Map<keyof MolvisUserConfig, Set<(value: any) => void>>;
+    private values: MolvisSetting;
+    private defaults: MolvisSetting;
+    private app: MolvisApp;
 
-    constructor(initialConfig?: Partial<MolvisUserConfig>) {
-        this.defaults = { ...DEFAULT_USER_CONFIG };
-        this.values = { ...this.defaults, ...initialConfig };
-        this.listeners = new Map();
+    constructor(app: MolvisApp, initialSetting?: Partial<MolvisSetting>) {
+        this.app = app;
+        this.defaults = { ...DEFAULT_SETTING };
+        this.values = { ...this.defaults, ...initialSetting };
+        this.applyAll();
     }
 
     /**
-     * Get a setting value
+     * Set camera pan speed (maps to panningSensibility)
      */
-    get<K extends keyof MolvisUserConfig>(key: K): MolvisUserConfig[K] {
-        return this.values[key];
+    setCameraPanSpeed(speed: number): void {
+        const next = this.sanitizePositive(speed, this.defaults.cameraPanSpeed);
+        this.values.cameraPanSpeed = next;
+        this.camera.panningSensibility = next;
     }
 
     /**
-     * Set a single setting value
+     * Set camera rotate speed (maps to angularSensibilityX/Y)
      */
-    set<K extends keyof MolvisUserConfig>(key: K, value: MolvisUserConfig[K]): void {
-        this.values[key] = value;
-        this.notify(key, value);
+    setCameraRotateSpeed(speed: number): void {
+        const next = this.sanitizePositive(speed, this.defaults.cameraRotateSpeed);
+        this.values.cameraRotateSpeed = next;
+        this.camera.angularSensibilityX = next;
+        this.camera.angularSensibilityY = next;
     }
 
     /**
-     * Update multiple settings at once
+     * Set camera zoom speed (maps to wheelPrecision)
      */
-    update(config: Partial<MolvisUserConfig>): void {
-        Object.entries(config).forEach(([key, value]) => {
-            this.set(key as keyof MolvisUserConfig, value);
-        });
+    setCameraZoomSpeed(speed: number): void {
+        const next = this.sanitizePositive(speed, this.defaults.cameraZoomSpeed);
+        this.values.cameraZoomSpeed = next;
+        this.camera.wheelPrecision = next;
     }
 
     /**
-     * Get all current settings
+     * Set camera inertia
      */
-    getAll(): MolvisUserConfig {
-        return { ...this.values };
+    setCameraInertia(inertia: number): void {
+        const next = this.sanitizeInertia(inertia, this.defaults.cameraInertia);
+        this.values.cameraInertia = next;
+        this.camera.inertia = next;
+    }
+
+    /**
+     * Set camera minimum radius
+     */
+    setCameraMinRadius(radius: number): void {
+        this.values.cameraMinRadius = radius;
+        this.camera.lowerRadiusLimit = radius;
+    }
+
+    /**
+     * Set camera maximum radius
+     */
+    setCameraMaxRadius(radius: number | null): void {
+        this.values.cameraMaxRadius = radius;
+        this.camera.upperRadiusLimit = radius;
+    }
+
+    /**
+     * Get camera pan speed (panningSensibility)
+     */
+    getCameraPanSpeed(): number {
+        return this.values.cameraPanSpeed;
+    }
+
+    /**
+     * Get camera rotate speed (angularSensibilityX/Y)
+     */
+    getCameraRotateSpeed(): number {
+        return this.values.cameraRotateSpeed;
+    }
+
+    /**
+     * Get camera zoom speed (wheelPrecision)
+     */
+    getCameraZoomSpeed(): number {
+        return this.values.cameraZoomSpeed;
+    }
+
+    /**
+     * Get camera inertia
+     */
+    getCameraInertia(): number {
+        return this.values.cameraInertia;
+    }
+
+    /**
+     * Get camera minimum radius
+     */
+    getCameraMinRadius(): number {
+        return this.values.cameraMinRadius;
+    }
+
+    /**
+     * Get camera maximum radius
+     */
+    getCameraMaxRadius(): number | null {
+        return this.values.cameraMaxRadius;
+    }
+
+    /**
+     * Get lighting settings
+     */
+    getLighting(): LightingSettings {
+        return this.values.lighting;
     }
 
     /**
      * Reset all settings to defaults
      */
     reset(): void {
-        this.values = { ...this.defaults };
-        Object.keys(this.values).forEach(key => {
-            this.notify(key as keyof MolvisUserConfig, this.values[key as keyof MolvisUserConfig]);
-        });
+        this.setCameraPanSpeed(this.defaults.cameraPanSpeed);
+        this.setCameraRotateSpeed(this.defaults.cameraRotateSpeed);
+        this.setCameraZoomSpeed(this.defaults.cameraZoomSpeed);
+        this.setCameraInertia(this.defaults.cameraInertia);
+        this.setCameraMinRadius(this.defaults.cameraMinRadius);
+        this.setCameraMaxRadius(this.defaults.cameraMaxRadius);
+        // Reset lighting to default
+        this.values.lighting = { ...this.defaults.lighting };
     }
 
-    /**
-     * Reset a specific setting to default
-     */
-    resetKey<K extends keyof MolvisUserConfig>(key: K): void {
-        this.set(key, this.defaults[key]);
+    private applyAll(): void {
+        this.setCameraPanSpeed(this.values.cameraPanSpeed);
+        this.setCameraRotateSpeed(this.values.cameraRotateSpeed);
+        this.setCameraZoomSpeed(this.values.cameraZoomSpeed);
+        this.setCameraInertia(this.values.cameraInertia);
+        this.setCameraMinRadius(this.values.cameraMinRadius);
+        this.setCameraMaxRadius(this.values.cameraMaxRadius);
     }
 
-    /**
-     * Listen for changes to a specific setting
-     * Returns an unsubscribe function
-     */
-    onChange<K extends keyof MolvisUserConfig>(
-        key: K,
-        callback: (value: MolvisUserConfig[K]) => void
-    ): () => void {
-        if (!this.listeners.has(key)) {
-            this.listeners.set(key, new Set());
-        }
-        this.listeners.get(key)!.add(callback);
-
-        // Return unsubscribe function
-        return () => {
-            this.listeners.get(key)?.delete(callback);
-        };
+    private get camera(): ArcRotateCamera {
+        return this.app.world.camera;
     }
 
-    /**
-     * Notify all listeners of a setting change
-     */
-    private notify<K extends keyof MolvisUserConfig>(key: K, value: MolvisUserConfig[K]): void {
-        this.listeners.get(key)?.forEach(callback => callback(value));
+    private sanitizePositive(value: number, fallback: number): number {
+        // if (!Number.isFinite(value)) return fallback;
+        if (value <= 0) return fallback;
+        return value;
+    }
+
+    private sanitizeInertia(value: number, fallback: number): number {
+        if (!Number.isFinite(value)) return fallback;
+        if (value < 0) return 0;
+        if (value > 1) return 1;
+        return value;
     }
 }

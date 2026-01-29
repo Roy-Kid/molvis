@@ -5,6 +5,17 @@ import { Frame, Block } from "molrs-wasm";
 
 import { DrawFrameOption } from "./draw";
 
+// Reusable scratch variables to avoid GC in tight loops
+const TMP_VEC_0 = new BABYLON.Vector3();
+const TMP_VEC_1 = new BABYLON.Vector3();
+const TMP_VEC_2 = new BABYLON.Vector3();
+const TMP_VEC_CENTER = new BABYLON.Vector3();
+const TMP_VEC_DIR = new BABYLON.Vector3();
+const TMP_VEC_AXIS = new BABYLON.Vector3();
+const TMP_MAT = BABYLON.Matrix.Identity();
+const TMP_QUAT = BABYLON.Quaternion.Identity();
+const UP_VECTOR = new BABYLON.Vector3(0, 1, 0);
+
 export interface UpdateFrameResult {
     success: boolean;
     reason?: string;
@@ -128,31 +139,72 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         // If we want to be super fast, maybe we don't change scale.
         // BUT, if we don't have the old scale, we are stuck.
 
-        const buffer = new Float32Array(count * 16);
+        const existingMatrixBuffer = mesh.thinInstanceGetBuffer("matrix");
+        const needsSetMatrix = !existingMatrixBuffer || existingMatrixBuffer.length !== count * 16;
+        const matrixBuffer = needsSetMatrix ? new Float32Array(count * 16) : existingMatrixBuffer;
+        const existingInstanceData = mesh.thinInstanceGetBuffer("instanceData");
+        const needsSetInstanceData = existingInstanceData ? existingInstanceData.length !== count * 4 : false;
+        const instanceDataBuffer = existingInstanceData && !needsSetInstanceData ? existingInstanceData : (existingInstanceData ? new Float32Array(count * 4) : null);
         const styleManager = this.app.styleManager;
         const drawOptions = this.options ?? {};
+        const styleCache = new Map<string, { radius: number }>();
 
         for (let i = 0; i < count; i++) {
             const element = elements ? elements[i] : "C";
-            // Re-fetch style (fast enough?)
-            const style = styleManager.getAtomStyle(element);
-            const radius = drawOptions.atoms?.radii?.[i] ?? style.radius;
+            let radius = drawOptions.atoms?.radii?.[i];
+            if (radius === undefined) {
+                let style = styleCache.get(element);
+                if (!style) {
+                    const s = styleManager.getAtomStyle(element);
+                    style = { radius: s.radius };
+                    styleCache.set(element, style);
+                }
+                radius = style.radius;
+            }
             const scale = radius * 2;
 
             const offset = i * 16;
 
             // Re-build matrix
-            buffer[offset + 0] = scale;
-            buffer[offset + 5] = scale;
-            buffer[offset + 10] = scale;
-            buffer[offset + 15] = 1;
+            matrixBuffer[offset + 0] = scale;
+            matrixBuffer[offset + 1] = 0;
+            matrixBuffer[offset + 2] = 0;
+            matrixBuffer[offset + 3] = 0;
+            matrixBuffer[offset + 4] = 0;
+            matrixBuffer[offset + 5] = scale;
+            matrixBuffer[offset + 6] = 0;
+            matrixBuffer[offset + 7] = 0;
+            matrixBuffer[offset + 8] = 0;
+            matrixBuffer[offset + 9] = 0;
+            matrixBuffer[offset + 10] = scale;
+            matrixBuffer[offset + 11] = 0;
+            matrixBuffer[offset + 15] = 1;
 
-            buffer[offset + 12] = xCoords[i];
-            buffer[offset + 13] = yCoords[i];
-            buffer[offset + 14] = zCoords[i];
+            matrixBuffer[offset + 12] = xCoords[i];
+            matrixBuffer[offset + 13] = yCoords[i];
+            matrixBuffer[offset + 14] = zCoords[i];
+
+            if (instanceDataBuffer) {
+                const idx4 = i * 4;
+                instanceDataBuffer[idx4 + 0] = xCoords[i];
+                instanceDataBuffer[idx4 + 1] = yCoords[i];
+                instanceDataBuffer[idx4 + 2] = zCoords[i];
+                instanceDataBuffer[idx4 + 3] = radius;
+            }
         }
 
-        mesh.thinInstanceSetBuffer("matrix", buffer, 16, true);
+        if (needsSetMatrix) {
+            mesh.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
+        } else {
+            mesh.thinInstanceBufferUpdated("matrix");
+        }
+        if (instanceDataBuffer) {
+            if (needsSetInstanceData) {
+                mesh.thinInstanceSetBuffer("instanceData", instanceDataBuffer, 4, true);
+            } else {
+                mesh.thinInstanceBufferUpdated("instanceData");
+            }
+        }
         mesh.thinInstanceRefreshBoundingInfo(true);
     }
 
@@ -164,49 +216,113 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         const i_atoms = bondsBlock.getColumnU32("i")!;
         const j_atoms = bondsBlock.getColumnU32("j")!;
 
-        const buffer = new Float32Array(count * 16);
+        const existingMatrix = mesh.thinInstanceGetBuffer("matrix");
+        const needsSetMatrix = !existingMatrix || existingMatrix.length !== count * 16;
+        const matrixBuffer = needsSetMatrix ? new Float32Array(count * 16) : existingMatrix;
+        const existingData0 = mesh.thinInstanceGetBuffer("instanceData0");
+        const existingData1 = mesh.thinInstanceGetBuffer("instanceData1");
+        const useImpostor = !!(existingData0 && existingData1);
+        const needsSetData0 = useImpostor && existingData0!.length !== count * 4;
+        const needsSetData1 = useImpostor && existingData1!.length !== count * 4;
+        const data0Buffer = useImpostor ? (needsSetData0 ? new Float32Array(count * 4) : existingData0!) : null;
+        const data1Buffer = useImpostor ? (needsSetData1 ? new Float32Array(count * 4) : existingData1!) : null;
         const drawOptions = this.options ?? {};
         const bondRadius = drawOptions.bonds?.radii ?? 0.1;
-
-        const tempMatrix = BABYLON.Matrix.Identity();
-        const up = new BABYLON.Vector3(0, 1, 0);
 
         for (let b = 0; b < count; b++) {
             const i = i_atoms[b];
             const j = j_atoms[b];
 
-            const p1 = new BABYLON.Vector3(xCoords[i], yCoords[i], zCoords[i]);
-            const p2 = new BABYLON.Vector3(xCoords[j], yCoords[j], zCoords[j]);
+            TMP_VEC_1.set(xCoords[i], yCoords[i], zCoords[i]); // p1
+            TMP_VEC_2.set(xCoords[j], yCoords[j], zCoords[j]); // p2
 
-            const distance = BABYLON.Vector3.Distance(p1, p2);
-            const center = p1.add(p2).scale(0.5);
-            const direction = p2.subtract(p1).normalize();
+            // center = (p1 + p2) * 0.5
+            TMP_VEC_CENTER.copyFrom(TMP_VEC_1).addInPlace(TMP_VEC_2).scaleInPlace(0.5);
 
-            // Calculate rotation
-            const axis = BABYLON.Vector3.Cross(up, direction);
-            const angle = Math.acos(BABYLON.Vector3.Dot(up, direction));
-
-            let rotation = BABYLON.Quaternion.Identity();
-
-            if (Math.abs(angle) < 0.0001) {
-            } else if (Math.abs(angle - Math.PI) < 0.0001) {
-                rotation = BABYLON.Quaternion.FromEulerAngles(Math.PI, 0, 0);
+            // direction = (p2 - p1).normalize()
+            TMP_VEC_DIR.copyFrom(TMP_VEC_2).subtractInPlace(TMP_VEC_1);
+            const distance = TMP_VEC_DIR.length();
+            if (distance > 1e-8) {
+                TMP_VEC_DIR.scaleInPlace(1 / distance);
             } else {
-                rotation = BABYLON.Quaternion.RotationAxis(axis, angle);
+                TMP_VEC_DIR.set(0, 1, 0);
             }
 
-            // Re-compose matrix
-            BABYLON.Matrix.ComposeToRef(
-                new BABYLON.Vector3(bondRadius * 2, distance, bondRadius * 2),
-                rotation,
-                center,
-                tempMatrix
-            );
+            if (useImpostor) {
+                const idx4 = b * 4;
+                data0Buffer![idx4 + 0] = TMP_VEC_CENTER.x;
+                data0Buffer![idx4 + 1] = TMP_VEC_CENTER.y;
+                data0Buffer![idx4 + 2] = TMP_VEC_CENTER.z;
+                data0Buffer![idx4 + 3] = bondRadius;
 
-            tempMatrix.copyToArray(buffer, b * 16);
+                data1Buffer![idx4 + 0] = TMP_VEC_DIR.x;
+                data1Buffer![idx4 + 1] = TMP_VEC_DIR.y;
+                data1Buffer![idx4 + 2] = TMP_VEC_DIR.z;
+                data1Buffer![idx4 + 3] = distance;
+
+                const matOffset = b * 16;
+                const scale = distance + bondRadius * 2;
+                matrixBuffer[matOffset + 0] = scale;
+                matrixBuffer[matOffset + 1] = 0;
+                matrixBuffer[matOffset + 2] = 0;
+                matrixBuffer[matOffset + 3] = 0;
+                matrixBuffer[matOffset + 4] = 0;
+                matrixBuffer[matOffset + 5] = scale;
+                matrixBuffer[matOffset + 6] = 0;
+                matrixBuffer[matOffset + 7] = 0;
+                matrixBuffer[matOffset + 8] = 0;
+                matrixBuffer[matOffset + 9] = 0;
+                matrixBuffer[matOffset + 10] = scale;
+                matrixBuffer[matOffset + 11] = 0;
+                matrixBuffer[matOffset + 12] = TMP_VEC_CENTER.x;
+                matrixBuffer[matOffset + 13] = TMP_VEC_CENTER.y;
+                matrixBuffer[matOffset + 14] = TMP_VEC_CENTER.z;
+                matrixBuffer[matOffset + 15] = 1;
+            } else {
+                // Fast rotation: quaternion from unit vectors (no acos)
+                let dot = BABYLON.Vector3.Dot(UP_VECTOR, TMP_VEC_DIR);
+                if (dot < -0.999999) {
+                    // Anti-parallel, flip 180 deg around X
+                    BABYLON.Quaternion.FromEulerAnglesToRef(Math.PI, 0, 0, TMP_QUAT);
+                } else {
+                    BABYLON.Vector3.CrossToRef(UP_VECTOR, TMP_VEC_DIR, TMP_VEC_AXIS);
+                    TMP_QUAT.x = TMP_VEC_AXIS.x;
+                    TMP_QUAT.y = TMP_VEC_AXIS.y;
+                    TMP_QUAT.z = TMP_VEC_AXIS.z;
+                    TMP_QUAT.w = 1 + dot;
+                    TMP_QUAT.normalize();
+                }
+
+                // Re-compose matrix
+                TMP_VEC_0.set(bondRadius * 2, distance, bondRadius * 2);
+                BABYLON.Matrix.ComposeToRef(
+                    TMP_VEC_0,
+                    TMP_QUAT,
+                    TMP_VEC_CENTER,
+                    TMP_MAT
+                );
+
+                TMP_MAT.copyToArray(matrixBuffer, b * 16);
+            }
         }
 
-        mesh.thinInstanceSetBuffer("matrix", buffer, 16, true);
+        if (needsSetMatrix) {
+            mesh.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
+        } else {
+            mesh.thinInstanceBufferUpdated("matrix");
+        }
+        if (useImpostor) {
+            if (needsSetData0) {
+                mesh.thinInstanceSetBuffer("instanceData0", data0Buffer!, 4, true);
+            } else {
+                mesh.thinInstanceBufferUpdated("instanceData0");
+            }
+            if (needsSetData1) {
+                mesh.thinInstanceSetBuffer("instanceData1", data1Buffer!, 4, true);
+            } else {
+                mesh.thinInstanceBufferUpdated("instanceData1");
+            }
+        }
         mesh.thinInstanceRefreshBoundingInfo(true);
     }
 
