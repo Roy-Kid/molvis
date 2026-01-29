@@ -17,7 +17,7 @@ import { Block, Frame } from "molrs-wasm";
 // ============================================================================
 
 /** Number of water molecules to generate */
-const NUM_WATER_MOLECULES = 1000;
+const NUM_WATER_MOLECULES = 10000;
 
 /** Density in g/cm³ (water is typically ~1.0 g/cm³) */
 const DENSITY = 1.0;

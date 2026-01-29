@@ -44,7 +44,7 @@ export class World {
     // Use Babylon.js default background color (blue-purple gradient)
 
     // Scene optimization
-    scene.skipPointerMovePicking = true;
+    scene.skipPointerMovePicking = false;
     scene.autoClear = true;
     scene.autoClearDepthAndStencil = true;
 

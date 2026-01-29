@@ -50,71 +50,73 @@ Effect.ShadersStore["sphereImpostorVertexShader"] = `
 `;
 
 Effect.ShadersStore["sphereImpostorFragmentShader"] = `
-    precision highp float;
+precision highp float;
+#ifdef GL_EXT_frag_depth
+#extension GL_EXT_frag_depth : enable
+#endif
+
+// Uniforms
+uniform mat4 projection;
+
+// Lighting Uniforms (MUST be view-space, normalized)
+uniform vec3 lightDir;
+uniform float lightAmbient;
+uniform float lightDiffuse;
+uniform float lightSpecular;
+uniform float lightSpecularPower;
+
+// Varyings
+varying vec2 vUV;
+varying vec4 vColor;
+varying vec3 vSphereCenter; // View-space center
+varying float vSphereRadius;
+
+void main() {
+    // Map uv [0,1] -> [-1,1]
+    vec2 coord = vUV * 2.0 - 1.0;
+
+    float r2 = dot(coord, coord);
+    if (r2 > 1.0) discard;
+
+    float z = sqrt(1.0 - r2);
+
+    // Surface point on sphere in VIEW space
+    // Note: -z (camera looks down -Z in view space)
+    vec3 P = vec3(
+        vSphereCenter.x + coord.x * vSphereRadius,
+        vSphereCenter.y + coord.y * vSphereRadius,
+        vSphereCenter.z - z * vSphereRadius
+    );
+
+    // View-space normal consistent with P
+    vec3 normal = normalize(P - vSphereCenter);
+
+    // Lighting vectors in VIEW space
+    vec3 L = normalize(lightDir);
+    vec3 V = normalize(-P); // from surface point to camera (origin)
+    float diffuse = max(dot(normal, L), 0.0);
+
+    // Blinn-Phong specular (more stable than reflect)
+    vec3 H = normalize(L + V);
+    float spec = pow(max(dot(normal, H), 0.0), lightSpecularPower) * lightSpecular;
+
+    vec3 finalColor = vColor.rgb * (lightAmbient + diffuse * lightDiffuse) + vec3(1.0) * spec;
+    gl_FragColor = vec4(finalColor, vColor.a);
+
+    // Depth Correction
+    float surfaceZ = P.z;
+
+    float clipZ = projection[2][2] * surfaceZ + projection[3][2];
+    float clipW = projection[2][3] * surfaceZ + projection[3][3];
+    float ndcZ = clipZ / clipW;
+    float depth = (ndcZ + 1.0) * 0.5;
+
     #ifdef GL_EXT_frag_depth
-    #extension GL_EXT_frag_depth : enable
+    gl_FragDepthEXT = depth;
+    #else
+    gl_FragDepth = depth;
     #endif
-
-    // Uniforms
-    uniform mat4 view;
-    uniform mat4 projection;
-    
-    // Lighting Uniforms
-    uniform vec3 lightDir;
-    uniform float lightAmbient;
-    uniform float lightDiffuse;
-    uniform float lightSpecular;
-    uniform float lightSpecularPower;
-
-    // Varyings
-    varying vec2 vUV;
-    varying vec4 vColor;
-    varying vec3 vSphereCenter; // View-space center
-    varying float vSphereRadius;
-    varying vec3 vViewPosition; // View-space frag pos (on the quad plane)
-
-    void main() {
-        // Map uv [0,1] to [-1,1]
-        vec2 coord = vUV * 2.0 - 1.0;
-        
-        // Check circle
-        float r2 = dot(coord, coord);
-        if (r2 > 1.0) discard;
-        
-        // Calculate normal in view space
-        float z = sqrt(1.0 - r2);
-        vec3 normal = vec3(coord, z); // This is local normal
-        
-        // Lighting (View Space)
-        float diffuse = max(dot(normal, lightDir), 0.0);
-        
-        // Specular
-        vec3 viewDir = vec3(0.0, 0.0, 1.0);
-        
-        vec3 reflectDir = reflect(-lightDir, normal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), lightSpecularPower) * lightSpecular;
-        
-        vec3 finalColor = vColor.rgb * (lightAmbient + diffuse * lightDiffuse) + vec3(1.0) * spec;
-        
-        gl_FragColor = vec4(finalColor, vColor.a);
-        
-        // Depth Correction
-        float surfaceZ = vSphereCenter.z - z * vSphereRadius;
-        
-        // Project to Clip Space Z
-        float clipZ = projection[2][2] * surfaceZ + projection[3][2];
-        float clipW = projection[2][3] * surfaceZ + projection[3][3];
-        
-        float ndcZ = clipZ / clipW;
-        
-        // Map to 0..1 depth range
-        float depth = (ndcZ + 1.0) * 0.5;
-        #ifdef GL_EXT_frag_depth
-        gl_FragDepthEXT = depth;
-        #else
-        gl_FragDepth = depth;
-        #endif
-    }
+}
 `;
 
 Effect.ShadersStore["bondImpostorVertexShader"] = `
@@ -181,80 +183,88 @@ Effect.ShadersStore["bondImpostorVertexShader"] = `
 `;
 
 Effect.ShadersStore["bondImpostorFragmentShader"] = `
-    precision highp float;
-    #ifdef GL_EXT_frag_depth
-    #extension GL_EXT_frag_depth : enable
-    #endif
+precision highp float;
+#ifdef GL_EXT_frag_depth
+#extension GL_EXT_frag_depth : enable
+#endif
 
-    varying vec2 vUV;
-    varying vec4 vColor0;
-    varying vec4 vColor1;
-    varying float vSplit;
-    varying vec3 vCenterView;
-    varying vec3 vDirView;
-    varying float vRadius;
-    varying float vHalfLen;
-    varying vec3 vPosView;
+varying vec2 vUV;
+varying vec4 vColor0;
+varying vec4 vColor1;
+varying float vSplit;
+varying vec3 vCenterView;
+varying vec3 vDirView;
+varying float vRadius;
+varying float vHalfLen;
+varying vec3 vPosView;
 
-    uniform mat4 projection;
-    
-    // Lighting Uniforms
-    uniform vec3 lightDir;
-    uniform float lightAmbient;
-    uniform float lightDiffuse;
-    uniform float lightSpecular;
-    uniform float lightSpecularPower;
+uniform mat4 projection;
 
-    void main() {
-        // Ray from camera (origin) through this fragment position in view space
-        vec3 D = normalize(vPosView);
-        vec3 CO = -vCenterView;
-        vec3 A = normalize(vDirView);
+// Lighting Uniforms (MUST be view-space, normalized)
+uniform vec3 lightDir;
+uniform float lightAmbient;
+uniform float lightDiffuse;
+uniform float lightSpecular;
+uniform float lightSpecularPower;
 
-        vec3 dPerp = D - A * dot(D, A);
-        vec3 mPerp = CO - A * dot(CO, A);
+void main() {
+    // Ray from camera (origin) through this fragment position in view space
+    vec3 D = normalize(vPosView);
+    vec3 CO = -vCenterView;
+    vec3 A = normalize(vDirView);
 
-        float a = dot(dPerp, dPerp);
-        if (a < 1e-6) discard;
-        float b = 2.0 * dot(dPerp, mPerp);
-        float c = dot(mPerp, mPerp) - vRadius * vRadius;
+    // Ray-cylinder intersection (infinite cylinder around axis A)
+    vec3 dPerp = D - A * dot(D, A);
+    vec3 mPerp = CO - A * dot(CO, A);
 
-        float disc = b * b - 4.0 * a * c;
-        if (disc < 0.0) discard;
+    float a = dot(dPerp, dPerp);
+    if (a < 1e-6) discard;
 
-        float sqrtDisc = sqrt(disc);
-        float t = (-b - sqrtDisc) / (2.0 * a);
-        if (t < 0.0) {
-            t = (-b + sqrtDisc) / (2.0 * a);
-            if (t < 0.0) discard;
-        }
+    float b = 2.0 * dot(dPerp, mPerp);
+    float c = dot(mPerp, mPerp) - vRadius * vRadius;
 
-        vec3 P = D * t;
-        float s = dot(P - vCenterView, A);
-        if (s < -vHalfLen || s > vHalfLen) discard;
+    float disc = b * b - 4.0 * a * c;
+    if (disc < 0.0) discard;
 
-        vec3 closest = vCenterView + A * s;
-        vec3 normal = normalize(P - closest);
-
-        // Simple lighting
-        float diffuse = max(dot(normal, lightDir), 0.0);
-        vec3 viewDir = vec3(0.0, 0.0, 1.0);
-        vec3 reflectDir = reflect(-lightDir, normal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), lightSpecularPower) * lightSpecular;
-        
-        vec4 vColor = (s < vSplit) ? vColor0 : vColor1;
-        vec3 finalColor = vColor.rgb * (lightAmbient + diffuse * lightDiffuse) + vec3(1.0) * spec;
-
-        gl_FragColor = vec4(finalColor, vColor.a);
-
-        float clipZ = projection[2][2] * P.z + projection[3][2];
-        float clipW = projection[2][3] * P.z + projection[3][3];
-        float ndcZ = clipZ / clipW;
-        float depth = (ndcZ + 1.0) * 0.5;
-        #ifdef GL_EXT_frag_depth
-        gl_FragDepthEXT = depth;
-        #else
-        gl_FragDepth = depth;
-        #endif
+    float sqrtDisc = sqrt(disc);
+    float t = (-b - sqrtDisc) / (2.0 * a);
+    if (t < 0.0) {
+        t = (-b + sqrtDisc) / (2.0 * a);
+        if (t < 0.0) discard;
     }
+
+    vec3 P = D * t;                 // hit point in VIEW space
+    float s = dot(P - vCenterView, A);
+    if (s < -vHalfLen || s > vHalfLen) discard;
+
+    vec3 closest = vCenterView + A * s;
+    vec3 normal = normalize(P - closest);
+
+    // Lighting vectors in VIEW space
+    vec3 L = normalize(lightDir);
+    vec3 V = normalize(-P); // from hit point to camera (origin)
+    float diffuse = max(dot(normal, L), 0.0);
+
+    // Blinn-Phong specular
+    vec3 H = normalize(L + V);
+    float spec = pow(max(dot(normal, H), 0.0), lightSpecularPower) * lightSpecular;
+
+    vec4 vColor = (s < vSplit) ? vColor0 : vColor1;
+    vec3 finalColor = vColor.rgb * (lightAmbient + diffuse * lightDiffuse) + vec3(1.0) * spec;
+
+    gl_FragColor = vec4(finalColor, vColor.a);
+
+    // Depth
+    float clipZ = projection[2][2] * P.z + projection[3][2];
+    float clipW = projection[2][3] * P.z + projection[3][3];
+    float ndcZ = clipZ / clipW;
+    float depth = (ndcZ + 1.0) * 0.5;
+
+    #ifdef GL_EXT_frag_depth
+    gl_FragDepthEXT = depth;
+    #else
+    gl_FragDepth = depth;
+    #endif
+}
+
 `;

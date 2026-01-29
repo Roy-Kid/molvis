@@ -38,10 +38,10 @@ export const DEFAULT_SETTING: MolvisSetting = {
     cameraMinRadius: 1,
     cameraMaxRadius: null,
     lighting: {
-        lightDir: [0.5, 0.5, 1.0],
-        ambient: 0.5,
-        diffuse: 1.0,
-        specular: 0.1,
+        lightDir: [0.5, 0.5, -1.0],
+        ambient: 0.4,
+        diffuse: 0.8,
+        specular: 0.01,
         specularPower: 4
     }
 };
