@@ -1,16 +1,8 @@
 # Your First Molecule in Jupyter
 
-So you've got your data in Python and you want to see it. You are in the right place. Let's fire up a Jupyter Notebook and make some magic happen.
+So you've got your data in Python and you want to see it. You are in the right place. Let's fire up a Jupyter Notebook and make some magic happen. We are going to initialize a Molvis scene inside a Jupyter widget and draw a simple molecular structure into it. By the end of this page, you'll have an interactive 3D viewer right there in your cell output.
 
-## What are we doing?
-
-We are going to initialize a Molvis scene inside a Jupyter widget and draw a simple molecular structure into it. By the end of this page, you'll have an interactive 3D viewer right there in your cell output.
-
-## Why use the Jupyter Widget?
-
-Because context switching kills flow. You don't want to save a PDB file, open PyMOL, load the file, realize it's wrong, go back to code, rinse, and repeat. You want to see the changes immediately as you manipulate your data structures. Molvis brings the visualization to your data, not the other way around.
-
-## How do we do it?
+We use the Jupyter Widget ecosystem because context switching kills flow. You don't want to save a PDB file, open PyMOL, load the file, realize it's wrong, go back to code, rinse, and repeat. You want to see the changes immediately as you manipulate your data structures. Molvis brings the visualization to your data, not the other way around.
 
 First, make sure you have `molvis` and `molpy` installed. Then, it's just a matter of creating a scene and feeding it a frame.
 
@@ -41,12 +33,4 @@ frame = mp.Frame()
 scene.draw_frame(frame)
 ```
 
-That's it! You should see your molecule. You can rotate with the left mouse button, pan with the right, and zoom with the scroll wheel.
-
-If you ever lose track of your scene variable but know you named it "my_first_view", you can grab it back anytime:
-
-```python
-scene = mv.Molvis.get_scene("my_first_view")
-```
-
-Easy, right?
+That's it! You should see your molecule. You can rotate with the left mouse button, pan with the right, and zoom with the scroll wheel. If you ever lose track of your scene variable but know you named it "my_first_view", you can grab it back anytime via `mv.Molvis.get_scene("my_first_view")`.

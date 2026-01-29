@@ -2,6 +2,13 @@ site_name: Molvis Documentation
 site_description: Interactive molecular visualization for everyone.
 site_url: https://molvis.molcrafts.org
 
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python/src]
+
 nav:
   - Home: index.md
   - Tutorials:

@@ -1,49 +1,98 @@
 # Core Library Reference
 
-The `@molvis/core` package provides the TypeScript rendering engine.
+The `@molvis/core` package is the TypeScript foundation of the viewer.
 
-## Functions
+## `mountMolvis`
 
-### `mountMolvis(container, config?) -> MolvisApp`
+```typescript
+function mountMolvis(container: HTMLElement, config?: MolvisConfig): MolvisApp
+```
 
-Initializes a Molvis application inside the given DOM element.
+Initializes and mounts a new Molvis application instance into the provided DOM element.
 
-*   **container** *(HTMLElement)*: The DOM element to render into.
-*   **config** *(MolvisConfig, optional)*: Initial configuration options.
+**Parameters:**
 
-Returns a `MolvisApp` instance.
+*   `container` (HTMLElement): The DOM element where the viewer will be rendered. It should have a defined width and height.
+*   `config` (MolvisConfig, optional): Configuration object to customize the initial state (e.g., background color, UI visibility).
+
+**Returns:**
+
+*   `MolvisApp`: The controller instance for the created application.
+
+---
 
 ## `class MolvisApp`
 
-The main controller for the visualization.
+The main entry point for controlling the Molvis application.
+
+### Properties
+
+*   `canvas`: The HTMLCanvasElement being used for rendering.
+*   `world`: The `World` instance managing the 3D scene.
+*   `settings`: The `Settings` manager for user preferences.
+*   `commands`: The `CommandRegistry` for executing named commands.
 
 ### Methods
 
 #### `start()`
 
-Starts the rendering loop. The canvas will update on every frame.
+```typescript
+start(): void
+```
+
+Starts the rendering loop. The scene will begin updating and rendering to the canvas.
 
 #### `stop()`
 
-Stops the rendering loop. Used to save battery or when the tab is hidden.
+```typescript
+stop(): void
+```
+
+Pauses the rendering loop. Use this to save resources when the viewer is not visible.
 
 #### `destroy()`
 
-Cleans up all resources, removes event listeners, and destroys the WebGL context. Call this when removing the component.
+```typescript
+destroy(): void
+```
 
-#### `renderFrame(frame, options?)`
+Completely disposes of the application. This removes the canvas, cleans up event listeners, and destroys the WebGL engine. **Must be called** before removing the container from the DOM.
 
-Renders a frame.
+#### `renderFrame()`
 
-*   **frame**: A `Frame` object containing atoms and bonds.
-*   **options**: Rendering options.
+```typescript
+renderFrame(frame: Frame, options?: any): void
+```
 
-#### `setMode(mode: ModeType)`
+Renders a molecular frame.
 
-Switches the interaction mode.
+*   `frame`: The `Frame` object (from `molrs-wasm` or constructed manually) containing the molecular data.
+*   `options`: Optional rendering parameters (style, color scheme).
 
-*   **mode**: One of `ModeType.View`, `ModeType.Select`, or `ModeType.Edit`.
+#### `setMode()`
+
+```typescript
+setMode(mode: ModeType): void
+```
+
+Switches the current interaction mode.
+
+*   `mode`: `ModeType.View`, `ModeType.Select`, or `ModeType.Edit`.
 
 #### `resize()`
 
-Forces the engine to resize the canvas to match the container's current dimensions. Call this if your layout changes dynamically.
+```typescript
+resize(): void
+```
+
+Forces the engine to recalculate the canvas size based on the container's current dimensions. Call this if the container is resized programmatically (e.g., a split-pane drag).
+
+---
+
+## `enum ModeType`
+
+Defines the available interaction modes.
+
+*   `View` ("view"): Default camera navigation.
+*   `Select` ("select"): Atom selection.
+*   `Edit` ("edit"): Geometry manipulation.

@@ -1,58 +1,38 @@
-# Scene Management
+# Scene Management and Architecture
 
-The "Scene" is the universe where your molecules live. It manages the camera, the lights, the canvas, and the rendering loop.
+The `Scene` (or `MolvisApp` in the core library) is the container for your visualization. It manages the lifecycle of the 3D engine, the connection to the DOM, and the communication between Python and JavaScript.
 
-## What is a Scene?
+## The Widget Lifecycle (Python)
 
-In Molvis, the Scene (represented by `Molvis` in Python and `MolvisApp` in Core) is the top-level controller. It binds the 3D engine to a DOM element (or a Widget area) and orchestrates the show. It's the boss.
+When you run `scene = mv.Molvis()` in a Jupyter notebook, several things happen:
 
-## Why manage it explicitly?
+1.  **Python Object Creation:** A `Molvis` instance is created in the Python kernel. It generates a unique Session ID.
+2.  **Frontend Sync:** The `anywidget` framework instructs the Jupyter frontend to create a corresponding JavaScript view.
+3.  **Connection:** The two sides establish a communication channel.
 
-You might want to show multiple views of the same molecule side-by-side. Or maybe you need to destroy a viewer to free up WebGL resources when a user navigates away. Explicit management gives you control over the lifecycle of the heavy 3D resources.
-
-## How to use it?
-
-### In Python (Jupyter)
-
-We use a global registry to keep track of your widgets. This is super handy when you define a widget in one cell and want to update it from another cell ten minutes later.
+Because of this split, the "Scene" exists in two places at once. We use a **Global Registry** pattern in Python to keep track of these instances. This is why you can retrieve a scene by name later.
 
 ```python
-import molvis as mv
+# Cell 1
+scene = mv.Molvis(name="prot_1")
 
-# Create a named scene
-view = mv.Molvis(name="main_stage", width=1000, height=800)
-display(view)
-
-# Later... somewhere else...
-# You don't need to pass the variable 'view' around.
-same_view = mv.Molvis.get_scene("main_stage")
-same_view.send_cmd("some_command", {})
+# Cell 2 (or a different notebook connected to the same kernel)
+# You don't need to pass the variable. You can look it up.
+s = mv.Molvis.get_scene("prot_1")
 ```
 
-If you don't provide a name, we generate a random UUID for you. But names are better.
+This design is crucial for interactive analysis. You might create a view, do some heavy computation in a different function, and then want to push the results back to that view without threading the object through your entire call stack.
 
-To clean up:
-```python
-view.close()
-```
+## The Application Lifecycle (Core)
 
-### In Core (Web)
+In the web environment, you are responsible for the lifecycle.
 
-In the browser, you attach the app to a DOM node.
+*   **Mounting:** `mountMolvis(element)` attaches the engine to a `div`. It sets up the WebGL context and event listeners.
+*   **Starting:** `app.start()` kicks off the requestAnimationFrame loop.
+*   **Destroying:** `app.destroy()` is critical. If you remove the `div` from the DOM without calling this, the WebGL context will hang around in memory. Browsers have a limit on how many WebGL contexts can be active (usually around 16). If you hit this limit, your visualizations will stop working.
 
-```typescript
-import { mountMolvis } from "@molvis/core";
+## Communication Protocol
 
-const app = mountMolvis(document.getElementById("root"));
+We use a custom JSON-RPC based protocol for communication. When you call `scene.draw_frame(frame)`, we don't just send JSON. We strip out the heavy numerical arrays (positions, colors) and send them as raw binary buffers alongside the JSON command. This "zero-copy" approach allows us to stream millions of atoms without the overhead of base64 encoding or JSON parsing on the main thread.
 
-// Start the engine
-app.start();
-
-// Stop the engine (pauses rendering)
-app.stop();
-
-// Nuke it from orbit (cleanup DOM and WebGL context)
-app.destroy();
-```
-
-**Pro Tip:** Always call `destroy()` when your component unmounts (e.g., in React's `useEffect` cleanup) to avoid memory leaks. WebGL contexts are precious!
+We designed this robust architecture because molecular visualization is resource-intensive. By carefully managing memory and communication, we ensure that Molvis remains responsive even when you are pushing it to its limits.

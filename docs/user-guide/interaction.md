@@ -1,52 +1,48 @@
-# Interaction
+# Interaction Modes and Controls
 
-Molvis isn't a movie; it's a video game. You interact with it.
+Molvis is designed to be interactive, functioning more like a game engine than a static image viewer. To manage the complexity of mouse and keyboard inputs, we segregate interaction logic into distinct "Modes". Each mode changes how the viewer interprets your actions, allowing for precise control whether you are just looking around or selecting specific atoms for analysis.
 
-## What are Modes?
+## View Mode
 
-We define different "Modes" to handle user input. The mouse does different things depending on the active mode.
+This is the default state of the application. In View Mode, you are an observer floating in space. The goal here is navigation. We use an arc-ball style camera control which feels intuitive for inspecting centered objects like proteins.
 
-*   **View Mode:** The default. Left click rotates, right click pans, scroll zooms. You are an observer floating in space.
-*   **Select Mode:** You can click on atoms to select them. This is useful for highlighting residues or picking atoms for calculation.
-*   **Edit Mode:** (Advanced) Move atoms around. Yes, you can tweak the geometry.
+*   **Left Click + Drag:** Rotates the camera around the focal point.
+*   **Right Click + Drag:** Pans the camera (moves the focal point).
+*   **Scroll Wheel:** Zooms in and out.
 
-## Why modes?
+We designed it this way because 90% of the time, you just want to see the molecule from different angles. By dedicating the primary mouse buttons to navigation, we ensure that you don't accidentally modify the scene or select atoms when you just meant to turn the view.
 
-Because a mouse only has so many buttons. Overloading controls is confusing. By explicitly switching modes, we keep the interaction clean and predictable.
+## Select Mode
 
-## How to use them?
+When you need to interact with the data itself, you switch to Select Mode. Here, the mouse becomes a pointer.
 
-### Switching Modes
+*   **Left Click:** Selects the atom under the cursor.
+*   **Shift + Left Click:** Adds or removes an atom from the current selection (toggle).
+*   **Background Click:** Clears the selection.
 
-**Python:**
+When an atom is selected, it emits an event. In the Jupyter environment, this syncs back to your Python kernel, allowing you to use the 3D viewer as an input device. You can pick a residue in 3D and immediately run a script on that residue in Python.
+
+## Edit Mode (Experimental)
+
+For users who need to manipulate the structure, Edit Mode unlocks geometry modification.
+
+*   **Click + Drag on Atom:** Moves the atom in the screen plane.
+
+This is useful for quick structural adjustments or setting up initial constraints for simulations. We keep this separate from View and Select modes to prevent accidental data corruption.
+
+## Switching Modes
+
+You can switch modes programmatically or via the UI (if enabled).
+
+In Python:
 ```python
 scene.set_mode("select")
-# Now clicking on atoms highlights them
 ```
 
-**Core:**
+In TypeScript:
 ```typescript
 import { ModeType } from "@molvis/core";
-
 app.setMode(ModeType.Select);
 ```
 
-### Handling Selections
-
-When you select atoms in the viewer, that information is synced back to your code.
-
-**Python:**
-```python
-# In a Jupyter cell
-selection = scene.get_selection()
-print(f"You selected atoms: {selection}")
-```
-
-You can also programmatically select atoms:
-
-```python
-# Select atoms with indices 0, 1, and 5
-scene.select([0, 1, 5])
-```
-
-This bidirectional sync is powerful. You can run a sophisticated query in Python (e.g., "all carbons within 5A of the ligand"), calculate the indices, and then highlight them in the viewer instantly.
+By explicitly managing these states, we keep the interface clean and predictable, avoiding the "what does this button do now?" confusion common in complex software.
