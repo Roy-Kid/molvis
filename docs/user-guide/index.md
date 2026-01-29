@@ -1,16 +1,8 @@
 # User Guide
 
-This is the meat and potatoes. The tutorials got you a "Hello World", but now you want to actually build something useful.
+This is the meat and potatoes of the documentation. While the tutorials got you a "Hello World", this section is where you learn to actually build something useful. We break down the machinery of Molvis into digestible parts, answering questions like "How do I control the camera?" or "What exactly *is* a Frame?".
 
-## What is this section?
-
-The User Guide is a collection of deep dives into specific concepts. We break down the machinery of Molvis into digestible parts. If you are wondering "How do I control the camera?" or "What exactly *is* a Frame?", this is where you look.
-
-## Why read this?
-
-Because blindly copying code snippets only gets you so far. Understanding the *concepts* allows you to bend the tool to your will. We explain the design philosophy behind our decisions so you can work *with* the framework, not against it.
-
-## How is it organized?
+Blindly copying code snippets only gets you so far. Understanding the *concepts* allows you to bend the tool to your will. We explain the design philosophy behind our decisions so you can work *with* the framework, not against it.
 
 *   **[Scene Management](scene.md):** Everything about the `Molvis` instance, resizing, and lifecycle.
 *   **[Data & Drawing](data.md):** How we handle molecular data, frames, and the rendering pipeline.
