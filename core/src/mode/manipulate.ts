@@ -4,37 +4,22 @@ import {
     AbstractMesh,
 } from "@babylonjs/core";
 import { Frame, Block } from "molrs-wasm";
-import type { Molvis } from "@molvis/core";
+import { type Molvis } from "@molvis/core";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
 import { ContextMenuController } from "../core/context_menu_controller";
-import type { HitResult, MenuItem } from "./types";
-import { DrawAtomCommand, DrawBondCommand } from "../commands/draw";
+import { type HitResult, type MenuItem } from "./types";
 import { syncSceneToFrame } from "../core/scene_sync";
 import { CommonMenuItems } from "./menu_items";
+import "../shaders/impostor";
 
 /**
  * =============================
  * Manipulate Mode
  * =============================
- * 
- * This mode allows users to modify molecular geometry without changing connectivity.
- * 
- * Mouse Interactions:
- *  - Left click on atom/bond: Select and highlight
- *  - Left drag on atom: Move atom in 3D along screen-aligned plane
- *  - Left drag on bond: Move both connected atoms proportionally
- *  - Escape: Clear selection
- * 
- * The mode reuses the existing picking utilities from BaseMode.
  */
 
-
-
-/**
- * Context menu controller for Manipulate mode.
- */
 class ManipulateModeContextMenu extends ContextMenuController {
     constructor(
         app: Molvis,
@@ -83,7 +68,6 @@ class ManipulateModeContextMenu extends ContextMenuController {
                 type: "button",
                 title: "Reset Positions",
                 action: () => {
-                    // TODO: Implement position reset
                     this.app.events.emit('info-text-change', "Reset not implemented yet");
                 }
             }
@@ -92,27 +76,21 @@ class ManipulateModeContextMenu extends ContextMenuController {
     }
 }
 
+
 /**
  * ManipulateMode - for moving atoms and adjusting geometry
  */
 class ManipulateMode extends BaseMode {
-    // Selection state managed by SelectionManager
-
-
     // Drag state
     private isDragging = false;
     private dragStartPosition: Vector3 | null = null;
-    private draggedAtom: AbstractMesh | null = null;
+    private draggedAtomId: number = -1;
 
     // Frame conversion state
     private originalFrameData: {
         atomBlock: Block;
         bondBlock?: Block;
-        atomMeshId: number;
-        bondMeshId?: number;
     } | null = null;
-    private convertedToMeshes = false;
-
 
     constructor(app: Molvis) {
         super(ModeType.Manipulate, app);
@@ -120,345 +98,203 @@ class ManipulateMode extends BaseMode {
 
     public override start(): void {
         super.start();
-        // Clear global selection
         this.app.world.selectionManager.apply({ type: 'clear' });
-
-        // Convert any frame-based entities found in SceneIndex
-        // Topology is automatically managed by SceneIndex during conversion (unregister Frame -> register Mesh)
-        // Convert SceneIndex to Meshes (if any)
         this.convertFromSceneIndex().catch(err => logger.error("[ManipulateMode] Conversion failed", err));
     }
 
     /**
-     * Convert Frame entities from SceneIndex to editable meshes.
-     * Replaces thin instances with individual meshes for manipulation.
+     * Convert Frame entities from SceneIndex to editable ImpostorPool instances.
      */
     private async convertFromSceneIndex(): Promise<void> {
-        const toDispose: number[] = [];
-        const atomBlocks: Block[] = [];
-        const bondBlocks: Block[] = [];
-
-        // 1. Identify Frame entities
-        // Iterate over SceneIndex entries
-        for (const [uniqueId, entry] of this.world.sceneIndex.allEntries) {
-            if (entry.kind === 'frame-atom') {
-                atomBlocks.push(entry.atomBlock);
-                toDispose.push(uniqueId);
-
-                // Track for discard: (Simplified: assumes 1 frame for now, or last one wins)
-                this.originalFrameData = {
-                    atomBlock: entry.atomBlock,
-                    bondBlock: undefined, // Will fill if bond found
-                    atomMeshId: uniqueId,
-                    bondMeshId: undefined
-                };
-            } else if (entry.kind === 'frame-bond') {
-                bondBlocks.push(entry.bondBlock);
-                toDispose.push(uniqueId);
-
-                if (this.originalFrameData) {
-                    this.originalFrameData.bondBlock = entry.bondBlock;
-                    this.originalFrameData.bondMeshId = uniqueId;
-                }
-            }
-        }
-
-        if (atomBlocks.length === 0) {
-            // Starting in Mesh Mode (hand-drawn only)
-            this.originalFrameData = null;
+        // Check if we have frame data in MetaRegistry
+        const atomBlock = this.world.sceneIndex.metaRegistry.atoms.frameBlock;
+        if (!atomBlock) {
             return;
         }
 
-        // 2. Unregister ALL Frame entities/topology FIRST
-        // This ensures clean slate and prevents "Delete after Add" topology bugs
-        toDispose.forEach(uid => {
-            const mesh = this.scene.getMeshByUniqueId(uid);
-            this.world.sceneIndex.unregister(uid);
-            if (mesh) mesh.dispose();
-        });
-
-        // 3. Convert Atoms (Populates Topology)
-        for (const atomBlock of atomBlocks) {
-            const count = atomBlock.nrows();
-            const xCoords = atomBlock.getColumnF32('x')!;
-            const yCoords = atomBlock.getColumnF32('y')!;
-            const zCoords = atomBlock.getColumnF32('z')!;
-            const elements = atomBlock.getColumnStrings('element')!;
-
-            for (let i = 0; i < count; i++) {
-                const position = new Vector3(xCoords[i], yCoords[i], zCoords[i]);
-                const element = elements[i];
-
-
-
-                // Create command using explicit Semantic ID (index i)
-                const cmd = new DrawAtomCommand(
-                    this.app,
-                    position,
-                    {
-                        element,
-                        atomId: i // Preserving Semantic ID 0..N
-                    },
-                    this.scene
-                );
-                cmd.do();
-            }
-        }
-
-        // 4. Convert Bonds (Populates Topology)
-        for (const bondBlock of bondBlocks) {
-            const count = bondBlock.nrows();
-            const iAtoms = bondBlock.getColumnU32('i')!;
-            const jAtoms = bondBlock.getColumnU32('j')!;
-            const orders = bondBlock.getColumnU8('order');
-
-            // We need coordinates for the bond endpoints.
-            // Since we just created Atom meshes for these indices (0..N),
-            // we can look them up by atomId?
-            // Expensive to search?
-            // SceneIndex has the newly registered atoms.
-            // But we can also use the coordinates from the atomBlock corresponding to this bondBlock?
-            // The bond entry in SceneIndex has `atomBlock` reference!
-
-            // Let's find the corresponding atomBlock for coordinates.
-            // We iterate bondBlocks. We need the atomBlock.
-            // We can re-fetch it from the sceneIndex entry if we had the ID.
-            // Or we check our `atomBlocks` array.
-            // Typically 1 atomBlock per 1 bondBlock.
-
-            // For now, assume 1-to-1 mapping or single frame. Use the first atomBlock?
-            // Robust way: Use the coordinates of the NEWLY CREATED MESHES.
-            // The `reconstruct` phase will fix topology. But we need to create the meshes first.
-            // To create meshes we need positions.
-
-            // Let's use `this.findAtomMeshByIndex` helper which searches by `atomId`.
-
-            for (let b = 0; b < count; b++) {
-                // Verify atoms exist in SceneIndex (created in step 3)
-                const atomIMesh = this.findAtomMeshByIndex(iAtoms[b]);
-                const atomJMesh = this.findAtomMeshByIndex(jAtoms[b]);
-
-                if (!atomIMesh || !atomJMesh) {
-                    logger.warn(`[ManipulateMode] Skipping Bond ${b}: Atoms ${iAtoms[b]} or ${jAtoms[b]} missing.`);
-                    continue;
-                }
-
-                const cmd = new DrawBondCommand(
-                    this.app,
-                    atomIMesh.position,
-                    atomJMesh.position,
-                    {
-                        order: orders ? orders[b] : 1,
-                        bondId: b, // Preserving Semantic ID
-                        atomId1: iAtoms[b],
-                        atomId2: jAtoms[b]
-                    },
-                    this.scene
-                );
-                cmd.do();
-            }
-        }
-
-        this.convertedToMeshes = true;
-        this.world.sceneIndex.markAllUnsaved();
+        // Store original blocks for Discard
+        this.originalFrameData = {
+            atomBlock: atomBlock,
+            bondBlock: this.world.sceneIndex.metaRegistry.bonds.frameBlock || undefined
+        };
     }
 
-    private findAtomMeshByIndex(atomId: number): AbstractMesh | undefined {
-        // Find mesh in SceneIndex with type='atom' and atomId=atomId
-        // We can scan sceneIndex.allEntries now!
-        for (const [uid, entry] of this.world.sceneIndex.allEntries) {
-            if (entry.kind === 'atom' && entry.meta.atomId === atomId) {
-                return this.scene.getMeshByUniqueId(uid) || undefined;
-            }
-        }
-        return undefined;
-    }
 
     protected createContextMenuController(): ContextMenuController {
         return new ManipulateModeContextMenu(this.app, this);
     }
 
-    /**
-     * Clear current selection and hide highlight
-     */
     public clearSelection(): void {
-
         this.app.world.selectionManager.apply({ type: 'clear' });
         this.app.events.emit('info-text-change', "");
     }
 
-    /**
-     * Select an atom and show highlight
-     */
-    private selectAtom(atom: AbstractMesh): void {
+    private selectAtom(mesh: AbstractMesh, thinIndex: number): void {
         this.clearSelection();
-
-
-        // Use SelectionManager
-        const key = String(atom.uniqueId); // Plain mesh selection
+        const key = `${mesh.uniqueId}:${thinIndex}`;
         this.app.world.selectionManager.apply({ type: 'replace', atoms: [key] });
 
-        // Update info panel
-        const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
+        const meta = this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex);
         const element = meta && meta.type === 'atom' ? meta.element : "?";
-        const pos = atom.position;
+        const pos = meta && meta.type === 'atom' ? meta.position : { x: 0, y: 0, z: 0 };
         this.app.events.emit('info-text-change',
             `Selected: ${element} at (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`
         );
     }
 
-    /**
-     * Select a bond
-     */
-    private selectBond(bond: AbstractMesh): void {
+    private selectBond(mesh: AbstractMesh, thinIndex: number): void {
         this.clearSelection();
-
-        // Use SelectionManager
-        const key = String(bond.uniqueId);
+        const key = `${mesh.uniqueId}:${thinIndex}`;
         this.app.world.selectionManager.apply({ type: 'replace', bonds: [key] });
 
-        const meta = this.world.sceneIndex.getMeta(bond.uniqueId);
+        const meta = this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex);
         const order = meta && meta.type === 'bond' ? meta.order : 1;
         this.app.events.emit('info-text-change', `Selected bond (order: ${order})`);
     }
 
     /**
-     * Move an atom to a new position and update connected bonds
+     * Move an atom to a new position by updating its pool buffers and connected bonds.
      */
-    private moveAtom(atom: AbstractMesh, newPosition: Vector3): void {
-        const oldPosition = atom.position.clone();
-        atom.position = newPosition;
+    private moveAtom(atomId: number, newPosition: Vector3): void {
+        const atomState = this.world.sceneIndex.meshRegistry.getAtomState();
+        if (!atomState) return;
+        const meshId = atomState.mesh.uniqueId;
 
-        // Update connected bonds
-        this.updateConnectedBonds(atom, oldPosition, newPosition);
+        const style = this.app.styleManager.getAtomStyle(
+            this.findAtomMeta(atomId)?.element ?? 'C'
+        );
+        const radius = style.radius * 0.6;
+        const scale = radius * 2;
+
+        // Update atom buffer: matrix + instanceData
+        const matrix = new Float32Array(16);
+        matrix[0] = scale; matrix[5] = scale; matrix[10] = scale; matrix[15] = 1;
+        matrix[12] = newPosition.x; matrix[13] = newPosition.y; matrix[14] = newPosition.z;
+
+        const updates = new Map<string, Float32Array>();
+        updates.set("matrix", matrix);
+        updates.set("instanceData", new Float32Array([
+            newPosition.x, newPosition.y, newPosition.z, radius
+        ]));
+
+        // Use SceneIndex to update BOTH metadata and pool
+        this.world.sceneIndex.updateAtom(meshId, atomId, {
+            position: { x: newPosition.x, y: newPosition.y, z: newPosition.z }
+        }, updates);
+
+        // Update connected bonds via topology
+        this.updateConnectedBonds(atomId, newPosition);
+
         this.world.sceneIndex.markAllUnsaved();
     }
 
     /**
-     * Update bond meshes connected to a moved atom
+     * Update bond buffers connected to a moved atom.
      */
-    /**
-     * Update bond meshes connected to a moved atom
-     */
-    private updateConnectedBonds(
-        atom: AbstractMesh,
-        _oldPosition: Vector3,
-        _newPosition: Vector3
-    ): void {
-        const meta = this.world.sceneIndex.getMeta(atom.uniqueId);
-        const atomId = meta && meta.type === 'atom' ? meta.atomId : -1;
-        if (atomId === -1) {
-            logger.warn('[ManipulateMode] updateConnectedBonds: moved atom has invalid ID');
-            return;
-        }
+    private updateConnectedBonds(atomId: number, newPosition: Vector3): void {
+        const bondState = this.world.sceneIndex.meshRegistry.getBondState();
+        if (!bondState) return;
+        const meshId = bondState.mesh.uniqueId;
 
-        const bondIds = this.world.topology.incident(atomId);
-
+        const bondIds = this.world.sceneIndex.topology.incident(atomId);
 
         for (const bondId of bondIds) {
-            const bondInfo = this.world.topology.endpoints(bondId);
-            if (!bondInfo) {
-                logger.warn(`[ManipulateMode] No topology info for bond ${bondId}`);
-                continue;
+            const endpoints = this.world.sceneIndex.topology.endpoints(bondId);
+            if (!endpoints) continue;
+
+            // Resolve endpoint positions via MetaRegistry
+            const atom1 = endpoints[0];
+            const atom2 = endpoints[1];
+
+            // Should be one of them is `atomId`.
+
+            const meta1 = atom1 === atomId ? { position: newPosition } : this.findAtomMeta(atom1);
+            const meta2 = atom2 === atomId ? { position: newPosition } : this.findAtomMeta(atom2);
+
+            if (!meta1 || !meta2) continue;
+
+            const p1 = new Vector3(meta1.position.x, meta1.position.y, meta1.position.z);
+            const p2 = new Vector3(meta2.position.x, meta2.position.y, meta2.position.z);
+
+            // Compute new bond geometry
+            const center = p1.add(p2).scaleInPlace(0.5);
+            const dir = p2.subtract(p1);
+            const distance = dir.length();
+            if (distance > 1e-8) {
+                dir.scaleInPlace(1 / distance);
+            } else {
+                dir.set(0, 1, 0);
             }
 
-            const otherAtomId = bondInfo[0] === atomId ? bondInfo[1] : bondInfo[0];
-            const otherAtomMesh = this.scene.meshes.find(m => {
-                const mMeta = this.world.sceneIndex.getMeta(m.uniqueId);
-                return mMeta?.type === 'atom' && mMeta.atomId === otherAtomId;
-            });
+            const bondMeta = this.findBondMeta(bondId);
+            const bondRadius = bondMeta ? this.app.styleManager.getBondStyle(bondMeta.order).radius : 0.1;
+            const bondScale = distance + bondRadius * 2;
 
-            if (!otherAtomMesh) {
-                logger.warn(`[ManipulateMode] Could not find mesh for neighbor atom ${otherAtomId}`);
-                continue;
-            }
+            const matrix = new Float32Array(16);
+            matrix[0] = bondScale; matrix[5] = bondScale; matrix[10] = bondScale; matrix[15] = 1;
+            matrix[12] = center.x; matrix[13] = center.y; matrix[14] = center.z;
 
-            // Find existing bond mesh to update (dispose and recreate)
-            const bondMesh = this.scene.meshes.find(m => {
-                const bMeta = this.world.sceneIndex.getMeta(m.uniqueId);
-                return bMeta?.type === 'bond' && bMeta.bondId === bondId;
-            });
+            const updates = new Map<string, Float32Array>();
+            updates.set("matrix", matrix);
+            updates.set("instanceData0", new Float32Array([center.x, center.y, center.z, bondRadius]));
+            updates.set("instanceData1", new Float32Array([dir.x, dir.y, dir.z, distance]));
 
-            if (bondMesh) {
-
-                const bondMeta = this.world.sceneIndex.getMeta(bondMesh.uniqueId);
-                const order = bondMeta?.type === 'bond' ? bondMeta.order : 1;
-
-                // Dispose old mesh
-                this.world.sceneIndex.unregister(bondMesh.uniqueId);
-                bondMesh.dispose();
-
-                // Create new mesh
-                const cmd = new DrawBondCommand(
-                    this.app,
-                    atom.position,
-                    otherAtomMesh.position,
-                    {
-                        order,
-                        bondId: bondId,
-                        atomId1: atomId,
-                        atomId2: otherAtomId
-                    },
-                    this.scene
-                );
-                const newMesh = cmd.do();
-
-                // Register new mesh with correct ID
-                this.world.sceneIndex.registerBond({
-                    mesh: newMesh,
-                    meta: {
-                        bondId: bondId,
-                        atomId1: atomId,
-                        atomId2: otherAtomId,
-                        order,
-                        start: { x: atom.position.x, y: atom.position.y, z: atom.position.z },
-                        end: { x: otherAtomMesh.position.x, y: otherAtomMesh.position.y, z: otherAtomMesh.position.z }
-                    }
-                });
-            }
+            // Update bond using SceneIndex
+            this.world.sceneIndex.updateBond(meshId, bondId, {
+                start: { x: p1.x, y: p1.y, z: p1.z },
+                end: { x: p2.x, y: p2.y, z: p2.z }
+            }, updates);
         }
+    }
+
+    private findAtomMeta(atomId: number) {
+        return this.world.sceneIndex.metaRegistry.atoms.getMeta(atomId);
+    }
+
+    private findBondMeta(bondId: number) {
+        return this.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
     }
 
     // --------------------------------
     // Pointer Event Handlers
     // --------------------------------
 
-    override _on_pointer_down(pointerInfo: PointerInfo): void {
+    override async _on_pointer_down(pointerInfo: PointerInfo): Promise<void> {
         super._on_pointer_down(pointerInfo);
 
-        if (pointerInfo.event.button !== 0) return; // Only handle left button
+        if (pointerInfo.event.button !== 0) return;
 
-        // Check for atom hit
-        const atomMesh = this.pick_mesh("atom");
-        if (atomMesh) {
-            this.selectAtom(atomMesh);
-            this.draggedAtom = atomMesh;
-            this.dragStartPosition = atomMesh.position.clone();
-            this.world.camera.detachControl(); // Lock camera during drag
+        const hit = await this.pickHit();
+        if (hit && hit.type === 'atom' && hit.mesh) {
+            const thinIndex = hit.thinInstanceIndex ?? -1;
+            this.selectAtom(hit.mesh, thinIndex);
+
+            // Resolve atom ID for dragging
+            const meta = this.world.sceneIndex.getMeta(hit.mesh.uniqueId, thinIndex);
+            if (meta && meta.type === 'atom') {
+                this.draggedAtomId = meta.atomId;
+                this.dragStartPosition = new Vector3(meta.position.x, meta.position.y, meta.position.z);
+                this.world.camera.detachControl();
+            }
             return;
         }
 
-        // Check for bond hit
-        const bondMesh = this.pick_mesh("bond");
-        if (bondMesh) {
-            this.selectBond(bondMesh);
+        if (hit && hit.type === 'bond' && hit.mesh) {
+            this.selectBond(hit.mesh, hit.thinInstanceIndex ?? -1);
             return;
         }
 
-        // Click on empty space - clear selection
         this.clearSelection();
     }
 
-    override _on_pointer_move(pointerInfo: PointerInfo): void {
-        // Only handle dragging if we have a dragged atom
-        if (!this.draggedAtom || !this.dragStartPosition) {
-            super._on_pointer_move(pointerInfo);
+    override async _on_pointer_move(pointerInfo: PointerInfo): Promise<void> {
+        if (this.draggedAtomId === -1 || !this.dragStartPosition) {
+            await super._on_pointer_move(pointerInfo);
             return;
         }
 
         this.isDragging = true;
 
-        // Calculate new position on screen-aligned plane through the atom's original position
         const newPosition = pointOnScreenAlignedPlane(
             this.world.scene,
             this.world.camera,
@@ -467,42 +303,33 @@ class ManipulateMode extends BaseMode {
             this.dragStartPosition
         );
 
-        // Move the atom
-        this.moveAtom(this.draggedAtom, newPosition);
+        this.moveAtom(this.draggedAtomId, newPosition);
 
-        // Update info panel with new position
-        const meta = this.world.sceneIndex.getMeta(this.draggedAtom.uniqueId);
-        const element = meta && meta.type === 'atom' ? meta.element : "?";
+        const meta = this.findAtomMeta(this.draggedAtomId);
+        const element = meta?.element ?? "?";
         this.app.events.emit('info-text-change',
             `Moving ${element}: (${newPosition.x.toFixed(2)}, ${newPosition.y.toFixed(2)}, ${newPosition.z.toFixed(2)})`
         );
     }
 
-    override _on_pointer_up(pointerInfo: PointerInfo): void {
-        super._on_pointer_up(pointerInfo);
+    override async _on_pointer_up(pointerInfo: PointerInfo): Promise<void> {
+        await super._on_pointer_up(pointerInfo);
 
         if (pointerInfo.event.button !== 0) return;
 
-        // End drag operation
-        if (this.draggedAtom && this.isDragging) {
-            // Keep the atom at its new position
-            const meta = this.world.sceneIndex.getMeta(this.draggedAtom.uniqueId);
-            const element = meta && meta.type === 'atom' ? meta.element : "?";
-            const pos = this.draggedAtom.position;
+        if (this.draggedAtomId !== -1 && this.isDragging) {
+            const meta = this.findAtomMeta(this.draggedAtomId);
+            const element = meta?.element ?? "?";
+            const pos = meta?.position ?? { x: 0, y: 0, z: 0 };
             this.app.events.emit('info-text-change',
                 `Moved ${element} to (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`
             );
-
-            // Clear selection (highlight) after drag
             this.clearSelection();
         }
 
-        // Re-enable camera controls
         this.world.camera.attachControl(this.world.scene.getEngine().getRenderingCanvas(), false);
-
-        // Reset drag state
         this.isDragging = false;
-        this.draggedAtom = null;
+        this.draggedAtomId = -1;
         this.dragStartPosition = null;
     }
 
@@ -510,57 +337,35 @@ class ManipulateMode extends BaseMode {
     // Frame Conversion Methods
     // --------------------------------
 
-    /**
-     * Check if there are unsaved changes
-     */
     public hasUnsavedChanges(): boolean {
-        return this.convertedToMeshes && this.originalFrameData !== null;
+        // Check if there are edits
+        return this.world.sceneIndex.metaRegistry.atoms.edits.size > 0;
     }
 
-
-
-    /**
-     * Save changes: convert meshes back to frame
-     */
     public async saveChanges(): Promise<void> {
-        // Allow saving even if originalFrameData is missing (Mesh mode)
-        if (!this.convertedToMeshes && !this.originalFrameData) {
-            // Check if we have any atoms
-            const hasAtoms = this.scene.meshes.some(m => {
-                const meta = this.world.sceneIndex.getMeta(m.uniqueId);
-                return meta?.type === 'atom';
-            });
-            if (!hasAtoms) return;
-        }
+        if (!this.hasUnsavedChanges()) return;
 
-        // Use syncSceneToFrame to update global system frame
         const frame = this.app.system.frame;
         if (!frame) {
             logger.warn('[ManipulateMode] No system frame to save to');
             return;
         }
 
-        syncSceneToFrame(this.scene, this.world.sceneIndex, frame);
+        // Sync changes back to the frame
+        syncSceneToFrame(this.world.sceneIndex, frame);
 
-        // Dispose individual meshes
-        this.disposeAllAtomAndBondMeshes();
+        // We don't dispose meshes anymore because they are shared.
+        // But we might want to refresh the frame load.
 
-        // Clear scene before redrawing
-        const { ClearSceneCommand } = await import('../commands/clear');
-        const clearCmd = new ClearSceneCommand(this.app);
-        clearCmd.do();
-
-        // Redraw thin instances from the updated frame
+        // Redraw to flush everything clean (and clear edits)
         const { DrawFrameCommand } = await import('../commands/draw');
-        const cmd = new DrawFrameCommand(this.app, {
-            frame: frame
-        });
+        const cmd = new DrawFrameCommand(this.app, { frame });
         cmd.do();
 
-        // Cleanup
+        // Clear edits in MetaRegistry (done by DrawFrameCommand -> registerFrame)
+        // registerFrame creates new AtomSource which clears edits.
+
         this.originalFrameData = null;
-        this.convertedToMeshes = false;
-        this.world.topology.clear();
         logger.info('[ManipulateMode] Saved changes using syncSceneToFrame');
     }
 
@@ -568,16 +373,9 @@ class ManipulateMode extends BaseMode {
         this.saveChanges().catch(err => logger.error("[ManipulateMode] Save failed", err));
     }
 
-    /**
-     * Discard changes: restore original frame
-     */
     public async discardChanges(): Promise<void> {
-        if (!this.convertedToMeshes || !this.originalFrameData) {
-            return;
-        }
-
-        // Dispose individual meshes
-        this.disposeAllAtomAndBondMeshes();
+        // Just reload original frame if we have it kept, or current frame?
+        if (!this.originalFrameData) return;
 
         const frame = new Frame();
         frame.insertBlock('atoms', this.originalFrameData.atomBlock);
@@ -585,59 +383,20 @@ class ManipulateMode extends BaseMode {
             frame.insertBlock('bonds', this.originalFrameData.bondBlock);
         }
 
-        // Clear scene before drawing
-        const { ClearSceneCommand } = await import('../commands/clear');
-        const clearCmd = new ClearSceneCommand(this.app);
-        clearCmd.do();
-
-        // Redraw the original frame
+        // Just redraw original frame
         const { DrawFrameCommand } = await import('../commands/draw');
         const cmd = new DrawFrameCommand(this.app, { frame });
         cmd.do();
 
-        // Cleanup
         this.originalFrameData = null;
-        this.convertedToMeshes = false;
-        this.world.topology.clear();
-        console.log('[ManipulateMode] Discarded changes and restored original frame');
-    }
-
-
-
-
-
-    /**
-     * Helper: Dispose all atom and bond meshes
-     */
-    private disposeAllAtomAndBondMeshes(): void {
-        const meshesToDispose: AbstractMesh[] = [];
-
-        this.scene.meshes.forEach(mesh => {
-            const meta = this.world.sceneIndex.getMeta(mesh.uniqueId);
-            if (meta?.type === 'atom' || meta?.type === 'bond') {
-                meshesToDispose.push(mesh);
-            }
-        });
-
-        meshesToDispose.forEach(mesh => {
-            this.world.sceneIndex.unregister(mesh.uniqueId);
-            mesh.dispose();
-        });
-
-        this.world.topology.clear();
+        logger.info('[ManipulateMode] Discarded changes and restored original frame');
     }
 
     protected override _on_press_escape(): void {
         this.clearSelection();
     }
 
-    // --------------------------------
-    // Cleanup
-    // --------------------------------
-
     public override finish(): void {
-        // Do not auto-discard. Preserving meshes allows seamless mode switching.
-        // User must explicitly Discard or Save if they want to revert or optimize.
         this.clearSelection();
         super.finish();
     }

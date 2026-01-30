@@ -34,14 +34,14 @@ export const DEFAULT_SETTING: MolvisSetting = {
     cameraPanSpeed: 1000,
     cameraRotateSpeed: 1000,
     cameraZoomSpeed: 50,
-    cameraInertia: 0.9,
+    cameraInertia: 0.1,
     cameraMinRadius: 1,
     cameraMaxRadius: null,
     lighting: {
         lightDir: [0.5, 0.5, -1.0],
         ambient: 0.4,
-        diffuse: 0.8,
-        specular: 0.01,
+        diffuse: 0.4,
+        specular: 0.0,
         specularPower: 4
     }
 };

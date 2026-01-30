@@ -18,7 +18,7 @@ export class ClearSceneCommand extends Command<void> {
         const meshesToDispose: BABYLON.AbstractMesh[] = [];
         scene.meshes.forEach((mesh) => {
             // Check if mesh is registered (atom, bond, or box meshes have names)
-            if (mesh.name === "atom_base" || mesh.name === "bond_base" || mesh.name === "sim_box") {
+            if (mesh.name === "atom_base" || mesh.name === "bond_base" || mesh.name === "edit_atom_base" || mesh.name === "edit_bond_base" || mesh.name === "manip_atom_base" || mesh.name === "manip_bond_base" || mesh.name === "sim_box") {
                 meshesToDispose.push(mesh);
             }
         });

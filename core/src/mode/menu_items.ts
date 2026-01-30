@@ -46,7 +46,7 @@ export class CommonMenuItems {
                 }
 
                 const format = inferFormatFromFilename(filename, "pdb");
-                syncSceneToFrame(app.world.scene, app.world.sceneIndex, frame);
+                syncSceneToFrame(app.world.sceneIndex, frame);
 
                 const payload = writeFrame(frame, { format, filename });
                 const blob = new Blob([payload.content], { type: payload.mime });

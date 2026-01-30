@@ -222,67 +222,39 @@ abstract class BaseMode {
    * Pick and create a HitResult from the current pointer position.
    * Returns hit information about what's under the cursor.
    */
-  protected pickHit(): HitResult | null {
-    const scene = this.world.scene;
-    const pickResult = scene.pick(
-      scene.pointerX,
-      scene.pointerY,
-      undefined,
-      false,
-      this.world.camera
-    );
-
-    if (!pickResult.hit || !pickResult.pickedMesh) {
-      return { type: "empty" };
-    }
-
-    const mesh = pickResult.pickedMesh;
-    const thinIndex = pickResult.thinInstanceIndex ?? -1;
-
-    const meta = thinIndex >= 0
-      ? this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
-      : this.world.sceneIndex.getMeta(mesh.uniqueId);
-
-    if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
-      return { type: "empty" };
-    }
-
-    return {
-      type: meta.type,
-      mesh,
-      thinInstanceIndex: thinIndex,
-    };
+  protected async pickHit(): Promise<HitResult | null> {
+    return this.world.picker.pick(this.scene.pointerX, this.scene.pointerY);
   }
 
-  _on_pointer_down(pointerInfo: PointerInfo): void {
+  async _on_pointer_down(pointerInfo: PointerInfo): Promise<void> {
     this._pointer_down_xy = this.get_pointer_xy();
 
     if (pointerInfo.event.button === 0) {
-      this._on_left_down(pointerInfo);
+      await this._on_left_down(pointerInfo);
     } else if (pointerInfo.event.button === 2) {
-      this._on_right_down(pointerInfo);
+      await this._on_right_down(pointerInfo);
     }
   }
 
-  _on_pointer_up(pointerInfo: PointerInfo): void {
+  async _on_pointer_up(pointerInfo: PointerInfo): Promise<void> {
     this._pointer_up_xy = this.get_pointer_xy();
 
     if (pointerInfo.event.button === 0) {
-      this._on_left_up(pointerInfo);
+      await this._on_left_up(pointerInfo);
     } else if (pointerInfo.event.button === 2) {
-      this._on_right_up(pointerInfo);
+      await this._on_right_up(pointerInfo);
     }
   }
 
-  protected _on_left_down(_pointerInfo: PointerInfo): void {
+  protected async _on_left_down(_pointerInfo: PointerInfo): Promise<void> {
     // Override in subclasses
   }
 
-  protected _on_left_up(_pointerInfo: PointerInfo): void {
+  protected async _on_left_up(_pointerInfo: PointerInfo): Promise<void> {
     // Override in subclasses
   }
 
-  protected _on_right_down(_pointerInfo: PointerInfo): void {
+  protected async _on_right_down(_pointerInfo: PointerInfo): Promise<void> {
     // Override in subclasses
   }
 
@@ -295,9 +267,9 @@ abstract class BaseMode {
    * 3. If menu consumes event (shows menu), we're done
    * 4. Otherwise, delegate to mode-specific logic via onRightClickNotConsumed()
    */
-  protected _on_right_up(pointerInfo: PointerInfo): void {
+  protected async _on_right_up(pointerInfo: PointerInfo): Promise<void> {
     // Pick what's under the cursor
-    const hit = this.pickHit();
+    const hit = await this.pickHit();
 
     // Let context menu controller handle it first
     const consumed = this.contextMenuController.handleRightClick(
@@ -312,20 +284,11 @@ abstract class BaseMode {
     }
   }
 
-  _on_pointer_move(_pointerInfo: PointerInfo): void {
-    const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, undefined, false, this.world.camera);
-    const mesh = pickResult.hit ? pickResult.pickedMesh : null;
-    if (mesh) {
-      const thinIndex = pickResult.thinInstanceIndex ?? -1;
-      const meta = thinIndex >= 0
-        ? this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
-        : this.world.sceneIndex.getMeta(mesh.uniqueId);
+  async _on_pointer_move(_pointerInfo: PointerInfo): Promise<void> {
+    const hit = await this.pickHit();
 
-      if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
-        this.app.events.emit('info-text-change', mesh.name);
-        return;
-      }
-
+    if (hit && (hit.type === 'atom' || hit.type === 'bond') && hit.metadata) {
+      const meta = hit.metadata;
       if (meta.type === 'atom') {
         const infoText = `[Atom] element: ${meta.element} | xyz: ${meta.position.x.toFixed(4)}, ${meta.position.y.toFixed(4)}, ${meta.position.z.toFixed(4)} | `;
         this.app.events.emit('info-text-change', infoText);
@@ -337,8 +300,8 @@ abstract class BaseMode {
           new Vector3(end.x, end.y, end.z)
         );
         const infoText = `[Bond] ${meta.atomId1}-${meta.atomId2} | ` +
-          `start: (${start.x.toFixed(2)}, ${start.y.toFixed(2)}, ${start.z.toFixed(2)}) | ` +
-          `end: (${end.x.toFixed(2)}, ${end.y.toFixed(2)}, ${end.z.toFixed(2)}) | ` +
+          // `start: (${start.x.toFixed(2)}, ${start.y.toFixed(2)}, ${start.z.toFixed(2)}) | ` +
+          // `end: (${end.x.toFixed(2)}, ${end.y.toFixed(2)}, ${end.z.toFixed(2)}) | ` +
           `length: ${length.toFixed(2)} Å` +
           (meta.order ? ` | order: ${meta.order}` : '');
         this.app.events.emit('info-text-change', infoText);
@@ -374,26 +337,12 @@ abstract class BaseMode {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);
   }
 
-  protected pick_mesh(type: "atom" | "bond"): AbstractMesh | null {
-    const scene = this.world.scene;
-
-    const pickResult = scene.pick(
-      scene.pointerX,
-      scene.pointerY,
-      (mesh: AbstractMesh) => {
-        const metaType = this.world.sceneIndex.getType(mesh.uniqueId);
-
-        if (type === 'atom') {
-          return metaType === 'atom';
-        } else if (type === 'bond') {
-          return metaType === 'bond';
-        }
-        return false;
-      },
-      false,
-      this.world.camera
-    );
-    return pickResult.hit ? pickResult.pickedMesh : null;
+  protected async pick_mesh(type: "atom" | "bond"): Promise<AbstractMesh | null> {
+    const hit = await this.pickHit();
+    if (hit && hit.type === type && hit.mesh) {
+      return hit.mesh;
+    }
+    return null;
   }
 }
 

@@ -54,3 +54,6 @@ export {
 	DrawBoxModifier,
 } from "./pipeline/rendering_modifiers";
 export { DataSourceModifier } from "./pipeline/data_source_modifier";
+
+// Register default commands
+import "./commands";

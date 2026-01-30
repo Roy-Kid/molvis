@@ -65,19 +65,12 @@ class SelectMode extends BaseMode {
    * - Left-click: Select entity (clear previous selection if no Ctrl)
    * - Ctrl+Left-click: Toggle entity in selection (incremental)
    */
-  override _on_pointer_pick(pointerInfo: PointerInfo): void {
+  override async _on_left_up(pointerInfo: PointerInfo): Promise<void> {
     const isCtrl = pointerInfo.event.ctrlKey;
 
-    const scenePick = this.scene.pick(
-      this.scene.pointerX,
-      this.scene.pointerY,
-      undefined,
-      false,
-      this.world.camera
-    );
+    const hit = await this.pickHit();
 
-    const mesh = scenePick.pickedMesh;
-    if (!mesh) {
+    if (!hit || (hit.type !== 'atom' && hit.type !== 'bond')) {
       // Empty click
       if (!isCtrl) {
         this.app.world.selectionManager.apply({ type: 'clear' });
@@ -85,20 +78,11 @@ class SelectMode extends BaseMode {
       return;
     }
 
-    const thinIndex = scenePick.thinInstanceIndex ?? -1;
+    const mesh = hit.mesh;
+    const thinIndex = hit.thinInstanceIndex ?? -1;
+    if (!mesh) return;
 
-    const meta = thinIndex >= 0
-      ? this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex)
-      : this.app.world.sceneIndex.getMeta(mesh.uniqueId);
-
-
-
-    if (!meta || (meta.type !== 'atom' && meta.type !== 'bond')) {
-      if (!isCtrl) {
-        this.app.world.selectionManager.apply({ type: 'clear' });
-      }
-      return;
-    }
+    const meta = hit.metadata;
 
     const key = makeSelectionKey(mesh.uniqueId, thinIndex >= 0 ? thinIndex : undefined);
 
@@ -117,9 +101,14 @@ class SelectMode extends BaseMode {
       }
     }
 
-
     this.app.world.selectionManager.apply(op);
   }
+
+  /**
+   * Selection happens on Up, but logic here is typically empty or handled by BaseMode
+   * if we want click behavior. BaseMode handles click -> pick -> _on_pointer_pick
+   */
+  override _on_pointer_pick(_pointerInfo: PointerInfo): void { }
 
   // TODO: Reimplement copy/paste with new selection system
   /*

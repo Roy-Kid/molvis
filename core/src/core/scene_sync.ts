@@ -1,107 +1,60 @@
-import type { Scene, Mesh } from "@babylonjs/core";
-import { Vector3 } from "@babylonjs/core";
 import { Frame, Block } from "molrs-wasm";
-import type { SceneIndex } from "./scene_index";
+import { SceneIndex } from "./scene_index";
 import { logger } from "../utils/logger";
 
 /**
  * Synchronize scene data (meshes and thin instances) back to Frame.
+ * Effectively dumps the current state of SceneIndex (MetaRegistry) into a new Frame structure.
  */
-export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Frame): void {
+export function syncSceneToFrame(sceneIndex: SceneIndex, frame: Frame): void {
     // Clear the frame
     frame.clear();
 
-    // Mapping from global semantic Atom ID -> New Frame Index (0..N)
-    const atomIdToFrameIndex = new Map<number, number>();
-
-    // Lists to populate the new Frame
     const atoms: Array<{ x: number; y: number; z: number; element: string }> = [];
     const bonds: Array<{ atomId1: number; atomId2: number; order: number }> = [];
 
-    // Helper to add atom and record mapping
-    const addAtom = (id: number, position: Vector3, element: string) => {
-        if (atomIdToFrameIndex.has(id)) {
-            logger.warn(`[syncSceneToFrame] Duplicate atom ID found: ${id}. Skipping.`);
-            return;
-        }
-        atomIdToFrameIndex.set(id, atoms.length);
-        atoms.push({ x: position.x, y: position.y, z: position.z, element });
-    };
+    // Mapping from global semantic Atom ID -> New Frame Index
+    // Ideally we preserve IDs if possible, but Frame implies contiguous 0..N packing.
+    // If our IDs are sparse (e.g. we deleted some), we must re-index.
+    // SceneIndex IDs might be sparse if we support deletion (which we do via removal from edits, 
+    // but Frame deletions are tricky).
+    // For now, let's just pack them.
+    const atomIdToFrameIndex = new Map<number, number>();
 
     // 1. Collect Atoms
-    for (const [uid, entry] of sceneIndex.allEntries) {
-        if (entry.kind === 'atom') {
-            const mesh = scene.getMeshByUniqueId(uid);
-            if (!mesh) {
-                logger.warn(`[syncSceneToFrame] Stale atom entry in SceneIndex: ${uid}`);
-                continue;
-            }
-            addAtom(entry.meta.atomId, mesh.position, entry.meta.element);
+    for (const atomId of sceneIndex.metaRegistry.atoms.getAllIds()) {
+        const meta = sceneIndex.metaRegistry.atoms.getMeta(atomId);
+        if (!meta) continue;
 
-        } else if (entry.kind === 'frame-atom') {
-            const mesh = scene.getMeshByUniqueId(uid) as Mesh;
-            if (!mesh || !mesh.hasThinInstances) continue;
-
-            const matrices = mesh.thinInstanceGetWorldMatrices();
-            const count = entry.atomBlock.nrows()!;
-            const elements = entry.atomBlock.getColumnStrings('element')!;
-
-            for (let i = 0; i < count; i++) {
-                const element = elements[i];
-                let position = new Vector3();
-
-                if (matrices && i < matrices.length) {
-                    const matrix = matrices[i];
-                    position = Vector3.TransformCoordinates(Vector3.Zero(), matrix);
-                } else {
-                    position.set(
-                        entry.atomBlock.getColumnF32('x')![i],
-                        entry.atomBlock.getColumnF32('y')![i],
-                        entry.atomBlock.getColumnF32('z')![i]
-                    );
-                }
-
-                addAtom(i, position, element);
-            }
-        }
+        atomIdToFrameIndex.set(atomId, atoms.length);
+        atoms.push({
+            x: meta.position.x,
+            y: meta.position.y,
+            z: meta.position.z,
+            element: meta.element
+        });
     }
 
     // 2. Collect Bonds
-    for (const [_, entry] of sceneIndex.allEntries) {
-        if (entry.kind === 'bond') {
-            const { atomId1, atomId2, order } = entry.meta;
+    for (const bondId of sceneIndex.metaRegistry.bonds.getAllIds()) {
+        const meta = sceneIndex.metaRegistry.bonds.getMeta(bondId);
+        if (!meta) continue;
 
-            const idx1 = atomIdToFrameIndex.get(atomId1);
-            const idx2 = atomIdToFrameIndex.get(atomId2);
+        const idx1 = atomIdToFrameIndex.get(meta.atomId1);
+        const idx2 = atomIdToFrameIndex.get(meta.atomId2);
 
-            if (idx1 !== undefined && idx2 !== undefined) {
-                bonds.push({ atomId1: idx1, atomId2: idx2, order });
-            } else {
-                logger.warn(`[syncSceneToFrame] Bond ${entry.meta.bondId} refers to unknown atoms ${atomId1}, ${atomId2}`);
-            }
-
-        } else if (entry.kind === 'frame-bond') {
-            const count = entry.bondBlock.nrows()!;
-            const iAtoms = entry.bondBlock.getColumnU32('i')!;
-            const jAtoms = entry.bondBlock.getColumnU32('j')!;
-            const orders = entry.bondBlock.getColumnU8('order');
-
-            for (let b = 0; b < count; b++) {
-                const atomId1 = iAtoms[b];
-                const atomId2 = jAtoms[b];
-                const order = orders ? orders[b] : 1;
-
-                const idx1 = atomIdToFrameIndex.get(atomId1);
-                const idx2 = atomIdToFrameIndex.get(atomId2);
-
-                if (idx1 !== undefined && idx2 !== undefined) {
-                    bonds.push({ atomId1: idx1, atomId2: idx2, order });
-                }
-            }
+        if (idx1 !== undefined && idx2 !== undefined) {
+            bonds.push({
+                atomId1: idx1,
+                atomId2: idx2,
+                order: meta.order
+            });
+        } else {
+            // Bond refers to deleted atoms?
         }
     }
 
-    // 3. Populate Frame using Blocks
+    // 3. Populate Frame
     const atomCount = atoms.length;
     if (atomCount > 0) {
         const atomBlock = new Block();
@@ -145,7 +98,18 @@ export function syncSceneToFrame(scene: Scene, sceneIndex: SceneIndex, frame: Fr
         frame.insertBlock('bonds', bondBlock);
     }
 
+    // Box
+    if (sceneIndex.metaRegistry.box) {
+        const b = sceneIndex.metaRegistry.box;
+        // Frame metadata 'box' is usually JSON string?
+        // See DrawFrameCommand.parseBoxMeta
+        const boxData = {
+            dimensions: b.dimensions,
+            origin: b.origin
+        };
+        frame.setMeta('box', JSON.stringify(boxData));
+    }
 
-    logger.info(`[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds using strict SceneIndex topology.`);
+    logger.info(`[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds.`);
     sceneIndex.markAllSaved();
 }

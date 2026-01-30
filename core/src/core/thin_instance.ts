@@ -1,8 +1,5 @@
 import { Vector3, type AbstractMesh, type Mesh } from "@babylonjs/core";
 import type { SceneIndex } from "./scene_index";
-import type { MolvisApp } from "./app";
-import type { EditMode } from "../mode/edit";
-import { logger } from "../utils/logger";
 
 /**
  * Extract 3D position from a transformation matrix buffer.
@@ -98,65 +95,6 @@ export function getBondEndpointsFromThinInstance(
         end,
         length: Vector3.Distance(start, end),
     };
-}
-
-
-/**
- * Convert a specific thin instance to an editable mesh.
- * This enables editing of atoms that were originally loaded from a Frame.
- * 
- * @param thinInstanceMesh The base mesh containing thin instances
- * @param instanceIndex The index of the specific thin instance to convert
- * @param app The MolvisApp instance
- * @returns The newly created mesh, or null if conversion failed
- */
-export function convertThinInstanceToMesh(
-    thinInstanceMesh: Mesh,
-    instanceIndex: number,
-    app: MolvisApp
-): Mesh | null {
-    const meta = app.world.sceneIndex.getMeta(thinInstanceMesh.uniqueId, instanceIndex);
-    if (!meta || meta.type !== 'atom') {
-        logger.error('[convertThinInstanceToMesh] Missing thin instance data');
-        return null;
-    }
-
-    if (instanceIndex < 0) {
-        logger.error(`[convertThinInstanceToMesh] Invalid instance index: ${instanceIndex}`);
-        return null;
-    }
-
-    const position = new Vector3(meta.position.x, meta.position.y, meta.position.z);
-    const element = meta.element;
-    const radius = app.styleManager.getAtomStyle(element).radius;
-
-    // Create new mesh using Artist (only available in Edit mode)
-    const mode = app.mode;
-    if (!mode || mode.type !== 'edit') {
-        logger.error('[convertThinInstanceToMesh] Can only convert thin instances in Edit mode');
-        return null;
-    }
-
-    const editMode = mode as unknown as EditMode;
-    const newMesh = editMode.artist?.drawAtom(position, {
-        element,
-        name: element,
-        radius
-    });
-
-    if (!newMesh) {
-        logger.error('[convertThinInstanceToMesh] Failed to create mesh via Artist');
-        return null;
-    }
-
-    // Note: We don't remove the thin instance here because Babylon.js doesn't support
-    // removing individual thin instances. Instead, we'll mark it as converted or
-    // handle it during the next frame redraw.
-    // For now, the thin instance will remain visible but the mesh will be on top.
-
-    newMesh.refreshBoundingInfo();
-
-    return newMesh;
 }
 
 /**

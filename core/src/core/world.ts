@@ -9,8 +9,10 @@ import { SceneIndex } from "./scene_index";
 import { GridGround } from "./grid";
 import { SelectionManager } from "./selection_manager";
 import { Highlighter } from "./highlighter";
+import { Picker } from "./picker";
 import { Topology } from "./system/topology";
 import { logger } from "../utils/logger";
+import { MolvisRenderer } from "./renderer";
 
 export class World {
   private _engine: Engine;
@@ -33,7 +35,9 @@ export class World {
   public sceneIndex: SceneIndex;
   public selectionManager: SelectionManager;
   public highlighter: Highlighter;
+  public picker: Picker;
   public topology: Topology;
+  public renderer: MolvisRenderer;
 
   constructor(canvas: HTMLCanvasElement, engine: Engine, app: MolvisApp) {
     this._engine = engine;
@@ -92,8 +96,13 @@ export class World {
     this.sceneIndex = new SceneIndex();
     this.selectionManager = new SelectionManager(this.sceneIndex);
     this.highlighter = new Highlighter(scene);
+    this.picker = new Picker(app, scene);
     // Alias topology to the one managed by SceneIndex
     this.topology = this.sceneIndex.topology;
+
+    // Initialize Unified Renderer
+    // This creates the base meshes and impostor pools
+    this.renderer = new MolvisRenderer(app, scene);
 
     // Wire up event: selection changes trigger highlighting
     this.selectionManager.on(state => this.highlighter.highlightSelection(state));

@@ -9,6 +9,7 @@ Effect.ShadersStore["sphereImpostorVertexShader"] = `
     // Instanced Attributes
     attribute vec4 instanceData; // x, y, z, radius
     attribute vec4 instanceColor;        // r, g, b, a
+    attribute vec4 instancePickingColor; // r, g, b, a (Encoded ID)
 
     // Uniforms
     uniform mat4 worldViewProjection;
@@ -18,6 +19,7 @@ Effect.ShadersStore["sphereImpostorVertexShader"] = `
     // Varyings
     varying vec2 vUV;
     varying vec4 vColor;
+    varying vec4 vPickingColor;
     varying vec3 vSphereCenter; // View space
     varying float vSphereRadius;
     varying vec3 vViewPosition; // View space position of the quad fragment
@@ -43,6 +45,7 @@ Effect.ShadersStore["sphereImpostorVertexShader"] = `
         
         vUV = uv;
         vColor = instanceColor;
+        vPickingColor = instancePickingColor;
         vSphereCenter = centerView;
         vSphereRadius = radius;
         vViewPosition = posView; 
@@ -57,6 +60,7 @@ precision highp float;
 
 // Uniforms
 uniform mat4 projection;
+uniform float uPickingEnabled; // 1.0 = Picking Mode
 
 // Lighting Uniforms (MUST be view-space, normalized)
 uniform vec3 lightDir;
@@ -68,6 +72,7 @@ uniform float lightSpecularPower;
 // Varyings
 varying vec2 vUV;
 varying vec4 vColor;
+varying vec4 vPickingColor;
 varying vec3 vSphereCenter; // View-space center
 varying float vSphereRadius;
 
@@ -88,6 +93,27 @@ void main() {
         vSphereCenter.z - z * vSphereRadius
     );
 
+    // Depth Correction
+    float surfaceZ = P.z;
+
+    float clipZ = projection[2][2] * surfaceZ + projection[3][2];
+    float clipW = projection[2][3] * surfaceZ + projection[3][3];
+    float ndcZ = clipZ / clipW;
+    float depth = (ndcZ + 1.0) * 0.5;
+
+    #ifdef GL_EXT_frag_depth
+    gl_FragDepthEXT = depth;
+    #else
+    gl_FragDepth = depth;
+    #endif
+
+    // Picking Mode Output
+    if (uPickingEnabled > 0.5) {
+        gl_FragColor = vPickingColor;
+        return;
+    }
+
+    // Normal Rendering
     // View-space normal consistent with P
     vec3 normal = normalize(P - vSphereCenter);
 
@@ -102,20 +128,6 @@ void main() {
 
     vec3 finalColor = vColor.rgb * (lightAmbient + diffuse * lightDiffuse) + vec3(1.0) * spec;
     gl_FragColor = vec4(finalColor, vColor.a);
-
-    // Depth Correction
-    float surfaceZ = P.z;
-
-    float clipZ = projection[2][2] * surfaceZ + projection[3][2];
-    float clipW = projection[2][3] * surfaceZ + projection[3][3];
-    float ndcZ = clipZ / clipW;
-    float depth = (ndcZ + 1.0) * 0.5;
-
-    #ifdef GL_EXT_frag_depth
-    gl_FragDepthEXT = depth;
-    #else
-    gl_FragDepth = depth;
-    #endif
 }
 `;
 
@@ -131,6 +143,7 @@ Effect.ShadersStore["bondImpostorVertexShader"] = `
     attribute vec4 instanceColor0; // r, g, b, a
     attribute vec4 instanceColor1; // r, g, b, a
     attribute vec4 instanceSplit;  // split offset (x)
+    attribute vec4 instancePickingColor; // r, g, b, a
 
     // Uniforms
     uniform mat4 view;
@@ -140,6 +153,7 @@ Effect.ShadersStore["bondImpostorVertexShader"] = `
     varying vec2 vUV;
     varying vec4 vColor0;
     varying vec4 vColor1;
+    varying vec4 vPickingColor;
     varying float vSplit;
     varying vec3 vCenterView;
     varying vec3 vDirView;
@@ -173,6 +187,7 @@ Effect.ShadersStore["bondImpostorVertexShader"] = `
         vUV = uv;
         vColor0 = instanceColor0;
         vColor1 = instanceColor1;
+        vPickingColor = instancePickingColor;
         vSplit = instanceSplit.x;
         vCenterView = centerView;
         vDirView = dirView;
@@ -191,6 +206,7 @@ precision highp float;
 varying vec2 vUV;
 varying vec4 vColor0;
 varying vec4 vColor1;
+varying vec4 vPickingColor;
 varying float vSplit;
 varying vec3 vCenterView;
 varying vec3 vDirView;
@@ -199,6 +215,7 @@ varying float vHalfLen;
 varying vec3 vPosView;
 
 uniform mat4 projection;
+uniform float uPickingEnabled; // 1.0 = Picking
 
 // Lighting Uniforms (MUST be view-space, normalized)
 uniform vec3 lightDir;
@@ -237,6 +254,25 @@ void main() {
     float s = dot(P - vCenterView, A);
     if (s < -vHalfLen || s > vHalfLen) discard;
 
+    // Depth
+    float clipZ = projection[2][2] * P.z + projection[3][2];
+    float clipW = projection[2][3] * P.z + projection[3][3];
+    float ndcZ = clipZ / clipW;
+    float depth = (ndcZ + 1.0) * 0.5;
+
+    #ifdef GL_EXT_frag_depth
+    gl_FragDepthEXT = depth;
+    #else
+    gl_FragDepth = depth;
+    #endif
+
+    // Picking Mode Output
+    if (uPickingEnabled > 0.5) {
+        gl_FragColor = vPickingColor;
+        return;
+    }
+
+    // Normal Rendering
     vec3 closest = vCenterView + A * s;
     vec3 normal = normalize(P - closest);
 
@@ -253,18 +289,6 @@ void main() {
     vec3 finalColor = vColor.rgb * (lightAmbient + diffuse * lightDiffuse) + vec3(1.0) * spec;
 
     gl_FragColor = vec4(finalColor, vColor.a);
-
-    // Depth
-    float clipZ = projection[2][2] * P.z + projection[3][2];
-    float clipW = projection[2][3] * P.z + projection[3][3];
-    float ndcZ = clipZ / clipW;
-    float depth = (ndcZ + 1.0) * 0.5;
-
-    #ifdef GL_EXT_frag_depth
-    gl_FragDepthEXT = depth;
-    #else
-    gl_FragDepth = depth;
-    #endif
 }
 
 `;

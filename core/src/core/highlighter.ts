@@ -1,14 +1,13 @@
-import type { Scene, Mesh, Material } from "@babylonjs/core";
-import { StandardMaterial, Color3 } from "@babylonjs/core";
+import type { Scene, Mesh } from "@babylonjs/core";
 import { type SelectionState, parseSelectionKey } from "./selection_manager";
 
 /**
  * Highlighter: Mode-aware highlighting in a single module.
- * Handles both thin instances (colorBuffer) and meshes (materials).
- * 
+ * All highlighting uses thin instance colorBuffer (impostor pipeline).
+ *
  * Responsibilities:
  * - Apply highlights based on selection state
- * - Restore original colors/materials on deselect
+ * - Restore original colors on deselect
  * - Handle mode switches (invalidate and rebuild)
  */
 export class Highlighter {
@@ -18,33 +17,12 @@ export class Highlighter {
     // Key: `${uniqueId}:${thinIndex}`
     private thinOriginalColors = new Map<string, { r: number; g: number; b: number; a: number }>();
 
-    // Storage for mesh original materials
-    // Key: uniqueId
-    private meshOriginalMaterials = new Map<number, Material | null>();
-
-    // Shared highlight materials
-    private selectionMaterial: StandardMaterial;
-    private previewMaterial: StandardMaterial;
-
     // State
     private lastSelectionState: SelectionState = { atoms: new Set(), bonds: new Set() };
     private previewKeys: Set<string> = new Set();
 
     constructor(scene: Scene) {
         this.scene = scene;
-
-        // Selection = Golden Orange (Premium look)
-        this.selectionMaterial = new StandardMaterial("highlight_select", scene);
-        this.selectionMaterial.diffuseColor = new Color3(1.0, 0.7, 0.0); // Golden Orange
-        this.selectionMaterial.emissiveColor = new Color3(0.4, 0.2, 0.0); // Subtle self-illumination
-        this.selectionMaterial.specularColor = new Color3(1.0, 1.0, 1.0); // High specular for "shiny" look
-        this.selectionMaterial.alpha = 1.0;
-
-        // Preview = Soft Sky Blue (Subtle)
-        this.previewMaterial = new StandardMaterial("highlight_preview", scene);
-        this.previewMaterial.diffuseColor = new Color3(0.4, 0.8, 1.0); // Soft Cyan
-        this.previewMaterial.emissiveColor = new Color3(0.0, 0.2, 0.3); // Very subtle glow
-        this.previewMaterial.alpha = 0.5; // More transparent
     }
 
     /**
@@ -76,19 +54,19 @@ export class Highlighter {
             if (this.lastSelectionState.atoms.has(key) || this.lastSelectionState.bonds.has(key)) {
                 continue;
             }
-            this.applyHighlight(key, this.previewMaterial, [0.4, 0.8, 1.0, 0.8]); // Soft Cyan (with alpha)
+            this.applyHighlight(key, [0.4, 0.8, 1.0, 0.8]); // Soft Cyan (with alpha)
         }
 
         // 2. Apply Selection
         for (const key of this.lastSelectionState.atoms) {
-            this.applyHighlight(key, this.selectionMaterial, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
+            this.applyHighlight(key, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
         }
         for (const key of this.lastSelectionState.bonds) {
-            this.applyHighlight(key, this.selectionMaterial, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
+            this.applyHighlight(key, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
         }
     }
 
-    private applyHighlight(key: string, material: StandardMaterial, colorBufferVal: number[]): void {
+    private applyHighlight(key: string, colorBufferVal: number[]): void {
         const ref = parseSelectionKey(key);
         if (!ref) return;
 
@@ -97,8 +75,6 @@ export class Highlighter {
 
         if (ref.subIndex !== undefined) {
             this.highlightThinInstance(mesh, ref.subIndex, colorBufferVal);
-        } else {
-            this.highlightMesh(mesh, material);
         }
     }
 
@@ -129,18 +105,7 @@ export class Highlighter {
     }
 
     /**
-     * Highlight a mesh.
-     */
-    private highlightMesh(mesh: Mesh, material: StandardMaterial): void {
-        // Store original material if not already stored
-        if (!this.meshOriginalMaterials.has(mesh.uniqueId)) {
-            this.meshOriginalMaterials.set(mesh.uniqueId, mesh.material);
-        }
-        mesh.material = material;
-    }
-
-    /**
-     * Clear all highlights and restore original colors/materials.
+     * Clear all highlights and restore original colors.
      */
     clearAll(): void {
         // Restore thin instance colors
@@ -164,15 +129,6 @@ export class Highlighter {
             mesh.thinInstanceSetBuffer("color", colorBuffer, 4, false);
         }
         this.thinOriginalColors.clear();
-
-        // Restore mesh materials
-        for (const [uniqueId, material] of this.meshOriginalMaterials) {
-            const mesh = this.scene.getMeshByUniqueId(uniqueId) as Mesh;
-            if (mesh) {
-                mesh.material = material;
-            }
-        }
-        this.meshOriginalMaterials.clear();
     }
 
     /**
@@ -180,10 +136,6 @@ export class Highlighter {
      */
     invalidateAndRebuild(): void {
         this.clearAll();
-        // Since we store state, we can just re-render
-        // But invalidation usually implies scene geometry changed
-        // So we might need to filter out keys that no longer exist?
-        // For now, re-render catches up.
         this.render();
     }
 
@@ -192,8 +144,6 @@ export class Highlighter {
      */
     dispose(): void {
         this.clearAll();
-        this.selectionMaterial.dispose();
-        this.previewMaterial.dispose();
     }
 
     private getThinInstanceColorBuffer(mesh: Mesh): Float32Array | null {

@@ -1,4 +1,4 @@
-import { Vector3, type Scene, type Mesh } from "@babylonjs/core";
+import { Vector3 } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
 import { Command } from "../commands/base";
 import {
@@ -14,18 +14,16 @@ import {
  * Artist options for initialization
  */
 export interface ArtistOptions {
-    scene: Scene;
     app: MolvisApp;
 }
 
 /**
  * Artist class - Thin orchestration layer for drawing operations
- * 
+ *
  * Delegates all mesh creation/deletion to Command objects.
  * Manages undo/redo stacks.
  */
 export class Artist {
-    private scene: Scene;
     private app: MolvisApp;
 
     // Undo/Redo stacks store Command instances
@@ -33,7 +31,6 @@ export class Artist {
     private redoStack: Command[];
 
     constructor(options: ArtistOptions) {
-        this.scene = options.scene;
         this.app = options.app;
         this.undoStack = [];
         this.redoStack = [];
@@ -44,45 +41,43 @@ export class Artist {
     /**
      * Draw an atom at the specified position
      */
-    drawAtom(position: Vector3, options: DrawAtomOptions): Mesh {
+    drawAtom(position: Vector3, options: DrawAtomOptions): { atomId: number } {
         const command = new DrawAtomCommand(
             this.app,
             position,
-            options,
-            this.scene
+            options
         );
 
-        const mesh = command.do();
+        const result = command.do();
         this.undoStack.push(command);
         this.redoStack = []; // Clear redo stack on new action
 
-        return mesh;
+        return result;
     }
 
     /**
      * Draw a bond between two positions
      */
-    drawBond(start: Vector3, end: Vector3, options: DrawBondOptions = {}): Mesh {
+    drawBond(start: Vector3, end: Vector3, options: DrawBondOptions = {}): { bondId: number } {
         const command = new DrawBondCommand(
             this.app,
             start,
             end,
-            options,
-            this.scene
+            options
         );
 
-        const mesh = command.do();
+        const result = command.do();
         this.undoStack.push(command);
         this.redoStack = [];
 
-        return mesh;
+        return result;
     }
 
     /**
      * Delete an atom and all connected bonds
      */
-    deleteAtom(mesh: Mesh): void {
-        const command = new DeleteAtomCommand(this.app, mesh, this.scene);
+    deleteAtom(atomId: number): void {
+        const command = new DeleteAtomCommand(this.app, atomId);
         command.do();
         this.undoStack.push(command);
         this.redoStack = [];
@@ -91,8 +86,8 @@ export class Artist {
     /**
      * Delete a bond
      */
-    deleteBond(mesh: Mesh): void {
-        const command = new DeleteBondCommand(this.app, mesh);
+    deleteBond(bondId: number): void {
+        const command = new DeleteBondCommand(this.app, bondId);
         command.do();
         this.undoStack.push(command);
         this.redoStack = [];

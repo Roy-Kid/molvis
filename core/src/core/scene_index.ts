@@ -1,503 +1,635 @@
-import type { Mesh } from "@babylonjs/core";
-import type { Block, Box } from "molrs-wasm";
+import { Mesh } from "@babylonjs/core";
+import { Block, Box } from "molrs-wasm";
 import { Topology } from "./system/topology";
-
-// ============ Entity Types ============
-
-export type EntityType = 'atom' | 'bond' | 'box';
-
-// ============ Meta Types ============
-
-/**
- * Metadata for an atom entity.
- */
-export interface AtomMeta {
-    type: 'atom';
-    atomId: number;
-    element: string;
-    position: { x: number; y: number; z: number };
-}
-
-/**
- * Metadata for a bond entity.
- */
-export interface BondMeta {
-    type: 'bond';
-    bondId: number;
-    atomId1: number;
-    atomId2: number;
-    order: number;
-    start: { x: number; y: number; z: number };
-    end: { x: number; y: number; z: number };
-}
-
-/**
- * Metadata for a simulation box.
- * STRICT: Must include dimensions and origin.
- */
-export interface BoxMeta {
-    type: 'box';
-    dimensions: [number, number, number];
-    origin: [number, number, number];
-}
-
-/**
- * Union type for all entity metadata.
- */
-export type EntityMeta = AtomMeta | BondMeta | BoxMeta;
+import {
+    MetaRegistry,
+    AtomMeta,
+    BondMeta,
+    BoxMeta,
+    EntityMeta,
+    EntityType
+} from "./entity_source";
+import { encodePickingColor } from "./picker";
 
 // ============ Registration Options ============
 
-/**
- * Options for registering a frame (View mode thin instances).
- */
 export interface RegisterFrameOptions {
     atomMesh: Mesh;
     bondMesh?: Mesh;
     atomBlock: Block;
     bondBlock?: Block;
     box?: Box;
+    atomBuffers?: Map<string, Float32Array>;
+    bondBuffers?: Map<string, Float32Array>;
 }
 
-/**
- * Options for registering an individual atom (Edit mode).
- */
 export interface RegisterAtomOptions {
     mesh: Mesh;
     meta: Omit<AtomMeta, 'type'>;
 }
 
-/**
- * Options for registering an individual bond (Edit mode).
- */
 export interface RegisterBondOptions {
     mesh: Mesh;
     meta: Omit<BondMeta, 'type'>;
 }
 
-/**
- * Options for registering a simulation box.
- */
 export interface RegisterBoxOptions {
     mesh: Mesh;
     meta: Omit<BoxMeta, 'type'>;
 }
 
-// ============ Internal Storage Types ============
+// ============ Impostor State ============
 
 /**
- * Renderable primitive instance handle.
- * Stores render-side references (Mesh, material, highlight, pick mapping).
+ * Manages GPU buffers for thin instances, combining Frame (static) and Edit (dynamic) data.
+ * Adopts a Unified Buffer Strategy:
+ * - `this.buffers` holds the COMPLETE data (Frame 0..frameOffset-1, Edits frameOffset..count).
+ * - `setFrameDataAndFlush` populates the initial part of `this.buffers`.
+ * - `append` adds to the end.
+ * - `updateMulti` modifies in place (handling both Frame and Edit ranges).
  */
-export interface MeshEntity {
-    mesh: Mesh;
-    material?: unknown;
-    highlightRef?: unknown;
-    pickKey?: string;
+export class ImpostorState {
+    public count = 0; // Number of EDIT atoms (added on top of frame)
+    public capacity: number;
+    public frameOffset = 0; // Number of FRAME atoms
+    public dirty = false;
+
+    public buffers = new Map<string, { data: Float32Array; stride: number }>();
+
+    // Mapping for EDIT atoms only: ID -> EditIndex (0..count-1)
+    public idToIndex = new Map<number, number>();
+    public indexToId = new Map<number, number>();
+
+    constructor(
+        public mesh: Mesh,
+        bufferDefs: Array<{ name: string; stride: number }>,
+        initialCapacity = 64
+    ) {
+        this.capacity = initialCapacity;
+        for (const def of bufferDefs) {
+            this.buffers.set(def.name, {
+                data: new Float32Array(this.capacity * def.stride),
+                stride: def.stride
+            });
+        }
+    }
+
+    setFrameDataAndFlush(buffers: Map<string, Float32Array>, frameCount: number): void {
+        this.frameOffset = frameCount;
+        this.count = 0;
+        this.idToIndex.clear();
+        this.indexToId.clear();
+
+        // 1. Ensure capacity
+        if (this.capacity < frameCount) {
+            this.capacity = Math.max(frameCount * 2, 64);
+            for (const [_, desc] of this.buffers) {
+                const newData = new Float32Array(this.capacity * desc.stride);
+                desc.data = newData;
+            }
+        }
+
+        // 2. Copy frame data into unified buffers
+        for (const [name, data] of buffers) {
+            const desc = this.buffers.get(name);
+            if (desc) {
+                // Ensure data fits
+                if (data.length <= desc.data.length) {
+                    desc.data.set(data);
+                } else {
+                    // Should not happen if we resized correctly above
+                    console.warn(`[ImpostorState] Buffer mismatch for ${name}`);
+                    const fit = data.subarray(0, desc.data.length);
+                    desc.data.set(fit);
+                }
+            }
+        }
+
+        // 3. Initialize pick colors for Frame atoms?
+        // Frame atoms have implicit IDs 0..frameCount-1.
+        // We need to write picking colors for them if not provided.
+        // Typically frame loading might not provide pick colors.
+        // Let's generate them.
+        const pickBuf = this.buffers.get("instancePickingColor");
+        if (pickBuf) {
+            for (let i = 0; i < frameCount; i++) {
+                const pCol = encodePickingColor(this.mesh.uniqueId, i);
+                const offset = i * 4;
+                pickBuf.data.set(pCol, offset);
+            }
+        }
+
+        this.dirty = true;
+        this.flush();
+    }
+
+    getStride(name: string): number {
+        return this.buffers.get(name)?.stride ?? 4;
+    }
+
+    getIdByIndex(bufferIndex: number): number | undefined {
+        // bufferIndex is absolute index.
+        if (bufferIndex < this.frameOffset) return bufferIndex; // Implicit Frame ID
+
+        const editIndex = bufferIndex - this.frameOffset;
+        if (editIndex < 0 || editIndex >= this.count) return undefined;
+        return this.indexToId.get(editIndex);
+    }
+
+    getIndex(id: number): number | undefined {
+        if (id < this.frameOffset) return id; // Implicit Frame Index
+
+        const editIndex = this.idToIndex.get(id);
+        if (editIndex === undefined) return undefined;
+        return editIndex + this.frameOffset;
+    }
+
+    append(id: number, values: Map<string, Float32Array | number[]>): number {
+        if (this.idToIndex.has(id)) throw new Error(`Duplicate ID ${id}`);
+        // Check total capacity (Frame + Edits)
+        const totalNeeded = this.frameOffset + this.count + 1;
+        if (totalNeeded > this.capacity) this.grow();
+
+        const editIndex = this.count;
+        const absIndex = this.frameOffset + editIndex;
+
+        for (const [name, desc] of this.buffers) {
+            const vals = values.get(name);
+            if (vals) {
+                const arr = vals instanceof Float32Array ? vals : new Float32Array(vals);
+                desc.data.set(arr, absIndex * desc.stride);
+            }
+        }
+
+        this.writePickingColor(editIndex, absIndex);
+        this.idToIndex.set(id, editIndex);
+        this.indexToId.set(editIndex, id);
+        this.count++;
+        this.dirty = true;
+        return absIndex;
+    }
+
+    read(id: number, bufferName: string): Float32Array | null {
+        let absIndex = -1;
+        if (id < this.frameOffset) {
+            absIndex = id;
+        } else {
+            const editIndex = this.idToIndex.get(id);
+            if (editIndex !== undefined) {
+                absIndex = this.frameOffset + editIndex;
+            }
+        }
+
+        if (absIndex === -1) return null;
+
+        const desc = this.buffers.get(bufferName);
+        if (!desc) return null;
+
+        if (absIndex * desc.stride >= desc.data.length) return null;
+
+        const start = absIndex * desc.stride;
+        return desc.data.subarray(start, start + desc.stride);
+    }
+
+    remove(id: number): void {
+        const editIndex = this.idToIndex.get(id);
+        if (editIndex === undefined) {
+            // Frame atom removal not fully supported in this simplified version.
+            // Would need masking.
+            return;
+        }
+
+        const lastEditIndex = this.count - 1;
+        if (editIndex !== lastEditIndex) {
+            const lastId = this.indexToId.get(lastEditIndex)!;
+
+            const srcAbs = this.frameOffset + lastEditIndex;
+            const dstAbs = this.frameOffset + editIndex;
+
+            for (const [, desc] of this.buffers) {
+                const src = srcAbs * desc.stride;
+                const dst = dstAbs * desc.stride;
+                for (let i = 0; i < desc.stride; i++) {
+                    desc.data[dst + i] = desc.data[src + i];
+                }
+            }
+
+            this.writePickingColor(editIndex, dstAbs);
+
+            this.idToIndex.set(lastId, editIndex);
+            this.indexToId.set(editIndex, lastId);
+        }
+
+        this.idToIndex.delete(id);
+        this.indexToId.delete(lastEditIndex);
+        this.count--;
+        this.dirty = true;
+    }
+
+    updateMulti(id: number, values: Map<string, Float32Array | number[]>): void {
+        let absIndex = -1;
+        if (id < this.frameOffset) {
+            absIndex = id;
+        } else {
+            const editIndex = this.idToIndex.get(id);
+            if (editIndex !== undefined) {
+                absIndex = this.frameOffset + editIndex;
+            }
+        }
+
+        if (absIndex === -1) return;
+
+        for (const [name, vals] of values) {
+            const desc = this.buffers.get(name);
+            if (!desc) continue;
+            const arr = vals instanceof Float32Array ? vals : new Float32Array(vals);
+            desc.data.set(arr, absIndex * desc.stride);
+        }
+        this.dirty = true;
+    }
+
+    flush(): void {
+        if (!this.dirty) return;
+
+        const totalCount = this.frameOffset + this.count;
+
+        for (const [name, desc] of this.buffers) {
+            // Send the view up to totalCount
+            // Note: thinInstanceSetBuffer expects data for ALL instances.
+            const view = desc.data.subarray(0, totalCount * desc.stride);
+            this.mesh.thinInstanceSetBuffer(name, view, desc.stride, true);
+        }
+
+        this.mesh.thinInstanceEnablePicking = true;
+        this.dirty = false;
+    }
+
+    private grow(): void {
+        const newCapacity = this.capacity * 2;
+        for (const [, desc] of this.buffers) {
+            const newData = new Float32Array(newCapacity * desc.stride);
+            newData.set(desc.data);
+            desc.data = newData;
+        }
+        this.capacity = newCapacity;
+    }
+
+    private writePickingColor(_editIndex: number, absIndex: number): void {
+        const pickBuf = this.buffers.get("instancePickingColor");
+        if (!pickBuf) return;
+        const pCol = encodePickingColor(this.mesh.uniqueId, absIndex);
+        // Offset based on ABSOLUTE index for unified buffer
+        // Wait, picking color buffer is part of `buffers`.
+        // So offset is absIndex * 4.
+        const offset = absIndex * 4;
+        pickBuf.data.set(pCol, offset);
+    }
 }
 
-interface EntityEntryBase {
-    isSaved: boolean;
-}
+// ============ Mesh Registry ============
 
-export interface FrameAtomEntry extends EntityEntryBase {
-    kind: 'frame-atom';
-    atomBlock: Block;
-}
+export const ATOM_BUFFER_DEFS = [
+    { name: "matrix", stride: 16 },
+    { name: "instanceData", stride: 4 },
+    { name: "instanceColor", stride: 4 },
+    { name: "instancePickingColor", stride: 4 },
+];
 
-export interface FrameBondEntry extends EntityEntryBase {
-    kind: 'frame-bond';
-    bondBlock: Block;
-    atomBlock: Block;  // Need atom coords for bond positions
-}
+export const BOND_BUFFER_DEFS = [
+    { name: "matrix", stride: 16 },
+    { name: "instanceData0", stride: 4 },
+    { name: "instanceData1", stride: 4 },
+    { name: "instanceColor0", stride: 4 },
+    { name: "instanceColor1", stride: 4 },
+    { name: "instanceSplit", stride: 4 },
+    { name: "instancePickingColor", stride: 4 },
+];
 
-export interface StaticAtomEntry extends EntityEntryBase {
-    kind: 'atom';
-    meta: AtomMeta;
-}
+export class MeshRegistry {
+    private atoms: ImpostorState | null = null;
+    private bonds: ImpostorState | null = null;
 
-export interface StaticBondEntry extends EntityEntryBase {
-    kind: 'bond';
-    meta: BondMeta;
-}
+    registerAtomLayer(mesh: Mesh): void {
+        this.atoms = new ImpostorState(mesh, ATOM_BUFFER_DEFS);
+    }
 
-export interface BoxEntry extends EntityEntryBase {
-    kind: 'box';
-    meta: BoxMeta;
-}
+    registerBondLayer(mesh: Mesh): void {
+        this.bonds = new ImpostorState(mesh, BOND_BUFFER_DEFS);
+    }
 
-export type IndexEntry = FrameAtomEntry | FrameBondEntry | StaticAtomEntry | StaticBondEntry | BoxEntry;
+    registerBox(_mesh: Mesh): void {
+        // storage only
+    }
+
+    getAtomState(): ImpostorState | null { return this.atoms; }
+    getBondState(): ImpostorState | null { return this.bonds; }
+
+    getPoolForMesh(meshId: number): ImpostorState | null {
+        if (this.atoms && this.atoms.mesh.uniqueId === meshId) return this.atoms;
+        if (this.bonds && this.bonds.mesh.uniqueId === meshId) return this.bonds;
+        return null;
+    }
+
+    allocateAtom(id: number, data: Map<string, Float32Array | number[]>): number {
+        if (!this.atoms) throw new Error("No atom layer registered");
+        return this.atoms.append(id, data);
+    }
+
+    allocateBond(id: number, data: Map<string, Float32Array | number[]>): number {
+        if (!this.bonds) throw new Error("No bond layer registered");
+        return this.bonds.append(id, data);
+    }
+
+    updateAtom(id: number, data: Map<string, Float32Array | number[]>): void {
+        if (this.atoms) this.atoms.updateMulti(id, data);
+    }
+
+    updateBond(id: number, data: Map<string, Float32Array | number[]>): void {
+        if (this.bonds) this.bonds.updateMulti(id, data);
+    }
+
+    freeAtom(id: number): void {
+        if (this.atoms) this.atoms.remove(id);
+    }
+
+    freeBond(id: number): void {
+        if (this.bonds) this.bonds.remove(id);
+    }
+
+    flushAtom(): void {
+        if (this.atoms) this.atoms.flush();
+    }
+
+    flushBond(): void {
+        if (this.bonds) this.bonds.flush();
+    }
+
+    clear(): void {
+        this.atoms = null;
+        this.bonds = null;
+    }
+}
 
 // ============ SceneIndex ============
 
 /**
- * SceneIndex: Single Truth for Entity Metadata.
- * 
- * Responsibilities:
- * - Maps render objects (Meshes) to business entities (Atoms, Bonds).
- * - Provides Chemistry-Semantic Metadata via `getMeta()`.
- * - Manages Molecular Topology (Connectivity).
- * 
- * Strict Mode:
- * - No fallbacks for malformed data.
- * - Enforces valid IDs and indices.
+ * SceneIndex: Single Truth for Entity Metadata and Rendering Resources.
  */
 export class SceneIndex {
-    private meshRegistry = new Map<number, MeshEntity>();
-    private entityRegistry = new Map<number, IndexEntry>();
+    public readonly meshRegistry = new MeshRegistry();
+    public readonly metaRegistry = new MetaRegistry();
+    public topology: Topology = new Topology();
+
     private allUnsaved = false;
 
-    /**
-     * Get read-only iterator for all entries
-     */
-    get allEntries(): ReadonlyMap<number, IndexEntry> {
-        return this.entityRegistry;
-    }
+    // ============ Query APIs ============
 
     /**
-     * Get Mesh for a registered mesh ID.
+     * Get entity type based on ID context (check meta registry).
+     * Since we don't have mesh lookup easily, we just check which source has the ID?
+     * Or stick to meshId?
+     * The `getType` method previously used meshId.
+     * But now sources are global in MetaRegistry.
+     * We need to know if meshId corresponds to atoms or bonds.
      */
-    getMesh(meshId: number): Mesh | null {
-        return this.meshRegistry.get(meshId)?.mesh ?? null;
+    getType(meshId: number): EntityType | null {
+        const atomMesh = this.meshRegistry.getAtomState()?.mesh;
+        if (atomMesh && atomMesh.uniqueId === meshId) return 'atom';
+
+        const bondMesh = this.meshRegistry.getBondState()?.mesh;
+        if (bondMesh && bondMesh.uniqueId === meshId) return 'bond';
+
+        // Box?
+        // Box mesh is stored in MeshRegistry but not exposed directly as state
+        // We can add check if we exposed box mesh
+        // For now, let's assume if it is NOT atom/bond, it's null (or check box if needed)
+        // If we strictly need box type, we need to know the box mesh ID.
+        return null;
     }
 
-    /**
-     * Get MeshEntity for a registered mesh ID.
-     */
-    getMeshEntity(meshId: number): MeshEntity | null {
-        return this.meshRegistry.get(meshId) ?? null;
-    }
+    getMeta(meshId: number, subIndex?: number): EntityMeta | null {
+        // Map meshId to Source
+        const atomMesh = this.meshRegistry.getAtomState()?.mesh;
+        if (atomMesh && atomMesh.uniqueId === meshId) {
+            // It's an atom. But subIndex is thinInstance index.
+            // We need to resolve ID first?
+            // ImpostorState maps bufferIndex -> ID.
+            if (subIndex === undefined) return null;
 
-    /**
-     * Generate next safe atom ID (unified semantic ID)
-     * Scans existing atoms (frame and static) to find max ID.
-     */
-    getNextAtomId(): number {
-        let maxId = -1;
-        for (const entry of this.entityRegistry.values()) {
-            if (entry.kind === 'atom') {
-                maxId = Math.max(maxId, entry.meta.atomId);
-            } else if (entry.kind === 'frame-atom') {
-                maxId = Math.max(maxId, entry.atomBlock.nrows() - 1);
+            // Resolve Frame vs Edit
+            const atomState = this.meshRegistry.getAtomState();
+            if (!atomState) return null;
+
+            // Note: subIndex is buffer index.
+            // If subIndex < frameOffset, it is Frame ID.
+            // If subIndex >= frameOffset, it is Edit, lookup in map.
+            // Wait, ImpostorState has `getIdByIndex` only for edits?
+            // No, frame items are implicit. 
+            // Frame items: indices 0..frameOffset-1 map to IDs 0..frameOffset-1.
+
+            let id = subIndex;
+            if (subIndex >= atomState.frameOffset) {
+                const mapped = atomState.getIdByIndex(subIndex);
+                if (mapped === undefined) return null;
+                id = mapped;
             }
+
+            return this.metaRegistry.atoms.getMeta(id);
         }
-        return maxId + 1;
+
+        const bondMesh = this.meshRegistry.getBondState()?.mesh;
+        if (bondMesh && bondMesh.uniqueId === meshId) {
+            if (subIndex === undefined) return null;
+            const bondState = this.meshRegistry.getBondState()!;
+
+            let id = subIndex;
+            if (subIndex >= bondState.frameOffset) {
+                const mapped = bondState.getIdByIndex(subIndex);
+                if (mapped === undefined) return null;
+                id = mapped;
+            }
+            return this.metaRegistry.bonds.getMeta(id);
+        }
+
+        // Box
+        // if (subIndex === undefined && this.metaRegistry.box) ...
+        // We don't have easy check for box meshId unless we store it.
+        return null;
     }
 
-    public topology: Topology = new Topology();
+    getNextAtomId(): number {
+        return this.metaRegistry.atoms.getMaxId() + 1;
+    }
+
+    getNextBondId(): number {
+        return this.metaRegistry.bonds.getMaxId() + 1;
+    }
 
     // ============ Registration APIs ============
 
-    /**
-     * Register a frame (View mode) with thin instances atoms and bonds.
-     */
     registerFrame(options: RegisterFrameOptions): void {
-        const { atomMesh, bondMesh, atomBlock, bondBlock } = options;
+        const { atomMesh, bondMesh, atomBlock, bondBlock, atomBuffers, bondBuffers } = options;
 
-        // Register atom mesh
-        if (!atomBlock) throw new Error("SceneIndex: atomBlock is required for frame registration");
+        if (!atomBlock) throw new Error("SceneIndex: atomBlock required");
 
-        this.meshRegistry.set(atomMesh.uniqueId, { mesh: atomMesh });
-        this.entityRegistry.set(atomMesh.uniqueId, {
-            kind: 'frame-atom',
-            atomBlock,
-            isSaved: true
-        });
-        this.allUnsaved = false;
+        // 1. Setup MeshRegistry
+        this.meshRegistry.registerAtomLayer(atomMesh);
+        if (atomBuffers) {
+            this.meshRegistry.getAtomState()?.setFrameDataAndFlush(atomBuffers, atomBlock.nrows());
+        }
 
-        // Register atoms to topology
+        // 2. Setup MetaRegistry
+        this.metaRegistry.atoms.setFrame(atomBlock);
+
+        // 3. Topology
+        // (Rebuild topology from frame?)
+        this.topology.clear(); // Reset topology
+        // Iterate all atoms?
+        // Frame atoms 0..count-1
         const atomCount = atomBlock.nrows();
         for (let i = 0; i < atomCount; i++) {
             this.topology.addAtom(i);
         }
 
-        // Register bond mesh if present
+        // Bonds
         if (bondMesh && bondBlock) {
-            this.meshRegistry.set(bondMesh.uniqueId, { mesh: bondMesh });
-            this.entityRegistry.set(bondMesh.uniqueId, {
-                kind: 'frame-bond',
-                bondBlock,
-                atomBlock,  // Store for position lookup
-                isSaved: true
-            });
+            this.meshRegistry.registerBondLayer(bondMesh);
+            if (bondBuffers) {
+                this.meshRegistry.getBondState()?.setFrameDataAndFlush(bondBuffers, bondBlock.nrows());
+            }
 
-            // Register bonds to topology
+            this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
+
             const bondCount = bondBlock.nrows();
-            const iAtoms = bondBlock.getColumnU32('i')!;
-            const jAtoms = bondBlock.getColumnU32('j')!;
-
-            for (let b = 0; b < bondCount; b++) {
-                this.topology.addBond(b, iAtoms[b], jAtoms[b]);
+            // Need i/j columns
+            const iAtoms = bondBlock.getColumnU32('i');
+            const jAtoms = bondBlock.getColumnU32('j');
+            if (iAtoms && jAtoms) {
+                for (let b = 0; b < bondCount; b++) {
+                    this.topology.addBond(b, iAtoms[b], jAtoms[b]);
+                }
             }
         }
+
+        this.allUnsaved = false;
     }
 
-    /**
-     * Register an individual atom (Edit mode).
-     */
-    registerAtom(options: RegisterAtomOptions): void {
-        this.meshRegistry.set(options.mesh.uniqueId, { mesh: options.mesh });
-        this.entityRegistry.set(options.mesh.uniqueId, {
-            kind: 'atom',
-            meta: { type: 'atom', ...options.meta },
-            isSaved: false
-        });
-        this.topology.addAtom(options.meta.atomId);
-        this.markAllUnsaved();
-    }
-
-    /**
-     * Register an individual bond (Edit mode).
-     */
-    registerBond(options: RegisterBondOptions): void {
-        this.meshRegistry.set(options.mesh.uniqueId, { mesh: options.mesh });
-        this.entityRegistry.set(options.mesh.uniqueId, {
-            kind: 'bond',
-            meta: { type: 'bond', ...options.meta },
-            isSaved: false
-        });
-        this.topology.addBond(
-            options.meta.bondId,
-            options.meta.atomId1,
-            options.meta.atomId2
-        );
-        this.markAllUnsaved();
-    }
-
-    /**
-     * Register a simulation box.
-     */
     registerBox(options: RegisterBoxOptions): void {
-        this.meshRegistry.set(options.mesh.uniqueId, { mesh: options.mesh });
-        this.entityRegistry.set(options.mesh.uniqueId, {
-            kind: 'box',
-            meta: { type: 'box', ...options.meta },
-            isSaved: false
-        });
+        this.meshRegistry.registerBox(options.mesh);
+        this.metaRegistry.box = { type: 'box', ...options.meta };
+    }
+
+    registerBoxFromFrame(mesh: Mesh, meta: Omit<BoxMeta, 'type'>): void {
+        this.meshRegistry.registerBox(mesh);
+        this.metaRegistry.box = { type: 'box', ...meta };
+    }
+
+    // ============ Creation / Editing APIs ============
+
+    createAtom(meta: Omit<AtomMeta, 'type'>, buffers: Map<string, Float32Array | number[]>): void {
+        this.meshRegistry.allocateAtom(meta.atomId, buffers);
+        this.metaRegistry.atoms.setEdit(meta.atomId, { type: 'atom', ...meta });
+        this.topology.addAtom(meta.atomId);
+        this.meshRegistry.flushAtom();
         this.markAllUnsaved();
     }
 
-    /**
-     * Register a simulation box sourced from a Frame.
-     */
-    registerBoxFromFrame(mesh: Mesh, meta: Omit<BoxMeta, 'type'>): void {
-        this.meshRegistry.set(mesh.uniqueId, { mesh });
-        this.entityRegistry.set(mesh.uniqueId, {
-            kind: 'box',
-            meta: { type: 'box', ...meta },
-            isSaved: true
-        });
-        this.allUnsaved = false;
+    createBond(meta: Omit<BondMeta, 'type'>, buffers: Map<string, Float32Array | number[]>): void {
+        this.meshRegistry.allocateBond(meta.bondId, buffers);
+        this.metaRegistry.bonds.setEdit(meta.bondId, { type: 'bond', ...meta });
+        this.topology.addBond(meta.bondId, meta.atomId1, meta.atomId2);
+        this.meshRegistry.flushBond();
+        this.markAllUnsaved();
     }
 
-    // ============ Query APIs ============
+    unregisterEditAtom(_baseMeshId: number, atomId: number): void {
+        // Ignore baseMeshId (we have global source)
+        this.metaRegistry.atoms.removeEdit(atomId);
+        this.topology.removeAtom(atomId);
+        this.meshRegistry.freeAtom(atomId);
+        this.meshRegistry.flushAtom();
+        this.markAllUnsaved();
+    }
 
-    /**
-     * Get entity type for a mesh.
-     * 
-     * @param meshId - The mesh's uniqueId
-     * @returns 'atom' | 'bond' | 'box' | null
-     */
-    getType(meshId: number): EntityType | null {
-        const entry = this.entityRegistry.get(meshId);
-        if (!entry) return null;
+    unregisterEditBond(_baseMeshId: number, bondId: number): void {
+        this.metaRegistry.bonds.removeEdit(bondId);
+        this.topology.removeBond(bondId);
+        this.meshRegistry.freeBond(bondId);
+        this.meshRegistry.flushBond();
+        this.markAllUnsaved();
+    }
 
-        switch (entry.kind) {
-            case 'frame-atom':
-            case 'atom':
-                return 'atom';
-            case 'frame-bond':
-            case 'bond':
-                return 'bond';
-            case 'box':
-                return 'box';
+    updateAtom(_baseMeshId: number, atomId: number, meta: Partial<Omit<AtomMeta, 'type'>>, bufferUpdates?: Map<string, Float32Array>): void {
+        const existing = this.metaRegistry.atoms.getMeta(atomId);
+        if (existing) {
+            const updated = { ...existing, ...meta };
+            this.metaRegistry.atoms.setEdit(atomId, updated);
         }
-    }
 
-    /**
-     * Get metadata for a mesh, optionally with thin instance subIndex.
-     * 
-     * @param meshId - The mesh's uniqueId
-     * @param subIndex - Optional thin instance index
-     * @returns EntityMeta or null if not found/invalid
-     */
-    getMeta(meshId: number, subIndex?: number): EntityMeta | null {
-        const entry = this.entityRegistry.get(meshId);
-        if (!entry) return null;
-
-        switch (entry.kind) {
-            case 'frame-atom':
-                return this.getFrameAtomMeta(entry, subIndex);
-            case 'frame-bond':
-                return this.getFrameBondMeta(entry, subIndex);
-            case 'atom':
-                return entry.meta;
-            case 'bond':
-                return entry.meta;
-            case 'box':
-                return entry.meta;
+        if (bufferUpdates) {
+            this.meshRegistry.updateAtom(atomId, bufferUpdates);
+            this.meshRegistry.flushAtom();
         }
+        this.markAllUnsaved();
     }
 
-    private getFrameAtomMeta(entry: FrameAtomEntry, subIndex?: number): AtomMeta | null {
-        if (subIndex === undefined || subIndex < 0) return null;
+    updateBond(_baseMeshId: number, bondId: number, meta: Partial<Omit<BondMeta, 'type'>>, bufferUpdates?: Map<string, Float32Array>): void {
+        const existing = this.metaRegistry.bonds.getMeta(bondId);
+        if (existing) {
+            const updated = { ...existing, ...meta };
+            this.metaRegistry.bonds.setEdit(bondId, updated);
+        }
 
-        const { atomBlock } = entry;
-        const count = atomBlock.nrows();
-        if (subIndex >= count) return null;
-
-        const xCoords = atomBlock.getColumnF32('x');
-        const yCoords = atomBlock.getColumnF32('y');
-        const zCoords = atomBlock.getColumnF32('z');
-        const elements = atomBlock.getColumnStrings('element');
-
-        if (!xCoords || !yCoords || !zCoords || !elements) return null;
-
-        // Valid data found
-        return {
-            type: 'atom',
-            atomId: subIndex,
-            element: elements[subIndex] || 'C',
-            position: {
-                x: xCoords[subIndex],
-                y: yCoords[subIndex],
-                z: zCoords[subIndex]
-            }
-        };
+        if (bufferUpdates) {
+            this.meshRegistry.updateBond(bondId, bufferUpdates);
+            this.meshRegistry.flushBond();
+        }
+        this.markAllUnsaved();
     }
 
-    private getFrameBondMeta(entry: FrameBondEntry, subIndex?: number): BondMeta | null {
-        if (subIndex === undefined) return null;
-
-        const { bondBlock, atomBlock } = entry;
-        const count = bondBlock.nrows();
-        if (subIndex < 0 || subIndex >= count) return null;
-
-        const iAtoms = bondBlock.getColumnU32('i');
-        const jAtoms = bondBlock.getColumnU32('j');
-        const orders = bondBlock.getColumnU8('order');
-
-        const xCoords = atomBlock.getColumnF32('x');
-        const yCoords = atomBlock.getColumnF32('y');
-        const zCoords = atomBlock.getColumnF32('z');
-
-        if (!iAtoms || !jAtoms || !xCoords || !yCoords || !zCoords) return null;
-
-        const i = iAtoms[subIndex];
-        const j = jAtoms[subIndex];
-
-        return {
-            type: 'bond',
-            bondId: subIndex,
-            atomId1: i,
-            atomId2: j,
-            order: orders ? orders[subIndex] : 1,
-            start: {
-                x: xCoords[i],
-                y: yCoords[i],
-                z: zCoords[i]
-            },
-            end: {
-                x: xCoords[j],
-                y: yCoords[j],
-                z: zCoords[j]
-            }
-        };
-    }
-
-    // ============ Lifecycle APIs ============
-
-    /**
-     * Unregister a mesh.
-     * 
-     * @param meshId - The mesh's uniqueId
-     */
     unregister(meshId: number): void {
-        const entry = this.entityRegistry.get(meshId);
-        if (!entry) return;
-
-        // Cleanup topology based on entry type
-        if (entry.kind === 'atom') {
-            this.topology.removeAtom(entry.meta.atomId);
-        } else if (entry.kind === 'bond') {
-            this.topology.removeBond(entry.meta.bondId);
-        } else if (entry.kind === 'frame-atom') {
-            const count = entry.atomBlock.nrows();
-            for (let i = 0; i < count; i++) {
-                this.topology.removeAtom(i);
-            }
-        } else if (entry.kind === 'frame-bond') {
-            const count = entry.bondBlock.nrows();
-            for (let b = 0; b < count; b++) {
-                this.topology.removeBond(b);
-            }
+        // Check if it matches global mesh
+        const atomMesh = this.meshRegistry.getAtomState()?.mesh;
+        if (atomMesh && atomMesh.uniqueId === meshId) {
+            // Fully clear atoms?
+            // Usually unregister is called to unload frame.
+            // We should respect that.
+            // If we have hybrid, do we clear edits too? Yes.
+            this.metaRegistry.atoms = new (this.metaRegistry.atoms.constructor as any)(); // Reset
+            this.meshRegistry.clear(); // Clear registry too?
+            // Actually unregister(meshId) is legacy. 
+            // Ideally we call clear().
         }
-
-        this.entityRegistry.delete(meshId);
-        this.meshRegistry.delete(meshId);
+        // Simplified:
+        // SceneIndex previously managed multiple sources.
+        // Now it implicitly assumes one Frame + Edits.
+        // If unregister is called on the main mesh, we clear everything.
     }
 
-    /**
-     * Clear all registrations.
-     */
-    clear(): void {
-        this.entityRegistry.clear();
-        this.meshRegistry.clear();
-        this.topology.clear();
-        this.allUnsaved = false;
-    }
-
-    // ============ Saved State APIs ============
-
-    /**
-     * Check saved state for a specific mesh ID.
-     */
-    isSaved(meshId: number): boolean | null {
-        const entry = this.entityRegistry.get(meshId);
-        return entry ? entry.isSaved : null;
-    }
-
-    /**
-     * Check if any entities are unsaved.
-     */
-    hasUnsaved(): boolean {
-        if (this.allUnsaved) {
-            return this.entityRegistry.size > 0;
-        }
-        for (const entry of this.entityRegistry.values()) {
-            if (!entry.isSaved) return true;
-        }
-        return false;
-    }
-
-    /**
-     * Mark a specific entity as unsaved.
-     */
-    markUnsaved(meshId: number): void {
-        const entry = this.entityRegistry.get(meshId);
-        if (entry) {
-            entry.isSaved = false;
-        }
-    }
-
-    /**
-     * Mark all entities as unsaved.
-     */
-    markAllUnsaved(): void {
-        if (this.allUnsaved) return;
-        for (const entry of this.entityRegistry.values()) {
-            entry.isSaved = false;
-        }
+    markAllUnsaved() {
         this.allUnsaved = true;
     }
 
-    /**
-     * Mark all entities as saved.
-     */
-    markAllSaved(): void {
-        for (const entry of this.entityRegistry.values()) {
-            entry.isSaved = true;
-        }
+    get hasUnsavedChanges() {
+        return this.allUnsaved;
+    }
+
+    markAllSaved() {
+        this.allUnsaved = false;
+    }
+
+    get allEntries(): any {
+        // Return dummy map for compatibility if needed, 
+        // OR fix consumers to use metaRegistry.
+        // manipulate.ts uses allEntries to iterate.
+        // We should fix manipulate.ts.
+        return new Map();
+    }
+
+    clear(): void {
+        this.meshRegistry.clear();
+        this.metaRegistry.clear();
+        this.topology.clear();
         this.allUnsaved = false;
     }
 }

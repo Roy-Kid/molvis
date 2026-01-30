@@ -138,11 +138,11 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         // Fallback or use what's there?
         // If we want to be super fast, maybe we don't change scale.
         // BUT, if we don't have the old scale, we are stuck.
-
-        const existingMatrixBuffer = mesh.thinInstanceGetBuffer("matrix");
+        // Use cast to accessing thinInstanceGetBuffer
+        const existingMatrixBuffer = (mesh as any).thinInstanceGetBuffer("matrix") as Float32Array | null;
         const needsSetMatrix = !existingMatrixBuffer || existingMatrixBuffer.length !== count * 16;
         const matrixBuffer = needsSetMatrix ? new Float32Array(count * 16) : existingMatrixBuffer;
-        const existingInstanceData = mesh.thinInstanceGetBuffer("instanceData");
+        const existingInstanceData = (mesh as any).thinInstanceGetBuffer("instanceData") as Float32Array | null;
         const needsSetInstanceData = existingInstanceData ? existingInstanceData.length !== count * 4 : false;
         const instanceDataBuffer = existingInstanceData && !needsSetInstanceData ? existingInstanceData : (existingInstanceData ? new Float32Array(count * 4) : null);
         const styleManager = this.app.styleManager;
@@ -216,11 +216,11 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         const i_atoms = bondsBlock.getColumnU32("i")!;
         const j_atoms = bondsBlock.getColumnU32("j")!;
 
-        const existingMatrix = mesh.thinInstanceGetBuffer("matrix");
+        const existingMatrix = (mesh as any).thinInstanceGetBuffer("matrix") as Float32Array | null;
         const needsSetMatrix = !existingMatrix || existingMatrix.length !== count * 16;
         const matrixBuffer = needsSetMatrix ? new Float32Array(count * 16) : existingMatrix;
-        const existingData0 = mesh.thinInstanceGetBuffer("instanceData0");
-        const existingData1 = mesh.thinInstanceGetBuffer("instanceData1");
+        const existingData0 = (mesh as any).thinInstanceGetBuffer("instanceData0") as Float32Array | null;
+        const existingData1 = (mesh as any).thinInstanceGetBuffer("instanceData1") as Float32Array | null;
         const useImpostor = !!(existingData0 && existingData1);
         const needsSetData0 = useImpostor && existingData0!.length !== count * 4;
         const needsSetData1 = useImpostor && existingData1!.length !== count * 4;

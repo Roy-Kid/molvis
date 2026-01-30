@@ -16,6 +16,7 @@ import { CommonMenuItems } from "./menu_items";
 import { Artist } from "./artist";
 import { syncSceneToFrame } from "../core/scene_sync";
 import { logger } from "../utils/logger";
+import "../shaders/impostor"; // Ensure impostor shaders are registered
 
 
 /**
@@ -38,7 +39,8 @@ function makeId(prefix = "atom"): string {
 
 class PreviewManager {
   private previewAtom: Mesh | null = null;
-  private previewBond: Mesh | null = null;
+  private previewBond1: Mesh | null = null;
+  private previewBond2: Mesh | null = null;
 
   constructor(private app: Molvis) { }
 
@@ -74,19 +76,43 @@ class PreviewManager {
     }
   }
 
-  showBond(path: Vector3[]) {
-    if (this.previewBond) {
-      MeshBuilder.CreateTube("preview_bond", { path, instance: this.previewBond }, this.scene);
+  showBond(path: Vector3[], color1?: Color3, color2?: Color3) {
+    const start = path[0];
+    const end = path[1];
+    const mid = Vector3.Center(start, end);
+
+    this.updateBondSegment(1, [start, mid], color1 ?? new Color3(0.8, 0.8, 0.8));
+    this.updateBondSegment(2, [mid, end], color2 ?? new Color3(0.8, 0.8, 0.8));
+  }
+
+  private updateBondSegment(index: 1 | 2, path: Vector3[], color: Color3) {
+    const meshName = `preview_bond_${index}`;
+    let mesh = index === 1 ? this.previewBond1 : this.previewBond2;
+
+    if (mesh) {
+      MeshBuilder.CreateTube(meshName, { path, instance: mesh }, this.scene);
+      (mesh.material as StandardMaterial).diffuseColor = color;
+      mesh.isVisible = true;
     } else {
-      this.previewBond = MeshBuilder.CreateTube(
-        "preview_bond",
+      mesh = MeshBuilder.CreateTube(
+        meshName,
         { path, radius: 0.05, updatable: true },
         this.scene
       );
-      const bmat = new StandardMaterial("preview_bond_mat", this.scene);
-      bmat.diffuseColor = new Color3(0.8, 0.8, 0.8);
-      this.previewBond.material = bmat;
+      const mat = new StandardMaterial(`${meshName}_mat`, this.scene);
+      mat.diffuseColor = color;
+      mat.specularColor = new Color3(0.1, 0.1, 0.1);
+      mesh.material = mat;
+      mesh.isPickable = false;
+
+      if (index === 1) this.previewBond1 = mesh;
+      else this.previewBond2 = mesh;
     }
+  }
+
+  hideBond() {
+    if (this.previewBond1) this.previewBond1.isVisible = false;
+    if (this.previewBond2) this.previewBond2.isVisible = false;
   }
 
   clear() {
@@ -94,9 +120,13 @@ class PreviewManager {
       this.previewAtom.dispose();
       this.previewAtom = null;
     }
-    if (this.previewBond) {
-      this.previewBond.dispose();
-      this.previewBond = null;
+    if (this.previewBond1) {
+      this.previewBond1.dispose();
+      this.previewBond1 = null;
+    }
+    if (this.previewBond2) {
+      this.previewBond2.dispose();
+      this.previewBond2 = null;
     }
   }
 }
@@ -181,9 +211,9 @@ class EditMode extends BaseMode {
 
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
+
     this.artist = new Artist({
-      scene: app.world.scene,
-      app: app,
+      app,
     });
     this.previews = new PreviewManager(app);
   }
@@ -197,7 +227,7 @@ class EditMode extends BaseMode {
    * Handles both regular atom meshes and thin instance atoms from draw_frame.
    */
   private getAtomPosition(atomMesh: AbstractMesh, thinInstanceIndex: number = -1): Vector3 {
-    // Check if this is a thin instance atom (from draw_frame)
+    // Check if this is a thin instance atom (from draw_frame or edit pool)
     if (thinInstanceIndex !== -1) {
       const meta = this.world.sceneIndex.getMeta(atomMesh.uniqueId, thinInstanceIndex);
       if (meta && meta.type === 'atom') {
@@ -214,59 +244,69 @@ class EditMode extends BaseMode {
     this.app.world.highlighter.invalidateAndRebuild();
   }
 
-  override _on_pointer_down(pointerInfo: PointerInfo) {
+  override async _on_pointer_down(pointerInfo: PointerInfo) {
     if (pointerInfo.event.target !== this.world.scene.getEngine().getRenderingCanvas()) return;
-    super._on_pointer_down(pointerInfo);
+    await super._on_pointer_down(pointerInfo);
 
     const isLeft = pointerInfo.event.button === 0;
     this.clickedAtom = null;
     this.clickedBond = null;
 
     if (isLeft) {
-      const atomMesh = this.pick_mesh("atom");
-      if (atomMesh) {
-        this.startAtom = atomMesh;
-        // Capture thin instance index if available
-        this.startAtomIndex = pointerInfo.pickInfo?.pickedMesh === atomMesh ? (pointerInfo.pickInfo?.thinInstanceIndex ?? -1) : -1;
+      // Use pickHit directly to get consistent thinInstanceIndex
+      const hit = await this.pickHit();
 
-        this.clickedAtom = atomMesh;
+      if (hit && hit.type === "atom" && hit.mesh) {
+        this.startAtom = hit.mesh;
+        this.startAtomIndex = hit.thinInstanceIndex ?? -1;
+
+        this.clickedAtom = hit.mesh;
         this.world.camera.detachControl();
         this.hoverAtom = null;
         this.hoverAtomIndex = -1;
         return;
       }
-      const bondMesh = this.pick_mesh("bond");
-      if (bondMesh) {
-        this.clickedBond = bondMesh;
+
+      if (hit && hit.type === "bond" && hit.mesh) {
+        this.clickedBond = hit.mesh;
         return;
       }
+
       this.pendingAtom = true;
     }
   }
 
-  override _on_pointer_move(pointerInfo: PointerInfo) {
-    super._on_pointer_move(pointerInfo);
+  override async _on_pointer_move(pointerInfo: PointerInfo) {
+    await super._on_pointer_move(pointerInfo);
 
     if (!this.startAtom) return;
+
+    // Use resolved position as anchor for drag plane
+    const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
 
     const xyz = pointOnScreenAlignedPlane(
       this.world.scene,
       this.world.camera,
       pointerInfo.event.clientX,
       pointerInfo.event.clientY,
-      this.startAtom.position
+      startPos
     );
 
-    const hit = this.pick_mesh("atom");
+    const hit = await this.pickHit();
     let hover: AbstractMesh | null = null;
     let hoverIndex = -1;
 
-    if (hit && hit !== this.startAtom) {
-      hover = hit;
-      // Capture thin instance index for hover
-      if (pointerInfo.pickInfo?.pickedMesh === hit) {
-        hoverIndex = pointerInfo.pickInfo.thinInstanceIndex ?? -1;
-      }
+    if (hit && hit.type === 'atom' && hit.mesh && hit.mesh !== this.startAtom) {
+      hover = hit.mesh;
+      hoverIndex = hit.thinInstanceIndex ?? -1;
+    }
+
+    // Resolve start color
+    let startColor = Color3.Gray();
+    const startMeta = this.world.sceneIndex.getMeta(this.startAtom.uniqueId, this.startAtomIndex !== -1 ? this.startAtomIndex : undefined);
+    if (startMeta && startMeta.type === 'atom') {
+      const style = this.app.styleManager.getAtomStyle(startMeta.element);
+      startColor = Color3.FromHexString(style.color);
     }
 
     if (hover) {
@@ -274,23 +314,35 @@ class EditMode extends BaseMode {
       this.hoverAtomIndex = hoverIndex;
       this.previews.hideAtom();
 
-      const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
       const hoverPos = this.getAtomPosition(hover, hoverIndex);
       const path = [startPos, hoverPos];
-      this.previews.showBond(path);
+
+      // Resolve hover color
+      let hoverColor = Color3.Gray();
+      const meta = this.world.sceneIndex.getMeta(hover.uniqueId, hoverIndex !== -1 ? hoverIndex : undefined);
+      if (meta && meta.type === 'atom') {
+        const style = this.app.styleManager.getAtomStyle(meta.element);
+        hoverColor = Color3.FromHexString(style.color);
+      }
+
+      this.previews.showBond(path, startColor, hoverColor);
     } else {
       this.hoverAtom = null;
       this.hoverAtomIndex = -1;
       this.previews.showAtom(xyz, 0.5, 0.5);
-      const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
       const path = [startPos, xyz];
-      this.previews.showBond(path);
+
+      // Resolve new atom color
+      const style = this.app.styleManager.getAtomStyle(this.element);
+      const newColor = Color3.FromHexString(style.color);
+
+      this.previews.showBond(path, startColor, newColor);
     }
   }
 
-  override _on_pointer_up(pointerInfo: PointerInfo) {
+  override async _on_pointer_up(pointerInfo: PointerInfo) {
     if (pointerInfo.event.target !== this.world.scene.getEngine().getRenderingCanvas()) return;
-    super._on_pointer_up(pointerInfo);
+    await super._on_pointer_up(pointerInfo);
     const isLeft = pointerInfo.event.button === 0;
 
     if (isLeft && this.clickedAtom && !this._is_dragging && this.startAtom === this.clickedAtom) {
@@ -307,14 +359,16 @@ class EditMode extends BaseMode {
     }
 
     if (isLeft && this.startAtom) {
+      const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
       const xyz = pointOnScreenAlignedPlane(
         this.world.scene,
         this.world.camera,
         pointerInfo.event.clientX,
-        pointerInfo.event.clientY
+        pointerInfo.event.clientY,
+        startPos // Use correct anchor
       );
+
       if (this.hoverAtom) {
-        const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
         const endPos = this.getAtomPosition(this.hoverAtom, this.hoverAtomIndex);
 
         // Resolve atom IDs using indices
@@ -340,7 +394,6 @@ class EditMode extends BaseMode {
           atomId
         });
 
-        const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
         // Resolve start ID
         const startIdx = this.startAtomIndex !== -1 ? this.startAtomIndex : undefined;
         const startMeta = this.world.sceneIndex.getMeta(this.startAtom.uniqueId, startIdx);
@@ -398,7 +451,7 @@ class EditMode extends BaseMode {
       return;
     }
     logger.info('[EditMode] Saving scene to Frame...');
-    syncSceneToFrame(this.world.scene, this.world.sceneIndex, frame);
+    syncSceneToFrame(this.world.sceneIndex, frame);
     logger.info('[EditMode] Successfully saved to Frame');
   }
 

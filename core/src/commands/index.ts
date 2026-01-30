@@ -22,3 +22,9 @@ export type { GetSelectedResponse } from "../core/selection_manager";
 export type { FrameSource } from "../pipeline/pipeline";
 export type { DrawFrameOption } from "./draw";
 export { ArrayFrameSource, SingleFrameSource, AsyncFrameSource } from "./sources";
+
+
+import "./draw";
+import "./clear";
+import "./selection";
+import "./update_frame";

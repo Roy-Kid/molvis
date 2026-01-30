@@ -1,6 +1,6 @@
 import { BaseMode, ModeType } from "./base";
 import type { MolvisApp } from "../core/app";
-import type { PointerInfo } from "@babylonjs/core";
+import { Vector3, type PointerInfo } from "@babylonjs/core";
 import { ContextMenuController } from "../core/context_menu_controller";
 import type { HitResult, MenuItem } from "./types";
 import { CommonMenuItems } from "./menu_items";
@@ -97,8 +97,8 @@ class ViewMode extends BaseMode {
     super.finish();
   }
 
-  override _on_pointer_down(pointerInfo: PointerInfo) {
-    super._on_pointer_down(pointerInfo);
+  override async _on_pointer_down(pointerInfo: PointerInfo) {
+    await super._on_pointer_down(pointerInfo);
 
     // Detect double-click
     const now = Date.now();
@@ -106,7 +106,7 @@ class ViewMode extends BaseMode {
 
     if (timeSinceLastClick < this.doubleClickThreshold &&
       pointerInfo.event.button === 0) { // Left button only
-      this.handleDoubleClick();
+      await this.handleDoubleClick();
     }
 
     this.lastClickTime = now;
@@ -115,31 +115,45 @@ class ViewMode extends BaseMode {
   /**
    * Handle double-click to set camera target (like Ovito)
    */
-  private handleDoubleClick(): void {
-    const pickResult = this.world.scene.pick(
-      this.world.scene.pointerX,
-      this.world.scene.pointerY,
-      undefined,
-      false,
-      this.world.camera
-    );
+  private async handleDoubleClick(): Promise<void> {
+    const hit = await this.pickHit();
 
-    if (pickResult.hit && pickResult.pickedPoint) {
-      // Only set camera target, don't move camera position (Ovito-like behavior)
-      this.world.camera.setTarget(pickResult.pickedPoint);
+    if (hit && (hit.type === 'atom' || hit.type === 'bond')) {
+      let target: Vector3 | null = null;
+      if (hit.metadata) {
+        if (hit.type === 'atom') {
+          target = new Vector3(hit.metadata.position.x, hit.metadata.position.y, hit.metadata.position.z);
+        } else if (hit.type === 'bond') {
+          // Midpoint of bond from metadata
+          const start = hit.metadata.start;
+          const end = hit.metadata.end;
+          target = new Vector3(
+            (start.x + end.x) / 2,
+            (start.y + end.y) / 2,
+            (start.z + end.z) / 2
+          );
+        }
+      } else if (hit.mesh) {
+        target = hit.mesh.absolutePosition.clone();
+      }
 
-      // Show target indicator at the picked point
-      this.world.targetIndicator.show(pickResult.pickedPoint);
+      if (target) {
+        // Only set camera target, don't move camera position (Ovito-like behavior)
+        this.world.camera.setTarget(target);
+
+        // Show target indicator at the picked point
+        this.world.targetIndicator.show(target);
+      }
     }
   }
 
-  override _on_pointer_up(pointerInfo: PointerInfo) {
-    super._on_pointer_up(pointerInfo);
+  override async _on_pointer_up(pointerInfo: PointerInfo) {
+    await super._on_pointer_up(pointerInfo);
   }
 
-  override _on_pointer_move(_pointerInfo: PointerInfo) {
+  override async _on_pointer_move(_pointerInfo: PointerInfo) {
     // ViewMode inherits atom info display functionality from BaseMode
-    super._on_pointer_move(_pointerInfo);
+    await super._on_pointer_move(_pointerInfo);
   }
 
   private onFrameChange = () => {

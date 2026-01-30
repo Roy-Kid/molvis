@@ -108,6 +108,14 @@ export class Topology {
     }
 
     /**
+     * Get bond IDs connected to an atom.
+     * Alias for incident() with a chemistry-semantic name.
+     */
+    getBondsForAtom(atomId: number): Set<number> {
+        return this.adjacency.get(atomId) ?? new Set();
+    }
+
+    /**
      * Get the source and target vertices of an edge.
      * igraph: ends(graph, es) -> we allow getting for single edge here for convenience.
      */

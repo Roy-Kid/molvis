@@ -130,13 +130,13 @@ class MeasureMode extends BaseMode {
     super.finish();
   }
 
-  protected override _on_left_up(pointerInfo: PointerInfo): void {
+  protected override async _on_left_up(pointerInfo: PointerInfo): Promise<void> {
     if (this._is_dragging) {
-      super._on_left_up(pointerInfo);
+      await super._on_left_up(pointerInfo);
       return;
     }
 
-    const hit = this.pickHit();
+    const hit = await this.pickHit();
 
     if (hit && hit.type === 'atom') {
       this.handleAtomClick(hit);
@@ -145,7 +145,7 @@ class MeasureMode extends BaseMode {
       this.clearAllMeasurements();
     }
 
-    super._on_left_up(pointerInfo);
+    await super._on_left_up(pointerInfo);
   }
 
   private handleAtomClick(hit: HitResult): void {
@@ -241,8 +241,10 @@ class MeasureMode extends BaseMode {
 
   // Override to prevent BaseMode from overwriting our measurement info with default hover text
   // BUT we now add hover highlighting via Highlighter
-  override _on_pointer_move(_pointerInfo: PointerInfo): void {
-    const hit = this.pickHit();
+  // Override to prevent BaseMode from overwriting our measurement info with default hover text
+  // BUT we now add hover highlighting via Highlighter
+  override async _on_pointer_move(_pointerInfo: PointerInfo): Promise<void> {
+    const hit = await this.pickHit();
 
     if (this.enableHoverHighlight) {
       if (hit && hit.type === 'atom' && hit.mesh) {

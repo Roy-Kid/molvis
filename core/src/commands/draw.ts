@@ -1,15 +1,10 @@
-import * as BABYLON from "@babylonjs/core";
-import { Vector3, MeshBuilder, Color3, Mesh, type Scene } from "@babylonjs/core";
-import type { MolvisApp } from "../core/app";
+import * as BABYLON from "@babylonjs/core"; // Used for mesh types
+import { Vector3 } from "@babylonjs/core";
 import { Command, command } from "./base";
-import { Frame, Block } from "molrs-wasm";
+import { Frame } from "molrs-wasm";
+import { MolvisApp } from "../core/app";
 import "../shaders/impostor"; // Register shaders
-
-// Reusable scratch variables to avoid GC in tight loops
-const TMP_VEC_1 = new Vector3();
-const TMP_VEC_2 = new Vector3();
-const TMP_VEC_CENTER = new Vector3();
-const TMP_VEC_DIR = new Vector3();
+// Note: ImpostorPool removed.
 
 export interface DrawAtomsOption {
     radii?: number[];
@@ -115,10 +110,9 @@ export class DrawBoxCommand extends Command<void> {
  */
 @command("draw_frame")
 export class DrawFrameCommand extends Command<void> {
-    private createdMeshes: BABYLON.AbstractMesh[] = [];
-    private boxMesh: BABYLON.Mesh | null = null;
     private frame: Frame;
     private options?: DrawFrameOption;
+    private boxMesh: BABYLON.Mesh | null = null;
 
     constructor(
         app: MolvisApp,
@@ -133,40 +127,29 @@ export class DrawFrameCommand extends Command<void> {
     }
 
     do(): void {
+        const renderer = this.app.world.renderer;
+        // const sceneIndex = this.app.world.sceneIndex; // Unused
         const scene = this.app.world.scene;
-        const drawOptions = this.options ?? {};
 
-        // Render Atoms (Thin Instances)
+        // 1. Clear Renderer & Registry
+        renderer.clear();
+        // sceneIndex.clear() is called by renderer.clear()
+
         const atomsBlock = this.frame.getBlock("atoms");
-        let atomMesh: BABYLON.Mesh | undefined;
-        if (atomsBlock && atomsBlock.len()! > 0) {
-            atomMesh = this.createAtomMesh(scene, drawOptions, atomsBlock);
-            this.createdMeshes.push(atomMesh);
-        }
-
-        // Render Bonds (Thin Instances)
         const bondsBlock = this.frame.getBlock("bonds");
-        let bondMesh: BABYLON.Mesh | undefined;
-        if (bondsBlock && bondsBlock.len()! > 0) {
-            if (!atomsBlock || atomsBlock.len() === 0) {
-                console.warn("[DrawFrame] Bonds present without atoms; skipping bond rendering.");
-            } else {
-                bondMesh = this.createBondMesh(scene, drawOptions, atomsBlock, bondsBlock);
-                this.createdMeshes.push(bondMesh);
-            }
+
+        if (!atomsBlock || atomsBlock.nrows() === 0) {
+            return;
         }
 
-        // Register frame with SceneIndex (single call for all thin instances)
-        if (atomMesh && atomsBlock) {
-            this.app.world.sceneIndex.registerFrame({
-                atomMesh,
-                bondMesh: bondMesh ?? undefined,
-                atomBlock: atomsBlock,
-                bondBlock: bondsBlock || undefined
-            });
-        }
+        // 2. Load Frame Data into SceneIndex (Delegated by Renderer)
+        renderer.loadFrame(
+            atomsBlock as any,
+            bondsBlock as any,
+            this.options
+        );
 
-        // Draw Box if explicitly defined in frame metadata
+        // 3. Draw Box
         const boxData = this.getBoxData(this.frame);
         if (boxData) {
             const existingBox = scene.getMeshByName("sim_box");
@@ -198,311 +181,9 @@ export class DrawFrameCommand extends Command<void> {
         }
     }
 
-    private createAtomMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption, atomsBlock: Block): BABYLON.Mesh {
-        const atomCount = atomsBlock.nrows()!;
-        const xCoords = atomsBlock.getColumnF32("x")!;
-        const yCoords = atomsBlock.getColumnF32("y")!;
-        const zCoords = atomsBlock.getColumnF32("z")!;
-        const elements = atomsBlock.getColumnStrings("element");
-        if (!elements) {
-            console.warn("[DrawFrame] Missing element column; defaulting to C for all atoms.");
-        }
-
-        // Force Impostor for Atoms
-        let atomMaterial = scene.getMaterialByName("atomMat_impostor") as BABYLON.ShaderMaterial;
-        if (!atomMaterial) {
-            atomMaterial = new BABYLON.ShaderMaterial(
-                "atomMat_impostor",
-                scene,
-                { vertex: "sphereImpostor", fragment: "sphereImpostor" },
-                {
-                    attributes: ["position", "uv", "instanceData", "instanceColor"],
-                    uniforms: ["view", "projection", "lightDir", "lightAmbient", "lightDiffuse", "lightSpecular", "lightSpecularPower"]
-                }
-            );
-            atomMaterial.backFaceCulling = false;
-            atomMaterial.alphaMode = BABYLON.Engine.ALPHA_DISABLE;
-            atomMaterial.disableDepthWrite = false;
-            atomMaterial.onBindObservable.add(() => {
-                atomMaterial.setMatrix("view", scene.getViewMatrix());
-                atomMaterial.setMatrix("projection", scene.getProjectionMatrix());
-
-                const lighting = this.app.settings.getLighting();
-                atomMaterial.setVector3("lightDir", new BABYLON.Vector3(lighting.lightDir[0], lighting.lightDir[1], lighting.lightDir[2]));
-
-                atomMaterial.setFloat("lightAmbient", lighting.ambient);
-                atomMaterial.setFloat("lightDiffuse", lighting.diffuse);
-                atomMaterial.setFloat("lightSpecular", lighting.specular);
-                atomMaterial.setFloat("lightSpecularPower", lighting.specularPower);
-            });
-        }
-
-        const sphereBase = BABYLON.MeshBuilder.CreatePlane("atom_base", { size: 1.0 }, scene);
-        sphereBase.material = atomMaterial;
-
-        // Optimization flags
-        // sphereBase.isPickable = true;
-        // sphereBase.doNotSyncBoundingInfo = true;
-        sphereBase.freezeWorldMatrix();
-
-        // Buffers
-        const matrixBuffer = new Float32Array(atomCount * 16);
-        const colorBuffer = new Float32Array(atomCount * 4);
-        const instanceDataBuffer = new Float32Array(atomCount * 4);
-
-        const styleManager = this.app.styleManager;
-        const styleCache = new Map<string, { r: number, g: number, b: number, a: number, radius: number }>();
-        const customRadii = drawOptions.atoms?.radii;
-
-        for (let i = 0; i < atomCount; i++) {
-            const element = elements ? elements[i] : "C";
-
-            let style = styleCache.get(element);
-            if (!style) {
-                const s = styleManager.getAtomStyle(element);
-                const c = BABYLON.Color3.FromHexString(s.color);
-                const color = c.toLinearSpace();
-                style = { r: color.r, g: color.g, b: color.b, a: s.alpha ?? 1.0, radius: s.radius };
-                styleCache.set(element, style);
-            }
-
-            const radius = customRadii?.[i] ?? style.radius * 0.6;
-            const scale = radius * 2;
-
-            const matOffset = i * 16;
-
-            // Build Matrix (Scale + Translation)
-            matrixBuffer[matOffset + 0] = scale;
-            matrixBuffer[matOffset + 1] = 0;
-            matrixBuffer[matOffset + 2] = 0;
-            matrixBuffer[matOffset + 3] = 0;
-
-            matrixBuffer[matOffset + 4] = 0;
-            matrixBuffer[matOffset + 5] = scale;
-            matrixBuffer[matOffset + 6] = 0;
-            matrixBuffer[matOffset + 7] = 0;
-
-            matrixBuffer[matOffset + 8] = 0;
-            matrixBuffer[matOffset + 9] = 0;
-            matrixBuffer[matOffset + 10] = scale;
-            matrixBuffer[matOffset + 11] = 0;
-
-            matrixBuffer[matOffset + 12] = xCoords[i];
-            matrixBuffer[matOffset + 13] = yCoords[i];
-            matrixBuffer[matOffset + 14] = zCoords[i];
-            matrixBuffer[matOffset + 15] = 1;
-
-            const idx4 = i * 4;
-            colorBuffer[idx4 + 0] = style.r;
-            colorBuffer[idx4 + 1] = style.g;
-            colorBuffer[idx4 + 2] = style.b;
-            colorBuffer[idx4 + 3] = style.a;
-
-            instanceDataBuffer[idx4 + 0] = xCoords[i];
-            instanceDataBuffer[idx4 + 1] = yCoords[i];
-            instanceDataBuffer[idx4 + 2] = zCoords[i];
-            instanceDataBuffer[idx4 + 3] = radius;
-        }
-
-        sphereBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-        sphereBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-        sphereBase.thinInstanceSetBuffer("instanceData", instanceDataBuffer, 4, true);
-        sphereBase.thinInstanceSetBuffer("instanceColor", colorBuffer, 4, true);
-        sphereBase.thinInstanceEnablePicking = true;
-        sphereBase.thinInstanceRefreshBoundingInfo(true);
-
-        return sphereBase;
-    }
-
-    private createBondMesh(scene: BABYLON.Scene, drawOptions: DrawFrameOption, atomsBlock: Block, bondsBlock: Block): BABYLON.Mesh {
-        const bondCount = bondsBlock.nrows();
-        const bondRadius = drawOptions.bonds?.radii ?? 0.1;
-        // Force Impostor for Bonds to match Atoms depth logic
-        let bondMaterial = scene.getMaterialByName("bondMat_impostor") as BABYLON.ShaderMaterial;
-        if (!bondMaterial) {
-            bondMaterial = new BABYLON.ShaderMaterial(
-                "bondMat_impostor",
-                scene,
-                { vertex: "bondImpostor", fragment: "bondImpostor" },
-                {
-                    attributes: ["position", "uv", "instanceData0", "instanceData1", "instanceColor0", "instanceColor1", "instanceSplit"],
-                    uniforms: ["view", "projection", "lightDir", "lightAmbient", "lightDiffuse", "lightSpecular", "lightSpecularPower"]
-                }
-            );
-            bondMaterial.backFaceCulling = false;
-            bondMaterial.alphaMode = BABYLON.Engine.ALPHA_DISABLE;
-            bondMaterial.disableDepthWrite = false;
-            bondMaterial.onBindObservable.add(() => {
-                bondMaterial.setMatrix("view", scene.getViewMatrix());
-                bondMaterial.setMatrix("projection", scene.getProjectionMatrix());
-
-                const lighting = this.app.settings.getLighting();
-                bondMaterial.setVector3("lightDir", new BABYLON.Vector3(lighting.lightDir[0], lighting.lightDir[1], lighting.lightDir[2]));
-                bondMaterial.setFloat("lightAmbient", lighting.ambient);
-                bondMaterial.setFloat("lightDiffuse", lighting.diffuse);
-                bondMaterial.setFloat("lightSpecular", lighting.specular);
-                bondMaterial.setFloat("lightSpecularPower", lighting.specularPower);
-            });
-        }
-
-        const cylinderBase = BABYLON.MeshBuilder.CreatePlane("bond_base", { size: 1.0 }, scene);
-        cylinderBase.material = bondMaterial;
-        cylinderBase.freezeWorldMatrix();
-
-        // Buffers
-        // Buffers
-        const matrixBuffer = new Float32Array(bondCount * 16);
-        const instanceData0 = new Float32Array(bondCount * 4);
-        const instanceData1 = new Float32Array(bondCount * 4);
-        const instanceColor0 = new Float32Array(bondCount * 4);
-        const instanceColor1 = new Float32Array(bondCount * 4);
-        const instanceSplit = new Float32Array(bondCount * 4);
-
-        const xCoords = atomsBlock.getColumnF32("x")!;
-        const yCoords = atomsBlock.getColumnF32("y")!;
-        const zCoords = atomsBlock.getColumnF32("z")!;
-        const i_atoms = bondsBlock.getColumnU32("i")!;
-        const j_atoms = bondsBlock.getColumnU32("j")!;
-
-        // Cache for bond style / atom colors
-        const styleManager = this.app.styleManager;
-        let cachedBondColor: Float32Array | null = null;
-        const elementColors = new Map<string, Float32Array>();
-        const elementRadii = new Map<string, number>();
-        const elements = atomsBlock.getColumnStrings("element");
-        const customAtomRadii = drawOptions.atoms?.radii;
-
-        for (let b = 0; b < bondCount; b++) {
-            const i = i_atoms[b];
-            const j = j_atoms[b];
-
-            // Reusing static vectors
-            TMP_VEC_1.set(xCoords[i], yCoords[i], zCoords[i]); // p1
-            TMP_VEC_2.set(xCoords[j], yCoords[j], zCoords[j]); // p2
-
-            // center = (p1 + p2) * 0.5
-            TMP_VEC_CENTER.copyFrom(TMP_VEC_1).addInPlace(TMP_VEC_2).scaleInPlace(0.5);
-
-            // direction = (p2 - p1).normalize()
-            TMP_VEC_DIR.copyFrom(TMP_VEC_2).subtractInPlace(TMP_VEC_1);
-            const distance = TMP_VEC_DIR.length();
-            if (distance > 1e-8) {
-                TMP_VEC_DIR.scaleInPlace(1 / distance);
-            } else {
-                TMP_VEC_DIR.set(0, 1, 0);
-            }
-
-            const idx4 = b * 4;
-            instanceData0[idx4 + 0] = TMP_VEC_CENTER.x;
-            instanceData0[idx4 + 1] = TMP_VEC_CENTER.y;
-            instanceData0[idx4 + 2] = TMP_VEC_CENTER.z;
-            instanceData0[idx4 + 3] = bondRadius;
-
-            instanceData1[idx4 + 0] = TMP_VEC_DIR.x;
-            instanceData1[idx4 + 1] = TMP_VEC_DIR.y;
-            instanceData1[idx4 + 2] = TMP_VEC_DIR.z;
-            instanceData1[idx4 + 3] = distance;
-
-            const matOffset = b * 16;
-            const scale = distance + bondRadius * 2;
-            matrixBuffer[matOffset + 0] = scale;
-            matrixBuffer[matOffset + 5] = scale;
-            matrixBuffer[matOffset + 10] = scale;
-            matrixBuffer[matOffset + 15] = 1;
-            matrixBuffer[matOffset + 12] = TMP_VEC_CENTER.x;
-            matrixBuffer[matOffset + 13] = TMP_VEC_CENTER.y;
-            matrixBuffer[matOffset + 14] = TMP_VEC_CENTER.z;
-
-            // Split calculation
-            let r0 = 0;
-            let r1 = 0;
-            if (elements) {
-                const e0 = elements[i] ?? "C";
-                const e1 = elements[j] ?? "C";
-                let cachedR0 = elementRadii.get(e0);
-                if (cachedR0 === undefined) {
-                    const s0 = styleManager.getAtomStyle(e0);
-                    cachedR0 = s0.radius;
-                    elementRadii.set(e0, cachedR0);
-                }
-                let cachedR1 = elementRadii.get(e1);
-                if (cachedR1 === undefined) {
-                    const s1 = styleManager.getAtomStyle(e1);
-                    cachedR1 = s1.radius;
-                    elementRadii.set(e1, cachedR1);
-                }
-                r0 = cachedR0;
-                r1 = cachedR1;
-            }
-            if (customAtomRadii) {
-                r0 = customAtomRadii[i] ?? r0;
-                r1 = customAtomRadii[j] ?? r1;
-            }
-            const splitOffset = (r0 - r1) * 0.4;
-            instanceSplit[idx4 + 0] = splitOffset;
-            instanceSplit[idx4 + 1] = 0;
-            instanceSplit[idx4 + 2] = 0;
-            instanceSplit[idx4 + 3] = 0;
-
-            if (!cachedBondColor) {
-                const style = styleManager.getBondStyle(1);
-                const color = BABYLON.Color3.FromHexString(style.color);
-                cachedBondColor = new Float32Array([color.r, color.g, color.b, style.alpha ?? 1.0]);
-            }
-
-            const colOffset = b * 4;
-            let c0 = cachedBondColor;
-            let c1 = cachedBondColor;
-
-            if (elements) {
-                const e0 = elements[i] ?? "C";
-                const e1 = elements[j] ?? "C";
-                let cached0 = elementColors.get(e0);
-                if (!cached0) {
-                    const s0 = styleManager.getAtomStyle(e0);
-                    const col0 = BABYLON.Color3.FromHexString(s0.color);
-                    const c = col0.toLinearSpace();
-                    cached0 = new Float32Array([c.r, c.g, c.b, s0.alpha ?? 1.0]);
-                    elementColors.set(e0, cached0);
-                }
-                let cached1 = elementColors.get(e1);
-                if (!cached1) {
-                    const s1 = styleManager.getAtomStyle(e1);
-                    const col1 = BABYLON.Color3.FromHexString(s1.color);
-                    const c = col1.toLinearSpace();
-                    cached1 = new Float32Array([c.r, c.g, c.b, s1.alpha ?? 1.0]);
-                    elementColors.set(e1, cached1);
-                }
-                c0 = cached0;
-                c1 = cached1;
-            }
-
-            instanceColor0[colOffset + 0] = c0[0];
-            instanceColor0[colOffset + 1] = c0[1];
-            instanceColor0[colOffset + 2] = c0[2];
-            instanceColor0[colOffset + 3] = c0[3];
-
-            instanceColor1[colOffset + 0] = c1[0];
-            instanceColor1[colOffset + 1] = c1[1];
-            instanceColor1[colOffset + 2] = c1[2];
-            instanceColor1[colOffset + 3] = c1[3];
-        }
-
-        cylinderBase.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-        cylinderBase.thinInstanceSetBuffer("instanceData0", instanceData0, 4, true);
-        cylinderBase.thinInstanceSetBuffer("instanceData1", instanceData1, 4, true);
-        cylinderBase.thinInstanceSetBuffer("instanceColor0", instanceColor0, 4, true);
-        cylinderBase.thinInstanceSetBuffer("instanceColor1", instanceColor1, 4, true);
-        cylinderBase.thinInstanceSetBuffer("instanceSplit", instanceSplit, 4, true);
-        cylinderBase.thinInstanceEnablePicking = true;
-        // cylinderBase.thinInstanceRefreshBoundingInfo(true);
-
-        return cylinderBase;
-    }
-
     undo(): Command {
-        this.createdMeshes.forEach((mesh) => mesh.dispose());
-        this.createdMeshes = [];
+        // Clearing logic matching existing patterns
+        this.app.world.renderer.clear();
         if (this.boxMesh) {
             this.app.world.sceneIndex.unregister(this.boxMesh.uniqueId);
             this.boxMesh.dispose();
@@ -572,6 +253,7 @@ class NoOpCommand extends Command<void> {
     }
 }
 
+
 /**
  * Command to draw an atom
  */
@@ -596,264 +278,279 @@ export interface DrawBondOptions {
 }
 
 /**
- * Command to draw an atom in Edit mode
+ * Command to draw an atom in Edit mode.
  */
-export class DrawAtomCommand extends Command<Mesh> {
-    private mesh: Mesh | null = null;
+export class DrawAtomCommand extends Command<{ atomId: number }> {
+    private atomId: number;
+    private executed = false;
+    private meshId: number = 0; // Store mesh ID for undo
 
     constructor(
         app: MolvisApp,
         private position: Vector3,
-        private options: DrawAtomOptions,
-        private scene: Scene
+        private options: DrawAtomOptions
+        // Pool removal: no ImpostorPool arg
     ) {
         super(app);
+        this.atomId = options.atomId ?? app.world.sceneIndex.getNextAtomId();
     }
 
-    do(): Mesh {
-        const { element, name, radius, color } = this.options;
-
+    do(): { atomId: number } {
+        const { element } = this.options;
         const style = this.app.styleManager.getAtomStyle(element);
-        const atomRadius = radius || style.radius;
+        const radius = this.options.radius || style.radius * 0.6;
+        const scale = radius * 2;
 
-        this.mesh = MeshBuilder.CreateSphere(
-            name || `atom_${element}_${Date.now()}`,
-            { diameter: atomRadius * 2, segments: 16 },
-            this.scene
-        );
+        // Compute colors
+        const c = BABYLON.Color3.FromHexString(style.color).toLinearSpace();
 
-        this.mesh.position = this.position.clone();
+        // Build buffer values
+        const values = new Map<string, Float32Array>();
 
-        const material = this.app.styleManager.getAtomMaterial(element);
-        // If custom color is provided, we clone and set it (rare case in Edit mode)
-        if (color) {
-            const customMat = material.clone(`${material.name}_custom_${Date.now()}`);
-            customMat.diffuseColor = Color3.FromHexString(color);
-            this.mesh.material = customMat;
-        } else {
-            this.mesh.material = material;
-        }
+        // Matrix (Scale + Translation)
+        const matrix = new Float32Array(16);
+        matrix[0] = scale; matrix[5] = scale; matrix[10] = scale; matrix[15] = 1;
+        matrix[12] = this.position.x; matrix[13] = this.position.y; matrix[14] = this.position.z;
+        values.set("matrix", matrix);
 
-        // Register with SceneIndex using new chemistry-semantic API
-        this.app.world.sceneIndex.registerAtom({
-            mesh: this.mesh,
-            meta: {
-                atomId: this.options.atomId ?? this.mesh.uniqueId,
+        // instanceData (x, y, z, radius)
+        values.set("instanceData", new Float32Array([
+            this.position.x, this.position.y, this.position.z, radius
+        ]));
+
+        // instanceColor (r, g, b, a)
+        values.set("instanceColor", new Float32Array([c.r, c.g, c.b, style.alpha ?? 1.0]));
+
+        // instancePickingColor will be set by the pool itself
+        values.set("instancePickingColor", new Float32Array(4)); // placeholder
+
+        // Create Atom in SceneIndex
+        this.app.world.sceneIndex.createAtom(
+            {
+                atomId: this.atomId,
                 element,
                 position: { x: this.position.x, y: this.position.y, z: this.position.z }
-            }
-        });
+            },
+            values
+        );
 
-        return this.mesh;
+        // Capture meshID for undo from MeshRegistry?
+        // SceneIndex.createAtom uses meshRegistry.getAtomState().mesh
+        // We can retrieve it.
+        const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+        if (atomState) this.meshId = atomState.mesh.uniqueId;
+
+        this.executed = true;
+        return { atomId: this.atomId };
     }
 
     undo(): Command {
-        if (!this.mesh) {
-            throw new Error("Cannot undo DrawAtomCommand: mesh not created");
+        if (!this.executed) {
+            throw new Error("Cannot undo DrawAtomCommand: not executed");
         }
-        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
-        this.mesh.dispose();
-        // Mark as unsaved when undoing an addition
-        this.app.world.sceneIndex.markAllUnsaved();
+        if (this.meshId) {
+            this.app.world.sceneIndex.unregisterEditAtom(this.meshId, this.atomId);
+        }
+        this.executed = false;
         return new NoOpCommand(this.app);
     }
 }
 
 /**
- * Command to delete an atom and connected bonds
+ * Command to delete an edit-mode atom and connected bonds.
  */
 export class DeleteAtomCommand extends Command<void> {
-    private deletedBonds: Mesh[] = [];
+    private savedAtomData: Map<string, Float32Array> | null = null;
+    private deletedBonds: Array<{
+        bondId: number;
+        data: Map<string, Float32Array>;
+    }> = [];
 
     constructor(
         app: MolvisApp,
-        private mesh: Mesh,
-        private scene: Scene
+        private atomId: number
+        // No pools
     ) {
         super(app);
     }
 
     do(): void {
-        // Find and delete connected bonds
+        const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+        if (!atomState) return;
+        const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+
+        // Save atom data for undo
+        this.savedAtomData = new Map();
+        for (const bufName of ["matrix", "instanceData", "instanceColor", "instancePickingColor"]) {
+            const data = atomState.read(this.atomId, bufName);
+            if (data) this.savedAtomData.set(bufName, new Float32Array(data)); // Copy
+        }
+
+        // Find and remove connected bonds via topology
+        const connectedBonds = this.app.world.sceneIndex.topology.getBondsForAtom(this.atomId);
         this.deletedBonds = [];
-        const atomPos = this.mesh.position;
 
-        this.scene.meshes.forEach((m) => {
-            const bondMeta = this.app.world.sceneIndex.getMeta(m.uniqueId);
-            if (bondMeta && bondMeta.type === 'bond') {
-                const start = new Vector3(bondMeta.start.x, bondMeta.start.y, bondMeta.start.z);
-                const end = new Vector3(bondMeta.end.x, bondMeta.end.y, bondMeta.end.z);
-                if (
-                    Vector3.Distance(start, atomPos) < 0.01 ||
-                    Vector3.Distance(end, atomPos) < 0.01
-                ) {
-                    this.deletedBonds.push(m as Mesh);
+        for (const bondId of connectedBonds) {
+            // Retrieve bond data if bondState exists
+            if (bondState) {
+                const bondData = new Map<string, Float32Array>();
+                for (const bufName of ["matrix", "instanceData0", "instanceData1", "instanceColor0", "instanceColor1", "instanceSplit", "instancePickingColor"]) {
+                    const data = bondState.read(bondId, bufName);
+                    if (data) bondData.set(bufName, new Float32Array(data)); // Copy
                 }
+                this.deletedBonds.push({ bondId, data: bondData });
+                this.app.world.sceneIndex.unregisterEditBond(bondState.mesh.uniqueId, bondId);
             }
-        });
+        }
 
-        // Dispose bonds and unregister from SceneIndex
-        this.deletedBonds.forEach((b) => {
-            this.app.world.sceneIndex.unregister(b.uniqueId);
-            b.dispose();
-        });
-
-        // Unregister and dispose atom
-        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
-        this.mesh.dispose();
-        this.app.world.sceneIndex.markAllUnsaved();
+        // Remove atom
+        this.app.world.sceneIndex.unregisterEditAtom(atomState.mesh.uniqueId, this.atomId);
     }
 
     undo(): Command {
+        // Restore atoms and bonds
+        // Not fully implemented for re-insertion, but we have data.
+        // For now NoOp as per previous implementation (it returned NoOpCommand).
+        // If strict undo is required, we'd need CreateAtom/CreateBond calls here.
         return new NoOpCommand(this.app);
     }
 }
 
 /**
- * Command to draw a bond in Edit mode
+ * Command to draw a bond in Edit mode.
  */
-export class DrawBondCommand extends Command<Mesh> {
-    private mesh: Mesh | null = null;
+export class DrawBondCommand extends Command<{ bondId: number }> {
+    private bondId: number;
+    private executed = false;
+    private meshId: number = 0;
 
     constructor(
         app: MolvisApp,
-        private start: Vector3,
-        private end: Vector3,
-        private options: DrawBondOptions,
-        private scene: Scene
+        private startPos: Vector3,
+        private endPos: Vector3,
+        private options: DrawBondOptions
     ) {
         super(app);
+        this.bondId = options.bondId ?? app.world.sceneIndex.getNextBondId();
     }
 
-    do(): Mesh {
-        const { order = 1, radius, color } = this.options;
+    do(): { bondId: number } {
+        const { order = 1 } = this.options;
+        const bondRadius = this.options.radius || this.app.styleManager.getBondStyle(order).radius;
 
-        const style = this.app.styleManager.getBondStyle(order);
-
-        const bondRadius = radius || style.radius;
-
-        const direction = this.end.subtract(this.start);
-        const length = direction.length();
-        const midpoint = this.start.add(direction.scale(0.5));
-
-        // For multiple bonds, create a parent mesh to hold all cylinders
-        const parent = new Mesh(`bond_parent_${Date.now()}`, this.scene);
-        parent.position = midpoint;
-
-        // Calculate rotation for bond orientation
-        const axis = Vector3.Cross(Vector3.Up(), direction.normalize());
-        const angle = Math.acos(Vector3.Dot(Vector3.Up(), direction.normalize()));
-
-        if (axis.length() > 0.001) {
-            parent.rotationQuaternion = null;
-            parent.rotate(axis.normalize(), angle);
+        // Compute center, direction, distance
+        const center = this.startPos.add(this.endPos).scaleInPlace(0.5);
+        const dir = this.endPos.subtract(this.startPos);
+        const distance = dir.length();
+        if (distance > 1e-8) {
+            dir.scaleInPlace(1 / distance);
+        } else {
+            dir.set(0, 1, 0);
         }
 
-        // Create material
-        let material = this.app.styleManager.getBondMaterial(order);
-        if (color) {
-            const customMat = material.clone(`${material.name}_custom_${Date.now()}`);
-            customMat.diffuseColor = Color3.FromHexString(color);
-            material = customMat;
-        }
+        const scale = distance + bondRadius * 2;
 
-        // Draw cylinders based on bond order
-        if (order === 1) {
-            // Single bond - one cylinder in the center
-            const cylinder = MeshBuilder.CreateCylinder(
-                `bond_single`,
-                {
-                    height: length,
-                    diameter: bondRadius * 2,
-                    tessellation: 8,
-                },
-                this.scene
-            );
-            cylinder.material = material;
-            cylinder.parent = parent;
-        } else if (order === 2) {
-            // Double bond - two parallel cylinders
-            const offset = bondRadius * 2; // Distance between cylinders
+        // Matrix
+        const matrix = new Float32Array(16);
+        matrix[0] = scale; matrix[5] = scale; matrix[10] = scale; matrix[15] = 1;
+        matrix[12] = center.x; matrix[13] = center.y; matrix[14] = center.z;
 
-            for (let i = 0; i < 2; i++) {
-                const cylinder = MeshBuilder.CreateCylinder(
-                    `bond_double_${i}`,
-                    {
-                        height: length,
-                        diameter: bondRadius * 1.5, // Slightly thinner for double bonds
-                        tessellation: 8,
-                    },
-                    this.scene
-                );
-                cylinder.material = material;
-                cylinder.parent = parent;
-                // Offset perpendicular to bond direction
-                cylinder.position.x = (i - 0.5) * offset;
-            }
-        } else if (order === 3) {
-            // Triple bond - three parallel cylinders
-            const offset = bondRadius * 2;
+        // instanceData0 (center.xyz, bondRadius)
+        const data0 = new Float32Array([center.x, center.y, center.z, bondRadius]);
 
-            for (let i = 0; i < 3; i++) {
-                const cylinder = MeshBuilder.CreateCylinder(
-                    `bond_triple_${i}`,
-                    {
-                        height: length,
-                        diameter: bondRadius * 1.2, // Even thinner for triple bonds
-                        tessellation: 8,
-                    },
-                    this.scene
-                );
-                cylinder.material = material;
-                cylinder.parent = parent;
-                // Offset perpendicular to bond direction
-                cylinder.position.x = (i - 1) * offset;
-            }
-        }
+        // instanceData1 (dir.xyz, distance)
+        const data1 = new Float32Array([dir.x, dir.y, dir.z, distance]);
 
-        this.mesh = parent;
+        // Colors - use element colors for bicolor bonds
+        const atomId1 = this.options.atomId1 ?? 0;
+        const atomId2 = this.options.atomId2 ?? 0;
 
-        // Register with SceneIndex using new chemistry-semantic API
-        this.app.world.sceneIndex.registerBond({
-            mesh: this.mesh,
-            meta: {
-                bondId: this.options.bondId ?? this.mesh.uniqueId,
-                atomId1: this.options.atomId1 ?? 0,
-                atomId2: this.options.atomId2 ?? 0,
+        // Try to get element colors from sceneIndex metadata
+        let c0 = this.getAtomColor(atomId1);
+        let c1 = this.getAtomColor(atomId2);
+
+        // Split offset
+        const r0 = this.getAtomRadius(atomId1);
+        const r1 = this.getAtomRadius(atomId2);
+        const splitOffset = (r0 - r1) * 0.4;
+
+        const values = new Map<string, Float32Array>();
+        values.set("matrix", matrix);
+        values.set("instanceData0", data0);
+        values.set("instanceData1", data1);
+        values.set("instanceColor0", c0);
+        values.set("instanceColor1", c1);
+        values.set("instanceSplit", new Float32Array([splitOffset, 0, 0, 0]));
+        values.set("instancePickingColor", new Float32Array(4)); // placeholder
+
+        // Create Bond
+        this.app.world.sceneIndex.createBond(
+            {
+                bondId: this.bondId,
+                atomId1,
+                atomId2,
                 order,
-                start: { x: this.start.x, y: this.start.y, z: this.start.z },
-                end: { x: this.end.x, y: this.end.y, z: this.end.z }
-            }
-        });
+                start: { x: this.startPos.x, y: this.startPos.y, z: this.startPos.z },
+                end: { x: this.endPos.x, y: this.endPos.y, z: this.endPos.z }
+            },
+            values
+        );
 
-        return this.mesh;
+        const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+        if (bondState) this.meshId = bondState.mesh.uniqueId;
+
+        this.executed = true;
+        return { bondId: this.bondId };
     }
 
     undo(): Command {
-        if (!this.mesh) {
-            throw new Error("Cannot undo DrawBondCommand: mesh not created");
+        if (!this.executed) {
+            throw new Error("Cannot undo DrawBondCommand: not executed");
         }
-        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
-        this.mesh.dispose();
+        if (this.meshId) {
+            this.app.world.sceneIndex.unregisterEditBond(this.meshId, this.bondId);
+        }
+        this.executed = false;
         return new NoOpCommand(this.app);
+    }
+
+    private getAtomColor(atomId: number): Float32Array {
+        const meta = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomId);
+        if (meta) {
+            const s = this.app.styleManager.getAtomStyle(meta.element);
+            const c = BABYLON.Color3.FromHexString(s.color).toLinearSpace();
+            return new Float32Array([c.r, c.g, c.b, s.alpha ?? 1.0]);
+        }
+        // Fallback to carbon
+        const s = this.app.styleManager.getAtomStyle('C');
+        const c = BABYLON.Color3.FromHexString(s.color).toLinearSpace();
+        return new Float32Array([c.r, c.g, c.b, s.alpha ?? 1.0]);
+    }
+
+    private getAtomRadius(atomId: number): number {
+        const meta = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomId);
+        if (meta) {
+            return this.app.styleManager.getAtomStyle(meta.element).radius;
+        }
+        return this.app.styleManager.getAtomStyle('C').radius;
     }
 }
 
 /**
- * Command to delete a bond
+ * Command to delete an edit-mode bond via ImpostorPool.
  */
 export class DeleteBondCommand extends Command<void> {
     constructor(
         app: MolvisApp,
-        private mesh: Mesh
+        private bondId: number
     ) {
         super(app);
     }
 
     do(): void {
-        this.app.world.sceneIndex.unregister(this.mesh.uniqueId);
-        this.mesh.dispose();
-        this.app.world.sceneIndex.markAllUnsaved();
+        const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+        if (!bondState) return;
+        this.app.world.sceneIndex.unregisterEditBond(bondState.mesh.uniqueId, this.bondId);
     }
 
     undo(): Command {
