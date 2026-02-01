@@ -16,22 +16,28 @@ if (__WASM_INLINE__) {
 import { MolvisApp } from "./core/app";
 import type { MolvisConfig } from "./core/config";
 
+import type { MolvisSetting } from "./core/settings";
+
 export function mountMolvis(
 	container: HTMLElement,
 	config: MolvisConfig = {},
+	settings?: Partial<MolvisSetting>
 ): MolvisApp {
-	return new MolvisApp(container, config);
+	return new MolvisApp(container, config, settings);
 }
 
 export { MolvisApp as Molvis } from "./core/app";
-export { mergeConfig, DEFAULT_CONFIG, type MolvisConfig } from "./core/config";
-export { Settings, DEFAULT_SETTING, type MolvisSetting } from "./core/settings";
+export { defaultMolvisConfig, DEFAULT_CONFIG, type MolvisConfig } from "./core/config";
+export { Settings, DEFAULT_SETTING, defaultMolvisSettings, type MolvisSetting } from "./core/settings";
 export { Frame, Block, Box, Trajectory } from "./core/system/";
 export { Topology } from "./core/system/topology";
 export { System } from "./core/system";
-export { World } from "./core";
+export { World, SelectionManager, type SelectionState, parseSelectionKey } from "./core";
 export {
 	writeFrame,
+	writePDBFrame,
+	writeXYZFrame,
+	writeLAMMPSData,
 	type ExportFormat,
 	type ExportPayload,
 	type WriteFrameOptions,
@@ -40,6 +46,9 @@ export {
 } from "./core/writer";
 export {
 	readFrame,
+	readPDBFrame,
+	readXYZFrame,
+	readLAMMPSData,
 	inferFormatFromFilename
 } from "./core/reader";
 
@@ -48,11 +57,7 @@ export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
 export type { Modifier } from "./pipeline/modifier";
 export { ArrayFrameSource } from "./commands/sources";
-export {
-	DrawAtomsModifier,
-	DrawBondsModifier,
-	DrawBoxModifier,
-} from "./pipeline/rendering_modifiers";
+
 export { DataSourceModifier } from "./pipeline/data_source_modifier";
 
 // Register default commands

@@ -16,6 +16,10 @@ export enum ModifierCategory {
      * Examples: WrapPBC, NormalizeData, SpatialGrid, GlobalStyle
      */
     SelectionInsensitive = "selection-insensitive",
+    /**
+     * Data modifiers operate on the entire frame structure (e.g. loading, filtering).
+     */
+    Data = "data",
 }
 
 /**

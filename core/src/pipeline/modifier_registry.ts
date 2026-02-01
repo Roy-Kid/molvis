@@ -1,6 +1,5 @@
 import { Modifier } from './modifier';
 import { DataSourceModifier } from './data_source_modifier';
-import { DrawBoxModifier, DrawAtomsModifier, DrawBondsModifier } from './rendering_modifiers';
 
 // Type for a modifier factory function
 export type ModifierFactory = () => Modifier;
@@ -24,13 +23,11 @@ export class ModifierRegistry {
 
     // Pre-register core modifiers
     static initialize() {
-        this.register('Draw Box', 'Visual', () => new DrawBoxModifier());
-        this.register('Draw Atoms', 'Visual', () => new DrawAtomsModifier());
-        this.register('Draw Bonds', 'Visual', () => new DrawBondsModifier());
         this.register('Data Source', 'Data', () => new DataSourceModifier());
         // Add more here as they are implemented (e.g. Wrap PBC, Select...)
     }
 }
+
 
 // Initialize immediately
 ModifierRegistry.initialize();

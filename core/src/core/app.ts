@@ -2,19 +2,22 @@ import { Engine } from "@babylonjs/core";
 import { logger } from "../utils/logger";
 import { World } from "./world";
 import { ModeManager, ModeType } from "../mode";
-import { GUIManager } from "../gui";
-import { type MolvisConfig, mergeConfig } from "./config";
+import { GUIManager } from "../ui/manager";
+import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { Settings, type MolvisSetting } from "./settings";
 import { CommandRegistry, commands } from "../commands";
+import { CommandManager } from "../commands/manager";
 import { EventEmitter } from "../events";
 import { ModifierPipeline } from "../pipeline";
 import { StyleManager } from "./style";
 import { Theme } from "./style/theme";
 import { System } from "./system";
 import { Trajectory } from "./system/trajectory";
+import { Artist } from "./artist";
 
-import { Frame } from "molrs-wasm";
-import { MolvisContextMenu, MolvisButton, MolvisSeparator, MolvisFolder, MolvisSlider } from "../ui/components";
+import { Frame, Box } from "molrs-wasm";
+import { MolvisContextMenu } from "../ui/menus/context_menu";
+import { MolvisButton, MolvisSeparator, MolvisFolder, MolvisSlider } from "../ui/components";
 
 export class MolvisApp {
   // DOM elements
@@ -39,8 +42,14 @@ export class MolvisApp {
   // Style System
   private _styleManager: StyleManager;
 
-  // Command registry
+  // Command registry (Registry/RPC)
   readonly commands: CommandRegistry;
+
+  // Command Manager (History/Undo/Redo)
+  public readonly commandManager: CommandManager;
+
+  // Artist (high-level drawing API)
+  public readonly artist: Artist;
 
   // Events
   public readonly events = new EventEmitter();
@@ -53,7 +62,7 @@ export class MolvisApp {
     config: MolvisConfig = {},
     setting?: Partial<MolvisSetting>
   ) {
-    this._config = mergeConfig(config);
+    this._config = defaultMolvisConfig(config);
     this._container = container;
 
     // Register Web Components
@@ -80,6 +89,9 @@ export class MolvisApp {
     // Initialize World
     this._world = new World(this._canvas, this._engine, this);
 
+    // Initialize Style Manager (before ModeManager)
+    this._styleManager = new StyleManager(this._world.scene);
+
     // Initialize settings
     this.settings = new Settings(this, setting);
 
@@ -98,11 +110,14 @@ export class MolvisApp {
     // Initialize modifier pipeline
     this._modifierPipeline = new ModifierPipeline();
 
-    // Initialize Style Manager
-    this._styleManager = new StyleManager(this._world.scene);
+    // Initialize Artist (Drawing Logic)
+    this.artist = new Artist({ app: this });
 
     // Initialize command registry (use shared singleton)
     this.commands = commands;
+
+    // Initialize Command Manager
+    this.commandManager = new CommandManager(this);
   }
 
   /**
@@ -349,6 +364,12 @@ export class MolvisApp {
       case "edit":
         this._modeManager.switch_mode(ModeType.Edit);
         break;
+      case "measure":
+        this._modeManager.switch_mode(ModeType.Measure);
+        break;
+      case "manipulate":
+        this._modeManager.switch_mode(ModeType.Manipulate);
+        break;
       default:
         logger.warn(`Unknown mode: ${mode}`);
         break;
@@ -366,6 +387,7 @@ export class MolvisApp {
   /**
    * Update configuration at runtime.
    * Merges with existing config and propagates changes.
+   * Note: Grid and Graphics are now in Settings, not Config.
    */
   public setConfig(newConfig: Partial<MolvisConfig>): void {
     // Deep merge would be better but simple merge works for top-level sections if we are careful
@@ -373,26 +395,14 @@ export class MolvisApp {
     // For now we assume we replace the section or use helper.
 
     // Simplistic merge:
-    this._config = mergeConfig({ ...this._config, ...newConfig });
+    this._config = defaultMolvisConfig({ ...this._config, ...newConfig });
 
-    // 1. Graphics
-    if (newConfig.graphics) {
-      this._world.applyGraphicsConfig();
-    }
-
-    // 2. Grid
-    if (newConfig.grid) {
-      if (this._config.grid?.enabled) {
-        this._world.grid.enable();
-      } else {
-        this._world.grid.disable();
-      }
-    }
-
-    // 3. UI
+    // UI Updates
     if (newConfig.showUI !== undefined) {
       this._uiOverlay.style.display = this._config.showUI ? 'block' : 'none';
     }
+
+    // Config no longer controls Grid or Graphics
   }
 
   /**
@@ -421,10 +431,11 @@ export class MolvisApp {
    */
   public renderFrame(
     frame: Frame,
+    box?: Box,
     options?: any
   ): void {
-    this._system.frame = frame; // Store frame in System for later access
-    this.execute("draw_frame", { frame, options });
+    this._system.setFrame(frame, box); // Store frame and box in System
+    this.execute("draw_frame", { frame, box, options });
   }
 
   /**

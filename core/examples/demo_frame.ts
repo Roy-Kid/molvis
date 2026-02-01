@@ -1,6 +1,6 @@
 import { Molvis } from "@molvis/core";
-import { DrawFrameCommand } from "@molvis/core/commands/draw";
-import { Frame, Block } from "molrs-wasm";
+import { DrawBoxCommand, DrawFrameCommand } from "@molvis/core/commands/draw";
+import { Frame, Block, Box } from "molrs-wasm";
 
 /**
  * Demo: Single frame rendering
@@ -31,13 +31,18 @@ async function main() {
     bondsBlock.setColumnU32("j", new Uint32Array([1, 2]));
     bondsBlock.setColumnU8("order", new Uint8Array([1, 1]));
 
+    const box = Box.cube(1, new Float32Array([0, 0, 0]), false, false, false);
+
+
     const frame = new Frame();
     frame.insertBlock("atoms", atomsBlock);
     frame.insertBlock("bonds", bondsBlock);
 
-    const drawCmd = new DrawFrameCommand(app, { frame });
+    const drawFrame = new DrawFrameCommand(app, { frame });
+    const drawBox = new DrawBoxCommand(app, { box });
 
-    await drawCmd.do();
+    await drawFrame.do();
+    await drawBox.do();
 
     console.log("✅ Demo frame rendered successfully!");
     console.log("SceneIndex stats:");

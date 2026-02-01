@@ -66,3 +66,20 @@ class SelectionCommandsMixin:
             blocks["bonds"] = data["bonds"]
         
         return mp.Frame(blocks=blocks)
+
+    def select_atom_by_id(self, atom_ids: int | list[int]) -> "Molvis":
+        """
+        Select atoms by their ID.
+        
+        Args:
+            atom_ids: Single atom ID or list of atom IDs to select.
+            
+        Returns:
+            Self for method chaining
+        """
+        if isinstance(atom_ids, int):
+            atom_ids = [atom_ids]
+            
+        self.send_cmd("select_atoms", {"ids": atom_ids}, [])
+        return self
+

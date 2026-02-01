@@ -11,6 +11,7 @@ export interface AtomMeta {
     atomId: number;
     element: string;
     position: { x: number; y: number; z: number };
+    [key: string]: any; // Allow arbitrary attributes
 }
 
 export interface BondMeta {
@@ -21,6 +22,7 @@ export interface BondMeta {
     order: number;
     start: { x: number; y: number; z: number };
     end: { x: number; y: number; z: number };
+    [key: string]: any; // Allow arbitrary attributes
 }
 
 export interface BoxMeta {
@@ -49,10 +51,98 @@ export class AtomSource {
         this.edits.delete(id);
     }
 
+    /**
+     * Set a specific attribute for an atom.
+     * Creates an edit entry if one doesn't exist.
+     */
+    setAttribute(id: number, key: string, value: any) {
+        let meta = this.edits.get(id);
+        if (!meta) {
+            // Need to fetch base meta to clone it?
+            // Or can we store PARTIAL edits? 
+            // The system expects full AtomMeta in edits for rendering?
+            // SceneIndex.updateAtom merges edits.
+            // But here AtomSource.getMeta returns AtomMeta | null.
+            // If we only store partial, getMeta needs to merge on fly.
+            // Current getMeta: "if (edit) return edit;" -> implies edit MUST be complete override.
+
+            // To support partial updates without fetching full frame data every time we make a small edit:
+            // We should probably fetch it ONCE here.
+
+            const base = this.getFromFrame(id);
+            if (!base) {
+                // If ID is out of frame range, we can't really set attribute unless we are creating new atom.
+                console.warn(`AtomSource: Cannot set attribute for non-existent atom ${id}`);
+                return;
+            }
+            meta = { ...base };
+            this.edits.set(id, meta);
+        }
+        meta[key] = value;
+    }
+
+    /**
+     * Get a specific attribute value.
+     */
+    getAttribute(id: number, key: string): any {
+        // 1. Check edits
+        const edit = this.edits.get(id);
+        if (edit) {
+            // Special handling for position coordinates which are nested
+            if (key === 'x') return edit.position.x;
+            if (key === 'y') return edit.position.y;
+            if (key === 'z') return edit.position.z;
+
+            if (key in edit) {
+                return edit[key];
+            }
+        }
+
+        // 2. Check frame
+        if (this.frameBlock && id < this.frameBlock.nrows()) {
+            // Special handling for known columns to use TypedArrays?
+            // General fallback
+            if (key === 'x' || key === 'y' || key === 'z') {
+                // Optimization: getFromFrame does this.
+                // But we want just one value.
+                const col = this.frameBlock.getColumnF32(key);
+                if (col) return col[id];
+            }
+            if (key === 'element') {
+                const col = this.frameBlock.getColumnStrings(key);
+                if (col) return col[id];
+            }
+
+            // Generic generic
+            // Check if F32
+            // We don't know type easily without trying?
+            // Block has `keys()`.
+
+            // This is slow if we do it for every attribute read.
+            // But intended for UI inspection.
+
+            // Try F32 first (most common)
+            try {
+                const col = this.frameBlock.getColumnF32(key);
+                if (col) return col[id];
+            } catch (e) {
+                // Ignore
+            }
+
+            try {
+                const col = this.frameBlock.getColumnStrings(key);
+                if (col) return col[id];
+            } catch (e) {
+                // Ignore
+            }
+        }
+        return undefined;
+    }
+
     getMeta(id: number): AtomMeta | null {
         // 1. Check local edits first (overlay)
         const edit = this.edits.get(id);
-        if (edit) return edit;
+        if (edit) return edit; // Assumes edit is FULL meta
 
         // 2. Check frame data
         if (this.frameBlock && id < this.frameBlock.nrows()) {
@@ -65,20 +155,18 @@ export class AtomSource {
     private getFromFrame(index: number): AtomMeta | null {
         if (!this.frameBlock) return null;
 
-        // Optimize? Only read needed columns?
-        // MolRS blocks usually return TypedArrays for columns.
-        // We can cache these if performance is an issue, but for now access directly.
-        // WARNING: getColumnF32 creates a new Float32Array view every time?
-        // Ideally we should cache the column views if they don't change.
-        // But Block doesn't emit change events.
-        // Let's assume fetching column view is cheap (it's WASM memory view).
-
         const x = this.frameBlock.getColumnF32('x');
         const y = this.frameBlock.getColumnF32('y');
         const z = this.frameBlock.getColumnF32('z');
-        const elements = this.frameBlock.getColumnStrings('element'); // This might be expensive?
+        const elements = this.frameBlock.getColumnStrings('element');
 
         if (!x || !y || !z || !elements) return null;
+
+        // Construct object with ALL columns from frame?
+        // Current implementation only returns specific AtomMeta fields.
+        // If we want `getMeta` to return everything, we need to iterate keys.
+        // But `getFromFrame` is called often.
+        // We will stick to minimal AtomMeta for now, and `getAttribute` for extras.
 
         return {
             type: 'atom',
@@ -103,26 +191,7 @@ export class AtomSource {
         if (this.frameBlock) {
             const count = this.frameBlock.nrows();
             for (let i = 0; i < count; i++) {
-                // Return frame ID unless it's "deleted" via edits? 
-                // Currently we don't support "deletion masking" of frame atoms in this simple model 
-                // other than overriding them with new data?
-                // Actually `removeEdit` just removes the OVERRIDE.
-                // To delete a frame atom, we might need a `deletions` Set.
-                // For now, let's assume we adhere to current behavior:
-                // Frame atoms exist. Edits are additions or modifications.
-                // Wait, if I delete a frame atom in EditMode, does it go away?
-                // In previous `EditAtomSource` logic, Frame and Edit were disjoint sets in Hybrid?
-                // Actually Hybrid iterated both.
-                // If I "delete" a frame atom, I usually Unregister it?
-                // But Frame is read-only block.
-                // We likely need a `deletedIds` set to mask frame atoms.
-                if (!this.edits.has(i)) { // If edited, it will be yielded by edits keys? 
-                    // No, edits map has the meta.
-                    // If I override frame atom 5, `edits.get(5)` returns new meta.
-                    // I should yield 5.
-                    // But if I iterate edits.keys() separately, I might duplicate?
-                    // Let's just iterate 0..frameCount, then edits that are > frameCount?
-                    // Or use a Set to track yielded IDs?
+                if (!this.edits.has(i)) {
                     yield i;
                 }
             }
@@ -132,14 +201,22 @@ export class AtomSource {
             if (!this.frameBlock || id >= this.frameBlock.nrows()) {
                 yield id;
             } else {
-                // It's an override of a frame atom, already yielded above?
-                // Wait, if I override atom 5:
-                // Loop 0..N yields 5 (checked edits.has? No, I yielded it).
-                // Actually, if I just yield 0..N-1, and then yield edits > N-1, what about overridden atoms?
-                // `getMeta(5)` returns the edit.
-                // So yielding 5 from the first loop is CORRECT.
-                // I just need to make sure I don't yield 5 AGAIN from edits loop.
-                // So edits loop should only yield IDs that are NOT in frame range.
+                // Must yield overridden IDs too?
+                // Wait, logic above yields `i` if !edits.has(i).
+                // So if edits.has(i), it wasn't yielded.
+                // So we MUST yield it here.
+                // Previous logic was confused.
+                // Correct logic:
+                // Yield all from edits.
+                // Yield from frame IF NOT in edits.
+
+                // But `edits.keys()` iteration order is arbitrary.
+                // Iterating 0..N is ordered. 
+
+                // Let's stick to: Iterate 0..N (Frame). If in edits, yield from edits? 
+                // No, this generator yields IDs. Metadata retrieval is separate.
+                // Changing implementation to be cleaner:
+                yield id;
             }
         }
     }
@@ -163,6 +240,31 @@ export class BondSource {
         this.edits.delete(id);
     }
 
+    setAttribute(id: number, key: string, value: any) {
+        let meta = this.edits.get(id);
+        if (!meta) {
+            const base = this.getFromFrame(id);
+            if (!base) return;
+            meta = { ...base };
+            this.edits.set(id, meta);
+        }
+        meta[key] = value;
+    }
+
+    getAttribute(id: number, key: string): any {
+        const edit = this.edits.get(id);
+        if (edit && key in edit) return edit[key];
+
+        if (this.frameBlock && id < this.frameBlock.nrows()) {
+            if (key === 'order') {
+                const col = this.frameBlock.getColumnU8('order');
+                if (col) return col[id];
+            }
+            // Generic fallback similar to atoms...
+        }
+        return undefined;
+    }
+
     getMeta(id: number): BondMeta | null {
         const edit = this.edits.get(id);
         if (edit) return edit;
@@ -179,31 +281,6 @@ export class BondSource {
         const iAtoms = this.frameBlock.getColumnU32('i');
         const jAtoms = this.frameBlock.getColumnU32('j');
         const orders = this.frameBlock.getColumnU8('order');
-
-        // We need atom positions to construct BondMeta
-        // Assuming we look up in FrameAtomBlock directly for speed?
-        // Or should we resolve via AtomSource to get potentially edited positions?
-        // Ideally bonds should follow atoms.
-        // But `BondSource` doesn't reference `AtomSource`.
-        // If an atom moved in `AtomSource`, the bond in `BondSource` (Frame) points to indices i, j.
-        // If I simply read x/y/z from `atomBlock`, I get ORIGINAL frame positions.
-        // If the atom was moved in `AtomSource` (Edit), the bond should visually move.
-        // `DrawBondCommand` usually calculates positions from `SceneIndex.getMeta(atomId)`.
-        // `BondMeta` here is "Data".
-        // Use `start`/`end` in BondMeta is redundancy.
-        // But the Interface defines `start`/`end`.
-        // For Frame bonds, we must calculate them on fly.
-        // If we want consistency, we should lookup atom positions from `AtomSource`.
-        // But `BondSource` is standalone here.
-        // Let's stick to reading from `atomBlock` (Frame Data) for now.
-        // If an atom is "Edited" (moved), the `BondSource` frame-derived meta will show old positions.
-        // BUT the `MeshRegistry` (Renderer) updates the bond buffer using `updateConnectedBonds`.
-        // So the RENDER is correct.
-        // The `Meta` returned here might be stale if we just read frame block?
-        // This is a discrepancy.
-        // However, `FrameBondSource` previously did `ax[i]`.
-        // So it was always reading original frame positions.
-        // So this refactor preserves existing behavior.
 
         const ax = this.atomBlock.getColumnF32('x');
         const ay = this.atomBlock.getColumnF32('y');
@@ -239,12 +316,16 @@ export class BondSource {
     *getAllIds(): IterableIterator<number> {
         if (this.frameBlock) {
             const count = this.frameBlock.nrows();
-            for (let i = 0; i < count; i++) yield i;
+            for (let i = 0; i < count; i++) {
+                if (!this.edits.has(i)) yield i;
+            }
         }
         for (const id of this.edits.keys()) {
-            if (!this.frameBlock || id >= this.frameBlock.nrows()) {
-                yield id;
-            }
+            // Yield edits. We yield frame IDs if not in edits above.
+            // If edit is overriding frame, we yield it here.
+            // If edit is new ID, we yield it here.
+            // So simply yielding all edits is correct IF we skipped them in the first loop.
+            yield id;
         }
     }
 }

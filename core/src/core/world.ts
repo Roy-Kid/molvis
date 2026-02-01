@@ -10,9 +10,7 @@ import { GridGround } from "./grid";
 import { SelectionManager } from "./selection_manager";
 import { Highlighter } from "./highlighter";
 import { Picker } from "./picker";
-import { Topology } from "./system/topology";
 import { logger } from "../utils/logger";
-import { MolvisRenderer } from "./renderer";
 
 export class World {
   private _engine: Engine;
@@ -24,6 +22,7 @@ export class World {
   };
   private _fxaa?: FxaaPostProcess;
   private _modeManager?: ModeManager;
+  private _lastRadius: number = 10;
 
   // Viewport/Camera settings
   public viewportSettings: ViewportSettings;
@@ -36,8 +35,6 @@ export class World {
   public selectionManager: SelectionManager;
   public highlighter: Highlighter;
   public picker: Picker;
-  public topology: Topology;
-  public renderer: MolvisRenderer;
 
   constructor(canvas: HTMLCanvasElement, engine: Engine, app: MolvisApp) {
     this._engine = engine;
@@ -52,6 +49,11 @@ export class World {
     scene.autoClear = true;
     scene.autoClearDepthAndStencil = true;
 
+    // Apply Coordinate System Config
+    if (this._app.config.useRightHandedSystem) {
+      scene.useRightHandedSystem = true;
+    }
+
     // Create ArcRotateCamera directly
     const camera = new ArcRotateCamera(
       "camera",
@@ -63,6 +65,28 @@ export class World {
     );
     camera.attachControl(canvas, true);
 
+    // Initialize last radius for ortho zoom tracking
+    this._lastRadius = camera.radius;
+
+    // Handle Orthographic Zoom
+    // ArcRotateCamera changes radius on zoom, but in Ortho mode this doesn't change view size if bounds are fixed.
+    // We bind radius changes to ortho bounds scaling.
+    scene.onBeforeRenderObservable.add(() => {
+      if (camera.mode === 1) { // Orthographic
+        if (this._lastRadius > 0 && Math.abs(camera.radius - this._lastRadius) > 0.0001) {
+          const scale = camera.radius / this._lastRadius;
+          // Scale ortho bounds
+          if (camera.orthoTop && camera.orthoBottom && camera.orthoLeft && camera.orthoRight) {
+            camera.orthoTop *= scale;
+            camera.orthoBottom *= scale;
+            camera.orthoLeft *= scale;
+            camera.orthoRight *= scale;
+          }
+        }
+      }
+      this._lastRadius = camera.radius;
+    });
+
     // Set as active camera
     scene.activeCamera = camera;
 
@@ -73,9 +97,8 @@ export class World {
     this.targetIndicator = new TargetIndicator(scene);
     this.axisHelper = new AxisHelper(this._engine, camera);
     this.grid = new GridGround(scene, camera, this._engine);
-    if (this._app.config.grid?.enabled) {
-      this.grid.enable();
-    }
+
+    // Initial grid settings are applied by Settings when initialized in App
 
     // Lighting setup for depth with minimal shadows
     // 1. Hemispheric light for soft global illumination (fill)
@@ -95,15 +118,8 @@ export class World {
     // Initialize new unified selection system
     this.sceneIndex = new SceneIndex();
     this.selectionManager = new SelectionManager(this.sceneIndex);
-    this.highlighter = new Highlighter(scene);
+    this.highlighter = new Highlighter(app, scene);
     this.picker = new Picker(app, scene);
-    // Alias topology to the one managed by SceneIndex
-    this.topology = this.sceneIndex.topology;
-
-    // Initialize Unified Renderer
-    // This creates the base meshes and impostor pools
-    this.renderer = new MolvisRenderer(app, scene);
-
     // Wire up event: selection changes trigger highlighting
     this.selectionManager.on(state => this.highlighter.highlightSelection(state));
 
@@ -118,8 +134,7 @@ export class World {
       engine.resize();
     });
 
-    // Apply initial graphics config
-    this.applyGraphicsConfig();
+    // Initial graphics settings will be applied by Settings when it is initialized
   }
 
   public get scene(): Scene {
@@ -144,10 +159,55 @@ export class World {
   }
 
   public resetCamera() {
-    this._sceneData.camera.alpha = Math.PI / 4;
-    this._sceneData.camera.beta = Math.PI / 3;
-    this._sceneData.camera.radius = 10;
-    this._sceneData.camera.setTarget(Vector3.Zero());
+    const bounds = this.sceneIndex.getBounds();
+
+    if (bounds) {
+      const center = new Vector3(
+        (bounds.min.x + bounds.max.x) * 0.5,
+        (bounds.min.y + bounds.max.y) * 0.5,
+        (bounds.min.z + bounds.max.z) * 0.5
+      );
+
+      const size = new Vector3(
+        bounds.max.x - bounds.min.x,
+        bounds.max.y - bounds.min.y,
+        bounds.max.z - bounds.min.z
+      );
+
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      // Calculate required radius to fit the scene
+      // FOV (alpha) is vertical.
+      const fov = this._sceneData.camera.fov;
+      const aspectRatio = this._engine.getAspectRatio(this._sceneData.camera);
+
+      // Distance needed to fit height
+      let distance = maxDim / (2 * Math.tan(fov / 2));
+
+      // If width is narrower, adjust for aspect ratio
+      if (aspectRatio < 1.0) {
+        distance = distance / aspectRatio;
+      }
+
+      // Add some padding (margin)
+      distance *= 1.2;
+
+      // Ensure minimum distance
+      distance = Math.max(distance, 5.0);
+
+      this._sceneData.camera.setTarget(center);
+      this._sceneData.camera.radius = distance;
+
+      // Reset angles to a nice isometric-ish view
+      this._sceneData.camera.alpha = Math.PI / 4;
+      this._sceneData.camera.beta = Math.PI / 3;
+    } else {
+      // Fallback if no data
+      this._sceneData.camera.setTarget(Vector3.Zero());
+      this._sceneData.camera.radius = 10;
+      this._sceneData.camera.alpha = Math.PI / 4;
+      this._sceneData.camera.beta = Math.PI / 3;
+    }
   }
 
   public takeScreenShot() {
@@ -205,10 +265,18 @@ export class World {
   }
 
   /**
-   * Apply graphics configuration from App.config.graphics
+   * Apply graphics settings
    */
-  public applyGraphicsConfig() {
-    const config = this._app.config.graphics;
+  public applyGraphicsSettings(config: {
+    shadows?: boolean;
+    postProcessing?: boolean;
+    ssao?: boolean;
+    bloom?: boolean;
+    ssr?: boolean;
+    dof?: boolean;
+    fxaa?: boolean;
+    hardwareScaling?: number;
+  }) {
     if (!config) return;
 
     // 1. Hardware Scaling (Resolution)
@@ -231,8 +299,6 @@ export class World {
     }
 
     // 3. Shadows & Post-Processing
-    // Currently we don't use ShadowGenerator or Pipeline, so these flags 
-    // (shadows, ssao, bloom, etc.) are implicitly respected (they are off).
-    // Future implementations should check these flags.
+    // Currently we don't use ShadowGenerator or Pipeline
   }
 }

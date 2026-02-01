@@ -7,8 +7,8 @@ export class StyleManager {
     private scene: Scene;
     private materialCache: Map<string, StandardMaterial> = new Map();
 
-    private globalAtomRadiusScale: number = 1.0;
-    private globalBondRadiusScale: number = 1.0;
+    private globalAtomRadiusScale: number = 0.6;
+    private globalBondRadiusScale: number = 0.6;
 
     constructor(scene: Scene) {
         this.scene = scene;
@@ -110,8 +110,8 @@ export class StyleManager {
         }
 
         const mat = new StandardMaterial(key, this.scene);
-        mat.wireframe = true;
-        mat.diffuseColor = Color3.FromHexString(this.currentTheme.selectionColor); // Re-use selection color for box for now
+        // mat.wireframe = true;
+        mat.diffuseColor = Color3.FromHexString(this.currentTheme.boxColor); // Re-use selection color for box for now
 
         this.materialCache.set(key, mat);
         return mat;

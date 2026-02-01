@@ -4,12 +4,39 @@ import type { MolvisApp } from "./app";
 /**
  * User settings that can be adjusted at runtime
  */
+// Grid configuration
+export interface GridConfig {
+    enabled?: boolean;
+    mainColor?: string;
+    lineColor?: string;
+    opacity?: number;
+    majorUnitFrequency?: number;
+    minorUnitVisibility?: number;
+    size?: number;
+}
+
+// Graphics configuration
+export interface GraphicsConfig {
+    shadows?: boolean;
+    postProcessing?: boolean;
+    ssao?: boolean;
+    bloom?: boolean;
+    ssr?: boolean;
+    dof?: boolean;
+    fxaa?: boolean;
+    hardwareScaling?: number;
+}
+
+/**
+ * User settings that can be adjusted at runtime
+ */
 export interface MolvisSetting {
     // Camera Controls
     cameraPanSpeed: number;
     cameraRotateSpeed: number;
     cameraZoomSpeed: number;
     cameraInertia: number;
+    cameraPanInertia: number;
 
     // Camera Limits
     cameraMinRadius: number;
@@ -17,6 +44,10 @@ export interface MolvisSetting {
 
     // Lighting
     lighting: LightingSettings;
+
+    // Rendering
+    grid: GridConfig; // Settings usually hold concrete values
+    graphics: GraphicsConfig;
 }
 
 export interface LightingSettings {
@@ -31,10 +62,11 @@ export interface LightingSettings {
  * Default user settings
  */
 export const DEFAULT_SETTING: MolvisSetting = {
-    cameraPanSpeed: 1000,
-    cameraRotateSpeed: 1000,
-    cameraZoomSpeed: 50,
-    cameraInertia: 0.1,
+    cameraPanSpeed: 500,
+    cameraRotateSpeed: 500,
+    cameraZoomSpeed: 10,
+    cameraInertia: 0.0,
+    cameraPanInertia: 0.0,
     cameraMinRadius: 1,
     cameraMaxRadius: null,
     lighting: {
@@ -43,6 +75,25 @@ export const DEFAULT_SETTING: MolvisSetting = {
         diffuse: 0.4,
         specular: 0.0,
         specularPower: 4
+    },
+    grid: {
+        enabled: false,
+        mainColor: '#888888',
+        lineColor: '#444444',
+        opacity: 0.5,
+        majorUnitFrequency: 10,
+        minorUnitVisibility: 0.5,
+        size: 100
+    },
+    graphics: {
+        shadows: false,
+        postProcessing: false,
+        ssao: false,
+        bloom: false,
+        ssr: false,
+        dof: false,
+        fxaa: true, // Low-cost AA
+        hardwareScaling: 1.0 // 1.0 = native, 2.0 = Retina (High Quality, Low Perf)
     }
 };
 
@@ -57,7 +108,8 @@ export class Settings {
     constructor(app: MolvisApp, initialSetting?: Partial<MolvisSetting>) {
         this.app = app;
         this.defaults = { ...DEFAULT_SETTING };
-        this.values = { ...this.defaults, ...initialSetting };
+        // Use helper to ensure deep merge of nested properties
+        this.values = defaultMolvisSettings(initialSetting);
         this.applyAll();
     }
 
@@ -96,6 +148,12 @@ export class Settings {
         const next = this.sanitizeInertia(inertia, this.defaults.cameraInertia);
         this.values.cameraInertia = next;
         this.camera.inertia = next;
+    }
+
+    setCameraPanInertia(inertia: number): void {
+        const next = this.sanitizeInertia(inertia, this.defaults.cameraPanInertia);
+        this.values.cameraPanInertia = next;
+        this.camera.panningInertia = next;
     }
 
     /**
@@ -142,6 +200,10 @@ export class Settings {
         return this.values.cameraInertia;
     }
 
+    getCameraPanInertia(): number {
+        return this.values.cameraPanInertia;
+    }
+
     /**
      * Get camera minimum radius
      */
@@ -163,6 +225,38 @@ export class Settings {
         return this.values.lighting;
     }
 
+    getGrid(): Required<GridConfig> {
+        return this.values.grid;
+    }
+
+    getGraphics(): Required<GraphicsConfig> {
+        return this.values.graphics;
+    }
+
+    /**
+     * Update Grid Settings
+     */
+    setGrid(config: Partial<GridConfig>): void {
+        this.values.grid = { ...this.values.grid, ...config };
+
+        // Notify Grid
+        if (this.app.world && this.app.world.grid) {
+            this.app.world.grid.update(this.values.grid);
+        }
+    }
+
+    /**
+     * Update Graphics Settings
+     */
+    setGraphics(config: Partial<GraphicsConfig>): void {
+        this.values.graphics = { ...this.values.graphics, ...config };
+
+        // Notify World
+        if (this.app.world) {
+            this.app.world.applyGraphicsSettings(this.values.graphics);
+        }
+    }
+
     /**
      * Reset all settings to defaults
      */
@@ -171,10 +265,13 @@ export class Settings {
         this.setCameraRotateSpeed(this.defaults.cameraRotateSpeed);
         this.setCameraZoomSpeed(this.defaults.cameraZoomSpeed);
         this.setCameraInertia(this.defaults.cameraInertia);
+        this.setCameraPanInertia(this.defaults.cameraPanInertia);
         this.setCameraMinRadius(this.defaults.cameraMinRadius);
         this.setCameraMaxRadius(this.defaults.cameraMaxRadius);
         // Reset lighting to default
         this.values.lighting = { ...this.defaults.lighting };
+        this.setGrid(this.defaults.grid);
+        this.setGraphics(this.defaults.graphics);
     }
 
     private applyAll(): void {
@@ -182,8 +279,14 @@ export class Settings {
         this.setCameraRotateSpeed(this.values.cameraRotateSpeed);
         this.setCameraZoomSpeed(this.values.cameraZoomSpeed);
         this.setCameraInertia(this.values.cameraInertia);
+        this.setCameraPanInertia(this.values.cameraPanInertia);
         this.setCameraMinRadius(this.values.cameraMinRadius);
         this.setCameraMaxRadius(this.values.cameraMaxRadius);
+        // Lighting is applied by World reading settings, no direct setter on World for now? 
+        // Actually lighting is likely set once or needs update method.
+        // For Grid and Graphics we call the setters to trigger updates.
+        this.setGrid(this.values.grid);
+        this.setGraphics(this.values.graphics);
     }
 
     private get camera(): ArcRotateCamera {
@@ -202,4 +305,28 @@ export class Settings {
         if (value > 1) return 1;
         return value;
     }
+}
+
+/**
+ * Configure default settings (merge partial with defaults)
+ */
+export function defaultMolvisSettings(settings: Partial<MolvisSetting> = {}): MolvisSetting {
+    // Deep merge not implemented here, shallow merge of top keys.
+    // For nested objects like lighting, grid, graphics we need to be careful.
+    // Ideally we would do a deeper merge.
+    const base = { ...DEFAULT_SETTING };
+    if (settings.lighting) base.lighting = { ...base.lighting, ...settings.lighting };
+    if (settings.grid) base.grid = { ...base.grid, ...settings.grid };
+    if (settings.graphics) base.graphics = { ...base.graphics, ...settings.graphics };
+
+    // Copy other scalar props
+    if (settings.cameraPanSpeed !== undefined) base.cameraPanSpeed = settings.cameraPanSpeed;
+    if (settings.cameraRotateSpeed !== undefined) base.cameraRotateSpeed = settings.cameraRotateSpeed;
+    if (settings.cameraZoomSpeed !== undefined) base.cameraZoomSpeed = settings.cameraZoomSpeed;
+    if (settings.cameraInertia !== undefined) base.cameraInertia = settings.cameraInertia;
+    if (settings.cameraPanInertia !== undefined) base.cameraPanInertia = settings.cameraPanInertia;
+    if (settings.cameraMinRadius !== undefined) base.cameraMinRadius = settings.cameraMinRadius;
+    if (settings.cameraMaxRadius !== undefined) base.cameraMaxRadius = settings.cameraMaxRadius;
+
+    return base;
 }

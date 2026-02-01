@@ -19,6 +19,7 @@ export class ModernTheme implements Theme {
 
     public readonly backgroundColor = "#1E1E1E"; // Dark gray background
     public readonly selectionColor = "#E74C3C"; // Bright red selection
+    public readonly boxColor = "#FFFFFF"; // White box
     public readonly defaultSpecular = "#888888"; // More reflective
 
     public getAtomStyle(element: string): AtomStyle {

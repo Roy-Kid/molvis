@@ -1,4 +1,4 @@
-export { MolvisContextMenu } from './context_menu';
+// Context menu moved to ../menus
 export { MolvisButton } from './button';
 export { MolvisSeparator } from './separator';
 export { MolvisFolder } from './folder';

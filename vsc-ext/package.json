@@ -10,21 +10,14 @@
   "contributes": {
     "commands": [
       {
-        "command": "molvis.helloWorld",
-        "title": "Hello World"
+        "command": "molvis.openPage",
+        "title": "MolVis: Open Page",
+        "icon": "$(layout-sidebar-right)"
       },
       {
-        "command": "molvis.openViewer",
-        "title": "MolVis: Open Viewer"
-      },
-      {
-        "command": "molvis.openPreviewToSide",
+        "command": "molvis.openPreview",
         "title": "MolVis: Open Preview",
         "icon": "$(open-preview)"
-      },
-      {
-        "command": "molvis.openApp",
-        "title": "MolVis: Open App"
       }
     ],
     "customEditors": [
@@ -39,13 +32,7 @@
             "filenamePattern": "*.xyz"
           },
           {
-            "filenamePattern": "*.lmp"
-          },
-          {
             "filenamePattern": "*.data"
-          },
-          {
-            "filenamePattern": "*.lammps"
           }
         ],
         "priority": "option"
@@ -54,8 +41,13 @@
     "menus": {
       "editor/title": [
         {
-          "command": "molvis.openPreviewToSide",
-          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .lmp || resourceExtname == .data || resourceExtname == .lammps",
+          "command": "molvis.openPreview",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data",
+          "group": "navigation"
+        },
+        {
+          "command": "molvis.openPage",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data",
           "group": "navigation"
         }
       ]
@@ -66,11 +58,11 @@
     "build": "rslib build",
     "dev": "rslib build --watch",
     "check-types": "tsc --noEmit",
-    "compile": "npm run check-types && npm run lint && npm run build",
+    "compile": "npm run check-types && npm run check-types:webview && npm run build",
     "watch": "npm-run-all -p watch:*",
     "watch:bundle": "npm run dev",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && npm run build",
+    "package": "npm run compile",
     "test": "vscode-test"
   },
   "devDependencies": {

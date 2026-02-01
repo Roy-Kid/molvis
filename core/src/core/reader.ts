@@ -2,43 +2,94 @@ import { Frame, PdbReader, XyzReader, LammpsReader } from "molrs-wasm";
 import { logger } from "../utils/logger";
 
 /**
- * Reads a frame from file content.
+ * Reads a PDB frame from file content.
  * 
  * @param content - File content as string
- * @param format - File format ("xyz", "pdb", "lammps")
  * @returns Frame object
  */
-export function readFrame(content: string, format: string): Frame {
+export function readPDBFrame(content: string): Frame {
     try {
-        const lower = format.toLowerCase();
-        let frame: Frame | undefined;
+        const reader = new PdbReader(content);
+        const frame = reader.read(0);
+        reader.free();
 
-        if (lower === 'xyz') {
-            const reader = new XyzReader(content);
-            frame = reader.read(0);
-            reader.free();
-        } else if (lower === 'pdb') {
-            const reader = new PdbReader(content);
-            frame = reader.read(0);
-            reader.free();
-        } else if (lower === 'lammps' || lower === 'lmp' || lower === 'data') {
-            const reader = new LammpsReader(content);
-            frame = reader.read(0);
-            reader.free();
-        } else {
-            throw new Error(`Unsupported format: ${format}`);
-        }
+        if (!frame) throw new Error("No frame read");
 
-        if (frame) {
-            logger.info(`[reader] Successfully read frame with format: ${format}`);
-            return frame;
-        } else {
-            logger.warn(`[reader] Failed to read frame for format ${format}`);
-            return new Frame();
-        }
+        logger.info(`[reader] Successfully read PDB frame`);
+        return frame;
     } catch (e) {
-        logger.error("[reader] Error reading frame via WASM:", e);
+        logger.error("[reader] Error reading PDB frame via WASM:", e);
         return new Frame();
+    }
+}
+
+/**
+ * Reads an XYZ frame from file content.
+ * 
+ * @param content - File content as string
+ * @returns Frame object
+ */
+export function readXYZFrame(content: string): Frame {
+    try {
+        const reader = new XyzReader(content);
+        const frame = reader.read(0);
+        reader.free();
+
+        if (!frame) throw new Error("No frame read");
+
+        logger.info(`[reader] Successfully read XYZ frame`);
+        return frame;
+    } catch (e) {
+        logger.error("[reader] Error reading XYZ frame via WASM:", e);
+        return new Frame();
+    }
+}
+
+/**
+ * Reads a LAMMPS data frame from file content.
+ * 
+ * @param content - File content as string
+ * @returns Frame object
+ */
+export function readLAMMPSData(content: string): Frame {
+    try {
+        const reader = new LammpsReader(content);
+        const frame = reader.read(0);
+        reader.free();
+
+        if (!frame) {
+            throw new Error("No frame read from LAMMPS data");
+        }
+
+        // FIXME: frame.renameBlock is missing in current WASM binding
+        // frame.renameBlock("species", "element");
+
+        logger.info(`[reader] Successfully read LAMMPS data frame`);
+        return frame;
+    } catch (e) {
+        logger.error("[reader] Error reading LAMMPS data frame via WASM:", e);
+        return new Frame();
+    }
+}
+
+/**
+ * Unified helper to read a frame based on filename extension.
+ * Dispatches to specific readers.
+ * 
+ * @param content - File content as string
+ * @param filename - Filename to infer format from
+ * @returns Frame object
+ */
+export function readFrame(content: string, filename: string): Frame {
+    const format = inferFormatFromFilename(filename);
+    switch (format) {
+        case 'xyz':
+            return readXYZFrame(content);
+        case 'lammps':
+            return readLAMMPSData(content);
+        case 'pdb':
+        default:
+            return readPDBFrame(content);
     }
 }
 

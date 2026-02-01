@@ -1,4 +1,4 @@
-import { Frame } from "molrs-wasm";
+import { Frame, Box } from "molrs-wasm";
 import { logger } from "../../utils/logger";
 
 /**
@@ -7,10 +7,19 @@ import { logger } from "../../utils/logger";
  */
 export class Trajectory {
     private _frames: Frame[];
+    private _boxes: (Box | undefined)[];
     private _currentIndex: number;
 
-    constructor(frames: Frame[] = []) {
+    constructor(frames: Frame[] = [], boxes: (Box | undefined)[] = []) {
         this._frames = frames;
+        this._boxes = boxes;
+        // Ensure boxes array matches frames length if not provided
+        if (this._boxes.length < this._frames.length) {
+            // Fill with undefined
+            const missing = this._frames.length - this._boxes.length;
+            for (let i = 0; i < missing; i++) this._boxes.push(undefined);
+        }
+
         this._currentIndex = 0;
         if (this._frames.length > 0) {
             logger.info(`[Trajectory] Initialized with ${this._frames.length} frames`);
@@ -26,6 +35,16 @@ export class Trajectory {
             return new Frame();
         }
         return this._frames[this._currentIndex];
+    }
+
+    /**
+     * Get the current Box (if any).
+     */
+    get currentBox(): Box | undefined {
+        if (this._frames.length === 0) {
+            return undefined;
+        }
+        return this._boxes[this._currentIndex];
     }
 
     /**
@@ -45,8 +64,9 @@ export class Trajectory {
     /**
      * Add a frame to the trajectory.
      */
-    addFrame(frame: Frame): void {
+    addFrame(frame: Frame, box?: Box): void {
         this._frames.push(frame);
+        this._boxes.push(box);
     }
 
     /**

@@ -24,6 +24,7 @@ export interface Theme {
     // Global properties
     backgroundColor: string;
     selectionColor: string;
+    boxColor: string;
 
     // Generic material settings (e.g. "matte", "glossy") to apply if specific overrides aren't present
     defaultSpecular: string;

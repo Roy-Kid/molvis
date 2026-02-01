@@ -2,7 +2,7 @@ import type { PointerInfo, AbstractMesh } from "@babylonjs/core";
 import { MeshBuilder, Color3, Vector3 } from "@babylonjs/core";
 import { BaseMode, ModeType } from "./base";
 import type { Molvis } from "@molvis/core";
-import { ContextMenuController } from "../core/context_menu_controller";
+import { ContextMenuController } from "../ui/menus/controller";
 import { makeSelectionKey } from "../core/selection_manager";
 import type { HitResult, MenuItem } from "./types";
 import { CommonMenuItems } from "./menu_items";

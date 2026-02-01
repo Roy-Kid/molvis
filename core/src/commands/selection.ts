@@ -1,6 +1,6 @@
 import { Vector3, Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
-import { Command } from "./base";
+import { Command, command } from "./base";
 import type { SelectedEntity, GetSelectedResponse } from "../core/selection_manager";
 import type { SceneIndex } from "../core/scene_index";
 import { logger } from "../utils/logger";
@@ -430,5 +430,38 @@ export function getSelectedCommand(app: MolvisApp): GetSelectedResponse {
     return app.world.selectionManager.getSelectedMeta();
 }
 
+/**
+ * Command to select atoms by their IDs.
+ */
+@command("select_atoms")
+export class SelectAtomByIdCommand extends Command<void> {
+    private atomIds: number[];
+    private prevSelection: number[];
+
+    constructor(app: MolvisApp, args: { ids: number[] | number }) {
+        super(app);
+        this.atomIds = Array.isArray(args.ids) ? args.ids : [args.ids];
+        this.prevSelection = [];
+    }
+
+    do(): void {
+        const sm = this.app.world.selectionManager;
+        // Backup current selection (only atoms supported for now in this command)
+        this.prevSelection = Array.from(sm.getSelectedAtomIds());
+
+        // Clear and select new
+        sm.clearSelection();
+        sm.selectAtomsByIds(this.atomIds);
+    }
+
+    undo(): Command {
+        const sm = this.app.world.selectionManager;
+        sm.clearSelection();
+        sm.selectAtomsByIds(this.prevSelection);
+        return this;
+    }
+}
+
 // Register the command for RPC access
 commands.register("get_selected", getSelectedCommand);
+

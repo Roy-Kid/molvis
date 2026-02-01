@@ -1,5 +1,5 @@
 import { Mesh } from "@babylonjs/core";
-import { Block, Box } from "molrs-wasm";
+import { Block, Box, Frame } from "molrs-wasm";
 import { Topology } from "./system/topology";
 import {
     MetaRegistry,
@@ -10,6 +10,7 @@ import {
     EntityType
 } from "./entity_source";
 import { encodePickingColor } from "./picker";
+import { makeSelectionKey } from "./selection_manager";
 
 // ============ Registration Options ============
 
@@ -72,6 +73,7 @@ export class ImpostorState {
                 stride: def.stride
             });
         }
+        this.mesh.isVisible = true; // Activate mesh when managed by ImpostorState
     }
 
     setFrameDataAndFlush(buffers: Map<string, Float32Array>, frameCount: number): void {
@@ -457,6 +459,32 @@ export class SceneIndex {
         return null;
     }
 
+    /**
+     * Get the selection key (MeshID:SubIndex) for a logical Atom ID.
+     * This performs a reverse lookup.
+     */
+    getSelectionKeyForAtom(atomId: number): string | null {
+        // 1. Check Edit State first (most dynamic)
+        const atomState = this.meshRegistry.getAtomState();
+        if (atomState) {
+            // Check if it is an Edit atom
+            if (atomState.idToIndex.has(atomId)) {
+                // Edit atom
+                const editIndex = atomState.idToIndex.get(atomId)!;
+                const bufferIndex = atomState.frameOffset + editIndex;
+                return makeSelectionKey(atomState.mesh.uniqueId, bufferIndex);
+            }
+
+            // Checks if it is a Frame atom (implicit ID)
+            if (atomId < atomState.frameOffset) {
+                // Frame atom
+                return makeSelectionKey(atomState.mesh.uniqueId, atomId);
+            }
+        }
+
+        return null; // Not found in managed layers
+    }
+
     getNextAtomId(): number {
         return this.metaRegistry.atoms.getMaxId() + 1;
     }
@@ -631,5 +659,273 @@ export class SceneIndex {
         this.metaRegistry.clear();
         this.topology.clear();
         this.allUnsaved = false;
+    }
+
+    /**
+     * Compute the bounding box of the entire scene (atoms).
+     */
+    getBounds(): { min: { x: number, y: number, z: number }, max: { x: number, y: number, z: number } } | null {
+        const atomState = this.meshRegistry.getAtomState();
+        if (!atomState) return null;
+
+        const buffer = atomState.buffers.get("instanceData");
+        if (!buffer) return null;
+
+        const data = buffer.data;
+        const totalCount = atomState.frameOffset + atomState.count;
+        if (totalCount === 0) return null;
+
+        let minX = Infinity, minY = Infinity, minZ = Infinity;
+        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+        // instanceData stride is 4: [x, y, z, r]
+        const stride = 4;
+
+        for (let i = 0; i < totalCount; i++) {
+            const idx = i * stride;
+            const x = data[idx];
+            const y = data[idx + 1];
+            const z = data[idx + 2];
+
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (z < minZ) minZ = z;
+
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+            if (z > maxZ) maxZ = z;
+        }
+
+        if (minX === Infinity) return null;
+
+        return {
+            min: { x: minX, y: minY, z: minZ },
+            max: { x: maxX, y: maxY, z: maxZ }
+        };
+    }
+
+    // ============ Attribute & Export APIs ============
+
+    /**
+     * Set an attribute for an atom.
+     * Updates the staging layer (MetaRegistry).
+     */
+    setAttribute(type: 'atom' | 'bond', id: number, key: string, value: any) {
+        if (type === 'atom') {
+            this.metaRegistry.atoms.setAttribute(id, key, value);
+        } else if (type === 'bond') {
+            this.metaRegistry.bonds.setAttribute(id, key, value);
+        }
+        this.markAllUnsaved();
+    }
+
+    /**
+     * Get an attribute value.
+     */
+    getAttribute(type: 'atom' | 'bond', id: number, key: string): any {
+        if (type === 'atom') {
+            return this.metaRegistry.atoms.getAttribute(id, key);
+        } else if (type === 'bond') {
+            return this.metaRegistry.bonds.getAttribute(id, key);
+        }
+        return undefined;
+    }
+
+    /**
+     * Create a new Frame that merges base data with staged edits.
+     * This is used for export.
+     */
+    dumpFrame(): Frame {
+        const newFrame = new Frame();
+
+        // 1. Process Atoms
+        const atomKeys = new Set<string>();
+        // Add known logical columns first
+        atomKeys.add('x'); atomKeys.add('y'); atomKeys.add('z'); atomKeys.add('element');
+
+        // Add keys from edits
+        const atomIds = Array.from(this.metaRegistry.atoms.getAllIds());
+        atomIds.sort((a, b) => a - b); // Ensure sorted order
+        const atomCount = atomIds.length;
+
+        // Mapping: Original Atom ID -> New Row Index (0-based)
+        const atomIdToIndex = new Map<number, number>();
+        for (let i = 0; i < atomCount; i++) {
+            atomIdToIndex.set(atomIds[i], i);
+        }
+
+        // Collect all keys from edits
+        for (const meta of this.metaRegistry.atoms.edits.values()) {
+            Object.keys(meta).forEach(k => {
+                if (k !== 'type' && k !== 'atomId' && k !== 'position') atomKeys.add(k);
+            });
+        }
+        // Also check frame keys if possible?
+        if (this.metaRegistry.atoms.frameBlock) {
+            const keys = this.metaRegistry.atoms.frameBlock.keys();
+            keys.forEach(k => atomKeys.add(k));
+        }
+
+        if (atomCount > 0) {
+            const atomsBlock = new Block();
+            // Iterate keys and populate columns
+            for (const key of atomKeys) {
+                // Determine type? Default to String for safety, or F32 if looks like number.
+                let isNumeric = true;
+
+                for (const id of atomIds) {
+                    const val = this.metaRegistry.atoms.getAttribute(id, key);
+                    if (val !== undefined && val !== null) {
+                        if (typeof val !== 'number') isNumeric = false;
+                        break;
+                    }
+                }
+
+                if (key === 'x' || key === 'y' || key === 'z') isNumeric = true; // Force coords to F32
+
+                if (isNumeric) {
+                    const data = new Float32Array(atomCount);
+                    for (let i = 0; i < atomCount; i++) {
+                        const id = atomIds[i];
+                        const val = this.metaRegistry.atoms.getAttribute(id, key);
+
+                        if (typeof val === 'number') {
+                            data[i] = val;
+                        } else {
+                            // STRICT CHECK for coordinates
+                            if (key === 'x' || key === 'y' || key === 'z') {
+                                throw new Error(`Export Error: Missing coordinate '${key}' for atom ID ${id}. Atom data: ${JSON.stringify(this.metaRegistry.atoms.getMeta(id))}`);
+                            }
+                            data[i] = 0; // Fallback for other numeric fields if really needed, but user asked for strictness?
+                            // Let's be strict for x,y,z only as explicitly requested, or maybe warn for others.
+                        }
+                    }
+                    atomsBlock.setColumnF32(key, data);
+                } else {
+                    const data = new Array(atomCount);
+                    for (let i = 0; i < atomCount; i++) {
+                        const id = atomIds[i];
+                        const val = this.metaRegistry.atoms.getAttribute(id, key);
+
+                        if (key === 'element' && !val) {
+                            throw new Error(`Export Error: Missing element for atom ID ${id}`);
+                        }
+
+                        data[i] = val !== undefined ? String(val) : "";
+                    }
+                    atomsBlock.setColumnStrings(key, data);
+                }
+            }
+            newFrame.insertBlock("atoms", atomsBlock);
+        }
+
+        // 2. Process Bonds (Topology)
+        const bondIds = Array.from(this.metaRegistry.bonds.getAllIds());
+        bondIds.sort((a, b) => a - b);
+
+        // Filter bonds that map to existing atoms
+        const validBonds: { i: number, j: number, order: number, id: number }[] = [];
+        for (const id of bondIds) {
+            const meta = this.metaRegistry.bonds.getMeta(id);
+            if (meta) {
+                const idx1 = atomIdToIndex.get(meta.atomId1);
+                const idx2 = atomIdToIndex.get(meta.atomId2);
+
+                if (idx1 !== undefined && idx2 !== undefined) {
+                    validBonds.push({
+                        i: idx1,
+                        j: idx2,
+                        order: meta.order ?? 1,
+                        id
+                    });
+                }
+            }
+        }
+
+        if (validBonds.length > 0) {
+            const bondsBlock = new Block();
+            const count = validBonds.length;
+            const iData = new Uint32Array(count);
+            const jData = new Uint32Array(count);
+            const orderData = new Float32Array(count);
+            let hasOrder = false;
+
+            for (let b = 0; b < count; b++) {
+                iData[b] = validBonds[b].i;
+                jData[b] = validBonds[b].j;
+                orderData[b] = validBonds[b].order;
+                if (validBonds[b].order !== 1) hasOrder = true;
+            }
+
+            bondsBlock.setColumnU32("i", iData);
+            bondsBlock.setColumnU32("j", jData);
+            if (hasOrder) {
+                bondsBlock.setColumnF32("order", orderData);
+            }
+
+            // Also copy other arbitrary bond attributes?
+            const bondKeys = new Set<string>();
+            // Collect all keys from edits
+            for (const meta of this.metaRegistry.bonds.edits.values()) {
+                Object.keys(meta).forEach(k => {
+                    if (k !== 'type' && k !== 'bondId' && k !== 'atomId1' && k !== 'atomId2' && k !== 'order') bondKeys.add(k);
+                });
+            }
+            if (this.metaRegistry.bonds.frameBlock) {
+                const keys = this.metaRegistry.bonds.frameBlock.keys();
+                keys.forEach(k => {
+                    if (k !== 'i' && k !== 'j' && k !== 'order') bondKeys.add(k);
+                });
+            }
+
+            for (const key of bondKeys) {
+                const data = new Array(count);
+                for (let b = 0; b < count; b++) {
+                    const bondId = validBonds[b].id;
+                    const val = this.metaRegistry.bonds.getAttribute(bondId, key);
+                    data[b] = val !== undefined ? String(val) : "";
+                }
+                bondsBlock.setColumnStrings(key, data);
+            }
+
+            newFrame.insertBlock("bonds", bondsBlock);
+        }
+
+        // 3. Process Box (CRYST1)
+        if (this.metaRegistry.box) {
+            const boxBlock = new Block();
+            // A box block typically has 1 row
+            // Columns: a, b, c, alpha, beta, gamma
+
+            const a = this.metaRegistry.box.dimensions[0];
+            const b = this.metaRegistry.box.dimensions[1];
+            const c = this.metaRegistry.box.dimensions[2];
+
+            const alpha = 90.0;
+            const beta = 90.0;
+            const gamma = 90.0;
+
+            const aData = new Float32Array([a]);
+            const bData = new Float32Array([b]);
+            const cData = new Float32Array([c]);
+            const alphaData = new Float32Array([alpha]);
+            const betaData = new Float32Array([beta]);
+            const gammaData = new Float32Array([gamma]);
+
+            boxBlock.setColumnF32("a", aData);
+            boxBlock.setColumnF32("b", bData);
+            boxBlock.setColumnF32("c", cData);
+            boxBlock.setColumnF32("alpha", alphaData);
+            boxBlock.setColumnF32("beta", betaData);
+            boxBlock.setColumnF32("gamma", gammaData);
+
+            newFrame.insertBlock("box", boxBlock);
+        }
+
+        return newFrame;
+    }
+
+    syncFrame() {
+        console.warn("SceneIndex.syncFrame: Not implemented fully. changes stay in staging layer.");
     }
 }

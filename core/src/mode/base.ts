@@ -11,8 +11,9 @@ import type {
   Observer,
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { ContextMenuController } from "../core/context_menu_controller";
+import { ContextMenuController } from "../ui/menus/controller";
 import type { HitResult } from "./types";
+import { isCtrlOrMeta } from "../utils/platform";
 
 enum ModeType {
   View = "view",
@@ -178,25 +179,11 @@ abstract class BaseMode {
     return this.scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
-          // Handle Ctrl key combinations
-          if (kbInfo.event.ctrlKey) {
-            switch (kbInfo.event.key.toLowerCase()) {
-              case "s":
-                this._on_press_ctrl_s();
-                break;
-              case "z":
-                this._on_press_ctrl_z();
-                break;
-              case "y":
-                this._on_press_ctrl_y();
-                break;
-              case "c":
-                this._on_press_ctrl_c();
-                break;
-              case "v":
-                this._on_press_ctrl_v();
-                break;
-            }
+          // Handle Ctrl/Cmd key combinations
+          if (isCtrlOrMeta(kbInfo.event)) {
+            // Global shortcuts (Undo/Redo/Save/Copy) are handled by the App/UI level (TopBar)
+            // We return here to allow the event to propagate if not prevented?
+            // Actually Babylon's observable doesn't stop propagation automatically but we shouldn't handle it here.
           } else {
             switch (kbInfo.event.key) {
               case "e":
@@ -300,9 +287,7 @@ abstract class BaseMode {
           new Vector3(end.x, end.y, end.z)
         );
         const infoText = `[Bond] ${meta.atomId1}-${meta.atomId2} | ` +
-          // `start: (${start.x.toFixed(2)}, ${start.y.toFixed(2)}, ${start.z.toFixed(2)}) | ` +
-          // `end: (${end.x.toFixed(2)}, ${end.y.toFixed(2)}, ${end.z.toFixed(2)}) | ` +
-          `length: ${length.toFixed(2)} Å` +
+          `length: ${length.toFixed(2)}` +
           (meta.order ? ` | order: ${meta.order}` : '');
         this.app.events.emit('info-text-change', infoText);
       }

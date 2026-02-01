@@ -48,16 +48,14 @@ export function activate(context: vscode.ExtensionContext) {
 	// Register Custom Text Editor Provider for .pdb files
 	context.subscriptions.push(MolvisEditorProvider.register(context));
 
-	// Command: Hello World (for testing)
-	const helloWorld = vscode.commands.registerCommand("molvis.helloWorld", () => {
-		vscode.window.showInformationMessage("Hello World from molvis!");
-	});
+	// Register Custom Text Editor Provider for .pdb files
+	context.subscriptions.push(MolvisEditorProvider.register(context));
 
-	// Command: Open standalone viewer
+	// Command: Open standalone viewer (Preview Mode)
 	const openViewer = vscode.commands.registerCommand("molvis.openViewer", () => {
 		const panel = vscode.window.createWebviewPanel(
 			"molvis.viewer",
-			"Molvis",
+			"Molvis Preview",
 			vscode.ViewColumn.Active,
 			{
 				enableScripts: true,
@@ -70,8 +68,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 		panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
 
-		// Send init message for standalone mode
-		sendToWebview(panel.webview, { type: "init", mode: "standalone" });
+		// Send init message for standalone mode (Preview: UI Hidden)
+		const config = { showUI: false };
+		sendToWebview(panel.webview, { type: "init", mode: "standalone", config });
 	});
 
 	// Command: Open preview to the side
@@ -85,14 +84,15 @@ export function activate(context: vscode.ExtensionContext) {
 
 			const document = activeEditor.document;
 			const lowerName = document.fileName.toLowerCase();
-			if (!lowerName.endsWith(".pdb") && !lowerName.endsWith(".xyz")) {
+			if (!lowerName.endsWith(".pdb") && !lowerName.endsWith(".xyz") && !lowerName.endsWith(".lmp") && !lowerName.endsWith(".data") && !lowerName.endsWith(".lammps")) {
 				vscode.window.showWarningMessage(
-					"MolVis preview is only available for .pdb or .xyz files"
+					"MolVis preview is only available for supported files (.pdb, .xyz, .lmp, .data, .lammps)"
 				);
 				return;
 			}
 
 			// Open the file in Custom Editor in a split view
+			// Custom Editor Provider handles init message (Preview: UI Hidden)
 			await vscode.commands.executeCommand(
 				"vscode.openWith",
 				document.uri,
@@ -102,31 +102,29 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	);
 
-	// Command: Open Full App
-	const openApp = vscode.commands.registerCommand("molvis.openApp", () => {
+	// Command: Open Page (Full UI)
+	const openPage = vscode.commands.registerCommand("molvis.openPage", () => {
 		const panel = vscode.window.createWebviewPanel(
-			"molvis.app",
-			"MolVis App",
+			"molvis.page",
+			"MolVis Page",
 			vscode.ViewColumn.Active,
 			{
 				enableScripts: true,
 				retainContextWhenHidden: true,
 				localResourceRoots: [
 					vscode.Uri.joinPath(context.extensionUri, "out"),
-					// Allow access to page dist if we can find it (dev mode hack or strictly strictly packaged)
-					// For now, we reuse the existing webview but tell it to be "app" mode
 				],
 			}
 		);
 
 		panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
 
-		// Send init message for app mode
-		// The webview wrapper needs to handle 'app' mode by rendering the full UI
-		sendToWebview(panel.webview, { type: "init", mode: "app" });
+		// Send init message for page mode (Page: UI Shown)
+		const config = { showUI: true };
+		sendToWebview(panel.webview, { type: "init", mode: "standalone", config });
 	});
 
-	context.subscriptions.push(helloWorld, openViewer, openPreviewToSide, openApp);
+	context.subscriptions.push(openViewer, openPreviewToSide, openPage);
 }
 
 export function deactivate() { }

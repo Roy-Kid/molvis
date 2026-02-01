@@ -3,18 +3,17 @@
  * Simplified to core essentials for anywidget integration.
  */
 
-import type { MolvisConfig as CoreMolvisConfig } from "@molvis/core";
+import { type MolvisConfig as CoreMolvisConfig, defaultMolvisConfig } from "@molvis/core";
 
 // Default widget configuration (passed to core)
-export const DEFAULT_CONFIG: Partial<CoreMolvisConfig> = {
+export const DEFAULT_CONFIG = defaultMolvisConfig({
   showUI: true,
   uiComponents: {
     showModePanel: true,
     showViewPanel: true,
     showInfoPanel: true,
-    showFrameIndicator: true,
   },
-};
+});
 
 // Environment detection for Jupyter contexts
 export const ENVIRONMENT = {

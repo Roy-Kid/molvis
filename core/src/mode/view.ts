@@ -1,7 +1,7 @@
 import { BaseMode, ModeType } from "./base";
 import type { MolvisApp } from "../core/app";
 import { Vector3, type PointerInfo } from "@babylonjs/core";
-import { ContextMenuController } from "../core/context_menu_controller";
+import { ContextMenuController } from "../ui/menus/controller";
 import type { HitResult, MenuItem } from "./types";
 import { CommonMenuItems } from "./menu_items";
 
@@ -170,13 +170,22 @@ class ViewMode extends BaseMode {
 
   private async redrawFrame() {
     const frame = this.app.system.frame;
+    const box = this.app.system.box;
 
     try {
-      const { UpdateFrameCommand } = await import("../commands/update_frame");
+      const { UpdateFrameCommand } = await import("../commands/frame");
       const updateCmd = new UpdateFrameCommand(this.app, { frame });
       const result = await updateCmd.do();
 
       if (result.success) {
+        // If update succeeded, ensure box is also updated if needed.
+        // For now, if box changed, UpdateFrame might not handle it.
+        // We could call DrawBoxCommand here if box exists.
+        if (box) {
+          const { DrawBoxCommand } = await import("../commands/draw");
+          const drawBox = new DrawBoxCommand(this.app, { box });
+          drawBox.do();
+        }
         return;
       }
       // console.log("UpdateFrame failed, falling back to DrawFrame:", result.reason);
@@ -192,7 +201,8 @@ class ViewMode extends BaseMode {
 
     const { DrawFrameCommand } = await import("../commands/draw");
     const cmd = new DrawFrameCommand(this.app, {
-      frame
+      frame,
+      box
     });
     await cmd.do();
   }

@@ -3,7 +3,7 @@ import type { PointerInfo } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
 
 import { BaseMode, ModeType } from "./base";
-import { ContextMenuController } from "../core/context_menu_controller";
+import { ContextMenuController } from "../ui/menus/controller";
 import type { SelectionOp } from "../core/selection_manager";
 import { makeSelectionKey } from "../core/selection_manager";
 import type { HitResult, MenuItem } from "./types";

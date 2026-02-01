@@ -3,15 +3,14 @@ import { MolvisContext } from './context';
 import MolvisWrapper from './MolvisWrapper';
 import type { Molvis } from '@molvis/core';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { TimelineControl } from "@/components/TimelineControl";
-import { PipelinePanel } from "@/components/PipelinePanel";
-import { EditorPanel } from "@/components/EditorPanel";
+import { TopBar } from './ui/layout/TopBar';
+import { RightSidebar } from './ui/layout/RightSidebar';
 
 const App: React.FC = () => {
   const [app, setApp] = useState<Molvis | null>(null);
+  const [currentMode, setCurrentMode] = useState<string>('view');
   const [statusMessage, setStatusMessage] = useState<string>("Ready");
   const [statusType, setStatusType] = useState<"info" | "error">("info");
 
@@ -51,13 +50,23 @@ const App: React.FC = () => {
             }, 5000);
         }
     };
+
+    const handleModeChange = () => {
+        if (app.mode) {
+             // Map core modes to UI modes if necessary, or just use mode type string
+             // Core modes: view, edit, etc.
+             setCurrentMode(app.mode.type);
+        }
+    };
     
     app.events.on('status-message', handleStatus);
+    app.events.on('mode-change', handleModeChange);
     
     return () => {
         window.removeEventListener('error', handleGlobalError);
         window.removeEventListener('unhandledrejection', handleRejection);
         app.events.off('status-message', handleStatus);
+        app.events.off('mode-change', handleModeChange);
     };
   }, [app]);
 
@@ -65,38 +74,83 @@ const App: React.FC = () => {
   React.useEffect(() => {
     if (!app) return;
     
-    // Initialize Pipeline
-    const initPipeline = async () => {
-      if (!app) return;
-      
-      const { DataSourceModifier } = await import('@molvis/core');
+    const initDemo = async () => {
+      // Dynamic imports to avoid issues before wasm init
+      const { DataSourceModifier, Frame, Block } = await import('@molvis/core');
       const pipeline = (app as any).modifierPipeline;
       
       if (pipeline && pipeline.getModifiers().length === 0) {
-           console.log("Initializing pipeline...");
-           pipeline.addModifier(new DataSourceModifier());
+           console.log("Initializing demo scene...");
            
-           // Draw modifiers are no longer added by default.
-           // They can be added manually by the user to override global settings.
+           // Create H2O Frame
+           const atomsBlock = new Block();
+           atomsBlock.setColumnF32("x", new Float32Array([0.0, 0.757, -0.757]));
+           atomsBlock.setColumnF32("y", new Float32Array([0.0, 0.586, 0.586]));
+           atomsBlock.setColumnF32("z", new Float32Array([0.0, 0.0, 0.0]));
+           atomsBlock.setColumnStrings("element", ["O", "H", "H"]);
+        
+           const bondsBlock = new Block();
+           bondsBlock.setColumnU32("i", new Uint32Array([0, 0]));
+           bondsBlock.setColumnU32("j", new Uint32Array([1, 2]));
+           bondsBlock.setColumnU8("order", new Uint8Array([1, 1]));
+        
+           const frame = new Frame();
+           frame.insertBlock("atoms", atomsBlock);
+           frame.insertBlock("bonds", bondsBlock);
+
+           // Add Data Source Modifier with this frame
+           const sourceMod = new DataSourceModifier();
+           sourceMod.setFrame(frame);
+           sourceMod.sourceType = 'empty';
+           sourceMod.filename = 'H2O Demo';
            
-           // Default to edit mode empty
-           app.setMode('edit');
+           pipeline.addModifier(sourceMod);
+           
+           // Force render
+           if ((app as any).renderFrame) {
+               (app as any).renderFrame(frame);
+           }
+           
+           app.setMode('view');
+           setCurrentMode('view');
+           
+           // Reset camera to view the molecule
+           setTimeout(() => {
+               if ((app as any).camera) (app as any).camera.reset();
+           }, 100);
       }
     };
     
-    initPipeline();
+    initDemo();
   }, [app]);
 
+  const handleModeSwitch = (mode: string) => {
+      console.log("[App] handleModeSwitch called with:", mode);
+      if (!app) return;
+      try {
+          app.setMode(mode);
+          // Only update UI if setMode didn't throw
+          setCurrentMode(mode);
+      } catch (e) {
+          console.error("[App] Failed to switch mode:", e);
+          setStatusMessage(`Failed to switch mode: ${(e as Error).message}`);
+          setStatusType("error");
+      }
+  };
 
   return (
     <ErrorBoundary>
       <MolvisContext.Provider value={app}>
-        <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
-
+        <div 
+            className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden"
+            onContextMenu={(e) => e.preventDefault()}
+        >
+          
+          <TopBar app={app} currentMode={currentMode} onModeChange={handleModeSwitch} />
 
           {/* Main Layout */}
           <ResizablePanelGroup direction="horizontal" className="flex-1">
-            {/* Left/Center Area: Viewport + Timeline */}
+            {/* Center Area: Viewport + Timeline */}
             <ResizablePanel defaultSize={75} className="flex flex-col min-w-[300px]">
               <div className="flex-1 relative bg-muted/20 overflow-hidden">
                 <MolvisWrapper onMount={setApp} />
@@ -112,57 +166,16 @@ const App: React.FC = () => {
 
             <ResizableHandle withHandle />
 
-            {/* Right Panel: Tabs */}
+            {/* Right Panel: Context Sensitive */}
             <ResizablePanel 
               defaultSize={25} 
               minSize={20} 
               maxSize={50} 
               collapsible={true}
               collapsedSize={0}
-              onCollapse={() => console.log('Right panel collapsed')}
-              onExpand={() => console.log('Right panel expanded')}
-              className="bg-background flex flex-col min-w-0" // removed fixed min-w to allow collapse
+              className="bg-background flex flex-col min-w-0" 
             >
-              <Tabs defaultValue="pipeline" className="flex-1 flex flex-col h-full w-full">
-                <div className="border-b px-2 py-2 bg-muted/10 shrink-0">
-                  <TabsList className="w-full grid grid-cols-4">
-                    <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-                    <TabsTrigger value="editor">Editor</TabsTrigger>
-                    <TabsTrigger value="rendering">Rendering</TabsTrigger>
-                    <TabsTrigger value="props">Props</TabsTrigger>
-                  </TabsList>
-                </div>
-
-                <div className="flex-1 overflow-hidden">
-                  <TabsContent value="pipeline" className="h-full m-0 border-0">
-                    <PipelinePanel app={app} />
-                  </TabsContent>
-
-                  <TabsContent value="editor" className="h-full m-0 border-0">
-                    <ScrollArea className="h-full">
-                       <EditorPanel app={app} />
-                    </ScrollArea>
-                  </TabsContent>
-
-                  <TabsContent value="rendering" className="h-full m-0 border-0">
-                    <ScrollArea className="h-full">
-                      <div className="p-4">
-                        <h3 className="font-medium text-sm mb-4">Rendering Settings</h3>
-                        {/* TODO: Add rendering controls */}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-
-                  <TabsContent value="props" className="h-full m-0 border-0">
-                    <ScrollArea className="h-full">
-                      <div className="p-4">
-                        <h3 className="font-medium text-sm mb-4">Object Properties</h3>
-                        {/* TODO: Add properties controls */}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-                </div>
-              </Tabs>
+               <RightSidebar app={app} currentMode={currentMode} />
             </ResizablePanel>
           </ResizablePanelGroup>
           

@@ -182,6 +182,76 @@ export class SelectionManager {
     }
 
     /**
+     * Clear the current selection.
+     */
+    clearSelection(): void {
+        this.apply({ type: 'clear' });
+    }
+
+    /**
+     * Select atoms by their SceneIndex Atomic IDs.
+     * This requires scanning the Scene Index/Meta Registry to find matching keys.
+     * 
+     * @param ids - Array of atom IDs to select
+     */
+    selectAtomsByIds(ids: number[]): void {
+        const idSet = new Set(ids);
+        const keysToAdd: SelectionKey[] = [];
+
+        // Inefficient scan? 
+        // SceneIndex stores ID -> Meta. 
+        // We need Meta -> Key (MeshID + InstanceID)
+        // MetaRegistry stores by ID.
+        // Wait, `dumpFrame` iterates all IDs.
+        // We can iterate all registered meshes in SceneIndex?
+        // Or better: SceneIndex should provide `getMeshAndIndex(atomId)`.
+
+        // Let's assume SceneIndex has `getAtomLocation(atomId)`.
+        // If not, we iterate all atoms in MetaRegistry.
+
+        // Actually, `SelectionKey` is based on MeshID:InstanceID (babylon concept).
+        // `AtomID` is logical ID.
+        // We need a map AtomID -> SelectionKey.
+
+        // SceneIndex.ts:
+        // `this.metaRegistry.atoms.getMeta(id)` returns { ...position, atomId, type }.
+        // But it doesn't store WHICH mesh it is in?
+        // The meshRegistry stores sets of IDs per mesh?
+
+        // Let's check SceneIndex implementation for reverse lookup.
+        // For now, I will use a direct lookup if exposed, or add it to SceneIndex.
+
+        // Assuming SceneIndex has `getSelectionKeyForAtom(atomId)`.
+        // I will add this method to SceneIndex in next step.
+        // For now, call it.
+
+        for (const id of ids) {
+            const key = this.sceneIndex.getSelectionKeyForAtom(id);
+            if (key) keysToAdd.push(key);
+        }
+
+        if (keysToAdd.length > 0) {
+            this.apply({ type: 'add', atoms: keysToAdd });
+        }
+    }
+
+    /**
+     * Get IDs of all selected atoms.
+     */
+    getSelectedAtomIds(): Set<number> {
+        const ids = new Set<number>();
+        for (const key of this.state.atoms) {
+            const ref = parseSelectionKey(key);
+            if (!ref) continue;
+            const meta = this.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+            if (meta?.type === 'atom') {
+                ids.add(meta.atomId);
+            }
+        }
+        return ids;
+    }
+
+    /**
      * Get metadata for all selected entities.
      * Returns data in molpy.Frame compatible format.
      * 
@@ -270,6 +340,15 @@ export class SelectionManager {
      */
     on(handler: (state: SelectionState) => void): void {
         this.listeners.push(handler);
+    }
+
+    /**
+     * Remove a change event listener.
+     * 
+     * @param handler - The handler to remove
+     */
+    off(handler: (state: SelectionState) => void): void {
+        this.listeners = this.listeners.filter(h => h !== handler);
     }
 
     /**

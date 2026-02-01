@@ -113,6 +113,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
         });
 
         // Send init message
-        sendToWebview(webviewPanel.webview, { type: "init", mode: "editor" });
+        const config = { showUI: false }; // Preview mode has UI hidden by default
+        sendToWebview(webviewPanel.webview, { type: "init", mode: "editor", config });
     }
 }

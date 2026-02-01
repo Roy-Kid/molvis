@@ -126,8 +126,9 @@ export class ClassicTheme implements Theme {
     public readonly name = "Classic";
 
     public readonly backgroundColor = "#000000"; // Black background
-    public readonly selectionColor = "#FFFF00"; // Yellow selection
+    public readonly selectionColor = "#FFB343"; // Yellow selection
     public readonly defaultSpecular = "#4D4D4D"; // Standard specular
+    public readonly boxColor = "#FFFFFF"; // Box color
 
     public getAtomStyle(element: string): AtomStyle {
         const color = DEFAULT_CPK_COLORS[element] || "#FF00FF"; // Magenta fallback

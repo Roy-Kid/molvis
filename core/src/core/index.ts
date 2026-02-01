@@ -1,6 +1,5 @@
 export { MolvisApp as Molvis } from "./app";
 export { World } from "./world";
-export { mergeConfig, DEFAULT_CONFIG } from "./config";
 export { Settings } from "./settings";
 export {
     writeFrame,
@@ -13,8 +12,12 @@ export {
 
 export {
     readFrame,
+    readPDBFrame,
+    readXYZFrame,
+    readLAMMPSData,
     inferFormatFromFilename
 } from "./reader";
 export { System } from "./system";
 export { SceneIndex } from "./scene_index";
 export { syncSceneToFrame } from "./scene_sync";
+export { SelectionManager, type SelectionState, parseSelectionKey } from "./selection_manager";

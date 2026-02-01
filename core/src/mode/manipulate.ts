@@ -8,11 +8,11 @@ import { type Molvis } from "@molvis/core";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
-import { ContextMenuController } from "../core/context_menu_controller";
+import { ContextMenuController } from "../ui/menus/controller";
 import { type HitResult, type MenuItem } from "./types";
 import { syncSceneToFrame } from "../core/scene_sync";
 import { CommonMenuItems } from "./menu_items";
-import "../shaders/impostor";
+import "../core/shaders/impostor";
 
 /**
  * =============================

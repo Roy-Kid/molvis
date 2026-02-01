@@ -73,7 +73,7 @@ class DrawingCommandsMixin:
         frame: mp.Frame,
         style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
         atom_radius: float | list[float] | None = None,
-        bond_radius: float = 0.1,
+        bond_radius: float | None = None,
         include_metadata: bool = False
     ) -> "Molvis":
         """
@@ -144,7 +144,7 @@ class DrawingCommandsMixin:
         atomistic: Any,
         style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
         atom_radius: float | list[float] | None = None,
-        bond_radius: float = 0.1,
+        bond_radius: float | None = None,
         include_metadata: bool = False,
         atom_fields: list[str] | None = None
     ) -> "Molvis":
@@ -326,7 +326,7 @@ class DrawingCommandsMixin:
         self: "Molvis",
         style: Literal["ball_and_stick", "spacefill", "wireframe"] = "ball_and_stick",
         atom_radius: float | list[float] | None = None,
-        bond_radius: float = 0.1
+        bond_radius: float | None = None
     ) -> "Molvis":
         """Set global visualization style parameters."""
         params = {

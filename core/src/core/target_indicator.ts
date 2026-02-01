@@ -1,9 +1,9 @@
-import { Vector3, Color3, MeshBuilder, StandardMaterial } from "@babylonjs/core";
+import { Vector3, Color4, MeshBuilder } from "@babylonjs/core";
 import type { Scene, Mesh } from "@babylonjs/core";
 
 /**
  * Visual indicator showing the current camera rotation target.
- * Displays as a small crosshair or sphere that fades after a few seconds.
+ * Displays as a small 3D axes crosshair (Red X, Green Y, Blue Z) that fades after a few seconds.
  */
 export class TargetIndicator {
     private mesh: Mesh | null = null;
@@ -18,29 +18,46 @@ export class TargetIndicator {
     /**
      * Show the target indicator at a specific position
      */
-    show(position: Vector3, isAtom: boolean = false): void {
+    show(position: Vector3, _isAtom: boolean = false): void {
         // Remove existing indicator
         this.hide();
 
-        // Create crosshair indicator
-        this.mesh = MeshBuilder.CreateSphere(
-            "cameraTarget",
-            { diameter: isAtom ? 0.3 : 0.2 },
+        const size = 0.2;
+
+        // Define axes lines
+        const lines = [
+            [new Vector3(-size, 0, 0), new Vector3(size, 0, 0)], // X
+            [new Vector3(0, -size, 0), new Vector3(0, size, 0)], // Y
+            [new Vector3(0, 0, -size), new Vector3(0, 0, size)]  // Z
+        ];
+
+        // Define colors (Red, Green, Blue)
+        const red = new Color4(1, 0, 0, 1);
+        const green = new Color4(0, 1, 0, 1);
+        const blue = new Color4(0, 0, 1, 1);
+
+        const colors = [
+            [red, red],
+            [green, green],
+            [blue, blue]
+        ];
+
+        // Create line system
+        this.mesh = MeshBuilder.CreateLineSystem(
+            "cameraTargetAxes",
+            {
+                lines: lines,
+                colors: colors,
+                useVertexAlpha: false
+            },
             this.scene
         );
 
         this.mesh.position = position.clone();
 
-        // Create material
-        const material = new StandardMaterial("targetMaterial", this.scene);
-        material.emissiveColor = isAtom ? Color3.Yellow() : Color3.White();
-        material.disableLighting = true;
-        material.alpha = 0.8;
-        this.mesh.material = material;
-
-        // Don't cast shadows or be pickable
+        // Ensure it renders on top or clearly?
+        this.mesh.renderingGroupId = 1; // Put in separate group if needed, or just standard 0
         this.mesh.isPickable = false;
-        this.mesh.receiveShadows = false;
 
         this.isVisible = true;
 
@@ -56,19 +73,23 @@ export class TargetIndicator {
     private fadeOut(): void {
         if (!this.mesh) return;
 
-        const material = this.mesh.material as StandardMaterial;
-        if (material) {
-            // Simple fade by reducing alpha
-            const fadeInterval = setInterval(() => {
-                material.alpha -= 0.1;
-                if (material.alpha <= 0) {
-                    clearInterval(fadeInterval);
-                    this.hide();
+        // Line meshes with vertex colors don't use standard material alpha easily.
+        // We can just hide it or blink it.
+        // Or visibility property?
+        const mesh = this.mesh;
+        let alpha = 1.0;
+
+        const fadeInterval = setInterval(() => {
+            alpha -= 0.1;
+            if (alpha <= 0) {
+                clearInterval(fadeInterval);
+                this.hide();
+            } else {
+                if (mesh.visibility !== undefined) {
+                    mesh.visibility = alpha;
                 }
-            }, 50);
-        } else {
-            this.hide();
-        }
+            }
+        }, 50);
     }
 
     /**

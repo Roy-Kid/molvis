@@ -1,4 +1,4 @@
-import { Frame } from "molrs-wasm";
+import { Frame, Box } from "molrs-wasm";
 import { logger } from "../utils/logger";
 
 /**
@@ -53,23 +53,33 @@ export class System {
     }
 
     /**
+     * Get the current Box (from the active trajectory).
+     */
+    get box(): Box | undefined {
+        return this._trajectory.currentBox;
+    }
+
+    /**
      * Set the current Frame.
      * This wraps the single frame in a new, single-frame Trajectory.
      */
     set frame(value: Frame | null) {
-        const frame = value ?? new Frame();
-        const oldLen = this._trajectory.length;
-        this._trajectory = new Trajectory([frame]);
+        this.setFrame(value ?? new Frame());
+    }
 
-        if (value) {
-            const atomsBlock = value.getBlock("atoms");
-            const bondsBlock = value.getBlock("bonds");
-            const atomCount = atomsBlock?.nrows() ?? 0;
-            const bondCount = bondsBlock?.nrows() ?? 0;
-            logger.info(`[System] Frame set (wrapped in Trajectory) with ${atomCount} atoms and ${bondCount} bonds`);
-        } else {
-            logger.info("[System] Frame reset (empty Trajectory)");
-        }
+    /**
+     * Set the current Frame and optional Box.
+     * Wraps them in a new, single-frame Trajectory.
+     */
+    public setFrame(frame: Frame, box?: Box): void {
+        const oldLen = this._trajectory.length;
+        this._trajectory = new Trajectory([frame], [box]);
+
+        const atomsBlock = frame.getBlock("atoms");
+        const bondsBlock = frame.getBlock("bonds");
+        const atomCount = atomsBlock?.nrows() ?? 0;
+        const bondCount = bondsBlock?.nrows() ?? 0;
+        logger.info(`[System] Frame set (wrapped in Trajectory) with ${atomCount} atoms and ${bondCount} bonds`);
 
         // Only emit if we actually change from a multi-frame trajectory or similar significant change
         if (oldLen > 1 || this._trajectory.length > 1) {

@@ -18,7 +18,7 @@ from typing import Any
 import anywidget
 import traitlets
 
-from .commands import DrawingCommandsMixin, SelectionCommandsMixin
+from .commands import DrawingCommandsMixin, SelectionCommandsMixin, FrameCommandsMixin, SnapshotCommandsMixin
 from .types import JsonRPCRequest
 from .utils import NumpyEncoder
 
@@ -33,7 +33,7 @@ if not ESM_path.exists():
     raise FileNotFoundError(f"ESM file not found: {ESM_path}")
 
 
-class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin):
+class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin, FrameCommandsMixin, SnapshotCommandsMixin):
     """
     A widget for molecular visualization using molpy and anywidget.
     

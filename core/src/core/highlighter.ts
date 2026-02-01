@@ -1,5 +1,6 @@
-import type { Scene, Mesh } from "@babylonjs/core";
+import { type Scene, type Mesh, Color3, Color4 } from "@babylonjs/core";
 import { type SelectionState, parseSelectionKey } from "./selection_manager";
+import type { MolvisApp } from "./app";
 
 /**
  * Highlighter: Mode-aware highlighting in a single module.
@@ -21,7 +22,10 @@ export class Highlighter {
     private lastSelectionState: SelectionState = { atoms: new Set(), bonds: new Set() };
     private previewKeys: Set<string> = new Set();
 
-    constructor(scene: Scene) {
+    private app: MolvisApp;
+
+    constructor(app: MolvisApp, scene: Scene) {
+        this.app = app;
         this.scene = scene;
     }
 
@@ -58,11 +62,31 @@ export class Highlighter {
         }
 
         // 2. Apply Selection
+        const selectionColorHex = this.app.styleManager.getTheme().selectionColor;
+
+        let r: number, g: number, b: number;
+
+        // Check if hex includes alpha (length > 7, e.g. #RRGGBBAA)
+        if (selectionColorHex.length > 7) {
+            const c4 = Color4.FromHexString(selectionColorHex);
+            // Manual approximation for linear space (Gamma 2.2) since Color4 doesn't have toLinearSpace
+            r = Math.pow(c4.r, 2.2);
+            g = Math.pow(c4.g, 2.2);
+            b = Math.pow(c4.b, 2.2);
+        } else {
+            const c3 = Color3.FromHexString(selectionColorHex).toLinearSpace();
+            r = c3.r;
+            g = c3.g;
+            b = c3.b;
+        }
+
+        const selectionColor = [r, g, b, 1.0];
+
         for (const key of this.lastSelectionState.atoms) {
-            this.applyHighlight(key, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
+            this.applyHighlight(key, selectionColor);
         }
         for (const key of this.lastSelectionState.bonds) {
-            this.applyHighlight(key, [1.0, 0.7, 0.0, 1.0]); // Golden Orange
+            this.applyHighlight(key, selectionColor);
         }
     }
 

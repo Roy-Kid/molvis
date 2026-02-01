@@ -185,14 +185,19 @@ export class GridGround {
     let worldPerPixel: number;
 
     if (this._camera.mode === 1) { // Orthographic camera
-      // For orthographic, use orthoRect to calculate world per pixel
-      const orthoRect = (this._camera as any).orthoRect;
-      if (orthoRect) {
-        const worldWidth = orthoRect.width;
+      // For orthographic, use ortho bounds
+      if (this._camera.orthoRight !== null && this._camera.orthoLeft !== null) {
+        const worldWidth = this._camera.orthoRight - this._camera.orthoLeft;
         worldPerPixel = worldWidth / renderHeight;
       } else {
-        // Fallback for orthographic camera
-        worldPerPixel = 0.1; // Default small value
+        // Fallback if ortho bounds not set manually (e.g. strict mode 1 switch)
+        // Estimate based on radius similar to perspective target match
+        const fov = this._camera.fov;
+        const dist = this._camera.radius;
+        const height = 2 * dist * Math.tan(fov / 2);
+        const aspect = this._engine.getAspectRatio(this._camera);
+        const width = height * aspect;
+        worldPerPixel = width / renderHeight;
       }
     } else { // Perspective camera
       const fov = this._camera.fov;
@@ -240,7 +245,46 @@ export class GridGround {
   }
 
   /**
-   * Update grid appearance
+   * Update grid settings (appearance + behavior)
+   */
+  public update(config: {
+    enabled?: boolean;
+    mainColor?: string;
+    lineColor?: string;
+    opacity?: number;
+    majorUnitFrequency?: number;
+    minorUnitVisibility?: number;
+    size?: number;
+  }): void {
+    if (config.enabled !== undefined) {
+      if (config.enabled) this.enable();
+      else this.disable();
+    }
+
+    if (config.mainColor) {
+      this._gridMaterial.mainColor = Color3.FromHexString(config.mainColor);
+    }
+    if (config.lineColor) {
+      this._gridMaterial.lineColor = Color3.FromHexString(config.lineColor);
+    }
+    if (config.opacity !== undefined) {
+      this._gridMaterial.opacity = config.opacity;
+    }
+    if (config.majorUnitFrequency !== undefined) {
+      this._gridMaterial.majorUnitFrequency = config.majorUnitFrequency;
+    }
+    if (config.minorUnitVisibility !== undefined) {
+      this._gridMaterial.minorUnitVisibility = config.minorUnitVisibility;
+    }
+
+    // Size changes require recreating ground
+    if (config.size !== undefined && config.size !== this.GRID_SIZE) {
+      this.setSize(config.size, config.size);
+    }
+  }
+
+  /**
+   * Update grid appearance (Legacy - deprecated by update)
    */
   public updateAppearance(options: {
     mainColor?: Color3;

@@ -12,16 +12,18 @@ export class DataSourceModifier extends BaseModifier {
     public sourceType: 'file' | 'empty' = 'empty';
     public filename: string = '';
 
-    private _frame: Frame | null = null;
+    // Visibility
+    public showAtoms: boolean = true;
+    public showBonds: boolean = true;
+    public showBox: boolean = true;
 
+    private _frame: Frame | null = null;
     constructor() {
         super(
-            "data-source",
-            "Data Source",
-            ModifierCategory.SelectionInsensitive
+            `data-source-${Date.now()}`,
+            'Data Source',
+            ModifierCategory.Data
         );
-        // Data source is always enabled and typically shouldn't be moved or disabled easily
-        this.enabled = true;
     }
 
     public setFrame(frame: Frame) {
@@ -33,11 +35,37 @@ export class DataSourceModifier extends BaseModifier {
     }
 
     apply(input: Frame, _context: PipelineContext): Frame {
-        // If we have a stored frame, we return it, effectively acting as the source.
-        // If not, we pass through the input (which might be the default empty source).
-        if (this._frame) {
-            return this._frame;
+        // Source Frame
+        const sourceFrame = this._frame || input;
+
+        // If all visible, return as is
+        if (this.showAtoms && this.showBonds && this.showBox) {
+            return sourceFrame;
         }
-        return input;
+
+        // Create restricted view (new Frame or modified copy)
+        // Since Frame is WASM, we can't easily "clone shallowly".
+        // However, we can create a new Frame and set blocks from the source.
+        // const output = new Frame();
+
+        // TODO: Fix Frame API usage for filtering. setBlock and box assignment are not available or typed correctly.
+        // For now, we return the full frame. logic is disabled.
+        /*
+        if (this.showAtoms) {
+            const atoms = sourceFrame.getBlock("atoms");
+            if (atoms) output.setBlock("atoms", atoms);
+        }
+
+        if (this.showBonds) {
+            const bonds = sourceFrame.getBlock("bonds");
+            if (bonds) output.setBlock("bonds", bonds);
+        }
+
+        if (this.showBox) {
+            output.box = sourceFrame.box;
+        }
+        return output;
+        */
+        return sourceFrame;
     }
 }

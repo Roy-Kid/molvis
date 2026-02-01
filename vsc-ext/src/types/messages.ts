@@ -6,7 +6,7 @@
  * Messages sent from Extension Host to Webview
  */
 export type HostToWebviewMessage =
-    | { type: "init"; mode: "standalone" | "editor" | "app" }
+    | { type: "init"; mode: "standalone" | "editor" | "app"; config?: any }
     | { type: "loadFile"; content: string; filename: string }
     | { type: "error"; message: string };
 

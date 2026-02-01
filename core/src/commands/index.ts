@@ -11,9 +11,13 @@ export { commands, CommandRegistry } from "./registry";
 export type { CommandFn } from "./registry";
 
 // Command classes
-export { DrawBoxCommand, DrawFrameCommand } from "./draw";
+export { DrawBoxCommand, DrawFrameCommand, DrawAtomCommand, DeleteAtomCommand, DrawBondCommand, DeleteBondCommand } from "./draw";
 export { ClearSceneCommand } from "./clear";
-export { getSelectedCommand } from "./selection";
+export { getSelectedCommand, SelectAtomByIdCommand } from "./selection";
+export { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
+export { NewFrameCommand, UpdateFrameCommand, DumpFrameCommand } from "./frame";
+export { TakeSnapshotCommand } from "./snapshot";
+
 export type { GetSelectedResponse } from "../core/selection_manager";
 
 // Utilities
@@ -27,4 +31,6 @@ export { ArrayFrameSource, SingleFrameSource, AsyncFrameSource } from "./sources
 import "./draw";
 import "./clear";
 import "./selection";
-import "./update_frame";
+import "./frame";
+import "./snapshot";
+import "./attributes";

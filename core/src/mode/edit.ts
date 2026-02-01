@@ -10,13 +10,14 @@ import {
 import type { Molvis } from "@molvis/core";
 import { BaseMode, ModeType } from "./base";
 import { pointOnScreenAlignedPlane } from "./utils";
-import { ContextMenuController } from "../core/context_menu_controller";
+import { ContextMenuController } from "../ui/menus/controller";
 import type { HitResult, MenuItem } from "./types";
 import { CommonMenuItems } from "./menu_items";
-import { Artist } from "./artist";
+import { Artist } from "../core/artist";
 import { syncSceneToFrame } from "../core/scene_sync";
 import { logger } from "../utils/logger";
-import "../shaders/impostor"; // Ensure impostor shaders are registered
+import { DeleteAtomCommand, DeleteBondCommand, DrawAtomCommand, DrawBondCommand } from "../commands/draw";
+import { CompositeCommand } from "../commands/composite";
 
 
 /**
@@ -212,9 +213,9 @@ class EditMode extends BaseMode {
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
 
-    this.artist = new Artist({
-      app,
-    });
+    // Use shared Artist instance from App
+    this.artist = app.artist;
+
     this.previews = new PreviewManager(app);
   }
 
@@ -380,30 +381,50 @@ class EditMode extends BaseMode {
         const endMeta = this.world.sceneIndex.getMeta(this.hoverAtom.uniqueId, endIdx);
         const endId = endMeta?.type === 'atom' ? endMeta.atomId : this.hoverAtom.uniqueId;
 
-        this.artist.drawBond(startPos, endPos, {
-          order: this.bondOrder,
-          atomId1: startId,
-          atomId2: endId
-        });
+        this.app.commandManager.execute(new DrawBondCommand(
+          this.app,
+          startPos,
+          endPos,
+          {
+            order: this.bondOrder,
+            atomId1: startId,
+            atomId2: endId
+          }
+        ));
       } else if (this._is_dragging) {
         const atomName = makeId("atom");
         const atomId = this.app.world.sceneIndex.getNextAtomId();
-        this.artist.drawAtom(xyz, {
-          element: this.element,
-          name: atomName,
-          atomId
-        });
+
+        // 1. Prepare Atom Command
+        const atomCmd = new DrawAtomCommand(
+          this.app,
+          xyz,
+          {
+            element: this.element,
+            name: atomName,
+            atomId
+          }
+        );
 
         // Resolve start ID
         const startIdx = this.startAtomIndex !== -1 ? this.startAtomIndex : undefined;
         const startMeta = this.world.sceneIndex.getMeta(this.startAtom.uniqueId, startIdx);
         const startId = startMeta?.type === 'atom' ? startMeta.atomId : this.startAtom.uniqueId;
 
-        this.artist.drawBond(startPos, xyz, {
-          order: this.bondOrder,
-          atomId1: startId,
-          atomId2: atomId // Use semantic ID, not mesh uniqueId
-        });
+        // 2. Prepare Bond Command
+        const bondCmd = new DrawBondCommand(
+          this.app,
+          startPos,
+          xyz,
+          {
+            order: this.bondOrder,
+            atomId1: startId,
+            atomId2: atomId // Use semantic ID
+          }
+        );
+
+        // 3. Execute Composite
+        this.app.commandManager.execute(new CompositeCommand(this.app, [atomCmd, bondCmd]));
       }
 
       this.world.camera.attachControl(this.world.scene.getEngine().getRenderingCanvas(), false);
@@ -425,11 +446,15 @@ class EditMode extends BaseMode {
       );
       const atomName = makeId("atom");
       const atomId = this.app.world.sceneIndex.getNextAtomId();
-      this.artist.drawAtom(Vector3.FromArray([xyz.x, xyz.y, xyz.z]), {
-        element: this.element,
-        name: atomName,
-        atomId
-      });
+      this.app.commandManager.execute(new DrawAtomCommand(
+        this.app,
+        Vector3.FromArray([xyz.x, xyz.y, xyz.z]),
+        {
+          element: this.element,
+          name: atomName,
+          atomId
+        }
+      ));
       this.pendingAtom = false;
       return;
     }
@@ -440,8 +465,27 @@ class EditMode extends BaseMode {
     }
   }
 
-  _on_press_ctrl_z(): void { this.artist.undo(); }
-  _on_press_ctrl_y(): void { this.artist.redo(); }
+  /**
+   * Handle right-click on atoms/bonds to delete them.
+   */
+  override onRightClickNotConsumed(_pointerInfo: PointerInfo, hit: HitResult | null): void {
+    if (!hit || !hit.metadata) return;
+
+    if (hit.type === "atom" && hit.metadata.type === "atom") {
+      const atomId = hit.metadata.atomId;
+      // Clear highlight before modifying geometry (indices might change)
+      this.app.world.highlighter.clearAll();
+      // Delete atom (and connected bonds via Command logic)
+      this.app.commandManager.execute(new DeleteAtomCommand(this.app, atomId));
+    } else if (hit.type === "bond" && hit.metadata.type === "bond") {
+      const bondId = hit.metadata.bondId;
+      this.app.world.highlighter.clearAll();
+      this.app.commandManager.execute(new DeleteBondCommand(this.app, bondId));
+    }
+  }
+
+  _on_press_ctrl_z(): void { this.app.commandManager.undo(); }
+  _on_press_ctrl_y(): void { this.app.commandManager.redo(); }
   _on_press_ctrl_s(): void { this.saveToFrame(); }
 
   private saveToFrame(): void {

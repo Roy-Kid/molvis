@@ -1,16 +1,17 @@
-import { mountMolvis, type MolvisConfig, Frame } from "@molvis/core";
-import { PdbReader, XyzReader, LammpsReader } from "molrs-wasm";
+import { mountMolvis, type MolvisConfig, Frame, readFrame } from "@molvis/core";
 
 const container = document.getElementById("molvis-container");
 if (!container) throw new Error("Missing container");
 
 const config: MolvisConfig = {
-  fitContainer: true,
-  showUI: true,
+  showUI: true
+};
+
+const settings = {
   grid: { enabled: true, mainColor: "#444", lineColor: "#666", opacity: 0.25, size: 10 }
 };
 
-const app = mountMolvis(container, config);
+const app = mountMolvis(container, config, settings);
 app.start();
 
 const resizeObserver = new ResizeObserver(() => app.resize());
@@ -23,9 +24,9 @@ declare const acquireVsCodeApi: () => {
 
 const vscode = acquireVsCodeApi();
 
-// Message types
+// Message types (re-declare here or import if shared build allows, currently inlined in original file)
 type HostToWebviewMessage =
-  | { type: "init"; mode: "standalone" | "editor" }
+  | { type: "init"; mode: "standalone" | "editor" | "app"; config?: any }
   | { type: "loadFile"; content: string; filename: string }
   | { type: "error"; message: string };
 
@@ -34,65 +35,30 @@ type WebviewToHostMessage =
   | { type: "fileDropped"; filename: string }
   | { type: "error"; message: string };
 
-let mode: "standalone" | "editor" = "standalone";
-
-/**
- * Detect file format from filename extension
- */
-function detectFormat(filename: string): "pdb" | "xyz" | "lammps" | "unknown" {
-  const ext = filename.toLowerCase().split('.').pop();
-  if (ext === "pdb") return "pdb";
-  if (ext === "xyz") return "xyz";
-  if (ext === "lmp" || ext === "data" || ext === "lammps") return "lammps";
-  return "unknown";
-}
-
-/**
- * Load and render a molecular file using molrs parsers
- */
-function readFrame(content: string, format: "pdb" | "xyz" | "lammps"): ReturnType<PdbReader["read"]> {
-  if (format === "pdb") {
-    const reader = new PdbReader(content);
-    const frame = reader.read(0);
-    if (!frame) {
-      throw new Error("Empty PDB file");
-    }
-    return frame;
-  }
-  if (format === "lammps") {
-    const reader = new LammpsReader(content);
-    const frame = reader.read(0);
-    if (!frame) {
-      throw new Error("Empty LAMMPS data file");
-    }
-    return frame;
-  }
-  const reader = new XyzReader(content);
-  const frame = reader.read(0);
-  if (!frame) {
-    throw new Error("Empty XYZ file");
-  }
-  return frame;
-}
+let mode: "standalone" | "editor" | "app" = "standalone";
 
 function loadFile(content: string, filename: string) {
-  const format = detectFormat(filename);
+  console.log(`Loading ${filename}...`);
 
-  if (format === "unknown") {
-    throw new Error(`Unsupported file format: ${filename}`);
+  try {
+    const frame = readFrame(content, filename);
+
+    if (!frame) throw new Error("Frame is undefined");
+
+    app.system.frame = frame;
+    app.execute("draw_frame", { frame });
+
+    // Reset view mode on new file load
+    app.setMode("view");
+    // Fit to screen
+    app.execute("reset_camera", {});
+
+    console.log(`Loaded ${filename} successfully`);
+  } catch (e) {
+    console.error("Failed to load file:", e);
+    // Optionally notify host of error
+    // vscode.postMessage({ type: "error", message: String(e) });
   }
-
-  console.log(`Loading ${filename} as ${format.toUpperCase()} format`);
-
-  const wasmFrame = readFrame(content, format);
-  // WASM readers return Frame directly, no conversion needed
-  const frame = wasmFrame;
-
-  app.system.frame = frame;
-  app.execute("draw_frame", { frame });
-  app.setMode("view");
-
-  console.log(`Loaded ${filename} successfully`);
 }
 
 /**
@@ -105,6 +71,11 @@ window.addEventListener("message", (event) => {
     case "init":
       mode = message.mode;
       console.log(`MolVis initialized in ${mode} mode`);
+
+      // Apply config if provided (e.g. showUI)
+      if (message.config) {
+        app.setConfig(message.config);
+      }
       break;
 
     case "loadFile":
@@ -118,25 +89,25 @@ window.addEventListener("message", (event) => {
 });
 
 /**
- * Drag and drop support for standalone mode
+ * Drag and drop support
+ * Enabled for all modes to allow dropping files onto preview/page
  */
-if (mode === "standalone") {
-  container.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  });
+container.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
 
-  container.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+container.addEventListener("drop", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      vscode.postMessage({ type: "fileDropped", filename: file.name });
-    }
-  });
-}
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) {
+    const file = files[0];
+    // Notify host to read the file
+    vscode.postMessage({ type: "fileDropped", filename: file.name });
+  }
+});
 
 // Cleanup
 window.addEventListener("beforeunload", () => {
