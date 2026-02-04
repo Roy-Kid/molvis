@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
-import { Molvis, writeFrame, inferFormatFromFilename } from '@molvis/core';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download, Loader2 } from 'lucide-react';
+import { type Molvis, inferFormatFromFilename, writeFrame } from "@molvis/core";
+import { Download, Loader2 } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
 
 interface ExportDialogProps {
   app: Molvis | null;
@@ -35,21 +36,21 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
 
       // 3. Write Frame (WASM)
       // Dynamic import if needed, but we imported from @molvis/core which should handle it if loaded.
-      // TopBar used dynamic import, maybe to ensure WASM presence. 
+      // TopBar used dynamic import, maybe to ensure WASM presence.
       // Since we are in UI, core should be loaded.
       const payload = writeFrame(frame, { format, filename });
 
-      if (payload && payload.content) {
-          const blob = new Blob([payload.content], { type: payload.mime });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = payload.suggestedName || filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          setOpen(false);
+      if (payload?.content) {
+        const blob = new Blob([payload.content], { type: payload.mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = payload.suggestedName || filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setOpen(false);
       }
     } catch (e) {
       console.error("Export failed:", e);
@@ -84,10 +85,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
           </div>
         </div>
         <DialogFooter>
-            <Button onClick={handleExport} disabled={isExporting}>
-                {isExporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Export
-            </Button>
+          <Button onClick={handleExport} disabled={isExporting}>
+            {isExporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Export
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

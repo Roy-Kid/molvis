@@ -1,19 +1,20 @@
 import { KeyboardEventTypes, type KeyboardInfo } from "@babylonjs/core";
+import type { MolvisApp } from "../core/app";
 
 import type { BaseMode } from "./base";
 import { ModeType } from "./base";
 import { ViewMode } from "./view";
 
-import { SelectMode } from "./select";
-import { MeasureMode } from "./measure";
 import { EditMode } from "./edit";
 import { ManipulateMode } from "./manipulate";
+import { MeasureMode } from "./measure";
+import { SelectMode } from "./select";
 
 class ModeManager {
-  private _app: any;
+  private _app: MolvisApp;
   private _mode: BaseMode | null = null;
 
-  constructor(app: any) {
+  constructor(app: MolvisApp) {
     this._app = app;
     this.switch_mode(ModeType.View);
     this._register_keyboard_events();
@@ -55,7 +56,6 @@ class ModeManager {
   public switch_mode = (mode: ModeType) => {
     if (this._mode) this._mode.finish();
     switch (mode) {
-
       case ModeType.View:
         this._mode = new ViewMode(this._app);
         break;
@@ -83,7 +83,7 @@ class ModeManager {
 
     // Emit mode change event
     if (this._app.events) {
-      this._app.events.emit('mode-change', mode);
+      this._app.events.emit("mode-change", mode);
     }
   };
 

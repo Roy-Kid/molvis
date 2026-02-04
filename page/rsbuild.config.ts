@@ -16,7 +16,6 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        'molrs-wasm': path.resolve(__dirname, '../../molrs/molrs-wasm/pkg'),
       },
     },
     source: {

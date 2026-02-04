@@ -1,0 +1,120 @@
+import { describe, expect, it } from "@rstest/core";
+import type { Modifier } from "../src/pipeline/modifier";
+import { ModifierPipeline } from "../src/pipeline/pipeline";
+import type { Frame } from "molwasm";
+
+/**
+ * Test suite for Pipeline System
+ */
+describe("Pipeline System", () => {
+  describe("Modifier", () => {
+    it("should create a modifier implementation", () => {
+      const testModifier: Modifier = {
+        id: "test-1",
+        name: "Test Modifier",
+        enabled: true,
+        category: "selection-insensitive" as any,
+        version: 1,
+        modify: (frame: Frame) => frame,
+        validate: () => ({ valid: true }),
+      };
+
+      expect(testModifier.id).toBe("test-1");
+      expect(testModifier.name).toBe("Test Modifier");
+      expect(testModifier.enabled).toBe(true);
+    });
+
+    it("should be able to enable/disable modifier", () => {
+      const testModifier: Modifier = {
+        id: "test-2",
+        name: "Test Modifier",
+        enabled: true,
+        category: "selection-insensitive" as any,
+        version: 1,
+        modify: (frame: Frame) => frame,
+        validate: () => ({ valid: true }),
+      };
+
+      expect(testModifier.enabled).toBe(true);
+
+      testModifier.enabled = false;
+      expect(testModifier.enabled).toBe(false);
+
+      testModifier.enabled = true;
+      expect(testModifier.enabled).toBe(true);
+    });
+  });
+
+  describe("ModifierPipeline", () => {
+    it("should add modifiers to pipeline", () => {
+      const pipeline = new ModifierPipeline();
+
+      const testModifier: Modifier = {
+        id: "test-1",
+        name: "Test Modifier",
+        enabled: true,
+        category: "selection-insensitive" as any,
+        version: 1,
+        modify: (frame: Frame) => frame,
+        validate: () => ({ valid: true }),
+      };
+
+      pipeline.addModifier(testModifier);
+
+      const modifiers = pipeline.getModifiers();
+      expect(modifiers.length).toBe(1);
+      expect(modifiers[0].id).toBe("test-1");
+    });
+
+    it("should remove modifiers from pipeline", () => {
+      const pipeline = new ModifierPipeline();
+
+      const testModifier: Modifier = {
+        id: "test-1",
+        name: "Test Modifier",
+        enabled: true,
+        category: "selection-insensitive" as any,
+        version: 1,
+        modify: (frame: Frame) => frame,
+        validate: () => ({ valid: true }),
+      };
+
+      pipeline.addModifier(testModifier);
+      expect(pipeline.getModifiers().length).toBe(1);
+
+      pipeline.removeModifier("test-1");
+      expect(pipeline.getModifiers().length).toBe(0);
+    });
+
+    it("should clear all modifiers", () => {
+      const pipeline = new ModifierPipeline();
+
+      const modifier1: Modifier = {
+        id: "test-1",
+        name: "Test 1",
+        enabled: true,
+        category: "selection-insensitive" as any,
+        version: 1,
+        modify: (frame: Frame) => frame,
+        validate: () => ({ valid: true }),
+      };
+
+      const modifier2: Modifier = {
+        id: "test-2",
+        name: "Test 2",
+        enabled: true,
+        category: "selection-insensitive" as any,
+        version: 1,
+        modify: (frame: Frame) => frame,
+        validate: () => ({ valid: true }),
+      };
+
+      pipeline.addModifier(modifier1);
+      pipeline.addModifier(modifier2);
+      expect(pipeline.getModifiers().length).toBe(2);
+
+      pipeline.clear();
+      expect(pipeline.getModifiers().length).toBe(0);
+    });
+  });
+});

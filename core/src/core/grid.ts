@@ -1,15 +1,19 @@
 import {
-  Color3,
-  MeshBuilder,
-  type Scene,
   type ArcRotateCamera,
+  Color3,
   type Engine,
   LinesMesh,
+  type Mesh,
+  MeshBuilder,
+  type Scene,
   VertexData,
 } from "@babylonjs/core";
-import {
-  GridMaterial,
-} from "@babylonjs/materials";
+import { GridMaterial } from "@babylonjs/materials";
+
+interface ReferenceLinesWithStorage extends LinesMesh {
+  _xLine?: LinesMesh;
+  _yLine?: LinesMesh;
+}
 
 /**
  * GridGround component that creates an adaptive grid ground
@@ -19,17 +23,17 @@ export class GridGround {
   private _scene: Scene;
   private _camera: ArcRotateCamera;
   private _engine: Engine;
-  private _ground: any;
+  private _ground: Mesh | null = null;
   private _gridMaterial: GridMaterial;
-  private _referenceLines: LinesMesh | null = null;
-  private _isEnabled: boolean = false;
+  private _referenceLines: ReferenceLinesWithStorage | null = null;
+  private _isEnabled = false;
 
   // Grid configuration
   private readonly TARGET_PX_PER_MINOR = 64;
   private GRID_SIZE = 10000;
   private readonly GRID_SUBDIVISIONS = 1;
-  private readonly MIN_GRID_STEP = 1; // Minimum grid step when camera is close
-  private readonly DISTANCE_THRESHOLD = 50; // Distance threshold for locking grid step
+  private MIN_GRID_STEP = 1; // Minimum grid step when camera is close
+  private DISTANCE_THRESHOLD = 50; // Distance threshold for locking grid step
 
   constructor(scene: Scene, camera: ArcRotateCamera, engine: Engine) {
     this._scene = scene;
@@ -78,8 +82,8 @@ export class GridGround {
 
     if (this._referenceLines) {
       // Dispose both X and Y reference lines
-      const xLine = (this._referenceLines as any)._xLine;
-      const yLine = (this._referenceLines as any)._yLine;
+      const xLine = this._referenceLines._xLine;
+      const yLine = this._referenceLines._yLine;
 
       if (xLine) {
         xLine.dispose();
@@ -104,9 +108,9 @@ export class GridGround {
       {
         width: this.GRID_SIZE,
         height: this.GRID_SIZE,
-        subdivisions: this.GRID_SUBDIVISIONS
+        subdivisions: this.GRID_SUBDIVISIONS,
       },
-      this._scene
+      this._scene,
     );
 
     this._ground.material = this._gridMaterial;
@@ -132,8 +136,12 @@ export class GridGround {
     xLine.color = new Color3(1.0, 0.0, 0.0);
     xLine.isPickable = false;
     const xPositions: number[] = [
-      -halfSize, 0, 0,  // Start point
-      halfSize, 0, 0,   // End point
+      -halfSize,
+      0,
+      0, // Start point
+      halfSize,
+      0,
+      0, // End point
     ];
     const xIndices: number[] = [0, 1];
 
@@ -142,14 +150,17 @@ export class GridGround {
     xVertexData.indices = xIndices;
     xVertexData.applyToMesh(xLine);
 
-
     // Create Y=0 line (horizontal, blue)
     const yLine = new LinesMesh("yReferenceLine", this._scene);
     yLine.color = new Color3(0.0, 0.0, 1.0);
     yLine.isPickable = false;
     const yPositions: number[] = [
-      0, 0, -halfSize,  // Start point
-      0, 0, halfSize,   // End point
+      0,
+      0,
+      -halfSize, // Start point
+      0,
+      0,
+      halfSize, // End point
     ];
     const yIndices: number[] = [0, 1];
 
@@ -160,8 +171,8 @@ export class GridGround {
 
     // Store both lines for later disposal
     this._referenceLines = xLine; // Keep reference for disposal, but we'll handle both
-    (this._referenceLines as any)._xLine = xLine;
-    (this._referenceLines as any)._yLine = yLine;
+    this._referenceLines._xLine = xLine;
+    this._referenceLines._yLine = yLine;
   }
 
   /**
@@ -184,7 +195,8 @@ export class GridGround {
     // Handle both perspective and orthographic cameras
     let worldPerPixel: number;
 
-    if (this._camera.mode === 1) { // Orthographic camera
+    if (this._camera.mode === 1) {
+      // Orthographic camera
       // For orthographic, use ortho bounds
       if (this._camera.orthoRight !== null && this._camera.orthoLeft !== null) {
         const worldWidth = this._camera.orthoRight - this._camera.orthoLeft;
@@ -199,7 +211,8 @@ export class GridGround {
         const width = height * aspect;
         worldPerPixel = width / renderHeight;
       }
-    } else { // Perspective camera
+    } else {
+      // Perspective camera
       const fov = this._camera.fov;
       const z = this._camera.radius;
 
@@ -223,12 +236,15 @@ export class GridGround {
 
     // Find best grid step from available scales
     const scales = [1, 2, 5];
-    const pow10 = Math.pow(10, Math.floor(Math.log10(desiredWorldStep)));
+    const pow10 = 10 ** Math.floor(Math.log10(desiredWorldStep));
     let best = scales[0] * pow10;
 
     for (const s of scales) {
       const candidate = s * pow10;
-      if (Math.abs(candidate - desiredWorldStep) < Math.abs(best - desiredWorldStep)) {
+      if (
+        Math.abs(candidate - desiredWorldStep) <
+        Math.abs(best - desiredWorldStep)
+      ) {
         best = candidate;
       }
     }
@@ -311,10 +327,10 @@ export class GridGround {
       this._gridMaterial.minorUnitVisibility = options.minorUnitVisibility;
     }
     if (options.distanceThreshold !== undefined) {
-      (this as any).DISTANCE_THRESHOLD = options.distanceThreshold;
+      this.DISTANCE_THRESHOLD = options.distanceThreshold;
     }
     if (options.minGridStep !== undefined) {
-      (this as any).MIN_GRID_STEP = options.minGridStep;
+      this.MIN_GRID_STEP = options.minGridStep;
     }
   }
 
@@ -347,8 +363,8 @@ export class GridGround {
     }
     if (this._referenceLines) {
       // Dispose both X and Y reference lines
-      const xLine = (this._referenceLines as any)._xLine;
-      const yLine = (this._referenceLines as any)._yLine;
+      const xLine = this._referenceLines._xLine;
+      const yLine = this._referenceLines._yLine;
 
       if (xLine) {
         xLine.dispose();

@@ -3,30 +3,34 @@ import { MolvisEditorProvider } from "./customEditor";
 import { sendToWebview } from "./webviewMessaging";
 
 function getNonce(): string {
-	let text = "";
-	const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
+  let text = "";
+  const possible =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
 }
 
-function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
-	const nonce = getNonce();
-	const scriptUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(extensionUri, "out", "webview", "index.js")
-	);
+function getWebviewHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): string {
+  const nonce = getNonce();
+  const scriptUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "out", "webview", "index.js"),
+  );
 
-	const csp = [
-		"default-src 'none'",
-		`img-src ${webview.cspSource} https: data:`,
-		`style-src ${webview.cspSource} 'unsafe-inline'`,
-		`script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'`,
-		`connect-src ${webview.cspSource} https:`,
-		`font-src ${webview.cspSource} https: data:`,
-	].join("; ");
+  const csp = [
+    "default-src 'none'",
+    `img-src ${webview.cspSource} https: data:`,
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
+    `script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+    `connect-src ${webview.cspSource} https:`,
+    `font-src ${webview.cspSource} https: data:`,
+  ].join("; ");
 
-	return `<!doctype html>
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -45,86 +49,97 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 }
 
 export function activate(context: vscode.ExtensionContext) {
-	// Register Custom Text Editor Provider for .pdb files
-	context.subscriptions.push(MolvisEditorProvider.register(context));
+  // Register Custom Text Editor Provider for .pdb files
+  context.subscriptions.push(MolvisEditorProvider.register(context));
 
-	// Register Custom Text Editor Provider for .pdb files
-	context.subscriptions.push(MolvisEditorProvider.register(context));
+  // Register Custom Text Editor Provider for .pdb files
+  context.subscriptions.push(MolvisEditorProvider.register(context));
 
-	// Command: Open standalone viewer (Preview Mode)
-	const openViewer = vscode.commands.registerCommand("molvis.openViewer", () => {
-		const panel = vscode.window.createWebviewPanel(
-			"molvis.viewer",
-			"Molvis Preview",
-			vscode.ViewColumn.Active,
-			{
-				enableScripts: true,
-				retainContextWhenHidden: true,
-				localResourceRoots: [
-					vscode.Uri.joinPath(context.extensionUri, "out"),
-				],
-			}
-		);
+  // Command: Open standalone viewer (Preview Mode)
+  const openViewer = vscode.commands.registerCommand(
+    "molvis.openViewer",
+    () => {
+      const panel = vscode.window.createWebviewPanel(
+        "molvis.viewer",
+        "Molvis Preview",
+        vscode.ViewColumn.Active,
+        {
+          enableScripts: true,
+          retainContextWhenHidden: true,
+          localResourceRoots: [
+            vscode.Uri.joinPath(context.extensionUri, "out"),
+          ],
+        },
+      );
 
-		panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
+      panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
 
-		// Send init message for standalone mode (Preview: UI Hidden)
-		const config = { showUI: false };
-		sendToWebview(panel.webview, { type: "init", mode: "standalone", config });
-	});
+      // Send init message for standalone mode (Preview: UI Hidden)
+      const config = { showUI: false };
+      sendToWebview(panel.webview, {
+        type: "init",
+        mode: "standalone",
+        config,
+      });
+    },
+  );
 
-	// Command: Open preview to the side
-	const openPreviewToSide = vscode.commands.registerCommand(
-		"molvis.openPreviewToSide",
-		async () => {
-			const activeEditor = vscode.window.activeTextEditor;
-			if (!activeEditor) {
-				return;
-			}
+  // Command: Open preview to the side
+  const openPreviewToSide = vscode.commands.registerCommand(
+    "molvis.openPreviewToSide",
+    async () => {
+      const activeEditor = vscode.window.activeTextEditor;
+      if (!activeEditor) {
+        return;
+      }
 
-			const document = activeEditor.document;
-			const lowerName = document.fileName.toLowerCase();
-			if (!lowerName.endsWith(".pdb") && !lowerName.endsWith(".xyz") && !lowerName.endsWith(".lmp") && !lowerName.endsWith(".data") && !lowerName.endsWith(".lammps")) {
-				vscode.window.showWarningMessage(
-					"MolVis preview is only available for supported files (.pdb, .xyz, .lmp, .data, .lammps)"
-				);
-				return;
-			}
+      const document = activeEditor.document;
+      const lowerName = document.fileName.toLowerCase();
+      if (
+        !lowerName.endsWith(".pdb") &&
+        !lowerName.endsWith(".xyz") &&
+        !lowerName.endsWith(".lmp") &&
+        !lowerName.endsWith(".data") &&
+        !lowerName.endsWith(".lammps")
+      ) {
+        vscode.window.showWarningMessage(
+          "MolVis preview is only available for supported files (.pdb, .xyz, .lmp, .data, .lammps)",
+        );
+        return;
+      }
 
-			// Open the file in Custom Editor in a split view
-			// Custom Editor Provider handles init message (Preview: UI Hidden)
-			await vscode.commands.executeCommand(
-				"vscode.openWith",
-				document.uri,
-				"molvis.editor",
-				vscode.ViewColumn.Beside
-			);
-		}
-	);
+      // Open the file in Custom Editor in a split view
+      // Custom Editor Provider handles init message (Preview: UI Hidden)
+      await vscode.commands.executeCommand(
+        "vscode.openWith",
+        document.uri,
+        "molvis.editor",
+        vscode.ViewColumn.Beside,
+      );
+    },
+  );
 
-	// Command: Open Page (Full UI)
-	const openPage = vscode.commands.registerCommand("molvis.openPage", () => {
-		const panel = vscode.window.createWebviewPanel(
-			"molvis.page",
-			"MolVis Page",
-			vscode.ViewColumn.Active,
-			{
-				enableScripts: true,
-				retainContextWhenHidden: true,
-				localResourceRoots: [
-					vscode.Uri.joinPath(context.extensionUri, "out"),
-				],
-			}
-		);
+  // Command: Open Page (Full UI)
+  const openPage = vscode.commands.registerCommand("molvis.openPage", () => {
+    const panel = vscode.window.createWebviewPanel(
+      "molvis.page",
+      "MolVis Page",
+      vscode.ViewColumn.Active,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "out")],
+      },
+    );
 
-		panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
+    panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
 
-		// Send init message for page mode (Page: UI Shown)
-		const config = { showUI: true };
-		sendToWebview(panel.webview, { type: "init", mode: "standalone", config });
-	});
+    // Send init message for page mode (Page: UI Shown)
+    const config = { showUI: true };
+    sendToWebview(panel.webview, { type: "init", mode: "standalone", config });
+  });
 
-	context.subscriptions.push(openViewer, openPreviewToSide, openPage);
+  context.subscriptions.push(openViewer, openPreviewToSide, openPage);
 }
 
-export function deactivate() { }
+export function deactivate() {}

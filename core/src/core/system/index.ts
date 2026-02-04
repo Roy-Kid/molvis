@@ -1,2 +1,2 @@
-export { Frame, Block, Box } from 'molrs-wasm';
-export { Trajectory } from './trajectory';
+export { Frame, Block, Box } from "molwasm";
+export { Trajectory } from "./trajectory";

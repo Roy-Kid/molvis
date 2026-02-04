@@ -1,31 +1,31 @@
 export interface AtomStyle {
-    color: string; // Hex
-    radius: number;
-    // StandardMaterial properties
-    specularColor?: string;
-    emissiveColor?: string;
-    alpha?: number;
+  color: string; // Hex
+  radius: number;
+  // StandardMaterial properties
+  specularColor?: string;
+  emissiveColor?: string;
+  alpha?: number;
 }
 
 export interface BondStyle {
-    color: string;
-    radius: number;
-    specularColor?: string;
-    alpha?: number;
+  color: string;
+  radius: number;
+  specularColor?: string;
+  alpha?: number;
 }
 
 export interface Theme {
-    name: string;
+  name: string;
 
-    // Core resolvers
-    getAtomStyle(element: string): AtomStyle;
-    getBondStyle(order: number, type?: string): BondStyle;
+  // Core resolvers
+  getAtomStyle(element: string): AtomStyle;
+  getBondStyle(order: number, type?: string): BondStyle;
 
-    // Global properties
-    backgroundColor: string;
-    selectionColor: string;
-    boxColor: string;
+  // Global properties
+  backgroundColor: string;
+  selectionColor: string;
+  boxColor: string;
 
-    // Generic material settings (e.g. "matte", "glossy") to apply if specific overrides aren't present
-    defaultSpecular: string;
+  // Generic material settings (e.g. "matte", "glossy") to apply if specific overrides aren't present
+  defaultSpecular: string;
 }

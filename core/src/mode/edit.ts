@@ -1,24 +1,28 @@
 import {
+  type AbstractMesh,
   Color3,
-  Mesh,
+  type Mesh,
   MeshBuilder,
-  PointerInfo,
+  type PointerInfo,
   StandardMaterial,
   Vector3,
-  AbstractMesh
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { BaseMode, ModeType } from "./base";
-import { pointOnScreenAlignedPlane } from "./utils";
-import { ContextMenuController } from "../ui/menus/controller";
-import type { HitResult, MenuItem } from "./types";
-import { CommonMenuItems } from "./menu_items";
-import { Artist } from "../core/artist";
-import { syncSceneToFrame } from "../core/scene_sync";
-import { logger } from "../utils/logger";
-import { DeleteAtomCommand, DeleteBondCommand, DrawAtomCommand, DrawBondCommand } from "../commands/draw";
 import { CompositeCommand } from "../commands/composite";
-
+import {
+  DeleteAtomCommand,
+  DeleteBondCommand,
+  DrawAtomCommand,
+  DrawBondCommand,
+} from "../commands/draw";
+import type { Artist } from "../core/artist";
+import { syncSceneToFrame } from "../core/scene_sync";
+import { ContextMenuController } from "../ui/menus/controller";
+import { logger } from "../utils/logger";
+import { BaseMode, ModeType } from "./base";
+import { CommonMenuItems } from "./menu_items";
+import type { HitResult, MenuItem } from "./types";
+import { pointOnScreenAlignedPlane } from "./utils";
 
 /**
  * =============================
@@ -43,15 +47,19 @@ class PreviewManager {
   private previewBond1: Mesh | null = null;
   private previewBond2: Mesh | null = null;
 
-  constructor(private app: Molvis) { }
+  constructor(private app: Molvis) {}
 
   private get scene() {
     return this.app.scene;
   }
 
-  showAtom(position: Vector3, opacity: number = 1.0, diameter: number = 0.5) {
+  showAtom(position: Vector3, opacity = 1.0, diameter = 0.5) {
     if (!this.previewAtom) {
-      this.previewAtom = MeshBuilder.CreateSphere("preview_atom", { diameter }, this.scene);
+      this.previewAtom = MeshBuilder.CreateSphere(
+        "preview_atom",
+        { diameter },
+        this.scene,
+      );
       const mat = new StandardMaterial("preview_atom_mat", this.scene);
       mat.diffuseColor = new Color3(0.7, 0.7, 0.7);
       mat.emissiveColor = new Color3(0.3, 0.3, 0.3);
@@ -82,7 +90,11 @@ class PreviewManager {
     const end = path[1];
     const mid = Vector3.Center(start, end);
 
-    this.updateBondSegment(1, [start, mid], color1 ?? new Color3(0.8, 0.8, 0.8));
+    this.updateBondSegment(
+      1,
+      [start, mid],
+      color1 ?? new Color3(0.8, 0.8, 0.8),
+    );
     this.updateBondSegment(2, [mid, end], color2 ?? new Color3(0.8, 0.8, 0.8));
   }
 
@@ -98,7 +110,7 @@ class PreviewManager {
       mesh = MeshBuilder.CreateTube(
         meshName,
         { path, radius: 0.05, updatable: true },
-        this.scene
+        this.scene,
       );
       const mat = new StandardMaterial(`${meshName}_mat`, this.scene);
       mat.diffuseColor = color;
@@ -139,12 +151,15 @@ class PreviewManager {
 class EditModeContextMenu extends ContextMenuController {
   constructor(
     app: Molvis,
-    private mode: EditMode
+    private mode: EditMode,
   ) {
     super(app, "molvis-edit-menu");
   }
 
-  protected shouldShowMenu(hit: HitResult | null, isDragging: boolean): boolean {
+  protected shouldShowMenu(
+    hit: HitResult | null,
+    isDragging: boolean,
+  ): boolean {
     return !isDragging && (!hit || hit.type === "empty");
   }
 
@@ -163,7 +178,9 @@ class EditModeContextMenu extends ContextMenuController {
         ],
         value: this.mode.element,
       },
-      action: (ev: any) => { this.mode.element = ev.value; }
+      action: (ev: Event) => {
+        this.mode.element = ev.value;
+      },
     });
     items.push({ type: "separator" });
     items.push({
@@ -178,7 +195,9 @@ class EditModeContextMenu extends ContextMenuController {
         ],
         value: this.mode.bondOrder,
       },
-      action: (ev: any) => { this.mode.bondOrder = ev.value; }
+      action: (ev: Event) => {
+        this.mode.bondOrder = ev.value;
+      },
     });
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
@@ -191,9 +210,9 @@ class EditModeContextMenu extends ContextMenuController {
 class EditMode extends BaseMode {
   // State machine for left-button operations
   private startAtom: AbstractMesh | null = null;
-  private startAtomIndex: number = -1; // Track thin instance index
+  private startAtomIndex = -1; // Track thin instance index
   private hoverAtom: AbstractMesh | null = null;
-  private hoverAtomIndex: number = -1; // Track thin instance index
+  private hoverAtomIndex = -1; // Track thin instance index
   private pendingAtom = false;
   private clickedAtom: AbstractMesh | null = null;
   private clickedBond: AbstractMesh | null = null;
@@ -204,11 +223,19 @@ class EditMode extends BaseMode {
   public artist: Artist;
   private previews: PreviewManager;
 
-  get element(): string { return this.element_; }
-  set element(v: string) { this.element_ = v; }
+  get element(): string {
+    return this.element_;
+  }
+  set element(v: string) {
+    this.element_ = v;
+  }
 
-  get bondOrder(): number { return this.bondOrder_; }
-  set bondOrder(v: number) { this.bondOrder_ = v; }
+  get bondOrder(): number {
+    return this.bondOrder_;
+  }
+  set bondOrder(v: number) {
+    this.bondOrder_ = v;
+  }
 
   constructor(app: Molvis) {
     super(ModeType.Edit, app);
@@ -227,11 +254,17 @@ class EditMode extends BaseMode {
    * Get the actual position of an atom mesh.
    * Handles both regular atom meshes and thin instance atoms from draw_frame.
    */
-  private getAtomPosition(atomMesh: AbstractMesh, thinInstanceIndex: number = -1): Vector3 {
+  private getAtomPosition(
+    atomMesh: AbstractMesh,
+    thinInstanceIndex = -1,
+  ): Vector3 {
     // Check if this is a thin instance atom (from draw_frame or edit pool)
     if (thinInstanceIndex !== -1) {
-      const meta = this.world.sceneIndex.getMeta(atomMesh.uniqueId, thinInstanceIndex);
-      if (meta && meta.type === 'atom') {
+      const meta = this.world.sceneIndex.getMeta(
+        atomMesh.uniqueId,
+        thinInstanceIndex,
+      );
+      if (meta && meta.type === "atom") {
         return new Vector3(meta.position.x, meta.position.y, meta.position.z);
       }
     }
@@ -246,7 +279,11 @@ class EditMode extends BaseMode {
   }
 
   override async _on_pointer_down(pointerInfo: PointerInfo) {
-    if (pointerInfo.event.target !== this.world.scene.getEngine().getRenderingCanvas()) return;
+    if (
+      pointerInfo.event.target !==
+      this.world.scene.getEngine().getRenderingCanvas()
+    )
+      return;
     await super._on_pointer_down(pointerInfo);
 
     const isLeft = pointerInfo.event.button === 0;
@@ -290,22 +327,25 @@ class EditMode extends BaseMode {
       this.world.camera,
       pointerInfo.event.clientX,
       pointerInfo.event.clientY,
-      startPos
+      startPos,
     );
 
     const hit = await this.pickHit();
     let hover: AbstractMesh | null = null;
     let hoverIndex = -1;
 
-    if (hit && hit.type === 'atom' && hit.mesh && hit.mesh !== this.startAtom) {
+    if (hit && hit.type === "atom" && hit.mesh && hit.mesh !== this.startAtom) {
       hover = hit.mesh;
       hoverIndex = hit.thinInstanceIndex ?? -1;
     }
 
     // Resolve start color
     let startColor = Color3.Gray();
-    const startMeta = this.world.sceneIndex.getMeta(this.startAtom.uniqueId, this.startAtomIndex !== -1 ? this.startAtomIndex : undefined);
-    if (startMeta && startMeta.type === 'atom') {
+    const startMeta = this.world.sceneIndex.getMeta(
+      this.startAtom.uniqueId,
+      this.startAtomIndex !== -1 ? this.startAtomIndex : undefined,
+    );
+    if (startMeta && startMeta.type === "atom") {
       const style = this.app.styleManager.getAtomStyle(startMeta.element);
       startColor = Color3.FromHexString(style.color);
     }
@@ -320,8 +360,11 @@ class EditMode extends BaseMode {
 
       // Resolve hover color
       let hoverColor = Color3.Gray();
-      const meta = this.world.sceneIndex.getMeta(hover.uniqueId, hoverIndex !== -1 ? hoverIndex : undefined);
-      if (meta && meta.type === 'atom') {
+      const meta = this.world.sceneIndex.getMeta(
+        hover.uniqueId,
+        hoverIndex !== -1 ? hoverIndex : undefined,
+      );
+      if (meta && meta.type === "atom") {
         const style = this.app.styleManager.getAtomStyle(meta.element);
         hoverColor = Color3.FromHexString(style.color);
       }
@@ -342,12 +385,24 @@ class EditMode extends BaseMode {
   }
 
   override async _on_pointer_up(pointerInfo: PointerInfo) {
-    if (pointerInfo.event.target !== this.world.scene.getEngine().getRenderingCanvas()) return;
+    if (
+      pointerInfo.event.target !==
+      this.world.scene.getEngine().getRenderingCanvas()
+    )
+      return;
     await super._on_pointer_up(pointerInfo);
     const isLeft = pointerInfo.event.button === 0;
 
-    if (isLeft && this.clickedAtom && !this._is_dragging && this.startAtom === this.clickedAtom) {
-      this.world.camera.attachControl(this.world.scene.getEngine().getRenderingCanvas(), false);
+    if (
+      isLeft &&
+      this.clickedAtom &&
+      !this._is_dragging &&
+      this.startAtom === this.clickedAtom
+    ) {
+      this.world.camera.attachControl(
+        this.world.scene.getEngine().getRenderingCanvas(),
+        false,
+      );
       this.startAtom = null;
       this.startAtomIndex = -1;
       this.clickedAtom = null;
@@ -360,74 +415,92 @@ class EditMode extends BaseMode {
     }
 
     if (isLeft && this.startAtom) {
-      const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
+      const startPos = this.getAtomPosition(
+        this.startAtom,
+        this.startAtomIndex,
+      );
       const xyz = pointOnScreenAlignedPlane(
         this.world.scene,
         this.world.camera,
         pointerInfo.event.clientX,
         pointerInfo.event.clientY,
-        startPos // Use correct anchor
+        startPos, // Use correct anchor
       );
 
       if (this.hoverAtom) {
-        const endPos = this.getAtomPosition(this.hoverAtom, this.hoverAtomIndex);
+        const endPos = this.getAtomPosition(
+          this.hoverAtom,
+          this.hoverAtomIndex,
+        );
 
         // Resolve atom IDs using indices
-        const startIdx = this.startAtomIndex !== -1 ? this.startAtomIndex : undefined;
-        const startMeta = this.world.sceneIndex.getMeta(this.startAtom.uniqueId, startIdx);
-        const startId = startMeta?.type === 'atom' ? startMeta.atomId : this.startAtom.uniqueId;
+        const startIdx =
+          this.startAtomIndex !== -1 ? this.startAtomIndex : undefined;
+        const startMeta = this.world.sceneIndex.getMeta(
+          this.startAtom.uniqueId,
+          startIdx,
+        );
+        const startId =
+          startMeta?.type === "atom"
+            ? startMeta.atomId
+            : this.startAtom.uniqueId;
 
-        const endIdx = this.hoverAtomIndex !== -1 ? this.hoverAtomIndex : undefined;
-        const endMeta = this.world.sceneIndex.getMeta(this.hoverAtom.uniqueId, endIdx);
-        const endId = endMeta?.type === 'atom' ? endMeta.atomId : this.hoverAtom.uniqueId;
+        const endIdx =
+          this.hoverAtomIndex !== -1 ? this.hoverAtomIndex : undefined;
+        const endMeta = this.world.sceneIndex.getMeta(
+          this.hoverAtom.uniqueId,
+          endIdx,
+        );
+        const endId =
+          endMeta?.type === "atom" ? endMeta.atomId : this.hoverAtom.uniqueId;
 
-        this.app.commandManager.execute(new DrawBondCommand(
-          this.app,
-          startPos,
-          endPos,
-          {
+        this.app.commandManager.execute(
+          new DrawBondCommand(this.app, startPos, endPos, {
             order: this.bondOrder,
             atomId1: startId,
-            atomId2: endId
-          }
-        ));
+            atomId2: endId,
+          }),
+        );
       } else if (this._is_dragging) {
         const atomName = makeId("atom");
         const atomId = this.app.world.sceneIndex.getNextAtomId();
 
         // 1. Prepare Atom Command
-        const atomCmd = new DrawAtomCommand(
-          this.app,
-          xyz,
-          {
-            element: this.element,
-            name: atomName,
-            atomId
-          }
-        );
+        const atomCmd = new DrawAtomCommand(this.app, xyz, {
+          element: this.element,
+          name: atomName,
+          atomId,
+        });
 
         // Resolve start ID
-        const startIdx = this.startAtomIndex !== -1 ? this.startAtomIndex : undefined;
-        const startMeta = this.world.sceneIndex.getMeta(this.startAtom.uniqueId, startIdx);
-        const startId = startMeta?.type === 'atom' ? startMeta.atomId : this.startAtom.uniqueId;
+        const startIdx =
+          this.startAtomIndex !== -1 ? this.startAtomIndex : undefined;
+        const startMeta = this.world.sceneIndex.getMeta(
+          this.startAtom.uniqueId,
+          startIdx,
+        );
+        const startId =
+          startMeta?.type === "atom"
+            ? startMeta.atomId
+            : this.startAtom.uniqueId;
 
         // 2. Prepare Bond Command
-        const bondCmd = new DrawBondCommand(
-          this.app,
-          startPos,
-          xyz,
-          {
-            order: this.bondOrder,
-            atomId1: startId,
-            atomId2: atomId // Use semantic ID
-          }
-        );
+        const bondCmd = new DrawBondCommand(this.app, startPos, xyz, {
+          order: this.bondOrder,
+          atomId1: startId,
+          atomId2: atomId, // Use semantic ID
+        });
 
         // 3. Execute Composite
-        this.app.commandManager.execute(new CompositeCommand(this.app, [atomCmd, bondCmd]));
+        this.app.commandManager.execute(
+          new CompositeCommand(this.app, [atomCmd, bondCmd]),
+        );
       }
 
-      this.world.camera.attachControl(this.world.scene.getEngine().getRenderingCanvas(), false);
+      this.world.camera.attachControl(
+        this.world.scene.getEngine().getRenderingCanvas(),
+        false,
+      );
       this.previews.clear();
       this.startAtom = null;
       this.startAtomIndex = -1;
@@ -442,19 +515,21 @@ class EditMode extends BaseMode {
         this.world.scene,
         this.world.camera,
         pointerInfo.event.clientX,
-        pointerInfo.event.clientY
+        pointerInfo.event.clientY,
       );
       const atomName = makeId("atom");
       const atomId = this.app.world.sceneIndex.getNextAtomId();
-      this.app.commandManager.execute(new DrawAtomCommand(
-        this.app,
-        Vector3.FromArray([xyz.x, xyz.y, xyz.z]),
-        {
-          element: this.element,
-          name: atomName,
-          atomId
-        }
-      ));
+      this.app.commandManager.execute(
+        new DrawAtomCommand(
+          this.app,
+          Vector3.FromArray([xyz.x, xyz.y, xyz.z]),
+          {
+            element: this.element,
+            name: atomName,
+            atomId,
+          },
+        ),
+      );
       this.pendingAtom = false;
       return;
     }
@@ -468,7 +543,10 @@ class EditMode extends BaseMode {
   /**
    * Handle right-click on atoms/bonds to delete them.
    */
-  override onRightClickNotConsumed(_pointerInfo: PointerInfo, hit: HitResult | null): void {
+  override onRightClickNotConsumed(
+    _pointerInfo: PointerInfo,
+    hit: HitResult | null,
+  ): void {
     if (!hit || !hit.metadata) return;
 
     if (hit.type === "atom" && hit.metadata.type === "atom") {
@@ -484,19 +562,25 @@ class EditMode extends BaseMode {
     }
   }
 
-  _on_press_ctrl_z(): void { this.app.commandManager.undo(); }
-  _on_press_ctrl_y(): void { this.app.commandManager.redo(); }
-  _on_press_ctrl_s(): void { this.saveToFrame(); }
+  _on_press_ctrl_z(): void {
+    this.app.commandManager.undo();
+  }
+  _on_press_ctrl_y(): void {
+    this.app.commandManager.redo();
+  }
+  _on_press_ctrl_s(): void {
+    this.saveToFrame();
+  }
 
   private saveToFrame(): void {
     const frame = this.app.system.frame;
     if (!frame) {
-      logger.warn('[EditMode] No Frame loaded, cannot save');
+      logger.warn("[EditMode] No Frame loaded, cannot save");
       return;
     }
-    logger.info('[EditMode] Saving scene to Frame...');
+    logger.info("[EditMode] Saving scene to Frame...");
     syncSceneToFrame(this.world.sceneIndex, frame);
-    logger.info('[EditMode] Successfully saved to Frame');
+    logger.info("[EditMode] Successfully saved to Frame");
   }
 
   public finish() {

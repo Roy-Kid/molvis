@@ -1,6 +1,6 @@
 import { Molvis } from "@molvis/core";
 import { DrawBoxCommand, DrawFrameCommand } from "@molvis/core/commands/draw";
-import { Frame, Block, Box } from "molrs-wasm";
+import { Frame, Block, Box } from "molwasm";
 
 /**
  * Demo: Single frame rendering

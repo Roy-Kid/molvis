@@ -1,5 +1,5 @@
-import React from 'react';
-import { Molvis } from '@molvis/core';
+import type { Molvis } from "@molvis/core";
+import type React from "react";
 
 interface MeasurePanelProps {
   app: Molvis | null;
@@ -13,9 +13,9 @@ export const MeasurePanel: React.FC<MeasurePanelProps> = ({ app: _app }) => {
         Click on atoms to measure distances, angles, and dihedrals.
       </p>
       <div className="text-xs text-muted-foreground p-2 border rounded bg-muted/20">
-        • Click 2 atoms for distance<br/>
-        • Click 3 atoms for angle<br/>
-        • Click 4 atoms for dihedral
+        • Click 2 atoms for distance
+        <br />• Click 3 atoms for angle
+        <br />• Click 4 atoms for dihedral
       </div>
     </div>
   );

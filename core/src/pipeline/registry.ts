@@ -1,51 +1,51 @@
-import type { Modifier } from "./modifier";
 import { logger } from "../utils/logger";
+import type { Modifier } from "./modifier";
 
 /**
  * Modifier registry for dynamic modifier discovery and instantiation.
  */
 export class ModifierRegistry {
-    private factories: Map<string, ModifierFactory> = new Map();
+  private factories: Map<string, ModifierFactory> = new Map();
 
-    /**
-     * Register a modifier factory.
-     */
-    register(type: string, factory: ModifierFactory): void {
-        this.factories.set(type, factory);
-    }
+  /**
+   * Register a modifier factory.
+   */
+  register(type: string, factory: ModifierFactory): void {
+    this.factories.set(type, factory);
+  }
 
-    /**
-     * Unregister a modifier factory.
-     */
-    unregister(type: string): boolean {
-        return this.factories.delete(type);
-    }
+  /**
+   * Unregister a modifier factory.
+   */
+  unregister(type: string): boolean {
+    return this.factories.delete(type);
+  }
 
-    /**
-     * Create a modifier instance by type.
-     */
-    create(type: string, params: ModifierParams): Modifier | null {
-        const factory = this.factories.get(type);
-        if (!factory) {
-            logger.warn(`Modifier type '${type}' not registered`);
-            return null;
-        }
-        return factory(params);
+  /**
+   * Create a modifier instance by type.
+   */
+  create(type: string, params: ModifierParams): Modifier | null {
+    const factory = this.factories.get(type);
+    if (!factory) {
+      logger.warn(`Modifier type '${type}' not registered`);
+      return null;
     }
+    return factory(params);
+  }
 
-    /**
-     * Get all registered modifier types.
-     */
-    getRegisteredTypes(): string[] {
-        return Array.from(this.factories.keys());
-    }
+  /**
+   * Get all registered modifier types.
+   */
+  getRegisteredTypes(): string[] {
+    return Array.from(this.factories.keys());
+  }
 
-    /**
-     * Check if a modifier type is registered.
-     */
-    isRegistered(type: string): boolean {
-        return this.factories.has(type);
-    }
+  /**
+   * Check if a modifier type is registered.
+   */
+  isRegistered(type: string): boolean {
+    return this.factories.has(type);
+  }
 }
 
 /**
@@ -57,8 +57,8 @@ export type ModifierFactory = (params: ModifierParams) => Modifier;
  * Generic parameters for modifier creation.
  */
 export interface ModifierParams {
-    id: string;
-    [key: string]: unknown;
+  id: string;
+  [key: string]: unknown;
 }
 
 /**

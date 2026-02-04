@@ -1,35 +1,34 @@
-import { MolvisElement } from '../base';
-import type { MenuItem } from '../../mode/types';
+import type { MenuItem } from "../../mode/types";
+import { MolvisElement } from "../base";
 
 /**
  * MolvisButton - Clickable button menu item
  */
 export class MolvisButton extends MolvisElement {
-    private _data: MenuItem | null = null;
-    private _rendered: boolean = false;
+  private _data: MenuItem | null = null;
+  private _rendered = false;
 
-    set data(item: MenuItem) {
-        this._data = item;
-        if (!this._rendered) {
-            this.render();
-            this._rendered = true;
-        }
+  set data(item: MenuItem) {
+    this._data = item;
+    if (!this._rendered) {
+      this.render();
+      this._rendered = true;
     }
+  }
 
-    connectedCallback() {
-        // Don't render if already rendered via data setter
-        if (!this._rendered) {
-            this.render();
-            this._rendered = true;
-        }
+  connectedCallback() {
+    // Don't render if already rendered via data setter
+    if (!this._rendered) {
+      this.render();
+      this._rendered = true;
     }
+  }
 
-    protected override render(): void {
-        console.log('[MolvisButton] render() called for:', this._data?.title, 'rendered flag:', this._rendered);
-        this.injectSharedStyles();
+  protected override render(): void {
+    this.injectSharedStyles();
 
-        const style = document.createElement('style');
-        style.textContent = `
+    const style = document.createElement("style");
+    style.textContent = `
             :host {
                 display: block;
             }
@@ -45,20 +44,19 @@ export class MolvisButton extends MolvisElement {
                 background: var(--hover-color);
             }
         `;
-        this.root.appendChild(style);
+    this.root.appendChild(style);
 
-        const button = document.createElement('div');
-        button.className = 'button';
-        button.textContent = this._data?.title || '';
+    const button = document.createElement("div");
+    button.className = "button";
+    button.textContent = this._data?.title || "";
 
-        button.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent click-through to canvas
-            console.log('[MolvisButton] Clicked:', this._data?.title);
-            if (this._data?.action) {
-                this._data.action();
-            }
-        });
+    button.addEventListener("click", (e) => {
+      e.stopPropagation(); // Prevent click-through to canvas
+      if (this._data?.action) {
+        this._data.action();
+      }
+    });
 
-        this.root.appendChild(button);
-    }
+    this.root.appendChild(button);
+  }
 }

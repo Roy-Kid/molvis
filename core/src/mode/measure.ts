@@ -1,15 +1,15 @@
-import type { PointerInfo, AbstractMesh } from "@babylonjs/core";
-import { MeshBuilder, Color3, Vector3 } from "@babylonjs/core";
-import { BaseMode, ModeType } from "./base";
+import type { AbstractMesh, PointerInfo } from "@babylonjs/core";
+import { Color3, MeshBuilder, Vector3 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { ContextMenuController } from "../ui/menus/controller";
 import { makeSelectionKey } from "../core/selection_manager";
-import type { HitResult, MenuItem } from "./types";
+import { ContextMenuController } from "../ui/menus/controller";
+import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
+import type { HitResult, MenuItem } from "./types";
 
 interface MeasurementData {
   id: string;
-  type: 'distance' | 'angle' | 'dihedral';
+  type: "distance" | "angle" | "dihedral";
   atoms: number[]; // Store Atom Semantic IDs
   visuals: AbstractMesh[];
   value: number;
@@ -28,12 +28,15 @@ interface BufferItem {
 class MeasureModeContextMenu extends ContextMenuController {
   constructor(
     app: Molvis,
-    private mode: MeasureMode
+    private mode: MeasureMode,
   ) {
     super(app, "molvis-measure-menu");
   }
 
-  protected shouldShowMenu(_hit: HitResult | null, isDragging: boolean): boolean {
+  protected shouldShowMenu(
+    _hit: HitResult | null,
+    isDragging: boolean,
+  ): boolean {
     return !isDragging;
   }
 
@@ -47,14 +50,14 @@ class MeasureModeContextMenu extends ContextMenuController {
           options: [
             { text: "Angstrom (Å)", value: "angstrom" },
             { text: "Nanometer (nm)", value: "nanometer" },
-            { text: "Picometer (pm)", value: "picometer" }
+            { text: "Picometer (pm)", value: "picometer" },
           ],
           value: this.mode.distanceUnit,
         },
-        action: (ev: any) => {
+        action: (ev: Event) => {
           this.mode.distanceUnit = ev.value;
           this.mode.updateAllLabels();
-        }
+        },
       },
       {
         type: "binding",
@@ -63,14 +66,14 @@ class MeasureModeContextMenu extends ContextMenuController {
           label: "Angle Unit",
           options: [
             { text: "Degrees (°)", value: "degrees" },
-            { text: "Radians (rad)", value: "radians" }
+            { text: "Radians (rad)", value: "radians" },
           ],
           value: this.mode.angleUnit,
         },
-        action: (ev: any) => {
+        action: (ev: Event) => {
           this.mode.angleUnit = ev.value;
           this.mode.updateAllLabels();
-        }
+        },
       },
       {
         type: "binding",
@@ -81,10 +84,10 @@ class MeasureModeContextMenu extends ContextMenuController {
           step: 1,
           value: this.mode.precision,
         },
-        action: (ev: any) => {
+        action: (ev: Event) => {
           this.mode.precision = ev.value;
           this.mode.updateAllLabels();
-        }
+        },
       },
       { type: "separator" },
       {
@@ -92,8 +95,8 @@ class MeasureModeContextMenu extends ContextMenuController {
         title: "Clear All",
         action: () => {
           this.mode.clearAllMeasurements();
-        }
-      }
+        },
+      },
     ];
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
@@ -120,17 +123,19 @@ class MeasureMode extends BaseMode {
   public override start(): void {
     super.start();
     // Clear any existing selection to start fresh
-    this.app.world.selectionManager.apply({ type: 'clear' });
+    this.app.world.selectionManager.apply({ type: "clear" });
     this.app.world.highlighter.invalidateAndRebuild();
   }
 
   public override finish(): void {
     this.clearAllMeasurements();
-    this.app.world.selectionManager.apply({ type: 'clear' });
+    this.app.world.selectionManager.apply({ type: "clear" });
     super.finish();
   }
 
-  protected override async _on_left_up(pointerInfo: PointerInfo): Promise<void> {
+  protected override async _on_left_up(
+    pointerInfo: PointerInfo,
+  ): Promise<void> {
     if (this._is_dragging) {
       await super._on_left_up(pointerInfo);
       return;
@@ -138,7 +143,7 @@ class MeasureMode extends BaseMode {
 
     const hit = await this.pickHit();
 
-    if (hit && hit.type === 'atom') {
+    if (hit && hit.type === "atom") {
       this.handleAtomClick(hit);
     } else {
       // Clear All on Empty Click
@@ -154,11 +159,12 @@ class MeasureMode extends BaseMode {
     const thinIndex = hit.thinInstanceIndex ?? -1;
     const meshId = hit.mesh.uniqueId;
 
-    const meta = thinIndex >= 0
-      ? this.world.sceneIndex.getMeta(meshId, thinIndex)
-      : this.world.sceneIndex.getMeta(meshId);
+    const meta =
+      thinIndex >= 0
+        ? this.world.sceneIndex.getMeta(meshId, thinIndex)
+        : this.world.sceneIndex.getMeta(meshId);
 
-    if (!meta || meta.type !== 'atom') {
+    if (!meta || meta.type !== "atom") {
       return;
     }
 
@@ -185,20 +191,26 @@ class MeasureMode extends BaseMode {
     }
 
     const label = meta.element;
-    const selectionKey = makeSelectionKey(meshId, thinIndex >= 0 ? thinIndex : undefined);
+    const selectionKey = makeSelectionKey(
+      meshId,
+      thinIndex >= 0 ? thinIndex : undefined,
+    );
 
     const item: BufferItem = {
       id: atomId,
       key: selectionKey,
       position,
-      label
+      label,
     };
 
     // Add to buffer
     this.selectionBuffer.push(item);
 
     // Highlight using SelectionManager
-    this.app.world.selectionManager.apply({ type: 'add', atoms: [selectionKey] });
+    this.app.world.selectionManager.apply({
+      type: "add",
+      atoms: [selectionKey],
+    });
 
     // Trigger Measurements
     this.processBuffer();
@@ -235,7 +247,7 @@ class MeasureMode extends BaseMode {
 
   private clearSelectionBuffer(): void {
     // Clear Visuals
-    this.app.world.selectionManager.apply({ type: 'clear' });
+    this.app.world.selectionManager.apply({ type: "clear" });
     this.selectionBuffer = [];
   }
 
@@ -247,9 +259,12 @@ class MeasureMode extends BaseMode {
     const hit = await this.pickHit();
 
     if (this.enableHoverHighlight) {
-      if (hit && hit.type === 'atom' && hit.mesh) {
+      if (hit && hit.type === "atom" && hit.mesh) {
         const thinIndex = hit.thinInstanceIndex ?? -1;
-        const key = makeSelectionKey(hit.mesh.uniqueId, thinIndex >= 0 ? thinIndex : undefined);
+        const key = makeSelectionKey(
+          hit.mesh.uniqueId,
+          thinIndex >= 0 ? thinIndex : undefined,
+        );
         this.app.world.highlighter.highlightPreview([key]);
       } else {
         this.app.world.highlighter.highlightPreview([]);
@@ -267,16 +282,20 @@ class MeasureMode extends BaseMode {
 
     const measurement: MeasurementData = {
       id,
-      type: 'distance',
+      type: "distance",
       atoms: [start.id, end.id],
       visuals: [line],
-      value: distance
+      value: distance,
     };
 
     this.measurements.set(id, measurement);
   }
 
-  private createAngleMeasurement(a: BufferItem, b: BufferItem, c: BufferItem): void {
+  private createAngleMeasurement(
+    a: BufferItem,
+    b: BufferItem,
+    c: BufferItem,
+  ): void {
     const vBA = a.position.subtract(b.position).normalize();
     const vBC = c.position.subtract(b.position).normalize();
 
@@ -287,16 +306,21 @@ class MeasureMode extends BaseMode {
 
     const measurement: MeasurementData = {
       id,
-      type: 'angle',
+      type: "angle",
       atoms: [a.id, b.id, c.id],
       visuals: [],
-      value: angleRad
+      value: angleRad,
     };
 
     this.measurements.set(id, measurement);
   }
 
-  private createDihedralMeasurement(a: BufferItem, b: BufferItem, c: BufferItem, d: BufferItem): void {
+  private createDihedralMeasurement(
+    a: BufferItem,
+    b: BufferItem,
+    c: BufferItem,
+    d: BufferItem,
+  ): void {
     const b1 = b.position.subtract(a.position);
     const b2 = c.position.subtract(b.position);
     const b3 = d.position.subtract(c.position);
@@ -317,27 +341,30 @@ class MeasureMode extends BaseMode {
 
     const measurement: MeasurementData = {
       id,
-      type: 'dihedral',
+      type: "dihedral",
       atoms: [a.id, b.id, c.id, d.id],
       visuals: [],
-      value: angleRad
+      value: angleRad,
     };
 
     this.measurements.set(id, measurement);
   }
 
-
   // Use Dashed Lines
   private createMeasurementLine(start: Vector3, end: Vector3): AbstractMesh {
     const points = [start, end];
-    const line = MeshBuilder.CreateDashedLines("measurement_line", {
-      points,
-      dashSize: 3,
-      gapSize: 1,
-      dashNb: 20
-    }, this.world.scene);
+    const line = MeshBuilder.CreateDashedLines(
+      "measurement_line",
+      {
+        points,
+        dashSize: 3,
+        gapSize: 1,
+        dashNb: 20,
+      },
+      this.world.scene,
+    );
 
-    // Allow picking/color through standard material? 
+    // Allow picking/color through standard material?
     // CreateDashedLines returns LinesMesh which uses color property, not material.diffuseColor in the same way.
     line.color = new Color3(1, 1, 0);
     line.alpha = 0.8;
@@ -347,7 +374,7 @@ class MeasureMode extends BaseMode {
 
   private updateInfoPanel(): void {
     if (this.measurements.size === 0) {
-      this.app.events.emit('info-text-change', "");
+      this.app.events.emit("info-text-change", "");
       return;
     }
 
@@ -358,9 +385,9 @@ class MeasureMode extends BaseMode {
     // Prioritize newest (map handles insertion order)
     for (const m of this.measurements.values()) {
       const str = this.formatMeasurement(m);
-      if (m.type === 'distance') dists.push(str);
-      else if (m.type === 'angle') angles.push(str);
-      else if (m.type === 'dihedral') dihedrals.push(str);
+      if (m.type === "distance") dists.push(str);
+      else if (m.type === "angle") angles.push(str);
+      else if (m.type === "dihedral") dihedrals.push(str);
     }
 
     // "3+2+1" Rule (Show Last N)
@@ -373,17 +400,19 @@ class MeasureMode extends BaseMode {
     if (showAngles.length > 0) sections.push(...showAngles);
     if (showDists.length > 0) sections.push(...showDists);
 
-    const infoText = `Active Measurements:\n${sections.join('\n')}`;
-    this.app.events.emit('info-text-change', infoText);
+    const infoText = `Active Measurements:\n${sections.join("\n")}`;
+    this.app.events.emit("info-text-change", infoText);
   }
 
   private formatMeasurement(m: MeasurementData): string {
-    const ids = m.atoms.map(id => `Atom ${id}`);
-    if (m.type === 'distance') {
+    const ids = m.atoms.map((id) => `Atom ${id}`);
+    if (m.type === "distance") {
       return `${ids[0]} - ${ids[1]}: ${this.formatDistance(m.value)}`;
-    } else if (m.type === 'angle') {
+    }
+    if (m.type === "angle") {
       return `${ids[0]} - ${ids[1]} - ${ids[2]}: ${this.formatAngle(m.value)}`;
-    } else if (m.type === 'dihedral') {
+    }
+    if (m.type === "dihedral") {
       return `${ids[0]} - ${ids[1]} - ${ids[2]} - ${ids[3]}: ${this.formatAngle(m.value)}`;
     }
     return "";
@@ -411,12 +440,11 @@ class MeasureMode extends BaseMode {
   }
 
   private formatAngle(radians: number): string {
-    if (this.angleUnit === 'degrees') {
+    if (this.angleUnit === "degrees") {
       const deg = radians * (180 / Math.PI);
       return `${deg.toFixed(this.precision)}°`;
-    } else {
-      return `${radians.toFixed(this.precision)} rad`;
     }
+    return `${radians.toFixed(this.precision)} rad`;
   }
 
   public updateAllLabels(): void {
@@ -425,11 +453,13 @@ class MeasureMode extends BaseMode {
 
   public clearAllMeasurements(): void {
     for (const measurement of this.measurements.values()) {
-      measurement.visuals.forEach(v => v.dispose());
+      for (const v of measurement.visuals) {
+        v.dispose();
+      }
     }
     this.measurements.clear();
     this.clearSelectionBuffer();
-    this.app.events.emit('info-text-change', "");
+    this.app.events.emit("info-text-change", "");
   }
 
   protected override _on_press_escape(): void {

@@ -1,5 +1,5 @@
+import type { Frame } from "molwasm";
 import type { FrameSource } from "../pipeline/pipeline";
-import { Frame } from "molrs-wasm";
 
 /**
  * ArrayFrameSource provides frames from an array of Frame objects.
@@ -14,7 +14,9 @@ export class ArrayFrameSource implements FrameSource {
 
   async getFrame(index: number): Promise<Frame> {
     if (index < 0 || index >= this.frames.length) {
-      throw new Error(`Frame index ${index} out of range [0, ${this.frames.length})`);
+      throw new Error(
+        `Frame index ${index} out of range [0, ${this.frames.length})`,
+      );
     }
     return this.frames[index];
   }
@@ -55,7 +57,7 @@ export class AsyncFrameSource implements FrameSource {
 
   constructor(
     getFrameFn: (index: number) => Promise<Frame>,
-    frameCount: number | null = null
+    frameCount: number | null = null,
   ) {
     this.getFrameFn = getFrameFn;
     this.frameCount = frameCount;

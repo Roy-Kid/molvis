@@ -1,117 +1,113 @@
-import { MolvisElement } from '../base';
-import type { MenuItem } from '../../mode/types';
-import { createControl } from '../builder';
+import type { MenuItem } from "../../mode/types";
 import { logger } from "../../utils/logger";
+import { MolvisElement } from "../base";
+import { createControl } from "../builder";
 
 /**
  * MolvisContextMenu - Main context menu web component
  * Displays a context menu at specified screen coordinates with menu items.
  */
 export class MolvisContextMenu extends MolvisElement {
-    private container: HTMLDivElement | null = null;
+  private container: HTMLDivElement | null = null;
 
-    constructor() {
-        super();
+  /**
+   * Show the context menu at the specified position with menu items
+   */
+  public show(x: number, y: number, items: MenuItem[]): void {
+    this.render();
+
+    if (!this.container) {
+      logger.error("[MolvisContextMenu] Container is null after render!");
+      return;
     }
 
-    /**
-     * Show the context menu at the specified position with menu items
-     */
-    public show(x: number, y: number, items: MenuItem[]): void {
-        this.render();
+    // Clear previous items
+    // Clear previous items
+    this.container.innerHTML = "";
 
-        if (!this.container) {
-            logger.error('[MolvisContextMenu] Container is null after render!');
-            return;
-        }
-
-        // Clear previous items
-        // Clear previous items
-        this.container.innerHTML = '';
-
-        if (!items) {
-            logger.error('[MolvisContextMenu] No items provided to show()');
-            return;
-        }
-
-        // Wrap actions to auto-close menu
-        const wrappedItems = items.map(item => {
-            if (item.type === 'button' && item.action) {
-                const originalAction = item.action;
-                return {
-                    ...item,
-                    action: () => {
-                        originalAction();
-                        this.hide();
-                    }
-                };
-            }
-            return item;
-        });
-
-        // Render menu items
-        wrappedItems.forEach((item, _index) => {
-            const control = createControl(item);
-            if (control) {
-                this.container!.appendChild(control);
-            }
-        });
-
-        // Position menu
-        this.style.left = `${x}px`;
-        this.style.top = `${y}px`;
-        this.style.display = 'block';
-
-        // Adjust position if menu goes off-screen
-        requestAnimationFrame(() => {
-            this.adjustPosition(x, y);
-        });
+    if (!items) {
+      logger.error("[MolvisContextMenu] No items provided to show()");
+      return;
     }
 
-    /**
-     * Hide the context menu
-     */
-    public hide(): void {
-        this.style.display = 'none';
+    // Wrap actions to auto-close menu
+    const wrappedItems = items.map((item) => {
+      if (item.type === "button" && item.action) {
+        const originalAction = item.action;
+        return {
+          ...item,
+          action: () => {
+            originalAction();
+            this.hide();
+          },
+        };
+      }
+      return item;
+    });
+
+    // Render menu items
+    for (const item of wrappedItems) {
+      const control = createControl(item);
+      if (control) {
+        this.container?.appendChild(control);
+      }
     }
 
-    /**
-     * Adjust menu position to stay within viewport bounds
-     */
-    private adjustPosition(x: number, y: number): void {
-        const rect = this.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
+    // Position menu
+    this.style.left = `${x}px`;
+    this.style.top = `${y}px`;
+    this.style.display = "block";
 
-        let adjustedX = x;
-        let adjustedY = y;
+    // Adjust position if menu goes off-screen
+    requestAnimationFrame(() => {
+      this.adjustPosition(x, y);
+    });
+  }
 
-        // Check right edge
-        if (x + rect.width > viewportWidth) {
-            adjustedX = viewportWidth - rect.width - 10;
-        }
+  /**
+   * Hide the context menu
+   */
+  public hide(): void {
+    this.style.display = "none";
+  }
 
-        // Check bottom edge
-        if (y + rect.height > viewportHeight) {
-            adjustedY = viewportHeight - rect.height - 10;
-        }
+  /**
+   * Adjust menu position to stay within viewport bounds
+   */
+  private adjustPosition(x: number, y: number): void {
+    const rect = this.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
-        // Ensure menu doesn't go off left or top edge
-        adjustedX = Math.max(10, adjustedX);
-        adjustedY = Math.max(10, adjustedY);
+    let adjustedX = x;
+    let adjustedY = y;
 
-        this.style.left = `${adjustedX}px`;
-        this.style.top = `${adjustedY}px`;
+    // Check right edge
+    if (x + rect.width > viewportWidth) {
+      adjustedX = viewportWidth - rect.width - 10;
     }
 
-    protected override render(): void {
-        // If container exists, just return - show() handles content updates
-        if (this.container) return;
+    // Check bottom edge
+    if (y + rect.height > viewportHeight) {
+      adjustedY = viewportHeight - rect.height - 10;
+    }
 
-        this.injectSharedStyles();
+    // Ensure menu doesn't go off left or top edge
+    adjustedX = Math.max(10, adjustedX);
+    adjustedY = Math.max(10, adjustedY);
 
-        const style = document.createElement('style');
-        style.textContent = `
+    this.style.left = `${adjustedX}px`;
+    this.style.top = `${adjustedY}px`;
+  }
+
+  protected override render(): void {
+    // If container exists, just return - show() handles content updates
+    if (this.container) return;
+
+    this.injectSharedStyles();
+
+    const style = document.createElement("style");
+    style.textContent = `
             :host {
                 position: fixed;
                 display: none;
@@ -126,10 +122,10 @@ export class MolvisContextMenu extends MolvisElement {
                 pointer-events: auto; /* Enable clicks */
             }
         `;
-        this.root.appendChild(style);
+    this.root.appendChild(style);
 
-        this.container = document.createElement('div');
-        this.container.className = 'menu-container';
-        this.root.appendChild(this.container);
-    }
+    this.container = document.createElement("div");
+    this.container.className = "menu-container";
+    this.root.appendChild(this.container);
+  }
 }

@@ -1,38 +1,38 @@
-import { MolvisElement } from '../base';
-import type { MenuItem } from '../../mode/types';
-import { createControl } from '../builder';
+import type { MenuItem } from "../../mode/types";
+import { MolvisElement } from "../base";
+import { createControl } from "../builder";
 
 /**
  * MolvisFolder - Collapsible folder menu item with nested items
  */
 export class MolvisFolder extends MolvisElement {
-    private _data: MenuItem | null = null;
-    private _rendered: boolean = false;
+  private _data: MenuItem | null = null;
+  private _rendered = false;
 
-    set data(item: MenuItem) {
-        this._data = item;
-        if (!this._rendered) {
-            this.render();
-            this._rendered = true;
-        }
+  set data(item: MenuItem) {
+    this._data = item;
+    if (!this._rendered) {
+      this.render();
+      this._rendered = true;
     }
+  }
 
-    connectedCallback() {
-        // Don't render if already rendered via data setter
-        if (!this._rendered) {
-            this.render();
-            this._rendered = true;
-        }
+  connectedCallback() {
+    // Don't render if already rendered via data setter
+    if (!this._rendered) {
+      this.render();
+      this._rendered = true;
     }
+  }
 
-    protected override render(): void {
-        // Clear previous content to prevent duplication
-        this.root.innerHTML = '';
+  protected override render(): void {
+    // Clear previous content to prevent duplication
+    this.root.innerHTML = "";
 
-        this.injectSharedStyles();
+    this.injectSharedStyles();
 
-        const style = document.createElement('style');
-        style.textContent = `
+    const style = document.createElement("style");
+    style.textContent = `
             :host {
                 display: block;
             }
@@ -50,24 +50,24 @@ export class MolvisFolder extends MolvisElement {
                 padding-left: 8px;
             }
         `;
-        this.root.appendChild(style);
+    this.root.appendChild(style);
 
-        const title = document.createElement('div');
-        title.className = 'folder-title';
-        title.textContent = this._data?.title || '';
-        this.root.appendChild(title);
+    const title = document.createElement("div");
+    title.className = "folder-title";
+    title.textContent = this._data?.title || "";
+    this.root.appendChild(title);
 
-        const itemsContainer = document.createElement('div');
-        itemsContainer.className = 'folder-items';
-        this.root.appendChild(itemsContainer);
+    const itemsContainer = document.createElement("div");
+    itemsContainer.className = "folder-items";
+    this.root.appendChild(itemsContainer);
 
-        if (this._data?.items) {
-            this._data.items.forEach(item => {
-                const control = createControl(item);
-                if (control) {
-                    itemsContainer.appendChild(control);
-                }
-            });
+    if (this._data?.items) {
+      for (const item of this._data.items) {
+        const control = createControl(item);
+        if (control) {
+          itemsContainer.appendChild(control);
         }
+      }
     }
+  }
 }

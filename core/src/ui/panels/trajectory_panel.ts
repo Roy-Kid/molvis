@@ -1,18 +1,18 @@
 export class MolvisTrajectoryPanel extends HTMLElement {
-    static get observedAttributes() {
-        return ['length', 'current', 'playing'];
-    }
+  static get observedAttributes() {
+    return ["length", "current", "playing"];
+  }
 
-    private shadow: ShadowRoot;
-    private slider: HTMLInputElement;
-    private currentLabel: HTMLSpanElement;
-    private totalLabel: HTMLSpanElement;
-    private playBtn: HTMLButtonElement;
+  private shadow: ShadowRoot;
+  private slider: HTMLInputElement;
+  private currentLabel: HTMLSpanElement;
+  private totalLabel: HTMLSpanElement;
+  private playBtn: HTMLButtonElement;
 
-    constructor() {
-        super();
-        this.shadow = this.attachShadow({ mode: 'open' });
-        this.shadow.innerHTML = `
+  constructor() {
+    super();
+    this.shadow = this.attachShadow({ mode: "open" });
+    this.shadow.innerHTML = `
             <style>
                 :host {
                     position: fixed;
@@ -118,99 +118,113 @@ export class MolvisTrajectoryPanel extends HTMLElement {
             </div>
         `;
 
-        this.slider = this.shadow.getElementById('slider') as HTMLInputElement;
-        this.currentLabel = this.shadow.getElementById('current') as HTMLSpanElement;
-        this.totalLabel = this.shadow.getElementById('total') as HTMLSpanElement;
-        this.playBtn = this.shadow.getElementById('playBtn') as HTMLButtonElement;
+    this.slider = this.shadow.getElementById("slider") as HTMLInputElement;
+    this.currentLabel = this.shadow.getElementById(
+      "current",
+    ) as HTMLSpanElement;
+    this.totalLabel = this.shadow.getElementById("total") as HTMLSpanElement;
+    this.playBtn = this.shadow.getElementById("playBtn") as HTMLButtonElement;
 
-        this.bindEvents();
+    this.bindEvents();
+  }
+
+  private bindEvents() {
+    this.slider.addEventListener("input", () => {
+      const val = Number.parseInt(this.slider.value, 10);
+      this.dispatchEvent(new CustomEvent("seek", { detail: val }));
+    });
+
+    this.shadow.getElementById("prevBtn")?.addEventListener("click", () => {
+      this.dispatchEvent(new CustomEvent("prev"));
+    });
+
+    this.shadow.getElementById("nextBtn")?.addEventListener("click", () => {
+      this.dispatchEvent(new CustomEvent("next"));
+    });
+
+    this.playBtn.addEventListener("click", () => {
+      const isPlaying = this.hasAttribute("playing");
+      this.dispatchEvent(new CustomEvent(isPlaying ? "pause" : "play"));
+    });
+
+    // Stop propagation to prevent canvas interaction
+    const stopPropagation = (e: Event) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
+    const events = [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "mousedown",
+      "mousemove",
+      "mouseup",
+      "touchstart",
+      "touchmove",
+      "touchend",
+      "click",
+      "contextmenu",
+      "wheel",
+    ];
+    for (const evt of events) {
+      this.addEventListener(evt, stopPropagation);
     }
+  }
 
-    private bindEvents() {
-        this.slider.addEventListener('input', () => {
-            const val = parseInt(this.slider.value, 10);
-            this.dispatchEvent(new CustomEvent('seek', { detail: val }));
-        });
+  attributeChangedCallback(name: string, _oldValue: string, newValue: string) {
+    if (name === "length") {
+      const len = Number.parseInt(newValue, 10);
+      this.slider.max = (len - 1).toString();
+      this.totalLabel.textContent = newValue;
+      // Hide if 0 or 1 frame
+      if (len <= 1) {
+        this.setAttribute("hidden", "");
+      } else {
+        this.removeAttribute("hidden");
+      }
+    } else if (name === "current") {
+      this.slider.value = newValue;
+      this.currentLabel.textContent = newValue;
+    } else if (name === "playing") {
+      const isPlaying = newValue !== null;
+      const playIcon = this.shadow.getElementById("playIcon") as HTMLElement;
+      const pauseIcon = this.shadow.getElementById("pauseIcon") as HTMLElement;
 
-        this.shadow.getElementById('prevBtn')?.addEventListener('click', () => {
-            this.dispatchEvent(new CustomEvent('prev'));
-        });
-
-        this.shadow.getElementById('nextBtn')?.addEventListener('click', () => {
-            this.dispatchEvent(new CustomEvent('next'));
-        });
-
-        this.playBtn.addEventListener('click', () => {
-            const isPlaying = this.hasAttribute('playing');
-            this.dispatchEvent(new CustomEvent(isPlaying ? 'pause' : 'play'));
-        });
-
-        // Stop propagation to prevent canvas interaction
-        const stopPropagation = (e: Event) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-        };
-        ['pointerdown', 'pointermove', 'pointerup',
-            'mousedown', 'mousemove', 'mouseup',
-            'touchstart', 'touchmove', 'touchend', 'click', 'contextmenu', 'wheel'].forEach(evt => {
-                this.addEventListener(evt, stopPropagation);
-            });
+      if (isPlaying) {
+        playIcon.style.display = "none";
+        pauseIcon.style.display = "block";
+      } else {
+        playIcon.style.display = "block";
+        pauseIcon.style.display = "none";
+      }
     }
+  }
 
-    attributeChangedCallback(name: string, _oldValue: string, newValue: string) {
-        if (name === 'length') {
-            const len = parseInt(newValue, 10);
-            this.slider.max = (len - 1).toString();
-            this.totalLabel.textContent = newValue;
-            // Hide if 0 or 1 frame
-            if (len <= 1) {
-                this.setAttribute('hidden', '');
-            } else {
-                this.removeAttribute('hidden');
-            }
-        } else if (name === 'current') {
-            this.slider.value = newValue;
-            this.currentLabel.textContent = newValue;
-        } else if (name === 'playing') {
-            const isPlaying = newValue !== null;
-            const playIcon = this.shadow.getElementById('playIcon') as HTMLElement;
-            const pauseIcon = this.shadow.getElementById('pauseIcon') as HTMLElement;
+  get length(): number {
+    return Number.parseInt(this.getAttribute("length") || "0", 10);
+  }
 
-            if (isPlaying) {
-                playIcon.style.display = 'none';
-                pauseIcon.style.display = 'block';
-            } else {
-                playIcon.style.display = 'block';
-                pauseIcon.style.display = 'none';
-            }
-        }
+  set length(val: number) {
+    this.setAttribute("length", val.toString());
+  }
+
+  get current(): number {
+    return Number.parseInt(this.getAttribute("current") || "0", 10);
+  }
+
+  set current(val: number) {
+    this.setAttribute("current", val.toString());
+  }
+
+  get playing(): boolean {
+    return this.hasAttribute("playing");
+  }
+
+  set playing(val: boolean) {
+    if (val) {
+      this.setAttribute("playing", "");
+    } else {
+      this.removeAttribute("playing");
     }
-
-    get length(): number {
-        return parseInt(this.getAttribute('length') || '0', 10);
-    }
-
-    set length(val: number) {
-        this.setAttribute('length', val.toString());
-    }
-
-    get current(): number {
-        return parseInt(this.getAttribute('current') || '0', 10);
-    }
-
-    set current(val: number) {
-        this.setAttribute('current', val.toString());
-    }
-
-    get playing(): boolean {
-        return this.hasAttribute('playing');
-    }
-
-    set playing(val: boolean) {
-        if (val) {
-            this.setAttribute('playing', '');
-        } else {
-            this.removeAttribute('playing');
-        }
-    }
+  }
 }

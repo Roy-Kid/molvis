@@ -1,23 +1,29 @@
 import { Engine } from "@babylonjs/core";
-import { logger } from "../utils/logger";
-import { World } from "./world";
-import { ModeManager, ModeType } from "../mode";
-import { GUIManager } from "../ui/manager";
-import { type MolvisConfig, defaultMolvisConfig } from "./config";
-import { Settings, type MolvisSetting } from "./settings";
-import { CommandRegistry, commands } from "../commands";
+import { type CommandRegistry, commands } from "../commands";
+import type { DrawFrameOption } from "../commands/draw";
 import { CommandManager } from "../commands/manager";
 import { EventEmitter } from "../events";
+import { ModeManager, ModeType } from "../mode";
 import { ModifierPipeline } from "../pipeline";
-import { StyleManager } from "./style";
-import { Theme } from "./style/theme";
-import { System } from "./system";
-import { Trajectory } from "./system/trajectory";
+import { GUIManager } from "../ui/manager";
+import { logger } from "../utils/logger";
 import { Artist } from "./artist";
+import { type MolvisConfig, defaultMolvisConfig } from "./config";
+import { type MolvisSetting, Settings } from "./settings";
+import { StyleManager } from "./style";
+import type { Theme } from "./style/theme";
+import { System } from "./system";
+import type { Trajectory } from "./system/trajectory";
+import { World } from "./world";
 
-import { Frame, Box } from "molrs-wasm";
+import type { Box, Frame } from "molwasm";
+import {
+  MolvisButton,
+  MolvisFolder,
+  MolvisSeparator,
+  MolvisSlider,
+} from "../ui/components";
 import { MolvisContextMenu } from "../ui/menus/context_menu";
-import { MolvisButton, MolvisSeparator, MolvisFolder, MolvisSlider } from "../ui/components";
 
 export class MolvisApp {
   // DOM elements
@@ -37,7 +43,7 @@ export class MolvisApp {
 
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
-  private _currentFrame: number = 0;
+  private _currentFrame = 0;
 
   // Style System
   private _styleManager: StyleManager;
@@ -60,14 +66,13 @@ export class MolvisApp {
   constructor(
     container: HTMLElement,
     config: MolvisConfig = {},
-    setting?: Partial<MolvisSetting>
+    setting?: Partial<MolvisSetting>,
   ) {
     this._config = defaultMolvisConfig(config);
     this._container = container;
 
     // Register Web Components
     this.registerWebComponents();
-
 
     // Create DOM structure
     this._root = this._createRoot();
@@ -80,11 +85,16 @@ export class MolvisApp {
     this._container.appendChild(this._root);
 
     // Initialize Babylon engine
-    this._engine = new Engine(this._canvas, this._config.canvas?.antialias ?? true, {
-      preserveDrawingBuffer: this._config.canvas?.preserveDrawingBuffer ?? true,
-      stencil: this._config.canvas?.stencil ?? true,
-      alpha: this._config.canvas?.alpha ?? false
-    });
+    this._engine = new Engine(
+      this._canvas,
+      this._config.canvas?.antialias ?? true,
+      {
+        preserveDrawingBuffer:
+          this._config.canvas?.preserveDrawingBuffer ?? true,
+        stencil: this._config.canvas?.stencil ?? true,
+        alpha: this._config.canvas?.alpha ?? false,
+      },
+    );
 
     // Initialize World
     this._world = new World(this._canvas, this._engine, this);
@@ -124,53 +134,52 @@ export class MolvisApp {
    * Register all web components for context menus
    */
   private registerWebComponents(): void {
-
     // Register custom elements
-    if (!customElements.get('molvis-context-menu')) {
-      customElements.define('molvis-context-menu', MolvisContextMenu);
+    if (!customElements.get("molvis-context-menu")) {
+      customElements.define("molvis-context-menu", MolvisContextMenu);
     }
-    if (!customElements.get('molvis-button')) {
-      customElements.define('molvis-button', MolvisButton);
+    if (!customElements.get("molvis-button")) {
+      customElements.define("molvis-button", MolvisButton);
     }
-    if (!customElements.get('molvis-separator')) {
-      customElements.define('molvis-separator', MolvisSeparator);
+    if (!customElements.get("molvis-separator")) {
+      customElements.define("molvis-separator", MolvisSeparator);
     }
-    if (!customElements.get('molvis-folder')) {
-      customElements.define('molvis-folder', MolvisFolder);
+    if (!customElements.get("molvis-folder")) {
+      customElements.define("molvis-folder", MolvisFolder);
     }
-    if (!customElements.get('molvis-slider')) {
-      customElements.define('molvis-slider', MolvisSlider);
+    if (!customElements.get("molvis-slider")) {
+      customElements.define("molvis-slider", MolvisSlider);
     }
   }
 
   private _createRoot(): HTMLElement {
-    const root = document.createElement('div');
-    root.className = 'molvis-root';
+    const root = document.createElement("div");
+    root.className = "molvis-root";
 
     // Fill parent container completely (no scrollbars, no white edges)
-    root.style.position = 'relative';
-    root.style.width = '100%';
-    root.style.height = '100%';
-    root.style.overflow = 'hidden';
-    root.style.margin = '0';
-    root.style.padding = '0';
+    root.style.position = "relative";
+    root.style.width = "100%";
+    root.style.height = "100%";
+    root.style.overflow = "hidden";
+    root.style.margin = "0";
+    root.style.padding = "0";
 
     return root;
   }
 
   private _createCanvas(): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    canvas.className = 'molvis-canvas';
+    const canvas = document.createElement("canvas");
+    canvas.className = "molvis-canvas";
 
     // Canvas fills the root container
-    canvas.style.position = 'absolute';
-    canvas.style.top = '0';
-    canvas.style.left = '0';
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    canvas.style.display = 'block';
-    canvas.style.outline = 'none';
-    canvas.style.touchAction = 'none';
+    canvas.style.position = "absolute";
+    canvas.style.top = "0";
+    canvas.style.left = "0";
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.display = "block";
+    canvas.style.outline = "none";
+    canvas.style.touchAction = "none";
 
     // Set initial canvas resolution based on container size
     const pixelRatio = window.devicePixelRatio || 1;
@@ -184,19 +193,19 @@ export class MolvisApp {
   }
 
   private _createUIOverlay(): HTMLElement {
-    const overlay = document.createElement('div');
-    overlay.className = 'molvis-ui-overlay';
+    const overlay = document.createElement("div");
+    overlay.className = "molvis-ui-overlay";
 
     // Absolute positioned to cover canvas
-    overlay.style.position = 'absolute';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100%';
-    overlay.style.height = '100%';
-    overlay.style.pointerEvents = 'none';
+    overlay.style.position = "absolute";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.pointerEvents = "none";
 
     if (this._config.showUI === false) {
-      overlay.style.display = 'none';
+      overlay.style.display = "none";
     }
 
     return overlay;
@@ -337,8 +346,8 @@ export class MolvisApp {
 
   public enableFitContainer(enabled: boolean): void {
     if (enabled) {
-      this._root.style.width = '100%';
-      this._root.style.height = '100%';
+      this._root.style.width = "100%";
+      this._root.style.height = "100%";
     }
     this.resize();
   }
@@ -399,7 +408,7 @@ export class MolvisApp {
 
     // UI Updates
     if (newConfig.showUI !== undefined) {
-      this._uiOverlay.style.display = this._config.showUI ? 'block' : 'none';
+      this._uiOverlay.style.display = this._config.showUI ? "block" : "none";
     }
 
     // Config no longer controls Grid or Graphics
@@ -413,7 +422,7 @@ export class MolvisApp {
    */
   public async computeFrame(
     frameIndex: number,
-    source?: any
+    source?: unknown,
   ): Promise<Frame> {
     if (!source) {
       throw new Error("computeFrame requires a source");
@@ -429,11 +438,7 @@ export class MolvisApp {
    * @param frame Frame to render
    * @param options Drawing options
    */
-  public renderFrame(
-    frame: Frame,
-    box?: Box,
-    options?: any
-  ): void {
+  public renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void {
     this._system.setFrame(frame, box); // Store frame and box in System
     this.execute("draw_frame", { frame, box, options });
   }
@@ -444,11 +449,11 @@ export class MolvisApp {
    */
   public setTrajectory(trajectory: Trajectory): void {
     this._system.trajectory = trajectory;
-    this.events.emit('trajectory-change', trajectory);
+    this.events.emit("trajectory-change", trajectory);
     // Reset to first frame (or keep current if valid?)
     // System.trajectory setter doesn't reset index in Trajectory class usually (it's new instance)
     // So index is 0.
-    this.events.emit('frame-change', 0);
+    this.events.emit("frame-change", 0);
   }
 
   /**
@@ -456,16 +461,16 @@ export class MolvisApp {
    */
   public nextFrame(): void {
     if (this._system.trajectory.next()) {
-      this.events.emit('frame-change', this._system.trajectory.currentIndex);
+      this.events.emit("frame-change", this._system.trajectory.currentIndex);
     }
   }
 
   /**
-  * Navigate to the previous frame.
-  */
+   * Navigate to the previous frame.
+   */
   public prevFrame(): void {
     if (this._system.trajectory.prev()) {
-      this.events.emit('frame-change', this._system.trajectory.currentIndex);
+      this.events.emit("frame-change", this._system.trajectory.currentIndex);
     }
   }
 
@@ -474,7 +479,7 @@ export class MolvisApp {
    */
   public seekFrame(index: number): void {
     if (this._system.trajectory.seek(index)) {
-      this.events.emit('frame-change', this._system.trajectory.currentIndex);
+      this.events.emit("frame-change", this._system.trajectory.currentIndex);
     }
   }
 }

@@ -1,5 +1,4 @@
-import React from 'react';
-import { Molvis } from '@molvis/core';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,9 +6,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Settings } from 'lucide-react';
-import { RenderTab } from '../modes/view/RenderTab';
+import type { Molvis } from "@molvis/core";
+import { Settings } from "lucide-react";
+import type React from "react";
+import { RenderTab } from "../modes/view/RenderTab";
 
 interface SettingsDialogProps {
   app: Molvis | null;
@@ -28,8 +28,8 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         <div className="py-4">
-           {/* Reuse RenderTab content or creating specific settings content */}
-           <RenderTab app={app} />
+          {/* Reuse RenderTab content or creating specific settings content */}
+          <RenderTab app={app} />
         </div>
       </DialogContent>
     </Dialog>

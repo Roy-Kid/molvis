@@ -1,14 +1,14 @@
-import { MolvisElement } from '../base';
+import { MolvisElement } from "../base";
 
 /**
  * MolvisSeparator - Horizontal divider line for menu sections
  */
 export class MolvisSeparator extends MolvisElement {
-    protected override render(): void {
-        this.injectSharedStyles();
+  protected override render(): void {
+    this.injectSharedStyles();
 
-        const style = document.createElement('style');
-        style.textContent = `
+    const style = document.createElement("style");
+    style.textContent = `
             :host {
                 display: block;
                 margin: 4px 0;
@@ -20,10 +20,10 @@ export class MolvisSeparator extends MolvisElement {
                 margin: 0 8px;
             }
         `;
-        this.root.appendChild(style);
+    this.root.appendChild(style);
 
-        const separator = document.createElement('div');
-        separator.className = 'separator';
-        this.root.appendChild(separator);
-    }
+    const separator = document.createElement("div");
+    separator.className = "separator";
+    this.root.appendChild(separator);
+  }
 }

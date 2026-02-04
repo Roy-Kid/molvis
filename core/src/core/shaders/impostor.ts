@@ -1,6 +1,6 @@
 import { Effect } from "@babylonjs/core";
 
-Effect.ShadersStore["sphereImpostorVertexShader"] = `
+Effect.ShadersStore.sphereImpostorVertexShader = `
     precision highp float;
 
     // Attributes
@@ -52,7 +52,7 @@ Effect.ShadersStore["sphereImpostorVertexShader"] = `
     }
 `;
 
-Effect.ShadersStore["sphereImpostorFragmentShader"] = `
+Effect.ShadersStore.sphereImpostorFragmentShader = `
 precision highp float;
 #ifdef GL_EXT_frag_depth
 #extension GL_EXT_frag_depth : enable
@@ -134,7 +134,7 @@ void main() {
 }
 `;
 
-Effect.ShadersStore["bondImpostorVertexShader"] = `
+Effect.ShadersStore.bondImpostorVertexShader = `
     precision highp float;
 
     // Attributes
@@ -200,7 +200,7 @@ Effect.ShadersStore["bondImpostorVertexShader"] = `
     }
 `;
 
-Effect.ShadersStore["bondImpostorFragmentShader"] = `
+Effect.ShadersStore.bondImpostorFragmentShader = `
 precision highp float;
 #ifdef GL_EXT_frag_depth
 #extension GL_EXT_frag_depth : enable

@@ -1,9 +1,9 @@
-import { BaseMode, ModeType } from "./base";
+import { type PointerInfo, Vector3 } from "@babylonjs/core";
 import type { MolvisApp } from "../core/app";
-import { Vector3, type PointerInfo } from "@babylonjs/core";
 import { ContextMenuController } from "../ui/menus/controller";
-import type { HitResult, MenuItem } from "./types";
+import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
+import type { HitResult, MenuItem } from "./types";
 
 /**
  * Context menu controller for View mode.
@@ -12,12 +12,15 @@ import { CommonMenuItems } from "./menu_items";
 class ViewModeContextMenu extends ContextMenuController {
   constructor(
     app: MolvisApp,
-    private mode: ViewMode
+    private mode: ViewMode,
   ) {
     super(app, "molvis-view-menu");
   }
 
-  protected shouldShowMenu(_hit: HitResult | null, isDragging: boolean): boolean {
+  protected shouldShowMenu(
+    _hit: HitResult | null,
+    isDragging: boolean,
+  ): boolean {
     // Show menu on any right-click (if not dragging)
     return !isDragging;
   }
@@ -35,7 +38,7 @@ class ViewModeContextMenu extends ContextMenuController {
       title: gridEnabled ? "Grid On" : "Grid Off",
       action: () => {
         this.mode.setGridEnabled(!gridEnabled);
-      }
+      },
     });
 
     return CommonMenuItems.appendCommonTail(items, this.app);
@@ -43,8 +46,8 @@ class ViewModeContextMenu extends ContextMenuController {
 }
 
 class ViewMode extends BaseMode {
-  private lastClickTime: number = 0;
-  private doubleClickThreshold: number = 300; // ms
+  private lastClickTime = 0;
+  private doubleClickThreshold = 300; // ms
 
   constructor(app: MolvisApp) {
     super(ModeType.View, app);
@@ -84,14 +87,14 @@ class ViewMode extends BaseMode {
     this.app.world.highlighter.invalidateAndRebuild();
 
     // Listen for frame changes (from System or UI)
-    this.app.events.on('frame-change', this.onFrameChange);
+    this.app.events.on("frame-change", this.onFrameChange);
   }
 
   /**
    * Finish ViewMode - deactivate 3D scene helpers
    */
   public finish(): void {
-    this.app.events.off('frame-change', this.onFrameChange);
+    this.app.events.off("frame-change", this.onFrameChange);
     this.world.targetIndicator.hide();
 
     super.finish();
@@ -104,8 +107,11 @@ class ViewMode extends BaseMode {
     const now = Date.now();
     const timeSinceLastClick = now - this.lastClickTime;
 
-    if (timeSinceLastClick < this.doubleClickThreshold &&
-      pointerInfo.event.button === 0) { // Left button only
+    if (
+      timeSinceLastClick < this.doubleClickThreshold &&
+      pointerInfo.event.button === 0
+    ) {
+      // Left button only
       await this.handleDoubleClick();
     }
 
@@ -118,19 +124,23 @@ class ViewMode extends BaseMode {
   private async handleDoubleClick(): Promise<void> {
     const hit = await this.pickHit();
 
-    if (hit && (hit.type === 'atom' || hit.type === 'bond')) {
+    if (hit && (hit.type === "atom" || hit.type === "bond")) {
       let target: Vector3 | null = null;
       if (hit.metadata) {
-        if (hit.type === 'atom') {
-          target = new Vector3(hit.metadata.position.x, hit.metadata.position.y, hit.metadata.position.z);
-        } else if (hit.type === 'bond') {
+        if (hit.type === "atom") {
+          target = new Vector3(
+            hit.metadata.position.x,
+            hit.metadata.position.y,
+            hit.metadata.position.z,
+          );
+        } else if (hit.type === "bond") {
           // Midpoint of bond from metadata
           const start = hit.metadata.start;
           const end = hit.metadata.end;
           target = new Vector3(
             (start.x + end.x) / 2,
             (start.y + end.y) / 2,
-            (start.z + end.z) / 2
+            (start.z + end.z) / 2,
           );
         }
       } else if (hit.mesh) {
@@ -202,7 +212,7 @@ class ViewMode extends BaseMode {
     const { DrawFrameCommand } = await import("../commands/draw");
     const cmd = new DrawFrameCommand(this.app, {
       frame,
-      box
+      box,
     });
     await cmd.do();
   }

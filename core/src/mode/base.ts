@@ -1,19 +1,19 @@
 import {
-  PointerEventTypes,
   KeyboardEventTypes,
+  PointerEventTypes,
   Vector2,
   Vector3,
 } from "@babylonjs/core";
 import type {
-  PointerInfo,
-  KeyboardInfo,
   AbstractMesh,
+  KeyboardInfo,
   Observer,
+  PointerInfo,
 } from "@babylonjs/core";
 import type { Molvis } from "@molvis/core";
-import { ContextMenuController } from "../ui/menus/controller";
-import type { HitResult } from "./types";
+import type { ContextMenuController } from "../ui/menus/controller";
 import { isCtrlOrMeta } from "../utils/platform";
+import type { HitResult } from "./types";
 
 enum ModeType {
   View = "view",
@@ -25,7 +25,7 @@ enum ModeType {
 
 /**
  * Base class for all interaction modes.
- * 
+ *
  * Event Flow Architecture:
  * ========================
  * Right-click events follow a layered approach:
@@ -34,7 +34,7 @@ enum ModeType {
  * 3. Context menu controller decides whether to show menu
  * 4. If menu is shown, event is consumed
  * 5. If not consumed, mode handles it via onRightClickNotConsumed()
- * 
+ *
  * Each mode must implement:
  * - createContextMenuController(): Create mode-specific menu controller
  * - onRightClickNotConsumed(): Handle right-click when menu doesn't consume it
@@ -52,7 +52,7 @@ abstract class BaseMode {
    * Flag to enable/disable hover highlighting.
    * Defaults to false. Subclasses can enable it.
    */
-  protected enableHoverHighlight: boolean = false;
+  protected enableHoverHighlight = false;
 
   // Context menu controller (mode-specific)
   protected contextMenuController!: ContextMenuController;
@@ -72,8 +72,6 @@ abstract class BaseMode {
   protected get app() {
     return this._app;
   }
-
-
 
   protected get world() {
     return this._app.world;
@@ -105,7 +103,10 @@ abstract class BaseMode {
    * Handle right-click when context menu doesn't consume the event.
    * Override in subclasses for mode-specific right-click behavior.
    */
-  protected onRightClickNotConsumed(_pointerInfo: PointerInfo, _hit: HitResult | null): void {
+  protected onRightClickNotConsumed(
+    _pointerInfo: PointerInfo,
+    _hit: HitResult | null,
+  ): void {
     // Default: do nothing
   }
 
@@ -247,7 +248,7 @@ abstract class BaseMode {
 
   /**
    * Right-click handler with layered event flow.
-   * 
+   *
    * Flow:
    * 1. Pick what's under the cursor
    * 2. Let context menu controller decide if it wants to handle this
@@ -262,7 +263,7 @@ abstract class BaseMode {
     const consumed = this.contextMenuController.handleRightClick(
       pointerInfo.event,
       hit,
-      this._is_dragging
+      this._is_dragging,
     );
 
     // If not consumed by menu, let mode handle it
@@ -274,35 +275,33 @@ abstract class BaseMode {
   async _on_pointer_move(_pointerInfo: PointerInfo): Promise<void> {
     const hit = await this.pickHit();
 
-    if (hit && (hit.type === 'atom' || hit.type === 'bond') && hit.metadata) {
+    if (hit && (hit.type === "atom" || hit.type === "bond") && hit.metadata) {
       const meta = hit.metadata;
-      if (meta.type === 'atom') {
+      if (meta.type === "atom") {
         const infoText = `[Atom] element: ${meta.element} | xyz: ${meta.position.x.toFixed(4)}, ${meta.position.y.toFixed(4)}, ${meta.position.z.toFixed(4)} | `;
-        this.app.events.emit('info-text-change', infoText);
+        this.app.events.emit("info-text-change", infoText);
       } else {
         const start = meta.start;
         const end = meta.end;
         const length = Vector3.Distance(
           new Vector3(start.x, start.y, start.z),
-          new Vector3(end.x, end.y, end.z)
+          new Vector3(end.x, end.y, end.z),
         );
-        const infoText = `[Bond] ${meta.atomId1}-${meta.atomId2} | ` +
-          `length: ${length.toFixed(2)}` +
-          (meta.order ? ` | order: ${meta.order}` : '');
-        this.app.events.emit('info-text-change', infoText);
+        const infoText = `[Bond] ${meta.atomId1}-${meta.atomId2} | length: ${length.toFixed(2)}${meta.order ? ` | order: ${meta.order}` : ""}`;
+        this.app.events.emit("info-text-change", infoText);
       }
     } else {
-      this.app.events.emit('info-text-change', "");
+      this.app.events.emit("info-text-change", "");
     }
   }
 
-  _on_pointer_wheel(_pointerInfo: PointerInfo): void { }
-  _on_pointer_pick(_pointerInfo: PointerInfo): void { }
-  _on_pointer_tap(_pointerInfo: PointerInfo): void { }
-  _on_pointer_double_tap(_pointerInfo: PointerInfo): void { }
-  _on_press_e(): void { }
+  _on_pointer_wheel(_pointerInfo: PointerInfo): void {}
+  _on_pointer_pick(_pointerInfo: PointerInfo): void {}
+  _on_pointer_tap(_pointerInfo: PointerInfo): void {}
+  _on_pointer_double_tap(_pointerInfo: PointerInfo): void {}
+  _on_press_e(): void {}
 
-  _on_press_q(): void { }
+  _on_press_q(): void {}
 
   protected _on_press_i(): void {
     this.world.toggleInspector();
@@ -312,17 +311,19 @@ abstract class BaseMode {
     // Override in subclasses for custom escape behavior
   }
 
-  protected _on_press_ctrl_s(): void { }
-  protected _on_press_ctrl_z(): void { }
-  protected _on_press_ctrl_y(): void { }
-  protected _on_press_ctrl_c(): void { }
-  protected _on_press_ctrl_v(): void { }
+  protected _on_press_ctrl_s(): void {}
+  protected _on_press_ctrl_z(): void {}
+  protected _on_press_ctrl_y(): void {}
+  protected _on_press_ctrl_c(): void {}
+  protected _on_press_ctrl_v(): void {}
 
   protected get_pointer_xy(): Vector2 {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);
   }
 
-  protected async pick_mesh(type: "atom" | "bond"): Promise<AbstractMesh | null> {
+  protected async pick_mesh(
+    type: "atom" | "bond",
+  ): Promise<AbstractMesh | null> {
     const hit = await this.pickHit();
     if (hit && hit.type === type && hit.mesh) {
       return hit.mesh;

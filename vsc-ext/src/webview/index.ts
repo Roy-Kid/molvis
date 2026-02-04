@@ -1,14 +1,20 @@
-import { mountMolvis, type MolvisConfig, Frame, readFrame } from "@molvis/core";
+import { Frame, type MolvisConfig, mountMolvis, readFrame } from "@molvis/core";
 
 const container = document.getElementById("molvis-container");
 if (!container) throw new Error("Missing container");
 
 const config: MolvisConfig = {
-  showUI: true
+  showUI: true,
 };
 
 const settings = {
-  grid: { enabled: true, mainColor: "#444", lineColor: "#666", opacity: 0.25, size: 10 }
+  grid: {
+    enabled: true,
+    mainColor: "#444",
+    lineColor: "#666",
+    opacity: 0.25,
+    size: 10,
+  },
 };
 
 const app = mountMolvis(container, config, settings);

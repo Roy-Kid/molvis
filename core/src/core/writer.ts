@@ -1,113 +1,126 @@
-import { Frame, writeFrame as wasmWriteFrame } from "molrs-wasm";
+import { type Frame, writeFrame as wasmWriteFrame } from "molwasm";
 import { logger } from "../utils/logger";
 import { inferFormatFromFilename } from "./reader";
 
-export type ExportFormat = 'pdb' | 'xyz' | 'lammps';
+export type ExportFormat = "pdb" | "xyz" | "lammps";
 
 export interface WriteFrameOptions {
-    format?: string;
-    filename?: string;
+  format?: string;
+  filename?: string;
 }
 
 export interface ExportPayload {
-    content: string;
-    mime: string;
-    suggestedName: string;
+  content: string;
+  mime: string;
+  suggestedName: string;
 }
 
 export function defaultExtensionForFormat(format: string): string {
-    switch (format.toLowerCase()) {
-        case 'pdb': return 'pdb';
-        case 'xyz': return 'xyz';
-        case 'lammps': return 'lammps';
-        default: return 'txt';
-    }
+  switch (format.toLowerCase()) {
+    case "pdb":
+      return "pdb";
+    case "xyz":
+      return "xyz";
+    case "lammps":
+      return "lammps";
+    default:
+      return "txt";
+  }
 }
 
 export function mimeForFormat(format: string): string {
-    switch (format.toLowerCase()) {
-        case 'pdb': return 'chemical/x-pdb';
-        case 'xyz': return 'chemical/x-xyz';
-        case 'lammps': return 'text/plain';
-        default: return 'text/plain';
-    }
+  switch (format.toLowerCase()) {
+    case "pdb":
+      return "chemical/x-pdb";
+    case "xyz":
+      return "chemical/x-xyz";
+    case "lammps":
+      return "text/plain";
+    default:
+      return "text/plain";
+  }
 }
 
 /**
  * Writes a frame to a string/blob in the specified format.
  * Uses WASM writer implementation.
  */
-export function writeFrame(frame: Frame, options: WriteFrameOptions): ExportPayload {
-    let format = options.format;
-    let filename = options.filename || "structure";
+export function writeFrame(
+  frame: Frame,
+  options: WriteFrameOptions,
+): ExportPayload {
+  let format = options.format;
+  let filename = options.filename || "structure";
 
-    if (!format && filename) {
-        format = inferFormatFromFilename(filename);
+  if (!format && filename) {
+    format = inferFormatFromFilename(filename);
+  }
+
+  if (!format) {
+    format = "pdb";
+  }
+
+  // Ensure format is supported by WASM (pdb, xyz)
+  const supported = ["pdb", "xyz"];
+  if (!supported.includes(format.toLowerCase())) {
+    // Fallback or error?
+    // Since we are dispatching to WASM, we should let it handle it or fail gracefully.
+    // However, we need to return payload.
+    // If lammps is requested, we should probably fail.
+    if (format === "lammps") {
+      throw new Error("LAMMPS export not yet supported by WASM writer");
+    }
+  }
+
+  try {
+    const content = wasmWriteFrame(frame, format);
+    const mime = mimeForFormat(format);
+
+    // Ensure filename has correct extension
+    const ext = defaultExtensionForFormat(format);
+    if (!filename.toLowerCase().endsWith(`.${ext}`)) {
+      filename = `${filename}.${ext}`;
     }
 
-    if (!format) {
-        format = 'pdb';
-    }
+    logger.info(
+      `[writer] Successfully wrote ${format} frame (${content.length} bytes)`,
+    );
 
-    // Ensure format is supported by WASM (pdb, xyz)
-    const supported = ['pdb', 'xyz'];
-    if (!supported.includes(format.toLowerCase())) {
-        // Fallback or error?
-        // Since we are dispatching to WASM, we should let it handle it or fail gracefully.
-        // However, we need to return payload.
-        // If lammps is requested, we should probably fail.
-        if (format === 'lammps') {
-            throw new Error("LAMMPS export not yet supported by WASM writer");
-        }
-    }
-
-    try {
-        const content = wasmWriteFrame(frame, format);
-        const mime = mimeForFormat(format);
-
-        // Ensure filename has correct extension
-        const ext = defaultExtensionForFormat(format);
-        if (!filename.toLowerCase().endsWith(`.${ext}`)) {
-            filename = `${filename}.${ext}`;
-        }
-
-        logger.info(`[writer] Successfully wrote ${format} frame (${content.length} bytes)`);
-
-        return {
-            content,
-            mime,
-            suggestedName: filename
-        };
-    } catch (e) {
-        logger.error(`[writer] Error writing ${format} frame via WASM:`, e);
-        throw e;
-    }
+    return {
+      content,
+      mime,
+      suggestedName: filename,
+    };
+  } catch (e) {
+    logger.error(`[writer] Error writing ${format} frame via WASM:`, e);
+    throw e;
+  }
 }
 
 /**
  * Writes a PDB frame.
  */
 export function writePDBFrame(frame: Frame): string {
-    try {
-        const content = wasmWriteFrame(frame, "pdb");
-        return content;
-    } catch (e) {
-        logger.error("[writer] Error writing PDB frame via WASM:", e);
-        throw e;
-    }
+  try {
+    const content = wasmWriteFrame(frame, "pdb");
+    return content;
+  } catch (e) {
+    logger.error("[writer] Error writing PDB frame via WASM:", e);
+    throw e;
+  }
 }
 
 /**
  * Writes an XYZ frame.
  */
 export function writeXYZFrame(frame: Frame): string {
-    try {
-        const content = wasmWriteFrame(frame, "xyz");
-        return content;
-    } catch (e) {
-        logger.error("[writer] Error writing XYZ frame via WASM:", e);
-        throw e;
-    }
+  try {
+    const content = wasmWriteFrame(frame, "xyz");
+    return content;
+  } catch (e) {
+    logger.error("[writer] Error writing XYZ frame via WASM:", e);
+    throw e;
+  }
 }
 
 /**
@@ -115,5 +128,5 @@ export function writeXYZFrame(frame: Frame): string {
  * Currently unsupported by WASM writer.
  */
 export function writeLAMMPSData(_frame: Frame): string {
-    throw new Error("LAMMPS export not yet supported by WASM writer");
+  throw new Error("LAMMPS export not yet supported by WASM writer");
 }

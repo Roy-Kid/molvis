@@ -1,5 +1,5 @@
 import { Molvis, Trajectory } from "@molvis/core";
-import { Block, Frame } from "molrs-wasm";
+import { Block, Frame } from "molwasm";
 
 /**
  * Performance Testing Demo

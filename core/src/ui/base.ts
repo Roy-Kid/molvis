@@ -1,4 +1,3 @@
-
 export const SHARED_CSS = `
     :host {
         display: block;
@@ -18,28 +17,28 @@ export const SHARED_CSS = `
 `;
 
 export class MolvisElement extends HTMLElement {
-    protected root: ShadowRoot;
+  protected root: ShadowRoot;
 
-    constructor() {
-        super();
-        this.root = this.attachShadow({ mode: 'open' });
-    }
+  constructor() {
+    super();
+    this.root = this.attachShadow({ mode: "open" });
+  }
 
-    connectedCallback() {
-        this.render();
-    }
+  connectedCallback() {
+    this.render();
+  }
 
-    protected render() {
-        // Override in subclasses
-    }
+  protected render() {
+    // Override in subclasses
+  }
 
-    protected addEncodedStyles(css: string) {
-        const style = document.createElement('style');
-        style.textContent = css;
-        this.root.appendChild(style);
-    }
+  protected addEncodedStyles(css: string) {
+    const style = document.createElement("style");
+    style.textContent = css;
+    this.root.appendChild(style);
+  }
 
-    protected injectSharedStyles() {
-        this.addEncodedStyles(SHARED_CSS);
-    }
+  protected injectSharedStyles() {
+    this.addEncodedStyles(SHARED_CSS);
+  }
 }

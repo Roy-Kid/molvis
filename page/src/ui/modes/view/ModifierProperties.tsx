@@ -1,6 +1,6 @@
-import React from 'react';
-import type { Modifier, Molvis } from '@molvis/core';
-import { DataSourceModifier } from './modifiers/DataSourceModifier';
+import type { Modifier, Molvis } from "@molvis/core";
+import type React from "react";
+import { DataSourceModifier } from "./modifiers/DataSourceModifier";
 
 interface ModifierPropertiesProps {
   modifier: Modifier;
@@ -9,10 +9,14 @@ interface ModifierPropertiesProps {
 }
 
 const MODIFIER_COMPONENTS: Record<string, React.FC<any>> = {
-  'Data Source': DataSourceModifier,
+  "Data Source": DataSourceModifier,
 };
 
-export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({ modifier, app, onUpdate }) => {
+export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
+  modifier,
+  app,
+  onUpdate,
+}) => {
   const Component = MODIFIER_COMPONENTS[modifier.name];
 
   if (!Component) {
@@ -26,12 +30,12 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({ modifier
   return (
     <div className="p-4 bg-muted/20 border-t">
       <div className="flex items-center justify-between mb-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {modifier.name} Parameters
-          </h4>
-          <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-              {modifier.category}
-          </span>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {modifier.name} Parameters
+        </h4>
+        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+          {modifier.category}
+        </span>
       </div>
       <Component modifier={modifier} app={app} onUpdate={onUpdate} />
     </div>
