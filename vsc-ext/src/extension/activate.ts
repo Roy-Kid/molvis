@@ -4,8 +4,8 @@ import { MolvisEditorProvider } from "./panels/editorProvider";
 import { MolecularFileLoader } from "./loading/molecularFileLoader";
 import { createHotReloadWatcher } from "./panels/hotReload";
 import { InMemoryPanelRegistry } from "./panels/panelRegistry";
-import { openPreviewPanel } from "./panels/previewPanel";
-import { openViewerPanel } from "./panels/viewerPanel";
+import { openQuickViewPanel } from "./panels/previewPanel";
+import { openEditorPanel } from "./panels/viewerPanel";
 
 /**
  * Extension entry point. Registers custom editor, preview/viewer commands and hot reload.
@@ -18,13 +18,13 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     MolvisEditorProvider.register(context, panelRegistry, logger),
     vscode.commands.registerCommand(
-      "molvis.openPreview",
+      "molvis.quickView",
       async (uri?: vscode.Uri) => {
-        await openPreviewPanel(context, panelRegistry, logger, fileLoader, uri);
+        await openQuickViewPanel(context, panelRegistry, logger, fileLoader, uri);
       },
     ),
-    vscode.commands.registerCommand("molvis.openViewer", () => {
-      openViewerPanel(context, panelRegistry);
+    vscode.commands.registerCommand("molvis.openEditor", () => {
+      openEditorPanel(context, panelRegistry);
     }),
     vscode.commands.registerCommand("molvis.reload", async () => {
       await panelRegistry.forEachVisible(async (panel, meta) => {

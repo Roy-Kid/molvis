@@ -2,13 +2,13 @@ import * as vscode from "vscode";
 import type { PanelRegistry } from "../types";
 import { getViewerHtml } from "./html";
 
-export function openViewerPanel(
+export function openEditorPanel(
   context: vscode.ExtensionContext,
   panelRegistry: PanelRegistry,
 ): void {
   const panel = vscode.window.createWebviewPanel(
-    "molvis.page",
-    "MolVis Viewer",
+    "molvis.workspace",
+    "MolVis Editor",
     vscode.ViewColumn.Active,
     {
       enableScripts: true,

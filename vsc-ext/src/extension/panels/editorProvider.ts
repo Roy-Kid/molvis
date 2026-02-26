@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { Logger, PanelRegistry } from "../types";
 import {
+  handleSaveFile,
   loadTextDocumentToWebview,
   onWebviewMessage,
   sendToWebview,
@@ -59,6 +60,9 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
         switch (message.type) {
           case "ready":
             void loadTextDocumentToWebview(webviewPanel.webview, document);
+            break;
+          case "saveFile":
+            void handleSaveFile(message.data, message.suggestedName);
             break;
           case "error":
             this.logger.error(`MolVis: ${message.message}`);

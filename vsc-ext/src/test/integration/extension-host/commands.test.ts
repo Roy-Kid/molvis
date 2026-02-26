@@ -32,19 +32,19 @@ suite("extension host commands", () => {
 
   test("registers expected commands", async () => {
     const commands = await vscode.commands.getCommands(true);
-    assert.ok(commands.includes("molvis.openPreview"));
-    assert.ok(commands.includes("molvis.openViewer"));
+    assert.ok(commands.includes("molvis.quickView"));
+    assert.ok(commands.includes("molvis.openEditor"));
     assert.ok(commands.includes("molvis.reload"));
   });
 
-  test("openViewer creates molvis viewer webview", async () => {
-    await vscode.commands.executeCommand("molvis.openViewer");
-    assert.ok(hasWebviewTab("molvis.page"));
+  test("openEditor creates molvis editor webview", async () => {
+    await vscode.commands.executeCommand("molvis.openEditor");
+    assert.ok(hasWebviewTab("molvis.workspace"));
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
 
-  test("openPreview accepts URI argument", async () => {
-    const filePath = path.join(os.tmpdir(), `molvis-preview-${Date.now()}.xyz`);
+  test("quickView accepts URI argument", async () => {
+    const filePath = path.join(os.tmpdir(), `molvis-quickview-${Date.now()}.xyz`);
     const fileUri = vscode.Uri.file(filePath);
 
     await vscode.workspace.fs.writeFile(
@@ -52,8 +52,8 @@ suite("extension host commands", () => {
       Buffer.from("1\nframe\nH 0 0 0\n"),
     );
 
-    await vscode.commands.executeCommand("molvis.openPreview", fileUri);
-    assert.ok(hasWebviewTab("molvis.preview"));
+    await vscode.commands.executeCommand("molvis.quickView", fileUri);
+    assert.ok(hasWebviewTab("molvis.quickView"));
 
     await vscode.commands.executeCommand("molvis.reload");
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");

@@ -13,13 +13,13 @@
   "contributes": {
     "commands": [
       {
-        "command": "molvis.openPreview",
-        "title": "MolVis: open preview",
+        "command": "molvis.quickView",
+        "title": "MolVis: Quick View",
         "icon": "$(open-preview)"
       },
       {
-        "command": "molvis.openViewer",
-        "title": "MolVis: open viewer",
+        "command": "molvis.openEditor",
+        "title": "MolVis: Open Editor",
         "icon": "$(preview)"
       },
       {
@@ -49,24 +49,24 @@
     "menus": {
       "editor/title": [
         {
-          "command": "molvis.openPreview",
+          "command": "molvis.quickView",
           "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .zarr",
           "group": "navigation"
         },
         {
-          "command": "molvis.openViewer",
+          "command": "molvis.openEditor",
           "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .zarr",
           "group": "navigation"
         },
         {
           "command": "molvis.reload",
-          "when": "activeCustomEditorId == molvis.editor || activeWebviewPanelId == molvis.preview || activeWebviewPanelId == molvis.page",
+          "when": "activeCustomEditorId == molvis.editor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.workspace",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "molvis.openPreview",
+          "command": "molvis.quickView",
           "when": "resourceExtname == .zarr || resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data",
           "group": "navigation"
         }

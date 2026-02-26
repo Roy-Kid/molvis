@@ -24,6 +24,7 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "fileDropped"; filename: string }
+  | { type: "saveFile"; data: string; suggestedName: string }
   | { type: "error"; message: string };
 
 // --- Panel (was types/panel.ts) ---

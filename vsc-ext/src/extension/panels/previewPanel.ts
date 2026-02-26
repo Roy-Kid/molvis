@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import type { Logger } from "../types";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
-import { onWebviewMessage, sendToWebview } from "./messaging";
+import { handleSaveFile, onWebviewMessage, sendToWebview } from "./messaging";
 import type { PanelRegistry } from "../types";
 import { getPreviewHtml } from "./html";
 
@@ -19,7 +19,7 @@ async function sendLoadedFile(
   });
 }
 
-export async function openPreviewPanel(
+export async function openQuickViewPanel(
   context: vscode.ExtensionContext,
   panelRegistry: PanelRegistry,
   logger: Logger,
@@ -34,14 +34,13 @@ export async function openPreviewPanel(
     }
   }
 
-  if (!targetUri) {
-    logger.error("MolVis: No file selected for preview");
-    return;
-  }
+  const title = targetUri
+    ? `Quick View: ${getDisplayName(targetUri)}`
+    : "Quick View";
 
   const panel = vscode.window.createWebviewPanel(
-    "molvis.preview",
-    `Preview: ${getDisplayName(targetUri)}`,
+    "molvis.quickView",
+    title,
     vscode.ViewColumn.Beside,
     {
       enableScripts: true,
@@ -52,13 +51,15 @@ export async function openPreviewPanel(
 
   panel.webview.html = getPreviewHtml(panel.webview, context.extensionUri);
 
-  const reloadPreview = async () => {
-    try {
-      await sendLoadedFile(panel, targetUri, fileLoader);
-    } catch (error) {
-      logger.error(`MolVis: Failed to reload file: ${error}`);
-    }
-  };
+  const reloadPreview = targetUri
+    ? async () => {
+        try {
+          await sendLoadedFile(panel, targetUri, fileLoader);
+        } catch (error) {
+          logger.error(`MolVis: Failed to reload file: ${error}`);
+        }
+      }
+    : undefined;
 
   panelRegistry.register(panel, {
     getHtml: () => getPreviewHtml(panel.webview, context.extensionUri),
@@ -66,14 +67,24 @@ export async function openPreviewPanel(
   });
 
   const messageDisposable = onWebviewMessage(panel.webview, async (message) => {
-    if (message.type !== "ready") {
-      return;
-    }
-
-    try {
-      await sendLoadedFile(panel, targetUri, fileLoader);
-    } catch (error) {
-      logger.error(`MolVis: Failed to load file: ${error}`);
+    switch (message.type) {
+      case "ready":
+        if (targetUri) {
+          try {
+            await sendLoadedFile(panel, targetUri, fileLoader);
+          } catch (error) {
+            logger.error(`MolVis: Failed to load file: ${error}`);
+          }
+        }
+        break;
+      case "saveFile":
+        await handleSaveFile(message.data, message.suggestedName);
+        break;
+      case "error":
+        logger.error(`MolVis: ${message.message}`);
+        break;
+      default:
+        break;
     }
   });
 

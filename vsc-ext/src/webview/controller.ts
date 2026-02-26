@@ -29,6 +29,19 @@ export function bootstrapWebview(container: HTMLElement): void {
 
   const vscode = acquireVsCodeApi();
 
+  // Override saveFile: encode blob as base64 and postMessage to extension host
+  // (showSaveFilePicker is blocked in cross-origin webview iframes)
+  app.saveFile = async (blob: Blob, suggestedName: string) => {
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const data = btoa(binary);
+    vscode.postMessage({ type: "saveFile", data, suggestedName });
+  };
+
   window.addEventListener(
     "message",
     (event: MessageEvent<HostToWebviewMessage>) => {

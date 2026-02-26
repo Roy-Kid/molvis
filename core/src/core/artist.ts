@@ -84,22 +84,15 @@ export class Artist {
   public clear(): void {
     const scene = this.app.world.scene;
 
-    // Hide and dispose old meshes
-    if (this.atomMesh) {
-      this.atomMesh.isVisible = false;
-      this.atomMesh.setEnabled(false);
-      this.atomMesh.dispose();
-    }
-    if (this.bondMesh) {
-      this.bondMesh.isVisible = false;
-      this.bondMesh.setEnabled(false);
-      this.bondMesh.dispose();
-    }
+    // Dispose old meshes
+    this.atomMesh.dispose();
+    this.bondMesh.dispose();
 
-    // Clear scene index
+    // Clear scene index (drops ImpostorState references)
     this.app.world.sceneIndex.clear();
 
-    // Recreate base meshes (disabled by default)
+    // Recreate base meshes (hidden+disabled by createBaseMesh;
+    // ImpostorState.flush() will enable them when instances are added).
     this.atomMesh = this.createBaseMesh(
       "atom_base_renderer",
       "atomMat_impostor",
@@ -110,10 +103,6 @@ export class Artist {
       "bondMat_impostor",
       scene,
     );
-
-    // Keep meshes disabled until data is ready
-    this.atomMesh.setEnabled(false);
-    this.bondMesh.setEnabled(false);
   }
 
   // ============ Frame Rendering (Bulk) ============
@@ -180,8 +169,13 @@ export class Artist {
     const atomsBlock = frame.getBlock("atoms");
     const bondsBlock = frame.getBlock("bonds");
 
-    // --- ATOMS ---
-    if (!atomsBlock || atomsBlock.nrows() === 0) return;
+    // Empty frame: register layers so edit-mode can draw into them, but keep
+    // meshes hidden — Babylon renders the base mesh when there are no instances.
+    if (!atomsBlock || atomsBlock.nrows() === 0) {
+      sceneIndex.meshRegistry.registerAtomLayer(this.atomMesh);
+      sceneIndex.meshRegistry.registerBondLayer(this.bondMesh);
+      return;
+    }
     const atomCount = atomsBlock.nrows();
     const xCoords = atomsBlock.getColumnF32("x");
     const yCoords = atomsBlock.getColumnF32("y");
@@ -407,13 +401,6 @@ export class Artist {
     });
 
     await this.waitForMaterials(Boolean(bondBlockObj));
-    this.atomMesh.setEnabled(true);
-    this.atomMesh.isVisible = true;
-
-    if (bondBlockObj) {
-      this.bondMesh.setEnabled(true);
-      this.bondMesh.isVisible = true;
-    }
 
     this.app.events.emit("frame-rendered", { frame, box: _box });
     this.updateVisualGuide(this.findSliceModifier());
@@ -774,10 +761,10 @@ export class Artist {
 
     const mesh = MeshBuilder.CreatePlane(name, { size: 1.0 }, scene);
     mesh.material = material;
-    mesh.freezeWorldMatrix(); // Optimization
-    mesh.isVisible = false; // Hidden by default, activated by ImpostorState
-
-    // Ensure mesh starts with no instances to prevent rendering errors
+    mesh.freezeWorldMatrix();
+    // Start hidden+disabled; ImpostorState.flush() will enable when instances exist.
+    mesh.isVisible = false;
+    mesh.setEnabled(false);
     mesh.thinInstanceCount = 0;
 
     return mesh;

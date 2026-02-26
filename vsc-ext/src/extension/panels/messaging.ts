@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
@@ -23,6 +23,30 @@ export function onWebviewMessage(
   handler: (message: WebviewToHostMessage) => void,
 ): vscode.Disposable {
   return webview.onDidReceiveMessage(handler);
+}
+
+/**
+ * Handle saveFile message from webview: show native save dialog and write file.
+ */
+export async function handleSaveFile(
+  base64Data: string,
+  suggestedName: string,
+): Promise<void> {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+  const defaultUri = workspaceFolder
+    ? vscode.Uri.joinPath(workspaceFolder, suggestedName)
+    : vscode.Uri.file(suggestedName);
+
+  const uri = await vscode.window.showSaveDialog({
+    defaultUri,
+    filters: {
+      "Molecular files": ["pdb", "xyz", "lammps"],
+    },
+  });
+  if (!uri) return;
+
+  const binary = Buffer.from(base64Data, "base64");
+  await vscode.workspace.fs.writeFile(uri, binary);
 }
 
 /**

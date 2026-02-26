@@ -65,6 +65,14 @@ export class MolvisApp {
   // User settings (public API)
   public readonly settings: Settings;
 
+  /**
+   * Pluggable file-save handler. Override to integrate with host environment
+   * (e.g. VSCode webview → postMessage → extension host → showSaveDialog).
+   * Default: uses the File System Access API (showSaveFilePicker).
+   */
+  public saveFile: (blob: Blob, suggestedName: string) => Promise<void> =
+    defaultSaveFile;
+
   constructor(
     container: HTMLElement,
     config: MolvisConfig = {},
@@ -334,6 +342,11 @@ export class MolvisApp {
     if (this._isRunning) return;
     this._isRunning = true;
     this._world.start();
+
+    // Render the initial frame so mesh layers are registered and
+    // edit-mode can draw into an empty scene.
+    this.renderFrame(this._system.frame);
+
     logger.info("Molvis started successfully");
   }
 
@@ -532,4 +545,37 @@ export class MolvisApp {
       this.events.emit("frame-change", this._system.trajectory.currentIndex);
     }
   }
+}
+
+// File System Access API — not yet in lib.dom.d.ts
+declare global {
+  interface Window {
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string;
+      types?: { description?: string; accept: Record<string, string[]> }[];
+    }) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }>;
+  }
+}
+
+async function defaultSaveFile(blob: Blob, suggestedName: string): Promise<void> {
+  if (typeof window.showSaveFilePicker !== "function") {
+    throw new Error("Save dialog not available in this environment. Override app.saveFile to provide a custom implementation.");
+  }
+
+  const handle = await window.showSaveFilePicker({
+    suggestedName,
+    types: [
+      {
+        description: "Molecular structure files",
+        accept: {
+          "chemical/x-pdb": [".pdb"],
+          "chemical/x-xyz": [".xyz"],
+          "text/plain": [".lammps"],
+        },
+      },
+    ],
+  });
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
 }

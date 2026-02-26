@@ -29,32 +29,23 @@ export class CommonMenuItems {
     return {
       type: "button",
       title: "Export",
-      action: () => {
+      action: async () => {
         const frame = app.system.frame;
         if (!frame) {
           logger.warn("[CommonMenuItems] No Frame loaded, cannot export");
           return;
         }
 
-        const filename = window.prompt(
-          "Enter file name (e.g. model.pdb / model.xyz / model.lammps)",
-          "molvis.pdb",
-        );
-        if (!filename) {
-          return;
+        try {
+          const suggestedName = "molvis.pdb";
+          const format = inferFormatFromFilename(suggestedName, "pdb");
+          const payload = exportFrame(app.world.sceneIndex, { format, filename: suggestedName });
+          const blob = new Blob([payload.content], { type: payload.mime });
+          await app.saveFile(blob, payload.suggestedName);
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          throw err;
         }
-
-        const format = inferFormatFromFilename(filename, "pdb");
-        const payload = exportFrame(app.world.sceneIndex, { format, filename });
-        const blob = new Blob([payload.content], { type: payload.mime });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = payload.suggestedName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
       },
     };
   }

@@ -246,6 +246,12 @@ export class ImpostorState {
       return;
     }
 
+    // Ensure mesh is visible when it has instances
+    if (!this.mesh.isEnabled()) {
+      this.mesh.setEnabled(true);
+      this.mesh.isVisible = true;
+    }
+
     const matrixDesc = this.buffers.get("matrix");
     if (matrixDesc) {
       const view = matrixDesc.data.subarray(0, totalCount * matrixDesc.stride);
