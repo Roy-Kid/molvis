@@ -6,10 +6,13 @@ import { createControl } from "../builder";
  * MolvisFolder - Collapsible folder menu item with nested items
  */
 export class MolvisFolder extends MolvisElement {
-  private _data: MenuItem | null = null;
+  private _data: Extract<MenuItem, { type: "folder" }> | null = null;
   private _rendered = false;
 
   set data(item: MenuItem) {
+    if (item.type !== "folder") {
+      throw new Error("MolvisFolder only accepts folder menu items");
+    }
     this._data = item;
     if (!this._rendered) {
       this.render();
@@ -54,14 +57,14 @@ export class MolvisFolder extends MolvisElement {
 
     const title = document.createElement("div");
     title.className = "folder-title";
-    title.textContent = this._data?.title || "";
+    title.textContent = this._data?.title ?? "";
     this.root.appendChild(title);
 
     const itemsContainer = document.createElement("div");
     itemsContainer.className = "folder-items";
     this.root.appendChild(itemsContainer);
 
-    if (this._data?.items) {
+    if (this._data) {
       for (const item of this._data.items) {
         const control = createControl(item);
         if (control) {

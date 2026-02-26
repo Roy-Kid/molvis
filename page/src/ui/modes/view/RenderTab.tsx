@@ -11,96 +11,103 @@ interface RenderTabProps {
   app: Molvis | null;
 }
 
+type UIState = NonNullable<MolvisConfig["ui"]>;
+type GridState = ReturnType<Molvis["settings"]["getGrid"]>;
+type GraphicsState = ReturnType<Molvis["settings"]["getGraphics"]>;
+
+interface RenderState {
+  ui: UIState;
+  grid: GridState;
+  graphics: GraphicsState;
+}
+
+function requireValue<T>(value: T | undefined, key: string): T {
+  if (value === undefined) {
+    throw new Error(`Missing required config key: ${key}`);
+  }
+  return value;
+}
+
 export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
-  // Local buffer for settings (transactional)
-  const [config, setConfig] = useState<MolvisConfig>({});
+  const [state, setState] = useState<RenderState | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     if (!app) return;
-    // Initial sync
-    // We ensure useRightHandedSystem is always true locally too, mirroring wrapper enforcement
-    const current = app.config ? { ...app.config } : {};
-    current.useRightHandedSystem = true;
-
-    setConfig(current);
+    if (!app.config.ui) {
+      throw new Error("Missing required config key: ui");
+    }
+    setState({
+      ui: { ...app.config.ui },
+      grid: { ...app.settings.getGrid() },
+      graphics: { ...app.settings.getGraphics() },
+    });
     setHasChanges(false);
   }, [app]);
 
-  // Update local buffer only
-  const updateLocal = (newConfig: Partial<MolvisConfig>) => {
-    setConfig((prev) => {
-      const merged = { ...prev, ...newConfig };
-      if (newConfig.grid && prev.grid)
-        merged.grid = { ...prev.grid, ...newConfig.grid };
-      if (newConfig.graphics && prev.graphics)
-        merged.graphics = { ...prev.graphics, ...newConfig.graphics };
-      return merged;
+  const updateUI = <K extends keyof UIState>(key: K, value: UIState[K]) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, ui: { ...prev.ui, [key]: value } };
     });
     setHasChanges(true);
   };
 
-  const updateGrid = (
-    key: keyof NonNullable<MolvisConfig["grid"]>,
-    value: any,
+  const updateGrid = <K extends keyof GridState>(
+    key: K,
+    value: GridState[K],
   ) => {
-    updateLocal({
-      grid: {
-        ...(config.grid || {}),
-        [key]: value,
-      },
+    setState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, grid: { ...prev.grid, [key]: value } };
     });
+    setHasChanges(true);
   };
 
-  const updateGraphics = (
-    key: keyof NonNullable<MolvisConfig["graphics"]>,
-    value: any,
+  const updateGraphics = <K extends keyof GraphicsState>(
+    key: K,
+    value: GraphicsState[K],
   ) => {
-    updateLocal({
-      graphics: {
-        ...(config.graphics || {}),
-        [key]: value,
-      },
+    setState((prev) => {
+      if (!prev) return prev;
+      return { ...prev, graphics: { ...prev.graphics, [key]: value } };
     });
-  };
-
-  const updateUI = (
-    key: keyof NonNullable<MolvisConfig["uiComponents"]>,
-    value: boolean,
-  ) => {
-    updateLocal({
-      uiComponents: {
-        ...(config.uiComponents || {}),
-        [key]: value,
-      },
-    });
-  };
-
-  const checkUI = (key: keyof NonNullable<MolvisConfig["uiComponents"]>) => {
-    return !!config.uiComponents?.[key];
-  };
-
-  const checkGraphic = (key: keyof NonNullable<MolvisConfig["graphics"]>) => {
-    return !!config.graphics?.[key];
+    setHasChanges(true);
   };
 
   const handleApply = () => {
-    if (!app) return;
-    console.log("[RenderTab] Applying settings:", config);
-
-    // Enforce RHS again just in case
-    const payload = { ...config, useRightHandedSystem: true };
-
-    app.setConfig(payload);
+    if (!app || !state) return;
+    app.setConfig({
+      useRightHandedSystem: true,
+      ui: state.ui,
+    });
+    app.settings.setGrid(state.grid);
+    app.settings.setGraphics(state.graphics);
     setHasChanges(false);
-
-    // Force a re-render/resize if needed to apply certain gfx settings
-    // app.resize();
   };
+
+  if (!state) {
+    return null;
+  }
+
+  const showViewPanel = requireValue(state.ui.showViewPanel, "ui.showViewPanel");
+  const showPerfPanel = requireValue(state.ui.showPerfPanel, "ui.showPerfPanel");
+  const showTrajPanel = requireValue(state.ui.showTrajPanel, "ui.showTrajPanel");
+  const gridEnabled = requireValue(state.grid.enabled, "grid.enabled");
+  const gridOpacity = requireValue(state.grid.opacity, "grid.opacity");
+  const gridSize = requireValue(state.grid.size, "grid.size");
+  const gfxShadows = requireValue(state.graphics.shadows, "graphics.shadows");
+  const gfxSsao = requireValue(state.graphics.ssao, "graphics.ssao");
+  const gfxBloom = requireValue(state.graphics.bloom, "graphics.bloom");
+  const gfxFxaa = requireValue(state.graphics.fxaa, "graphics.fxaa");
+  const gfxDof = requireValue(state.graphics.dof, "graphics.dof");
+  const hwScaling = requireValue(
+    state.graphics.hardwareScaling,
+    "graphics.hardwareScaling",
+  );
 
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
-      {/* UI Settings */}
       <div className="space-y-4">
         <h4 className="text-sm font-medium leading-none text-muted-foreground">
           User Interface
@@ -110,7 +117,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="ui-view-panel">View Type (Top-Left)</Label>
           <Switch
             id="ui-view-panel"
-            checked={checkUI("showViewPanel")}
+            checked={showViewPanel}
             onCheckedChange={(c) => updateUI("showViewPanel", c)}
           />
         </div>
@@ -119,7 +126,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="ui-perf-panel">FPS Counter (Bottom-Right)</Label>
           <Switch
             id="ui-perf-panel"
-            checked={checkUI("showPerfPanel")}
+            checked={showPerfPanel}
             onCheckedChange={(c) => updateUI("showPerfPanel", c)}
           />
         </div>
@@ -128,7 +135,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="ui-traj-panel">Trajectory Controls</Label>
           <Switch
             id="ui-traj-panel"
-            checked={checkUI("showTrajPanel")}
+            checked={showTrajPanel}
             onCheckedChange={(c) => updateUI("showTrajPanel", c)}
           />
         </div>
@@ -136,7 +143,6 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      {/* Grid Settings */}
       <div className="space-y-4">
         <h4 className="text-sm font-medium leading-none text-muted-foreground">
           Grid
@@ -146,29 +152,29 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="show-grid">Enabled</Label>
           <Switch
             id="show-grid"
-            checked={config.grid?.enabled ?? true}
+            checked={gridEnabled}
             onCheckedChange={(c) => updateGrid("enabled", c)}
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Opacity ({config.grid?.opacity ?? 0.5})</Label>
+          <Label>Opacity ({gridOpacity})</Label>
           <Slider
             min={0}
             max={1}
             step={0.1}
-            value={[config.grid?.opacity ?? 0.5]}
+            value={[gridOpacity]}
             onValueChange={([v]) => updateGrid("opacity", v)}
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Size ({config.grid?.size ?? 100})</Label>
+          <Label>Size ({gridSize})</Label>
           <Slider
             min={10}
             max={500}
             step={10}
-            value={[config.grid?.size ?? 100]}
+            value={[gridSize]}
             onValueChange={([v]) => updateGrid("size", v)}
           />
         </div>
@@ -176,7 +182,6 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      {/* Graphics Settings */}
       <div className="space-y-4">
         <h4 className="text-sm font-medium leading-none text-muted-foreground">
           Graphics
@@ -186,7 +191,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="gfx-shadows">Shadows</Label>
           <Switch
             id="gfx-shadows"
-            checked={checkGraphic("shadows")}
+            checked={gfxShadows}
             onCheckedChange={(c) => updateGraphics("shadows", c)}
           />
         </div>
@@ -195,7 +200,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="gfx-ssao">SSAO (Ambient Occlusion)</Label>
           <Switch
             id="gfx-ssao"
-            checked={checkGraphic("ssao")}
+            checked={gfxSsao}
             onCheckedChange={(c) => updateGraphics("ssao", c)}
           />
         </div>
@@ -204,7 +209,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="gfx-bloom">Bloom</Label>
           <Switch
             id="gfx-bloom"
-            checked={checkGraphic("bloom")}
+            checked={gfxBloom}
             onCheckedChange={(c) => updateGraphics("bloom", c)}
           />
         </div>
@@ -213,7 +218,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="gfx-fxaa">FXAA (Anti-Aliasing)</Label>
           <Switch
             id="gfx-fxaa"
-            checked={checkGraphic("fxaa")}
+            checked={gfxFxaa}
             onCheckedChange={(c) => updateGraphics("fxaa", c)}
           />
         </div>
@@ -222,15 +227,13 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
           <Label htmlFor="gfx-dof">Depth of Field</Label>
           <Switch
             id="gfx-dof"
-            checked={checkGraphic("dof")}
+            checked={gfxDof}
             onCheckedChange={(c) => updateGraphics("dof", c)}
           />
         </div>
 
         <div className="space-y-2">
-          <Label>
-            Hardware Scaling ({config.graphics?.hardwareScaling ?? 1.0})
-          </Label>
+          <Label>Hardware Scaling ({hwScaling})</Label>
           <div className="text-xs text-muted-foreground mb-1">
             Lower is faster, Higher is sharper
           </div>
@@ -238,7 +241,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
             min={0.5}
             max={2.0}
             step={0.1}
-            value={[config.graphics?.hardwareScaling ?? 1.0]}
+            value={[hwScaling]}
             onValueChange={([v]) => updateGraphics("hardwareScaling", v)}
           />
         </div>
@@ -246,7 +249,6 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      {/* Apply Button */}
       <div className="pt-2">
         <Button
           className="w-full"

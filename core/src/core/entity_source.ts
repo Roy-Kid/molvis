@@ -1,4 +1,4 @@
-import type { Block } from "molwasm";
+import type { Block } from "@molcrafts/molrs";
 
 // ============ Entity Types ============
 
@@ -11,7 +11,6 @@ export interface AtomMeta {
   atomId: number;
   element: string;
   position: { x: number; y: number; z: number };
-  [key: string]: unknown; // Allow arbitrary attributes
 }
 
 export interface BondMeta {
@@ -22,7 +21,6 @@ export interface BondMeta {
   order: number;
   start: { x: number; y: number; z: number };
   end: { x: number; y: number; z: number };
-  [key: string]: unknown; // Allow arbitrary attributes
 }
 
 export interface BoxMeta {
@@ -58,52 +56,39 @@ export class AtomSource {
   setAttribute(id: number, key: string, value: unknown) {
     let meta = this.edits.get(id);
     if (!meta) {
-      // Need to fetch base meta to clone it?
-      // Or can we store PARTIAL edits?
-      // The system expects full AtomMeta in edits for rendering?
-      // SceneIndex.updateAtom merges edits.
-      // But here AtomSource.getMeta returns AtomMeta | null.
-      // If we only store partial, getMeta needs to merge on fly.
-      // Current getMeta: "if (edit) return edit;" -> implies edit MUST be complete override.
-
-      // To support partial updates without fetching full frame data every time we make a small edit:
-      // We should probably fetch it ONCE here.
-
       const base = this.getFromFrame(id);
-      if (!base) {
-        // If ID is out of frame range, we can't really set attribute unless we are creating new atom.
-        return;
-      }
+      if (!base) return;
       meta = { ...base };
       this.edits.set(id, meta);
     }
-    meta[key] = value;
+    if (key === "x" || key === "y" || key === "z") {
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) {
+        throw new Error(`Invalid coordinate value for atom ${id}.${key}`);
+      }
+      meta.position[key] = numericValue;
+      return;
+    }
+
+    (meta as unknown as Record<string, unknown>)[key] = value;
   }
 
   /**
    * Get a specific attribute value.
    */
   getAttribute(id: number, key: string): unknown {
-    // 1. Check edits
     const edit = this.edits.get(id);
     if (edit) {
-      // Special handling for position coordinates which are nested
       if (key === "x") return edit.position.x;
       if (key === "y") return edit.position.y;
       if (key === "z") return edit.position.z;
-
       if (key in edit) {
-        return edit[key];
+        return (edit as unknown as Record<string, unknown>)[key];
       }
     }
 
-    // 2. Check frame
     if (this.frameBlock && id < this.frameBlock.nrows()) {
-      // Special handling for known columns to use TypedArrays?
-      // General fallback
       if (key === "x" || key === "y" || key === "z") {
-        // Optimization: getFromFrame does this.
-        // But we want just one value.
         const col = this.frameBlock.getColumnF32(key);
         if (col) return col[id];
       }
@@ -111,43 +96,21 @@ export class AtomSource {
         const col = this.frameBlock.getColumnStrings(key);
         if (col) return col[id];
       }
-
-      // Generic generic
-      // Check if F32
-      // We don't know type easily without trying?
-      // Block has `keys()`.
-
-      // This is slow if we do it for every attribute read.
-      // But intended for UI inspection.
-
-      // Try F32 first (most common)
-      try {
-        const col = this.frameBlock.getColumnF32(key);
-        if (col) return col[id];
-      } catch (e) {
-        // Ignore
-      }
-
-      try {
-        const col = this.frameBlock.getColumnStrings(key);
-        if (col) return col[id];
-      } catch (e) {
-        // Ignore
-      }
+      const col = this.frameBlock.getColumnF32(key);
+      if (col) return col[id];
+      const strCol = this.frameBlock.getColumnStrings(key);
+      if (strCol) return strCol[id];
     }
     return undefined;
   }
 
   getMeta(id: number): AtomMeta | null {
-    // 1. Check local edits first (overlay)
     const edit = this.edits.get(id);
-    if (edit) return edit; // Assumes edit is FULL meta
+    if (edit) return edit;
 
-    // 2. Check frame data
     if (this.frameBlock && id < this.frameBlock.nrows()) {
       return this.getFromFrame(id);
     }
-
     return null;
   }
 
@@ -161,16 +124,10 @@ export class AtomSource {
 
     if (!x || !y || !z || !elements) return null;
 
-    // Construct object with ALL columns from frame?
-    // Current implementation only returns specific AtomMeta fields.
-    // If we want `getMeta` to return everything, we need to iterate keys.
-    // But `getFromFrame` is called often.
-    // We will stick to minimal AtomMeta for now, and `getAttribute` for extras.
-
     return {
       type: "atom",
       atomId: index,
-      element: elements[index] || "C",
+      element: elements[index],
       position: { x: x[index], y: y[index], z: z[index] },
     };
   }
@@ -187,34 +144,17 @@ export class AtomSource {
   }
 
   *getAllIds(): IterableIterator<number> {
+    // Yield all frame IDs (0..frameCount-1), whether overridden by edits or not
     if (this.frameBlock) {
       const count = this.frameBlock.nrows();
       for (let i = 0; i < count; i++) {
-        if (!this.edits.has(i)) {
-          yield i;
-        }
+        yield i;
       }
     }
-
+    // Yield edit-only IDs that are outside the frame range
+    const frameCount = this.frameBlock?.nrows() ?? 0;
     for (const id of this.edits.keys()) {
-      if (!this.frameBlock || id >= this.frameBlock.nrows()) {
-        yield id;
-      } else {
-        // Must yield overridden IDs too?
-        // Wait, logic above yields `i` if !edits.has(i).
-        // So if edits.has(i), it wasn't yielded.
-        // So we MUST yield it here.
-        // Previous logic was confused.
-        // Correct logic:
-        // Yield all from edits.
-        // Yield from frame IF NOT in edits.
-
-        // But `edits.keys()` iteration order is arbitrary.
-        // Iterating 0..N is ordered.
-
-        // Let's stick to: Iterate 0..N (Frame). If in edits, yield from edits?
-        // No, this generator yields IDs. Metadata retrieval is separate.
-        // Changing implementation to be cleaner:
+      if (id >= frameCount) {
         yield id;
       }
     }
@@ -247,19 +187,24 @@ export class BondSource {
       meta = { ...base };
       this.edits.set(id, meta);
     }
-    meta[key] = value;
+    (meta as unknown as Record<string, unknown>)[key] = value;
   }
 
   getAttribute(id: number, key: string): unknown {
     const edit = this.edits.get(id);
-    if (edit && key in edit) return edit[key];
+    if (edit && key in edit) {
+      return (edit as unknown as Record<string, unknown>)[key];
+    }
 
     if (this.frameBlock && id < this.frameBlock.nrows()) {
       if (key === "order") {
         const col = this.frameBlock.getColumnU8("order");
         if (col) return col[id];
       }
-      // Generic fallback similar to atoms...
+      const col = this.frameBlock.getColumnF32(key);
+      if (col) return col[id];
+      const strCol = this.frameBlock.getColumnStrings(key);
+      if (strCol) return strCol[id];
     }
     return undefined;
   }
@@ -316,15 +261,14 @@ export class BondSource {
     if (this.frameBlock) {
       const count = this.frameBlock.nrows();
       for (let i = 0; i < count; i++) {
-        if (!this.edits.has(i)) yield i;
+        yield i;
       }
     }
+    const frameCount = this.frameBlock?.nrows() ?? 0;
     for (const id of this.edits.keys()) {
-      // Yield edits. We yield frame IDs if not in edits above.
-      // If edit is overriding frame, we yield it here.
-      // If edit is new ID, we yield it here.
-      // So simply yielding all edits is correct IF we skipped them in the first loop.
-      yield id;
+      if (id >= frameCount) {
+        yield id;
+      }
     }
   }
 }

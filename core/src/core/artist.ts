@@ -3,13 +3,16 @@ import {
   Engine,
   type Mesh,
   MeshBuilder,
+  type LinesMesh,
   type Scene,
   ShaderMaterial,
   Vector3,
 } from "@babylonjs/core";
-import type { Block, Box, Frame } from "molwasm";
+import type { Block, Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 import { encodePickingColor } from "./picker";
+
+import { SliceModifier } from "../modifiers/SliceModifier";
 import "./shaders/impostor";
 
 /**
@@ -24,8 +27,9 @@ export interface ArtistOptions {
  */
 export interface DrawAtomOptions {
   element: string;
+  name?: string;
   radius?: number;
-  color?: string; // Hex color
+  color?: string;
   atomId?: number;
 }
 
@@ -71,22 +75,31 @@ export class Artist {
       "bondMat_impostor",
       scene,
     );
-
-    // Note: Pools are now managed by SceneIndex. We just provide the Meshes.
   }
 
   /**
    * Clear all rendered data.
+   * Meshes are kept hidden and disabled until renderFrame populates them.
    */
   public clear(): void {
+    const scene = this.app.world.scene;
+
+    // Hide and dispose old meshes
+    if (this.atomMesh) {
+      this.atomMesh.isVisible = false;
+      this.atomMesh.setEnabled(false);
+      this.atomMesh.dispose();
+    }
+    if (this.bondMesh) {
+      this.bondMesh.isVisible = false;
+      this.bondMesh.setEnabled(false);
+      this.bondMesh.dispose();
+    }
+
+    // Clear scene index
     this.app.world.sceneIndex.clear();
 
-    // Dispose proper meshes
-    if (this.atomMesh) this.atomMesh.dispose();
-    if (this.bondMesh) this.bondMesh.dispose();
-
-    // Recreate base meshes
-    const scene = this.app.world.scene;
+    // Recreate base meshes (disabled by default)
     this.atomMesh = this.createBaseMesh(
       "atom_base_renderer",
       "atomMat_impostor",
@@ -97,39 +110,87 @@ export class Artist {
       "bondMat_impostor",
       scene,
     );
+
+    // Keep meshes disabled until data is ready
+    this.atomMesh.setEnabled(false);
+    this.bondMesh.setEnabled(false);
   }
 
   // ============ Frame Rendering (Bulk) ============
 
   /**
+   * Ensure shader variants used by thin instances are fully compiled before enabling meshes.
+   */
+  private async waitForMaterials(includeBonds: boolean): Promise<void> {
+    const compileOne = async (
+      mesh: Mesh,
+      material: ShaderMaterial | null,
+      materialLabel: string,
+    ) => {
+      if (!material) {
+        throw new Error(`Missing shader material for ${materialLabel}`);
+      }
+
+      // Check the exact variant used by this renderer (instanced / thin-instanced path).
+      if (material.isReady(mesh, true)) return;
+
+      await material.forceCompilationAsync(mesh, { useInstances: true });
+
+      if (!material.isReady(mesh, true)) {
+        throw new Error(
+          `Shader material "${material.name}" for ${materialLabel} is not ready after compilation`,
+        );
+      }
+    };
+
+    const tasks: Promise<void>[] = [
+      compileOne(
+        this.atomMesh,
+        this.atomMesh.material as ShaderMaterial | null,
+        "atoms",
+      ),
+    ];
+
+    if (includeBonds) {
+      tasks.push(
+        compileOne(
+          this.bondMesh,
+          this.bondMesh.material as ShaderMaterial | null,
+          "bonds",
+        ),
+      );
+    }
+
+    await Promise.all(tasks);
+  }
+
+  /**
    * Render a Frame into SceneIndex.
    * Computes render buffers and registers everything.
    */
-  public renderFrame(
+  public async renderFrame(
     frame: Frame,
     _box?: Box,
     options?: {
-      atoms?: { radii?: number[]; impostor?: boolean };
+      atoms?: { radii?: number[]; visible?: boolean[]; impostor?: boolean };
       bonds?: { radii?: number; impostor?: boolean };
     },
-  ): void {
+  ): Promise<void> {
     const sceneIndex = this.app.world.sceneIndex;
-    // Optionally clear before rendering if this is a replacement (usually DrawFrame does clear)
-    // But renderFrame logic itself is "load data".
-
     const atomsBlock = frame.getBlock("atoms");
     const bondsBlock = frame.getBlock("bonds");
 
     // --- ATOMS ---
     if (!atomsBlock || atomsBlock.nrows() === 0) return;
-
     const atomCount = atomsBlock.nrows();
     const xCoords = atomsBlock.getColumnF32("x");
     const yCoords = atomsBlock.getColumnF32("y");
     const zCoords = atomsBlock.getColumnF32("z");
-    const elements = atomsBlock.getColumnStrings("element");
+    const elementsColumn = atomsBlock.getColumnStrings("element");
+    const typesColumn = atomsBlock.getColumnStrings("type");
 
-    if (!xCoords || !yCoords || !zCoords) return;
+    if (!elementsColumn && !typesColumn) throw new Error("No elements or types column found");
+    if (!xCoords || !yCoords || !zCoords) throw new Error("No coordinates column");
 
     // Buffers for Atom Pool
     const atomMatrix = new Float32Array(atomCount * 16);
@@ -144,18 +205,49 @@ export class Artist {
     >();
     const customRadii = options?.atoms?.radii;
 
+    // Check for visibility options
+    const visibleArr = options?.atoms?.visible;
+
+    // Helper to check visibility
+    const isVisible = (i: number) => {
+      if (visibleArr) return visibleArr[i];
+      return true;
+    };
+
     for (let i = 0; i < atomCount; i++) {
-      const element = elements ? elements[i] : "C";
-      let style = styleCache.get(element);
-      if (!style) {
-        const s = styleManager.getAtomStyle(element);
-        const c = Color3.FromHexString(s.color).toLinearSpace();
-        style = { r: c.r, g: c.g, b: c.b, a: s.alpha ?? 1.0, radius: s.radius };
-        styleCache.set(element, style);
+      // Logic: Prefer element. If missing, use type.
+      // If we use type, we use a different coloring strategy (hash)
+      // If element is present, we use CPK.
+
+      let style: { r: number; g: number; b: number; a: number; radius: number };
+
+      if (elementsColumn) {
+        const element = elementsColumn[i];
+        let cached = styleCache.get(element);
+        if (!cached) {
+          const s = styleManager.getAtomStyle(element);
+          const c = Color3.FromHexString(s.color).toLinearSpace();
+          cached = { r: c.r, g: c.g, b: c.b, a: s.alpha ?? 1.0, radius: s.radius };
+          styleCache.set(element, cached);
+        }
+        style = cached;
+      } else {
+        // Fallback to type
+        const type = typesColumn ? typesColumn[i] : "UNK";
+        let cached = styleCache.get("TYPE:" + type);
+        if (!cached) {
+          // DELEGATE TO STYLE MANAGER
+          const s = styleManager.getTypeStyle(type);
+          const c = Color3.FromHexString(s.color).toLinearSpace();
+          cached = { r: c.r, g: c.g, b: c.b, a: 1.0, radius: s.radius };
+          styleCache.set("TYPE:" + type, cached);
+        }
+        style = cached;
       }
 
       const radius = customRadii?.[i] ?? style.radius;
       const scale = radius * 2;
+
       const matOffset = i * 16;
       const idx4 = i * 4;
 
@@ -174,13 +266,11 @@ export class Artist {
       atomData[idx4 + 2] = zCoords[i];
       atomData[idx4 + 3] = radius;
 
-      // Color
       atomColor[idx4 + 0] = style.r;
       atomColor[idx4 + 1] = style.g;
       atomColor[idx4 + 2] = style.b;
-      atomColor[idx4 + 3] = style.a;
+      atomColor[idx4 + 3] = isVisible(i) ? style.a : 0.2;
 
-      // Picking
       const pCol = encodePickingColor(this.atomMesh.uniqueId, i);
       atomPick[idx4 + 0] = pCol[0];
       atomPick[idx4 + 1] = pCol[1];
@@ -214,25 +304,14 @@ export class Artist {
         const bondPick = new Float32Array(bondCount * 4);
 
         const bondRadius = options?.bonds?.radii ?? 0.1;
-        const bondStyle = styleManager.getBondStyle(1);
-        const defBondCol = Color3.FromHexString(
-          bondStyle.color,
-        ).toLinearSpace();
-        const defBondAlpha = bondStyle.alpha ?? 1.0;
 
-        // Caches for Bond Colors derived from Atoms
-        const elemColors = new Map<string, Float32Array>();
-        // Helper to get element color
-        const getElemColor = (e: string) => {
-          let ec = elemColors.get(e);
-          if (!ec) {
-            const s = styleManager.getAtomStyle(e);
-            const c = Color3.FromHexString(s.color).toLinearSpace();
-            ec = new Float32Array([c.r, c.g, c.b, s.alpha ?? 1.0]);
-            elemColors.set(e, ec);
-          }
-          return ec;
-        };
+        const atomColors = new Float32Array(atomCount * 4);
+        for (let i = 0; i < atomCount; i++) {
+          atomColors[i * 4 + 0] = atomColor[i * 4 + 0];
+          atomColors[i * 4 + 1] = atomColor[i * 4 + 1];
+          atomColors[i * 4 + 2] = atomColor[i * 4 + 2];
+          atomColors[i * 4 + 3] = atomColor[i * 4 + 3];
+        }
 
         const TMP_VEC_1 = new Vector3();
         const TMP_VEC_2 = new Vector3();
@@ -243,13 +322,13 @@ export class Artist {
           const i = iAtoms[b];
           const j = jAtoms[b];
 
+          const visible = isVisible(i) && isVisible(j);
+
           TMP_VEC_1.set(xCoords[i], yCoords[i], zCoords[i]);
           TMP_VEC_2.set(xCoords[j], yCoords[j], zCoords[j]);
 
           // center = (p1 + p2) * 0.5
-          TMP_CENTER.copyFrom(TMP_VEC_1)
-            .addInPlace(TMP_VEC_2)
-            .scaleInPlace(0.5);
+          TMP_CENTER.copyFrom(TMP_VEC_1).addInPlace(TMP_VEC_2).scaleInPlace(0.5);
 
           // direction
           TMP_DIR.copyFrom(TMP_VEC_2).subtractInPlace(TMP_VEC_1);
@@ -285,32 +364,18 @@ export class Artist {
           // Split (simplified)
           bondSplit[idx4 + 0] = 0;
 
-          // Colors
-          let c0: Float32Array;
-          let c1: Float32Array;
-          if (elements) {
-            const e0 = elements[i] ?? "C";
-            const e1 = elements[j] ?? "C";
-            c0 = getElemColor(e0);
-            c1 = getElemColor(e1);
-          } else {
-            c0 = new Float32Array([
-              defBondCol.r,
-              defBondCol.g,
-              defBondCol.b,
-              defBondAlpha,
-            ]);
-            c1 = c0;
-          }
+          // Colors - grab directly from atom colors we calculated
+          const alpha = visible ? 1.0 : 0.2;
 
-          bondCol0[idx4 + 0] = c0[0];
-          bondCol0[idx4 + 1] = c0[1];
-          bondCol0[idx4 + 2] = c0[2];
-          bondCol0[idx4 + 3] = c0[3];
-          bondCol1[idx4 + 0] = c1[0];
-          bondCol1[idx4 + 1] = c1[1];
-          bondCol1[idx4 + 2] = c1[2];
-          bondCol1[idx4 + 3] = c1[3];
+          bondCol0[idx4 + 0] = atomColors[i * 4 + 0];
+          bondCol0[idx4 + 1] = atomColors[i * 4 + 1];
+          bondCol0[idx4 + 2] = atomColors[i * 4 + 2];
+          bondCol0[idx4 + 3] = atomColors[i * 4 + 3] * alpha;
+
+          bondCol1[idx4 + 0] = atomColors[j * 4 + 0];
+          bondCol1[idx4 + 1] = atomColors[j * 4 + 1];
+          bondCol1[idx4 + 2] = atomColors[j * 4 + 2];
+          bondCol1[idx4 + 3] = atomColors[j * 4 + 3] * alpha;
 
           // Picking
           const p = encodePickingColor(this.bondMesh.uniqueId, b);
@@ -331,7 +396,7 @@ export class Artist {
       }
     }
 
-    // DELEGATE TO SCENE INDEX
+    // ... registerFrame ...
     sceneIndex.registerFrame({
       atomMesh: this.atomMesh,
       bondMesh: this.bondMesh,
@@ -341,10 +406,180 @@ export class Artist {
       bondBuffers,
     });
 
-    // Box rendering logic (if box passed)
-    // Usually box is handled by separate command or app logic, but Artist could own it.
-    // For now, let's keep box logic outside or just allow calling drawBox here.
-    // The original DrawFrameCommand handled box separately.
+    await this.waitForMaterials(Boolean(bondBlockObj));
+    this.atomMesh.setEnabled(true);
+    this.atomMesh.isVisible = true;
+
+    if (bondBlockObj) {
+      this.bondMesh.setEnabled(true);
+      this.bondMesh.isVisible = true;
+    }
+
+    this.app.events.emit("frame-rendered", { frame, box: _box });
+    this.updateVisualGuide(this.findSliceModifier());
+  }
+
+  /**
+   * Fast-path update: refreshes atom/bond positions and visibility without recreating meshes.
+   */
+  public refreshFrame(frame: Frame): void {
+    const atomsBlock = frame.getBlock("atoms");
+    if (atomsBlock && atomsBlock.nrows() > 0) {
+      const x = atomsBlock.getColumnF32("x");
+      const y = atomsBlock.getColumnF32("y");
+      const z = atomsBlock.getColumnF32("z");
+
+      const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+
+      if (x && y && z && atomState) {
+        const count = Math.min(atomsBlock.nrows(), atomState.count);
+        const matDesc = atomState.buffers.get("matrix");
+        const dataDesc = atomState.buffers.get("instanceData");
+
+        if (matDesc && dataDesc) {
+          for (let i = 0; i < count; i++) {
+            // Update Matrix (pos at 12, 13, 14)
+            matDesc.data[i * 16 + 12] = x[i];
+            matDesc.data[i * 16 + 13] = y[i];
+            matDesc.data[i * 16 + 14] = z[i];
+
+            // Update Data (pos at 0, 1, 2)
+            dataDesc.data[i * 4 + 0] = x[i];
+            dataDesc.data[i * 4 + 1] = y[i];
+            dataDesc.data[i * 4 + 2] = z[i];
+          }
+          atomState.mesh.thinInstanceBufferUpdated("matrix");
+          atomState.mesh.thinInstanceBufferUpdated("instanceData");
+        }
+
+        const bondsBlock = frame.getBlock("bonds");
+        const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+
+        if (bondsBlock && bondState) {
+          const iAtoms = bondsBlock.getColumnU32("i");
+          const jAtoms = bondsBlock.getColumnU32("j");
+          const matB = bondState.buffers.get("matrix");
+          const d0B = bondState.buffers.get("instanceData0");
+          const d1B = bondState.buffers.get("instanceData1");
+
+          if (iAtoms && jAtoms && matB && d0B && d1B) {
+            const bCount = Math.min(bondsBlock.nrows(), bondState.count);
+            const tmp1 = new Vector3();
+            const tmp2 = new Vector3();
+            const tmpC = new Vector3();
+            const tmpD = new Vector3();
+
+            for (let b = 0; b < bCount; b++) {
+              const i = iAtoms[b];
+              const j = jAtoms[b];
+
+              tmp1.set(x[i], y[i], z[i]);
+              tmp2.set(x[j], y[j], z[j]);
+
+              tmpC.copyFrom(tmp1).addInPlace(tmp2).scaleInPlace(0.5);
+              tmpD.copyFrom(tmp2).subtractInPlace(tmp1);
+              let dist = tmpD.length();
+              if (dist > 1e-8) tmpD.scaleInPlace(1 / dist);
+              else tmpD.set(0, 1, 0);
+
+              const radius = d0B.data[b * 4 + 3];
+              const scale = dist + radius * 2;
+
+              // Matrix
+              matB.data[b * 16 + 0] = scale;
+              matB.data[b * 16 + 5] = scale;
+              matB.data[b * 16 + 10] = scale;
+              matB.data[b * 16 + 12] = tmpC.x;
+              matB.data[b * 16 + 13] = tmpC.y;
+              matB.data[b * 16 + 14] = tmpC.z;
+
+              // Data0
+              d0B.data[b * 4 + 0] = tmpC.x;
+              d0B.data[b * 4 + 1] = tmpC.y;
+              d0B.data[b * 4 + 2] = tmpC.z;
+
+              // Data1
+              d1B.data[b * 4 + 0] = tmpD.x;
+              d1B.data[b * 4 + 1] = tmpD.y;
+              d1B.data[b * 4 + 2] = tmpD.z;
+              d1B.data[b * 4 + 3] = dist;
+            }
+            bondState.mesh.thinInstanceBufferUpdated("matrix");
+            bondState.mesh.thinInstanceBufferUpdated("instanceData0");
+            bondState.mesh.thinInstanceBufferUpdated("instanceData1");
+          }
+        }
+      }
+    }
+
+    const sliceMod = this.findSliceModifier();
+    this.updateVisualGuide(sliceMod);
+    if (!sliceMod?.visibilityMask) return;
+    const visMask = sliceMod.visibilityMask;
+
+    const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+    if (!atomState) return;
+
+    const instanceColorDesc = atomState.buffers.get("instanceColor");
+    if (!instanceColorDesc) return;
+
+    const totalCount = atomState.frameOffset + atomState.count;
+    for (let i = 0; i < totalCount; i++) {
+      instanceColorDesc.data[i * 4 + 3] = visMask[i] ? 1.0 : 0.0;
+    }
+    atomState.mesh.thinInstanceBufferUpdated("instanceColor");
+
+    const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+    if (!bondState) return;
+
+    const bondColor0 = bondState.buffers.get("instanceColor0");
+    const bondColor1 = bondState.buffers.get("instanceColor1");
+    const bondsBlock = frame.getBlock("bonds");
+    if (!bondsBlock || !bondColor0 || !bondColor1) return;
+
+    const iAtoms = bondsBlock.getColumnU32("i");
+    const jAtoms = bondsBlock.getColumnU32("j");
+    if (!iAtoms || !jAtoms) return;
+
+    const safeCount = Math.min(bondsBlock.nrows(), bondState.frameOffset);
+    for (let b = 0; b < safeCount; b++) {
+      const alpha = (!visMask[iAtoms[b]] || !visMask[jAtoms[b]]) ? 0.0 : 1.0;
+      bondColor0.data[b * 4 + 3] = alpha;
+      bondColor1.data[b * 4 + 3] = alpha;
+    }
+    bondState.mesh.thinInstanceBufferUpdated("instanceColor0");
+    bondState.mesh.thinInstanceBufferUpdated("instanceColor1");
+  }
+
+  private findSliceModifier(): SliceModifier | null {
+    for (const mod of this.app.modifierPipeline.getModifiers()) {
+      if (mod instanceof SliceModifier && mod.enabled) return mod;
+    }
+    return null;
+  }
+
+  /**
+   * Update the visual guide wireframe mesh from the SliceModifier's guideLines.
+   */
+  private updateVisualGuide(sliceMod: SliceModifier | null): void {
+    const scene = this.app.world.scene;
+    const existing = scene.getMeshByName("visual_guide_mesh") as LinesMesh | null;
+
+    if (!sliceMod || sliceMod.guideLines.length === 0) {
+      if (existing) existing.dispose();
+      return;
+    }
+
+    const lines: Vector3[][] = [];
+    for (const guide of sliceMod.guideLines) {
+      lines.push(guide.points.map(([x, y, z]) => new Vector3(x, y, z)));
+    }
+
+    if (existing) existing.dispose();
+    const guideMesh = MeshBuilder.CreateLineSystem("visual_guide_mesh", { lines }, scene);
+    guideMesh.color = new Color3(1, 0, 0);
+    guideMesh.renderingGroupId = 1;
+    guideMesh.isPickable = false;
   }
 
   // ============ Single Drawing Methods ============
@@ -500,6 +735,15 @@ export class Artist {
   }
 
   /**
+   * Limit selection to atoms matching the expression.
+   *
+   * @param expression - Boolean expression string (e.g. "element == 'C'")
+   */
+  public selectByExpression(expression: string): void {
+    this.app.world.selectionManager.selectByExpression(expression);
+  }
+
+  /**
    * Delete a bond
    */
   public deleteBond(meshId: number, bondId: number): void {
@@ -532,6 +776,10 @@ export class Artist {
     mesh.material = material;
     mesh.freezeWorldMatrix(); // Optimization
     mesh.isVisible = false; // Hidden by default, activated by ImpostorState
+
+    // Ensure mesh starts with no instances to prevent rendering errors
+    mesh.thinInstanceCount = 0;
+
     return mesh;
   }
 
@@ -548,22 +796,22 @@ export class Artist {
       {
         attributes: isAtom
           ? [
-              "position",
-              "uv",
-              "instanceData",
-              "instanceColor",
-              "instancePickingColor",
-            ]
+            "position",
+            "uv",
+            "instanceData",
+            "instanceColor",
+            "instancePickingColor",
+          ]
           : [
-              "position",
-              "uv",
-              "instanceData0",
-              "instanceData1",
-              "instanceColor0",
-              "instanceColor1",
-              "instanceSplit",
-              "instancePickingColor",
-            ],
+            "position",
+            "uv",
+            "instanceData0",
+            "instanceData1",
+            "instanceColor0",
+            "instanceColor1",
+            "instanceSplit",
+            "instancePickingColor",
+          ],
         uniforms: [
           "view",
           "projection",
@@ -577,9 +825,28 @@ export class Artist {
       },
     );
 
+    const isGhost = name.includes("ghost");
+
     material.backFaceCulling = false;
-    material.alphaMode = Engine.ALPHA_DISABLE;
+    material.alphaMode = isGhost ? Engine.ALPHA_COMBINE : Engine.ALPHA_DISABLE;
     material.disableDepthWrite = false;
+    material.forceDepthWrite = !isGhost; // Opaque writes depth, Ghost reads (tests) but doesn't write
+
+    const lighting = this.app.settings.getLighting();
+    let zParams = lighting.lightDir[2];
+    if (this.app.config.useRightHandedSystem) {
+      zParams = -zParams;
+    }
+
+    material.setVector3(
+      "lightDir",
+      new Vector3(lighting.lightDir[0], lighting.lightDir[1], zParams),
+    );
+    material.setFloat("lightAmbient", lighting.ambient);
+    material.setFloat("lightDiffuse", lighting.diffuse);
+    material.setFloat("lightSpecular", lighting.specular);
+    material.setFloat("lightSpecularPower", lighting.specularPower);
+    material.setFloat("uPickingEnabled", 0.0);
 
     material.onBindObservable.add(() => {
       if (!material) return;
@@ -592,7 +859,6 @@ export class Artist {
 
       const lighting = this.app.settings.getLighting();
 
-      // RHS Correction: Flip Z of lightDir if using Right Handed System
       let zParams = lighting.lightDir[2];
       if (this.app.config.useRightHandedSystem) {
         zParams = -zParams;

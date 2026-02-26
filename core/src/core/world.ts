@@ -50,21 +50,15 @@ export class World {
     this._engine = engine;
     this._app = app;
 
-    // Initialize scene
     const scene = new Scene(engine);
-    // Use Babylon.js default background color (blue-purple gradient)
-
-    // Scene optimization
     scene.skipPointerMovePicking = false;
     scene.autoClear = true;
     scene.autoClearDepthAndStencil = true;
 
-    // Apply Coordinate System Config
     if (this._app.config.useRightHandedSystem) {
       scene.useRightHandedSystem = true;
     }
 
-    // Create ArcRotateCamera directly
     const camera = new ArcRotateCamera(
       "camera",
       Math.PI / 4, // alpha
@@ -73,23 +67,20 @@ export class World {
       Vector3.Zero(),
       scene,
     );
+    // Use Z as global up axis in a right-handed coordinate system.
+    camera.upVector = new Vector3(0, 0, 1);
     camera.attachControl(canvas, true);
 
-    // Initialize last radius for ortho zoom tracking
     this._lastRadius = camera.radius;
 
-    // Handle Orthographic Zoom
-    // ArcRotateCamera changes radius on zoom, but in Ortho mode this doesn't change view size if bounds are fixed.
-    // We bind radius changes to ortho bounds scaling.
+    // Sync orthographic zoom bounds with radius changes
     scene.onBeforeRenderObservable.add(() => {
       if (camera.mode === 1) {
-        // Orthographic
         if (
           this._lastRadius > 0 &&
           Math.abs(camera.radius - this._lastRadius) > 0.0001
         ) {
           const scale = camera.radius / this._lastRadius;
-          // Scale ortho bounds
           if (
             camera.orthoTop &&
             camera.orthoBottom &&
@@ -106,49 +97,33 @@ export class World {
       this._lastRadius = camera.radius;
     });
 
-    // Set as active camera
     scene.activeCamera = camera;
 
-    // Viewport Settings
     this.viewportSettings = new ViewportSettings(scene, camera);
-
-    // Visual Overlays
     this.targetIndicator = new TargetIndicator(scene);
     this.axisHelper = new AxisHelper(this._engine, camera);
     this.grid = new GridGround(scene, camera, this._engine);
-
-    // Initial grid settings are applied by Settings when initialized in App
-
-    // Lighting setup for depth with minimal shadows
-    // 1. Hemispheric light for soft global illumination (fill)
-    // High intensity and bright ground color ensures atoms look fully lit even in crevices
     const hemiLight = new HemisphericLight(
       "hemiLight",
-      new Vector3(0, 1, 0),
+      new Vector3(0, 0, 1),
       scene,
     );
     hemiLight.intensity = 0.7;
-    hemiLight.groundColor = new Color3(0.6, 0.6, 0.6); // Strong bounce light to remove dark under-sides
-    hemiLight.specular = Color3.Black(); // Reduce specular on hemi to avoid washout
-
-    // 2. Directional light for definition (key light)
-    // Attached to camera to ensure viewed side is always lit ("Headlamp")
+    hemiLight.groundColor = new Color3(0.6, 0.6, 0.6);
+    hemiLight.specular = Color3.Black();
     const dirLight = new DirectionalLight(
       "dirLight",
       new Vector3(0, 0, 1),
       scene,
     );
     dirLight.parent = camera;
-    dirLight.intensity = 0.4; // Slightly reduced to balance with stronger ambient
-    dirLight.specular = new Color3(0.5, 0.5, 0.5); // Add some shine for "stereoscopic" feel
-
-    // Initialize new unified selection system
+    dirLight.intensity = 0.4;
+    dirLight.specular = new Color3(0.5, 0.5, 0.5);
     this.sceneIndex = new SceneIndex();
     this.selectionManager = new SelectionManager(this.sceneIndex);
     this.highlighter = new Highlighter(app, scene);
     this.picker = new Picker(app, scene);
-    // Wire up event: selection changes trigger highlighting
-    this.selectionManager.on((state) =>
+    this.selectionManager.on("selection-change", (state) =>
       this.highlighter.highlightSelection(state),
     );
 
@@ -158,12 +133,9 @@ export class World {
       camera,
     };
 
-    // Resize handling
     window.addEventListener("resize", () => {
       engine.resize();
     });
-
-    // Initial graphics settings will be applied by Settings when it is initialized
   }
 
   public get scene(): Scene {

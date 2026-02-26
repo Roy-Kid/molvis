@@ -2,22 +2,30 @@
   "name": "molvis",
   "displayName": "molvis",
   "description": "VSCode Molvis Extension",
+  "repository": "https://github.com/molcrafts/molvis",
+  "icon": "image/molvis-icon.png",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.108.1"
   },
+  "publisher": "molcrafts",
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "molvis.openPage",
-        "title": "MolVis: Open Page",
-        "icon": "$(layout-sidebar-right)"
+        "command": "molvis.openPreview",
+        "title": "MolVis: open preview",
+        "icon": "$(open-preview)"
       },
       {
-        "command": "molvis.openPreview",
-        "title": "MolVis: Open Preview",
-        "icon": "$(open-preview)"
+        "command": "molvis.openViewer",
+        "title": "MolVis: open viewer",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "molvis.reload",
+        "title": "MolVis: Reload",
+        "icon": "$(refresh)"
       }
     ],
     "customEditors": [
@@ -42,12 +50,24 @@
       "editor/title": [
         {
           "command": "molvis.openPreview",
-          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .zarr",
           "group": "navigation"
         },
         {
-          "command": "molvis.openPage",
-          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data",
+          "command": "molvis.openViewer",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .zarr",
+          "group": "navigation"
+        },
+        {
+          "command": "molvis.reload",
+          "when": "activeCustomEditorId == molvis.editor || activeWebviewPanelId == molvis.preview || activeWebviewPanelId == molvis.page",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "molvis.openPreview",
+          "when": "resourceExtname == .zarr || resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data",
           "group": "navigation"
         }
       ]
@@ -57,25 +77,43 @@
     "vscode:prepublish": "npm run package",
     "build": "rslib build",
     "dev": "rslib build --watch",
-    "check-types": "tsc --noEmit",
-    "compile": "npm run check-types && npm run check-types:webview && npm run build",
     "watch": "npm-run-all -p watch:*",
     "watch:bundle": "npm run dev",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run compile",
-    "test": "vscode-test"
+    "package": "NODE_ENV=production npm run compile",
+    "compile": "rslib build",
+    "build:test-extension": "tsc --project tsconfig.integration.json",
+    "test:compile": "tsc --project tsconfig.test.json",
+    "test:unit": "npm run test:compile && mocha --ui tdd \"out-test/test/unit/**/*.test.js\"",
+    "test:integration": "npm run build:test-extension && npm run test:compile && vscode-test --config .vscode-test.mjs",
+    "test": "npm-run-all test:unit test:integration",
+    "deploy": "vsce publish",
+    "deploy:ovsx": "ovsx publish"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@molvis/core": "file:../core",
     "@rslib/core": "^0.5.5",
+    "@rsbuild/plugin-react": "^1.4.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
     "@types/vscode": "^1.108.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
-    "molwasm": "^0.0.3",
+    "@vscode/vsce": "^3.2.1",
+    "@molcrafts/molrs": "file:../../molrs/pkg",
     "npm-run-all": "^4.1.5",
+    "ovsx": "^0.10.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.3"
+    "typescript-eslint": "^8.46.3",
+    "@tailwindcss/postcss": "^4.1.17",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17"
   }
 }

@@ -16,6 +16,22 @@ interface ToolsTabProps {
   app: Molvis | null;
 }
 
+interface EditModeState {
+  type: ModeType.Edit;
+  element: string;
+  bondOrder: number;
+}
+
+function isEditModeState(mode: unknown): mode is EditModeState {
+  if (!mode || typeof mode !== "object") return false;
+  const candidate = mode as Partial<EditModeState>;
+  return (
+    candidate.type === ModeType.Edit &&
+    typeof candidate.element === "string" &&
+    typeof candidate.bondOrder === "number"
+  );
+}
+
 const COMMON_ELEMENTS = [
   "H",
   "He",
@@ -55,11 +71,10 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
 
     const updateState = () => {
       const mode = app.mode;
-      if (mode && mode.type === ModeType.Edit) {
+      if (isEditModeState(mode)) {
         setIsEditMode(true);
-        const editMode = mode as any;
-        if (editMode.element) setActiveElement(editMode.element);
-        if (editMode.bondOrder) setActiveBondOrder(editMode.bondOrder);
+        setActiveElement(mode.element);
+        setActiveBondOrder(mode.bondOrder);
       } else {
         setIsEditMode(false);
       }
@@ -87,14 +102,13 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
     if (!app) return;
 
     const mode = app.mode;
-    if (mode && mode.type === ModeType.Edit) {
-      const editMode = mode as any;
+    if (isEditModeState(mode)) {
       if (updates.element) {
-        editMode.element = updates.element;
+        mode.element = updates.element;
         setActiveElement(updates.element);
       }
       if (updates.bondOrder) {
-        editMode.bondOrder = updates.bondOrder;
+        mode.bondOrder = updates.bondOrder;
         setActiveBondOrder(updates.bondOrder);
       }
     }

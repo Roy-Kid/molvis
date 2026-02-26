@@ -172,9 +172,6 @@ npm run test -w core
 ```bash
 # Lint and format
 npx biome check --write
-
-# Type check
-npm run check-types -w core
 ```
 
 ## Building and Publishing

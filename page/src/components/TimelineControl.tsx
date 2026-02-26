@@ -17,6 +17,8 @@ interface TimelineControlProps {
   totalFrames?: number;
 }
 
+const FRAME_INTERVAL_MS = 1000 / 30;
+
 export const TimelineControl: React.FC<TimelineControlProps> = ({
   app,
   totalFrames = 1,
@@ -24,78 +26,88 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
   const requestRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number | undefined>(undefined);
-  const fps = 30; // Target FPS
+  const currentFrameRef = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
 
-  // Sync with app state if available
+  useEffect(() => {
+    currentFrameRef.current = currentFrame;
+  }, [currentFrame]);
+
   useEffect(() => {
     if (!app) return;
 
-    // Listen for frame changes from app (if externally controlled)
-    const handleFrameChange = (event: any) => {
-      if (event.current !== currentFrame) {
-        setCurrentFrame(event.current);
-      }
+    setCurrentFrame(app.system.trajectory.currentIndex);
+
+    const handleFrameChange = (index: number) => {
+      setCurrentFrame((prev) => (prev === index ? prev : index));
     };
+
+    const handleTrajectoryChange = () => {
+      setCurrentFrame(app.system.trajectory.currentIndex);
+    };
+
     app.events.on("frame-change", handleFrameChange);
+    app.events.on("trajectory-change", handleTrajectoryChange);
     return () => {
       app.events.off("frame-change", handleFrameChange);
+      app.events.off("trajectory-change", handleTrajectoryChange);
     };
   }, [app]);
 
   const updateFrame = useCallback(
     (newFrame: number) => {
-      if (!app) return;
+      if (!app || totalFrames <= 0) return;
       const frame = Math.max(0, Math.min(newFrame, totalFrames - 1));
-      setCurrentFrame(frame);
-      app.currentFrame = frame; // Update core state
-
-      // Trigger render (in a real scenario, this would compute and render)
-      // For now, we just log/simulate or if app has correct pipeline set up:
-      // app.computeFrame(frame).then(f => app.renderFrame(f));
-      // Since we don't have a full trajectory in the demo, this is mostly UI state.
+      app.seekFrame(frame);
     },
     [app, totalFrames],
   );
 
   const animate = useCallback(
     (time: number) => {
-      if (lastTimeRef.current === undefined) {
+      if (lastTimeRef.current === null) {
         lastTimeRef.current = time;
       }
       const deltaTime = time - lastTimeRef.current;
 
-      if (deltaTime >= 1000 / fps) {
-        setCurrentFrame((prev) => {
-          const next = prev + 1;
-          if (next >= totalFrames) {
-            // Loop or stop
-            return 0;
-          }
-          // Sync with app
-          if (app) app.currentFrame = next;
-          return next;
-        });
+      if (deltaTime >= FRAME_INTERVAL_MS) {
+        const next =
+          currentFrameRef.current + 1 >= totalFrames
+            ? 0
+            : currentFrameRef.current + 1;
+        updateFrame(next);
         lastTimeRef.current = time;
       }
       requestRef.current = requestAnimationFrame(animate);
     },
-    [app, fps, totalFrames],
+    [totalFrames, updateFrame],
   );
 
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && totalFrames > 1) {
       requestRef.current = requestAnimationFrame(animate);
     } else {
       if (requestRef.current !== null) cancelAnimationFrame(requestRef.current);
-      lastTimeRef.current = undefined;
+      lastTimeRef.current = null;
     }
     return () => {
       if (requestRef.current !== null) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying, animate]);
+  }, [isPlaying, totalFrames, animate]);
 
-  const togglePlay = () => setIsPlaying(!isPlaying);
+  useEffect(() => {
+    if (totalFrames <= 0) {
+      setCurrentFrame(0);
+      setIsPlaying(false);
+      return;
+    }
+    setCurrentFrame((prev) => Math.max(0, Math.min(prev, totalFrames - 1)));
+  }, [totalFrames]);
+
+  const togglePlay = () => {
+    if (totalFrames <= 1) return;
+    setIsPlaying((prev) => !prev);
+  };
   const stepForward = () => {
     setIsPlaying(false);
     updateFrame(currentFrame + 1);
@@ -114,8 +126,10 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
   };
 
   const handleSliderChange = (vals: number[]) => {
+    const [value] = vals;
+    if (value === undefined) return;
     setIsPlaying(false);
-    updateFrame(vals[0]);
+    updateFrame(value);
   };
 
   return (

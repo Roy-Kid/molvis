@@ -304,7 +304,7 @@ export class PasteSelectionCommand extends Command<void> {
       // Add color (default white for now, could be element-based)
       newAtomColors.push(1.0, 1.0, 1.0, 1.0);
 
-      // TODO: Update SceneIndex with new elements?
+      // SceneIndex metadata sync for pasted atoms is intentionally deferred.
       // atomElements.push(atomData.element);
 
       // Track created atom index

@@ -1,6 +1,7 @@
 import type { MolvisApp } from "../core/app";
 import type { MolvisConfig } from "../core/config";
 import type { Trajectory } from "../core/system/trajectory";
+import type { ModeType } from "../mode";
 import { InfoPanel } from "./panels/info_panel";
 import { ModePanel } from "./panels/mode_panel";
 import { PerfPanel } from "./panels/perf_panel";
@@ -16,6 +17,7 @@ export class GUIManager {
   private app: MolvisApp;
   private config: MolvisConfig;
   private uiOverlay: HTMLElement | null = null;
+  private layoutObserver: ResizeObserver | null = null;
 
   // Components
   private infoPanel: InfoPanel | null = null;
@@ -89,6 +91,11 @@ export class GUIManager {
       this.uiOverlay.remove();
       this.uiOverlay = null;
     }
+
+    if (this.layoutObserver) {
+      this.layoutObserver.disconnect();
+      this.layoutObserver = null;
+    }
   }
 
   /**
@@ -155,6 +162,12 @@ export class GUIManager {
       ) as MolvisTrajectoryPanel;
       this.uiOverlay.appendChild(this.trajectoryPanel);
 
+      // Sync initial trajectory state immediately so single-frame datasets stay hidden.
+      this.trajectoryPanel.length = this.app.system.trajectory.length;
+      this.trajectoryPanel.current = this.app.system.trajectory.currentIndex;
+      this.trajectoryPanel.playing = false;
+      this.updateTrajectoryPanelLayout();
+
       // Bind panel events
       this.trajectoryPanel.addEventListener("seek", (e: Event) => {
         this.app.seekFrame((e as CustomEvent).detail);
@@ -176,6 +189,8 @@ export class GUIManager {
         this.stopPlayback();
       });
     }
+
+    this.setupLayoutObserver();
   }
 
   /**
@@ -220,7 +235,7 @@ export class GUIManager {
   /**
    * Handle mode change event
    */
-  private handleModeChange(mode: string): void {
+  private handleModeChange(mode: ModeType): void {
     if (this.modePanel) {
       this.modePanel.update(mode);
     }
@@ -238,6 +253,7 @@ export class GUIManager {
   private handleTrajectoryChange(traj: Trajectory): void {
     if (this.trajectoryPanel) {
       this.trajectoryPanel.length = traj.length;
+      this.updateTrajectoryPanelLayout();
       this.stopPlayback(); // Stop ensuring no weirdness
     }
   }
@@ -246,6 +262,28 @@ export class GUIManager {
     if (this.trajectoryPanel) {
       this.trajectoryPanel.current = index;
     }
+  }
+
+  private setupLayoutObserver(): void {
+    if (!this.uiOverlay) return;
+    if (!this.trajectoryPanel) return;
+    if (this.layoutObserver) {
+      this.layoutObserver.disconnect();
+      this.layoutObserver = null;
+    }
+
+    this.layoutObserver = new ResizeObserver(() => {
+      this.updateTrajectoryPanelLayout();
+    });
+    this.layoutObserver.observe(this.uiOverlay);
+  }
+
+  private updateTrajectoryPanelLayout(): void {
+    if (!this.trajectoryPanel) return;
+
+    const width = this.app.canvas.clientWidth || this.uiOverlay?.clientWidth || 0;
+    const height = this.app.canvas.clientHeight || this.uiOverlay?.clientHeight || 0;
+    this.trajectoryPanel.setViewportSize(width, height);
   }
 
   private startPlayback() {

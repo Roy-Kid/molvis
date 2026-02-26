@@ -1,4 +1,5 @@
 import type { MolvisApp } from "../../core/app";
+import type { MenuItem } from "../../mode/types";
 import type { MolvisContextMenu } from "../menus/context_menu";
 import type { GUIComponent } from "../types";
 
@@ -36,7 +37,7 @@ export class ViewPanel implements GUIComponent {
       "molvis-context-menu",
     ) as unknown as MolvisContextMenu;
 
-    const items = [
+    const items: MenuItem[] = [
       {
         type: "button",
         title: "Perspective",
@@ -81,7 +82,7 @@ export class ViewPanel implements GUIComponent {
         title: "Front",
         action: () => {
           const camera = this.app.world.camera;
-          camera.alpha = 0;
+          camera.alpha = Math.PI / 2;
           camera.beta = Math.PI / 2;
           this.updateDisplay();
         },
@@ -91,8 +92,7 @@ export class ViewPanel implements GUIComponent {
         title: "Back",
         action: () => {
           const camera = this.app.world.camera;
-          // Existing check: "if (Math.abs(alpha - Math.PI) < 0.1 ... 'Back'"
-          camera.alpha = Math.PI;
+          camera.alpha = -Math.PI / 2;
           camera.beta = Math.PI / 2;
           this.updateDisplay();
         },
@@ -102,7 +102,7 @@ export class ViewPanel implements GUIComponent {
         title: "Left",
         action: () => {
           const camera = this.app.world.camera;
-          camera.alpha = -Math.PI / 2;
+          camera.alpha = Math.PI;
           camera.beta = Math.PI / 2;
           this.updateDisplay();
         },
@@ -112,7 +112,7 @@ export class ViewPanel implements GUIComponent {
         title: "Right",
         action: () => {
           const camera = this.app.world.camera;
-          camera.alpha = Math.PI / 2;
+          camera.alpha = 0;
           camera.beta = Math.PI / 2;
           this.updateDisplay();
         },
@@ -122,6 +122,7 @@ export class ViewPanel implements GUIComponent {
         title: "Top",
         action: () => {
           const camera = this.app.world.camera;
+          camera.alpha = 0;
           camera.beta = 0;
           this.updateDisplay();
         },
@@ -131,6 +132,7 @@ export class ViewPanel implements GUIComponent {
         title: "Bottom",
         action: () => {
           const camera = this.app.world.camera;
+          camera.alpha = 0;
           camera.beta = Math.PI;
           this.updateDisplay();
         },
@@ -148,8 +150,8 @@ export class ViewPanel implements GUIComponent {
           camera.orthoTop = null;
           camera.orthoBottom = null;
 
-          camera.alpha = Math.PI / 2;
-          camera.beta = Math.PI / 2;
+          camera.alpha = Math.PI / 4;
+          camera.beta = Math.PI / 3;
           camera.radius = 20;
           camera.target.set(0, 0, 0);
           this.updateDisplay();
@@ -177,23 +179,39 @@ export class ViewPanel implements GUIComponent {
     }
 
     // In perspective mode, check if we're in a specific view
-    const alpha = camera.alpha;
+    const alpha = this.normalizeAngle(camera.alpha);
     const beta = camera.beta;
 
-    // Check for front view (alpha ≈ 0, beta ≈ π/2)
-    if (Math.abs(alpha) < 0.1 && Math.abs(beta - Math.PI / 2) < 0.1) {
+    // Z-up mapping: Front => +Y, Back => -Y.
+    if (
+      Math.abs(alpha - Math.PI / 2) < 0.1 &&
+      Math.abs(beta - Math.PI / 2) < 0.1
+    ) {
       this.element.textContent = "Front";
       return;
     }
 
-    // Check for back view (alpha ≈ π, beta ≈ π/2)
-    if (Math.abs(alpha - Math.PI) < 0.1 && Math.abs(beta - Math.PI / 2) < 0.1) {
+    if (
+      Math.abs(alpha + Math.PI / 2) < 0.1 &&
+      Math.abs(beta - Math.PI / 2) < 0.1
+    ) {
       this.element.textContent = "Back";
       return;
     }
 
     // Default to Persp for perspective mode
     this.element.textContent = "Persp";
+  }
+
+  private normalizeAngle(value: number): number {
+    const wrapped = value % (2 * Math.PI);
+    if (wrapped > Math.PI) {
+      return wrapped - 2 * Math.PI;
+    }
+    if (wrapped < -Math.PI) {
+      return wrapped + 2 * Math.PI;
+    }
+    return wrapped;
   }
 
   public mount(container: HTMLElement): void {

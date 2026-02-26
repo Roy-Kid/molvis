@@ -1,4 +1,6 @@
+import { EventEmitter } from "../events";
 import type { SceneIndex } from "./scene_index";
+import { ExpressionSelector } from "./selection/expression";
 
 export type SelectionKey = string;
 
@@ -87,21 +89,19 @@ export type SelectionOp =
 
 // ============ SelectionManager ============
 
+interface SelectionEventMap {
+  "selection-change": SelectionState;
+}
+
 /**
- * SelectionManager: Maintains selection state using selection keys.
- * Emits events for highlighting.
- *
- * Responsibilities:
- * - Maintain selection state (atoms and bonds)
- * - Apply selection operations
- * - Emit change events for highlighting
+ * SelectionManager: maintains selection state and emits change events.
  */
-export class SelectionManager {
+export class SelectionManager extends EventEmitter<SelectionEventMap> {
   private state: SelectionState = { atoms: new Set(), bonds: new Set() };
-  private listeners: Array<(state: SelectionState) => void> = [];
   private sceneIndex: SceneIndex;
 
   constructor(sceneIndex: SceneIndex) {
+    super();
     this.sceneIndex = sceneIndex;
   }
 
@@ -170,7 +170,7 @@ export class SelectionManager {
         break;
     }
 
-    this.emit();
+    this.emitChange();
   }
 
   /**
@@ -212,49 +212,31 @@ export class SelectionManager {
   }
 
   /**
-   * Select atoms by their SceneIndex Atomic IDs.
-   * This requires scanning the Scene Index/Meta Registry to find matching keys.
-   *
-   * @param ids - Array of atom IDs to select
+   * Select atoms by their logical atom IDs.
    */
-  selectAtomsByIds(_ids: number[]): void {
+  selectAtomsByIds(ids: number[]): void {
     const keysToAdd: SelectionKey[] = [];
-
-    // Inefficient scan?
-    // SceneIndex stores ID -> Meta.
-    // We need Meta -> Key (MeshID + InstanceID)
-    // MetaRegistry stores by ID.
-    // Wait, `dumpFrame` iterates all IDs.
-    // We can iterate all registered meshes in SceneIndex?
-    // Or better: SceneIndex should provide `getMeshAndIndex(atomId)`.
-
-    // Let's assume SceneIndex has `getAtomLocation(atomId)`.
-    // If not, we iterate all atoms in MetaRegistry.
-
-    // Actually, `SelectionKey` is based on MeshID:InstanceID (babylon concept).
-    // `AtomID` is logical ID.
-    // We need a map AtomID -> SelectionKey.
-
-    // SceneIndex.ts:
-    // `this.metaRegistry.atoms.getMeta(id)` returns { ...position, atomId, type }.
-    // But it doesn't store WHICH mesh it is in?
-    // The meshRegistry stores sets of IDs per mesh?
-
-    // Let's check SceneIndex implementation for reverse lookup.
-    // For now, I will use a direct lookup if exposed, or add it to SceneIndex.
-
-    // Assuming SceneIndex has `getSelectionKeyForAtom(atomId)`.
-    // I will add this method to SceneIndex in next step.
-    // For now, call it.
-
     for (const id of ids) {
       const key = this.sceneIndex.getSelectionKeyForAtom(id);
       if (key) keysToAdd.push(key);
     }
-
     if (keysToAdd.length > 0) {
       this.apply({ type: "add", atoms: keysToAdd });
     }
+  }
+
+  /**
+   * Select atoms using a boolean expression.
+   *
+   * @param expression - The boolean expression (e.g. "element == 'C'")
+   * @param op - The selection operation (default: "replace")
+   */
+  selectByExpression(
+    expression: string,
+    op: "replace" | "add" | "remove" | "toggle" = "replace",
+  ): void {
+    const keys = ExpressionSelector.select(this.sceneIndex, expression);
+    this.apply({ type: op, atoms: keys });
   }
 
   /**
@@ -355,30 +337,7 @@ export class SelectionManager {
     };
   }
 
-  /**
-   * Register a change event listener.
-   *
-   * @param handler - Function to call when selection changes
-   */
-  on(handler: (state: SelectionState) => void): void {
-    this.listeners.push(handler);
-  }
-
-  /**
-   * Remove a change event listener.
-   *
-   * @param handler - The handler to remove
-   */
-  off(handler: (state: SelectionState) => void): void {
-    this.listeners = this.listeners.filter((h) => h !== handler);
-  }
-
-  /**
-   * Emit change event to all listeners.
-   */
-  private emit(): void {
-    for (const fn of this.listeners) {
-      fn(this.state);
-    }
+  private emitChange(): void {
+    this.emit("selection-change", this.state);
   }
 }

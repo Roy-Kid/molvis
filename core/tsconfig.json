@@ -31,10 +31,7 @@
   },
   "include": [
     "src",
-    "tests/index.ts",
-    "molrs",
-    "examples/demo_frame.ts",
-    "examples/demo_traj.ts"
+    "molrs"
   ],
   "types": [
     "babylonjs",

@@ -9,14 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   type Molvis,
   type SelectionState,
   parseSelectionKey,
 } from "@molvis/core";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 interface InspectorTabProps {
@@ -56,7 +55,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
     atoms: new Set(),
     bonds: new Set(),
   });
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
 
   // New Attribute Inputs
   const [newKey, setNewKey] = useState("");
@@ -65,7 +64,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
   useEffect(() => {
     if (!app) return;
 
-    const manager = (app as any).world?.selectionManager;
+    const manager = app.world.selectionManager;
     if (!manager) return;
 
     // Initial state
@@ -79,17 +78,15 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
       });
     };
 
-    manager.on(handler);
-    return () => {
-      manager.off?.(handler);
-    };
+    const unsub = manager.on("selection-change", handler);
+    return unsub;
   }, [app]);
 
   // Derived Selection Data
   const atomIds = React.useMemo(() => {
     if (!app) return [];
     const ids: number[] = [];
-    selection.atoms.forEach((key) => {
+    for (const key of selection.atoms) {
       const ref = parseSelectionKey(key);
       // Verify it's an atom from primary scene (mesh 0 for now)
       if (ref) {
@@ -98,7 +95,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
           ids.push(meta.atomId);
         }
       }
-    });
+    }
     return ids;
   }, [selection, app]);
 
@@ -106,28 +103,28 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
   const attributes = React.useMemo(() => {
     if (!app || atomIds.length === 0) return {};
 
-    const attrs: Record<string, { value: any; mixed: boolean }> = {};
+    const attrs: Record<string, { value: unknown; mixed: boolean }> = {};
     const allKeys = new Set<string>();
 
     // 1. Gather keys
     allKeys.add("element"); // Always show
-    atomIds.forEach((id) => {
+    for (const id of atomIds) {
       const registry = app.world.sceneIndex.metaRegistry;
       if (registry) {
         const edit = registry.atoms.edits.get(id);
         if (edit) {
-          Object.keys(edit).forEach((k) => {
-            if (k !== "type" && k !== "atomId" && k !== "position")
+          for (const k of Object.keys(edit)) {
+            if (k !== "type" && k !== "atomId" && k !== "position") {
               allKeys.add(k);
-          });
+            }
+          }
         }
       }
-    });
+    }
 
     // 2. Determine values
-    allKeys.forEach((key) => {
-      let commonVal: any = undefined;
-      const first = true;
+    for (const key of allKeys) {
+      let commonVal: unknown = undefined;
       let mixed = false;
 
       // Re-verify mixed status properly
@@ -148,16 +145,27 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
         value: mixed ? undefined : commonVal,
         mixed,
       };
-    });
+    }
 
     return attrs;
-  }, [atomIds, app, refreshTrigger]);
+  }, [atomIds, app]);
+
+  useEffect(() => {
+    const nextDrafts: Record<string, string> = {};
+    for (const [key, info] of Object.entries(attributes)) {
+      nextDrafts[key] =
+        info.mixed || info.value === undefined || info.value === null
+          ? ""
+          : String(info.value);
+    }
+    setDraftValues(nextDrafts);
+  }, [attributes]);
 
   const handleUpdate = (key: string, value: string) => {
     if (!app) return;
 
     // Auto convert number if it looks like one
-    let finalVal: any = value;
+    let finalVal: unknown = value;
     const num = Number(value);
     if (!Number.isNaN(num) && value.trim() !== "") {
       finalVal = num;
@@ -169,8 +177,10 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
       key,
       value: finalVal,
     });
-
-    setRefreshTrigger((prev) => prev + 1);
+    setSelection((prev) => ({
+      atoms: new Set(prev.atoms),
+      bonds: new Set(prev.bonds),
+    }));
   };
 
   const handleAdd = () => {
@@ -178,6 +188,19 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
     handleUpdate(newKey.trim(), newValue);
     setNewKey("");
     setNewValue("");
+  };
+
+  const commitAttribute = (
+    key: string,
+    info: { value: unknown; mixed: boolean },
+  ) => {
+    const next = draftValues[key] ?? "";
+    const prev =
+      info.mixed || info.value === undefined || info.value === null
+        ? ""
+        : String(info.value);
+    if (next === prev) return;
+    handleUpdate(key, next);
   };
 
   if (selection.atoms.size === 0 && selection.bonds.size === 0) {
@@ -192,6 +215,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
             stroke="currentColor"
             strokeWidth={2}
           >
+            <title>No selection</title>
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -273,9 +297,22 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
                       <div className="relative group">
                         <Input
                           className="h-8 text-xs font-mono bg-transparent hover:bg-muted/10 focus:bg-background transition-colors pr-7"
-                          value={info.mixed ? "" : (info.value ?? "")}
+                          value={draftValues[key] ?? ""}
                           placeholder={info.mixed ? "<mixed>" : "Value"}
-                          onChange={(e) => handleUpdate(key, e.target.value)}
+                          onChange={(e) =>
+                            setDraftValues((prev) => ({
+                              ...prev,
+                              [key]: e.target.value,
+                            }))
+                          }
+                          onBlur={() => commitAttribute(key, info)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              commitAttribute(key, info);
+                              (e.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
                         />
                         {/* Optional: delete button for custom attributes could go here */}
                       </div>

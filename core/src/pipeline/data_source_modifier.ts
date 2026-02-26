@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "./modifier";
 import type { PipelineContext } from "./types";
 
@@ -9,7 +9,7 @@ import type { PipelineContext } from "./types";
  */
 export class DataSourceModifier extends BaseModifier {
   // Properties for UI binding
-  public sourceType: "file" | "empty" = "empty";
+  public sourceType: "file" | "zarr" | "empty" = "empty";
   public filename = "";
 
   // Visibility
@@ -22,7 +22,7 @@ export class DataSourceModifier extends BaseModifier {
     super(`data-source-${Date.now()}`, "Data Source", ModifierCategory.Data);
   }
 
-  public setFrame(frame: Frame) {
+  public setFrame(frame: Frame | null) {
     this._frame = frame;
   }
 
@@ -31,37 +31,14 @@ export class DataSourceModifier extends BaseModifier {
   }
 
   apply(input: Frame, _context: PipelineContext): Frame {
-    // Source Frame
     const sourceFrame = this._frame || input;
 
-    // If all visible, return as is
     if (this.showAtoms && this.showBonds && this.showBox) {
       return sourceFrame;
     }
 
-    // Create restricted view (new Frame or modified copy)
-    // Since Frame is WASM, we can't easily "clone shallowly".
-    // However, we can create a new Frame and set blocks from the source.
-    // const output = new Frame();
-
-    // TODO: Fix Frame API usage for filtering. setBlock and box assignment are not available or typed correctly.
-    // For now, we return the full frame. logic is disabled.
-    /*
-        if (this.showAtoms) {
-            const atoms = sourceFrame.getBlock("atoms");
-            if (atoms) output.setBlock("atoms", atoms);
-        }
-
-        if (this.showBonds) {
-            const bonds = sourceFrame.getBlock("bonds");
-            if (bonds) output.setBlock("bonds", bonds);
-        }
-
-        if (this.showBox) {
-            output.box = sourceFrame.box;
-        }
-        return output;
-        */
+    // Visibility flags are currently used for UI state only.
+    // Frame-level block filtering is intentionally a no-op in v0.0.2.
     return sourceFrame;
   }
 }

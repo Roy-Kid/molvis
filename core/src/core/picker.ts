@@ -21,6 +21,7 @@ export class Picker {
   private scene: Scene;
   private pickingTexture: RenderTargetTexture | null = null;
   private _pickingEnabled = false;
+  private _pickInProgress = false;
   private atomPickingMaterial: ShaderMaterial | null = null;
   private bondPickingMaterial: ShaderMaterial | null = null;
 
@@ -34,78 +35,115 @@ export class Picker {
    * Returns HitResult with type 'empty' if nothing hit.
    */
   public async pick(x: number, y: number): Promise<HitResult> {
+    if (this._pickInProgress) {
+      return { type: "empty" };
+    }
     if (!this.ensureTexture()) {
       return { type: "empty" };
     }
     this.ensurePickingMaterials();
+    this._pickInProgress = true;
 
-    const engine = this.scene.getEngine();
-    const canvas = engine.getRenderingCanvas();
-    if (!canvas) return { type: "empty" };
+    try {
+      const engine = this.scene.getEngine();
+      const canvas = engine.getRenderingCanvas();
+      if (!canvas) return { type: "empty" };
 
-    const scaling = engine.getHardwareScalingLevel();
-    const texHeight = this.pickingTexture?.getRenderHeight();
+      const texture = this.pickingTexture;
+      if (!texture) return { type: "empty" };
+      const texWidth = texture.getRenderWidth();
+      const texHeight = texture.getRenderHeight();
 
-    // Perform render
-    this.renderPickingScene();
+      // Perform render
+      this.renderPickingScene();
 
-    // Canvas Y is top-down, Texture/WebGL Y is bottom-up (usually).
-    const glY = texHeight - y / scaling - 1;
-    const glX = x / scaling;
+      // Map input-space coordinates to picking texture coordinates.
+      // This keeps picking stable regardless of how canvas/render target sizes are configured.
+      const inputRect = engine.getInputElementClientRect?.();
+      const inputWidth = inputRect?.width || canvas.clientWidth || texWidth;
+      const inputHeight = inputRect?.height || canvas.clientHeight || texHeight;
+      if (inputWidth <= 0 || inputHeight <= 0) {
+        return { type: "empty" };
+      }
 
-    // Async read from the texture
-    const rttWrapper = this.pickingTexture?.renderTarget;
-    if (rttWrapper) {
-      engine.bindFramebuffer(rttWrapper);
-    }
+      const normX = x / inputWidth;
+      const normY = y / inputHeight;
+      const glX = Math.min(
+        texWidth - 1,
+        Math.max(0, Math.floor(normX * texWidth)),
+      );
+      const glY = Math.min(
+        texHeight - 1,
+        Math.max(0, texHeight - Math.floor(normY * texHeight) - 1),
+      );
 
-    const buffer = await engine.readPixels(
-      Math.floor(glX),
-      Math.floor(glY),
-      1,
-      1,
-    );
+      // Async read from the texture
+      const rttWrapper = texture.renderTarget;
+      if (rttWrapper) {
+        engine.bindFramebuffer(rttWrapper);
+      }
 
-    if (rttWrapper) {
-      engine.unBindFramebuffer(rttWrapper);
-    }
+      const buffer = await engine.readPixels(
+        glX,
+        glY,
+        1,
+        1,
+      );
 
-    if (!buffer) return { type: "empty" };
-    const data = new Uint8Array(
-      buffer.buffer,
-      buffer.byteOffset,
-      buffer.byteLength,
-    );
+      if (rttWrapper) {
+        engine.unBindFramebuffer(rttWrapper);
+      }
 
-    // Decode RGBA -> ID
-    const r = data[0];
-    const g = data[1];
-    const b = data[2];
-    const a = data[3];
+      if (!buffer) return { type: "empty" };
+      const data = new Uint8Array(
+        buffer.buffer,
+        buffer.byteOffset,
+        buffer.byteLength,
+      );
 
-    if (r === 0 && g === 0 && b === 0 && a === 0) {
+      // Decode RGBA -> ID
+      const r = data[0];
+      const g = data[1];
+      const b = data[2];
+      const a = data[3];
+
+      if (r === 0 && g === 0 && b === 0 && a === 0) {
+        return { type: "empty" };
+      }
+
+      // Reconstruct 32-bit int
+      const fullId = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+
+      const meshId = fullId >>> INSTANCE_ID_BITS;
+      const thinId = fullId & MAX_INSTANCE_ID;
+
+      // All picking now uses the impostor pipeline
+      const mesh = this.findMeshByShortId(meshId);
+      if (!mesh) return { type: "empty" };
+
+      const meta = this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinId);
+      if (!meta) return { type: "empty" };
+
+      if (meta.type === "atom") {
+        return {
+          type: "atom",
+          mesh,
+          thinInstanceIndex: thinId,
+          metadata: meta,
+        };
+      }
+      if (meta.type === "bond") {
+        return {
+          type: "bond",
+          mesh,
+          thinInstanceIndex: thinId,
+          metadata: meta,
+        };
+      }
       return { type: "empty" };
+    } finally {
+      this._pickInProgress = false;
     }
-
-    // Reconstruct 32-bit int
-    const fullId = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
-
-    const meshId = fullId >>> INSTANCE_ID_BITS;
-    const thinId = fullId & MAX_INSTANCE_ID;
-
-    // All picking now uses the impostor pipeline
-    const mesh = this.findMeshByShortId(meshId);
-    if (!mesh) return { type: "empty" };
-
-    const meta = this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinId);
-    if (!meta) return { type: "empty" };
-
-    return {
-      type: meta.type as "atom" | "bond",
-      mesh,
-      thinInstanceIndex: thinId,
-      metadata: meta,
-    };
   }
 
   /**
@@ -209,37 +247,32 @@ export class Picker {
 
   /**
    * Render the scene in picking mode.
-   * All atoms/bonds use the impostor pipeline (ThinInstances).
+   * Uses MeshRegistry to get known atom/bond meshes directly.
    */
   private renderPickingScene() {
     if (!this.pickingTexture) return;
 
     this._pickingEnabled = true;
 
+    const registry = this.app.world.sceneIndex.meshRegistry;
     this.pickingTexture.renderList = [];
-    for (const m of this.scene.meshes) {
-      const isAtom =
-        m.name.startsWith("atom_base") ||
-        m.name.startsWith("edit_atom_base") ||
-        m.name.startsWith("manip_atom_base");
-      const isBond =
-        m.name.startsWith("bond_base") ||
-        m.name.startsWith("edit_bond_base") ||
-        m.name.startsWith("manip_bond_base");
 
-      if (isAtom && this.atomPickingMaterial) {
-        this.pickingTexture?.renderList?.push(m);
-        this.pickingTexture?.setMaterialForRendering(
-          m,
-          this.atomPickingMaterial,
-        );
-      } else if (isBond && this.bondPickingMaterial) {
-        this.pickingTexture?.renderList?.push(m);
-        this.pickingTexture?.setMaterialForRendering(
-          m,
-          this.bondPickingMaterial,
-        );
-      }
+    const atomState = registry.getAtomState();
+    if (atomState && this.atomPickingMaterial) {
+      this.pickingTexture.renderList.push(atomState.mesh);
+      this.pickingTexture.setMaterialForRendering(
+        atomState.mesh,
+        this.atomPickingMaterial,
+      );
+    }
+
+    const bondState = registry.getBondState();
+    if (bondState && this.bondPickingMaterial) {
+      this.pickingTexture.renderList.push(bondState.mesh);
+      this.pickingTexture.setMaterialForRendering(
+        bondState.mesh,
+        this.bondPickingMaterial,
+      );
     }
 
     this.pickingTexture.render(false, false);
@@ -252,7 +285,19 @@ export class Picker {
   }
 
   private findMeshByShortId(id: number): AbstractMesh | undefined {
-    return this.scene.getMeshByUniqueId(id) || undefined;
+    const registry = this.app.world.sceneIndex.meshRegistry;
+
+    const atomState = registry.getAtomState();
+    if (atomState && (atomState.mesh.uniqueId & MAX_MESH_ID) === id) {
+      return atomState.mesh;
+    }
+
+    const bondState = registry.getBondState();
+    if (bondState && (bondState.mesh.uniqueId & MAX_MESH_ID) === id) {
+      return bondState.mesh;
+    }
+
+    return undefined;
   }
 }
 

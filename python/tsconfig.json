@@ -1,9 +1,6 @@
 {
   "compilerOptions": {
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "noEmit": true,
     "skipLibCheck": true,
@@ -16,8 +13,10 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@molvis/core": ["../core/src/index.ts"]
+    }
   },
-  "include": [
-    "src/ts/**/*.ts"
-  ]
+  "include": ["src/ts/**/*.ts"]
 }

@@ -1,6 +1,6 @@
 import type { PointerInfo } from "@babylonjs/core";
 
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp as Molvis } from "../core/app";
 
 import type { SelectionOp } from "../core/selection_manager";
 import { makeSelectionKey } from "../core/selection_manager";
@@ -92,15 +92,21 @@ class SelectMode extends BaseMode {
     const isSelected = this.app.world.selectionManager.isSelected(key);
     let op: SelectionOp;
 
-    if (isCtrl) {
-      op = { type: "toggle", [`${meta.type}s`]: [key] };
-    } else {
-      if (isSelected) {
-        // If already selected, deselect it (remove)
-        op = { type: "remove", [`${meta.type}s`]: [key] };
+    if (meta.type === "atom") {
+      if (isCtrl) {
+        op = { type: "toggle", atoms: [key] };
+      } else if (isSelected) {
+        op = { type: "remove", atoms: [key] };
       } else {
-        // If not selected, standard replace
-        op = { type: "replace", [`${meta.type}s`]: [key] };
+        op = { type: "replace", atoms: [key] };
+      }
+    } else {
+      if (isCtrl) {
+        op = { type: "toggle", bonds: [key] };
+      } else if (isSelected) {
+        op = { type: "remove", bonds: [key] };
+      } else {
+        op = { type: "replace", bonds: [key] };
       }
     }
 
@@ -112,50 +118,6 @@ class SelectMode extends BaseMode {
    * if we want click behavior. BaseMode handles click -> pick -> _on_pointer_pick
    */
   override _on_pointer_pick(_pointerInfo: PointerInfo): void {}
-
-  // TODO: Reimplement copy/paste with new selection system
-  /*
-  override _on_press_ctrl_c(): void {
-    const selected = this.selectionManager.getSelected();
-    if (selected.length === 0) return;
-
-    this.clipboard = this.serializeSelection(selected);
-  }
-
-  override _on_press_ctrl_v(): void {
-    if (!this.clipboard) return;
-
-    const pastePosition = this.getWorldPositionFromScreen();
-    if (!pastePosition) return;
-
-    const pasteCommand = new PasteSelectionCommand(this.app, {
-      clipboardData: this.clipboard,
-      pastePosition
-    });
-    pasteCommand.do();
-  }
-
-  private serializeSelection(selected: SelectedEntity[]): ClipboardData {
-    const atoms = selected.filter(e => e.type === 'atom');
-
-    const atomData = atoms.map((entity) => {
-      const mesh = this.scene.getMeshById(entity.meshId);
-      const element = mesh?.metadata?.element || 'C';
-
-      return {
-        element,
-        relativePosition: Vector3.Zero()
-      };
-    });
-
-    const bondData: Array<{ i: number; j: number; order: number }> = [];
-
-    return {
-      atoms: atomData,
-      bonds: bondData
-    };
-  }
-  */
 }
 
 export { SelectMode };

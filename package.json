@@ -21,7 +21,8 @@
     "build:page": "npm run build -w page",
     "build:all": "npm run build:core && npm run build:python && npm run build:page",
     "test": "npm run test -w core",
-    "test:watch": "npm run test:watch -w core"
+    "test:watch": "npm run test:watch -w core",
+    "release:core:check": "npm run release:check -w core"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

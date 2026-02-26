@@ -1,6 +1,12 @@
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp as Molvis } from "../../core/app";
 import type { HitResult, MenuItem } from "../../mode/types";
 import type { MolvisContextMenu } from "../menus/context_menu";
+
+interface ContextMenuTriggerEvent {
+  preventDefault(): void;
+  clientX: number;
+  clientY: number;
+}
 
 /**
  * Base class for mode-specific context menu controllers.
@@ -51,7 +57,7 @@ export abstract class ContextMenuController {
    * @param ev Mouse event from Babylon.js (IMouseEvent)
    */
   public handleRightClick(
-    ev: MouseEvent,
+    ev: ContextMenuTriggerEvent,
     hit: HitResult | null,
     isDragging: boolean,
   ): boolean {

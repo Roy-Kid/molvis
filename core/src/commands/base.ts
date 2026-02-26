@@ -11,8 +11,9 @@ interface CommandMetadata {
 /**
  * Global registry for command metadata
  */
-type CommandConstructor = new (app: MolvisApp, args: unknown) => Command;
-const commandMetadataRegistry = new Map<CommandConstructor, CommandMetadata>();
+type CommandConstructor<A, R> = new (app: MolvisApp, args: A) => Command<R>;
+type CommandClass = abstract new (...args: never[]) => Command<unknown>;
+const commandMetadataRegistry = new Map<CommandClass, CommandMetadata>();
 
 import { commands } from "./registry";
 
@@ -21,9 +22,12 @@ import { commands } from "./registry";
  * Usage: @command("command_name")
  */
 export function command(name: string) {
-  return <T extends CommandConstructor>(ctor: T) => {
+  return ((target) => {
+    const commandClass = target as unknown as CommandClass;
+    const ctor = target as unknown as CommandConstructor<unknown, unknown>;
+
     // Register metadata
-    commandMetadataRegistry.set(ctor, {
+    commandMetadataRegistry.set(commandClass, {
       name,
       rpcExposed: true,
     });
@@ -33,16 +37,14 @@ export function command(name: string) {
       const cmd = new ctor(app, args);
       return cmd.do();
     });
-
-    return ctor;
-  };
+  }) satisfies ClassDecorator;
 }
 
 /**
  * Get command metadata for a command class
  */
 export function getCommandMetadata(
-  commandClass: CommandConstructor,
+  commandClass: CommandClass,
 ): CommandMetadata | undefined {
   return commandMetadataRegistry.get(commandClass);
 }

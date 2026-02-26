@@ -5,10 +5,13 @@ import { MolvisElement } from "../base";
  * MolvisButton - Clickable button menu item
  */
 export class MolvisButton extends MolvisElement {
-  private _data: MenuItem | null = null;
+  private _data: Extract<MenuItem, { type: "button" }> | null = null;
   private _rendered = false;
 
   set data(item: MenuItem) {
+    if (item.type !== "button") {
+      throw new Error("MolvisButton only accepts button menu items");
+    }
     this._data = item;
     if (!this._rendered) {
       this.render();
@@ -48,13 +51,11 @@ export class MolvisButton extends MolvisElement {
 
     const button = document.createElement("div");
     button.className = "button";
-    button.textContent = this._data?.title || "";
+    button.textContent = this._data?.title ?? "";
 
     button.addEventListener("click", (e) => {
       e.stopPropagation(); // Prevent click-through to canvas
-      if (this._data?.action) {
-        this._data.action();
-      }
+      this._data?.action();
     });
 
     this.root.appendChild(button);

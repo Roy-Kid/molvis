@@ -1,6 +1,8 @@
-import { type Frame, writeFrame as wasmWriteFrame } from "molwasm";
+import { Frame, writeFrame as wasmWriteFrame } from "@molcrafts/molrs";
 import { logger } from "../utils/logger";
 import { inferFormatFromFilename } from "./reader";
+import { syncSceneToFrame } from "./scene_sync";
+import type { SceneIndex } from "./scene_index";
 
 export type ExportFormat = "pdb" | "xyz" | "lammps";
 
@@ -13,6 +15,18 @@ export interface ExportPayload {
   content: string;
   mime: string;
   suggestedName: string;
+}
+
+/**
+ * Build export payload from the current staged scene state without mutating save-state flags.
+ */
+export function exportFrame(
+  sceneIndex: SceneIndex,
+  options: WriteFrameOptions,
+): ExportPayload {
+  const frame = new Frame();
+  syncSceneToFrame(sceneIndex, frame, { markSaved: false });
+  return writeFrame(frame, options);
 }
 
 export function defaultExtensionForFormat(format: string): string {

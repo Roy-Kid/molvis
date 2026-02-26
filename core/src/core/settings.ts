@@ -83,7 +83,7 @@ export const DEFAULT_SETTING: MolvisSetting = {
     opacity: 0.5,
     majorUnitFrequency: 10,
     minorUnitVisibility: 0.5,
-    size: 100,
+    size: 1000,
   },
   graphics: {
     shadows: false,
@@ -225,11 +225,11 @@ export class Settings {
     return this.values.lighting;
   }
 
-  getGrid(): Required<GridConfig> {
+  getGrid(): GridConfig {
     return this.values.grid;
   }
 
-  getGraphics(): Required<GraphicsConfig> {
+  getGraphics(): GraphicsConfig {
     return this.values.graphics;
   }
 

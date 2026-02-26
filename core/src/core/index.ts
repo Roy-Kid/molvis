@@ -2,6 +2,7 @@ export { MolvisApp as Molvis } from "./app";
 export { World } from "./world";
 export { Settings } from "./settings";
 export {
+  exportFrame,
   writeFrame,
   defaultExtensionForFormat,
   mimeForFormat,

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type Molvis, inferFormatFromFilename, writeFrame } from "@molvis/core";
+import { type Molvis, exportFrame, inferFormatFromFilename } from "@molvis/core";
 import { Download, Loader2 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -28,33 +28,23 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
     setIsExporting(true);
 
     try {
-      // 1. Get Frame from Scene (snapshot)
-      const frame = app.world.sceneIndex.dumpFrame();
-
-      // 2. Infer format
       const format = inferFormatFromFilename(filename, "pdb");
+      const payload = exportFrame(app.world.sceneIndex, { format, filename });
 
-      // 3. Write Frame (WASM)
-      // Dynamic import if needed, but we imported from @molvis/core which should handle it if loaded.
-      // TopBar used dynamic import, maybe to ensure WASM presence.
-      // Since we are in UI, core should be loaded.
-      const payload = writeFrame(frame, { format, filename });
-
-      if (payload?.content) {
-        const blob = new Blob([payload.content], { type: payload.mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = payload.suggestedName || filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setOpen(false);
+      if (!payload.content) {
+        throw new Error("Export payload is empty");
       }
-    } catch (e) {
-      console.error("Export failed:", e);
-      // Ideally show toast error
+
+      const blob = new Blob([payload.content], { type: payload.mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = payload.suggestedName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setOpen(false);
     } finally {
       setIsExporting(false);
     }

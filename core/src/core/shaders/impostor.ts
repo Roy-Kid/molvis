@@ -77,6 +77,7 @@ varying vec3 vSphereCenter; // View-space center
 varying float vSphereRadius;
 
 void main() {
+    if (vColor.a < 0.1) discard;
     // Map uv [0,1] -> [-1,1]
     vec2 coord = vUV * 2.0 - 1.0;
 
@@ -228,6 +229,7 @@ uniform float lightSpecular;
 uniform float lightSpecularPower;
 
 void main() {
+    if (vColor0.a < 0.1) discard;
     // Ray from camera (origin) through this fragment position in view space
     vec3 D = normalize(vPosView);
     vec3 CO = -vCenterView;

@@ -1,11 +1,11 @@
 import type { AbstractMesh, PointerInfo } from "@babylonjs/core";
 import { Color3, MeshBuilder, Vector3 } from "@babylonjs/core";
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp as Molvis } from "../core/app";
 import { makeSelectionKey } from "../core/selection_manager";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { HitResult, MenuItem } from "./types";
+import type { BindingEvent, HitResult, MenuItem } from "./types";
 
 interface MeasurementData {
   id: string;
@@ -54,8 +54,8 @@ class MeasureModeContextMenu extends ContextMenuController {
           ],
           value: this.mode.distanceUnit,
         },
-        action: (ev: Event) => {
-          this.mode.distanceUnit = ev.value;
+        action: (ev: BindingEvent) => {
+          this.mode.distanceUnit = String(ev.value);
           this.mode.updateAllLabels();
         },
       },
@@ -70,8 +70,8 @@ class MeasureModeContextMenu extends ContextMenuController {
           ],
           value: this.mode.angleUnit,
         },
-        action: (ev: Event) => {
-          this.mode.angleUnit = ev.value;
+        action: (ev: BindingEvent) => {
+          this.mode.angleUnit = String(ev.value);
           this.mode.updateAllLabels();
         },
       },
@@ -84,8 +84,8 @@ class MeasureModeContextMenu extends ContextMenuController {
           step: 1,
           value: this.mode.precision,
         },
-        action: (ev: Event) => {
-          this.mode.precision = ev.value;
+        action: (ev: BindingEvent) => {
+          this.mode.precision = Number(ev.value);
           this.mode.updateAllLabels();
         },
       },
@@ -153,10 +153,8 @@ class MeasureMode extends BaseMode {
     await super._on_left_up(pointerInfo);
   }
 
-  private handleAtomClick(hit: HitResult): void {
-    if (!hit.mesh) return;
-
-    const thinIndex = hit.thinInstanceIndex ?? -1;
+  private handleAtomClick(hit: Extract<HitResult, { type: "atom" }>): void {
+    const thinIndex = hit.thinInstanceIndex;
     const meshId = hit.mesh.uniqueId;
 
     const meta =
@@ -183,7 +181,7 @@ class MeasureMode extends BaseMode {
 
     // Robust Position Logic
     let position: Vector3;
-    if (thinIndex === -1) {
+    if (thinIndex < 0) {
       position = hit.mesh.absolutePosition.clone();
     } else {
       // For thin instances, we assume they haven't moved individually

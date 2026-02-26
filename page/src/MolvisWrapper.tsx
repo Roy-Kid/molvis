@@ -2,84 +2,75 @@ import { type Molvis, defaultMolvisConfig, mountMolvis } from "@molvis/core";
 import type React from "react";
 import { useEffect, useRef } from "react";
 
-// Molvis wrapper: create / destroy core instance. Pure rendering area.
 interface MolvisWrapperProps {
   onMount?: (app: Molvis) => void;
 }
 
+/**
+ * Mounts a MolVis core instance into a full-size container and handles cleanup.
+ */
 const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const molvisRef = useRef<Molvis | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    console.log("[MolvisWrapper] Mounting...");
 
     const config = defaultMolvisConfig({
       showUI: true,
       useRightHandedSystem: true,
       ui: {
-        showModePanel: false, // We use our own top bar
-        showViewPanel: true, // Default off in page wrapper? Or true? Original was true.
+        showModePanel: false,
+        showViewPanel: true,
         showInfoPanel: true,
-        showPerfPanel: true, // Default off, user can enable
-        showTrajPanel: false, // Default off
-        showContextMenu: true, // Enable/Disable right-click menu
+        showPerfPanel: true,
+        showTrajPanel: false,
+        showContextMenu: true,
       },
     });
 
     const settings = {
       grid: {
-        enabled: false, // Default off
+        enabled: false,
         size: 100,
         opacity: 0.5,
       },
       graphics: {
         hardwareScaling: 1.0,
         fxaa: true,
-        dof: false, // Depth of Field default off
+        dof: false,
       },
     };
 
-    try {
-      molvisRef.current = mountMolvis(containerRef.current, config, settings);
-      console.log("[MolvisWrapper] Mounted successfully", molvisRef.current);
-      molvisRef.current.start();
-      if (onMount) {
-        onMount(molvisRef.current);
-      }
-    } catch (e) {
-      console.error("Failed to mount Molvis:", e);
+    molvisRef.current = mountMolvis(containerRef.current, config, settings);
+    molvisRef.current.start();
+    if (onMount) {
+      onMount(molvisRef.current);
     }
 
-    let resizeTimeout: number;
-    const resizeObserver = new ResizeObserver((entries) => {
-      // Debounce resize to avoid flickering during rapid layout changes
+    let resizeTimeout: number | null = null;
+    const resizeObserver = new ResizeObserver(() => {
       if (resizeTimeout) window.cancelAnimationFrame(resizeTimeout);
 
       resizeTimeout = window.requestAnimationFrame(() => {
-        for (const _entry of entries) {
-          if (molvisRef.current) {
-            molvisRef.current.resize();
-          }
+        if (molvisRef.current) {
+          molvisRef.current.resize();
         }
       });
     });
     resizeObserver.observe(containerRef.current);
 
     return () => {
-      console.log("[MolvisWrapper] Unmounting...");
       resizeObserver.disconnect();
+      if (resizeTimeout) {
+        window.cancelAnimationFrame(resizeTimeout);
+      }
       if (molvisRef.current) {
-        try {
-          molvisRef.current.destroy();
-        } catch (e) {
-          console.error("[MolvisWrapper] Destroy failed", e);
-        }
+        molvisRef.current.destroy();
         molvisRef.current = null;
       }
     };
-  }, []);
+  }, [onMount]);
 
   return (
     <div

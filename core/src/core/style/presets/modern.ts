@@ -34,6 +34,23 @@ export class ModernTheme implements Theme {
     };
   }
 
+  public getTypeStyle(type: string): AtomStyle {
+    // Keep type coloring deterministic while preserving modern material defaults.
+    let hash = 0;
+    for (let i = 0; i < type.length; i++) {
+      hash = type.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const colorCode = (hash & 0x00ffffff).toString(16).toUpperCase();
+    const color = `#${"000000".slice(colorCode.length)}${colorCode}`;
+
+    return {
+      color,
+      radius: 0.4,
+      specularColor: "#FFFFFF",
+      emissiveColor: "#000000",
+    };
+  }
+
   public getBondStyle(_order: number, _type?: string): BondStyle {
     return {
       color: "#BDC3C7", // Light gray bond

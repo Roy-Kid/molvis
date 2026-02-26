@@ -1,6 +1,6 @@
-import { Molvis, Trajectory } from "@molvis/core";
+import { Molvis, Trajectory } from "../src/index";
 
-import { Block, Frame } from "molwasm";
+import { Block, Frame } from "@molcrafts/molrs";
 
 /**
  * Demo: Trajectory rendering

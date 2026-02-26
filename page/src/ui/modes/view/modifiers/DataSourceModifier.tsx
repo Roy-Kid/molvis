@@ -1,14 +1,29 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { Modifier, Molvis } from "@molvis/core";
-import { ArrayFrameSource, Frame, readFrame } from "@molvis/core";
-import { FileUp, Trash2 } from "lucide-react";
+import {
+  type DataSourceModifier as CoreDataSourceModifier,
+  Frame,
+  type FrameProvider,
+  type Molvis,
+  Trajectory,
+  ZarrReader,
+  readFrame,
+} from "@molvis/core";
+import { FileUp, FolderUp, Trash2 } from "lucide-react";
 import type React from "react";
 
 interface DataSourceModifierProps {
-  modifier: Modifier;
+  modifier: CoreDataSourceModifier;
   app: Molvis | null;
   onUpdate: () => void;
+}
+
+// Add webkitdirectory to InputHTMLAttributes
+declare module "react" {
+  interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
+    webkitdirectory?: string | boolean;
+    directory?: string | boolean;
+  }
 }
 
 export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
@@ -16,119 +31,135 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   app,
   onUpdate,
 }) => {
-  const handleChange = (key: string, value: any) => {
-    (modifier as any)[key] = value;
-    onUpdate();
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !app) return;
 
     try {
       const text = await file.text();
-      const ext = (file.name.split(".").pop() || "pdb").toLowerCase();
+      const frame = readFrame(text, file.name);
 
-      console.log(`Reading file ${file.name} as ${ext}`);
+      modifier.sourceType = "file";
+      modifier.filename = file.name;
+      modifier.setFrame(frame);
 
-      // Clear existing scene and history
-      if (app && (app as any).artist) {
-        (app as any).artist.clear();
-      }
-      if (app && (app as any).commandManager) {
-        (app as any).commandManager.clearHistory();
-      }
-
-      let frame;
-      try {
-        frame = readFrame(text, file.name);
-        console.log("[DataSourceModifier] read returned:", frame);
-      } catch (err) {
-        console.error("Parse error", err);
-        if (app?.events) {
-          app.events.emit("status-message", {
-            text: `Failed to parse file: ${(err as Error).message}`,
-            type: "error",
-          });
-        }
-        return;
-      }
-
-      if (frame) {
-        // Update Modifier State
-        (modifier as any).sourceType = "file";
-        (modifier as any).filename = file.name;
-
-        if (
-          "setFrame" in modifier &&
-          typeof (modifier as any).setFrame === "function"
-        ) {
-          (modifier as any).setFrame(frame);
-        }
-
-        onUpdate();
-
-        // Trigger pipeline update
-        app.setMode("view");
-
-        // Force re-compute
-        const pipeline = (app as any).modifierPipeline;
-        if (pipeline) {
-          const dummySource = new ArrayFrameSource([new Frame()]);
-          const computed = await (app as any).computeFrame(0, dummySource);
-          (app as any).renderFrame(computed);
-          onUpdate();
-        }
-
-        (app as any).frameCount = 1;
-      }
-    } catch (e) {
-      console.error("Upload failed", e);
-      if (app?.events) {
-        app.events.emit("status-message", {
-          text: `Error: ${(e as Error).message}`,
-          type: "error",
-        });
-      }
+      app.loadFrame(frame, frame.simbox);
+      app.setMode("view");
+      await app.applyPipeline({ fullRebuild: true });
+      onUpdate();
+    } catch (err) {
+      app.events.emit("status-message", {
+        text: `Failed to load file: ${err instanceof Error ? err.message : String(err)}`,
+        type: "error",
+      });
     } finally {
-      // Reset value to allow re-selection of same file
       e.target.value = "";
     }
   };
 
-  const filename = (modifier as any).filename || "-";
-  // Get counts from the modifiers frame if possible, or system frame
-  const frame = app?.system?.frame;
-  const atomCount = frame?.getBlock("atoms")?.nrows() ?? 0;
-  const bondCount = frame?.getBlock("bonds")?.nrows() ?? 0;
-  const hasBox = !!frame?.box;
+  const handleZarrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !app) return;
 
-  const showAtoms = (modifier as any).showAtoms ?? true;
-  const showBonds = (modifier as any).showBonds ?? true;
-  const showBox = (modifier as any).showBox ?? true;
+    try {
+      const fileMap = new Map<string, Uint8Array>();
+      let rootName = "";
 
-  const triggerUpdate = async () => {
-    if (!app) return;
-    const dummySource = new ArrayFrameSource([new Frame()]);
-    const computed = await (app as any).computeFrame(0, dummySource);
-    (app as any).renderFrame(computed);
-    onUpdate();
+      await Promise.all(
+        Array.from(files).map(async (file) => {
+          const buffer = await file.arrayBuffer();
+          const parts = file.webkitRelativePath.split("/");
+          if (parts.length > 1) {
+            if (!rootName) rootName = parts[0];
+            const relPath = parts.slice(1).join("/");
+            fileMap.set(relPath, new Uint8Array(buffer));
+          } else {
+            fileMap.set(file.name, new Uint8Array(buffer));
+          }
+        }),
+      );
+
+      const reader = new ZarrReader(fileMap);
+      const frameCount = reader.len();
+      if (frameCount <= 0) {
+        throw new Error("Zarr archive has no frames");
+      }
+
+      const frameCache = new Map<number, Frame>();
+      const provider: FrameProvider = {
+        length: frameCount,
+        get(index: number): Frame {
+          if (index < 0 || index >= frameCount) {
+            throw new Error(
+              `Zarr frame ${index} out of range [0, ${frameCount})`,
+            );
+          }
+          const cached = frameCache.get(index);
+          if (cached) {
+            return cached;
+          }
+          const frame = reader.read(index);
+          if (!frame) {
+            throw new Error(`Failed to read Zarr frame ${index}`);
+          }
+          frameCache.set(index, frame);
+          if (frameCache.size > 16) {
+            const oldestKey = frameCache.keys().next().value as
+              | number
+              | undefined;
+            if (oldestKey !== undefined && oldestKey !== index) {
+              frameCache.delete(oldestKey);
+            }
+          }
+          return frame;
+        },
+      };
+
+      // Validate first frame early so users get immediate errors for malformed archives.
+      provider.get(0);
+
+      modifier.sourceType = "zarr";
+      modifier.filename = rootName || "trajectory.zarr";
+      // Trajectory frames come from provider; keep DataSourceModifier pass-through.
+      modifier.setFrame(null);
+      app.setMode("view");
+      app.setTrajectory(Trajectory.fromProvider(provider));
+      app.events.emit("status-message", {
+        text: `Loaded trajectory: ${modifier.filename} (${frameCount} frames)`,
+        type: "info",
+      });
+      onUpdate();
+    } catch (err) {
+      app.events.emit("status-message", {
+        text: `Failed to load Zarr: ${err instanceof Error ? err.message : String(err)}`,
+        type: "error",
+      });
+    } finally {
+      e.target.value = "";
+    }
   };
 
-  const handleToggle = (prop: string, checked: boolean) => {
-    handleChange(prop, checked);
-    triggerUpdate();
+  const filename = modifier.filename === "" ? "-" : modifier.filename;
+  const frame = app?.system.frame;
+  const atomCount = frame?.getBlock("atoms")?.nrows() ?? 0;
+  const bondCount = frame?.getBlock("bonds")?.nrows() ?? 0;
+  const hasBox = frame?.simbox !== undefined;
+
+  const handleToggle = (
+    prop: "showAtoms" | "showBonds" | "showBox",
+    checked: boolean,
+  ) => {
+    modifier[prop] = checked;
+    onUpdate();
+    app?.applyPipeline({ fullRebuild: true });
   };
 
   const handleClear = () => {
-    if (app && (app as any).artist) (app as any).artist.clear();
-    if (app && (app as any).commandManager)
-      (app as any).commandManager.clearHistory();
-
-    if ("setFrame" in modifier) (modifier as any).setFrame(null);
-    (modifier as any).filename = "";
+    if (!app) return;
+    modifier.setFrame(null);
+    modifier.filename = "";
+    app.loadFrame(new Frame());
     onUpdate();
-    triggerUpdate();
   };
 
   return (
@@ -140,9 +171,25 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             className="absolute inset-0 opacity-0 cursor-pointer"
             onChange={handleFileUpload}
             accept=".pdb,.xyz,.lmp,.lammps"
+            title="Load single file"
           />
           <Button variant="outline" size="sm" className="w-full gap-2">
             <FileUp className="h-4 w-4" /> Load File
+          </Button>
+        </div>
+
+        <div className="relative flex-1">
+          <input
+            type="file"
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            onChange={handleZarrUpload}
+            webkitdirectory=""
+            directory=""
+            multiple
+            title="Load Zarr directory"
+          />
+          <Button variant="outline" size="sm" className="w-full gap-2">
+            <FolderUp className="h-4 w-4" /> Load Zarr
           </Button>
         </div>
 
@@ -161,7 +208,6 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
         Src: <span className="font-mono text-foreground">{filename}</span>
       </div>
 
-      {/* Visibility Table */}
       <div className="border rounded-md overflow-hidden bg-background">
         <table className="w-full text-xs">
           <thead className="bg-muted text-muted-foreground font-medium">
@@ -175,9 +221,9 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             <tr className="hover:bg-muted/50 transition-colors">
               <td className="px-3 py-2">
                 <Checkbox
-                  checked={showAtoms}
-                  onCheckedChange={(c) =>
-                    handleToggle("showAtoms", c as boolean)
+                  checked={modifier.showAtoms}
+                  onCheckedChange={(checked) =>
+                    handleToggle("showAtoms", checked === true)
                   }
                   className="h-3.5 w-3.5"
                 />
@@ -190,9 +236,9 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             <tr className="hover:bg-muted/50 transition-colors">
               <td className="px-3 py-2">
                 <Checkbox
-                  checked={showBonds}
-                  onCheckedChange={(c) =>
-                    handleToggle("showBonds", c as boolean)
+                  checked={modifier.showBonds}
+                  onCheckedChange={(checked) =>
+                    handleToggle("showBonds", checked === true)
                   }
                   className="h-3.5 w-3.5"
                 />
@@ -205,8 +251,10 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             <tr className="hover:bg-muted/50 transition-colors">
               <td className="px-3 py-2">
                 <Checkbox
-                  checked={showBox}
-                  onCheckedChange={(c) => handleToggle("showBox", c as boolean)}
+                  checked={modifier.showBox}
+                  onCheckedChange={(checked) =>
+                    handleToggle("showBox", checked === true)
+                  }
                   className="h-3.5 w-3.5"
                 />
               </td>

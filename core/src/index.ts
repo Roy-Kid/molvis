@@ -1,12 +1,11 @@
-import init, { type InitOutput } from "molwasm";
+import init, { type InitOutput } from "@molcrafts/molrs";
 declare const __WASM_INLINE__: boolean;
 
 export let wasmInstance: InitOutput;
 
 if (__WASM_INLINE__) {
   const { default: wasmUrl } = await import(
-    // @ts-ignore
-    /* webpackMode: "eager" */ "molwasm/molrs_wasm_bg.wasm?inline"
+    /* webpackMode: "eager" */ "@molcrafts/molrs/molwasm_bg.wasm?inline"
   );
   wasmInstance = await init(wasmUrl);
 } else {
@@ -38,7 +37,13 @@ export {
   defaultMolvisSettings,
   type MolvisSetting,
 } from "./core/settings";
-export { Frame, Block, Box, Trajectory } from "./core/system/";
+export {
+  Frame,
+  Block,
+  Box,
+  Trajectory,
+  type FrameProvider,
+} from "./core/system/index";
 export { Topology } from "./core/system/topology";
 export { System } from "./core/system";
 export {
@@ -48,6 +53,7 @@ export {
   parseSelectionKey,
 } from "./core";
 export {
+  exportFrame,
   writeFrame,
   writePDBFrame,
   writeXYZFrame,
@@ -64,15 +70,24 @@ export {
   readXYZFrame,
   readLAMMPSData,
   inferFormatFromFilename,
+  TrajectoryReader,
+  deriveElementFromType,
+  processZarrFrame,
 } from "./core/reader";
 
 export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
 export type { Modifier } from "./pipeline/modifier";
-export { ArrayFrameSource } from "./commands/sources";
+export { ArrayFrameSource, ZarrFrameSource } from "./commands/sources";
+export { ZarrReader } from "@molcrafts/molrs";
 
 export { DataSourceModifier } from "./pipeline/data_source_modifier";
+export { SliceModifier } from "./modifiers/SliceModifier";
+export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
+export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
+
+export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
 
 // Register default commands
 import "./commands";

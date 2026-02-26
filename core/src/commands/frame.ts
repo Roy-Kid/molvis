@@ -1,6 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
-import { type Block, type Frame } from "molwasm";
+import { type Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../core/app";
+import { syncSceneToFrame } from "../core/scene_sync";
 import { Command, command } from "./base";
 import type { DrawFrameOption } from "./draw";
 
@@ -38,11 +39,11 @@ const UP_VECTOR = new BABYLON.Vector3(0, 1, 0);
 @command("new_frame")
 export class NewFrameCommand extends Command<void> {
   private clear: boolean;
+  private frameName?: string;
 
   constructor(app: MolvisApp, args: { name?: string; clear?: boolean }) {
     super(app);
-    // TODO: Use name parameter when frame naming is implemented
-    void args.name;
+    this.frameName = args.name;
     this.clear = args.clear ?? true;
   }
 
@@ -52,11 +53,8 @@ export class NewFrameCommand extends Command<void> {
       index.clear();
       this.app.artist.clear();
     }
-    // Logic for "new frame" is mostly structural in SceneIndex if it tracked frames separately.
-    // Currently SceneIndex has one "current" collection of meshes.
-    // So this command is mostly a "Clear" + "Set Name" placeholder.
-    // Or if we want to separate frames, we would need SceneIndex to support multiple active frames.
-    // For now, assume single active frame model.
+    // Frame naming is retained for forward compatibility but not persisted in v0.0.2.
+    void this.frameName;
   }
 
   undo(): Command {
@@ -86,21 +84,16 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       return { success: false, reason: "No frame provided" };
     }
 
-    const scene = this.app.world.scene;
     const sceneIndex = this.app.world.sceneIndex;
 
-    // 1. Get Existing Meshes
-    const atomMesh =
-      (scene.getMeshByName("atom_base_renderer") as BABYLON.Mesh) ||
-      scene.getMeshByName("atom_base");
-    const bondMesh =
-      (scene.getMeshByName("bond_base_renderer") as BABYLON.Mesh) ||
-      scene.getMeshByName("bond_base");
+    // 1. Get Existing Meshes from Artist (more reliable than scene lookup)
+    const atomMesh = this.app.artist.atomMesh;
+    const bondMesh = this.app.artist.bondMesh;
 
     if (!atomMesh) {
       return {
         success: false,
-        reason: "No existing atom mesh found (atom_base_renderer)",
+        reason: "No existing atom mesh found",
       };
     }
 
@@ -134,20 +127,18 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       };
     }
 
-    // 3. Update Buffers
+    // 3. Update Buffers (in-place, no mesh recreation)
     this.updateAtomBuffer(atomMesh, frameAtoms);
 
     if (bondMesh && frameBonds) {
       this.updateBondBuffer(bondMesh, frameAtoms, frameBonds);
     }
 
-    // 4. Update Metadata in SceneIndex
-    sceneIndex.registerFrame({
-      atomMesh,
-      bondMesh: bondMesh || undefined,
-      atomBlock: frameAtoms,
-      bondBlock: frameBonds ?? undefined,
-    });
+    // 4. Update Metadata only (don't call registerFrame - it recreates ImpostorState!)
+    sceneIndex.metaRegistry.atoms.setFrame(frameAtoms);
+    if (frameBonds) {
+      sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
+    }
 
     return { success: true };
   }
@@ -163,27 +154,29 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     if (!zCoords) throw new Error("Missing z coordinates");
     const elements = atomsBlock.getColumnStrings("element");
 
-    const existingMatrixBuffer = (mesh as BABYLON.Mesh).thinInstanceGetBuffer(
-      "matrix",
-    ) as Float32Array | null;
-    const needsSetMatrix =
-      !existingMatrixBuffer || existingMatrixBuffer.length !== count * 16;
-    const matrixBuffer = needsSetMatrix
-      ? new Float32Array(count * 16)
-      : existingMatrixBuffer;
+    // Retrieve Metalayer/ImpostorState from SceneIndex
+    const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+    if (!atomState || atomState.mesh !== mesh) {
+      throw new Error("Atom state not found or mismatched mesh in SceneIndex");
+    }
 
-    const existingInstanceData = (mesh as BABYLON.Mesh).thinInstanceGetBuffer(
-      "instanceData",
-    ) as Float32Array | null;
-    const needsSetInstanceData = existingInstanceData
-      ? existingInstanceData.length !== count * 4
-      : false;
-    const instanceDataBuffer =
-      existingInstanceData && !needsSetInstanceData
-        ? existingInstanceData
-        : existingInstanceData
-          ? new Float32Array(count * 4)
-          : null;
+    // Get buffer from ImpostorState
+    const matrixDesc = atomState.buffers.get("matrix");
+    if (!matrixDesc) throw new Error("Matrix buffer missing in AtomState");
+
+    const matrixBuffer = matrixDesc.data; // Using the persistent buffer
+    if (matrixBuffer.length < count * 16) {
+      // Buffer too small? We should probably resize via ImpostorState.
+      // But UpdateFrameCommand usually assumes topology matches.
+      // If count is same, length should be sufficient if ImpostorState was init correctly.
+      // But if ImpostorState was grown for Edits, it's fine.
+      throw new Error(`Matrix buffer too small: ${matrixBuffer.length} < ${count * 16}`);
+    }
+
+    // InstanceData
+    const instanceDataDesc = atomState.buffers.get("instanceData");
+    if (!instanceDataDesc) throw new Error("InstanceData buffer missing in AtomState");
+    const instanceDataBuffer = instanceDataDesc.data;
 
     const styleManager = this.app.styleManager;
     const drawOptions = this.options ?? {};
@@ -193,7 +186,6 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       const element = elements ? elements[i] : "C";
       let radius = drawOptions.atoms?.radii?.[i];
 
-      // Logic: if radius undefined, check style manager.
       if (radius === undefined) {
         let style = styleCache.get(element);
         if (!style) {
@@ -217,27 +209,23 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       matrixBuffer[offset + 13] = yCoords[i];
       matrixBuffer[offset + 14] = zCoords[i];
 
-      if (instanceDataBuffer) {
-        const idx4 = i * 4;
-        instanceDataBuffer[idx4 + 0] = xCoords[i];
-        instanceDataBuffer[idx4 + 1] = yCoords[i];
-        instanceDataBuffer[idx4 + 2] = zCoords[i];
-        instanceDataBuffer[idx4 + 3] = radius;
-      }
+      const idx4 = i * 4;
+      instanceDataBuffer[idx4 + 0] = xCoords[i];
+      instanceDataBuffer[idx4 + 1] = yCoords[i];
+      instanceDataBuffer[idx4 + 2] = zCoords[i];
+      instanceDataBuffer[idx4 + 3] = radius;
     }
 
-    if (needsSetMatrix) {
-      mesh.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-    } else {
-      mesh.thinInstanceBufferUpdated("matrix");
-    }
-    if (instanceDataBuffer) {
-      if (needsSetInstanceData) {
-        mesh.thinInstanceSetBuffer("instanceData", instanceDataBuffer, 4, true);
-      } else {
-        mesh.thinInstanceBufferUpdated("instanceData");
-      }
-    }
+    // Notify ImpostorState that we modified the data?
+    // ImpostorState.updateMulti? Use setFrameDataAndFlush? 
+    // Simply calling thinInstanceBufferUpdated on mesh is enough IF we modified the array it uses.
+    // Babylon's ThinInstanceSetBuffer uses the array reference if not static?
+    // Wait, ImpostorState calls `thinInstanceSetBuffer(..., true)`.
+    // Static buffers might need explicit update call.
+
+    // Flush via ImpostorState
+    atomState.dirty = true;
+    atomState.flush();
     mesh.thinInstanceRefreshBoundingInfo(true);
   }
 
@@ -259,35 +247,18 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     const j_atoms = bondsBlock.getColumnU32("j");
     if (!j_atoms) throw new Error("Missing bond j atoms");
 
-    const existingMatrix = (mesh as BABYLON.Mesh).thinInstanceGetBuffer(
-      "matrix",
-    ) as Float32Array | null;
-    const needsSetMatrix =
-      !existingMatrix || existingMatrix.length !== count * 16;
-    const matrixBuffer = needsSetMatrix
-      ? new Float32Array(count * 16)
-      : existingMatrix;
+    // Retrieve Bond State
+    const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+    if (!bondState || bondState.mesh !== mesh) {
+      throw new Error("Bond state not found or mismatched mesh");
+    }
 
-    const existingData0 = (mesh as BABYLON.Mesh).thinInstanceGetBuffer(
-      "instanceData0",
-    ) as Float32Array | null;
-    const existingData1 = (mesh as BABYLON.Mesh).thinInstanceGetBuffer(
-      "instanceData1",
-    ) as Float32Array | null;
-    const useImpostor = !!(existingData0 && existingData1);
+    const matrixBuffer = bondState.buffers.get("matrix")?.data;
+    if (!matrixBuffer) throw new Error("Bond matrix buffer missing");
 
-    const needsSetData0 = useImpostor && existingData0?.length !== count * 4;
-    const needsSetData1 = useImpostor && existingData1?.length !== count * 4;
-    const data0Buffer = useImpostor
-      ? needsSetData0
-        ? new Float32Array(count * 4)
-        : (existingData0 ?? new Float32Array(count * 4))
-      : null;
-    const data1Buffer = useImpostor
-      ? needsSetData1
-        ? new Float32Array(count * 4)
-        : (existingData1 ?? new Float32Array(count * 4))
-      : null;
+    const data0Buffer = bondState.buffers.get("instanceData0")?.data;
+    const data1Buffer = bondState.buffers.get("instanceData1")?.data;
+    const useImpostor = !!(data0Buffer && data1Buffer);
 
     const drawOptions = this.options ?? {};
     const bondRadius = drawOptions.bonds?.radii ?? 0.1;
@@ -335,7 +306,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         matrixBuffer[matOffset + 13] = TMP_VEC_CENTER.y;
         matrixBuffer[matOffset + 14] = TMP_VEC_CENTER.z;
       } else {
-        // Fast rotation: quaternion from unit vectors (no acos)
+        // Fast rotation
         const dot = BABYLON.Vector3.Dot(UP_VECTOR, TMP_VEC_DIR);
         if (dot < -0.999999) {
           BABYLON.Quaternion.FromEulerAnglesToRef(Math.PI, 0, 0, TMP_QUAT);
@@ -360,23 +331,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       }
     }
 
-    if (needsSetMatrix) {
-      mesh.thinInstanceSetBuffer("matrix", matrixBuffer, 16, true);
-    } else {
-      mesh.thinInstanceBufferUpdated("matrix");
-    }
-    if (useImpostor && data0Buffer && data1Buffer) {
-      if (needsSetData0) {
-        mesh.thinInstanceSetBuffer("instanceData0", data0Buffer, 4, true);
-      } else {
-        mesh.thinInstanceBufferUpdated("instanceData0");
-      }
-      if (needsSetData1) {
-        mesh.thinInstanceSetBuffer("instanceData1", data1Buffer, 4, true);
-      } else {
-        mesh.thinInstanceBufferUpdated("instanceData1");
-      }
-    }
+    // Flush via ImpostorState
+    bondState.dirty = true;
+    bondState.flush();
     mesh.thinInstanceRefreshBoundingInfo(true);
   }
 
@@ -386,40 +343,24 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
 }
 
 /**
- * Command to dump the current scene frame.
+ * Command to export current staged scene data as a plain frame-data payload.
+ * Intended for external clients (e.g. python) to reconstruct frame objects.
  */
-@command("dump_frame")
-export class DumpFrameCommand extends Command<{
-  frameData: FrameDataBlocks;
+@command("export_frame")
+export class ExportFrameCommand extends Command<{
+  frameData: { blocks: FrameDataBlocks; metadata: Record<string, unknown> };
 }> {
-  do(): { frameData: FrameDataBlocks } {
-    const frame = this.app.world.sceneIndex.dumpFrame();
-    // We return the raw frame as a JS object/dict for the RPC layer to serialize
-    // The molrs-wasm frame object might need to do to_dict()?
-    // Need to check if `dumpFrame` returns a WASM Frame object.
-    // Yes, SceneIndex.dumpFrame returns Frame.
-
-    // However, we cannot return WASM object to python directly via JSON RPC.
-    // We must convert to simple object.
-    // Since we don't have frame.to_dict exposed in JS interface often?
-    // Let's check `Frame` interface in simple view.
-
-    // Actually, the easiest way might be to Write to buffer using `writeFrame`
-    // OR construct a plain object matching what Python expects if we want strict typing.
-    // But `writeFrame` (binary) is good. The user requested `mp.Frame` support.
-    // `mp.Frame` can be constructed from a dict.
-
-    // Let's allow the RPC layer/serializer to handle `Frame` if it has a `toJSON` or we can map it.
-    // WASM objects don't usually map well.
-    // I will implement a manual partial dump here OR use writeFrame to binary and send binary?
-    // The user requirement "dumpFrame -> mp.Frame" implies we want the structural data.
-
-    // Let's implement a manual conversion to a plain object structure that `molpy` can digest.
+  do(): {
+    frameData: { blocks: FrameDataBlocks; metadata: Record<string, unknown> };
+  } {
+    const tempFrame = new Frame();
+    syncSceneToFrame(this.app.world.sceneIndex, tempFrame, {
+      markSaved: false,
+    });
 
     const blocks: FrameDataBlocks = {};
 
-    // Atoms
-    const atomsBlock = frame.getBlock("atoms");
+    const atomsBlock = tempFrame.getBlock("atoms");
     if (atomsBlock) {
       const x = atomsBlock.getColumnF32("x");
       const y = atomsBlock.getColumnF32("y");
@@ -436,26 +377,30 @@ export class DumpFrameCommand extends Command<{
       }
     }
 
-    // Bonds
-    const bondsBlock = frame.getBlock("bonds");
+    const bondsBlock = tempFrame.getBlock("bonds");
     if (bondsBlock) {
       const i = bondsBlock.getColumnU32("i");
       const j = bondsBlock.getColumnU32("j");
-      const order = bondsBlock.getColumnF32("order");
+      const orderU8 = bondsBlock.getColumnU8("order");
+      const orderF32 = bondsBlock.getColumnF32("order");
 
       if (i && j) {
         blocks.bonds = {
           i: Array.from(i),
           j: Array.from(j),
-          order: order ? Array.from(order) : undefined,
+          order: orderU8
+            ? Array.from(orderU8)
+            : orderF32
+              ? Array.from(orderF32)
+              : undefined,
         };
       }
     }
 
-    return { frameData: { blocks } };
+    return { frameData: { blocks, metadata: {} } };
   }
 
   undo(): Command {
-    return new NewFrameCommand(this.app, {}); // No-op really
+    return this;
   }
 }

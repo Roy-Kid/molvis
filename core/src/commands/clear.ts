@@ -1,4 +1,4 @@
-import type * as BABYLON from "@babylonjs/core";
+import type { AbstractMesh } from "@babylonjs/core";
 import { Command, command } from "./base";
 
 /**
@@ -7,21 +7,19 @@ import { Command, command } from "./base";
 @command("clear_scene")
 export class ClearSceneCommand extends Command<void> {
   do(): void {
-    const scene = this.app.world.scene;
+    const registry = this.app.world.sceneIndex.meshRegistry;
+    const meshesToDispose: AbstractMesh[] = [];
 
-    // Clear existing atom/bond/box meshes
-    const meshesToDispose: BABYLON.AbstractMesh[] = [];
+    const atomState = registry.getAtomState();
+    if (atomState) meshesToDispose.push(atomState.mesh);
+
+    const bondState = registry.getBondState();
+    if (bondState) meshesToDispose.push(bondState.mesh);
+
+    // Also clear sim_box meshes
+    const scene = this.app.world.scene;
     for (const mesh of scene.meshes) {
-      // Check if mesh is registered (atom, bond, or box meshes have names)
-      if (
-        mesh.name === "atom_base" ||
-        mesh.name === "bond_base" ||
-        mesh.name === "edit_atom_base" ||
-        mesh.name === "edit_bond_base" ||
-        mesh.name === "manip_atom_base" ||
-        mesh.name === "manip_bond_base" ||
-        mesh.name === "sim_box"
-      ) {
+      if (mesh.name === "sim_box") {
         meshesToDispose.push(mesh);
       }
     }

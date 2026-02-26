@@ -142,7 +142,7 @@ export class Highlighter {
     // Apply visual
     colorBuffer.set(color, offset);
 
-    mesh.thinInstanceSetBuffer("color", colorBuffer, 4, false);
+    mesh.thinInstanceSetBuffer("instanceColor", colorBuffer, 4, false);
   }
 
   /**
@@ -167,7 +167,7 @@ export class Highlighter {
       colorBuffer[offset + 2] = color.b;
       colorBuffer[offset + 3] = color.a;
 
-      mesh.thinInstanceSetBuffer("color", colorBuffer, 4, false);
+      mesh.thinInstanceSetBuffer("instanceColor", colorBuffer, 4, false);
     }
     this.thinOriginalColors.clear();
   }

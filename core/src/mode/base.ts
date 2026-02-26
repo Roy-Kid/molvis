@@ -10,7 +10,7 @@ import type {
   Observer,
   PointerInfo,
 } from "@babylonjs/core";
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp as Molvis } from "../core/app";
 import type { ContextMenuController } from "../ui/menus/controller";
 import { isCtrlOrMeta } from "../utils/platform";
 import type { HitResult } from "./types";
@@ -131,34 +131,28 @@ abstract class BaseMode {
   }
 
   private unregister_pointer_events = () => {
-    const is_successful = this.scene.onPointerObservable.remove(
-      this._pointer_observer,
-    );
-    if (!is_successful) {
-      // Observer removal failed
-    }
+    this.scene.onPointerObservable.remove(this._pointer_observer);
   };
 
   private unregister_keyboard_events = () => {
-    const is_successful = this.scene.onKeyboardObservable.remove(
-      this._kb_observer,
-    );
-    if (!is_successful) {
-      // Observer removal failed
-    }
+    this.scene.onKeyboardObservable.remove(this._kb_observer);
   };
 
   private register_pointer_events() {
+    const swallow = (p: Promise<void>) => {
+      p.catch((err) => console.error("[Molvis] pointer handler error:", err));
+    };
+
     return this.scene.onPointerObservable.add((pointerInfo: PointerInfo) => {
       switch (pointerInfo.type) {
         case PointerEventTypes.POINTERDOWN:
-          this._on_pointer_down(pointerInfo);
+          swallow(this._on_pointer_down(pointerInfo));
           break;
         case PointerEventTypes.POINTERUP:
-          this._on_pointer_up(pointerInfo);
+          swallow(this._on_pointer_up(pointerInfo));
           break;
         case PointerEventTypes.POINTERMOVE:
-          this._on_pointer_move(pointerInfo);
+          swallow(this._on_pointer_move(pointerInfo));
           break;
         case PointerEventTypes.POINTERWHEEL:
           this._on_pointer_wheel(pointerInfo);
@@ -180,11 +174,8 @@ abstract class BaseMode {
     return this.scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
-          // Handle Ctrl/Cmd key combinations
           if (isCtrlOrMeta(kbInfo.event)) {
-            // Global shortcuts (Undo/Redo/Save/Copy) are handled by the App/UI level (TopBar)
-            // We return here to allow the event to propagate if not prevented?
-            // Actually Babylon's observable doesn't stop propagation automatically but we shouldn't handle it here.
+            // Ctrl/Cmd shortcuts handled by UI layer
           } else {
             switch (kbInfo.event.key) {
               case "e":
@@ -274,25 +265,23 @@ abstract class BaseMode {
 
   async _on_pointer_move(_pointerInfo: PointerInfo): Promise<void> {
     const hit = await this.pickHit();
+    this.app.events.emit("info-text-change", this.formatHitInfo(hit));
+  }
 
-    if (hit && (hit.type === "atom" || hit.type === "bond") && hit.metadata) {
-      const meta = hit.metadata;
-      if (meta.type === "atom") {
-        const infoText = `[Atom] element: ${meta.element} | xyz: ${meta.position.x.toFixed(4)}, ${meta.position.y.toFixed(4)}, ${meta.position.z.toFixed(4)} | `;
-        this.app.events.emit("info-text-change", infoText);
-      } else {
-        const start = meta.start;
-        const end = meta.end;
-        const length = Vector3.Distance(
-          new Vector3(start.x, start.y, start.z),
-          new Vector3(end.x, end.y, end.z),
-        );
-        const infoText = `[Bond] ${meta.atomId1}-${meta.atomId2} | length: ${length.toFixed(2)}${meta.order ? ` | order: ${meta.order}` : ""}`;
-        this.app.events.emit("info-text-change", infoText);
-      }
-    } else {
-      this.app.events.emit("info-text-change", "");
+  protected formatHitInfo(hit: HitResult | null): string {
+    if (!hit || (hit.type !== "atom" && hit.type !== "bond")) {
+      return "";
     }
+    if (hit.type === "atom") {
+      const { element, position } = hit.metadata;
+      return `[Atom] element: ${element} | xyz: ${position.x.toFixed(4)}, ${position.y.toFixed(4)}, ${position.z.toFixed(4)} | `;
+    }
+    const { start, end, atomId1, atomId2, order } = hit.metadata;
+    const length = Vector3.Distance(
+      new Vector3(start.x, start.y, start.z),
+      new Vector3(end.x, end.y, end.z),
+    );
+    return `[Bond] ${atomId1}-${atomId2} | length: ${length.toFixed(2)}${order ? ` | order: ${order}` : ""}`;
   }
 
   _on_pointer_wheel(_pointerInfo: PointerInfo): void {}

@@ -1,7 +1,9 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 import { logger } from "../utils/logger";
 import type { Modifier } from "./modifier";
-import { createDefaultContext } from "./types";
+import { createDefaultContext, type PipelineContext } from "./types";
+import type { MolvisApp } from "../core/app";
+import { EventEmitter } from "../events";
 
 /**
  * Frame source interface for loading frames.
@@ -11,28 +13,27 @@ export interface FrameSource {
   getFrameCount(): number | null;
 }
 
-/**
- * Modifier pipeline that executes a sequence of modifiers.
- * Modifiers are stateless - all state is in the context and frame.
- */
-import { EventEmitter } from "../events";
+export interface PipelineEventMap {
+  "modifier-added": { modifier: Modifier; index: number };
+  "modifier-removed": { modifier: Modifier; index: number };
+  "modifier-reordered": { modifier: Modifier; oldIndex: number; newIndex: number };
+  "pipeline-cleared": Record<string, never>;
+  "computed": { frame: Frame; context: PipelineContext };
+}
 
-/**
- * Pipeline events that UI can subscribe to.
- */
 export const PipelineEvents = {
-  MODIFIER_ADDED: "modifier-added",
-  MODIFIER_REMOVED: "modifier-removed",
-  MODIFIER_REORDERED: "modifier-reordered",
-  PIPELINE_CLEARED: "pipeline-cleared",
-  COMPUTED: "computed",
+  MODIFIER_ADDED: "modifier-added" as const,
+  MODIFIER_REMOVED: "modifier-removed" as const,
+  MODIFIER_REORDERED: "modifier-reordered" as const,
+  PIPELINE_CLEARED: "pipeline-cleared" as const,
+  COMPUTED: "computed" as const,
 };
 
 /**
  * Modifier pipeline that executes a sequence of modifiers.
  * Modifiers are stateless - all state is in the context and frame.
  */
-export class ModifierPipeline extends EventEmitter {
+export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   private modifiers: Modifier[] = [];
 
   /**
@@ -85,16 +86,18 @@ export class ModifierPipeline extends EventEmitter {
     return true;
   }
 
+
+
   /**
    * Compute the result of applying all modifiers to a frame.
    * This is a pure function - modifiers are stateless.
    */
-  async compute(source: FrameSource, frameIndex = 0): Promise<Frame> {
+  async compute(source: FrameSource, frameIndex: number, app: MolvisApp): Promise<Frame> {
     // Load initial frame
     let frame = await source.getFrame(frameIndex);
 
     // Create initial context
-    const context = createDefaultContext(frame, frameIndex);
+    const context = createDefaultContext(frame, app, frameIndex);
 
     // Apply each enabled modifier sequentially
     for (const modifier of this.modifiers) {
@@ -125,6 +128,6 @@ export class ModifierPipeline extends EventEmitter {
    */
   clear(): void {
     this.modifiers = [];
-    this.emit(PipelineEvents.PIPELINE_CLEARED, {});
+    this.emit(PipelineEvents.PIPELINE_CLEARED, {} as Record<string, never>);
   }
 }

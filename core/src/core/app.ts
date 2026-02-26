@@ -1,10 +1,12 @@
 import { Engine } from "@babylonjs/core";
 import { type CommandRegistry, commands } from "../commands";
 import type { DrawFrameOption } from "../commands/draw";
+import { ArrayFrameSource } from "../commands/sources";
 import { CommandManager } from "../commands/manager";
-import { EventEmitter } from "../events";
+import { EventEmitter, type MolvisEventMap } from "../events";
 import { ModeManager, ModeType } from "../mode";
-import { ModifierPipeline } from "../pipeline";
+import { ModifierPipeline, PipelineEvents } from "../pipeline";
+import type { FrameSource } from "../pipeline/pipeline";
 import { GUIManager } from "../ui/manager";
 import { logger } from "../utils/logger";
 import { Artist } from "./artist";
@@ -16,7 +18,7 @@ import { System } from "./system";
 import type { Trajectory } from "./system/trajectory";
 import { World } from "./world";
 
-import type { Box, Frame } from "molwasm";
+import type { Box, Frame } from "@molcrafts/molrs";
 import {
   MolvisButton,
   MolvisFolder,
@@ -58,7 +60,7 @@ export class MolvisApp {
   public readonly artist: Artist;
 
   // Events
-  public readonly events = new EventEmitter();
+  public readonly events = new EventEmitter<MolvisEventMap>();
 
   // User settings (public API)
   public readonly settings: Settings;
@@ -106,7 +108,7 @@ export class MolvisApp {
     this.settings = new Settings(this, setting);
 
     // Initialize System
-    this._system = new System();
+    this._system = new System(this.events);
 
     // Initialize GUI
     this._guiManager = new GUIManager(this._container, this, this._config);
@@ -128,6 +130,19 @@ export class MolvisApp {
 
     // Initialize Command Manager
     this.commandManager = new CommandManager(this);
+
+    // Sync pipeline selection output to SelectionManager
+    this._modifierPipeline.on(PipelineEvents.COMPUTED, ({ context }) => {
+      const mask = context.currentSelection;
+      if (!mask) return;
+
+      const keys: string[] = [];
+      for (const idx of mask.getIndices()) {
+        const key = this._world.sceneIndex.getSelectionKeyForAtom(idx);
+        if (key) keys.push(key);
+      }
+      this._world.selectionManager.apply({ type: 'replace', atoms: keys });
+    });
   }
 
   /**
@@ -181,6 +196,15 @@ export class MolvisApp {
     canvas.style.outline = "none";
     canvas.style.touchAction = "none";
 
+    // Prevent default scrolling when zooming
+    canvas.addEventListener(
+      "wheel",
+      (evt) => {
+        evt.preventDefault();
+      },
+      { passive: false },
+    );
+
     // Set initial canvas resolution based on container size
     const pixelRatio = window.devicePixelRatio || 1;
     const width = this._container.clientWidth || 800;
@@ -228,7 +252,7 @@ export class MolvisApp {
     return this._world.mode;
   }
 
-  get modifierPipeline() {
+  get modifierPipeline(): ModifierPipeline {
     return this._modifierPipeline;
   }
 
@@ -302,7 +326,7 @@ export class MolvisApp {
    * @param args Command arguments
    * @returns Promise if command is async, void otherwise
    */
-  public execute<A>(name: string, args: A): void | Promise<void> {
+  public execute<A, R = unknown>(name: string, args: A): R | Promise<R> {
     return this.commands.execute(name, this, args);
   }
 
@@ -396,22 +420,13 @@ export class MolvisApp {
   /**
    * Update configuration at runtime.
    * Merges with existing config and propagates changes.
-   * Note: Grid and Graphics are now in Settings, not Config.
    */
   public setConfig(newConfig: Partial<MolvisConfig>): void {
-    // Deep merge would be better but simple merge works for top-level sections if we are careful
-    // Actually mergeConfig in config.ts handles per-section defaults but not deep merging of partial user text.
-    // For now we assume we replace the section or use helper.
-
-    // Simplistic merge:
     this._config = defaultMolvisConfig({ ...this._config, ...newConfig });
 
-    // UI Updates
     if (newConfig.showUI !== undefined) {
       this._uiOverlay.style.display = this._config.showUI ? "block" : "none";
     }
-
-    // Config no longer controls Grid or Graphics
   }
 
   /**
@@ -422,13 +437,13 @@ export class MolvisApp {
    */
   public async computeFrame(
     frameIndex: number,
-    source?: unknown,
+    source?: FrameSource,
   ): Promise<Frame> {
     if (!source) {
       throw new Error("computeFrame requires a source");
     }
-
-    const frame = await this._modifierPipeline.compute(source, frameIndex);
+    logger.info(`App: computeFrame called with source ${source} index ${frameIndex}`);
+    const frame = await this._modifierPipeline.compute(source, frameIndex, this);
     this._currentFrame = frameIndex;
     return frame;
   }
@@ -439,8 +454,50 @@ export class MolvisApp {
    * @param options Drawing options
    */
   public renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void {
-    this._system.setFrame(frame, box); // Store frame and box in System
-    this.execute("draw_frame", { frame, box, options });
+    // Optimization: If we have a single-frame trajectory, update in place
+    // This avoids full system reset which breaks UI state and causes flickering
+    if (this._system.trajectory.length === 1) {
+      this._system.updateCurrentFrame(frame, box);
+    } else {
+      this._system.setFrame(frame, box); // Store frame and box in System
+    }
+    const drawResult = this.execute("draw_frame", { frame, box, options });
+    if (drawResult instanceof Promise) {
+      void drawResult.catch((error) => {
+        logger.error("draw_frame failed", error);
+      });
+    }
+  }
+
+
+  /**
+   * Load a new frame into the system, clearing the existing scene.
+   * Consolidates scene clearing, history reset, and initial rendering.
+   */
+  public loadFrame(frame: Frame, box?: Box): void {
+    this.artist.clear();
+    this.commandManager.clearHistory();
+    this._system.setFrame(frame, box);
+    this.renderFrame(frame, box);
+  }
+
+  /**
+   * Run the modifier pipeline on the current system frame and apply the result.
+   * Use fullRebuild when the atom count or topology changes (e.g. file load).
+   * Default is fast-path (visibility-only update, no flicker).
+   */
+  public async applyPipeline(options?: { fullRebuild?: boolean }): Promise<void> {
+    const sourceFrame = this._system.frame;
+    if (!sourceFrame) return;
+
+    const source = new ArrayFrameSource([sourceFrame]);
+    const computed = await this._modifierPipeline.compute(source, this._currentFrame, this);
+
+    if (options?.fullRebuild) {
+      this.renderFrame(computed);
+    } else {
+      this.artist.refreshFrame(computed);
+    }
   }
 
   /**
@@ -450,9 +507,6 @@ export class MolvisApp {
   public setTrajectory(trajectory: Trajectory): void {
     this._system.trajectory = trajectory;
     this.events.emit("trajectory-change", trajectory);
-    // Reset to first frame (or keep current if valid?)
-    // System.trajectory setter doesn't reset index in Trajectory class usually (it's new instance)
-    // So index is 0.
     this.events.emit("frame-change", 0);
   }
 

@@ -1,17 +1,7 @@
-import { type Box, Frame } from "molwasm";
+import { type Box, Frame } from "@molcrafts/molrs";
 import { logger } from "../utils/logger";
-
-/**
- * System class manages all data and structure-related operations.
- * Parallel to World (which handles rendering), System handles data.
- */
 import { Trajectory } from "./system/trajectory";
-
-/**
- * System class manages all data and structure-related operations.
- * Parallel to World (which handles rendering), System handles data.
- */
-import type { EventEmitter } from "../events";
+import type { EventEmitter, MolvisEventMap } from "../events";
 
 /**
  * System class manages all data and structure-related operations.
@@ -19,9 +9,9 @@ import type { EventEmitter } from "../events";
  */
 export class System {
   private _trajectory: Trajectory;
-  private events?: EventEmitter;
+  private events?: EventEmitter<MolvisEventMap>;
 
-  constructor(events?: EventEmitter) {
+  constructor(events?: EventEmitter<MolvisEventMap>) {
     this.events = events;
     this._trajectory = new Trajectory([new Frame()]);
     logger.info("[System] Initialized with empty frame");
@@ -41,7 +31,6 @@ export class System {
     this._trajectory = value;
     logger.info(`[System] Trajectory set with ${value.length} frames`);
     this.events?.emit("trajectory-change", value);
-    // Also emit frame-change as we reset to start of new trajectory usually
     this.events?.emit("frame-change", this._trajectory.currentIndex);
   }
 
@@ -83,11 +72,23 @@ export class System {
       `[System] Frame set (wrapped in Trajectory) with ${atomCount} atoms and ${bondCount} bonds`,
     );
 
-    // Only emit if we actually change from a multi-frame trajectory or similar significant change
     if (oldLen > 1 || this._trajectory.length > 1) {
       this.events?.emit("trajectory-change", this._trajectory);
     }
     this.events?.emit("frame-change", 0);
+  }
+
+  /**
+   * Update the currently active frame content without resetting the trajectory structure.
+   * Useful for visual updates (e.g. Modifiers) that don't change the dataset structure.
+   */
+  public updateCurrentFrame(frame: Frame, box?: Box): void {
+    const currentIndex = this._trajectory.currentIndex;
+    if (this._trajectory.replaceFrame(currentIndex, frame, box)) {
+      this.events?.emit("frame-change", currentIndex);
+    } else {
+      this.setFrame(frame, box);
+    }
   }
 
   // Navigation wrappers to ensure events are emitted

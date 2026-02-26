@@ -161,6 +161,8 @@ class AxisViewer {
     plane.material = material;
 
     plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    // In the right-handed gizmo scene, billboard text appears mirrored without an X flip.
+    plane.scaling.x = -1;
 
     return plane;
   }
@@ -190,8 +192,9 @@ export class AxisHelper {
       Vector3.Zero(),
       scene,
     );
+    this._cameraGizmo.upVector = camera.upVector.clone();
 
-    new HemisphericLight("lightAxis", new Vector3(0, 1, 0), scene);
+    new HemisphericLight("lightAxis", new Vector3(0, 0, 1), scene);
 
     new AxisViewer(scene, 2.5);
 
@@ -201,6 +204,7 @@ export class AxisHelper {
     // Sync camera on render
     scene.registerBeforeRender(() => {
       if (camera) {
+        this._cameraGizmo.upVector.copyFrom(camera.upVector);
         this._cameraGizmo.alpha = camera.alpha;
         this._cameraGizmo.beta = camera.beta;
         // Keep radius fixed

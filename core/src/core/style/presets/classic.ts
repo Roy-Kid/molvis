@@ -140,6 +140,21 @@ export class ClassicTheme implements Theme {
     };
   }
 
+  public getTypeStyle(type: string): AtomStyle {
+    // Stable hash for type color
+    let hash = 0;
+    for (let i = 0; i < type.length; i++) {
+      hash = type.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+    const hex = "#" + "00000".substring(0, 6 - c.length) + c;
+
+    return {
+      color: hex,
+      radius: 0.5, // Default generic radius
+    };
+  }
+
   public getBondStyle(_order: number, _type?: string): BondStyle {
     return {
       color: "#808080", // Standard gray bond

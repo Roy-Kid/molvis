@@ -1,12 +1,20 @@
-import { Block, type Frame } from "molwasm";
+import { Block, type Frame } from "@molcrafts/molrs";
 import { logger } from "../utils/logger";
 import type { SceneIndex } from "./scene_index";
+
+export interface SyncSceneToFrameOptions {
+  markSaved?: boolean;
+}
 
 /**
  * Synchronize scene data (meshes and thin instances) back to Frame.
  * Effectively dumps the current state of SceneIndex (MetaRegistry) into a new Frame structure.
  */
-export function syncSceneToFrame(sceneIndex: SceneIndex, frame: Frame): void {
+export function syncSceneToFrame(
+  sceneIndex: SceneIndex,
+  frame: Frame,
+  options: SyncSceneToFrameOptions = {},
+): void {
   // Clear the frame
   frame.clear();
 
@@ -71,10 +79,10 @@ export function syncSceneToFrame(sceneIndex: SceneIndex, frame: Frame): void {
       elements.push(atom.element);
     }
 
-    atomBlock.setColumnF32("x", x, undefined);
-    atomBlock.setColumnF32("y", y, undefined);
-    atomBlock.setColumnF32("z", z, undefined);
-    atomBlock.setColumnStrings("element", elements, undefined);
+    atomBlock.setColumnF32("x", x);
+    atomBlock.setColumnF32("y", y);
+    atomBlock.setColumnF32("z", z);
+    atomBlock.setColumnStrings("element", elements);
 
     frame.insertBlock("atoms", atomBlock);
   }
@@ -93,27 +101,19 @@ export function syncSceneToFrame(sceneIndex: SceneIndex, frame: Frame): void {
       orderArr[idx] = bond.order;
     }
 
-    bondBlock.setColumnU32("i", iArr, undefined);
-    bondBlock.setColumnU32("j", jArr, undefined);
-    bondBlock.setColumnU8("order", orderArr, undefined);
+    bondBlock.setColumnU32("i", iArr);
+    bondBlock.setColumnU32("j", jArr);
+    bondBlock.setColumnU8("order", orderArr);
 
     frame.insertBlock("bonds", bondBlock);
   }
 
-  // Box
-  if (sceneIndex.metaRegistry.box) {
-    const b = sceneIndex.metaRegistry.box;
-    // Frame metadata 'box' is usually JSON string?
-    // See DrawFrameCommand.parseBoxMeta
-    const boxData = {
-      dimensions: b.dimensions,
-      origin: b.origin,
-    };
-    frame.setMeta("box", JSON.stringify(boxData));
-  }
+  // Box synchronization intentionally omitted until a typed Frame box API is exposed.
 
   logger.info(
     `[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds.`,
   );
-  sceneIndex.markAllSaved();
+  if (options.markSaved !== false) {
+    sceneIndex.markAllSaved();
+  }
 }

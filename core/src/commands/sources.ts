@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import type { Frame, ZarrReader } from "@molcrafts/molrs";
 import type { FrameSource } from "../pipeline/pipeline";
 
 /**
@@ -65,6 +65,29 @@ export class AsyncFrameSource implements FrameSource {
 
   async getFrame(index: number): Promise<Frame> {
     return this.getFrameFn(index);
+  }
+
+  getFrameCount(): number | null {
+    return this.frameCount;
+  }
+}
+
+/**
+ * ZarrFrameSource provides frames from a Zarr archive.
+ */
+export class ZarrFrameSource implements FrameSource {
+  private reader: ZarrReader;
+  private frameCount: number;
+
+  constructor(reader: ZarrReader) {
+    this.reader = reader;
+    this.frameCount = reader.len();
+  }
+
+  async getFrame(index: number): Promise<Frame> {
+    const frame = this.reader.read(index);
+    if (!frame) throw new Error(`Frame index ${index} out of range`);
+    return frame;
   }
 
   getFrameCount(): number | null {

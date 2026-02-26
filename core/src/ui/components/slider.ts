@@ -1,4 +1,4 @@
-import type { MenuItem } from "../../mode/types";
+import type { BindingOption, MenuItem } from "../../mode/types";
 import { MolvisElement } from "../base";
 
 /**
@@ -6,10 +6,13 @@ import { MolvisElement } from "../base";
  * Currently implements dropdown list functionality
  */
 export class MolvisSlider extends MolvisElement {
-  private _data: MenuItem | null = null;
+  private _data: Extract<MenuItem, { type: "binding" }> | null = null;
   private _rendered = false;
 
   set data(item: MenuItem) {
+    if (item.type !== "binding") {
+      throw new Error("MolvisSlider only accepts binding menu items");
+    }
     this._data = item;
     if (!this._rendered) {
       this.render();
@@ -117,9 +120,7 @@ export class MolvisSlider extends MolvisElement {
       checkbox.addEventListener("change", (e) => {
         e.stopPropagation();
         const target = e.target as HTMLInputElement;
-        if (this._data?.action) {
-          this._data.action({ value: target.checked });
-        }
+        this._data?.action({ value: target.checked });
       });
 
       controlContainer.appendChild(checkbox);
@@ -128,12 +129,9 @@ export class MolvisSlider extends MolvisElement {
       const select = document.createElement("select");
 
       if (config.options) {
-        for (const option of config.options as Array<{
-          value: string;
-          text: string;
-        }>) {
+        for (const option of config.options as BindingOption[]) {
           const optionEl = document.createElement("option");
-          optionEl.value = option.value;
+          optionEl.value = String(option.value);
           optionEl.textContent = option.text;
 
           if (option.value === config.value) {
@@ -156,9 +154,7 @@ export class MolvisSlider extends MolvisElement {
         // Try to parse as number if it looks like a number
         const parsedValue = Number.isNaN(Number(value)) ? value : Number(value);
 
-        if (this._data?.action) {
-          this._data.action({ value: parsedValue });
-        }
+        this._data?.action({ value: parsedValue });
       });
 
       controlContainer.appendChild(select);

@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
@@ -48,8 +48,7 @@ export class SelectModifier extends BaseModifier {
       // Selection by indices
       mask = SelectionMask.fromIndices(atomCount, this.expression);
     } else {
-      // TODO: Expression-based selection (future enhancement)
-      // For now, just select all
+      // Expression evaluation is not wired in this modifier yet.
       logger.warn(
         "Expression-based selection not yet implemented, selecting all",
       );

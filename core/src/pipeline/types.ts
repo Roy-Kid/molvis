@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 
 /**
  * Selection mask representing a subset of atoms/bonds.
@@ -140,6 +140,10 @@ export class SelectionMask {
   }
 }
 
+import type { MolvisApp } from "../core/app";
+
+// ... existing imports ...
+
 /**
  * Pipeline execution context that flows through modifiers.
  */
@@ -158,6 +162,11 @@ export interface PipelineContext {
    * Frame index in trajectory (if applicable).
    */
   frameIndex?: number;
+
+  /**
+   * Application instance for modifiers to trigger refreshes.
+   */
+  readonly app: MolvisApp;
 }
 
 /**
@@ -165,6 +174,7 @@ export interface PipelineContext {
  */
 export function createDefaultContext(
   frame: Frame,
+  app: MolvisApp,
   frameIndex?: number,
 ): PipelineContext {
   const atomsBlock = frame.getBlock("atoms");
@@ -173,6 +183,7 @@ export function createDefaultContext(
     selectionSet: new Map(),
     currentSelection: SelectionMask.all(atomCount),
     frameIndex,
+    app,
   };
 }
 

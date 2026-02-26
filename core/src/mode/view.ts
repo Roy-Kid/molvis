@@ -4,6 +4,9 @@ import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { HitResult, MenuItem } from "./types";
+import { UpdateFrameCommand } from "../commands/frame";
+import { DrawBoxCommand, DrawFrameCommand } from "../commands/draw";
+import { logger } from "../utils/logger";
 
 /**
  * Context menu controller for View mode.
@@ -86,7 +89,7 @@ class ViewMode extends BaseMode {
     // Invalidate highlights for mode switch (View uses thin instances)
     this.app.world.highlighter.invalidateAndRebuild();
 
-    // Listen for frame changes (from System or UI)
+    // Listen for frame changes (both trajectory and frame changes)
     this.app.events.on("frame-change", this.onFrameChange);
   }
 
@@ -126,25 +129,21 @@ class ViewMode extends BaseMode {
 
     if (hit && (hit.type === "atom" || hit.type === "bond")) {
       let target: Vector3 | null = null;
-      if (hit.metadata) {
-        if (hit.type === "atom") {
-          target = new Vector3(
-            hit.metadata.position.x,
-            hit.metadata.position.y,
-            hit.metadata.position.z,
-          );
-        } else if (hit.type === "bond") {
-          // Midpoint of bond from metadata
-          const start = hit.metadata.start;
-          const end = hit.metadata.end;
-          target = new Vector3(
-            (start.x + end.x) / 2,
-            (start.y + end.y) / 2,
-            (start.z + end.z) / 2,
-          );
-        }
-      } else if (hit.mesh) {
-        target = hit.mesh.absolutePosition.clone();
+      if (hit.type === "atom") {
+        target = new Vector3(
+          hit.metadata.position.x,
+          hit.metadata.position.y,
+          hit.metadata.position.z,
+        );
+      } else if (hit.type === "bond") {
+        // Midpoint of bond from metadata
+        const start = hit.metadata.start;
+        const end = hit.metadata.end;
+        target = new Vector3(
+          (start.x + end.x) / 2,
+          (start.y + end.y) / 2,
+          (start.z + end.z) / 2,
+        );
       }
 
       if (target) {
@@ -166,8 +165,11 @@ class ViewMode extends BaseMode {
     await super._on_pointer_move(_pointerInfo);
   }
 
+  /**
+   * Handle frame change - stateless, always tries to update, falls back to redraw if needed
+   */
   private onFrameChange = () => {
-    this.redrawFrame();
+    this.renderFrame();
   };
 
   override _on_press_q(): void {
@@ -178,43 +180,69 @@ class ViewMode extends BaseMode {
     this.app.nextFrame();
   }
 
-  private async redrawFrame() {
+  /**
+   * Unified frame rendering logic:
+   * 1. Try UpdateFrameCommand (fast, in-place buffer update)
+   * 2. If topology mismatch, use DrawFrameCommand (full rebuild)
+   */
+  private async renderFrame() {
     const frame = this.app.system.frame;
     const box = this.app.system.box;
+    const atomMesh = this.app.artist.atomMesh;
 
-    try {
-      const { UpdateFrameCommand } = await import("../commands/frame");
+    // Check if we can use UpdateFrameCommand
+    const canUpdate = this.canUpdateFrame(frame, atomMesh);
+
+    if (canUpdate) {
+      // Try fast update
       const updateCmd = new UpdateFrameCommand(this.app, { frame });
       const result = await updateCmd.do();
 
       if (result.success) {
-        // If update succeeded, ensure box is also updated if needed.
-        // For now, if box changed, UpdateFrame might not handle it.
-        // We could call DrawBoxCommand here if box exists.
+        // Update box if needed
         if (box) {
-          const { DrawBoxCommand } = await import("../commands/draw");
           const drawBox = new DrawBoxCommand(this.app, { box });
           drawBox.do();
         }
         return;
       }
-      // console.log("UpdateFrame failed, falling back to DrawFrame:", result.reason);
-    } catch (e) {
-      // Ignore error and fall back
-      // console.warn("UpdateFrameCommand error:", e);
+
+      // Update failed, fall through to redraw
+      logger.warn(
+        `UpdateFrameCommand failed: ${result.reason}, using DrawFrameCommand`,
+      );
     }
 
-    // Fallback to full rebuild - clear scene first, then draw
-    const { ClearSceneCommand } = await import("../commands/clear");
-    const clearCmd = new ClearSceneCommand(this.app);
-    clearCmd.do();
+    // Full redraw (topology changed or update failed)
+    const drawCmd = new DrawFrameCommand(this.app, { frame, box });
+    await drawCmd.do();
+  }
 
-    const { DrawFrameCommand } = await import("../commands/draw");
-    const cmd = new DrawFrameCommand(this.app, {
-      frame,
-      box,
-    });
-    await cmd.do();
+  /**
+   * Check if current frame can be updated in-place (same topology)
+   */
+  private canUpdateFrame(frame: any, atomMesh: any): boolean {
+    if (!atomMesh) return false;
+
+    const currentAtomCount = atomMesh.thinInstanceCount;
+    if (currentAtomCount === 0) return false;
+
+    const frameAtoms = frame.getBlock("atoms");
+    if (!frameAtoms) return false;
+
+    const newAtomCount = frameAtoms.nrows();
+    if (currentAtomCount !== newAtomCount) return false;
+
+    // Check bond count
+    const bondMesh = this.app.artist.bondMesh;
+    if (bondMesh) {
+      const currentBondCount = bondMesh.thinInstanceCount;
+      const frameBonds = frame.getBlock("bonds");
+      const newBondCount = frameBonds ? frameBonds.nrows() : 0;
+      if (currentBondCount !== newBondCount) return false;
+    }
+
+    return true;
   }
 }
 

@@ -74,16 +74,19 @@ export interface SetFrameMetaArgs {
 
 @command("set_frame_meta")
 export class SetFrameMetaCommand extends Command<void> {
+  private key: string;
+  private value: unknown;
+
   constructor(app: MolvisApp, args: SetFrameMetaArgs) {
     super(app);
-    // TODO: Global frame metadata staging not yet implemented.
-    // Store key and value when implementation is ready
-    void args.key;
-    void args.value;
+    this.key = args.key;
+    this.value = args.value;
   }
 
   do(): void {
-    // TODO: Global frame metadata staging not yet implemented.
+    // Reserved for API compatibility. Frame-level metadata storage is not wired yet.
+    void this.key;
+    void this.value;
   }
 
   undo(): Command {

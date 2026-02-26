@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { logger } from "../utils/logger";
@@ -13,21 +13,12 @@ export class WrapPBCModifier extends BaseModifier {
   }
 
   apply(input: Frame, _context: PipelineContext): Frame {
-    // Check if frame has a box
-    if (!input.box) {
+    if (!input.simbox) {
       logger.warn("WrapPBC: Frame has no box, skipping");
       return input;
     }
 
-    // TODO: Implement actual PBC wrapping logic
-    // For now, this is a placeholder that returns the input unchanged
-    logger.info("WrapPBC: Wrapping atoms into periodic box (placeholder)");
-
-    // In a real implementation, this would:
-    // 1. Clone the frame
-    // 2. Wrap atom positions into the box
-    // 3. Return the modified frame
-
+    logger.info("WrapPBC: periodic wrapping is not implemented in v0.0.2");
     return input;
   }
 

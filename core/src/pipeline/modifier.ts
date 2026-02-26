@@ -1,5 +1,6 @@
-import type { Frame } from "molwasm";
-import type { PipelineContext, ValidationResult } from "./types";
+import type { Frame } from "@molcrafts/molrs";
+import type { PipelineContext, ValidationResult, SelectionMask as SelectionMaskType } from "./types";
+import { SelectionMask } from "./types";
 
 /**
  * Modifier category determines default selection behavior.
@@ -105,12 +106,11 @@ export abstract class BaseModifier implements Modifier {
   protected getEffectiveSelection(
     context: PipelineContext,
     frameSize: number,
-  ): import("./types").SelectionMask {
+  ): SelectionMaskType {
     if (this.category === ModifierCategory.SelectionSensitive) {
       return context.currentSelection;
     }
     // Selection-insensitive: operate on all atoms
-    const { SelectionMask } = require("./types");
     return SelectionMask.all(frameSize);
   }
 }

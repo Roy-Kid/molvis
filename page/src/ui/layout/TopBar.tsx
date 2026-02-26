@@ -22,6 +22,9 @@ interface TopBarProps {
   onModeChange: (mode: string) => void;
 }
 
+/**
+ * Primary toolbar for mode switching and global actions (undo/redo/export).
+ */
 export const TopBar: React.FC<TopBarProps> = ({
   app,
   currentMode,
@@ -91,10 +94,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Mode Switcher */}
         <Tabs
           value={currentMode}
-          onValueChange={(val) => {
-            console.log("[TopBar] Switching mode to:", val);
-            onModeChange(val);
-          }}
+          onValueChange={onModeChange}
           className="w-[500px]"
         >
           <TabsList className="grid w-full grid-cols-5">

@@ -22,7 +22,7 @@ export {
 export { ClearSceneCommand } from "./clear";
 export { getSelectedCommand, SelectAtomByIdCommand } from "./selection";
 export { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
-export { NewFrameCommand, UpdateFrameCommand, DumpFrameCommand } from "./frame";
+export { NewFrameCommand, UpdateFrameCommand, ExportFrameCommand } from "./frame";
 export { TakeSnapshotCommand } from "./snapshot";
 
 export type { GetSelectedResponse } from "../core/selection_manager";

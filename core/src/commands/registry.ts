@@ -16,21 +16,21 @@ export type CommandFn<A = unknown, R = unknown> = (
  * They should NOT implicitly compute or render - those steps are triggered explicitly by the caller.
  */
 export class CommandRegistry {
-  private commands = new Map<string, CommandFn>();
+  private commands = new Map<string, CommandFn<unknown, unknown>>();
 
   /**
    * Register a command function.
    * @param name Command name
    * @param fn Command function
    */
-  register<A>(name: string, fn: CommandFn<A>): CommandFn<A> {
+  register<A, R>(name: string, fn: CommandFn<A, R>): CommandFn<A, R> {
     if (!name || typeof name !== "string") {
       throw new Error("Command name must be a non-empty string");
     }
     if (typeof fn !== "function") {
       throw new Error("Command must be a function");
     }
-    this.commands.set(name, fn as CommandFn);
+    this.commands.set(name, fn as CommandFn<unknown, unknown>);
     return fn;
   }
 
@@ -41,8 +41,12 @@ export class CommandRegistry {
    * @param args Command arguments
    * @returns Promise if command is async, void otherwise
    */
-  execute<A>(name: string, app: MolvisApp, args: A): void | Promise<void> {
-    const fn = this.commands.get(name);
+  execute<A, R = unknown>(
+    name: string,
+    app: MolvisApp,
+    args: A,
+  ): R | Promise<R> {
+    const fn = this.commands.get(name) as CommandFn<A, R> | undefined;
     if (!fn) {
       throw new Error(`Unknown command: ${name}`);
     }

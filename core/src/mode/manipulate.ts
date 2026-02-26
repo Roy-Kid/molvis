@@ -1,7 +1,8 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
-import type { Molvis } from "@molvis/core";
-import { type Block, Frame } from "molwasm";
+import type { MolvisApp as Molvis } from "../core/app";
+import { type Block, Frame } from "@molcrafts/molrs";
 import { syncSceneToFrame } from "../core/scene_sync";
+import { DrawFrameCommand } from "../commands/draw";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
@@ -97,22 +98,13 @@ class ManipulateMode extends BaseMode {
   public override start(): void {
     super.start();
     this.app.world.selectionManager.apply({ type: "clear" });
-    this.convertFromSceneIndex().catch((err) =>
-      logger.error("[ManipulateMode] Conversion failed", err),
-    );
+    this.convertFromSceneIndex();
   }
 
-  /**
-   * Convert Frame entities from SceneIndex to editable ImpostorPool instances.
-   */
-  private async convertFromSceneIndex(): Promise<void> {
-    // Check if we have frame data in MetaRegistry
+  private convertFromSceneIndex(): void {
     const atomBlock = this.world.sceneIndex.metaRegistry.atoms.frameBlock;
-    if (!atomBlock) {
-      return;
-    }
+    if (!atomBlock) return;
 
-    // Store original blocks for Discard
     this.originalFrameData = {
       atomBlock: atomBlock,
       bondBlock:
@@ -218,8 +210,6 @@ class ManipulateMode extends BaseMode {
       // Resolve endpoint positions via MetaRegistry
       const atom1 = endpoints[0];
       const atom2 = endpoints[1];
-
-      // Should be one of them is `atomId`.
 
       const meta1 =
         atom1 === atomId ? { position: newPosition } : this.findAtomMeta(atom1);
@@ -401,32 +391,20 @@ class ManipulateMode extends BaseMode {
       return;
     }
 
-    // Sync changes back to the frame
     syncSceneToFrame(this.world.sceneIndex, frame);
 
-    // We don't dispose meshes anymore because they are shared.
-    // But we might want to refresh the frame load.
-
-    // Redraw to flush everything clean (and clear edits)
-    const { DrawFrameCommand } = await import("../commands/draw");
     const cmd = new DrawFrameCommand(this.app, { frame });
     cmd.do();
-
-    // Clear edits in MetaRegistry (done by DrawFrameCommand -> registerFrame)
-    // registerFrame creates new AtomSource which clears edits.
 
     this.originalFrameData = null;
     logger.info("[ManipulateMode] Saved changes using syncSceneToFrame");
   }
 
   protected override _on_press_ctrl_s(): void {
-    this.saveChanges().catch((err) =>
-      logger.error("[ManipulateMode] Save failed", err),
-    );
+    void this.saveChanges();
   }
 
   public async discardChanges(): Promise<void> {
-    // Just reload original frame if we have it kept, or current frame?
     if (!this.originalFrameData) return;
 
     const frame = new Frame();
@@ -435,8 +413,6 @@ class ManipulateMode extends BaseMode {
       frame.insertBlock("bonds", this.originalFrameData.bondBlock);
     }
 
-    // Just redraw original frame
-    const { DrawFrameCommand } = await import("../commands/draw");
     const cmd = new DrawFrameCommand(this.app, { frame });
     cmd.do();
 

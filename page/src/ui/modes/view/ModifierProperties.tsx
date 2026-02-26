@@ -1,6 +1,16 @@
-import type { Modifier, Molvis } from "@molvis/core";
+import {
+  DataSourceModifier as CoreDataSourceModifier,
+  SliceModifier as CoreSliceModifier,
+  ExpressionSelectionModifier as CoreExpressionSelectionModifier,
+  HideSelectionModifier as CoreHideModifier,
+  type Modifier,
+  type Molvis,
+} from "@molvis/core";
+import { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 import type React from "react";
 import { DataSourceModifier } from "./modifiers/DataSourceModifier";
+import { SliceModifier } from "./modifiers/SliceModifier";
+import { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 
 interface ModifierPropertiesProps {
   modifier: Modifier;
@@ -8,23 +18,25 @@ interface ModifierPropertiesProps {
   onUpdate: () => void;
 }
 
-const MODIFIER_COMPONENTS: Record<string, React.FC<any>> = {
-  "Data Source": DataSourceModifier,
-};
-
 export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   modifier,
   app,
   onUpdate,
 }) => {
-  const Component = MODIFIER_COMPONENTS[modifier.name];
+  let content: React.ReactNode = (
+    <div className="p-4 bg-muted/20 border-t text-sm text-muted-foreground text-center">
+      No properties available for {modifier.name}.
+    </div>
+  );
 
-  if (!Component) {
-    return (
-      <div className="p-4 bg-muted/20 border-t text-sm text-muted-foreground text-center">
-        No properties available for {modifier.name}.
-      </div>
-    );
+  if (modifier instanceof CoreDataSourceModifier) {
+    content = <DataSourceModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+  } else if (modifier instanceof CoreSliceModifier) {
+    content = <SliceModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+  } else if (modifier instanceof CoreExpressionSelectionModifier) {
+    content = <ExpressionSelectionModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+  } else if (modifier instanceof CoreHideModifier) {
+    content = <HideSelectionModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
   }
 
   return (
@@ -37,7 +49,7 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
           {modifier.category}
         </span>
       </div>
-      <Component modifier={modifier} app={app} onUpdate={onUpdate} />
+      {content}
     </div>
   );
 };

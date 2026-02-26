@@ -2,11 +2,11 @@ import {
   type ArcRotateCamera,
   Color3,
   type Engine,
-  LinesMesh,
+  type LinesMesh,
   type Mesh,
   MeshBuilder,
   type Scene,
-  VertexData,
+  Vector3,
 } from "@babylonjs/core";
 import { GridMaterial } from "@babylonjs/materials";
 
@@ -30,10 +30,18 @@ export class GridGround {
 
   // Grid configuration
   private readonly TARGET_PX_PER_MINOR = 64;
-  private GRID_SIZE = 10000;
   private readonly GRID_SUBDIVISIONS = 1;
   private MIN_GRID_STEP = 1; // Minimum grid step when camera is close
   private DISTANCE_THRESHOLD = 50; // Distance threshold for locking grid step
+
+  // Infinite grid settings
+  private readonly GRID_SIZE_MULTIPLIER = 100; // Grid extends 100x camera distance
+  private _currentGridSize = 10000;
+
+  // Smooth transition state
+  private _currentGridRatio = 1;
+  private _targetGridRatio = 1;
+  private readonly TRANSITION_SPEED = 0.15; // Lerp factor for smooth transitions
 
   constructor(scene: Scene, camera: ArcRotateCamera, engine: Engine) {
     this._scene = scene;
@@ -43,18 +51,29 @@ export class GridGround {
   }
 
   /**
-   * Create the grid material with default settings
+   * Create the grid material with beautiful modern settings
    */
   private _createGridMaterial(): GridMaterial {
     const grid = new GridMaterial("grid", this._scene);
+
+    // Rendering settings
     grid.disableDepthWrite = true;
     grid.zOffset = -1;
-    grid.mainColor = new Color3(0.53, 0.53, 0.53);
-    grid.lineColor = new Color3(0.59, 0.59, 0.59);
-    grid.opacity = 0.8;
-    grid.majorUnitFrequency = 10;
-    grid.minorUnitVisibility = 0.7;
     grid.backFaceCulling = false;
+
+    // Modern dark theme colors
+    grid.mainColor = new Color3(0.12, 0.12, 0.14); // Dark background
+    grid.lineColor = new Color3(0.35, 0.4, 0.45); // Subtle blue-gray lines
+
+    // Transparency and visibility
+    grid.opacity = 0.95; // Higher opacity for better contrast
+    grid.majorUnitFrequency = 10;
+    grid.minorUnitVisibility = 0.45; // More subtle minor lines
+
+    // Edge fade effect for depth
+    grid.useMaxLine = true;
+    grid.gridOffset = new Vector3(0, 0, 0.01); // Slightly lift grid to prevent z-fighting
+
     return grid;
   }
 
@@ -100,19 +119,21 @@ export class GridGround {
   }
 
   /**
-   * Create the ground mesh
+   * Create the ground mesh (dynamically sized for infinite appearance).
+   * Base mesh is XZ; rotate into XY so Z is the world up axis.
    */
   private _createGround(): void {
     this._ground = MeshBuilder.CreateGround(
       "gridGround",
       {
-        width: this.GRID_SIZE,
-        height: this.GRID_SIZE,
+        width: this._currentGridSize,
+        height: this._currentGridSize,
         subdivisions: this.GRID_SUBDIVISIONS,
       },
       this._scene,
     );
 
+    this._ground.rotation.x = Math.PI / 2;
     this._ground.material = this._gridMaterial;
     this._ground.renderingGroupId = 0; // Render behind other objects
     this._ground.isPickable = false;
@@ -122,55 +143,55 @@ export class GridGround {
   }
 
   /**
-   * Create reference lines for x=0 and y=0
+   * Create subtle reference lines for x=0 and y=0 that blend with the grid
    */
   private _createReferenceLines(): void {
     if (this._referenceLines) {
+      const xLine = this._referenceLines._xLine;
+      const yLine = this._referenceLines._yLine;
+      if (xLine) xLine.dispose();
+      if (yLine) yLine.dispose();
       this._referenceLines.dispose();
     }
 
-    const halfSize = this.GRID_SIZE / 2;
+    const halfSize = this._currentGridSize / 2;
 
-    // Create X=0 line (vertical, red)
-    const xLine = new LinesMesh("xReferenceLine", this._scene);
-    xLine.color = new Color3(1.0, 0.0, 0.0);
+    // Create X axis reference line (y=0) - pure red
+    const xLine = MeshBuilder.CreateLines(
+      "xReferenceLine",
+      {
+        points: [
+          new Vector3(-halfSize, 0, 0.001),
+          new Vector3(halfSize, 0, 0.001),
+        ],
+        updatable: false,
+      },
+      this._scene,
+    );
+    xLine.color = new Color3(1.0, 0.0, 0.0); // Pure red
     xLine.isPickable = false;
-    const xPositions: number[] = [
-      -halfSize,
-      0,
-      0, // Start point
-      halfSize,
-      0,
-      0, // End point
-    ];
-    const xIndices: number[] = [0, 1];
+    xLine.renderingGroupId = 0; // Same layer as grid for better blending
+    xLine.alpha = 0.6; // Semi-transparent
 
-    const xVertexData = new VertexData();
-    xVertexData.positions = xPositions;
-    xVertexData.indices = xIndices;
-    xVertexData.applyToMesh(xLine);
-
-    // Create Y=0 line (horizontal, blue)
-    const yLine = new LinesMesh("yReferenceLine", this._scene);
-    yLine.color = new Color3(0.0, 0.0, 1.0);
+    // Create Y axis reference line (x=0) - pure green
+    const yLine = MeshBuilder.CreateLines(
+      "yReferenceLine",
+      {
+        points: [
+          new Vector3(0, -halfSize, 0.001),
+          new Vector3(0, halfSize, 0.001),
+        ],
+        updatable: false,
+      },
+      this._scene,
+    );
+    yLine.color = new Color3(0.0, 1.0, 0.0); // Pure green
     yLine.isPickable = false;
-    const yPositions: number[] = [
-      0,
-      0,
-      -halfSize, // Start point
-      0,
-      0,
-      halfSize, // End point
-    ];
-    const yIndices: number[] = [0, 1];
+    yLine.renderingGroupId = 0; // Same layer as grid for better blending
+    yLine.alpha = 0.6; // Semi-transparent
 
-    const yVertexData = new VertexData();
-    yVertexData.positions = yPositions;
-    yVertexData.indices = yIndices;
-    yVertexData.applyToMesh(yLine);
-
-    // Store both lines for later disposal
-    this._referenceLines = xLine; // Keep reference for disposal, but we'll handle both
+    // Store lines for later disposal
+    this._referenceLines = xLine as ReferenceLinesWithStorage;
     this._referenceLines._xLine = xLine;
     this._referenceLines._yLine = yLine;
   }
@@ -187,25 +208,53 @@ export class GridGround {
   }
 
   /**
-   * Update grid density based on camera position
+   * Update grid density and size based on camera position (infinite grid effect)
    */
   private _updateGridDensity(): void {
+    if (!this._ground) return;
+
     const renderHeight = this._engine.getRenderHeight(true);
+    const cameraRadius = this._camera.radius;
+
+    // Dynamically size grid based on camera distance for infinite appearance
+    const targetSize = Math.max(cameraRadius * this.GRID_SIZE_MULTIPLIER, 1000);
+
+    // Only recreate grid if size changed significantly (avoid constant recreation)
+    if (
+      Math.abs(targetSize - this._currentGridSize) >
+      this._currentGridSize * 0.5
+    ) {
+      this._currentGridSize = targetSize;
+      // Dispose and recreate with new size
+      this._ground.dispose();
+      if (this._referenceLines) {
+        const xLine = this._referenceLines._xLine;
+        const yLine = this._referenceLines._yLine;
+        if (xLine) xLine.dispose();
+        if (yLine) yLine.dispose();
+        this._referenceLines.dispose();
+        this._referenceLines = null;
+      }
+      this._createGround();
+    }
+
+    // Keep grid centered on camera target in XY (Z-up world).
+    const target = this._camera.target;
+    this._ground.position.x = target.x;
+    this._ground.position.y = target.y;
+    this._ground.position.z = 0;
 
     // Handle both perspective and orthographic cameras
     let worldPerPixel: number;
 
     if (this._camera.mode === 1) {
       // Orthographic camera
-      // For orthographic, use ortho bounds
       if (this._camera.orthoRight !== null && this._camera.orthoLeft !== null) {
         const worldWidth = this._camera.orthoRight - this._camera.orthoLeft;
         worldPerPixel = worldWidth / renderHeight;
       } else {
-        // Fallback if ortho bounds not set manually (e.g. strict mode 1 switch)
-        // Estimate based on radius similar to perspective target match
         const fov = this._camera.fov;
-        const dist = this._camera.radius;
+        const dist = cameraRadius;
         const height = 2 * dist * Math.tan(fov / 2);
         const aspect = this._engine.getAspectRatio(this._camera);
         const width = height * aspect;
@@ -214,50 +263,55 @@ export class GridGround {
     } else {
       // Perspective camera
       const fov = this._camera.fov;
-      const z = this._camera.radius;
+      const z = cameraRadius;
 
-      // Update fog based on camera distance
-      this._scene.fogStart = z;
-      this._scene.fogEnd = z + 1000;
+      // Smooth fog transition based on grid size
+      this._scene.fogStart = z * 0.5;
+      this._scene.fogEnd = this._currentGridSize * 0.5;
 
       // Check if camera is close enough to lock grid step
       if (z <= this.DISTANCE_THRESHOLD) {
-        // Lock grid step to minimum value when camera is close
-        this._gridMaterial.gridRatio = this.MIN_GRID_STEP;
+        this._targetGridRatio = this.MIN_GRID_STEP;
         this._gridMaterial.majorUnitFrequency = 1;
-        return;
-      }
+      } else {
+        worldPerPixel = (2 * z * Math.tan(fov / 2)) / renderHeight;
 
-      worldPerPixel = (2 * z * Math.tan(fov / 2)) / renderHeight;
+        // Calculate optimal grid step size
+        const desiredWorldStep = worldPerPixel * this.TARGET_PX_PER_MINOR;
+
+        // Find best grid step from available scales
+        const scales = [1, 2, 5];
+        const pow10 = 10 ** Math.floor(Math.log10(desiredWorldStep));
+        let best = scales[0] * pow10;
+
+        for (const s of scales) {
+          const candidate = s * pow10;
+          if (
+            Math.abs(candidate - desiredWorldStep) <
+            Math.abs(best - desiredWorldStep)
+          ) {
+            best = candidate;
+          }
+        }
+
+        // Ensure grid step is never smaller than minimum
+        best = Math.max(best, this.MIN_GRID_STEP);
+        this._targetGridRatio = best;
+        this._gridMaterial.majorUnitFrequency = 10;
+      }
     }
 
-    // Calculate optimal grid step size
-    const desiredWorldStep = worldPerPixel * this.TARGET_PX_PER_MINOR;
+    // Smooth interpolation to target grid ratio
+    this._currentGridRatio +=
+      (this._targetGridRatio - this._currentGridRatio) * this.TRANSITION_SPEED;
 
-    // Find best grid step from available scales
-    const scales = [1, 2, 5];
-    const pow10 = 10 ** Math.floor(Math.log10(desiredWorldStep));
-    let best = scales[0] * pow10;
-
-    for (const s of scales) {
-      const candidate = s * pow10;
-      if (
-        Math.abs(candidate - desiredWorldStep) <
-        Math.abs(best - desiredWorldStep)
-      ) {
-        best = candidate;
-      }
+    // Snap to target if very close
+    if (Math.abs(this._targetGridRatio - this._currentGridRatio) < 0.01) {
+      this._currentGridRatio = this._targetGridRatio;
     }
 
-    // Ensure grid step is never smaller than minimum
-    best = Math.max(best, this.MIN_GRID_STEP);
-
-    // Update grid properties
-    this._gridMaterial.gridRatio = best;
-    this._gridMaterial.majorUnitFrequency = 10;
-
-    // Don't notify observers here - it creates infinite recursion!
-    // The grid update is already part of the render loop
+    // Apply smoothed ratio
+    this._gridMaterial.gridRatio = this._currentGridRatio;
   }
 
   /**
@@ -293,8 +347,8 @@ export class GridGround {
       this._gridMaterial.minorUnitVisibility = config.minorUnitVisibility;
     }
 
-    // Size changes require recreating ground
-    if (config.size !== undefined && config.size !== this.GRID_SIZE) {
+    // Size changes set minimum grid size (grid will auto-expand)
+    if (config.size !== undefined && config.size !== this._currentGridSize) {
       this.setSize(config.size, config.size);
     }
   }
@@ -335,15 +389,28 @@ export class GridGround {
   }
 
   /**
-   * Set grid size
+   * Set minimum grid size (grid will auto-expand beyond this based on camera)
    */
   public setSize(width: number, height: number): void {
-    if (this._ground) {
-      this._ground.dispose();
-    }
+    const minSize = Math.max(width, height);
 
-    this.GRID_SIZE = Math.max(width, height);
-    this._createGround();
+    // Set current size but allow dynamic expansion
+    if (this._currentGridSize < minSize) {
+      this._currentGridSize = minSize;
+
+      if (this._ground) {
+        this._ground.dispose();
+        if (this._referenceLines) {
+          const xLine = this._referenceLines._xLine;
+          const yLine = this._referenceLines._yLine;
+          if (xLine) xLine.dispose();
+          if (yLine) yLine.dispose();
+          this._referenceLines.dispose();
+          this._referenceLines = null;
+        }
+        this._createGround();
+      }
+    }
   }
 
   /**

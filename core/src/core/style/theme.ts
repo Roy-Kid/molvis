@@ -19,6 +19,7 @@ export interface Theme {
 
   // Core resolvers
   getAtomStyle(element: string): AtomStyle;
+  getTypeStyle(type: string): AtomStyle;
   getBondStyle(order: number, type?: string): BondStyle;
 
   // Global properties

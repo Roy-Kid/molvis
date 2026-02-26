@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "rootDir": "src",
+    "outDir": "out-test",
+    "sourceMap": false,
+    "declaration": false,
+    "types": ["node", "mocha", "vscode"]
+  },
+  "include": ["src/extension/**/*.ts", "src/test/**/*.ts"],
+  "exclude": ["src/webview-app/**/*", "src/viewer-app/**/*"]
+}

@@ -7,7 +7,7 @@ import {
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp as Molvis } from "../core/app";
 import { CompositeCommand } from "../commands/composite";
 import {
   DeleteAtomCommand,
@@ -21,7 +21,7 @@ import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { HitResult, MenuItem } from "./types";
+import type { BindingEvent, HitResult, MenuItem } from "./types";
 import { pointOnScreenAlignedPlane } from "./utils";
 
 /**
@@ -178,8 +178,8 @@ class EditModeContextMenu extends ContextMenuController {
         ],
         value: this.mode.element,
       },
-      action: (ev: Event) => {
-        this.mode.element = ev.value;
+      action: (ev: BindingEvent) => {
+        this.mode.element = String(ev.value);
       },
     });
     items.push({ type: "separator" });
@@ -195,8 +195,8 @@ class EditModeContextMenu extends ContextMenuController {
         ],
         value: this.mode.bondOrder,
       },
-      action: (ev: Event) => {
-        this.mode.bondOrder = ev.value;
+      action: (ev: BindingEvent) => {
+        this.mode.bondOrder = Number(ev.value);
       },
     });
     return CommonMenuItems.appendCommonTail(items, this.app);
@@ -275,6 +275,7 @@ class EditMode extends BaseMode {
 
   override start(): void {
     super.start();
+    this.app.world.sceneIndex.promoteFrameToEditPool();
     this.app.world.highlighter.invalidateAndRebuild();
   }
 
@@ -547,15 +548,15 @@ class EditMode extends BaseMode {
     _pointerInfo: PointerInfo,
     hit: HitResult | null,
   ): void {
-    if (!hit || !hit.metadata) return;
+    if (!hit || hit.type === "empty") return;
 
-    if (hit.type === "atom" && hit.metadata.type === "atom") {
+    if (hit.type === "atom") {
       const atomId = hit.metadata.atomId;
       // Clear highlight before modifying geometry (indices might change)
       this.app.world.highlighter.clearAll();
       // Delete atom (and connected bonds via Command logic)
       this.app.commandManager.execute(new DeleteAtomCommand(this.app, atomId));
-    } else if (hit.type === "bond" && hit.metadata.type === "bond") {
+    } else if (hit.type === "bond") {
       const bondId = hit.metadata.bondId;
       this.app.world.highlighter.clearAll();
       this.app.commandManager.execute(new DeleteBondCommand(this.app, bondId));

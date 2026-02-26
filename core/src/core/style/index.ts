@@ -43,6 +43,14 @@ export class StyleManager {
     };
   }
 
+  public getTypeStyle(type: string): AtomStyle {
+    const style = this.currentTheme.getTypeStyle(type);
+    return {
+      ...style,
+      radius: style.radius * this.globalAtomRadiusScale,
+    };
+  }
+
   public getBondStyle(order: number): BondStyle {
     const style = this.currentTheme.getBondStyle(order);
     return {

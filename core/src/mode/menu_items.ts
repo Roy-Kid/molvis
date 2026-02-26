@@ -1,7 +1,6 @@
 import type { MolvisApp } from "../core/app";
 import { inferFormatFromFilename } from "../core/reader";
-import { syncSceneToFrame } from "../core/scene_sync";
-import { writeFrame } from "../core/writer";
+import { exportFrame } from "../core/writer";
 import { logger } from "../utils/logger";
 import type { MenuItem } from "./types";
 
@@ -46,9 +45,7 @@ export class CommonMenuItems {
         }
 
         const format = inferFormatFromFilename(filename, "pdb");
-        syncSceneToFrame(app.world.sceneIndex, frame);
-
-        const payload = writeFrame(frame, { format, filename });
+        const payload = exportFrame(app.world.sceneIndex, { format, filename });
         const blob = new Blob([payload.content], { type: payload.mime });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");

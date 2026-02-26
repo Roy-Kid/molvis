@@ -93,8 +93,8 @@ Both webviews use the same Babylon.js-based rendering engine from `@molvis/core`
 
 ## License
 
-BSD-3-Clause - See [LICENSE](../LICENSE) for details.
+BSD-3-Clause
 
 ## Contributing
 
-This extension is part of the MolVis monorepo. See the [main README](../README.md) for contribution guidelines.
+This extension is part of the MolVis monorepo.
