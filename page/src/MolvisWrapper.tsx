@@ -48,23 +48,13 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       onMount(molvisRef.current);
     }
 
-    let resizeTimeout: number | null = null;
     const resizeObserver = new ResizeObserver(() => {
-      if (resizeTimeout) window.cancelAnimationFrame(resizeTimeout);
-
-      resizeTimeout = window.requestAnimationFrame(() => {
-        if (molvisRef.current) {
-          molvisRef.current.resize();
-        }
-      });
+      molvisRef.current?.resize();
     });
     resizeObserver.observe(containerRef.current);
 
     return () => {
       resizeObserver.disconnect();
-      if (resizeTimeout) {
-        window.cancelAnimationFrame(resizeTimeout);
-      }
       if (molvisRef.current) {
         molvisRef.current.destroy();
         molvisRef.current = null;

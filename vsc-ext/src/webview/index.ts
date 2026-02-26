@@ -1,4 +1,4 @@
-import { bootstrapWebview } from "./runtime/controller";
+import { bootstrapWebview } from "./controller";
 
 const container = document.getElementById("molvis-container");
 if (!container) {

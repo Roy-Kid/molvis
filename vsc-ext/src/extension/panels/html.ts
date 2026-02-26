@@ -1,9 +1,35 @@
-import type * as vscode from "vscode";
-import {
-  getPreviewScriptUri,
-  getViewerCssUri,
-  getViewerScriptUri,
-} from "./assets";
+import * as vscode from "vscode";
+
+// --- Asset URIs (was webview/assets.ts) ---
+
+function getPreviewScriptUri(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): vscode.Uri {
+  return webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "out", "webview", "index.js"),
+  );
+}
+
+function getViewerScriptUri(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): vscode.Uri {
+  return webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "out", "viewer", "index.js"),
+  );
+}
+
+function getViewerCssUri(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): vscode.Uri {
+  return webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "out", "viewer", "index.css"),
+  );
+}
+
+// --- HTML generation (was webview/htmlFactory.ts) ---
 
 function getNonce(): string {
   const charset =

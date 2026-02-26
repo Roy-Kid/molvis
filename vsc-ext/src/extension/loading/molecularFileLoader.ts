@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import type { MolecularFilePayload } from "../types/messages";
+import type { MolecularFilePayload } from "../types";
 import { getDisplayName, isZarrUriPath } from "./pathUtils";
-import { readZarrDirectory } from "./zarrDirectoryReader";
+import { readZarrDirectoryWithFs } from "./zarrDirectoryReaderCore";
 
 export interface LoadedMolecularFile {
   filename: string;
@@ -15,7 +15,7 @@ export class MolecularFileLoader {
     if (isZarrUriPath(uri, stat.type)) {
       return {
         filename: getDisplayName(uri),
-        payload: await readZarrDirectory(uri),
+        payload: await readZarrDirectoryWithFs(uri, vscode.workspace.fs, vscode.Uri),
       };
     }
 

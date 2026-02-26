@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { PanelRegistry } from "../types/panel";
+import type { PanelRegistry } from "../types";
 
 export function createHotReloadWatcher(
   context: vscode.ExtensionContext,

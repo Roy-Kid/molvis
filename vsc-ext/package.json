@@ -82,10 +82,9 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "NODE_ENV=production npm run compile",
     "compile": "rslib build",
-    "build:test-extension": "tsc --project tsconfig.integration.json",
     "test:compile": "tsc --project tsconfig.test.json",
     "test:unit": "npm run test:compile && mocha --ui tdd \"out-test/test/unit/**/*.test.js\"",
-    "test:integration": "npm run build:test-extension && npm run test:compile && vscode-test --config .vscode-test.mjs",
+    "test:integration": "npm run test:compile && vscode-test --config .vscode-test.mjs",
     "test": "npm-run-all test:unit test:integration",
     "deploy": "vsce publish",
     "deploy:ovsx": "ovsx publish"

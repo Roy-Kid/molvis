@@ -1,12 +1,11 @@
 import * as vscode from "vscode";
-import type { Logger } from "../infra/logger";
+import type { Logger, PanelRegistry } from "../types";
 import {
   loadTextDocumentToWebview,
   onWebviewMessage,
   sendToWebview,
-} from "../messaging/hostToWebview";
-import type { PanelRegistry } from "../types/panel";
-import { getPreviewHtml } from "../webview/htmlFactory";
+} from "./messaging";
+import { getPreviewHtml } from "./html";
 
 /**
  * Custom text editor provider for molecular text formats (`.pdb/.xyz/.data`).

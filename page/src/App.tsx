@@ -70,7 +70,7 @@ const App: React.FC = () => {
           {/* Right Panel: Context Sensitive */}
           <ResizablePanel
             defaultSize={25}
-            minSize={20}
+            minSize={10}
             maxSize={50}
             collapsible={true}
             collapsedSize={0}

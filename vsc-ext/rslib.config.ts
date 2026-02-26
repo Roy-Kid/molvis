@@ -1,96 +1,65 @@
-import * as path from "path";
+import path from "node:path";
 import { pluginReact } from "@rsbuild/plugin-react";
-// rslib.config.ts
 import { defineConfig } from "@rslib/core";
+
+const sharedDefine = {
+  __WASM_INLINE__: "false",
+  "process.env.NODE_ENV": '"production"',
+};
 
 export default defineConfig({
   lib: [
-    // Extension host (Node.js)
+    // Extension host (Node.js, CJS)
     {
       format: "cjs",
       bundle: true,
       autoExtension: false,
       source: {
-        entry: {
-          extension: "./src/extension/activate.ts",
-        },
-        define: {
-          __WASM_INLINE__: "false",
-          "process.env.NODE_ENV": '"production"',
-        },
+        entry: { extension: "./src/extension/activate.ts" },
+        define: sharedDefine,
       },
       output: {
         target: "node",
-        distPath: {
-          root: "out",
-        },
-        filename: {
-          js: "extension.js",
-        },
-        sourceMap: {
-          js: false,
-        },
-        externals: {
-          vscode: "commonjs vscode",
-        },
+        distPath: { root: "out" },
+        filename: { js: "extension.js" },
+        sourceMap: { js: false },
+        externals: { vscode: "commonjs vscode" },
         minify: true,
       },
     },
-    // Webview (Browser)
+    // Webview (Browser, ESM)
     {
       format: "esm",
       bundle: true,
       autoExtension: false,
       source: {
-        entry: {
-          "webview/index": "./src/webview-app/index.ts",
-        },
-        define: {
-          __WASM_INLINE__: "false",
-          "process.env.NODE_ENV": '"production"',
-        },
+        entry: { "webview/index": "./src/webview/index.ts" },
+        define: sharedDefine,
       },
       output: {
         target: "web",
-        distPath: {
-          root: "out",
-        },
-        filename: {
-          js: "[name].js",
-        },
-        sourceMap: {
-          js: false,
-        },
+        distPath: { root: "out" },
+        filename: { js: "[name].js" },
+        sourceMap: { js: false },
         externals: {},
         minify: true,
       },
     },
-    // Viewer (Browser - React App)
+    // Viewer (Browser, React, ESM)
     {
       format: "esm",
       bundle: true,
       autoExternal: false,
       autoExtension: false,
       source: {
-        entry: {
-          "viewer/index": "./src/viewer-app/index.tsx",
-        },
-        define: {
-          __WASM_INLINE__: "false",
-          "process.env.NODE_ENV": '"production"',
-        },
+        entry: { "viewer/index": "./src/viewer/index.tsx" },
+        define: sharedDefine,
       },
       output: {
         target: "web",
-        distPath: {
-          root: "out",
-        },
-        filename: {
-          js: "[name].js",
-        },
-        sourceMap: {
-          js: false,
-        },
+        distPath: { root: "out" },
+        filename: { js: "[name].js" },
+        sourceMap: { js: false },
         externals: [],
         minify: true,
       },
@@ -101,8 +70,8 @@ export default defineConfig({
 
   source: {
     alias: {
-      "@": path.resolve(__dirname, "../page/src"),
-      "@molvis/core": path.resolve(__dirname, "../core/src/index.ts"),
+      "@": path.resolve(import.meta.dirname, "../page/src"),
+      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
     },
   },
 

@@ -1,10 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { PageAppAdapter } from "./adapter/pageAppAdapter";
+import App from "../../../page/src/App";
 import "./main.css";
 
 const container = document.getElementById("root");
 if (container) {
   const root = createRoot(container);
-  root.render(<PageAppAdapter />);
+  root.render(<App />);
 }

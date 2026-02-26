@@ -1,15 +1,11 @@
 {
   "name": "@molvis/core",
   "version": "0.0.2",
-  "main": "./dist/index.js",
   "type": "module",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     }
   },
   "files": [
@@ -38,7 +34,7 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
-    "@molcrafts/molrs": "file:../../molrs/pkg",
+    "@molcrafts/molrs": "file:../../molrs/molrs-wasm/pkg",
     "tslog": "^4.9.3"
   },
   "directories": {

@@ -48,7 +48,7 @@ export class DrawBoxCommand extends Command<void> {
 
     // Get corners from molrs Box
     const cornersView = this.box.get_corners();
-    const corners = cornersView.to_js_array(); // Float32Array length 24
+    const corners = cornersView.toCopy(); // Float32Array length 24
 
     // Create a root mesh for the box
     this.boxMesh = new BABYLON.Mesh("sim_box", scene);
@@ -66,9 +66,9 @@ export class DrawBoxCommand extends Command<void> {
     const getPoint = (idx: number) =>
       new BABYLON.Vector3(corners[idx * 3], corners[idx * 3 + 1], corners[idx * 3 + 2]);
 
-    const l = this.box.lengths().to_js_array();
+    const l = this.box.lengths().toCopy();
     const lengths = new BABYLON.Vector3(l[0], l[1], l[2]);
-    const o = this.box.origin().to_js_array();
+    const o = this.box.origin().toCopy();
     const origin = new BABYLON.Vector3(o[0], o[1], o[2]);
     const center = origin.add(lengths.scale(0.5));
 

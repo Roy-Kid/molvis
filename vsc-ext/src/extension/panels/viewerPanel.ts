@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import type { PanelRegistry } from "../types/panel";
-import { getViewerHtml } from "../webview/htmlFactory";
+import type { PanelRegistry } from "../types";
+import { getViewerHtml } from "./html";
 
 export function openViewerPanel(
   context: vscode.ExtensionContext,

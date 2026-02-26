@@ -61,8 +61,8 @@ export class World {
 
     const camera = new ArcRotateCamera(
       "camera",
-      Math.PI / 4, // alpha
-      Math.PI / 3, // beta
+      Math.PI / 4, // alpha – 45° in XY plane
+      Math.acos(1 / Math.sqrt(3)), // beta – view from (a,a,a) direction
       10, // radius
       Vector3.Zero(),
       scene,
@@ -133,9 +133,6 @@ export class World {
       camera,
     };
 
-    window.addEventListener("resize", () => {
-      engine.resize();
-    });
   }
 
   public get scene(): Scene {
@@ -259,10 +256,13 @@ export class World {
   }
 
   /**
-   * Resize the engine
+   * Resize the engine and immediately re-render so the canvas is never
+   * displayed in a cleared (blank) state between resize and the next
+   * render-loop tick.
    */
   public resize() {
     this._engine.resize();
+    this._sceneData.scene.render();
   }
 
   /**

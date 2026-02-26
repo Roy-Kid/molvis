@@ -345,14 +345,10 @@ export class MolvisApp {
   }
 
   public resize = (): void => {
-    // Update canvas resolution based on container size
-    const pixelRatio = window.devicePixelRatio || 1;
-    const width = this._container.clientWidth || 800;
-    const height = this._container.clientHeight || 600;
-
-    this._canvas.width = Math.floor(width * pixelRatio);
-    this._canvas.height = Math.floor(height * pixelRatio);
-
+    // Let Babylon's engine.resize() read the canvas CSS size and update the
+    // drawing-buffer dimensions internally.  Manually setting canvas.width /
+    // canvas.height *before* the engine does it clears the bitmap and causes a
+    // visible flash during continuous resize (e.g. dragging a splitter).
     this._world.resize();
   };
 

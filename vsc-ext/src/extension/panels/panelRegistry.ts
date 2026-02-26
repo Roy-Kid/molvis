@@ -1,5 +1,5 @@
 import type * as vscode from "vscode";
-import type { PanelRegistry, WebviewPanelMeta } from "../types/panel";
+import type { PanelRegistry, WebviewPanelMeta } from "../types";
 
 /**
  * In-memory registry for active webview panels and their reload metadata.

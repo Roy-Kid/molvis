@@ -8,7 +8,7 @@ import {
   processZarrFrame,
   readFrame,
 } from "@molvis/core";
-import type { MolecularFilePayload } from "../../extension/types/messages";
+import type { MolecularFilePayload } from "../extension/types";
 
 export interface RuntimeLoadContext {
   setTrajectory: (trajectory: Trajectory) => void;

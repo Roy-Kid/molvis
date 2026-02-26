@@ -2,7 +2,7 @@ import { type MolvisConfig, type Trajectory, mountMolvis } from "@molvis/core";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
-} from "../../extension/types/messages";
+} from "../extension/types";
 import {
   createRuntimeResources,
   freeRuntimeResources,

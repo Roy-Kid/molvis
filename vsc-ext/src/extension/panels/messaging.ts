@@ -3,7 +3,7 @@ import type * as vscode from "vscode";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
-} from "../types/messages";
+} from "../types";
 
 /**
  * Send a message from extension host to webview.

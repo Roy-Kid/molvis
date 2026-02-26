@@ -4,22 +4,14 @@ export default defineConfig({
   lib: [
     {
       format: "esm",
-      dts: {
-        distPath: "./dist",
-      },
+      dts: true,
       source: {
-        entry: {
-          index: "./src/index.ts",
-        },
         define: {
           __WASM_INLINE__: JSON.stringify(false),
         },
       },
       output: {
         target: "web",
-        distPath: {
-          root: "dist",
-        },
         externals: [
           "@babylonjs/core",
           "@babylonjs/gui",

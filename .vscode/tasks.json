@@ -25,17 +25,17 @@
       "group": { "kind": "build", "isDefault": true },
       "presentation": { "reveal": "always" },
       "isBackground": true,
-      "problemMatcher": [
-        {
-          "owner": "rslib-watch",
-          "pattern": [{ "regexp": ".*" }],
-          "background": {
-            "activeOnStart": true,
-            "beginsPattern": "start\\s+build started\\.{3}",
-            "endsPattern": "ready\\s+built in\\s+\\d+(?:\\.\\d+)?\\s*s"
-          }
+      "problemMatcher": {
+        "owner": "rslib-watch",
+        "pattern": {
+          "regexp": "^\\b$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*start\\s+build started.*$",
+          "endsPattern": "^.*ready\\s+built in.*$"
         }
-      ]
+      }
     },
     {
       "type": "npm",

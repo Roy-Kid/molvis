@@ -1,14 +1,10 @@
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rslib/core";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   resolve: {
     alias: {
-      "@molvis/core": path.resolve(__dirname, "../core/src/index.ts"),
+      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
     },
   },
   lib: [
@@ -18,9 +14,7 @@ export default defineConfig({
       autoExtension: false,
       syntax: "esnext",
       source: {
-        entry: {
-          index: "./src/ts/index.ts",
-        },
+        entry: { index: "./src/ts/index.ts" },
         define: {
           __WASM_INLINE__: JSON.stringify(true),
         },
@@ -28,9 +22,7 @@ export default defineConfig({
       output: {
         target: "web",
         externals: ["@rslib/core"],
-        distPath: {
-          root: "src/molvis/dist",
-        },
+        distPath: { root: "src/molvis/dist" },
       },
     },
   ],
@@ -43,16 +35,9 @@ export default defineConfig({
       config.output = {
         ...(config.output || {}),
         module: true,
-        library: {
-          type: "module",
-        },
+        library: { type: "module" },
       };
-      addRules([
-        {
-          test: /\.wasm$/,
-          type: "asset/inline",
-        },
-      ]);
+      addRules([{ test: /\.wasm$/, type: "asset/inline" }]);
     },
   },
 });

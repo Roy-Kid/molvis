@@ -1,12 +1,11 @@
-import type * as vscode from "vscode";
-import { registerOpenPreviewCommand } from "./commands/openPreview";
-import { registerOpenViewerCommand } from "./commands/openViewer";
-import { registerReloadPanelsCommand } from "./commands/reloadPanels";
-import { MolvisEditorProvider } from "./editor/molvisEditorProvider";
-import { VsCodeLogger } from "./infra/logger";
+import * as vscode from "vscode";
+import { VsCodeLogger } from "./types";
+import { MolvisEditorProvider } from "./panels/editorProvider";
 import { MolecularFileLoader } from "./loading/molecularFileLoader";
-import { createHotReloadWatcher } from "./panels/hotReloadWatcher";
+import { createHotReloadWatcher } from "./panels/hotReload";
 import { InMemoryPanelRegistry } from "./panels/panelRegistry";
+import { openPreviewPanel } from "./panels/previewPanel";
+import { openViewerPanel } from "./panels/viewerPanel";
 
 /**
  * Extension entry point. Registers custom editor, preview/viewer commands and hot reload.
@@ -18,9 +17,25 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     MolvisEditorProvider.register(context, panelRegistry, logger),
-    registerOpenPreviewCommand(context, panelRegistry, logger, fileLoader),
-    registerOpenViewerCommand(context, panelRegistry),
-    registerReloadPanelsCommand(panelRegistry),
+    vscode.commands.registerCommand(
+      "molvis.openPreview",
+      async (uri?: vscode.Uri) => {
+        await openPreviewPanel(context, panelRegistry, logger, fileLoader, uri);
+      },
+    ),
+    vscode.commands.registerCommand("molvis.openViewer", () => {
+      openViewerPanel(context, panelRegistry);
+    }),
+    vscode.commands.registerCommand("molvis.reload", async () => {
+      await panelRegistry.forEachVisible(async (panel, meta) => {
+        if (meta.reload) {
+          await meta.reload();
+          return;
+        }
+
+        panel.webview.html = meta.getHtml();
+      });
+    }),
     createHotReloadWatcher(context, panelRegistry),
   );
 }

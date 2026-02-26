@@ -10,6 +10,5 @@
     "declaration": false,
     "types": ["node", "mocha", "vscode"]
   },
-  "include": ["src/extension/**/*.ts", "src/test/**/*.ts"],
-  "exclude": ["src/webview-app/**/*", "src/viewer-app/**/*"]
+  "include": ["src/extension.ts", "src/extension/**/*.ts", "src/test/**/*.ts"]
 }
