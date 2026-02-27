@@ -1,5 +1,5 @@
 import { type PointerInfo, Vector3 } from "@babylonjs/core";
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";

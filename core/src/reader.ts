@@ -1,5 +1,5 @@
 import { Frame, LammpsReader, PdbReader, XyzReader } from "@molcrafts/molrs";
-import { logger } from "../utils/logger";
+import { logger } from "./utils/logger";
 import { PeriodicTable } from "./system/elements";
 
 export function readPDBFrame(content: string): Frame {

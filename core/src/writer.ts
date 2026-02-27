@@ -1,5 +1,5 @@
 import { Frame, writeFrame as wasmWriteFrame } from "@molcrafts/molrs";
-import { logger } from "../utils/logger";
+import { logger } from "./utils/logger";
 import { inferFormatFromFilename } from "./reader";
 import { syncSceneToFrame } from "./scene_sync";
 import type { SceneIndex } from "./scene_index";

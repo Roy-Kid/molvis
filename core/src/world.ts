@@ -10,8 +10,8 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { Inspector } from "@babylonjs/inspector";
-import type { ModeManager } from "../mode";
-import { logger } from "../utils/logger";
+import type { ModeManager } from "./mode";
+import { logger } from "./utils/logger";
 import type { MolvisApp } from "./app";
 import { AxisHelper } from "./axis_helper";
 import { GridGround } from "./grid";
@@ -25,11 +25,8 @@ import { ViewportSettings } from "./viewport_settings";
 export class World {
   private _engine: Engine;
   private _app: MolvisApp;
-  private _sceneData: {
-    scene: Scene;
-    camera: ArcRotateCamera;
-    light: HemisphericLight;
-  };
+  private _scene: Scene;
+  private _camera: ArcRotateCamera;
   private _fxaa?: FxaaPostProcess;
   private _modeManager?: ModeManager;
   private _lastRadius = 10;
@@ -127,20 +124,17 @@ export class World {
       this.highlighter.highlightSelection(state),
     );
 
-    this._sceneData = {
-      scene,
-      light: hemiLight,
-      camera,
-    };
+    this._scene = scene;
+    this._camera = camera;
 
   }
 
   public get scene(): Scene {
-    return this._sceneData.scene;
+    return this._scene;
   }
 
   public get camera(): ArcRotateCamera {
-    return this._sceneData.camera;
+    return this._camera;
   }
 
   public get mode() {
@@ -153,7 +147,7 @@ export class World {
 
   // Camera control methods
   public focusOn(target: Vector3) {
-    this._sceneData.camera.setTarget(target);
+    this.camera.setTarget(target);
   }
 
   public resetCamera() {
@@ -176,8 +170,8 @@ export class World {
 
       // Calculate required radius to fit the scene
       // FOV (alpha) is vertical.
-      const fov = this._sceneData.camera.fov;
-      const aspectRatio = this._engine.getAspectRatio(this._sceneData.camera);
+      const fov = this.camera.fov;
+      const aspectRatio = this._engine.getAspectRatio(this.camera);
 
       // Distance needed to fit height
       let distance = maxDim / (2 * Math.tan(fov / 2));
@@ -193,18 +187,18 @@ export class World {
       // Ensure minimum distance
       distance = Math.max(distance, 5.0);
 
-      this._sceneData.camera.setTarget(center);
-      this._sceneData.camera.radius = distance;
+      this.camera.setTarget(center);
+      this.camera.radius = distance;
 
       // Reset angles to a nice isometric-ish view
-      this._sceneData.camera.alpha = Math.PI / 4;
-      this._sceneData.camera.beta = Math.PI / 3;
+      this.camera.alpha = Math.PI / 4;
+      this.camera.beta = Math.PI / 3;
     } else {
       // Fallback if no data
-      this._sceneData.camera.setTarget(Vector3.Zero());
-      this._sceneData.camera.radius = 10;
-      this._sceneData.camera.alpha = Math.PI / 4;
-      this._sceneData.camera.beta = Math.PI / 3;
+      this.camera.setTarget(Vector3.Zero());
+      this.camera.radius = 10;
+      this.camera.alpha = Math.PI / 4;
+      this.camera.beta = Math.PI / 3;
     }
   }
 
@@ -212,7 +206,7 @@ export class World {
     logger.info("[World] Taking screenshot...");
     Tools.CreateScreenshotUsingRenderTarget(
       this._engine,
-      this._sceneData.camera,
+      this.camera,
       { precision: 1 },
       (data) => {
         const link = document.createElement("a");
@@ -229,7 +223,7 @@ export class World {
    */
   public start() {
     this._engine.runRenderLoop(() => {
-      this._sceneData.scene.render();
+      this.scene.render();
       // Render axis helper in viewport corner
       this.axisHelper.render();
       const fps = this._engine.getFps();
@@ -245,7 +239,7 @@ export class World {
   }
 
   public toggleInspector() {
-    const scene = this._sceneData.scene;
+    const scene = this.scene;
     if (scene.debugLayer.isVisible()) {
       scene.debugLayer.hide();
       return;
@@ -262,7 +256,7 @@ export class World {
    */
   public resize() {
     this._engine.resize();
-    this._sceneData.scene.render();
+    this.scene.render();
   }
 
   /**
@@ -281,16 +275,20 @@ export class World {
     if (!config) return;
 
     // 1. Hardware Scaling (Resolution)
-    // config.hardwareScaling: 1.0 = native, 0.5 = half res
-    // engine.setHardwareScalingLevel: 1.0 = native, 2.0 = half res (it's inverse)
-    if (config.hardwareScaling) {
-      this._engine.setHardwareScalingLevel(1.0 / config.hardwareScaling);
+    // `hardwareScaling` is a quality multiplier relative to the display's native DPR.
+    // 1.0 = native DPR, 0.5 = lower quality / faster, 2.0 = supersample / sharper.
+    if (config.hardwareScaling !== undefined) {
+      const quality = Number.isFinite(config.hardwareScaling)
+        ? Math.max(config.hardwareScaling, 0.1)
+        : 1.0;
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      this._engine.setHardwareScalingLevel(1.0 / (quality * devicePixelRatio));
     }
 
     // 2. FXAA
     if (config.fxaa) {
       if (!this._fxaa) {
-        this._fxaa = new FxaaPostProcess("fxaa", 1.0, this._sceneData.camera);
+        this._fxaa = new FxaaPostProcess("fxaa", 1.0, this.camera);
       }
     } else {
       if (this._fxaa) {

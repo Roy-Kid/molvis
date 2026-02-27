@@ -1,4 +1,4 @@
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 import { Command, command } from "./base";
 
 export interface SetAttributeArgs {

@@ -1,15 +1,14 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
-import type { MolvisApp as Molvis } from "../core/app";
+import type { MolvisApp as Molvis } from "../app";
 import { type Block, Frame } from "@molcrafts/molrs";
-import { syncSceneToFrame } from "../core/scene_sync";
+import { syncSceneToFrame } from "../scene_sync";
 import { DrawFrameCommand } from "../commands/draw";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { HitResult, MenuItem } from "./types";
-import { pointOnScreenAlignedPlane } from "./utils";
-import "../core/shaders/impostor";
+import "../shaders/impostor";
 
 /**
  * =============================
@@ -330,13 +329,8 @@ class ManipulateMode extends BaseMode {
 
     this.isDragging = true;
 
-    const newPosition = pointOnScreenAlignedPlane(
-      this.world.scene,
-      this.world.camera,
-      pointerInfo.event.clientX,
-      pointerInfo.event.clientY,
-      this.dragStartPosition,
-    );
+    const newPosition = this.projectPointerOnScreenPlane(this.dragStartPosition);
+    if (!newPosition) return;
 
     this.moveAtom(this.draggedAtomId, newPosition);
 
@@ -401,7 +395,7 @@ class ManipulateMode extends BaseMode {
   }
 
   protected override _on_press_ctrl_s(): void {
-    void this.saveChanges();
+    this.app.save();
   }
 
   public async discardChanges(): Promise<void> {
@@ -428,6 +422,8 @@ class ManipulateMode extends BaseMode {
 
   public override finish(): void {
     this.clearSelection();
+    this.restoreSceneFromFrame();
+    this.originalFrameData = null;
     super.finish();
   }
 }

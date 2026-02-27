@@ -1,10 +1,10 @@
 import { type Mesh, type Scene, Vector3 } from "@babylonjs/core";
-import type { MolvisApp } from "../core/app";
-import type { SceneIndex } from "../core/scene_index";
+import type { MolvisApp } from "../app";
+import type { SceneIndex } from "../scene_index";
 import type {
   GetSelectedResponse,
   SelectedEntity,
-} from "../core/selection_manager";
+} from "../selection_manager";
 import { logger } from "../utils/logger";
 import { Command, command } from "./base";
 import { commands } from "./registry";

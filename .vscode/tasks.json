@@ -19,8 +19,8 @@
     },
     {
       "type": "npm",
-      "label": "vsc-ext: dev",
-      "script": "dev",
+      "label": "vsc-ext: watch",
+      "script": "watch",
       "options": { "cwd": "${workspaceFolder}/vsc-ext" },
       "group": { "kind": "build", "isDefault": true },
       "presentation": { "reveal": "always" },

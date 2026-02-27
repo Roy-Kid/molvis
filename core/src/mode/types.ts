@@ -1,5 +1,5 @@
 import type { AbstractMesh } from "@babylonjs/core";
-import type { AtomMeta, BondMeta } from "../core/entity_source";
+import type { AtomMeta, BondMeta } from "../entity_source";
 
 /**
  * Result of a pick/raycast operation

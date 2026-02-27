@@ -1,4 +1,10 @@
-import { type MolvisConfig, type Trajectory, mountMolvis } from "@molvis/core";
+import {
+  type Molvis,
+  type MolvisConfig,
+  type MolvisSetting,
+  type Trajectory,
+  mountMolvis,
+} from "@molvis/core";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
@@ -21,13 +27,21 @@ export function bootstrapWebview(container: HTMLElement): void {
       grid: { enabled: true },
     },
   );
-  app.start();
-
   const resources = createRuntimeResources();
   const resizeObserver = new ResizeObserver(() => app.resize());
   resizeObserver.observe(container);
 
   const vscode = acquireVsCodeApi();
+
+  const applyOptions = (config: unknown, settings: unknown): void => {
+    if (config && typeof config === "object") {
+      app.setConfig(config as Partial<MolvisConfig>);
+    }
+
+    if (settings && typeof settings === "object") {
+      applyMolvisSettings(app, settings as Partial<MolvisSetting>);
+    }
+  };
 
   // Override saveFile: encode blob as base64 and postMessage to extension host
   // (showSaveFilePicker is blocked in cross-origin webview iframes)
@@ -48,9 +62,10 @@ export function bootstrapWebview(container: HTMLElement): void {
       const message = event.data;
       switch (message.type) {
         case "init":
-          if (message.config && typeof message.config === "object") {
-            app.setConfig(message.config as Partial<MolvisConfig>);
-          }
+          applyOptions(message.config, message.settings);
+          break;
+        case "applySettings":
+          applyOptions(message.config, message.settings);
           break;
         case "loadFile":
           loadMolecularPayload(
@@ -65,6 +80,9 @@ export function bootstrapWebview(container: HTMLElement): void {
             resources,
           );
           break;
+        case "triggerSave":
+          app.save();
+          break;
         case "error":
           break;
         default:
@@ -73,21 +91,32 @@ export function bootstrapWebview(container: HTMLElement): void {
     },
   );
 
+  app.events.on("dirty-change", (isDirty: boolean) => {
+    vscode.postMessage({ type: "dirtyStateChanged", isDirty });
+  });
+
   container.addEventListener("dragover", (event) => {
     event.preventDefault();
     event.stopPropagation();
   });
 
-  container.addEventListener("drop", (event) => {
+  container.addEventListener("drop", async (event) => {
     event.preventDefault();
     event.stopPropagation();
 
     const file = event.dataTransfer?.files?.[0];
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
-    vscode.postMessage({ type: "fileDropped", filename: file.name });
+    try {
+      const content = await file.text();
+      loadMolecularPayload(content, file.name, {
+        setTrajectory: (trajectory: Trajectory) => app.setTrajectory(trajectory),
+        setViewMode: () => app.setMode("view"),
+        resetCamera: () => app.world.resetCamera(),
+      }, resources);
+    } catch (e) {
+      console.error("Failed to load dropped file:", e);
+    }
   });
 
   window.addEventListener("beforeunload", () => {
@@ -96,5 +125,55 @@ export function bootstrapWebview(container: HTMLElement): void {
     app.destroy();
   });
 
-  vscode.postMessage({ type: "ready" });
+  // App start awaits renderer warmup internally.
+  // Signal ready only after that gate passes.
+  void app
+    .start()
+    .then(() => {
+      vscode.postMessage({ type: "ready" });
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.postMessage({ type: "error", message });
+    });
+}
+
+function applyMolvisSettings(
+  app: Molvis,
+  settings: Partial<MolvisSetting>,
+): void {
+  if (typeof settings.cameraPanSpeed === "number") {
+    app.settings.setCameraPanSpeed(settings.cameraPanSpeed);
+  }
+  if (typeof settings.cameraRotateSpeed === "number") {
+    app.settings.setCameraRotateSpeed(settings.cameraRotateSpeed);
+  }
+  if (typeof settings.cameraZoomSpeed === "number") {
+    app.settings.setCameraZoomSpeed(settings.cameraZoomSpeed);
+  }
+  if (typeof settings.cameraInertia === "number") {
+    app.settings.setCameraInertia(settings.cameraInertia);
+  }
+  if (typeof settings.cameraPanInertia === "number") {
+    app.settings.setCameraPanInertia(settings.cameraPanInertia);
+  }
+  if (typeof settings.cameraMinRadius === "number") {
+    app.settings.setCameraMinRadius(settings.cameraMinRadius);
+  }
+  if (
+    settings.cameraMaxRadius === null ||
+    typeof settings.cameraMaxRadius === "number"
+  ) {
+    app.settings.setCameraMaxRadius(settings.cameraMaxRadius);
+  }
+  if (settings.grid && typeof settings.grid === "object") {
+    app.settings.setGrid(
+      settings.grid as Parameters<typeof app.settings.setGrid>[0],
+    );
+  }
+  if (settings.graphics && typeof settings.graphics === "object") {
+    app.settings.setGraphics(
+      settings.graphics as Parameters<typeof app.settings.setGraphics>[0],
+    );
+  }
 }

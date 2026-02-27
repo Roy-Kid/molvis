@@ -1,7 +1,7 @@
 import { type Box, Frame } from "@molcrafts/molrs";
-import { logger } from "../utils/logger";
+import { logger } from "./utils/logger";
 import { Trajectory } from "./system/trajectory";
-import type { EventEmitter, MolvisEventMap } from "../events";
+import type { EventEmitter, MolvisEventMap } from "./events";
 
 /**
  * System class manages all data and structure-related operations.

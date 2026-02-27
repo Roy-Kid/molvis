@@ -1,4 +1,4 @@
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 
 /**
  * Command function type that operates on MolvisApp.

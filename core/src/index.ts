@@ -12,10 +12,11 @@ if (__WASM_INLINE__) {
   wasmInstance = await init();
 }
 
-import { MolvisApp } from "./core/app";
-import type { MolvisConfig } from "./core/config";
+import { MolvisApp } from "./app";
+import type { MolvisConfig } from "./config";
 
-import type { MolvisSetting } from "./core/settings";
+import type { MolvisSetting } from "./settings";
+export { MOLVIS_VERSION } from "./version";
 
 export function mountMolvis(
   container: HTMLElement,
@@ -25,33 +26,33 @@ export function mountMolvis(
   return new MolvisApp(container, config, settings);
 }
 
-export { MolvisApp as Molvis } from "./core/app";
+export { MolvisApp as Molvis } from "./app";
 export {
   defaultMolvisConfig,
   DEFAULT_CONFIG,
   type MolvisConfig,
-} from "./core/config";
+} from "./config";
 export {
   Settings,
   DEFAULT_SETTING,
   defaultMolvisSettings,
   type MolvisSetting,
-} from "./core/settings";
+} from "./settings";
 export {
   Frame,
   Block,
   Box,
   Trajectory,
   type FrameProvider,
-} from "./core/system/index";
-export { Topology } from "./core/system/topology";
-export { System } from "./core/system";
+} from "./system/index";
+export { Topology } from "./system/topology";
+export { System } from "./system";
+export { World } from "./world";
 export {
-  World,
   SelectionManager,
   type SelectionState,
   parseSelectionKey,
-} from "./core";
+} from "./selection_manager";
 export {
   exportFrame,
   writeFrame,
@@ -63,7 +64,7 @@ export {
   type WriteFrameOptions,
   defaultExtensionForFormat,
   mimeForFormat,
-} from "./core/writer";
+} from "./writer";
 export {
   readFrame,
   readPDBFrame,
@@ -73,7 +74,7 @@ export {
   TrajectoryReader,
   deriveElementFromType,
   processZarrFrame,
-} from "./core/reader";
+} from "./reader";
 
 export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";

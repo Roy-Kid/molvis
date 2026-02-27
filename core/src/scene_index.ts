@@ -49,7 +49,7 @@ export class ImpostorState {
   public count = 0; // Number of EDIT atoms (added on top of frame)
   public capacity: number;
   public frameOffset = 0; // Number of FRAME atoms
-  public dirty = false;
+  public needsFlush = false;
 
   public buffers = new Map<string, { data: Float32Array; stride: number }>();
 
@@ -105,7 +105,7 @@ export class ImpostorState {
       }
     }
 
-    this.dirty = true;
+    this.needsFlush = true;
     this.flush();
   }
 
@@ -152,7 +152,7 @@ export class ImpostorState {
     this.idToIndex.set(id, editIndex);
     this.indexToId.set(editIndex, id);
     this.count++;
-    this.dirty = true;
+    this.needsFlush = true;
     return absIndex;
   }
 
@@ -207,7 +207,7 @@ export class ImpostorState {
     this.idToIndex.delete(id);
     this.indexToId.delete(lastEditIndex);
     this.count--;
-    this.dirty = true;
+    this.needsFlush = true;
   }
 
   updateMulti(id: number, values: Map<string, Float32Array | number[]>): void {
@@ -229,11 +229,11 @@ export class ImpostorState {
       const arr = vals instanceof Float32Array ? vals : new Float32Array(vals);
       desc.data.set(arr, absIndex * desc.stride);
     }
-    this.dirty = true;
+    this.needsFlush = true;
   }
 
   flush(): void {
-    if (!this.dirty) return;
+    if (!this.needsFlush) return;
 
     const totalCount = this.frameOffset + this.count;
 
@@ -242,7 +242,7 @@ export class ImpostorState {
       this.mesh.isVisible = false;
       this.mesh.setEnabled(false);
       this.mesh.thinInstanceCount = 0;
-      this.dirty = false;
+      this.needsFlush = false;
       return;
     }
 
@@ -265,7 +265,7 @@ export class ImpostorState {
     }
 
     this.mesh.thinInstanceEnablePicking = true;
-    this.dirty = false;
+    this.needsFlush = false;
   }
 
   private grow(): void {
@@ -415,6 +415,7 @@ export class SceneIndex {
   public topology: Topology = new Topology();
 
   private allUnsaved = false;
+  public onDirtyChange?: (isDirty: boolean) => void;
 
   // ============ Query APIs ============
 
@@ -528,7 +529,7 @@ export class SceneIndex {
       }
     }
 
-    this.allUnsaved = false;
+    this.markAllSaved();
   }
 
   registerBox(options: RegisterBoxOptions): void {
@@ -625,7 +626,9 @@ export class SceneIndex {
   }
 
   markAllUnsaved() {
+    if (this.allUnsaved) return;
     this.allUnsaved = true;
+    this.onDirtyChange?.(true);
   }
 
   get hasUnsavedChanges() {
@@ -633,7 +636,9 @@ export class SceneIndex {
   }
 
   markAllSaved() {
+    if (!this.allUnsaved) return;
     this.allUnsaved = false;
+    this.onDirtyChange?.(false);
   }
 
   /**
@@ -673,7 +678,7 @@ export class SceneIndex {
     this.meshRegistry.clear();
     this.metaRegistry.clear();
     this.topology.clear();
-    this.allUnsaved = false;
+    this.markAllSaved();
   }
 
   /**

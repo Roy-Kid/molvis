@@ -1,4 +1,4 @@
-import { EventEmitter } from "../events";
+import { EventEmitter } from "./events";
 import type { SceneIndex } from "./scene_index";
 import { ExpressionSelector } from "./selection/expression";
 

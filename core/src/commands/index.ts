@@ -25,7 +25,7 @@ export { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
 export { NewFrameCommand, UpdateFrameCommand, ExportFrameCommand } from "./frame";
 export { TakeSnapshotCommand } from "./snapshot";
 
-export type { GetSelectedResponse } from "../core/selection_manager";
+export type { GetSelectedResponse } from "../selection_manager";
 
 // Utilities
 

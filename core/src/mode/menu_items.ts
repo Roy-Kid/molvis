@@ -1,6 +1,6 @@
-import type { MolvisApp } from "../core/app";
-import { inferFormatFromFilename } from "../core/reader";
-import { exportFrame } from "../core/writer";
+import type { MolvisApp } from "../app";
+import { inferFormatFromFilename } from "../reader";
+import { exportFrame } from "../writer";
 import { logger } from "../utils/logger";
 import type { MenuItem } from "./types";
 

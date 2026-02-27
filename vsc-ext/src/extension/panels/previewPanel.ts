@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { Logger } from "../types";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
+import { createInitMessage } from "../configuration";
 import { handleSaveFile, onWebviewMessage, sendToWebview } from "./messaging";
 import type { PanelRegistry } from "../types";
 import { getPreviewHtml } from "./html";
@@ -66,9 +67,11 @@ export async function openQuickViewPanel(
     reload: reloadPreview,
   });
 
+  const baseTitle = panel.title;
   const messageDisposable = onWebviewMessage(panel.webview, async (message) => {
     switch (message.type) {
       case "ready":
+        sendToWebview(panel.webview, createInitMessage("standalone"));
         if (targetUri) {
           try {
             await sendLoadedFile(panel, targetUri, fileLoader);
@@ -79,6 +82,9 @@ export async function openQuickViewPanel(
         break;
       case "saveFile":
         await handleSaveFile(message.data, message.suggestedName);
+        break;
+      case "dirtyStateChanged":
+        panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;
         break;
       case "error":
         logger.error(`MolVis: ${message.message}`);
@@ -91,11 +97,5 @@ export async function openQuickViewPanel(
   panel.onDidDispose(() => {
     panelRegistry.unregister(panel);
     messageDisposable.dispose();
-  });
-
-  sendToWebview(panel.webview, {
-    type: "init",
-    mode: "standalone",
-    config: { showUI: true },
   });
 }

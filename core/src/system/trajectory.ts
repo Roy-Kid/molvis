@@ -1,5 +1,5 @@
 import { type Box, Frame } from "@molcrafts/molrs";
-import { logger } from "../../utils/logger";
+import { logger } from "../utils/logger";
 
 /**
  * Interface for lazy frame providers that load frames on demand.

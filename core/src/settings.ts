@@ -93,7 +93,7 @@ export const DEFAULT_SETTING: MolvisSetting = {
     ssr: false,
     dof: false,
     fxaa: true, // Low-cost AA
-    hardwareScaling: 1.0, // 1.0 = native, 2.0 = Retina (High Quality, Low Perf)
+    hardwareScaling: 1.0, // 1.0 = native DPR, <1 faster/blurrier, >1 sharper/slower
   },
 };
 

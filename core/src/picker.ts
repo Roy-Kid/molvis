@@ -1,11 +1,12 @@
 import {
   type AbstractMesh,
+  type Camera,
   Constants,
   RenderTargetTexture,
   type Scene,
   ShaderMaterial,
 } from "@babylonjs/core";
-import type { HitResult } from "../mode/types";
+import type { HitResult } from "./mode/types";
 import type { MolvisApp } from "./app";
 
 /**
@@ -16,7 +17,60 @@ const INSTANCE_ID_BITS = 20; // 1M instances per mesh max
 const MAX_MESH_ID = (1 << MESH_ID_BITS) - 1;
 const MAX_INSTANCE_ID = (1 << INSTANCE_ID_BITS) - 1;
 
-export class Picker {
+export interface NormalizedPickPoint {
+  x: number;
+  y: number;
+}
+
+interface PickerBackend {
+  pick(point: NormalizedPickPoint): Promise<HitResult>;
+  readonly isPicking: boolean;
+}
+
+class PickCoordinator {
+  constructor(
+    private readonly scene: Scene,
+    private readonly backend: PickerBackend,
+  ) {}
+
+  public async pick(pointerX: number, pointerY: number): Promise<HitResult> {
+    if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) {
+      return { type: "empty" };
+    }
+    const point = this.normalizePointer(pointerX, pointerY);
+    return this.backend.pick(point);
+  }
+
+  public get isPicking(): boolean {
+    return this.backend.isPicking;
+  }
+
+  // Keep this aligned with Babylon's CreatePickingRayToRef transform.
+  private normalizePointer(
+    pointerX: number,
+    pointerY: number,
+  ): NormalizedPickPoint {
+    const engine = this.scene.getEngine();
+    const levelInv = 1 / engine.getHardwareScalingLevel();
+
+    let x = pointerX * levelInv;
+    let y = pointerY * levelInv;
+
+    const camera = (this.scene.cameraToUseForPointers ??
+      this.scene.activeCamera) as Camera | null;
+    if (camera) {
+      const renderWidth = engine.getRenderWidth();
+      const renderHeight = engine.getRenderHeight();
+      const global = camera.viewport.toGlobal(renderWidth, renderHeight);
+      x -= global.x;
+      y -= renderHeight - global.y - global.height;
+    }
+
+    return { x, y };
+  }
+}
+
+class IdPassPickerBackend implements PickerBackend {
   private app: MolvisApp;
   private scene: Scene;
   private pickingTexture: RenderTargetTexture | null = null;
@@ -31,10 +85,13 @@ export class Picker {
   }
 
   /**
-   * Pick top-most object at screen coordinates (x, y).
+   * Pick top-most object at normalized render-space coordinates.
    * Returns HitResult with type 'empty' if nothing hit.
    */
-  public async pick(x: number, y: number): Promise<HitResult> {
+  public async pick(point: NormalizedPickPoint): Promise<HitResult> {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      return { type: "empty" };
+    }
     if (this._pickInProgress) {
       return { type: "empty" };
     }
@@ -57,24 +114,14 @@ export class Picker {
       // Perform render
       this.renderPickingScene();
 
-      // Map input-space coordinates to picking texture coordinates.
-      // This keeps picking stable regardless of how canvas/render target sizes are configured.
-      const inputRect = engine.getInputElementClientRect?.();
-      const inputWidth = inputRect?.width || canvas.clientWidth || texWidth;
-      const inputHeight = inputRect?.height || canvas.clientHeight || texHeight;
-      if (inputWidth <= 0 || inputHeight <= 0) {
-        return { type: "empty" };
-      }
-
-      const normX = x / inputWidth;
-      const normY = y / inputHeight;
+      // Coordinates are already normalized by the coordinator.
       const glX = Math.min(
         texWidth - 1,
-        Math.max(0, Math.floor(normX * texWidth)),
+        Math.max(0, Math.floor(point.x)),
       );
       const glY = Math.min(
         texHeight - 1,
-        Math.max(0, texHeight - Math.floor(normY * texHeight) - 1),
+        Math.max(0, texHeight - Math.floor(point.y) - 1),
       );
 
       // Async read from the texture
@@ -298,6 +345,23 @@ export class Picker {
     }
 
     return undefined;
+  }
+}
+
+export class Picker {
+  private readonly coordinator: PickCoordinator;
+
+  constructor(app: MolvisApp, scene: Scene) {
+    const backend = new IdPassPickerBackend(app, scene);
+    this.coordinator = new PickCoordinator(scene, backend);
+  }
+
+  public async pick(pointerX: number, pointerY: number): Promise<HitResult> {
+    return this.coordinator.pick(pointerX, pointerY);
+  }
+
+  public get isPicking(): boolean {
+    return this.coordinator.isPicking;
   }
 }
 

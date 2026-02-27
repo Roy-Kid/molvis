@@ -1,4 +1,4 @@
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 import { Command } from "./base";
 
 /**

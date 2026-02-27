@@ -17,14 +17,21 @@ export class VsCodeLogger implements Logger {
 export type MolecularFilePayload = string | Record<string, string>;
 
 export type HostToWebviewMessage =
-  | { type: "init"; mode: "standalone" | "editor" | "app"; config?: unknown }
+  | {
+      type: "init";
+      mode: "standalone" | "editor" | "app";
+      config?: unknown;
+      settings?: unknown;
+    }
+  | { type: "applySettings"; config?: unknown; settings?: unknown }
   | { type: "loadFile"; content: MolecularFilePayload; filename: string }
+  | { type: "triggerSave" }
   | { type: "error"; message: string };
 
 export type WebviewToHostMessage =
   | { type: "ready" }
-  | { type: "fileDropped"; filename: string }
   | { type: "saveFile"; data: string; suggestedName: string }
+  | { type: "dirtyStateChanged"; isDirty: boolean }
   | { type: "error"; message: string };
 
 // --- Panel (was types/panel.ts) ---

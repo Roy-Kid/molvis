@@ -2,7 +2,7 @@ import type { Frame } from "@molcrafts/molrs";
 import { logger } from "../utils/logger";
 import type { Modifier } from "./modifier";
 import { createDefaultContext, type PipelineContext } from "./types";
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 import { EventEmitter } from "../events";
 
 /**

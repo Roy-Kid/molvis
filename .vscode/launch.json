@@ -11,7 +11,7 @@
 			"outFiles": [
 				"${workspaceFolder}/vsc-ext/out/**/*.js"
 			],
-			"preLaunchTask": "vsc-ext: dev"
+			"preLaunchTask": "vsc-ext: watch"
 		}
 	]
 }

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { MolvisWebviewOptions } from "../configuration";
 
 // --- Asset URIs (was webview/assets.ts) ---
 
@@ -81,11 +82,16 @@ export function getPreviewHtml(
 export function getViewerHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
+  options?: MolvisWebviewOptions,
 ): string {
   const nonce = getNonce();
   const scriptUri = getViewerScriptUri(webview, extensionUri);
   const cssUri = getViewerCssUri(webview, extensionUri);
   const csp = buildCsp(webview, nonce);
+  const serializedOptions = JSON.stringify(options ?? {}).replace(
+    /</g,
+    "\\u003c",
+  );
 
   return `<!doctype html>
 <html lang="en">
@@ -101,6 +107,7 @@ export function getViewerHtml(
   </head>
   <body>
     <div id="root"></div>
+    <script nonce="${nonce}">window.__MOLVIS_VSCODE_INIT__ = ${serializedOptions};</script>
     <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
   </body>
 </html>`;

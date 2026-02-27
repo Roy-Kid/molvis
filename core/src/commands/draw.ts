@@ -1,8 +1,8 @@
 import * as BABYLON from "@babylonjs/core";
 import { Vector3 } from "@babylonjs/core";
 import type { Box, Frame } from "@molcrafts/molrs";
-import type { MolvisApp } from "../core/app";
-import type { DrawAtomOptions, DrawBondOptions } from "../core/artist";
+import type { MolvisApp } from "../app";
+import type { DrawAtomOptions, DrawBondOptions } from "../artist";
 import { Command, command } from "./base";
 
 export interface DrawAtomsOption {
@@ -210,7 +210,7 @@ class NoOpCommand extends Command<void> {
 }
 
 // DrawAtomOptions and DrawBondOptions are defined in artist.ts
-export type { DrawAtomOptions, DrawBondOptions } from "../core/artist";
+export type { DrawAtomOptions, DrawBondOptions } from "../artist";
 
 /**
  * Command to draw an atom in Edit mode.

@@ -1,9 +1,9 @@
 import type { PointerInfo } from "@babylonjs/core";
 
-import type { MolvisApp as Molvis } from "../core/app";
+import type { MolvisApp as Molvis } from "../app";
 
-import type { SelectionOp } from "../core/selection_manager";
-import { makeSelectionKey } from "../core/selection_manager";
+import type { SelectionOp } from "../selection_manager";
+import { makeSelectionKey } from "../selection_manager";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";

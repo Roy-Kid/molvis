@@ -1,7 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import { type Block, Frame } from "@molcrafts/molrs";
-import type { MolvisApp } from "../core/app";
-import { syncSceneToFrame } from "../core/scene_sync";
+import type { MolvisApp } from "../app";
+import { syncSceneToFrame } from "../scene_sync";
 import { Command, command } from "./base";
 import type { DrawFrameOption } from "./draw";
 
@@ -224,7 +224,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     // Static buffers might need explicit update call.
 
     // Flush via ImpostorState
-    atomState.dirty = true;
+    atomState.needsFlush = true;
     atomState.flush();
     mesh.thinInstanceRefreshBoundingInfo(true);
   }
@@ -332,7 +332,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     }
 
     // Flush via ImpostorState
-    bondState.dirty = true;
+    bondState.needsFlush = true;
     bondState.flush();
     mesh.thinInstanceRefreshBoundingInfo(true);
   }

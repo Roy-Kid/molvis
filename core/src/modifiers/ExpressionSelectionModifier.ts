@@ -2,7 +2,7 @@ import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
-import { ExpressionSelector } from "../core/selection/expression";
+import { ExpressionSelector } from "../selection/expression";
 
 /**
  * Modifier that selects atoms based on a boolean expression.

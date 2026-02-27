@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { Logger, PanelRegistry } from "../types";
+import { createInitMessage } from "../configuration";
 import {
   handleSaveFile,
   loadTextDocumentToWebview,
@@ -54,15 +55,22 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
       this.context.extensionUri,
     );
 
+    const baseTitle = webviewPanel.title;
     const messageDisposable = onWebviewMessage(
       webviewPanel.webview,
       (message) => {
         switch (message.type) {
           case "ready":
+            sendToWebview(webviewPanel.webview, createInitMessage("editor"));
             void loadTextDocumentToWebview(webviewPanel.webview, document);
             break;
           case "saveFile":
             void handleSaveFile(message.data, message.suggestedName);
+            break;
+          case "dirtyStateChanged":
+            webviewPanel.title = message.isDirty
+              ? `● ${baseTitle}`
+              : baseTitle;
             break;
           case "error":
             this.logger.error(`MolVis: ${message.message}`);
@@ -93,12 +101,6 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
       this.panelRegistry.unregister(webviewPanel);
       messageDisposable.dispose();
       changeDocumentSubscription.dispose();
-    });
-
-    sendToWebview(webviewPanel.webview, {
-      type: "init",
-      mode: "editor",
-      config: { showUI: true },
     });
   }
 }

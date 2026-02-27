@@ -1,4 +1,4 @@
-import type { MolvisApp as Molvis } from "../../core/app";
+import type { MolvisApp as Molvis } from "../../app";
 import type { HitResult, MenuItem } from "../../mode/types";
 import type { MolvisContextMenu } from "../menus/context_menu";
 

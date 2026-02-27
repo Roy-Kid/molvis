@@ -4,97 +4,183 @@ A VSCode extension for visualizing molecular structures directly within your edi
 
 ## Features
 
-### 🔬 Molecular Visualization
-
-- **Custom Editor for .pdb/.xyz files**: Open `.pdb` or `.xyz` files in an interactive 3D viewer
-- **Side-by-side text/visualization**: Click the preview button in the editor title bar to view molecular structure alongside the text
-- **Command-based viewer**: Open an empty viewer and drag-and-drop molecular files
-- **Real-time updates**: Changes to the text file automatically update the visualization
-
-### 🎯 Workflows
-
-#### 1. Open .pdb/.xyz file in MolVis viewer
-
-1. Open any `.pdb` or `.xyz` file in VSCode
-2. Right-click the editor tab → **Reopen Editor With...** → **MolVis Viewer**
-3. The file will open in the 3D molecular viewer
-
-#### 2. Preview to the side (Markdown-style)
-
-1. Open a `.pdb` or `.xyz` file in the text editor
-2. Click the **Open Preview to the Side** button (📖) in the editor title bar
-3. The molecular visualization will open in a split view alongside your text editor
-
-#### 3. Standalone viewer with drag-and-drop
-
-1. Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
-2. Run **MolVis: Open Viewer**
-3. Drag and drop a `.pdb` or `.xyz` file from your file explorer into the viewer
+- **Custom Editor** for `.pdb`, `.xyz`, `.data` files with interactive 3D viewing
+- **Quick View** panel for side-by-side text + visualization
+- **Editor Workspace** with full React-based MolVis UI
+- **Drag-and-drop** file loading onto the canvas
+- **Hot reload** during development (watches build output)
+- **Zarr directory** support for trajectory data
+- **Configurable** camera, graphics, grid, and UI settings via `molvis.config` / `molvis.settings`
 
 ## Supported File Formats
 
-- **PDB** (`.pdb`) - Protein Data Bank format
-- **XYZ** (`.xyz`) - XYZ molecular format
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| PDB    | `.pdb`    | Protein Data Bank |
+| XYZ    | `.xyz`    | Multi-frame trajectory support |
+| LAMMPS | `.data`   | LAMMPS data format |
+| Zarr   | `.zarr`   | Directory-based binary trajectory |
 
-> **Note**: This extension currently supports small text-based molecular files (< 10MB). Support for additional formats (`.cif`, `.mol2`) and large files is planned for future releases.
+## Workflows
 
-## Requirements
+### 1. Custom Editor
 
-- VSCode 1.108.1 or higher
-- WebGL-capable browser engine (included in VSCode)
+1. Open a `.pdb`, `.xyz`, or `.data` file in VSCode
+2. Right-click the editor tab -> **Reopen Editor With...** -> **MolVis Viewer**
 
-## Extension Commands
+### 2. Quick View (side-by-side)
 
-- `MolVis: Open Viewer` - Open an empty molecular viewer
-- `Open Preview to the Side` - Open molecular visualization alongside text editor (available when a `.pdb` or `.xyz` file is active)
+1. Open a supported file in the text editor
+2. Click the **Open Preview to the Side** button in the editor title bar
+3. Visualization opens alongside your text editor
 
-## Known Limitations
+### 3. Editor Workspace
 
-- **Read-only visualization**: Editing molecular structures is not yet supported
-- **Small files only**: Files larger than 10MB may cause performance issues
-- **PDB/XYZ only**: Additional formats will be added in future releases
+1. Right-click a supported file in the Explorer -> **MolVis: Open Editor**
+2. A full MolVis workspace opens with React-based UI
 
-## Validation Checklist
+### 4. Drag-and-drop
 
-- Open a `.pdb` file with explicit element columns; verify element colors match expectations.
-- Open a `.pdb` file without element columns; verify colors still appear and the model renders.
-- Open a `.xyz` file; verify atoms render and colors are visible.
-- Load a file without a box/CRYST1 entry; verify a tight-fit box is drawn around the atoms.
+Drop a molecular file directly onto any MolVis canvas to load it.
 
-## Release Checklist
+## Commands
 
-- `npm run build` completes without errors
-- `npm run package` completes without errors
-- Manual validation checklist passes on `.pdb` and `.xyz` fixtures
+| Command | Description |
+|---------|-------------|
+| `MolVis: Quick View` | Open a side-by-side preview panel |
+| `MolVis: Open Editor` | Open full MolVis editor workspace |
+| `MolVis: Reload` | Reload the active MolVis webview |
+
+## Configuration
+
+### `molvis.config`
+
+Controls the MolVis core initialization:
+
+```jsonc
+{
+  "molvis.config": {
+    "showUI": true,
+    "useRightHandedSystem": true,
+    "ui": {
+      "showInfoPanel": true,
+      "showViewPanel": true,
+      "showPerfPanel": true,
+      "showContextMenu": true
+    },
+    "canvas": {
+      "antialias": true
+    }
+  }
+}
+```
+
+### `molvis.settings`
+
+Runtime settings applied after initialization:
+
+```jsonc
+{
+  "molvis.settings": {
+    "cameraPanSpeed": 1.0,
+    "cameraRotateSpeed": 1.0,
+    "cameraZoomSpeed": 1.0,
+    "cameraInertia": 0.9,
+    "grid": { "enabled": true, "size": 100, "opacity": 0.5 },
+    "graphics": { "fxaa": true, "hardwareScaling": 1.0 }
+  }
+}
+```
+
+## Architecture
+
+```
+vsc-ext/
+  src/
+    extension/          # Extension host (Node.js)
+      activate.ts       # Entry point: registers providers, commands, watchers
+      configuration.ts  # Reads molvis.config / molvis.settings
+      types.ts          # Message types, Logger, PanelRegistry interfaces
+      panels/
+        editorProvider.ts   # CustomTextEditorProvider for .pdb/.xyz/.data
+        previewPanel.ts     # Quick View side panel
+        viewerPanel.ts      # Full editor workspace panel
+        html.ts             # Webview HTML generation with CSP
+        messaging.ts        # Host <-> webview message helpers
+        hotReload.ts        # Dev file watcher for auto-reload
+      loading/
+        molecularFileLoader.ts      # Unified file loading (text + zarr)
+        zarrDirectoryReaderCore.ts  # Recursive zarr directory reader
+        pathUtils.ts                # URI / path utilities
+    webview/            # Webview bundle (browser)
+      index.ts          # Entry point
+      controller.ts     # Bootstraps MolVis core, handles messages & drop
+      loader.ts         # File parsing (PDB/XYZ/LAMMPS/Zarr)
+    browser/            # Alternative webview entries
+      preview.tsx       # Preview entry (uses controller.ts)
+      editor.tsx        # Editor entry (uses React App from page/)
+    test/
+      unit/             # Mocha unit tests
+      integration/      # VSCode integration tests
+```
+
+### Message Protocol
+
+**Host -> Webview**: `init`, `applySettings`, `loadFile`, `error`
+
+**Webview -> Host**: `ready`, `saveFile`, `error`
+
+### Build Strategy
+
+Three separate Rslib configurations:
+
+- **Extension host** (`rslib.extension.config.ts`): CJS bundle for Node.js
+- **Webview** (`rslib.webview.config.ts`): ESM bundle for browser, with code splitting (vendor / molvis-core / runtime) and inline WASM
 
 ## Development
 
-### Building the extension
+### Build
 
 ```bash
 npm install
-npm run build
+npm run build          # Build everything
+npm run build:extension  # Extension host only
+npm run build:webview    # Webview bundles only
 ```
 
-### Running in development
+### Watch mode
+
+```bash
+npm run watch          # Watch extension + webview + typecheck
+```
+
+### Run
 
 1. Open this folder in VSCode
 2. Press `F5` to launch the Extension Development Host
 3. Test the extension in the new VSCode window
 
-## Architecture
+### Test
 
-The extension uses a dual-webview strategy:
+```bash
+npm run test           # Unit + integration
+npm run test:unit      # Unit tests only
+npm run test:integration  # Integration tests only
+```
 
-- **Custom Text Editor**: Integrates with VSCode's document model for `.pdb` and `.xyz` files
-- **Webview Panel**: Standalone viewer for exploratory work
+### Package & Deploy
 
-Both webviews use the same Babylon.js-based rendering engine from `@molvis/core`, with message passing between the extension host (Node.js) and webview (browser) for file loading and state synchronization.
+```bash
+npm run package        # Production build
+npm run deploy:vsce    # Publish to VS Code Marketplace
+npm run deploy:ovsx    # Publish to Open VSX
+```
+
+## Requirements
+
+- VSCode 1.108.1+
+- WebGL-capable browser engine (included in VSCode)
 
 ## License
 
 BSD-3-Clause
-
-## Contributing
-
-This extension is part of the MolVis monorepo.

@@ -1,5 +1,10 @@
 import { Effect } from "@babylonjs/core";
 
+/**
+ * Shader source registration is intentionally module-scoped side effect.
+ * Artist imports this file once, then app.start() waits for warmup compilation.
+ * Do not move this into webview/extension code paths.
+ */
 Effect.ShadersStore.sphereImpostorVertexShader = `
     precision highp float;
 

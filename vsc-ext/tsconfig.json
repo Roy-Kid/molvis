@@ -9,6 +9,6 @@
       "@molvis/core": ["../core/src/index.ts"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../core/src/types/**/*"],
   "exclude": ["rslib.config.ts"]
 }

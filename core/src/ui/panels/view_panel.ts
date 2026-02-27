@@ -1,4 +1,4 @@
-import type { MolvisApp } from "../../core/app";
+import type { MolvisApp } from "../../app";
 import type { MenuItem } from "../../mode/types";
 import type { MolvisContextMenu } from "../menus/context_menu";
 import type { GUIComponent } from "../types";

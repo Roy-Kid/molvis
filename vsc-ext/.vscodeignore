@@ -6,17 +6,22 @@
 .vscode-test/**
 src/**
 node_modules/**
+out-test/**
 .gitignore
 .yarnrc
 vsc-extension-quickstart.md
 **/tsconfig.json
+tsconfig.test.json
 **/eslint.config.mjs
 **/*.map
 **/*.ts
 **/.vscode-test.*
+biome.json
 
 # Build config
 rslib.config.ts
+rslib.extension.config.ts
+rslib.webview.config.ts
 package-lock.json
 
 # Only include what we need:

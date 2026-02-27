@@ -1,5 +1,5 @@
 import type { Box, Frame } from "@molcrafts/molrs";
-import type { Trajectory } from "./core/system/trajectory";
+import type { Trajectory } from "./system/trajectory";
 import type { ModeType } from "./mode/base";
 
 /**
@@ -14,6 +14,7 @@ export interface MolvisEventMap {
   "info-text-change": string;
   "fps-change": number;
   "history-change": { canUndo: boolean; canRedo: boolean };
+  "dirty-change": boolean;
   "status-message": { text: string; type: "info" | "error" };
 }
 

@@ -7,7 +7,7 @@ import {
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
-import type { MolvisApp as Molvis } from "../core/app";
+import type { MolvisApp as Molvis } from "../app";
 import { CompositeCommand } from "../commands/composite";
 import {
   DeleteAtomCommand,
@@ -15,14 +15,12 @@ import {
   DrawAtomCommand,
   DrawBondCommand,
 } from "../commands/draw";
-import type { Artist } from "../core/artist";
-import { syncSceneToFrame } from "../core/scene_sync";
+import type { Artist } from "../artist";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { BindingEvent, HitResult, MenuItem } from "./types";
-import { pointOnScreenAlignedPlane } from "./utils";
 
 /**
  * =============================
@@ -323,19 +321,25 @@ class EditMode extends BaseMode {
     // Use resolved position as anchor for drag plane
     const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
 
-    const xyz = pointOnScreenAlignedPlane(
-      this.world.scene,
-      this.world.camera,
-      pointerInfo.event.clientX,
-      pointerInfo.event.clientY,
-      startPos,
-    );
+    const xyz = this.projectPointerOnScreenPlane(startPos);
+    if (!xyz) {
+      this.previews.hideAtom();
+      this.previews.hideBond();
+      return;
+    }
 
     const hit = await this.pickHit();
     let hover: AbstractMesh | null = null;
     let hoverIndex = -1;
 
-    if (hit && hit.type === "atom" && hit.mesh && hit.mesh !== this.startAtom) {
+    const samePickedAtom = Boolean(
+      hit &&
+      hit.type === "atom" &&
+      hit.mesh === this.startAtom &&
+      (hit.thinInstanceIndex ?? -1) === this.startAtomIndex,
+    );
+
+    if (hit && hit.type === "atom" && hit.mesh && !samePickedAtom) {
       hover = hit.mesh;
       hoverIndex = hit.thinInstanceIndex ?? -1;
     }
@@ -420,13 +424,20 @@ class EditMode extends BaseMode {
         this.startAtom,
         this.startAtomIndex,
       );
-      const xyz = pointOnScreenAlignedPlane(
-        this.world.scene,
-        this.world.camera,
-        pointerInfo.event.clientX,
-        pointerInfo.event.clientY,
-        startPos, // Use correct anchor
-      );
+      const xyz = this.projectPointerOnScreenPlane(startPos);
+      if (!xyz) {
+        this.world.camera.attachControl(
+          this.world.scene.getEngine().getRenderingCanvas(),
+          false,
+        );
+        this.previews.clear();
+        this.startAtom = null;
+        this.startAtomIndex = -1;
+        this.hoverAtom = null;
+        this.hoverAtomIndex = -1;
+        this.clickedAtom = null;
+        return;
+      }
 
       if (this.hoverAtom) {
         const endPos = this.getAtomPosition(
@@ -512,12 +523,11 @@ class EditMode extends BaseMode {
     }
 
     if (isLeft && this.pendingAtom && !this._is_dragging) {
-      const xyz = pointOnScreenAlignedPlane(
-        this.world.scene,
-        this.world.camera,
-        pointerInfo.event.clientX,
-        pointerInfo.event.clientY,
-      );
+      const xyz = this.projectPointerOnScreenPlane();
+      if (!xyz) {
+        this.pendingAtom = false;
+        return;
+      }
       const atomName = makeId("atom");
       const atomId = this.app.world.sceneIndex.getNextAtomId();
       this.app.commandManager.execute(
@@ -570,18 +580,7 @@ class EditMode extends BaseMode {
     this.app.commandManager.redo();
   }
   _on_press_ctrl_s(): void {
-    this.saveToFrame();
-  }
-
-  private saveToFrame(): void {
-    const frame = this.app.system.frame;
-    if (!frame) {
-      logger.warn("[EditMode] No Frame loaded, cannot save");
-      return;
-    }
-    logger.info("[EditMode] Saving scene to Frame...");
-    syncSceneToFrame(this.world.sceneIndex, frame);
-    logger.info("[EditMode] Successfully saved to Frame");
+    this.app.save();
   }
 
   public finish() {
@@ -590,6 +589,7 @@ class EditMode extends BaseMode {
     this.pendingAtom = false;
     this.hoverAtom = null;
     this.previews.clear();
+    this.restoreSceneFromFrame();
     super.finish();
   }
 }

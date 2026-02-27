@@ -140,7 +140,7 @@ export class SelectionMask {
   }
 }
 
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 
 // ... existing imports ...
 

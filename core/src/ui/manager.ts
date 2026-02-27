@@ -1,6 +1,6 @@
-import type { MolvisApp } from "../core/app";
-import type { MolvisConfig } from "../core/config";
-import type { Trajectory } from "../core/system/trajectory";
+import type { MolvisApp } from "../app";
+import type { MolvisConfig } from "../config";
+import type { Trajectory } from "../system/trajectory";
 import type { ModeType } from "../mode";
 import { InfoPanel } from "./panels/info_panel";
 import { ModePanel } from "./panels/mode_panel";

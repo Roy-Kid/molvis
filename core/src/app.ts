@@ -1,21 +1,24 @@
 import { Engine } from "@babylonjs/core";
-import { type CommandRegistry, commands } from "../commands";
-import type { DrawFrameOption } from "../commands/draw";
-import { ArrayFrameSource } from "../commands/sources";
-import { CommandManager } from "../commands/manager";
-import { EventEmitter, type MolvisEventMap } from "../events";
-import { ModeManager, ModeType } from "../mode";
-import { ModifierPipeline, PipelineEvents } from "../pipeline";
-import type { FrameSource } from "../pipeline/pipeline";
-import { GUIManager } from "../ui/manager";
-import { logger } from "../utils/logger";
+import { type CommandRegistry, commands } from "./commands";
+import type { DrawFrameOption } from "./commands/draw";
+import { ArrayFrameSource } from "./commands/sources";
+import { CommandManager } from "./commands/manager";
+import { EventEmitter, type MolvisEventMap } from "./events";
+import { ModeManager, ModeType } from "./mode";
+import type { HitResult } from "./mode/types";
+import { ModifierPipeline, PipelineEvents } from "./pipeline";
+import type { FrameSource } from "./pipeline/pipeline";
+import { GUIManager } from "./ui/manager";
+import { logger } from "./utils/logger";
 import { Artist } from "./artist";
+import { syncSceneToFrame } from "./scene_sync";
 import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { type MolvisSetting, Settings } from "./settings";
 import { StyleManager } from "./style";
 import type { Theme } from "./style/theme";
 import { System } from "./system";
 import type { Trajectory } from "./system/trajectory";
+import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
 
 import type { Box, Frame } from "@molcrafts/molrs";
@@ -24,8 +27,8 @@ import {
   MolvisFolder,
   MolvisSeparator,
   MolvisSlider,
-} from "../ui/components";
-import { MolvisContextMenu } from "../ui/menus/context_menu";
+} from "./ui/components";
+import { MolvisContextMenu } from "./ui/menus/context_menu";
 
 export class MolvisApp {
   // DOM elements
@@ -42,6 +45,8 @@ export class MolvisApp {
   private _modeManager!: ModeManager;
   private _guiManager!: GUIManager;
   private _isRunning = false;
+  private _rendererReady = false;
+  private _rendererInitPromise!: Promise<void>;
 
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
@@ -80,6 +85,7 @@ export class MolvisApp {
   ) {
     this._config = defaultMolvisConfig(config);
     this._container = container;
+    logger.info(`Molvis initializing (v${MOLVIS_VERSION})`);
 
     // Register Web Components
     this.registerWebComponents();
@@ -104,6 +110,7 @@ export class MolvisApp {
         stencil: this._config.canvas?.stencil ?? true,
         alpha: this._config.canvas?.alpha ?? false,
       },
+      true,
     );
 
     // Initialize World
@@ -133,11 +140,28 @@ export class MolvisApp {
     // Initialize Artist (Drawing Logic)
     this.artist = new Artist({ app: this });
 
+    // Renderer warmup is started during initialization but awaited in start().
+    // Keep this internal: host layers should not manually compile shaders.
+    this._rendererInitPromise = this.artist
+      .prepareRenderer()
+      .then(() => {
+        this._rendererReady = true;
+      })
+      .catch((error) => {
+        logger.error("Renderer warmup failed during app initialization", error);
+        throw error;
+      });
+
     // Initialize command registry (use shared singleton)
     this.commands = commands;
 
     // Initialize Command Manager
     this.commandManager = new CommandManager(this);
+
+    // Wire scene-level dirty tracking to event bus
+    this._world.sceneIndex.onDirtyChange = (isDirty: boolean) => {
+      this.events.emit("dirty-change", isDirty);
+    };
 
     // Sync pipeline selection output to SelectionManager
     this._modifierPipeline.on(PipelineEvents.COMPUTED, ({ context }) => {
@@ -213,13 +237,13 @@ export class MolvisApp {
       { passive: false },
     );
 
-    // Set initial canvas resolution based on container size
-    const pixelRatio = window.devicePixelRatio || 1;
+    // Set initial canvas resolution based on container size.
+    // Babylon will manage the backing-store scale via engine.resize().
     const width = this._container.clientWidth || 800;
     const height = this._container.clientHeight || 600;
 
-    canvas.width = Math.floor(width * pixelRatio);
-    canvas.height = Math.floor(height * pixelRatio);
+    canvas.width = Math.floor(width);
+    canvas.height = Math.floor(height);
 
     return canvas;
   }
@@ -307,6 +331,10 @@ export class MolvisApp {
     return this._isRunning;
   }
 
+  get rendererReady(): boolean {
+    return this._rendererReady;
+  }
+
   get currentFrame(): number {
     return this._currentFrame;
   }
@@ -338,14 +366,26 @@ export class MolvisApp {
     return this.commands.execute(name, this, args);
   }
 
-  public start(): void {
+  public async pickAtPointer(
+    pointerX: number,
+    pointerY: number,
+  ): Promise<HitResult> {
+    return this._world.picker.pick(pointerX, pointerY);
+  }
+
+  public async start(): Promise<void> {
     if (this._isRunning) return;
+
+    // Single guard for renderer readiness.
+    // First frame and all mode interactions happen only after warmup completes.
+    await this._rendererInitPromise;
+
     this._isRunning = true;
     this._world.start();
 
     // Render the initial frame so mesh layers are registered and
     // edit-mode can draw into an empty scene.
-    this.renderFrame(this._system.frame);
+    await this.renderFrameInternal(this._system.frame);
 
     logger.info("Molvis started successfully");
   }
@@ -383,6 +423,13 @@ export class MolvisApp {
       this._root.style.height = "100%";
     }
     this.resize();
+  }
+
+  public save(): void {
+    const frame = this._system.frame;
+    if (frame) {
+      syncSceneToFrame(this._world.sceneIndex, frame);
+    }
   }
 
   public destroy(): void {
@@ -462,7 +509,11 @@ export class MolvisApp {
    * @param frame Frame to render
    * @param options Drawing options
    */
-  public renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void {
+  private renderFrameInternal(
+    frame: Frame,
+    box?: Box,
+    options?: DrawFrameOption,
+  ): Promise<void> {
     // Optimization: If we have a single-frame trajectory, update in place
     // This avoids full system reset which breaks UI state and causes flickering
     if (this._system.trajectory.length === 1) {
@@ -470,14 +521,16 @@ export class MolvisApp {
     } else {
       this._system.setFrame(frame, box); // Store frame and box in System
     }
+
     const drawResult = this.execute("draw_frame", { frame, box, options });
-    if (drawResult instanceof Promise) {
-      void drawResult.catch((error) => {
-        logger.error("draw_frame failed", error);
-      });
-    }
+    return drawResult instanceof Promise ? drawResult : Promise.resolve();
   }
 
+  public renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void {
+    void this.renderFrameInternal(frame, box, options).catch((error) => {
+      logger.error("draw_frame failed", error);
+    });
+  }
 
   /**
    * Load a new frame into the system, clearing the existing scene.

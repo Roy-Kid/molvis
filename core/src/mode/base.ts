@@ -10,10 +10,11 @@ import type {
   Observer,
   PointerInfo,
 } from "@babylonjs/core";
-import type { MolvisApp as Molvis } from "../core/app";
+import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
 import { isCtrlOrMeta } from "../utils/platform";
 import type { HitResult } from "./types";
+import { pointOnScreenAlignedPlane } from "./utils";
 
 enum ModeType {
   View = "view",
@@ -175,7 +176,26 @@ abstract class BaseMode {
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
           if (isCtrlOrMeta(kbInfo.event)) {
-            // Ctrl/Cmd shortcuts handled by UI layer
+            switch (kbInfo.event.key) {
+              case "s":
+                kbInfo.event.preventDefault();
+                this._on_press_ctrl_s();
+                break;
+              case "z":
+                kbInfo.event.preventDefault();
+                this._on_press_ctrl_z();
+                break;
+              case "y":
+                kbInfo.event.preventDefault();
+                this._on_press_ctrl_y();
+                break;
+              case "c":
+                this._on_press_ctrl_c();
+                break;
+              case "v":
+                this._on_press_ctrl_v();
+                break;
+            }
           } else {
             switch (kbInfo.event.key) {
               case "e":
@@ -202,7 +222,25 @@ abstract class BaseMode {
    * Returns hit information about what's under the cursor.
    */
   protected async pickHit(): Promise<HitResult | null> {
-    return this.world.picker.pick(this.scene.pointerX, this.scene.pointerY);
+    return this.app.pickAtPointer(this.scene.pointerX, this.scene.pointerY);
+  }
+
+  /**
+   * Project current scene pointer onto a screen-aligned plane.
+   * Returns null when projection fails, so callers can safely bail out.
+   */
+  protected projectPointerOnScreenPlane(anchor?: Vector3): Vector3 | null {
+    try {
+      return pointOnScreenAlignedPlane(
+        this.scene,
+        this.world.camera,
+        this.scene.pointerX,
+        this.scene.pointerY,
+        anchor,
+      );
+    } catch {
+      return null;
+    }
   }
 
   async _on_pointer_down(pointerInfo: PointerInfo): Promise<void> {
@@ -298,6 +336,21 @@ abstract class BaseMode {
 
   protected _on_press_escape(): void {
     // Override in subclasses for custom escape behavior
+  }
+
+  /**
+   * Discard unsaved scene changes by re-rendering from system.frame.
+   * If there are no unsaved changes, this is a no-op.
+   */
+  protected restoreSceneFromFrame(): void {
+    if (!this.app.world.sceneIndex.hasUnsavedChanges) {
+      return;
+    }
+    const frame = this.app.system.frame;
+    if (frame) {
+      this.app.renderFrame(frame, this.app.system.box);
+    }
+    this.app.world.sceneIndex.markAllSaved();
   }
 
   protected _on_press_ctrl_s(): void {}

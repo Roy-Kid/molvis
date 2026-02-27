@@ -12,7 +12,7 @@ import type { Block, Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 import { encodePickingColor } from "./picker";
 
-import { SliceModifier } from "../modifiers/SliceModifier";
+import { SliceModifier } from "./modifiers/SliceModifier";
 import "./shaders/impostor";
 
 /**
@@ -75,6 +75,141 @@ export class Artist {
       "bondMat_impostor",
       scene,
     );
+    this.registerRuntimeLayers();
+  }
+
+  /**
+   * Compile atom/bond instancing shader variants once at app bootstrap.
+   *
+   * Important:
+   * - We compile against temporary warmup meshes (not runtime renderer meshes).
+   * - This avoids leaking dummy instances into empty-frame picking/edit flows.
+   */
+  public async prepareRenderer(): Promise<void> {
+    const scene = this.app.world.scene;
+    const atomMaterial = this.atomMesh.material as ShaderMaterial | null;
+    const bondMaterial = this.bondMesh.material as ShaderMaterial | null;
+
+    const atomWarmupMesh = atomMaterial
+      ? this.createWarmupMesh(
+          "__molvis_warmup_atom__",
+          scene,
+          atomMaterial,
+          "atom",
+        )
+      : null;
+    const bondWarmupMesh = bondMaterial
+      ? this.createWarmupMesh(
+          "__molvis_warmup_bond__",
+          scene,
+          bondMaterial,
+          "bond",
+        )
+      : null;
+
+    try {
+      await Promise.all([
+        this.compileOneMaterial(
+          atomWarmupMesh ?? this.atomMesh,
+          atomMaterial,
+          "atoms",
+        ),
+        this.compileOneMaterial(
+          bondWarmupMesh ?? this.bondMesh,
+          bondMaterial,
+          "bonds",
+        ),
+      ]);
+    } finally {
+      atomWarmupMesh?.dispose();
+      bondWarmupMesh?.dispose();
+    }
+  }
+
+  private createWarmupMesh(
+    name: string,
+    scene: Scene,
+    material: ShaderMaterial,
+    target: "atom" | "bond",
+  ): Mesh {
+    const mesh = MeshBuilder.CreatePlane(name, { size: 1.0 }, scene);
+    mesh.material = material;
+    mesh.isPickable = false;
+    mesh.isVisible = false;
+
+    const matrix = new Float32Array(16);
+    matrix[0] = 1;
+    matrix[5] = 1;
+    matrix[10] = 1;
+    matrix[15] = 1;
+    mesh.thinInstanceSetBuffer("matrix", matrix, 16, false);
+
+    if (target === "atom") {
+      mesh.thinInstanceSetBuffer(
+        "instanceData",
+        new Float32Array([0, 0, 0, 0.5]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instanceColor",
+        new Float32Array([1, 1, 1, 1]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instancePickingColor",
+        new Float32Array([0, 0, 0, 1]),
+        4,
+        false,
+      );
+    } else {
+      mesh.thinInstanceSetBuffer(
+        "instanceData0",
+        new Float32Array([0, 0, 0, 0.1]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instanceData1",
+        new Float32Array([0, 1, 0, 1]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instanceColor0",
+        new Float32Array([1, 1, 1, 1]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instanceColor1",
+        new Float32Array([1, 1, 1, 1]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instanceSplit",
+        new Float32Array([0, 0, 0, 0]),
+        4,
+        false,
+      );
+      mesh.thinInstanceSetBuffer(
+        "instancePickingColor",
+        new Float32Array([0, 0, 0, 1]),
+        4,
+        false,
+      );
+    }
+
+    mesh.thinInstanceCount = 1;
+    return mesh;
+  }
+
+  private registerRuntimeLayers(): void {
+    const meshRegistry = this.app.world.sceneIndex.meshRegistry;
+    meshRegistry.registerAtomLayer(this.atomMesh);
+    meshRegistry.registerBondLayer(this.bondMesh);
   }
 
   /**
@@ -103,54 +238,30 @@ export class Artist {
       "bondMat_impostor",
       scene,
     );
+    this.registerRuntimeLayers();
   }
 
   // ============ Frame Rendering (Bulk) ============
 
-  /**
-   * Ensure shader variants used by thin instances are fully compiled before enabling meshes.
-   */
-  private async waitForMaterials(includeBonds: boolean): Promise<void> {
-    const compileOne = async (
-      mesh: Mesh,
-      material: ShaderMaterial | null,
-      materialLabel: string,
-    ) => {
-      if (!material) {
-        throw new Error(`Missing shader material for ${materialLabel}`);
-      }
-
-      // Check the exact variant used by this renderer (instanced / thin-instanced path).
-      if (material.isReady(mesh, true)) return;
-
-      await material.forceCompilationAsync(mesh, { useInstances: true });
-
-      if (!material.isReady(mesh, true)) {
-        throw new Error(
-          `Shader material "${material.name}" for ${materialLabel} is not ready after compilation`,
-        );
-      }
-    };
-
-    const tasks: Promise<void>[] = [
-      compileOne(
-        this.atomMesh,
-        this.atomMesh.material as ShaderMaterial | null,
-        "atoms",
-      ),
-    ];
-
-    if (includeBonds) {
-      tasks.push(
-        compileOne(
-          this.bondMesh,
-          this.bondMesh.material as ShaderMaterial | null,
-          "bonds",
-        ),
-      );
+  private async compileOneMaterial(
+    mesh: Mesh,
+    material: ShaderMaterial | null,
+    materialLabel: string,
+  ): Promise<void> {
+    if (!material) {
+      throw new Error(`Missing shader material for ${materialLabel}`);
     }
 
-    await Promise.all(tasks);
+    // Check the exact variant used by this renderer (instanced / thin-instanced path).
+    if (material.isReady(mesh, true)) return;
+
+    await material.forceCompilationAsync(mesh, { useInstances: true });
+
+    if (!material.isReady(mesh, true)) {
+      throw new Error(
+        `Shader material "${material.name}" for ${materialLabel} is not ready after compilation`,
+      );
+    }
   }
 
   /**
@@ -169,11 +280,10 @@ export class Artist {
     const atomsBlock = frame.getBlock("atoms");
     const bondsBlock = frame.getBlock("bonds");
 
-    // Empty frame: register layers so edit-mode can draw into them, but keep
-    // meshes hidden — Babylon renders the base mesh when there are no instances.
+    // Empty frame: nothing to upload; clear() already recreated meshes and layers.
     if (!atomsBlock || atomsBlock.nrows() === 0) {
-      sceneIndex.meshRegistry.registerAtomLayer(this.atomMesh);
-      sceneIndex.meshRegistry.registerBondLayer(this.bondMesh);
+      this.app.events.emit("frame-rendered", { frame, box: _box });
+      this.updateVisualGuide(this.findSliceModifier());
       return;
     }
     const atomCount = atomsBlock.nrows();
@@ -399,8 +509,6 @@ export class Artist {
       atomBuffers,
       bondBuffers,
     });
-
-    await this.waitForMaterials(Boolean(bondBlockObj));
 
     this.app.events.emit("frame-rendered", { frame, box: _box });
     this.updateVisualGuide(this.findSliceModifier());
