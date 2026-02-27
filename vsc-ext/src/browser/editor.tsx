@@ -1,6 +1,5 @@
 import { createRoot } from "react-dom/client";
 import App from "../../../page/src/App";
-// @ts-ignore css handled by bundler
 import "../viewer/main.css";
 import type { WebviewToHostMessage } from "../extension/types";
 
@@ -10,6 +9,8 @@ declare const acquireVsCodeApi:
 
 const vscode =
   typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : undefined;
+
+document.documentElement.classList.add("dark");
 
 const viewerRoot = document.getElementById("root");
 if (viewerRoot) {

@@ -51,7 +51,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog modal={false} open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" title="Export">
           <Download className="h-5 w-5" />

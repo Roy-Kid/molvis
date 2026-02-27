@@ -29,6 +29,16 @@ export class GUIManager {
   // Playback state
   private playbackInterval: ReturnType<typeof setInterval> | null = null;
   private playbackSpeed = 100; // ms per frame
+  private readonly infoChangeHandler = (text: string) =>
+    this.handleInfoChange(text);
+  private readonly modeChangeHandler = (mode: ModeType) =>
+    this.handleModeChange(mode);
+  private readonly fpsChangeHandler = (fps: number) =>
+    this.handleFpsChange(fps);
+  private readonly trajectoryChangeHandler = (trajectory: Trajectory) =>
+    this.handleTrajectoryChange(trajectory);
+  private readonly frameChangeHandler = (index: number) =>
+    this.handleFrameChange(index);
 
   constructor(container: HTMLElement, app: MolvisApp, config: MolvisConfig) {
     this.container = container;
@@ -197,30 +207,24 @@ export class GUIManager {
    * Setup event listeners
    */
   private setupEventListeners(): void {
-    this.app.events.on("info-text-change", this.handleInfoChange.bind(this));
-    this.app.events.on("mode-change", this.handleModeChange.bind(this));
-    this.app.events.on("fps-change", this.handleFpsChange.bind(this));
+    this.app.events.on("info-text-change", this.infoChangeHandler);
+    this.app.events.on("mode-change", this.modeChangeHandler);
+    this.app.events.on("fps-change", this.fpsChangeHandler);
 
-    this.app.events.on(
-      "trajectory-change",
-      this.handleTrajectoryChange.bind(this),
-    );
-    this.app.events.on("frame-change", this.handleFrameChange.bind(this));
+    this.app.events.on("trajectory-change", this.trajectoryChangeHandler);
+    this.app.events.on("frame-change", this.frameChangeHandler);
   }
 
   /**
    * Remove event listeners
    */
   private removeEventListeners(): void {
-    this.app.events.off("info-text-change", this.handleInfoChange.bind(this));
-    this.app.events.off("mode-change", this.handleModeChange.bind(this));
-    this.app.events.off("fps-change", this.handleFpsChange.bind(this));
+    this.app.events.off("info-text-change", this.infoChangeHandler);
+    this.app.events.off("mode-change", this.modeChangeHandler);
+    this.app.events.off("fps-change", this.fpsChangeHandler);
 
-    this.app.events.off(
-      "trajectory-change",
-      this.handleTrajectoryChange.bind(this),
-    );
-    this.app.events.off("frame-change", this.handleFrameChange.bind(this));
+    this.app.events.off("trajectory-change", this.trajectoryChangeHandler);
+    this.app.events.off("frame-change", this.frameChangeHandler);
   }
 
   /**

@@ -38,6 +38,13 @@ export class DrawBoxCommand extends Command<void> {
 
   do(): void {
     const scene = this.app.world.scene;
+    const copyAndFree = (view: { toCopy(): Float32Array; free(): void }) => {
+      try {
+        return view.toCopy();
+      } finally {
+        view.free();
+      }
+    };
 
     // Clear existing box
     const existingBox = scene.getMeshByName("sim_box");
@@ -47,8 +54,7 @@ export class DrawBoxCommand extends Command<void> {
     }
 
     // Get corners from molrs Box
-    const cornersView = this.box.get_corners();
-    const corners = cornersView.toCopy(); // Float32Array length 24
+    const corners = copyAndFree(this.box.get_corners()); // Float32Array length 24
 
     // Create a root mesh for the box
     this.boxMesh = new BABYLON.Mesh("sim_box", scene);
@@ -66,9 +72,9 @@ export class DrawBoxCommand extends Command<void> {
     const getPoint = (idx: number) =>
       new BABYLON.Vector3(corners[idx * 3], corners[idx * 3 + 1], corners[idx * 3 + 2]);
 
-    const l = this.box.lengths().toCopy();
+    const l = copyAndFree(this.box.lengths());
     const lengths = new BABYLON.Vector3(l[0], l[1], l[2]);
-    const o = this.box.origin().toCopy();
+    const o = copyAndFree(this.box.origin());
     const origin = new BABYLON.Vector3(o[0], o[1], o[2]);
     const center = origin.add(lengths.scale(0.5));
 

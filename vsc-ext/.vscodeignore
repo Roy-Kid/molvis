@@ -22,6 +22,7 @@ biome.json
 rslib.config.ts
 rslib.extension.config.ts
 rslib.webview.config.ts
+postcss.config.mjs
 package-lock.json
 
 # Only include what we need:

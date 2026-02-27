@@ -1,4 +1,4 @@
-import type { ArcRotateCamera } from "@babylonjs/core";
+import type { ArcRotateCamera, Observer, Scene } from "@babylonjs/core";
 import type { MolvisApp } from "./app";
 
 /**
@@ -104,6 +104,14 @@ export class Settings {
   private values: MolvisSetting;
   private defaults: MolvisSetting;
   private app: MolvisApp;
+  private adaptiveCameraObserver: Observer<Scene> | null = null;
+  private readonly adaptivePanDistanceRef = 100;
+  private readonly adaptiveZoomDistanceRef = 1000;
+  private readonly adaptivePanMaxFactor = 200;
+  private readonly adaptiveZoomMaxFactor = 20;
+  private readonly panBoostMultiplier = 5;
+  private readonly minPanSensibility = 0.5;
+  private readonly minWheelPrecision = 0.05;
 
   constructor(app: MolvisApp, initialSetting?: Partial<MolvisSetting>) {
     this.app = app;
@@ -111,6 +119,7 @@ export class Settings {
     // Use helper to ensure deep merge of nested properties
     this.values = defaultMolvisSettings(initialSetting);
     this.applyAll();
+    this.attachAdaptiveCameraControl();
   }
 
   /**
@@ -119,7 +128,7 @@ export class Settings {
   setCameraPanSpeed(speed: number): void {
     const next = this.sanitizePositive(speed, this.defaults.cameraPanSpeed);
     this.values.cameraPanSpeed = next;
-    this.camera.panningSensibility = next;
+    this.applyAdaptiveCameraControl();
   }
 
   /**
@@ -138,7 +147,7 @@ export class Settings {
   setCameraZoomSpeed(speed: number): void {
     const next = this.sanitizePositive(speed, this.defaults.cameraZoomSpeed);
     this.values.cameraZoomSpeed = next;
-    this.camera.wheelPrecision = next;
+    this.applyAdaptiveCameraControl();
   }
 
   /**
@@ -275,8 +284,8 @@ export class Settings {
   }
 
   private applyAll(): void {
-    this.setCameraPanSpeed(this.values.cameraPanSpeed);
     this.setCameraRotateSpeed(this.values.cameraRotateSpeed);
+    this.setCameraPanSpeed(this.values.cameraPanSpeed);
     this.setCameraZoomSpeed(this.values.cameraZoomSpeed);
     this.setCameraInertia(this.values.cameraInertia);
     this.setCameraPanInertia(this.values.cameraPanInertia);
@@ -293,9 +302,53 @@ export class Settings {
     return this.app.world.camera;
   }
 
+  private attachAdaptiveCameraControl(): void {
+    if (this.adaptiveCameraObserver) {
+      return;
+    }
+
+    this.adaptiveCameraObserver = this.app.world.scene.onBeforeRenderObservable.add(
+      () => {
+        this.applyAdaptiveCameraControl();
+      },
+    );
+  }
+
+  private applyAdaptiveCameraControl(): void {
+    const panFactor = this.getAdaptivePanFactor();
+    const zoomFactor = this.getAdaptiveZoomFactor();
+
+    this.camera.panningSensibility = Math.max(
+      this.minPanSensibility,
+      this.values.cameraPanSpeed / (panFactor * this.panBoostMultiplier),
+    );
+    this.camera.wheelPrecision = Math.max(
+      this.minWheelPrecision,
+      this.values.cameraZoomSpeed / zoomFactor,
+    );
+  }
+
+  private getAdaptivePanFactor(): number {
+    const worldDistance = Math.max(this.camera.target.length(), this.camera.radius, 1);
+    const normalized = worldDistance / this.adaptivePanDistanceRef;
+    if (normalized <= 1) {
+      return 1;
+    }
+    return Math.min(normalized, this.adaptivePanMaxFactor);
+  }
+
+  private getAdaptiveZoomFactor(): number {
+    const worldDistance = Math.max(this.camera.target.length(), this.camera.radius, 1);
+    const normalized = worldDistance / this.adaptiveZoomDistanceRef;
+    if (normalized <= 1) {
+      return 1;
+    }
+    const factor = 1 + Math.log10(normalized) * 2.5;
+    return Math.min(factor, this.adaptiveZoomMaxFactor);
+  }
+
   private sanitizePositive(value: number, fallback: number): number {
-    // if (!Number.isFinite(value)) return fallback;
-    if (value <= 0) return fallback;
+    if (!Number.isFinite(value) || value <= 0) return fallback;
     return value;
   }
 

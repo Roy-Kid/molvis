@@ -6,6 +6,7 @@ import { CommonMenuItems } from "./menu_items";
 import type { HitResult, MenuItem } from "./types";
 import { UpdateFrameCommand } from "../commands/frame";
 import { DrawBoxCommand, DrawFrameCommand } from "../commands/draw";
+import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { logger } from "../utils/logger";
 
 /**
@@ -44,6 +45,16 @@ class ViewModeContextMenu extends ContextMenuController {
       },
     });
 
+    // Enable/Disable PBC wrapping
+    const pbcEnabled = this.mode.isPbcEnabled();
+    items.push({
+      type: "button",
+      title: pbcEnabled ? "PBC On" : "PBC Off",
+      action: () => {
+        this.mode.setPbcEnabled(!pbcEnabled);
+      },
+    });
+
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
@@ -60,12 +71,6 @@ class ViewMode extends BaseMode {
     return new ViewModeContextMenu(this.app, this);
   }
 
-  public resetCamera(): void {
-    if (this.app.world.camera) {
-      this.app.world.camera.restoreState();
-    }
-  }
-
   public isGridEnabled(): boolean {
     return this.app.world.grid ? this.app.world.grid.isEnabled : false;
   }
@@ -78,6 +83,45 @@ class ViewMode extends BaseMode {
         this.app.world.grid.disable();
       }
     }
+  }
+
+  public isPbcEnabled(): boolean {
+    for (const modifier of this.getWrapPbcModifiers()) {
+      if (modifier.enabled) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public setPbcEnabled(enabled: boolean): void {
+    const pipeline = this.app.modifierPipeline;
+    const modifiers = this.getWrapPbcModifiers();
+
+    if (enabled) {
+      if (modifiers.length === 0) {
+        pipeline.addModifier(new WrapPBCModifier(`wrap-pbc-${Date.now()}`));
+      } else {
+        for (const modifier of modifiers) {
+          modifier.enabled = true;
+        }
+      }
+    } else {
+      for (const modifier of modifiers) {
+        modifier.enabled = false;
+      }
+    }
+
+    void this.app.applyPipeline({ fullRebuild: true });
+  }
+
+  private getWrapPbcModifiers(): WrapPBCModifier[] {
+    return this.app.modifierPipeline
+      .getModifiers()
+      .filter(
+        (modifier): modifier is WrapPBCModifier =>
+          modifier instanceof WrapPBCModifier,
+      );
   }
 
   /**

@@ -46,7 +46,9 @@ export function activate(context: vscode.ExtensionContext): void {
         panel.webview.html = meta.getHtml();
       });
     }),
-    createHotReloadWatcher(context, panelRegistry),
+    ...(context.extensionMode !== vscode.ExtensionMode.Production
+      ? [createHotReloadWatcher(context, panelRegistry)]
+      : []),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (!affectsMolvisSettings(event)) {
         return;

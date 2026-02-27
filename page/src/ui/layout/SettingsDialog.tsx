@@ -17,7 +17,7 @@ interface SettingsDialogProps {
 
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
   return (
-    <Dialog>
+    <Dialog modal={false}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" title="Settings">
           <Settings className="h-5 w-5" />

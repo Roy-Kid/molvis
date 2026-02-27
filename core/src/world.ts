@@ -48,7 +48,9 @@ export class World {
     this._app = app;
 
     const scene = new Scene(engine);
-    scene.skipPointerMovePicking = false;
+    // Hover/pick uses the custom Picker pipeline, so disable Babylon's
+    // built-in pointer-move picking to avoid duplicate per-move ray tests.
+    scene.skipPointerMovePicking = true;
     scene.autoClear = true;
     scene.autoClearDepthAndStencil = true;
 
@@ -79,10 +81,10 @@ export class World {
         ) {
           const scale = camera.radius / this._lastRadius;
           if (
-            camera.orthoTop &&
-            camera.orthoBottom &&
-            camera.orthoLeft &&
-            camera.orthoRight
+            camera.orthoTop !== null &&
+            camera.orthoBottom !== null &&
+            camera.orthoLeft !== null &&
+            camera.orthoRight !== null
           ) {
             camera.orthoTop *= scale;
             camera.orthoBottom *= scale;

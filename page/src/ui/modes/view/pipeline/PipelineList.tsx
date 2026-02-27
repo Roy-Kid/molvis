@@ -82,7 +82,7 @@ export function PipelineList({
           </DndContext>
 
           <div className="p-2">
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"

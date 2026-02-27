@@ -46,6 +46,17 @@ abstract class BaseMode {
   private _app: Molvis;
   private _pointer_observer: Observer<PointerInfo>;
   private _kb_observer: Observer<KeyboardInfo>;
+  private _infoLastText = "";
+  private _hoverPickRaf: number | null = null;
+  private _hoverPickScheduled = false;
+  private _hoverPickInFlight = false;
+  private _hoverPickDirty = false;
+  private _hoverPointerX = Number.NaN;
+  private _hoverPointerY = Number.NaN;
+  private _hoverLastPickedX = Number.NaN;
+  private _hoverLastPickedY = Number.NaN;
+  private _pointerButtons = 0;
+  private _interactionEpoch = 0;
   protected _pointer_down_xy: Vector2 = new Vector2();
   protected _pointer_up_xy: Vector2 = new Vector2();
 
@@ -124,6 +135,8 @@ abstract class BaseMode {
   }
 
   public finish() {
+    this._interactionEpoch += 1;
+    this.cancelHoverPick();
     this.unregister_pointer_events();
     this.unregister_keyboard_events();
     if (this.contextMenuController) {
@@ -245,6 +258,7 @@ abstract class BaseMode {
 
   async _on_pointer_down(pointerInfo: PointerInfo): Promise<void> {
     this._pointer_down_xy = this.get_pointer_xy();
+    this._pointerButtons = pointerInfo.event.buttons ?? 0;
 
     if (pointerInfo.event.button === 0) {
       await this._on_left_down(pointerInfo);
@@ -255,11 +269,16 @@ abstract class BaseMode {
 
   async _on_pointer_up(pointerInfo: PointerInfo): Promise<void> {
     this._pointer_up_xy = this.get_pointer_xy();
+    this._pointerButtons = pointerInfo.event.buttons ?? 0;
 
     if (pointerInfo.event.button === 0) {
       await this._on_left_up(pointerInfo);
     } else if (pointerInfo.event.button === 2) {
       await this._on_right_up(pointerInfo);
+    }
+
+    if (this._pointerButtons === 0 && this._hoverPickDirty) {
+      this.scheduleHoverPick();
     }
   }
 
@@ -301,9 +320,9 @@ abstract class BaseMode {
     }
   }
 
-  async _on_pointer_move(_pointerInfo: PointerInfo): Promise<void> {
-    const hit = await this.pickHit();
-    this.app.events.emit("info-text-change", this.formatHitInfo(hit));
+  async _on_pointer_move(pointerInfo: PointerInfo): Promise<void> {
+    this._pointerButtons = pointerInfo.event.buttons ?? 0;
+    this.queueHoverPick(this.scene.pointerX, this.scene.pointerY);
   }
 
   protected formatHitInfo(hit: HitResult | null): string {
@@ -361,6 +380,97 @@ abstract class BaseMode {
 
   protected get_pointer_xy(): Vector2 {
     return new Vector2(this.scene.pointerX, this.scene.pointerY);
+  }
+
+  private queueHoverPick(pointerX: number, pointerY: number): void {
+    if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) {
+      return;
+    }
+
+    this._hoverPointerX = pointerX;
+    this._hoverPointerY = pointerY;
+    this._hoverPickDirty = true;
+
+    if (!this.shouldRunHoverPickNow()) {
+      return;
+    }
+
+    this.scheduleHoverPick();
+  }
+
+  private shouldRunHoverPickNow(): boolean {
+    return this._pointerButtons === 0;
+  }
+
+  private scheduleHoverPick(): void {
+    if (this._hoverPickScheduled || this._hoverPickInFlight) {
+      return;
+    }
+
+    this._hoverPickScheduled = true;
+    this._hoverPickRaf = window.requestAnimationFrame(() => {
+      this._hoverPickScheduled = false;
+      this._hoverPickRaf = null;
+      void this.processHoverPick();
+    });
+  }
+
+  private async processHoverPick(): Promise<void> {
+    if (!this._hoverPickDirty || this._hoverPickInFlight) {
+      return;
+    }
+
+    if (!this.shouldRunHoverPickNow()) {
+      return;
+    }
+
+    const pointerX = this._hoverPointerX;
+    const pointerY = this._hoverPointerY;
+    this._hoverPickDirty = false;
+
+    if (pointerX === this._hoverLastPickedX && pointerY === this._hoverLastPickedY) {
+      return;
+    }
+
+    this._hoverPickInFlight = true;
+    this._hoverLastPickedX = pointerX;
+    this._hoverLastPickedY = pointerY;
+    const epoch = this._interactionEpoch;
+
+    try {
+      const hit = await this.app.pickAtPointer(pointerX, pointerY);
+      if (epoch !== this._interactionEpoch) {
+        return;
+      }
+      this.emitInfoTextIfChanged(this.formatHitInfo(hit));
+    } finally {
+      this._hoverPickInFlight = false;
+      if (epoch !== this._interactionEpoch) {
+        return;
+      }
+      if (this._hoverPickDirty && this.shouldRunHoverPickNow()) {
+        this.scheduleHoverPick();
+      }
+    }
+  }
+
+  private emitInfoTextIfChanged(text: string): void {
+    if (this._infoLastText === text) {
+      return;
+    }
+
+    this._infoLastText = text;
+    this.app.events.emit("info-text-change", text);
+  }
+
+  private cancelHoverPick(): void {
+    if (this._hoverPickRaf !== null) {
+      window.cancelAnimationFrame(this._hoverPickRaf);
+      this._hoverPickRaf = null;
+    }
+    this._hoverPickScheduled = false;
+    this._hoverPickInFlight = false;
+    this._hoverPickDirty = false;
   }
 
   protected async pick_mesh(
