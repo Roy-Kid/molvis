@@ -50,7 +50,7 @@
 | Transparency / opacity | ❌ | ✅ | ✅ | P1 | Per-atom/group alpha, shader support needed |
 | Ambient occlusion | ❌ | ✅ | ❌ | P2 | BabylonJS SSAO post-process |
 | Dark / light theme | ✅ | ✅ | ❌ | — | StyleManager |
-| Background color | ❌ | ✅ | ✅ | P1 | Custom viewport background, in settings |
+| Background color | ✅ | ✅ | ✅ | — | RenderTab color picker with presets (black/gray/white/custom) |
 
 ## 3. Rendering Output
 
@@ -163,7 +163,7 @@
 | FrameDiff (position vs full) | ✅ | ❌ | ❌ | — | **Differentiator** smart transition |
 | Play/pause button | ✅ | ✅ | ✅ | — | TimelineControl component with 30fps rAF loop |
 | Frame slider / timeline | ✅ | ✅ | ❌ | — | TimelineControl slider + frame counter |
-| Playback speed control | ❌ | ✅ | ❌ | P1 | FPS / skip frames |
+| Playback speed control | ✅ | ✅ | ❌ | — | TimelineControl speed selector: 0.5x/1x/2x/5x/10x |
 | Frame interpolation | ❌ | ✅ | ❌ | P3 | Smooth between frames |
 | Camera animation | ❌ | ✅ | ❌ | P3 | Animated fly-through |
 
@@ -188,7 +188,7 @@
 | Settings dialog | ✅ | ✅ | ✅ | — | |
 | Export dialog | ✅ | ✅ | ✅ | — | |
 | Undo/redo UI buttons | ✅ | ✅ | ✅ | — | TopBar buttons + Ctrl+Z/Ctrl+Shift+Z shortcuts |
-| Keyboard shortcut help | ❌ | ✅ | ✅ | P1 | Overlay or dialog |
+| Keyboard shortcut help | ✅ | ✅ | ✅ | — | ? key opens dialog with all shortcuts |
 | Drag-drop file open | ✅ | ✅ | ✅ | — | See File Formats |
 | Recent files | ❌ | ✅ | ✅ | P2 | Local storage |
 | Animation timeline UI | ✅ | ✅ | ❌ | — | TimelineControl with play/pause/skip/slider |
@@ -210,16 +210,15 @@
 
 | Feature | Category |
 |---------|----------|
-| Stick only, Wireframe representations | Rendering |
 | Vector arrows | Rendering |
 | Bond order display | Rendering |
-| Assign uniform color, Transparency, Background color | Coloring |
+| Assign uniform color, Transparency | Coloring |
 | CIF, GRO, MOL/SDF, LAMMPS dump formats | File (molrs) |
 | Marquee select, Select by element, Transform selection | Interaction |
 | Import by SMILES | Building (molrs) |
 | Displacement vectors, Histogram, Scatter plot | Analysis |
 | Assign color, Delete selected, Replicate, Create bonds, DataSource modifiers | Pipeline |
-| Playback speed, Jupyter widget, Keyboard shortcut help | Various |
+| Jupyter widget | Integration |
 
 ### P2 — Later (breadth expansion)
 

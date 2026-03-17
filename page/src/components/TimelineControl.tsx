@@ -1,4 +1,11 @@
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import type { Molvis } from "@molvis/core";
 import {
@@ -17,7 +24,8 @@ interface TimelineControlProps {
   totalFrames?: number;
 }
 
-const FRAME_INTERVAL_MS = 1000 / 30;
+const BASE_FPS = 30;
+const SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const;
 
 export const TimelineControl: React.FC<TimelineControlProps> = ({
   app,
@@ -25,13 +33,19 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
+  const [speed, setSpeed] = useState(1);
   const requestRef = useRef<number | null>(null);
   const currentFrameRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
+  const speedRef = useRef(1);
 
   useEffect(() => {
     currentFrameRef.current = currentFrame;
   }, [currentFrame]);
+
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
 
   useEffect(() => {
     if (!app) return;
@@ -69,8 +83,9 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
         lastTimeRef.current = time;
       }
       const deltaTime = time - lastTimeRef.current;
+      const interval = (1000 / BASE_FPS) / speedRef.current;
 
-      if (deltaTime >= FRAME_INTERVAL_MS) {
+      if (deltaTime >= interval) {
         const next =
           currentFrameRef.current + 1 >= totalFrames
             ? 0
@@ -149,6 +164,23 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
       <div className="font-mono text-xs text-muted-foreground shrink-0 w-20 text-right tabular-nums">
         {currentFrame} / {totalFrames}
       </div>
+
+      {/* Speed selector */}
+      <Select
+        value={String(speed)}
+        onValueChange={(v) => setSpeed(Number(v))}
+      >
+        <SelectTrigger className="h-7 w-16 text-[10px] shrink-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SPEED_OPTIONS.map((s) => (
+            <SelectItem key={s} value={String(s)} className="text-xs">
+              {s}x
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Controls Area (Right) */}
       <div className="flex items-center gap-1 shrink-0">

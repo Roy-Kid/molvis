@@ -10,8 +10,9 @@ import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MolvisWrapper from "./MolvisWrapper";
+import { KeyboardShortcutsDialog } from "./ui/layout/KeyboardShortcutsDialog";
 import { LeftSidebar } from "./ui/layout/LeftSidebar";
 import { RightSidebar } from "./ui/layout/RightSidebar";
 import { TopBar } from "./ui/layout/TopBar";
@@ -25,7 +26,25 @@ const App: React.FC = () => {
     useMolvisUiState(app);
   const { statusMessage, statusType } = useStatusMessage(app);
 
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
   useBootstrapDemo(app, setCurrentMode);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "?" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !(e.target instanceof HTMLInputElement) &&
+        !(e.target instanceof HTMLTextAreaElement)
+      ) {
+        setShortcutsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleModeSwitch = (mode: string) => {
     if (!app) {
@@ -104,6 +123,11 @@ const App: React.FC = () => {
         >
           {statusMessage}
         </div>
+
+        <KeyboardShortcutsDialog
+          open={shortcutsOpen}
+          onOpenChange={setShortcutsOpen}
+        />
       </div>
     </ErrorBoundary>
   );

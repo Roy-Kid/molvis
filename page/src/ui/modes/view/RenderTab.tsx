@@ -37,7 +37,23 @@ interface RenderState {
   labelMode: LabelMode;
   labelTemplate: string;
   labelFontSize: number;
+  backgroundColor: string;
 }
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (v: number) =>
+    Math.round(Math.max(0, Math.min(1, v)) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+const BG_PRESETS = [
+  { label: "Black", value: "#000000" },
+  { label: "Dark Gray", value: "#1a1a2e" },
+  { label: "Gray", value: "#808080" },
+  { label: "White", value: "#ffffff" },
+] as const;
 
 function findHideHydrogensMod(
   app: Molvis,
@@ -66,6 +82,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     }
     const hMod = findHideHydrogensMod(app);
     const labelCfg = app.artist.labelRenderer.config;
+    const cc = app.scene.clearColor;
+    const bgHex = rgbToHex(cc.r, cc.g, cc.b);
     setState({
       ui: { ...app.config.ui },
       grid: { ...app.settings.getGrid() },
@@ -75,6 +93,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       labelMode: labelCfg.mode,
       labelTemplate: labelCfg.template,
       labelFontSize: labelCfg.fontSize,
+      backgroundColor: bgHex,
     });
     setHasChanges(false);
   }, [app]);
@@ -148,6 +167,15 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     state.graphics.hardwareScaling,
     "graphics.hardwareScaling",
   );
+
+  const handleBackgroundColor = (hex: string) => {
+    if (!app) return;
+    const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
+    const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
+    const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
+    app.scene.clearColor.set(r, g, b, 1);
+    setState((prev) => (prev ? { ...prev, backgroundColor: hex } : prev));
+  };
 
   const rebuildLabels = (
     mode: LabelMode,
@@ -391,6 +419,38 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
             step={10}
             value={[gridSize]}
             onValueChange={([v]) => updateGrid("size", v)}
+          />
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+          Background
+        </h4>
+
+        <div className="flex items-center gap-2">
+          {BG_PRESETS.map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              className={`w-6 h-6 rounded border-2 transition-colors ${
+                state.backgroundColor === preset.value
+                  ? "border-blue-500"
+                  : "border-muted"
+              }`}
+              style={{ backgroundColor: preset.value }}
+              title={preset.label}
+              onClick={() => handleBackgroundColor(preset.value)}
+            />
+          ))}
+          <input
+            type="color"
+            value={state.backgroundColor}
+            onChange={(e) => handleBackgroundColor(e.target.value)}
+            className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+            title="Custom color"
           />
         </div>
       </div>
