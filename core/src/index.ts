@@ -94,6 +94,12 @@ export { COLORMAP_NAMES } from "./artist/colormaps";
 
 export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
 
+export {
+  LabelRenderer,
+  type LabelConfig,
+  type LabelMode,
+  DEFAULT_LABEL_CONFIG,
+} from "./artist/label_renderer";
 export type { RepresentationStyle } from "./artist/representation";
 export {
   REPRESENTATIONS,

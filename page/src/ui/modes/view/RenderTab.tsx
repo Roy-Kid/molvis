@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   type Molvis,
   type MolvisConfig,
+  type LabelMode,
   HideHydrogensModifier,
   REPRESENTATIONS,
 } from "@molvis/core";
@@ -33,6 +34,9 @@ interface RenderState {
   graphics: GraphicsState;
   representationName: string;
   hideHydrogens: boolean;
+  labelMode: LabelMode;
+  labelTemplate: string;
+  labelFontSize: number;
 }
 
 function findHideHydrogensMod(
@@ -61,12 +65,16 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       throw new Error("Missing required config key: ui");
     }
     const hMod = findHideHydrogensMod(app);
+    const labelCfg = app.artist.labelRenderer.config;
     setState({
       ui: { ...app.config.ui },
       grid: { ...app.settings.getGrid() },
       graphics: { ...app.settings.getGraphics() },
       representationName: app.styleManager.getRepresentation().name,
       hideHydrogens: hMod?.hideHydrogens ?? false,
+      labelMode: labelCfg.mode,
+      labelTemplate: labelCfg.template,
+      labelFontSize: labelCfg.fontSize,
     });
     setHasChanges(false);
   }, [app]);
@@ -141,6 +149,59 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     "graphics.hardwareScaling",
   );
 
+  const rebuildLabels = (
+    mode: LabelMode,
+    template: string,
+    fontSize: number,
+  ) => {
+    if (!app) return;
+    const lr = app.artist.labelRenderer;
+    lr.setConfig({ mode, template, fontSize });
+
+    if (mode === "none") {
+      lr.clearLabels();
+      return;
+    }
+
+    const frame = app.system.frame;
+    const atoms = frame?.getBlock("atoms");
+    if (!atoms || atoms.nrows() === 0) {
+      lr.clearLabels();
+      return;
+    }
+
+    const x = atoms.getColumnF32("x");
+    const y = atoms.getColumnF32("y");
+    const z = atoms.getColumnF32("z");
+    const elements = atoms.getColumnStrings("element");
+    if (!x || !y || !z || !elements) return;
+
+    const selectedIndices =
+      mode === "selected"
+        ? app.world.selectionManager.getSelectedAtomIds()
+        : undefined;
+
+    lr.build(
+      { count: atoms.nrows(), x, y, z, elements },
+      selectedIndices,
+    );
+  };
+
+  const handleLabelModeChange = (mode: LabelMode) => {
+    setState((prev) => (prev ? { ...prev, labelMode: mode } : prev));
+    rebuildLabels(mode, state.labelTemplate, state.labelFontSize);
+  };
+
+  const handleLabelTemplateChange = (template: string) => {
+    setState((prev) => (prev ? { ...prev, labelTemplate: template } : prev));
+    rebuildLabels(state.labelMode, template, state.labelFontSize);
+  };
+
+  const handleLabelFontSizeChange = (size: number) => {
+    setState((prev) => (prev ? { ...prev, labelFontSize: size } : prev));
+    rebuildLabels(state.labelMode, state.labelTemplate, size);
+  };
+
   const handleHideHydrogens = (checked: boolean) => {
     if (!app) return;
     let mod = findHideHydrogensMod(app);
@@ -197,6 +258,67 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
             onCheckedChange={handleHideHydrogens}
           />
         </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+          Labels
+        </h4>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Show Labels</Label>
+          <Select
+            value={state.labelMode}
+            onValueChange={(v) => handleLabelModeChange(v as LabelMode)}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="all">All Atoms</SelectItem>
+              <SelectItem value="selected">Selected Only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {state.labelMode !== "none" && (
+          <>
+            <div className="space-y-1">
+              <Label className="text-xs">Template</Label>
+              <Select
+                value={state.labelTemplate}
+                onValueChange={handleLabelTemplateChange}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="{element}">Element</SelectItem>
+                  <SelectItem value="{atomId}">Atom Index</SelectItem>
+                  <SelectItem value="{element} {atomId}">
+                    Element + Index
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">
+                Font Size ({state.labelFontSize}px)
+              </Label>
+              <Slider
+                min={8}
+                max={24}
+                step={1}
+                value={[state.labelFontSize]}
+                onValueChange={([v]) => handleLabelFontSizeChange(v)}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <Separator />

@@ -35,7 +35,7 @@
 | Bond order display | ❌ | ❌ | ✅ | P1 | Double/triple bond rendering, parallel cylinders |
 | Non-covalent interactions | ❌ | ❌ | ✅ | P2 | H-bonds, halogen bonds; dashed lines |
 | Close contact display | ❌ | ❌ | ✅ | P3 | Salt bridges, repulsive contacts |
-| Per-atom labels | ❌ | ✅ | ✅ | P0 | Element, index, charge; BabylonJS GUI texture |
+| Per-atom labels | ✅ | ✅ | ✅ | — | LabelRenderer: element/index/custom templates, 3 modes, auto-cull |
 | Hydrogen visibility toggle | ✅ | ✅ | ✅ | — | HideHydrogensModifier pipeline filter + RenderTab toggle |
 
 ## 2. Coloring & Appearance
@@ -204,7 +204,6 @@
 
 | Feature | Category |
 |---------|----------|
-| Per-atom labels | Rendering |
 | Property inspector (full table) | Analysis |
 | Wrap PBC modifier (complete) | Pipeline |
 | Data inspector table | UX |

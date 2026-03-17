@@ -16,6 +16,7 @@ import {
   createImpostorMaterial,
 } from "./artist/material_factory";
 import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
+import { LabelRenderer } from "./artist/label_renderer";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
 import { createWarmupMesh } from "./artist/warmup";
 import "./shaders/impostor";
@@ -64,6 +65,7 @@ export class Artist {
   public atomMesh: Mesh;
   public bondMesh: Mesh;
   public ribbonRenderer: RibbonRenderer;
+  public labelRenderer: LabelRenderer;
 
   constructor(options: ArtistOptions) {
     this.app = options.app;
@@ -80,6 +82,7 @@ export class Artist {
       scene,
     );
     this.ribbonRenderer = new RibbonRenderer(scene);
+    this.labelRenderer = new LabelRenderer(scene);
     this.registerRuntimeLayers();
   }
 
@@ -142,6 +145,7 @@ export class Artist {
     this.atomMesh.dispose();
     this.bondMesh.dispose();
     this.ribbonRenderer.dispose();
+    this.labelRenderer.dispose();
   }
 
   // ============ Frame Rendering (Bulk) ============
