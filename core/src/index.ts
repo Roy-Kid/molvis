@@ -88,6 +88,7 @@ export { SliceModifier } from "./modifiers/SliceModifier";
 export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
+export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export type { ColormapName } from "./artist/colormaps";
 export { COLORMAP_NAMES } from "./artist/colormaps";
 

@@ -10,7 +10,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { type Molvis, type MolvisConfig, REPRESENTATIONS } from "@molvis/core";
+import {
+  type Molvis,
+  type MolvisConfig,
+  HideHydrogensModifier,
+  REPRESENTATIONS,
+} from "@molvis/core";
 import type React from "react";
 import { useEffect, useState } from "react";
 
@@ -27,6 +32,16 @@ interface RenderState {
   grid: GridState;
   graphics: GraphicsState;
   representationName: string;
+  hideHydrogens: boolean;
+}
+
+function findHideHydrogensMod(
+  app: Molvis,
+): HideHydrogensModifier | undefined {
+  for (const mod of app.modifierPipeline.getModifiers()) {
+    if (mod instanceof HideHydrogensModifier) return mod;
+  }
+  return undefined;
 }
 
 function requireValue<T>(value: T | undefined, key: string): T {
@@ -45,11 +60,13 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     if (!app.config.ui) {
       throw new Error("Missing required config key: ui");
     }
+    const hMod = findHideHydrogensMod(app);
     setState({
       ui: { ...app.config.ui },
       grid: { ...app.settings.getGrid() },
       graphics: { ...app.settings.getGraphics() },
       representationName: app.styleManager.getRepresentation().name,
+      hideHydrogens: hMod?.hideHydrogens ?? false,
     });
     setHasChanges(false);
   }, [app]);
@@ -124,6 +141,18 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     "graphics.hardwareScaling",
   );
 
+  const handleHideHydrogens = (checked: boolean) => {
+    if (!app) return;
+    let mod = findHideHydrogensMod(app);
+    if (!mod) {
+      mod = new HideHydrogensModifier();
+      app.modifierPipeline.addModifier(mod);
+    }
+    mod.hideHydrogens = checked;
+    setState((prev) => (prev ? { ...prev, hideHydrogens: checked } : prev));
+    app.applyPipeline({ fullRebuild: true });
+  };
+
   const handleRepresentationChange = (name: string) => {
     if (!app) return;
     app.setRepresentation(name);
@@ -151,6 +180,23 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-4">
+        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+          Visibility
+        </h4>
+
+        <div className="flex items-center justify-between">
+          <Label htmlFor="hide-hydrogens">Hide Hydrogens</Label>
+          <Switch
+            id="hide-hydrogens"
+            checked={state.hideHydrogens}
+            onCheckedChange={handleHideHydrogens}
+          />
+        </div>
       </div>
 
       <Separator />

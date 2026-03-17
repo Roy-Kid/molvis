@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { Molvis } from "@molvis/core";
-import { Redo2, Scan, Undo2 } from "lucide-react";
+import { Camera, Redo2, Scan, Undo2 } from "lucide-react";
 import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -66,6 +66,21 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
     }
   };
 
+  const handleScreenshot = async () => {
+    if (!app) return;
+    try {
+      const dataUrl = await app.screenshot({ transparentBackground: false });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "molvis-screenshot.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Screenshot failed:", err);
+    }
+  };
+
   return (
     <div className="h-10 border-b bg-background flex items-center px-3 gap-3 shrink-0 justify-between">
       <div className="flex items-center gap-3 min-w-0">
@@ -76,6 +91,14 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
       </div>
 
       <div className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleScreenshot}
+          title="Screenshot (PNG)"
+        >
+          <Camera className="h-3.5 w-3.5" />
+        </Button>
         <ExportDialog app={app} />
         <Separator orientation="vertical" className="h-5 mx-1" />
 

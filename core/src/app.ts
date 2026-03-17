@@ -1,4 +1,4 @@
-import { Engine } from "@babylonjs/core";
+import { Engine, Tools } from "@babylonjs/core";
 import { Artist } from "./artist";
 import { type CommandRegistry, commands } from "./commands";
 import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
@@ -446,6 +446,37 @@ export class MolvisApp {
     const frame = this._system.frame;
     if (frame) {
       syncSceneToFrame(this._world.sceneIndex, frame);
+    }
+  }
+
+  /**
+   * Capture the current viewport as a PNG data URL.
+   * Uses BabylonJS render-target screenshot for consistent quality.
+   */
+  public async screenshot(options?: {
+    width?: number;
+    height?: number;
+    transparentBackground?: boolean;
+  }): Promise<string> {
+    const width = options?.width ?? this._canvas.width;
+    const height = options?.height ?? this._canvas.height;
+    const savedAlpha = this._world.scene.clearColor.a;
+
+    if (options?.transparentBackground) {
+      this._world.scene.clearColor.a = 0;
+    }
+
+    try {
+      const data = await Tools.CreateScreenshotUsingRenderTargetAsync(
+        this._engine,
+        this._world.scene.activeCamera!,
+        { width, height },
+      );
+      return data;
+    } finally {
+      if (options?.transparentBackground) {
+        this._world.scene.clearColor.a = savedAlpha;
+      }
     }
   }
 

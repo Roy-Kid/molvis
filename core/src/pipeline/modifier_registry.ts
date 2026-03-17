@@ -1,4 +1,5 @@
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
+import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
@@ -57,6 +58,11 @@ export class ModifierRegistry {
       "Color by Property",
       "Selection Insensitive",
       () => new ColorByPropertyModifier(),
+    );
+    ModifierRegistry.register(
+      "Hide Hydrogens",
+      "Selection Insensitive",
+      () => new HideHydrogensModifier(),
     );
   }
 }
