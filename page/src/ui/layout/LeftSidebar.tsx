@@ -6,12 +6,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
 import { useState } from "react";
 import { RdfPanel } from "../modes/select/RdfPanel";
 import { useSelectionSnapshot } from "../modes/select/useSelectionSnapshot";
+import { DataInspectorPanel } from "./DataInspectorPanel";
 
 interface LeftSidebarProps {
   app: Molvis | null;
@@ -25,62 +27,75 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
 
   return (
     <div className="h-full w-full bg-background flex flex-col border-r">
-      <div className="h-9 px-2.5 border-b bg-muted/15 shrink-0 flex items-center justify-between">
-        <div className="text-xs font-semibold tracking-wide uppercase">
-          Analysis
+      <Tabs defaultValue="data" className="h-full flex flex-col">
+        <div className="shrink-0 border-b bg-muted/15">
+          <TabsList className="w-full rounded-none h-9 bg-transparent">
+            <TabsTrigger value="data" className="text-[10px] uppercase h-7">
+              Data
+            </TabsTrigger>
+            <TabsTrigger value="analysis" className="text-[10px] uppercase h-7">
+              Analysis
+            </TabsTrigger>
+          </TabsList>
         </div>
-        <div className="text-[10px] text-muted-foreground">
-          {snapshot.atomCount} atom{snapshot.atomCount !== 1 ? "s" : ""}
-        </div>
-      </div>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="min-h-full">
-          <SidebarSection
-            title="Analysis"
-            subtitle={
-              analysisMethod === "rdf"
-                ? "Radial distribution function"
-                : "Mean square displacement"
-            }
-            badge={analysisMethod.toUpperCase()}
-            defaultOpen={true}
-            className="border-b-0"
-          >
-            <div className="grid grid-cols-[72px_1fr] gap-2 items-center">
-              <span className="text-[11px] text-muted-foreground">Method</span>
-              <Select
-                value={analysisMethod}
-                onValueChange={(value) => {
-                  if (value === "rdf" || value === "msd") {
-                    setAnalysisMethod(value);
-                  }
-                }}
+        <TabsContent value="data" className="flex-1 min-h-0 mt-0">
+          <DataInspectorPanel app={app} />
+        </TabsContent>
+
+        <TabsContent value="analysis" className="flex-1 min-h-0 mt-0">
+          <ScrollArea className="h-full">
+            <div className="min-h-full">
+              <SidebarSection
+                title="Analysis"
+                subtitle={
+                  analysisMethod === "rdf"
+                    ? "Radial distribution function"
+                    : "Mean square displacement"
+                }
+                badge={analysisMethod.toUpperCase()}
+                defaultOpen={true}
+                className="border-b-0"
               >
-                <SelectTrigger className="h-7 text-xs" size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="rdf" className="text-xs">
-                    RDF
-                  </SelectItem>
-                  <SelectItem value="msd" className="text-xs">
-                    MSD (Coming Soon)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <div className="grid grid-cols-[72px_1fr] gap-2 items-center">
+                  <span className="text-[11px] text-muted-foreground">
+                    Method
+                  </span>
+                  <Select
+                    value={analysisMethod}
+                    onValueChange={(value) => {
+                      if (value === "rdf" || value === "msd") {
+                        setAnalysisMethod(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="rdf" className="text-xs">
+                        RDF
+                      </SelectItem>
+                      <SelectItem value="msd" className="text-xs">
+                        MSD (Coming Soon)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {analysisMethod === "rdf" ? (
-              <RdfPanel app={app} snapshot={snapshot} />
-            ) : (
-              <div className="rounded border bg-muted/10 p-2 text-[11px] text-muted-foreground">
-                MSD is not wired yet. Switch back to RDF to run analysis now.
-              </div>
-            )}
-          </SidebarSection>
-        </div>
-      </ScrollArea>
+                {analysisMethod === "rdf" ? (
+                  <RdfPanel app={app} snapshot={snapshot} />
+                ) : (
+                  <div className="rounded border bg-muted/10 p-2 text-[11px] text-muted-foreground">
+                    MSD is not wired yet. Switch back to RDF to run analysis
+                    now.
+                  </div>
+                )}
+              </SidebarSection>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

@@ -92,6 +92,14 @@ export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export type { ColormapName } from "./artist/colormaps";
 export { COLORMAP_NAMES } from "./artist/colormaps";
 
+export {
+  discoverAtomColumns,
+  extractAtomRows,
+  extractBondRows,
+  type ColumnDescriptor,
+  type AtomRow,
+  type BondRow,
+} from "./data_inspector";
 export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
 
 export {

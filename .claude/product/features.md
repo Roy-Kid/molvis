@@ -128,7 +128,7 @@
 | Displacement vectors | ❌ | ✅ | ❌ | P1 | molrs computes delta, MolVis renders arrows |
 | Histogram | ❌ | ✅ | ❌ | P1 | Property distribution, generic Plotly panel |
 | Scatter plot | ❌ | ✅ | ❌ | P1 | Two-property scatter, generic Plotly panel |
-| Property inspector | 🔨 | ✅ | ✅ | P0 | Full data table for selected atoms/bonds |
+| Property inspector | ✅ | ✅ | ✅ | — | DataInspectorPanel with virtual-scrolled atom/bond tables |
 | Compute property (formula) | ❌ | ✅ | ❌ | P2 | Expression engine, runs in molrs |
 
 ## 8. Data Pipeline / Modifiers
@@ -192,7 +192,7 @@
 | Drag-drop file open | ✅ | ✅ | ✅ | — | See File Formats |
 | Recent files | ❌ | ✅ | ✅ | P2 | Local storage |
 | Animation timeline UI | ✅ | ✅ | ❌ | — | TimelineControl with play/pause/skip/slider |
-| Data inspector table | ❌ | ✅ | ✅ | P0 | See Analysis |
+| Data inspector table | ✅ | ✅ | ✅ | — | LeftSidebar Data tab with atom/bond tables |
 | Grid ground | ✅ | ❌ | ❌ | — | Reference grid |
 | Axis helper | ✅ | ❌ | ✅ | — | XYZ indicator |
 
@@ -204,9 +204,7 @@
 
 | Feature | Category |
 |---------|----------|
-| Property inspector (full table) | Analysis |
-| Wrap PBC modifier (complete) | Pipeline |
-| Data inspector table | UX |
+| Wrap PBC modifier (complete) | Pipeline (molrs) |
 
 ### P1 — Soon (competitive parity, common workflows)
 
