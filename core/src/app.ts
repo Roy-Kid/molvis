@@ -1,23 +1,29 @@
 import { Engine } from "@babylonjs/core";
+import { Artist } from "./artist";
 import { type CommandRegistry, commands } from "./commands";
-import type { DrawFrameOption } from "./commands/draw";
-import { ArrayFrameSource } from "./commands/sources";
+import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
+import { UpdateFrameCommand } from "./commands/frame";
 import { CommandManager } from "./commands/manager";
+import { ArrayFrameSource } from "./commands/sources";
+import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { ModeManager, ModeType } from "./mode";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import type { FrameSource } from "./pipeline/pipeline";
-import { GUIManager } from "./ui/manager";
-import { logger } from "./utils/logger";
-import { Artist } from "./artist";
 import { syncSceneToFrame } from "./scene_sync";
-import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { type MolvisSetting, Settings } from "./settings";
 import { StyleManager } from "./style";
 import type { Theme } from "./style/theme";
 import { System } from "./system";
+import {
+  type FrameTransitionDecision,
+  type FrameUpdateKind,
+  classifyFrameTransition,
+} from "./system/frame_diff";
 import type { Trajectory } from "./system/trajectory";
+import { GUIManager } from "./ui/manager";
+import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
 
@@ -29,6 +35,11 @@ import {
   MolvisSlider,
 } from "./ui/components";
 import { MolvisContextMenu } from "./ui/menus/context_menu";
+
+interface StructuralSelectionSnapshot {
+  atomIds: number[];
+  hasExpressionSelection: boolean;
+}
 
 export class MolvisApp {
   // DOM elements
@@ -51,6 +62,9 @@ export class MolvisApp {
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
   private _currentFrame = 0;
+  private _lastRenderedFrame: Frame | null = null;
+  private _frameRenderQueue: Promise<void> = Promise.resolve();
+  private _pendingFrameRender: { forceFull: boolean } | null = null;
 
   // Style System
   private _styleManager: StyleManager;
@@ -173,7 +187,7 @@ export class MolvisApp {
         const key = this._world.sceneIndex.getSelectionKeyForAtom(idx);
         if (key) keys.push(key);
       }
-      this._world.selectionManager.apply({ type: 'replace', atoms: keys });
+      this._world.selectionManager.apply({ type: "replace", atoms: keys });
     });
   }
 
@@ -385,7 +399,7 @@ export class MolvisApp {
 
     // Render the initial frame so mesh layers are registered and
     // edit-mode can draw into an empty scene.
-    await this.renderFrameInternal(this._system.frame);
+    await this.renderActiveTrajectoryFrame(true);
 
     logger.info("Molvis started successfully");
   }
@@ -433,7 +447,11 @@ export class MolvisApp {
   }
 
   public destroy(): void {
+    this.stop();
     this._guiManager.unmount();
+    this._lastRenderedFrame = null;
+    this._pendingFrameRender = null;
+    this._engine.dispose();
 
     if (this._root.parentElement) {
       this._root.parentElement.removeChild(this._root);
@@ -498,10 +516,133 @@ export class MolvisApp {
     if (!source) {
       throw new Error("computeFrame requires a source");
     }
-    logger.info(`App: computeFrame called with source ${source} index ${frameIndex}`);
-    const frame = await this._modifierPipeline.compute(source, frameIndex, this);
+    logger.info(
+      `App: computeFrame called with source ${source} index ${frameIndex}`,
+    );
+    const frame = await this._modifierPipeline.compute(
+      source,
+      frameIndex,
+      this,
+    );
     this._currentFrame = frameIndex;
     return frame;
+  }
+
+  /**
+   * Queue a trajectory frame render using a "latest-wins" pattern.
+   * Rapid calls (e.g. timeline scrubbing) coalesce: only the most recent
+   * request executes after the current render finishes, skipping intermediates.
+   */
+  private queueTrajectoryFrameRender(forceFull = false): void {
+    if (!this._isRunning) return;
+
+    // If a render is already queued, upgrade to forceFull if requested.
+    if (this._pendingFrameRender) {
+      if (forceFull) this._pendingFrameRender.forceFull = true;
+      return;
+    }
+
+    this._pendingFrameRender = { forceFull };
+    this._frameRenderQueue = this._frameRenderQueue
+      .catch(() => {
+        // Previous render failure is already logged; keep queue alive.
+      })
+      .then(async () => {
+        // Drain the pending request (latest wins).
+        const pending = this._pendingFrameRender;
+        this._pendingFrameRender = null;
+        if (pending) {
+          await this.renderActiveTrajectoryFrame(pending.forceFull);
+        }
+      })
+      .catch((error) => {
+        logger.error("Failed to render trajectory frame", error);
+      });
+  }
+
+  private captureStructuralSelectionSnapshot(): StructuralSelectionSnapshot {
+    const selection = this._world.selectionManager;
+    return {
+      atomIds: [...selection.getSelectedAtomIds()],
+      hasExpressionSelection: selection.hasExpressionSelectionContext(),
+    };
+  }
+
+  private reconcileSelectionAfterStructuralUpdate(
+    updateKind: Exclude<FrameUpdateKind, "position">,
+    snapshot: StructuralSelectionSnapshot,
+  ): void {
+    const selection = this._world.selectionManager;
+
+    if (snapshot.hasExpressionSelection) {
+      const rehydrated = selection.reapplyLastExpression();
+      if (!rehydrated) {
+        selection.clearSelection();
+      }
+      return;
+    }
+
+    if (updateKind === "bond" && snapshot.atomIds.length > 0) {
+      selection.replaceAtomsByIds(snapshot.atomIds);
+      return;
+    }
+
+    selection.clearSelection();
+  }
+
+  /**
+   * Render the currently active trajectory frame.
+   *
+   * NOTE: This method deliberately bypasses the CommandManager and constructs
+   * UpdateFrameCommand / DrawFrameCommand directly. Trajectory playback renders
+   * are transient (not user-reversible) and must not pollute the undo history.
+   */
+  private async renderActiveTrajectoryFrame(forceFull = false): Promise<void> {
+    const frame = this._system.frame;
+    const box = this._system.box;
+    this._currentFrame = this._system.trajectory.currentIndex;
+
+    const atomCount = frame.getBlock("atoms")?.nrows() ?? 0;
+    const bondCount = frame.getBlock("bonds")?.nrows() ?? 0;
+    let decision: FrameTransitionDecision = forceFull
+      ? {
+          kind: "full",
+          reasons: ["Forced full rebuild"],
+          stats: { atomCount, bondCount },
+        }
+      : classifyFrameTransition(this._lastRenderedFrame, frame);
+
+    if (decision.kind === "position") {
+      const updateCmd = new UpdateFrameCommand(this, { frame });
+      const result = await updateCmd.do();
+      if (result.success) {
+        if (box) {
+          this.execute("draw_box", { box });
+        }
+        this._lastRenderedFrame = frame;
+        return;
+      }
+      logger.warn(
+        `Position update failed (${result.reason ?? "unknown reason"}), falling back to full rebuild`,
+      );
+      decision = {
+        kind: "full",
+        reasons: [
+          ...decision.reasons,
+          `Fast update failed: ${result.reason ?? "unknown reason"}`,
+        ],
+        stats: decision.stats,
+      };
+    }
+
+    const selectionSnapshot = this.captureStructuralSelectionSnapshot();
+    const drawCmd = new DrawFrameCommand(this, { frame, box });
+    await drawCmd.do();
+    this.reconcileSelectionAfterStructuralUpdate(
+      decision.kind,
+      selectionSnapshot,
+    );
+    this._lastRenderedFrame = frame;
   }
 
   /**
@@ -514,16 +655,13 @@ export class MolvisApp {
     box?: Box,
     options?: DrawFrameOption,
   ): Promise<void> {
-    // Optimization: If we have a single-frame trajectory, update in place
-    // This avoids full system reset which breaks UI state and causes flickering
-    if (this._system.trajectory.length === 1) {
-      this._system.updateCurrentFrame(frame, box);
-    } else {
-      this._system.setFrame(frame, box); // Store frame and box in System
-    }
+    this._system.updateCurrentFrame(frame, box);
 
     const drawResult = this.execute("draw_frame", { frame, box, options });
-    return drawResult instanceof Promise ? drawResult : Promise.resolve();
+    const done = drawResult instanceof Promise ? drawResult : Promise.resolve();
+    return done.then(() => {
+      this._lastRenderedFrame = frame;
+    });
   }
 
   public renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void {
@@ -539,6 +677,7 @@ export class MolvisApp {
   public loadFrame(frame: Frame, box?: Box): void {
     this.artist.clear();
     this.commandManager.clearHistory();
+    this._lastRenderedFrame = null;
     this._system.setFrame(frame, box);
     this.renderFrame(frame, box);
   }
@@ -548,12 +687,18 @@ export class MolvisApp {
    * Use fullRebuild when the atom count or topology changes (e.g. file load).
    * Default is fast-path (visibility-only update, no flicker).
    */
-  public async applyPipeline(options?: { fullRebuild?: boolean }): Promise<void> {
+  public async applyPipeline(options?: {
+    fullRebuild?: boolean;
+  }): Promise<void> {
     const sourceFrame = this._system.frame;
     if (!sourceFrame) return;
 
     const source = new ArrayFrameSource([sourceFrame]);
-    const computed = await this._modifierPipeline.compute(source, this._currentFrame, this);
+    const computed = await this._modifierPipeline.compute(
+      source,
+      this._currentFrame,
+      this,
+    );
 
     if (options?.fullRebuild) {
       this.renderFrame(computed);
@@ -568,16 +713,18 @@ export class MolvisApp {
    */
   public setTrajectory(trajectory: Trajectory): void {
     this._system.trajectory = trajectory;
-    this.events.emit("trajectory-change", trajectory);
-    this.events.emit("frame-change", 0);
+    this._currentFrame = this._system.trajectory.currentIndex;
+    this._lastRenderedFrame = null;
+    this.queueTrajectoryFrameRender(true);
   }
 
   /**
    * Navigate to the next frame.
    */
   public nextFrame(): void {
-    if (this._system.trajectory.next()) {
-      this.events.emit("frame-change", this._system.trajectory.currentIndex);
+    if (this._system.nextFrame()) {
+      this._currentFrame = this._system.trajectory.currentIndex;
+      this.queueTrajectoryFrameRender();
     }
   }
 
@@ -585,8 +732,9 @@ export class MolvisApp {
    * Navigate to the previous frame.
    */
   public prevFrame(): void {
-    if (this._system.trajectory.prev()) {
-      this.events.emit("frame-change", this._system.trajectory.currentIndex);
+    if (this._system.prevFrame()) {
+      this._currentFrame = this._system.trajectory.currentIndex;
+      this.queueTrajectoryFrameRender();
     }
   }
 
@@ -594,8 +742,9 @@ export class MolvisApp {
    * Seek to a specific frame index.
    */
   public seekFrame(index: number): void {
-    if (this._system.trajectory.seek(index)) {
-      this.events.emit("frame-change", this._system.trajectory.currentIndex);
+    if (this._system.seekFrame(index)) {
+      this._currentFrame = this._system.trajectory.currentIndex;
+      this.queueTrajectoryFrameRender();
     }
   }
 }
@@ -606,13 +755,23 @@ declare global {
     showSaveFilePicker?: (options?: {
       suggestedName?: string;
       types?: { description?: string; accept: Record<string, string[]> }[];
-    }) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }>;
+    }) => Promise<{
+      createWritable(): Promise<{
+        write(data: Blob): Promise<void>;
+        close(): Promise<void>;
+      }>;
+    }>;
   }
 }
 
-async function defaultSaveFile(blob: Blob, suggestedName: string): Promise<void> {
+async function defaultSaveFile(
+  blob: Blob,
+  suggestedName: string,
+): Promise<void> {
   if (typeof window.showSaveFilePicker !== "function") {
-    throw new Error("Save dialog not available in this environment. Override app.saveFile to provide a custom implementation.");
+    throw new Error(
+      "Save dialog not available in this environment. Override app.saveFile to provide a custom implementation.",
+    );
   }
 
   const handle = await window.showSaveFilePicker({

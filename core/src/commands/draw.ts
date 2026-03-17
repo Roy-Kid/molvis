@@ -1,5 +1,5 @@
 import * as BABYLON from "@babylonjs/core";
-import { Vector3 } from "@babylonjs/core";
+import type { Vector3 } from "@babylonjs/core";
 import type { Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
 import type { DrawAtomOptions, DrawBondOptions } from "../artist";
@@ -63,14 +63,26 @@ export class DrawBoxCommand extends Command<void> {
     const material = this.app.styleManager.getBoxMaterial();
 
     const edges = [
-      [0, 1], [0, 3], [0, 4], // From 0
-      [1, 5], [4, 5], [6, 5], // Connected to 5
-      [2, 6], [2, 3], [1, 2], // From 2 or connecting
-      [4, 7], [3, 7], [6, 7], // Connected to 7
+      [0, 1],
+      [0, 3],
+      [0, 4], // From 0
+      [1, 5],
+      [4, 5],
+      [6, 5], // Connected to 5
+      [2, 6],
+      [2, 3],
+      [1, 2], // From 2 or connecting
+      [4, 7],
+      [3, 7],
+      [6, 7], // Connected to 7
     ];
 
     const getPoint = (idx: number) =>
-      new BABYLON.Vector3(corners[idx * 3], corners[idx * 3 + 1], corners[idx * 3 + 2]);
+      new BABYLON.Vector3(
+        corners[idx * 3],
+        corners[idx * 3 + 1],
+        corners[idx * 3 + 2],
+      );
 
     const l = copyAndFree(this.box.lengths());
     const lengths = new BABYLON.Vector3(l[0], l[1], l[2]);
@@ -86,11 +98,15 @@ export class DrawBoxCommand extends Command<void> {
 
       // Create Cylinder (defaults to Y axis alignment, diameter 1, height 1)
       // Diameter 1 allows easy scaling: scaling.x/z = diameter
-      const cyl = BABYLON.MeshBuilder.CreateCylinder("box_edge", {
-        height: len,
-        diameter: 1,
-        tessellation: 8
-      }, scene);
+      const cyl = BABYLON.MeshBuilder.CreateCylinder(
+        "box_edge",
+        {
+          height: len,
+          diameter: 1,
+          tessellation: 8,
+        },
+        scene,
+      );
 
       cyl.material = material;
       cyl.parent = this.boxMesh;
@@ -108,14 +124,21 @@ export class DrawBoxCommand extends Command<void> {
 
       if (dot < -0.9999) {
         // Parallel opposite - flip 180 on X
-        cyl.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(Math.PI, 0, 0);
+        cyl.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(
+          Math.PI,
+          0,
+          0,
+        );
       } else if (dot > 0.9999) {
         // Parallel same - no rotation
         cyl.rotationQuaternion = BABYLON.Quaternion.Identity();
       } else {
         const axis = BABYLON.Vector3.Cross(up, dir);
         const angle = Math.acos(dot);
-        cyl.rotationQuaternion = BABYLON.Quaternion.RotationAxis(axis.normalize(), angle);
+        cyl.rotationQuaternion = BABYLON.Quaternion.RotationAxis(
+          axis.normalize(),
+          angle,
+        );
       }
     });
 
@@ -123,7 +146,10 @@ export class DrawBoxCommand extends Command<void> {
       if (!this.boxMesh || this.boxMesh.isDisposed()) return;
       if (!scene.activeCamera) return;
 
-      const dist = BABYLON.Vector3.Distance(scene.activeCamera.position, center);
+      const dist = BABYLON.Vector3.Distance(
+        scene.activeCamera.position,
+        center,
+      );
       let scale = dist * 0.002;
       scale = Math.max(scale, 0.015);
 
@@ -209,7 +235,7 @@ export class DrawFrameCommand extends Command<void> {
  * No-op command
  */
 class NoOpCommand extends Command<void> {
-  do(): void { }
+  do(): void {}
   undo(): Command {
     return this;
   }
@@ -265,11 +291,20 @@ export class DrawAtomCommand extends Command<{ atomId: number }> {
  */
 export class DeleteAtomCommand extends Command<void> {
   private savedAtomData: Record<string, Float32Array> | null = null;
-  private savedAtomMeta: { element: string; position: { x: number; y: number; z: number } } | null = null;
+  private savedAtomMeta: {
+    element: string;
+    position: { x: number; y: number; z: number };
+  } | null = null;
   private deletedBonds: Array<{
     bondId: number;
     data: Record<string, Float32Array>;
-    meta: { atomId1: number; atomId2: number; order: number; start: { x: number; y: number; z: number }; end: { x: number; y: number; z: number } } | null;
+    meta: {
+      atomId1: number;
+      atomId2: number;
+      order: number;
+      start: { x: number; y: number; z: number };
+      end: { x: number; y: number; z: number };
+    } | null;
   }> = [];
 
   constructor(
@@ -287,33 +322,62 @@ export class DeleteAtomCommand extends Command<void> {
 
     // Save atom buffers
     this.savedAtomData = {};
-    for (const bufName of ["matrix", "instanceData", "instanceColor", "instancePickingColor"]) {
+    for (const bufName of [
+      "matrix",
+      "instanceData",
+      "instanceColor",
+      "instancePickingColor",
+    ]) {
       const data = atomState.read(this.atomId, bufName);
       if (data) this.savedAtomData[bufName] = new Float32Array(data);
     }
 
     // Save atom metadata
-    const meta = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(this.atomId);
+    const meta = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(
+      this.atomId,
+    );
     if (meta) {
-      this.savedAtomMeta = { element: meta.element, position: { ...meta.position } };
+      this.savedAtomMeta = {
+        element: meta.element,
+        position: { ...meta.position },
+      };
     }
 
     // Save and remove connected bonds
-    const connectedBonds = this.app.world.sceneIndex.topology.getBondsForAtom(this.atomId);
+    const connectedBonds = this.app.world.sceneIndex.topology.getBondsForAtom(
+      this.atomId,
+    );
     this.deletedBonds = [];
 
     for (const bondId of connectedBonds) {
       if (bondState) {
         const bondData: Record<string, Float32Array> = {};
-        for (const bufName of ["matrix", "instanceData0", "instanceData1", "instanceColor0", "instanceColor1", "instanceSplit", "instancePickingColor"]) {
+        for (const bufName of [
+          "matrix",
+          "instanceData0",
+          "instanceData1",
+          "instanceColor0",
+          "instanceColor1",
+          "instanceSplit",
+          "instancePickingColor",
+        ]) {
           const data = bondState.read(bondId, bufName);
           if (data) bondData[bufName] = new Float32Array(data);
         }
-        const bondMeta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
+        const bondMeta =
+          this.app.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
         this.deletedBonds.push({
           bondId,
           data: bondData,
-          meta: bondMeta ? { atomId1: bondMeta.atomId1, atomId2: bondMeta.atomId2, order: bondMeta.order, start: { ...bondMeta.start }, end: { ...bondMeta.end } } : null,
+          meta: bondMeta
+            ? {
+                atomId1: bondMeta.atomId1,
+                atomId2: bondMeta.atomId2,
+                order: bondMeta.order,
+                start: { ...bondMeta.start },
+                end: { ...bondMeta.end },
+              }
+            : null,
         });
         this.app.artist.deleteBond(bondState.mesh.uniqueId, bondId);
       }
@@ -323,7 +387,8 @@ export class DeleteAtomCommand extends Command<void> {
   }
 
   undo(): Command {
-    if (!this.savedAtomData || !this.savedAtomMeta) return new NoOpCommand(this.app);
+    if (!this.savedAtomData || !this.savedAtomMeta)
+      return new NoOpCommand(this.app);
 
     // Restore atom
     const buffers = new Map<string, Float32Array>();
@@ -331,7 +396,11 @@ export class DeleteAtomCommand extends Command<void> {
       buffers.set(name, data);
     }
     this.app.world.sceneIndex.createAtom(
-      { atomId: this.atomId, element: this.savedAtomMeta.element, position: this.savedAtomMeta.position },
+      {
+        atomId: this.atomId,
+        element: this.savedAtomMeta.element,
+        position: this.savedAtomMeta.position,
+      },
       buffers,
     );
 
@@ -343,7 +412,14 @@ export class DeleteAtomCommand extends Command<void> {
         bondBuffers.set(name, buf);
       }
       this.app.world.sceneIndex.createBond(
-        { bondId, atomId1: meta.atomId1, atomId2: meta.atomId2, order: meta.order, start: meta.start, end: meta.end },
+        {
+          bondId,
+          atomId1: meta.atomId1,
+          atomId2: meta.atomId2,
+          order: meta.order,
+          start: meta.start,
+          end: meta.end,
+        },
         bondBuffers,
       );
     }
@@ -399,7 +475,13 @@ export class DrawBondCommand extends Command<{ bondId: number }> {
  */
 export class DeleteBondCommand extends Command<void> {
   private savedData: Record<string, Float32Array> | null = null;
-  private savedMeta: { atomId1: number; atomId2: number; order: number; start: { x: number; y: number; z: number }; end: { x: number; y: number; z: number } } | null = null;
+  private savedMeta: {
+    atomId1: number;
+    atomId2: number;
+    order: number;
+    start: { x: number; y: number; z: number };
+    end: { x: number; y: number; z: number };
+  } | null = null;
 
   constructor(
     app: MolvisApp,
@@ -414,13 +496,29 @@ export class DeleteBondCommand extends Command<void> {
 
     // Save bond buffers and metadata before deletion
     this.savedData = {};
-    for (const bufName of ["matrix", "instanceData0", "instanceData1", "instanceColor0", "instanceColor1", "instanceSplit", "instancePickingColor"]) {
+    for (const bufName of [
+      "matrix",
+      "instanceData0",
+      "instanceData1",
+      "instanceColor0",
+      "instanceColor1",
+      "instanceSplit",
+      "instancePickingColor",
+    ]) {
       const data = bondState.read(this.bondId, bufName);
       if (data) this.savedData[bufName] = new Float32Array(data);
     }
-    const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(this.bondId);
+    const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(
+      this.bondId,
+    );
     if (meta) {
-      this.savedMeta = { atomId1: meta.atomId1, atomId2: meta.atomId2, order: meta.order, start: { ...meta.start }, end: { ...meta.end } };
+      this.savedMeta = {
+        atomId1: meta.atomId1,
+        atomId2: meta.atomId2,
+        order: meta.order,
+        start: { ...meta.start },
+        end: { ...meta.end },
+      };
     }
 
     this.app.artist.deleteBond(bondState.mesh.uniqueId, this.bondId);

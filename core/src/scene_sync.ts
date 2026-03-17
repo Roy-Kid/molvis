@@ -1,6 +1,6 @@
 import { Block, type Frame } from "@molcrafts/molrs";
-import { logger } from "./utils/logger";
 import type { SceneIndex } from "./scene_index";
+import { logger } from "./utils/logger";
 
 export interface SyncSceneToFrameOptions {
   markSaved?: boolean;

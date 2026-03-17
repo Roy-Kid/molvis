@@ -87,6 +87,13 @@ export type SelectionOp =
   | { type: "toggle"; atoms?: SelectionKey[]; bonds?: SelectionKey[] }
   | { type: "clear" };
 
+export type SelectionSource = "manual" | "expression";
+
+export interface SelectionApplyMeta {
+  source?: SelectionSource;
+  expression?: string;
+}
+
 // ============ SelectionManager ============
 
 interface SelectionEventMap {
@@ -99,6 +106,8 @@ interface SelectionEventMap {
 export class SelectionManager extends EventEmitter<SelectionEventMap> {
   private state: SelectionState = { atoms: new Set(), bonds: new Set() };
   private sceneIndex: SceneIndex;
+  private source: SelectionSource = "manual";
+  private lastExpression: string | null = null;
 
   constructor(sceneIndex: SceneIndex) {
     super();
@@ -110,7 +119,7 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
    *
    * @param op - The selection operation to apply
    */
-  apply(op: SelectionOp): void {
+  apply(op: SelectionOp, meta?: SelectionApplyMeta): void {
     switch (op.type) {
       case "replace":
         this.state.atoms = new Set(op.atoms || []);
@@ -170,6 +179,17 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
         break;
     }
 
+    if (meta?.source) {
+      this.source = meta.source;
+      if (meta.source === "expression" && meta.expression) {
+        this.lastExpression = meta.expression;
+      }
+    } else if (op.type === "clear") {
+      this.source = "manual";
+    } else {
+      this.source = "manual";
+    }
+
     this.emitChange();
   }
 
@@ -201,7 +221,10 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
    * @returns The current selection state
    */
   getState(): SelectionState {
-    return this.state;
+    return {
+      atoms: new Set(this.state.atoms),
+      bonds: new Set(this.state.bonds),
+    };
   }
 
   /**
@@ -226,6 +249,19 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
   }
 
   /**
+   * Replace selected atoms by logical IDs.
+   * Bond selection is cleared.
+   */
+  replaceAtomsByIds(ids: Iterable<number>): void {
+    const keys: SelectionKey[] = [];
+    for (const id of ids) {
+      const key = this.sceneIndex.getSelectionKeyForAtom(id);
+      if (key) keys.push(key);
+    }
+    this.apply({ type: "replace", atoms: keys });
+  }
+
+  /**
    * Select atoms using a boolean expression.
    *
    * @param expression - The boolean expression (e.g. "element == 'C'")
@@ -236,7 +272,28 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
     op: "replace" | "add" | "remove" | "toggle" = "replace",
   ): void {
     const keys = ExpressionSelector.select(this.sceneIndex, expression);
-    this.apply({ type: op, atoms: keys });
+    this.apply({ type: op, atoms: keys }, { source: "expression", expression });
+  }
+
+  /**
+   * Returns true when the active selection originated from expression selection.
+   */
+  hasExpressionSelectionContext(): boolean {
+    return this.source === "expression" && this.lastExpression !== null;
+  }
+
+  /**
+   * Reapply the latest expression using "replace" semantics.
+   * Returns false if no expression is available or evaluation fails.
+   */
+  reapplyLastExpression(): boolean {
+    if (!this.lastExpression) return false;
+    try {
+      this.selectByExpression(this.lastExpression, "replace");
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**

@@ -1,8 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SidebarSection } from "@/ui/layout/SidebarSection";
 import type { Molvis } from "@molvis/core";
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import { InspectorTab } from "./InspectorTab";
+import { useSelectionSnapshot } from "./useSelectionSnapshot";
 
 interface SelectPanelProps {
   app: Molvis | null;
@@ -10,57 +14,79 @@ interface SelectPanelProps {
 
 export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const [expression, setExpression] = useState("");
+  const snapshot = useSelectionSnapshot(app);
 
   const handleSelect = () => {
-    if (!app || !expression.trim()) return;
+    if (!app || !expression.trim()) {
+      return;
+    }
+
     try {
       app.artist.selectByExpression(expression);
-    } catch (e) {
-      console.error("Selection failed:", e);
-      // Ideally show error toast/status
       app.events.emit("status-message", {
-        text: `Selection error: ${(e as Error).message}`,
+        text: "Expression selection updated",
+        type: "info",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      app.events.emit("status-message", {
+        text: `Selection error: ${message}`,
         type: "error",
       });
     }
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="border-b px-2 py-2 bg-muted/10 shrink-0 font-medium text-sm">
-        Selection
-      </div>
-      
-      {/* Expression Selection Section */}
-      <div className="p-3 border-b space-y-2">
-        <div className="text-xs text-muted-foreground font-medium">
-          Select by Expression
+    <div className="h-full flex flex-col">
+      <div className="h-9 px-2.5 border-b bg-muted/15 shrink-0 flex items-center justify-between">
+        <div className="text-xs font-semibold tracking-wide uppercase">
+          Select Workbench
         </div>
-        <div className="flex gap-2">
-          <Input 
-            className="h-8 text-xs font-mono"
-            placeholder="e.g. element == 'C' && x > 0"
-            value={expression}
-            onChange={(e) => setExpression(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSelect()}
-          />
-          <Button 
-            size="sm" 
-            className="h-8 px-3 text-xs"
-            onClick={handleSelect}
-            disabled={!expression.trim()}
-          >
-            Select
-          </Button>
+        <div className="text-[10px] text-muted-foreground">
+          {snapshot.atomCount} atom{snapshot.atomCount !== 1 ? "s" : ""}
         </div>
       </div>
 
-      <div className="border-b px-2 py-2 bg-muted/10 shrink-0 font-medium text-sm mt-1">
-        Inspector
-      </div>
-      <div className="flex-1 overflow-auto">
-        <InspectorTab app={app} />
-      </div>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="min-h-full">
+          <SidebarSection
+            title="Selection"
+            subtitle="Expression query"
+            badge={`${snapshot.atomCount}/${snapshot.bondCount}`}
+            defaultOpen={true}
+          >
+            <div className="flex gap-1.5">
+              <Input
+                className="h-7 text-xs font-mono"
+                placeholder="element == 'C' && x > 0"
+                value={expression}
+                onChange={(e) => setExpression(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSelect()}
+              />
+              <Button
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={handleSelect}
+                disabled={!expression.trim()}
+              >
+                Select
+              </Button>
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Ctrl + Click to toggle atoms and bonds.
+            </div>
+          </SidebarSection>
+
+          <SidebarSection
+            title="Inspector"
+            subtitle="Selected atom attributes"
+            defaultOpen={true}
+            className="border-b-0"
+          >
+            <InspectorTab app={app} compact={true} snapshot={snapshot} />
+          </SidebarSection>
+        </div>
+      </ScrollArea>
     </div>
   );
 };

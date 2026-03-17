@@ -1,8 +1,8 @@
 import { Frame, writeFrame as wasmWriteFrame } from "@molcrafts/molrs";
-import { logger } from "./utils/logger";
 import { inferFormatFromFilename } from "./reader";
-import { syncSceneToFrame } from "./scene_sync";
 import type { SceneIndex } from "./scene_index";
+import { syncSceneToFrame } from "./scene_sync";
+import { logger } from "./utils/logger";
 
 export type ExportFormat = "pdb" | "xyz" | "lammps";
 

@@ -1,9 +1,9 @@
 import {
   Color3,
   Engine,
+  type LinesMesh,
   type Mesh,
   MeshBuilder,
-  type LinesMesh,
   type Scene,
   ShaderMaterial,
   Vector3,
@@ -293,8 +293,10 @@ export class Artist {
     const elementsColumn = atomsBlock.getColumnStrings("element");
     const typesColumn = atomsBlock.getColumnStrings("type");
 
-    if (!elementsColumn && !typesColumn) throw new Error("No elements or types column found");
-    if (!xCoords || !yCoords || !zCoords) throw new Error("No coordinates column");
+    if (!elementsColumn && !typesColumn)
+      throw new Error("No elements or types column found");
+    if (!xCoords || !yCoords || !zCoords)
+      throw new Error("No coordinates column");
 
     // Buffers for Atom Pool
     const atomMatrix = new Float32Array(atomCount * 16);
@@ -331,7 +333,13 @@ export class Artist {
         if (!cached) {
           const s = styleManager.getAtomStyle(element);
           const c = Color3.FromHexString(s.color).toLinearSpace();
-          cached = { r: c.r, g: c.g, b: c.b, a: s.alpha ?? 1.0, radius: s.radius };
+          cached = {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+            a: s.alpha ?? 1.0,
+            radius: s.radius,
+          };
           styleCache.set(element, cached);
         }
         style = cached;
@@ -432,7 +440,9 @@ export class Artist {
           TMP_VEC_2.set(xCoords[j], yCoords[j], zCoords[j]);
 
           // center = (p1 + p2) * 0.5
-          TMP_CENTER.copyFrom(TMP_VEC_1).addInPlace(TMP_VEC_2).scaleInPlace(0.5);
+          TMP_CENTER.copyFrom(TMP_VEC_1)
+            .addInPlace(TMP_VEC_2)
+            .scaleInPlace(0.5);
 
           // direction
           TMP_DIR.copyFrom(TMP_VEC_2).subtractInPlace(TMP_VEC_1);
@@ -573,7 +583,7 @@ export class Artist {
 
               tmpC.copyFrom(tmp1).addInPlace(tmp2).scaleInPlace(0.5);
               tmpD.copyFrom(tmp2).subtractInPlace(tmp1);
-              let dist = tmpD.length();
+              const dist = tmpD.length();
               if (dist > 1e-8) tmpD.scaleInPlace(1 / dist);
               else tmpD.set(0, 1, 0);
 
@@ -638,7 +648,7 @@ export class Artist {
 
     const safeCount = Math.min(bondsBlock.nrows(), bondState.frameOffset);
     for (let b = 0; b < safeCount; b++) {
-      const alpha = (!visMask[iAtoms[b]] || !visMask[jAtoms[b]]) ? 0.0 : 1.0;
+      const alpha = !visMask[iAtoms[b]] || !visMask[jAtoms[b]] ? 0.0 : 1.0;
       bondColor0.data[b * 4 + 3] = alpha;
       bondColor1.data[b * 4 + 3] = alpha;
     }
@@ -658,7 +668,9 @@ export class Artist {
    */
   private updateVisualGuide(sliceMod: SliceModifier | null): void {
     const scene = this.app.world.scene;
-    const existing = scene.getMeshByName("visual_guide_mesh") as LinesMesh | null;
+    const existing = scene.getMeshByName(
+      "visual_guide_mesh",
+    ) as LinesMesh | null;
 
     if (!sliceMod || sliceMod.guideLines.length === 0) {
       if (existing) existing.dispose();
@@ -671,7 +683,11 @@ export class Artist {
     }
 
     if (existing) existing.dispose();
-    const guideMesh = MeshBuilder.CreateLineSystem("visual_guide_mesh", { lines }, scene);
+    const guideMesh = MeshBuilder.CreateLineSystem(
+      "visual_guide_mesh",
+      { lines },
+      scene,
+    );
     guideMesh.color = new Color3(1, 0, 0);
     guideMesh.renderingGroupId = 1;
     guideMesh.isPickable = false;
@@ -891,22 +907,22 @@ export class Artist {
       {
         attributes: isAtom
           ? [
-            "position",
-            "uv",
-            "instanceData",
-            "instanceColor",
-            "instancePickingColor",
-          ]
+              "position",
+              "uv",
+              "instanceData",
+              "instanceColor",
+              "instancePickingColor",
+            ]
           : [
-            "position",
-            "uv",
-            "instanceData0",
-            "instanceData1",
-            "instanceColor0",
-            "instanceColor1",
-            "instanceSplit",
-            "instancePickingColor",
-          ],
+              "position",
+              "uv",
+              "instanceData0",
+              "instanceData1",
+              "instanceColor0",
+              "instanceColor1",
+              "instanceSplit",
+              "instancePickingColor",
+            ],
         uniforms: [
           "view",
           "projection",

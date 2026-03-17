@@ -8,6 +8,7 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import type { MolvisApp as Molvis } from "../app";
+import type { Artist } from "../artist";
 import { CompositeCommand } from "../commands/composite";
 import {
   DeleteAtomCommand,
@@ -15,7 +16,6 @@ import {
   DrawAtomCommand,
   DrawBondCommand,
 } from "../commands/draw";
-import type { Artist } from "../artist";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
@@ -334,9 +334,9 @@ class EditMode extends BaseMode {
 
     const samePickedAtom = Boolean(
       hit &&
-      hit.type === "atom" &&
-      hit.mesh === this.startAtom &&
-      (hit.thinInstanceIndex ?? -1) === this.startAtomIndex,
+        hit.type === "atom" &&
+        hit.mesh === this.startAtom &&
+        (hit.thinInstanceIndex ?? -1) === this.startAtomIndex,
     );
 
     if (hit && hit.type === "atom" && hit.mesh && !samePickedAtom) {

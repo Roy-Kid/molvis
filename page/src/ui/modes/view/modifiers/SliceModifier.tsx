@@ -3,7 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { SliceModifier as CoreSliceModifier, type Molvis } from "@molvis/core";
+import type { SliceModifier as CoreSliceModifier, Molvis } from "@molvis/core";
 import { RotateCcw } from "lucide-react";
 import type React from "react";
 

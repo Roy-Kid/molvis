@@ -31,6 +31,14 @@ export class StyleManager {
     this.globalBondRadiusScale = scale;
   }
 
+  public getAtomRadiusScale(): number {
+    return this.globalAtomRadiusScale;
+  }
+
+  public getBondRadiusScale(): number {
+    return this.globalBondRadiusScale;
+  }
+
   public getTheme(): Theme {
     return this.currentTheme;
   }

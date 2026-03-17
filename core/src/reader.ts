@@ -1,6 +1,11 @@
-import { Frame, LammpsReader, PdbReader, XyzReader } from "@molcrafts/molrs";
-import { logger } from "./utils/logger";
+import {
+  type Frame,
+  LammpsReader,
+  PdbReader,
+  XyzReader,
+} from "@molcrafts/molrs";
 import { PeriodicTable } from "./system/elements";
+import { logger } from "./utils/logger";
 
 export function readPDBFrame(content: string): Frame {
   const reader = new PdbReader(content);
@@ -173,7 +178,9 @@ export class TrajectoryReader {
 
   readFrame(index: number): Frame {
     if (index < 0 || index >= this.frameCount) {
-      throw new Error(`Frame index ${index} out of range [0, ${this.frameCount})`);
+      throw new Error(
+        `Frame index ${index} out of range [0, ${this.frameCount})`,
+      );
     }
 
     const frame = this.reader.read(index);

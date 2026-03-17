@@ -428,7 +428,10 @@ abstract class BaseMode {
     const pointerY = this._hoverPointerY;
     this._hoverPickDirty = false;
 
-    if (pointerX === this._hoverLastPickedX && pointerY === this._hoverLastPickedY) {
+    if (
+      pointerX === this._hoverLastPickedX &&
+      pointerY === this._hoverLastPickedY
+    ) {
       return;
     }
 

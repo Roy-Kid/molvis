@@ -10,16 +10,16 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import { Inspector } from "@babylonjs/inspector";
-import type { ModeManager } from "./mode";
-import { logger } from "./utils/logger";
 import type { MolvisApp } from "./app";
 import { AxisHelper } from "./axis_helper";
 import { GridGround } from "./grid";
 import { Highlighter } from "./highlighter";
+import type { ModeManager } from "./mode";
 import { Picker } from "./picker";
 import { SceneIndex } from "./scene_index";
 import { SelectionManager } from "./selection_manager";
 import { TargetIndicator } from "./target_indicator";
+import { logger } from "./utils/logger";
 import { ViewportSettings } from "./viewport_settings";
 
 export class World {
@@ -128,7 +128,6 @@ export class World {
 
     this._scene = scene;
     this._camera = camera;
-
   }
 
   public get scene(): Scene {

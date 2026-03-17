@@ -90,9 +90,18 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     return null;
   }
 
-  const showViewPanel = requireValue(state.ui.showViewPanel, "ui.showViewPanel");
-  const showPerfPanel = requireValue(state.ui.showPerfPanel, "ui.showPerfPanel");
-  const showTrajPanel = requireValue(state.ui.showTrajPanel, "ui.showTrajPanel");
+  const showViewPanel = requireValue(
+    state.ui.showViewPanel,
+    "ui.showViewPanel",
+  );
+  const showPerfPanel = requireValue(
+    state.ui.showPerfPanel,
+    "ui.showPerfPanel",
+  );
+  const showTrajPanel = requireValue(
+    state.ui.showTrajPanel,
+    "ui.showTrajPanel",
+  );
   const gridEnabled = requireValue(state.grid.enabled, "grid.enabled");
   const gridOpacity = requireValue(state.grid.opacity, "grid.opacity");
   const gridSize = requireValue(state.grid.size, "grid.size");

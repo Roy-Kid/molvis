@@ -1,8 +1,8 @@
-import { DataSourceModifier } from "./data_source_modifier";
-import { SliceModifier } from "../modifiers/SliceModifier";
-import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
+import { SliceModifier } from "../modifiers/SliceModifier";
+import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
+import { DataSourceModifier } from "./data_source_modifier";
 import type { Modifier } from "./modifier";
 
 // Type for a modifier factory function

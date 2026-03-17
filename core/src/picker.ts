@@ -6,8 +6,8 @@ import {
   type Scene,
   ShaderMaterial,
 } from "@babylonjs/core";
-import type { HitResult } from "./mode/types";
 import type { MolvisApp } from "./app";
+import type { HitResult } from "./mode/types";
 
 /**
  * ID Encoder/Decoder Constants
@@ -115,10 +115,7 @@ class IdPassPickerBackend implements PickerBackend {
       this.renderPickingScene();
 
       // Coordinates are already normalized by the coordinator.
-      const glX = Math.min(
-        texWidth - 1,
-        Math.max(0, Math.floor(point.x)),
-      );
+      const glX = Math.min(texWidth - 1, Math.max(0, Math.floor(point.x)));
       const glY = Math.min(
         texHeight - 1,
         Math.max(0, texHeight - Math.floor(point.y) - 1),
@@ -130,12 +127,7 @@ class IdPassPickerBackend implements PickerBackend {
         engine.bindFramebuffer(rttWrapper);
       }
 
-      const buffer = await engine.readPixels(
-        glX,
-        glY,
-        1,
-        1,
-      );
+      const buffer = await engine.readPixels(glX, glY, 1, 1);
 
       if (rttWrapper) {
         engine.unBindFramebuffer(rttWrapper);

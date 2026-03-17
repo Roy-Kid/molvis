@@ -1,6 +1,6 @@
 import type { Box, Frame } from "@molcrafts/molrs";
-import type { Trajectory } from "./system/trajectory";
 import type { ModeType } from "./mode/base";
+import type { Trajectory } from "./system/trajectory";
 
 /**
  * Typed event map for MolvisApp.events.
@@ -30,7 +30,10 @@ export type Listener<T = unknown> = (data: T) => void;
 export class EventEmitter<TMap = Record<string, unknown>> {
   private listeners = new Map<string, Set<Listener<unknown>>>();
 
-  public on<K extends string & keyof TMap>(event: K, listener: Listener<TMap[K]>): () => void {
+  public on<K extends string & keyof TMap>(
+    event: K,
+    listener: Listener<TMap[K]>,
+  ): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
@@ -39,7 +42,10 @@ export class EventEmitter<TMap = Record<string, unknown>> {
     return () => this.off(event, listener);
   }
 
-  public off<K extends string & keyof TMap>(event: K, listener: Listener<TMap[K]>): void {
+  public off<K extends string & keyof TMap>(
+    event: K,
+    listener: Listener<TMap[K]>,
+  ): void {
     const listeners = this.listeners.get(event);
     if (listeners) {
       listeners.delete(listener as Listener<unknown>);

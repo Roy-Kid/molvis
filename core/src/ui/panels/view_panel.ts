@@ -227,7 +227,9 @@ export class ViewPanel implements GUIComponent {
       return true;
     }
 
-    const menu = document.createElement("molvis-context-menu") as MolvisContextMenu;
+    const menu = document.createElement(
+      "molvis-context-menu",
+    ) as MolvisContextMenu;
     menu.id = ViewPanel.MENU_ID;
     this.app.uiContainer.appendChild(menu);
     this.menu = menu;
@@ -324,9 +326,11 @@ export class ViewPanel implements GUIComponent {
     container.appendChild(this.element);
 
     // Update display when camera changes
-    this.cameraObserver = this.app.world.scene.onBeforeRenderObservable.add(() => {
-      this.updateDisplay();
-    });
+    this.cameraObserver = this.app.world.scene.onBeforeRenderObservable.add(
+      () => {
+        this.updateDisplay();
+      },
+    );
   }
 
   public unmount(): void {

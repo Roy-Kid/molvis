@@ -8,7 +8,8 @@ import type { Mesh, Scene } from "@babylonjs/core";
 export class TargetIndicator {
   private mesh: Mesh | null = null;
   private scene: Scene;
-  private fadeTimeout: NodeJS.Timeout | null = null;
+  private fadeTimeout: ReturnType<typeof setTimeout> | null = null;
+  private fadeInterval: ReturnType<typeof setInterval> | null = null;
   private isVisible = false;
 
   constructor(scene: Scene) {
@@ -79,10 +80,9 @@ export class TargetIndicator {
     const mesh = this.mesh;
     let alpha = 1.0;
 
-    const fadeInterval = setInterval(() => {
+    this.fadeInterval = setInterval(() => {
       alpha -= 0.1;
       if (alpha <= 0) {
-        clearInterval(fadeInterval);
         this.hide();
       } else {
         if (mesh.visibility !== undefined) {
@@ -96,6 +96,11 @@ export class TargetIndicator {
    * Immediately hide the indicator
    */
   hide(): void {
+    if (this.fadeInterval) {
+      clearInterval(this.fadeInterval);
+      this.fadeInterval = null;
+    }
+
     if (this.fadeTimeout) {
       clearTimeout(this.fadeTimeout);
       this.fadeTimeout = null;

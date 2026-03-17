@@ -27,7 +27,7 @@ export interface BindingOption {
 }
 
 export interface BindingConfig {
-  view?: "list" | "checkbox";
+  view?: "list" | "checkbox" | "slider";
   label?: string;
   value: string | number | boolean;
   options?: BindingOption[];

@@ -34,9 +34,7 @@ export class Trajectory {
 
     this._currentIndex = 0;
     if (this._length > 0) {
-      logger.info(
-        `[Trajectory] Initialized with ${this._length} frames`,
-      );
+      logger.info(`[Trajectory] Initialized with ${this._length} frames`);
     }
   }
 
@@ -44,7 +42,10 @@ export class Trajectory {
    * Create a Trajectory backed by a lazy FrameProvider.
    * Frames are loaded on demand instead of all at once.
    */
-  static fromProvider(provider: FrameProvider, boxes: (Box | undefined)[] = []): Trajectory {
+  static fromProvider(
+    provider: FrameProvider,
+    boxes: (Box | undefined)[] = [],
+  ): Trajectory {
     const traj = new Trajectory([], boxes);
     traj._provider = provider;
     traj._length = provider.length;
@@ -86,7 +87,10 @@ export class Trajectory {
     if (this._length === 0) {
       return undefined;
     }
-    return this._boxes[this._currentIndex] ?? this._getFrame(this._currentIndex)?.simbox;
+    return (
+      this._boxes[this._currentIndex] ??
+      this._getFrame(this._currentIndex)?.simbox
+    );
   }
 
   /**
@@ -118,10 +122,7 @@ export class Trajectory {
    * Returns true if the index changed.
    */
   next(): boolean {
-    if (
-      this._length === 0 ||
-      this._currentIndex >= this._length - 1
-    ) {
+    if (this._length === 0 || this._currentIndex >= this._length - 1) {
       return false;
     }
     this._currentIndex++;

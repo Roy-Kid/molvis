@@ -1,8 +1,8 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
-import type { MolvisApp as Molvis } from "../app";
 import { type Block, Frame } from "@molcrafts/molrs";
-import { syncSceneToFrame } from "../scene_sync";
+import type { MolvisApp as Molvis } from "../app";
 import { DrawFrameCommand } from "../commands/draw";
+import { syncSceneToFrame } from "../scene_sync";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
@@ -329,7 +329,9 @@ class ManipulateMode extends BaseMode {
 
     this.isDragging = true;
 
-    const newPosition = this.projectPointerOnScreenPlane(this.dragStartPosition);
+    const newPosition = this.projectPointerOnScreenPlane(
+      this.dragStartPosition,
+    );
     if (!newPosition) return;
 
     this.moveAtom(this.draggedAtomId, newPosition);

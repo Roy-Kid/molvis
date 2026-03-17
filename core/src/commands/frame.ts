@@ -160,6 +160,14 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       throw new Error("Atom state not found or mismatched mesh in SceneIndex");
     }
 
+    // Guard: frame atom count must match the frame segment [0..frameOffset)
+    // to prevent writing into the edit segment.
+    if (count !== atomState.frameOffset) {
+      throw new Error(
+        `Frame atom count (${count}) does not match frameOffset (${atomState.frameOffset}). Cannot safely update buffers without overwriting edit data.`,
+      );
+    }
+
     // Get buffer from ImpostorState
     const matrixDesc = atomState.buffers.get("matrix");
     if (!matrixDesc) throw new Error("Matrix buffer missing in AtomState");
@@ -170,12 +178,15 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       // But UpdateFrameCommand usually assumes topology matches.
       // If count is same, length should be sufficient if ImpostorState was init correctly.
       // But if ImpostorState was grown for Edits, it's fine.
-      throw new Error(`Matrix buffer too small: ${matrixBuffer.length} < ${count * 16}`);
+      throw new Error(
+        `Matrix buffer too small: ${matrixBuffer.length} < ${count * 16}`,
+      );
     }
 
     // InstanceData
     const instanceDataDesc = atomState.buffers.get("instanceData");
-    if (!instanceDataDesc) throw new Error("InstanceData buffer missing in AtomState");
+    if (!instanceDataDesc)
+      throw new Error("InstanceData buffer missing in AtomState");
     const instanceDataBuffer = instanceDataDesc.data;
 
     const styleManager = this.app.styleManager;
@@ -217,7 +228,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     }
 
     // Notify ImpostorState that we modified the data?
-    // ImpostorState.updateMulti? Use setFrameDataAndFlush? 
+    // ImpostorState.updateMulti? Use setFrameDataAndFlush?
     // Simply calling thinInstanceBufferUpdated on mesh is enough IF we modified the array it uses.
     // Babylon's ThinInstanceSetBuffer uses the array reference if not static?
     // Wait, ImpostorState calls `thinInstanceSetBuffer(..., true)`.
@@ -337,8 +348,14 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     mesh.thinInstanceRefreshBoundingInfo(true);
   }
 
+  /**
+   * UpdateFrameCommand is not reversible — it is used for transient trajectory
+   * playback and is never pushed to the CommandManager history stack.
+   */
   undo(): Command {
-    return this;
+    throw new Error(
+      "UpdateFrameCommand is not reversible. It should not be pushed to command history.",
+    );
   }
 }
 
@@ -395,6 +412,11 @@ export class ExportFrameCommand extends Command<{
               : undefined,
         };
       }
+    }
+
+    // Free the temporary WASM Frame to prevent memory leaks
+    if (typeof (tempFrame as { free?: () => void }).free === "function") {
+      (tempFrame as { free: () => void }).free();
     }
 
     return { frameData: { blocks, metadata: {} } };

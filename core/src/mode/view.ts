@@ -1,13 +1,10 @@
 import { type PointerInfo, Vector3 } from "@babylonjs/core";
 import type { MolvisApp } from "../app";
+import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { HitResult, MenuItem } from "./types";
-import { UpdateFrameCommand } from "../commands/frame";
-import { DrawBoxCommand, DrawFrameCommand } from "../commands/draw";
-import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
-import { logger } from "../utils/logger";
 
 /**
  * Context menu controller for View mode.
@@ -55,13 +52,51 @@ class ViewModeContextMenu extends ContextMenuController {
       },
     });
 
+    const atomDiameterScale = this.mode.getAtomDiameterScale();
+    items.push({
+      type: "binding",
+      bindingConfig: {
+        view: "slider",
+        label: "Atom Diameter",
+        value: atomDiameterScale,
+        min: 0.2,
+        max: 2.0,
+        step: 0.02,
+      },
+      action: (ev) => {
+        if (typeof ev.value === "number") {
+          this.mode.setAtomDiameterScale(ev.value);
+        }
+      },
+    });
+
+    const bondDiameterScale = this.mode.getBondDiameterScale();
+    items.push({
+      type: "binding",
+      bindingConfig: {
+        view: "slider",
+        label: "Bond Diameter",
+        value: bondDiameterScale,
+        min: 0.2,
+        max: 2.0,
+        step: 0.02,
+      },
+      action: (ev) => {
+        if (typeof ev.value === "number") {
+          this.mode.setBondDiameterScale(ev.value);
+        }
+      },
+    });
+
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
 
 class ViewMode extends BaseMode {
+  private static readonly DOUBLE_CLICK_THRESHOLD_MS = 300;
+
   private lastClickTime = 0;
-  private doubleClickThreshold = 300; // ms
+  private _diameterRafId: number | null = null;
 
   constructor(app: MolvisApp) {
     super(ModeType.View, app);
@@ -83,6 +118,35 @@ class ViewMode extends BaseMode {
         this.app.world.grid.disable();
       }
     }
+  }
+
+  public getAtomDiameterScale(): number {
+    return this.app.styleManager.getAtomRadiusScale();
+  }
+
+  public getBondDiameterScale(): number {
+    return this.app.styleManager.getBondRadiusScale();
+  }
+
+  public setAtomDiameterScale(scale: number): void {
+    const clamped = Math.min(2.0, Math.max(0.2, scale));
+    this.app.styleManager.setAtomRadiusScale(clamped);
+    this.scheduleStyleRedraw();
+  }
+
+  public setBondDiameterScale(scale: number): void {
+    const clamped = Math.min(2.0, Math.max(0.2, scale));
+    this.app.styleManager.setBondRadiusScale(clamped);
+    this.scheduleStyleRedraw();
+  }
+
+  /** Debounce style redraws to at most one per animation frame. */
+  private scheduleStyleRedraw(): void {
+    if (this._diameterRafId !== null) return;
+    this._diameterRafId = requestAnimationFrame(() => {
+      this._diameterRafId = null;
+      this.app.renderFrame(this.app.system.frame, this.app.system.box);
+    });
   }
 
   public isPbcEnabled(): boolean {
@@ -132,16 +196,16 @@ class ViewMode extends BaseMode {
 
     // Invalidate highlights for mode switch (View uses thin instances)
     this.app.world.highlighter.invalidateAndRebuild();
-
-    // Listen for frame changes (both trajectory and frame changes)
-    this.app.events.on("frame-change", this.onFrameChange);
   }
 
   /**
    * Finish ViewMode - deactivate 3D scene helpers
    */
   public finish(): void {
-    this.app.events.off("frame-change", this.onFrameChange);
+    if (this._diameterRafId !== null) {
+      cancelAnimationFrame(this._diameterRafId);
+      this._diameterRafId = null;
+    }
     this.world.targetIndicator.hide();
 
     super.finish();
@@ -155,7 +219,7 @@ class ViewMode extends BaseMode {
     const timeSinceLastClick = now - this.lastClickTime;
 
     if (
-      timeSinceLastClick < this.doubleClickThreshold &&
+      timeSinceLastClick < ViewMode.DOUBLE_CLICK_THRESHOLD_MS &&
       pointerInfo.event.button === 0
     ) {
       // Left button only
@@ -209,84 +273,12 @@ class ViewMode extends BaseMode {
     await super._on_pointer_move(_pointerInfo);
   }
 
-  /**
-   * Handle frame change - stateless, always tries to update, falls back to redraw if needed
-   */
-  private onFrameChange = () => {
-    this.renderFrame();
-  };
-
   override _on_press_q(): void {
     this.app.prevFrame();
   }
 
   override _on_press_e(): void {
     this.app.nextFrame();
-  }
-
-  /**
-   * Unified frame rendering logic:
-   * 1. Try UpdateFrameCommand (fast, in-place buffer update)
-   * 2. If topology mismatch, use DrawFrameCommand (full rebuild)
-   */
-  private async renderFrame() {
-    const frame = this.app.system.frame;
-    const box = this.app.system.box;
-    const atomMesh = this.app.artist.atomMesh;
-
-    // Check if we can use UpdateFrameCommand
-    const canUpdate = this.canUpdateFrame(frame, atomMesh);
-
-    if (canUpdate) {
-      // Try fast update
-      const updateCmd = new UpdateFrameCommand(this.app, { frame });
-      const result = await updateCmd.do();
-
-      if (result.success) {
-        // Update box if needed
-        if (box) {
-          const drawBox = new DrawBoxCommand(this.app, { box });
-          drawBox.do();
-        }
-        return;
-      }
-
-      // Update failed, fall through to redraw
-      logger.warn(
-        `UpdateFrameCommand failed: ${result.reason}, using DrawFrameCommand`,
-      );
-    }
-
-    // Full redraw (topology changed or update failed)
-    const drawCmd = new DrawFrameCommand(this.app, { frame, box });
-    await drawCmd.do();
-  }
-
-  /**
-   * Check if current frame can be updated in-place (same topology)
-   */
-  private canUpdateFrame(frame: any, atomMesh: any): boolean {
-    if (!atomMesh) return false;
-
-    const currentAtomCount = atomMesh.thinInstanceCount;
-    if (currentAtomCount === 0) return false;
-
-    const frameAtoms = frame.getBlock("atoms");
-    if (!frameAtoms) return false;
-
-    const newAtomCount = frameAtoms.nrows();
-    if (currentAtomCount !== newAtomCount) return false;
-
-    // Check bond count
-    const bondMesh = this.app.artist.bondMesh;
-    if (bondMesh) {
-      const currentBondCount = bondMesh.thinInstanceCount;
-      const frameBonds = frame.getBlock("bonds");
-      const newBondCount = frameBonds ? frameBonds.nrows() : 0;
-      if (currentBondCount !== newBondCount) return false;
-    }
-
-    return true;
   }
 }
 

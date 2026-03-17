@@ -1,7 +1,7 @@
 import type { MolvisApp } from "../app";
 import type { MolvisConfig } from "../config";
-import type { Trajectory } from "../system/trajectory";
 import type { ModeType } from "../mode";
+import type { Trajectory } from "../system/trajectory";
 import { InfoPanel } from "./panels/info_panel";
 import { ModePanel } from "./panels/mode_panel";
 import { PerfPanel } from "./panels/perf_panel";
@@ -285,8 +285,10 @@ export class GUIManager {
   private updateTrajectoryPanelLayout(): void {
     if (!this.trajectoryPanel) return;
 
-    const width = this.app.canvas.clientWidth || this.uiOverlay?.clientWidth || 0;
-    const height = this.app.canvas.clientHeight || this.uiOverlay?.clientHeight || 0;
+    const width =
+      this.app.canvas.clientWidth || this.uiOverlay?.clientWidth || 0;
+    const height =
+      this.app.canvas.clientHeight || this.uiOverlay?.clientHeight || 0;
     this.trajectoryPanel.setViewportSize(width, height);
   }
 

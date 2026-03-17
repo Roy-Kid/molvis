@@ -1,9 +1,9 @@
 import type { Frame } from "@molcrafts/molrs";
-import { logger } from "../utils/logger";
-import type { Modifier } from "./modifier";
-import { createDefaultContext, type PipelineContext } from "./types";
 import type { MolvisApp } from "../app";
 import { EventEmitter } from "../events";
+import { logger } from "../utils/logger";
+import type { Modifier } from "./modifier";
+import { type PipelineContext, createDefaultContext } from "./types";
 
 /**
  * Frame source interface for loading frames.
@@ -16,9 +16,13 @@ export interface FrameSource {
 export interface PipelineEventMap {
   "modifier-added": { modifier: Modifier; index: number };
   "modifier-removed": { modifier: Modifier; index: number };
-  "modifier-reordered": { modifier: Modifier; oldIndex: number; newIndex: number };
+  "modifier-reordered": {
+    modifier: Modifier;
+    oldIndex: number;
+    newIndex: number;
+  };
   "pipeline-cleared": Record<string, never>;
-  "computed": { frame: Frame; context: PipelineContext };
+  computed: { frame: Frame; context: PipelineContext };
 }
 
 export const PipelineEvents = {
@@ -86,13 +90,15 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     return true;
   }
 
-
-
   /**
    * Compute the result of applying all modifiers to a frame.
    * This is a pure function - modifiers are stateless.
    */
-  async compute(source: FrameSource, frameIndex: number, app: MolvisApp): Promise<Frame> {
+  async compute(
+    source: FrameSource,
+    frameIndex: number,
+    app: MolvisApp,
+  ): Promise<Frame> {
     // Load initial frame
     let frame = await source.getFrame(frameIndex);
 

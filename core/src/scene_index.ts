@@ -92,7 +92,11 @@ export class ImpostorState {
     for (const [name, data] of buffers) {
       const desc = this.buffers.get(name);
       if (desc) {
-        desc.data.set(data.length <= desc.data.length ? data : data.subarray(0, desc.data.length));
+        desc.data.set(
+          data.length <= desc.data.length
+            ? data
+            : data.subarray(0, desc.data.length),
+        );
       }
     }
 
@@ -433,18 +437,20 @@ export class SceneIndex {
     const atomState = this.meshRegistry.getAtomState();
     if (atomState && atomState.mesh.uniqueId === meshId) {
       if (subIndex === undefined) return null;
-      const id = subIndex >= atomState.frameOffset
-        ? atomState.getIdByIndex(subIndex)
-        : subIndex;
+      const id =
+        subIndex >= atomState.frameOffset
+          ? atomState.getIdByIndex(subIndex)
+          : subIndex;
       return id === undefined ? null : this.metaRegistry.atoms.getMeta(id);
     }
 
     const bondState = this.meshRegistry.getBondState();
     if (bondState && bondState.mesh.uniqueId === meshId) {
       if (subIndex === undefined) return null;
-      const id = subIndex >= bondState.frameOffset
-        ? bondState.getIdByIndex(subIndex)
-        : subIndex;
+      const id =
+        subIndex >= bondState.frameOffset
+          ? bondState.getIdByIndex(subIndex)
+          : subIndex;
       return id === undefined ? null : this.metaRegistry.bonds.getMeta(id);
     }
 
@@ -461,7 +467,10 @@ export class SceneIndex {
 
     const editIndex = atomState.idToIndex.get(atomId);
     if (editIndex !== undefined) {
-      return makeSelectionKey(atomState.mesh.uniqueId, atomState.frameOffset + editIndex);
+      return makeSelectionKey(
+        atomState.mesh.uniqueId,
+        atomState.frameOffset + editIndex,
+      );
     }
     if (atomId < atomState.frameOffset) {
       return makeSelectionKey(atomState.mesh.uniqueId, atomId);
@@ -758,5 +767,4 @@ export class SceneIndex {
     }
     return undefined;
   }
-
 }

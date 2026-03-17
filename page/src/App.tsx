@@ -12,6 +12,7 @@ import type { Molvis } from "@molvis/core";
 import type React from "react";
 import { useState } from "react";
 import MolvisWrapper from "./MolvisWrapper";
+import { LeftSidebar } from "./ui/layout/LeftSidebar";
 import { RightSidebar } from "./ui/layout/RightSidebar";
 import { TopBar } from "./ui/layout/TopBar";
 
@@ -40,26 +41,40 @@ const App: React.FC = () => {
         className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden"
         onContextMenu={(e) => e.preventDefault()}
       >
-        <TopBar
-          app={app}
-          currentMode={currentMode}
-          onModeChange={handleModeSwitch}
-        />
+        <TopBar app={app} currentMode={currentMode} />
 
-        {/* Main Layout */}
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-          {/* Center Area: Viewport + Timeline */}
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="flex-1"
+          defaultLayout={{ left: 0, canvas: 74, right: 26 }}
+          resizeTargetMinimumSize={{ fine: 20, coarse: 36 }}
+        >
           <ResizablePanel
-            defaultSize={75}
-            className="flex flex-col min-w-[300px]"
+            id="left"
+            defaultSize="0%"
+            collapsible={true}
+            collapsedSize="0%"
+            minSize="14%"
+            maxSize="38%"
+            className="bg-background flex flex-col min-w-0"
+          >
+            <LeftSidebar app={app} />
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          <ResizablePanel
+            id="canvas"
+            defaultSize="74%"
+            minSize="35%"
+            className="flex flex-col min-w-[360px]"
           >
             <div className="flex-1 relative bg-muted/20 overflow-hidden">
               <MolvisWrapper onMount={setApp} />
             </div>
 
-            {/* Timeline Control Bar - Only show if multiple frames */}
             {app && trajectoryLength > 1 && (
-              <div className="h-14 border-t bg-muted/20 shrink-0 z-10">
+              <div className="h-12 border-t bg-muted/20 shrink-0 z-10">
                 <TimelineControl app={app} totalFrames={trajectoryLength} />
               </div>
             )}
@@ -67,22 +82,25 @@ const App: React.FC = () => {
 
           <ResizableHandle withHandle />
 
-          {/* Right Panel: Context Sensitive */}
           <ResizablePanel
-            defaultSize={25}
-            minSize={10}
-            maxSize={50}
+            id="right"
+            defaultSize="26%"
+            minSize="15%"
+            maxSize="40%"
             collapsible={true}
-            collapsedSize={0}
+            collapsedSize="0%"
             className="bg-background flex flex-col min-w-0"
           >
-            <RightSidebar app={app} currentMode={currentMode} />
+            <RightSidebar
+              app={app}
+              currentMode={currentMode}
+              onModeChange={handleModeSwitch}
+            />
           </ResizablePanel>
         </ResizablePanelGroup>
 
-        {/* Bottom Status Bar */}
         <div
-          className={`h-6 border-t bg-muted/60 flex items-center px-2 text-[10px] shrink-0 ${statusType === "error" ? "text-red-500 font-bold bg-red-100/10" : "text-muted-foreground"}`}
+          className={`h-5 border-t bg-muted/60 flex items-center px-2 text-[10px] shrink-0 ${statusType === "error" ? "text-red-500 font-bold bg-red-100/10" : "text-muted-foreground"}`}
         >
           {statusMessage}
         </div>

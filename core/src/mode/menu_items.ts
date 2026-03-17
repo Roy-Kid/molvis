@@ -1,7 +1,7 @@
 import type { MolvisApp } from "../app";
 import { inferFormatFromFilename } from "../reader";
-import { exportFrame } from "../writer";
 import { logger } from "../utils/logger";
+import { exportFrame } from "../writer";
 import type { MenuItem } from "./types";
 
 /**
@@ -39,7 +39,10 @@ export class CommonMenuItems {
         try {
           const suggestedName = "molvis.pdb";
           const format = inferFormatFromFilename(suggestedName, "pdb");
-          const payload = exportFrame(app.world.sceneIndex, { format, filename: suggestedName });
+          const payload = exportFrame(app.world.sceneIndex, {
+            format,
+            filename: suggestedName,
+          });
           const blob = new Blob([payload.content], { type: payload.mime });
           await app.saveFile(blob, payload.suggestedName);
         } catch (err) {

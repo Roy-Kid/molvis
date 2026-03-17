@@ -17,9 +17,13 @@ import {
 } from "@molvis/core";
 import { Plus } from "lucide-react";
 import React, { useEffect, useState } from "react";
+import type { SelectionSnapshot } from "./useSelectionSnapshot";
 
 interface InspectorTabProps {
   app: Molvis | null;
+  compact?: boolean;
+  /** If provided, skips internal subscription and uses parent snapshot. */
+  snapshot?: SelectionSnapshot;
 }
 
 const COMMON_ELEMENTS = [
@@ -50,99 +54,108 @@ const COMMON_ELEMENTS = [
   "I",
 ];
 
-export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
-  const [selection, setSelection] = useState<SelectionState>({
+export const InspectorTab: React.FC<InspectorTabProps> = ({
+  app,
+  compact = false,
+  snapshot: externalSnapshot,
+}) => {
+  // Use external snapshot if provided; otherwise maintain own subscription
+  const [internalSelection, setInternalSelection] = useState<SelectionState>({
     atoms: new Set(),
     bonds: new Set(),
   });
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-
-  // New Attribute Inputs
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
 
   useEffect(() => {
-    if (!app) return;
+    // Skip internal subscription when snapshot is provided by parent
+    if (externalSnapshot || !app) return;
 
     const manager = app.world.selectionManager;
     if (!manager) return;
 
-    // Initial state
-    setSelection({ ...manager.getState() });
+    const state = manager.getState();
+    setInternalSelection(state);
 
-    // Subscribe
     const handler = (state: SelectionState) => {
-      setSelection({
+      setInternalSelection({
         atoms: new Set(state.atoms),
         bonds: new Set(state.bonds),
       });
     };
 
-    const unsub = manager.on("selection-change", handler);
-    return unsub;
-  }, [app]);
+    return manager.on("selection-change", handler);
+  }, [app, externalSnapshot]);
 
-  // Derived Selection Data
+  // Derive effective selection: from external snapshot or internal state
+  const selection = React.useMemo<SelectionState>(() => {
+    if (externalSnapshot) {
+      // Reconstruct SelectionState-like object from snapshot's atomIds
+      // For display purposes we only need atom count / bond count
+      return {
+        atoms: new Set(
+          externalSnapshot.atomIds.map((id) => {
+            const key = app?.world.sceneIndex.getSelectionKeyForAtom(id);
+            return key ?? String(id);
+          }),
+        ),
+        bonds: new Set<string>(),
+      };
+    }
+    return internalSelection;
+  }, [externalSnapshot, internalSelection, app]);
+
   const atomIds = React.useMemo(() => {
+    if (externalSnapshot) return externalSnapshot.atomIds;
     if (!app) return [];
-    const ids: number[] = [];
+    const ids = new Set<number>();
     for (const key of selection.atoms) {
       const ref = parseSelectionKey(key);
-      // Verify it's an atom from primary scene (mesh 0 for now)
-      if (ref) {
-        const meta = app.world.sceneIndex.getMeta(ref.meshId, ref.subIndex);
-        if (meta && meta.type === "atom") {
-          ids.push(meta.atomId);
-        }
+      if (!ref) continue;
+      const meta = app.world.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+      if (meta?.type === "atom") {
+        ids.add(meta.atomId);
       }
     }
-    return ids;
-  }, [selection, app]);
+    return [...ids];
+  }, [selection, app, externalSnapshot]);
 
-  // Collect Attributes
   const attributes = React.useMemo(() => {
     if (!app || atomIds.length === 0) return {};
 
     const attrs: Record<string, { value: unknown; mixed: boolean }> = {};
     const allKeys = new Set<string>();
 
-    // 1. Gather keys
-    allKeys.add("element"); // Always show
+    allKeys.add("element");
     for (const id of atomIds) {
       const registry = app.world.sceneIndex.metaRegistry;
-      if (registry) {
-        const edit = registry.atoms.edits.get(id);
-        if (edit) {
-          for (const k of Object.keys(edit)) {
-            if (k !== "type" && k !== "atomId" && k !== "position") {
-              allKeys.add(k);
-            }
-          }
+      const edit = registry?.atoms.edits.get(id);
+      if (!edit) continue;
+      for (const key of Object.keys(edit)) {
+        if (key !== "type" && key !== "atomId" && key !== "position") {
+          allKeys.add(key);
         }
       }
     }
 
-    // 2. Determine values
     for (const key of allKeys) {
-      let commonVal: unknown = undefined;
+      let commonValue: unknown = undefined;
       let mixed = false;
 
-      // Re-verify mixed status properly
-      if (atomIds.length > 0) {
-        const val0 = app.world.sceneIndex.getAttribute("atom", atomIds[0], key);
-        for (let i = 1; i < atomIds.length; i++) {
-          if (
-            app.world.sceneIndex.getAttribute("atom", atomIds[i], key) !== val0
-          ) {
-            mixed = true;
-            break;
-          }
+      const first = app.world.sceneIndex.getAttribute("atom", atomIds[0], key);
+      for (let i = 1; i < atomIds.length; i++) {
+        if (
+          app.world.sceneIndex.getAttribute("atom", atomIds[i], key) !== first
+        ) {
+          mixed = true;
+          break;
         }
-        commonVal = val0;
       }
+      commonValue = first;
 
       attrs[key] = {
-        value: mixed ? undefined : commonVal,
+        value: mixed ? undefined : commonValue,
         mixed,
       };
     }
@@ -162,21 +175,21 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
   }, [attributes]);
 
   const handleUpdate = (key: string, value: string) => {
-    if (!app) return;
+    if (!app || atomIds.length === 0) return;
 
-    // Auto convert number if it looks like one
-    let finalVal: unknown = value;
-    const num = Number(value);
-    if (!Number.isNaN(num) && value.trim() !== "") {
-      finalVal = num;
+    let finalValue: unknown = value;
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && value.trim() !== "") {
+      finalValue = numeric;
     }
 
     app.execute("set_attribute", {
       type: "atom",
       ids: atomIds,
       key,
-      value: finalVal,
+      value: finalValue,
     });
+
     setSelection((prev) => ({
       atoms: new Set(prev.atoms),
       bonds: new Set(prev.bonds),
@@ -205,159 +218,130 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({ app }) => {
 
   if (selection.atoms.size === 0 && selection.bonds.size === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm p-4 text-center select-none">
-        <div className="mb-2 rounded-full bg-muted/20 p-3">
-          <svg
-            className=" w-6 h-6 text-muted-foreground/50"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <title>No selection</title>
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-            />
-          </svg>
-        </div>
-        <p>No selection</p>
-        <p className="text-xs mt-1 opacity-50">Select atoms to inspect</p>
+      <div
+        className={cn(
+          "rounded border bg-muted/10 text-muted-foreground text-center",
+          compact ? "p-2 text-[11px]" : "p-4 text-sm",
+        )}
+      >
+        No selection. Select atoms to inspect and edit attributes.
       </div>
     );
   }
 
-  return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-2 border-b">
-          <div>
-            <h3 className="text-sm font-semibold leading-none">
-              Selection Inspector
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1.5">
-              {selection.atoms.size} atom{selection.atoms.size !== 1 ? "s" : ""}
-              , {selection.bonds.size} bond
-              {selection.bonds.size !== 1 ? "s" : ""}
-            </p>
+  const content = (
+    <div className={cn("space-y-3", compact ? "p-0" : "p-4")}>
+      <div className="rounded border bg-muted/10 px-2 py-1 text-[11px] text-muted-foreground">
+        {selection.atoms.size} atom{selection.atoms.size !== 1 ? "s" : ""},{" "}
+        {selection.bonds.size} bond{selection.bonds.size !== 1 ? "s" : ""}
+      </div>
+
+      {atomIds.length > 0 && (
+        <div className="space-y-2">
+          <div className="grid gap-2">
+            {Object.entries(attributes).map(([key, info]) => {
+              const isElement = key === "element";
+              return (
+                <div
+                  key={key}
+                  className="grid grid-cols-[78px_1fr] items-center gap-2"
+                >
+                  <Label
+                    className={cn(
+                      "text-[11px] truncate text-muted-foreground",
+                      isElement && "text-foreground font-semibold",
+                    )}
+                    title={key}
+                  >
+                    {key}
+                  </Label>
+
+                  {isElement ? (
+                    <Select
+                      value={info.mixed ? "" : (info.value as string)}
+                      onValueChange={(value) => handleUpdate(key, value)}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-full" size="sm">
+                        <SelectValue
+                          placeholder={
+                            info.mixed ? "<multiple>" : "Select element"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COMMON_ELEMENTS.map((element) => (
+                          <SelectItem
+                            key={element}
+                            value={element}
+                            className="text-xs"
+                          >
+                            {element}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      className="h-7 text-xs font-mono bg-transparent"
+                      value={draftValues[key] ?? ""}
+                      placeholder={info.mixed ? "<mixed>" : "Value"}
+                      onChange={(event) =>
+                        setDraftValues((prev) => ({
+                          ...prev,
+                          [key]: event.target.value,
+                        }))
+                      }
+                      onBlur={() => commitAttribute(key, info)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitAttribute(key, info);
+                          (event.currentTarget as HTMLInputElement).blur();
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded border bg-background px-1.5 py-1 flex items-center gap-1">
+            <Input
+              className="h-6 text-[11px] border-0 shadow-none focus-visible:ring-0 px-1.5"
+              placeholder="property"
+              value={newKey}
+              onChange={(event) => setNewKey(event.target.value)}
+            />
+            <Input
+              className="h-6 text-[11px] border-0 shadow-none focus-visible:ring-0 px-1.5"
+              placeholder="value"
+              value={newValue}
+              onChange={(event) => setNewValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  handleAdd();
+                }
+              }}
+            />
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={handleAdd}
+              disabled={!newKey.trim()}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
           </div>
         </div>
-
-        {/* Attributes List */}
-        {atomIds.length > 0 && (
-          <div className="space-y-4">
-            <div className="grid gap-4">
-              {Object.entries(attributes).map(([key, info]) => {
-                const isElement = key === "element";
-
-                return (
-                  <div
-                    key={key}
-                    className="grid grid-cols-[80px_1fr] items-center gap-3"
-                  >
-                    <Label
-                      className={cn(
-                        "text-xs font-medium truncate text-muted-foreground",
-                        isElement && "text-foreground font-semibold",
-                      )}
-                      title={key}
-                    >
-                      {key}
-                    </Label>
-
-                    {isElement ? (
-                      <Select
-                        value={info.mixed ? "" : (info.value as string)}
-                        onValueChange={(val) => handleUpdate(key, val)}
-                      >
-                        <SelectTrigger className="h-8 text-xs w-full">
-                          <SelectValue
-                            placeholder={
-                              info.mixed ? "<Multiple>" : "Select element"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COMMON_ELEMENTS.map((el) => (
-                            <SelectItem key={el} value={el} className="text-xs">
-                              {el}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="relative group">
-                        <Input
-                          className="h-8 text-xs font-mono bg-transparent hover:bg-muted/10 focus:bg-background transition-colors pr-7"
-                          value={draftValues[key] ?? ""}
-                          placeholder={info.mixed ? "<mixed>" : "Value"}
-                          onChange={(e) =>
-                            setDraftValues((prev) => ({
-                              ...prev,
-                              [key]: e.target.value,
-                            }))
-                          }
-                          onBlur={() => commitAttribute(key, info)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              commitAttribute(key, info);
-                              (e.currentTarget as HTMLInputElement).blur();
-                            }
-                          }}
-                        />
-                        {/* Optional: delete button for custom attributes could go here */}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Compact Add Attribute */}
-        {atomIds.length > 0 && (
-          <div className="pt-4 border-t">
-            <div className="text-xs font-medium text-muted-foreground mb-3 px-1">
-              Add Property
-            </div>
-            <div className="flex items-center gap-2 bg-muted/10 p-1.5 rounded-md border border-transparent focus-within:border-ring/20 focus-within:bg-muted/20 transition-all">
-              <Input
-                className="h-7 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-2 min-w-0"
-                placeholder="Name"
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-              />
-              <div className="w-[1px] h-4 bg-border shrink-0" />
-              <Input
-                className="h-7 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 px-2 min-w-0"
-                placeholder="Value"
-                value={newValue}
-                onChange={(e) => setNewValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              />
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 shrink-0 hover:bg-primary hover:text-primary-foreground rounded-sm"
-                onClick={handleAdd}
-                disabled={!newKey.trim()}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </ScrollArea>
+      )}
+    </div>
   );
+
+  if (compact) {
+    return content;
+  }
+
+  return <ScrollArea className="h-full">{content}</ScrollArea>;
 };

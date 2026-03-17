@@ -1,16 +1,16 @@
 import {
   DataSourceModifier as CoreDataSourceModifier,
-  SliceModifier as CoreSliceModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   HideSelectionModifier as CoreHideModifier,
+  SliceModifier as CoreSliceModifier,
   type Modifier,
   type Molvis,
 } from "@molvis/core";
-import { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 import type React from "react";
 import { DataSourceModifier } from "./modifiers/DataSourceModifier";
-import { SliceModifier } from "./modifiers/SliceModifier";
 import { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
+import { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
+import { SliceModifier } from "./modifiers/SliceModifier";
 
 interface ModifierPropertiesProps {
   modifier: Modifier;
@@ -30,13 +30,29 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   );
 
   if (modifier instanceof CoreDataSourceModifier) {
-    content = <DataSourceModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+    content = (
+      <DataSourceModifier modifier={modifier} app={app} onUpdate={onUpdate} />
+    );
   } else if (modifier instanceof CoreSliceModifier) {
-    content = <SliceModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+    content = (
+      <SliceModifier modifier={modifier} app={app} onUpdate={onUpdate} />
+    );
   } else if (modifier instanceof CoreExpressionSelectionModifier) {
-    content = <ExpressionSelectionModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+    content = (
+      <ExpressionSelectionModifier
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
+    );
   } else if (modifier instanceof CoreHideModifier) {
-    content = <HideSelectionModifier modifier={modifier} app={app} onUpdate={onUpdate} />;
+    content = (
+      <HideSelectionModifier
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
+    );
   }
 
   return (

@@ -1,5 +1,8 @@
-import { HideSelectionModifier as CoreHideModifier, type Molvis } from "@molvis/core";
-import React from "react";
+import type {
+  HideSelectionModifier as CoreHideModifier,
+  Molvis,
+} from "@molvis/core";
+import type React from "react";
 
 interface ModifierProps {
   modifier: CoreHideModifier;

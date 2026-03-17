@@ -307,11 +307,10 @@ export class Settings {
       return;
     }
 
-    this.adaptiveCameraObserver = this.app.world.scene.onBeforeRenderObservable.add(
-      () => {
+    this.adaptiveCameraObserver =
+      this.app.world.scene.onBeforeRenderObservable.add(() => {
         this.applyAdaptiveCameraControl();
-      },
-    );
+      });
   }
 
   private applyAdaptiveCameraControl(): void {
@@ -329,7 +328,11 @@ export class Settings {
   }
 
   private getAdaptivePanFactor(): number {
-    const worldDistance = Math.max(this.camera.target.length(), this.camera.radius, 1);
+    const worldDistance = Math.max(
+      this.camera.target.length(),
+      this.camera.radius,
+      1,
+    );
     const normalized = worldDistance / this.adaptivePanDistanceRef;
     if (normalized <= 1) {
       return 1;
@@ -338,7 +341,11 @@ export class Settings {
   }
 
   private getAdaptiveZoomFactor(): number {
-    const worldDistance = Math.max(this.camera.target.length(), this.camera.radius, 1);
+    const worldDistance = Math.max(
+      this.camera.target.length(),
+      this.camera.radius,
+      1,
+    );
     const normalized = worldDistance / this.adaptiveZoomDistanceRef;
     if (normalized <= 1) {
       return 1;

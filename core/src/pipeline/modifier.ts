@@ -1,5 +1,9 @@
 import type { Frame } from "@molcrafts/molrs";
-import type { PipelineContext, ValidationResult, SelectionMask as SelectionMaskType } from "./types";
+import type {
+  PipelineContext,
+  SelectionMask as SelectionMaskType,
+  ValidationResult,
+} from "./types";
 import { SelectionMask } from "./types";
 
 /**

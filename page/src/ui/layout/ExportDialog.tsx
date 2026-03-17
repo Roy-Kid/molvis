@@ -9,7 +9,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type Molvis, exportFrame, inferFormatFromFilename } from "@molvis/core";
+import {
+  type Molvis,
+  exportFrame,
+  inferFormatFromFilename,
+} from "@molvis/core";
 import { Download, Loader2 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";

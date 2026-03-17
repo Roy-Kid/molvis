@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeEach } from "@rstest/core";
-import { SceneIndex } from "../src/core/scene_index";
-import { Block } from "@molcrafts/molrs";
-import { SelectionManager, makeSelectionKey } from "../src/core/selection_manager";
+import { SceneIndex } from "../src/scene_index";
+import { SelectionManager } from "../src/selection_manager";
 
 describe("Expression Selection", () => {
     let sceneIndex: SceneIndex;
