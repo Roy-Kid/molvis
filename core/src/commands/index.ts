@@ -28,6 +28,7 @@ export {
   ExportFrameCommand,
 } from "./frame";
 export { TakeSnapshotCommand } from "./snapshot";
+export { SetRepresentationCommand } from "./representation";
 
 export type { GetSelectedResponse } from "../selection_manager";
 
@@ -48,3 +49,4 @@ import "./selection";
 import "./frame";
 import "./snapshot";
 import "./attributes";
+import "./representation";

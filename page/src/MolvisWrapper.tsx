@@ -6,6 +6,7 @@ import {
   Trajectory,
   TrajectoryReader,
   defaultMolvisConfig,
+  inferFormatFromFilename,
   mountMolvis,
   readFrame,
 } from "@molvis/core";
@@ -194,6 +195,9 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
           }
           app.setTrajectory(new Trajectory(frames));
           reader.free();
+        } else if (inferFormatFromFilename(file.name) === "pdb") {
+          // PDB: use loadPdb to also build ribbon geometry
+          app.loadPdb(content);
         } else {
           const frame = readFrame(content, file.name);
           app.setTrajectory(new Trajectory([frame]));

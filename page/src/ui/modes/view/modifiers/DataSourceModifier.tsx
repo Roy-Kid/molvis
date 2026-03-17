@@ -7,6 +7,7 @@ import {
   type Molvis,
   Trajectory,
   ZarrReader,
+  inferFormatFromFilename,
   readFrame,
 } from "@molvis/core";
 import { FileUp, FolderUp, Trash2 } from "lucide-react";
@@ -37,13 +38,19 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
 
     try {
       const text = await file.text();
-      const frame = readFrame(text, file.name);
 
       modifier.sourceType = "file";
       modifier.filename = file.name;
-      modifier.setFrame(frame);
 
-      app.loadFrame(frame, frame.simbox);
+      if (inferFormatFromFilename(file.name) === "pdb") {
+        app.loadPdb(text);
+        const frame = app.system.frame;
+        if (frame) modifier.setFrame(frame);
+      } else {
+        const frame = readFrame(text, file.name);
+        modifier.setFrame(frame);
+        app.loadFrame(frame, frame.simbox);
+      }
       app.setMode("view");
       await app.applyPipeline({ fullRebuild: true });
       onUpdate();

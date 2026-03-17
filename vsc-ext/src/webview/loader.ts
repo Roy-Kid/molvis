@@ -14,6 +14,8 @@ export interface RuntimeLoadContext {
   setTrajectory: (trajectory: Trajectory) => void;
   setViewMode: () => void;
   resetCamera: () => void;
+  /** Load a PDB file using MolvisApp.loadPdb (builds ribbon geometry). */
+  loadPdb?: (pdbText: string) => void;
 }
 
 export interface RuntimeResources {
@@ -32,6 +34,10 @@ export function createRuntimeResources(): RuntimeResources {
 
 function isXYZFile(filename: string): boolean {
   return filename.toLowerCase().endsWith(".xyz");
+}
+
+function isPDBFile(filename: string): boolean {
+  return filename.toLowerCase().endsWith(".pdb");
 }
 
 function decodeBase64ToBytes(value: string): Uint8Array {
@@ -142,6 +148,15 @@ export function loadMolecularPayload(
 
   if (isXYZFile(filename)) {
     loadTrajectory(payload, context, resources);
+    return;
+  }
+
+  // PDB files: use loadPdb() to build ribbon geometry from HELIX/SHEET records
+  if (isPDBFile(filename) && context.loadPdb) {
+    freeRuntimeResources(resources);
+    context.loadPdb(payload);
+    context.setViewMode();
+    context.resetCamera();
     return;
   }
 

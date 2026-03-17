@@ -1,4 +1,5 @@
 import {
+  ColorByPropertyModifier as CoreColorByPropertyModifier,
   DataSourceModifier as CoreDataSourceModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   HideSelectionModifier as CoreHideModifier,
@@ -7,6 +8,7 @@ import {
   type Molvis,
 } from "@molvis/core";
 import type React from "react";
+import { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
 import { DataSourceModifier } from "./modifiers/DataSourceModifier";
 import { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
@@ -48,6 +50,14 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   } else if (modifier instanceof CoreHideModifier) {
     content = (
       <HideSelectionModifier
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
+    );
+  } else if (modifier instanceof CoreColorByPropertyModifier) {
+    content = (
+      <ColorByPropertyModifier
         modifier={modifier}
         app={app}
         onUpdate={onUpdate}

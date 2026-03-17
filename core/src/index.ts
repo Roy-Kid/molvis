@@ -87,8 +87,23 @@ export { DataSourceModifier } from "./pipeline/data_source_modifier";
 export { SliceModifier } from "./modifiers/SliceModifier";
 export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
+export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
+export type { ColormapName } from "./artist/colormaps";
+export { COLORMAP_NAMES } from "./artist/colormaps";
 
 export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
+
+export type { RepresentationStyle } from "./artist/representation";
+export {
+  REPRESENTATIONS,
+  BALL_AND_STICK,
+  SPACEFILL,
+  STICK,
+  WIREFRAME,
+  RIBBON,
+  RIBBON_AND_STICK,
+  findRepresentation,
+} from "./artist/representation";
 
 // Register default commands
 import "./commands";

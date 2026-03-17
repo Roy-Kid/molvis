@@ -1,3 +1,4 @@
+import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
@@ -51,6 +52,11 @@ export class ModifierRegistry {
       "Hide Selection",
       "Selection Sensitive",
       () => new HideSelectionModifier(),
+    );
+    ModifierRegistry.register(
+      "Color by Property",
+      "Selection Insensitive",
+      () => new ColorByPropertyModifier(),
     );
   }
 }

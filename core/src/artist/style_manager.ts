@@ -1,5 +1,6 @@
 import { Color3, type Scene, StandardMaterial } from "@babylonjs/core";
 import { ClassicTheme } from "./presets/classic";
+import { BALL_AND_STICK, type RepresentationStyle } from "./representation";
 import type { AtomStyle, BondStyle, Theme } from "./theme";
 
 export class StyleManager {
@@ -7,36 +8,48 @@ export class StyleManager {
   private scene: Scene;
   private materialCache: Map<string, StandardMaterial> = new Map();
 
-  private globalAtomRadiusScale = 0.6;
-  private globalBondRadiusScale = 0.6;
+  private _representation: RepresentationStyle = BALL_AND_STICK;
 
   constructor(scene: Scene) {
     this.scene = scene;
-    // Default to ClassicTheme for backward compatibility during init
     this.currentTheme = new ClassicTheme();
-    this.applyGlobalStyles();
   }
 
   public setTheme(theme: Theme) {
     this.currentTheme = theme;
-    this.materialCache.clear(); // Invalidate cache on theme change
-    this.applyGlobalStyles();
+    this.materialCache.clear();
+  }
+
+  public setRepresentation(repr: RepresentationStyle) {
+    this._representation = repr;
+  }
+
+  public getRepresentation(): RepresentationStyle {
+    return this._representation;
   }
 
   public setAtomRadiusScale(scale: number) {
-    this.globalAtomRadiusScale = scale;
+    this._representation = {
+      ...this._representation,
+      atomRadiusScale: scale,
+      name: "Custom",
+    };
   }
 
   public setBondRadiusScale(scale: number) {
-    this.globalBondRadiusScale = scale;
+    this._representation = {
+      ...this._representation,
+      bondRadiusScale: scale,
+      name: "Custom",
+    };
   }
 
   public getAtomRadiusScale(): number {
-    return this.globalAtomRadiusScale;
+    return this._representation.atomRadiusScale;
   }
 
   public getBondRadiusScale(): number {
-    return this.globalBondRadiusScale;
+    return this._representation.bondRadiusScale;
   }
 
   public getTheme(): Theme {
@@ -47,7 +60,7 @@ export class StyleManager {
     const style = this.currentTheme.getAtomStyle(element);
     return {
       ...style,
-      radius: style.radius * this.globalAtomRadiusScale,
+      radius: style.radius * this._representation.atomRadiusScale,
     };
   }
 
@@ -55,7 +68,7 @@ export class StyleManager {
     const style = this.currentTheme.getTypeStyle(type);
     return {
       ...style,
-      radius: style.radius * this.globalAtomRadiusScale,
+      radius: style.radius * this._representation.atomRadiusScale,
     };
   }
 
@@ -63,16 +76,14 @@ export class StyleManager {
     const style = this.currentTheme.getBondStyle(order);
     return {
       ...style,
-      radius: style.radius * this.globalBondRadiusScale,
+      radius: style.radius * this._representation.bondRadiusScale,
     };
   }
 
   public getAtomMaterial(element: string): StandardMaterial {
     const key = `atom_${element}_${this.currentTheme.name}`;
     const cached = this.materialCache.get(key);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
     const style = this.currentTheme.getAtomStyle(element);
     const mat = new StandardMaterial(key, this.scene);
@@ -101,9 +112,7 @@ export class StyleManager {
   public getBondMaterial(order: number): StandardMaterial {
     const key = `bond_${order}_${this.currentTheme.name}`;
     const cached = this.materialCache.get(key);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
     const style = this.currentTheme.getBondStyle(order);
     const mat = new StandardMaterial(key, this.scene);
@@ -128,22 +137,12 @@ export class StyleManager {
   public getBoxMaterial(): StandardMaterial {
     const key = `box_${this.currentTheme.name}`;
     const cached = this.materialCache.get(key);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
 
     const mat = new StandardMaterial(key, this.scene);
-    // mat.wireframe = true;
-    mat.diffuseColor = Color3.FromHexString(this.currentTheme.boxColor); // Re-use selection color for box for now
+    mat.diffuseColor = Color3.FromHexString(this.currentTheme.boxColor);
 
     this.materialCache.set(key, mat);
     return mat;
-  }
-
-  private applyGlobalStyles() {
-    // if (this.scene.clearColor) {
-    //     const bg = Color3.FromHexString(this.currentTheme.backgroundColor);
-    //     this.scene.clearColor = new Color4(bg.r, bg.g, bg.b, 1);
-    // }
   }
 }

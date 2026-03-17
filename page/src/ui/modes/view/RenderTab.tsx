@@ -1,9 +1,16 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import type { Molvis, MolvisConfig } from "@molvis/core";
+import { type Molvis, type MolvisConfig, REPRESENTATIONS } from "@molvis/core";
 import type React from "react";
 import { useEffect, useState } from "react";
 
@@ -19,6 +26,7 @@ interface RenderState {
   ui: UIState;
   grid: GridState;
   graphics: GraphicsState;
+  representationName: string;
 }
 
 function requireValue<T>(value: T | undefined, key: string): T {
@@ -41,6 +49,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       ui: { ...app.config.ui },
       grid: { ...app.settings.getGrid() },
       graphics: { ...app.settings.getGraphics() },
+      representationName: app.styleManager.getRepresentation().name,
     });
     setHasChanges(false);
   }, [app]);
@@ -115,8 +124,37 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     "graphics.hardwareScaling",
   );
 
+  const handleRepresentationChange = (name: string) => {
+    if (!app) return;
+    app.setRepresentation(name);
+    setState((prev) => (prev ? { ...prev, representationName: name } : prev));
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
+      <div className="space-y-2">
+        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+          Representation
+        </h4>
+        <Select
+          value={state.representationName}
+          onValueChange={handleRepresentationChange}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REPRESENTATIONS.map((r) => (
+              <SelectItem key={r.name} value={r.name}>
+                {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Separator />
+
       <div className="space-y-4">
         <h4 className="text-sm font-medium leading-none text-muted-foreground">
           User Interface

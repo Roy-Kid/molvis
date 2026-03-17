@@ -4,6 +4,7 @@ import { type CommandRegistry, commands } from "./commands";
 import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
 import { UpdateFrameCommand } from "./commands/frame";
 import { CommandManager } from "./commands/manager";
+import { SetRepresentationCommand } from "./commands/representation";
 import { ArrayFrameSource } from "./commands/sources";
 import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { EventEmitter, type MolvisEventMap } from "./events";
@@ -13,8 +14,10 @@ import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import type { FrameSource } from "./pipeline/pipeline";
 import { syncSceneToFrame } from "./scene_sync";
 import { type MolvisSetting, Settings } from "./settings";
-import { StyleManager } from "./style";
-import type { Theme } from "./style/theme";
+import { findRepresentation } from "./artist/representation";
+import { readPDBFrame } from "./reader";
+import { StyleManager } from "./artist/style_manager";
+import type { Theme } from "./artist/theme";
 import { System } from "./system";
 import {
   type FrameTransitionDecision,
@@ -485,9 +488,17 @@ export class MolvisApp {
 
   public setTheme(theme: Theme): void {
     this._styleManager.setTheme(theme);
-    // Request redraw if frame is loaded
     if (this._system.frame) {
       this.renderFrame(this._system.frame);
+    }
+  }
+
+  public setRepresentation(name: string): void {
+    const repr = findRepresentation(name);
+    if (repr) {
+      void this.commandManager.execute(
+        new SetRepresentationCommand(this, { style: repr }),
+      );
     }
   }
 
@@ -639,7 +650,7 @@ export class MolvisApp {
     const drawCmd = new DrawFrameCommand(this, { frame, box });
     await drawCmd.do();
     this.reconcileSelectionAfterStructuralUpdate(
-      decision.kind,
+      decision.kind as Exclude<FrameUpdateKind, "position">,
       selectionSnapshot,
     );
     this._lastRenderedFrame = frame;
@@ -676,10 +687,25 @@ export class MolvisApp {
    */
   public loadFrame(frame: Frame, box?: Box): void {
     this.artist.clear();
+    this.artist.ribbonRenderer.dispose();
     this.commandManager.clearHistory();
     this._lastRenderedFrame = null;
     this._system.setFrame(frame, box);
     this.renderFrame(frame, box);
+  }
+
+  /**
+   * Load a PDB file. Reads the frame AND builds ribbon geometry from
+   * backbone/secondary structure data (HELIX/SHEET records) if present.
+   */
+  public loadPdb(pdbText: string): void {
+    const frame = readPDBFrame(pdbText);
+    const box = frame.simbox;
+    this.loadFrame(frame, box);
+    // Build ribbon AFTER loadFrame (which clears old ribbon)
+    this.artist.ribbonRenderer.buildFromPdb(pdbText);
+    const repr = this._styleManager.getRepresentation();
+    this.artist.ribbonRenderer.setVisible(repr.showRibbon);
   }
 
   /**

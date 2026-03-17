@@ -1,4 +1,5 @@
 import { PeriodicTable } from "../../system/elements";
+import { hslColorFromString } from "../palette";
 import type { AtomStyle, BondStyle, Theme } from "../theme";
 
 const DEFAULT_CPK_COLORS: Record<string, string> = {
@@ -125,40 +126,22 @@ const DEFAULT_CPK_COLORS: Record<string, string> = {
 export class ClassicTheme implements Theme {
   public readonly name = "Classic";
 
-  public readonly backgroundColor = "#000000"; // Black background
-  public readonly selectionColor = "#FFB343"; // Yellow selection
-  public readonly defaultSpecular = "#4D4D4D"; // Standard specular
-  public readonly boxColor = "#FFFFFF"; // Box color
+  public readonly backgroundColor = "#000000";
+  public readonly selectionColor = "#FFB343";
+  public readonly defaultSpecular = "#4D4D4D";
+  public readonly boxColor = "#FFFFFF";
 
   public getAtomStyle(element: string): AtomStyle {
-    const color = DEFAULT_CPK_COLORS[element] || "#FF00FF"; // Magenta fallback
+    const color = DEFAULT_CPK_COLORS[element] || "#FF00FF";
     const radius = PeriodicTable[element]?.radius || 0.3;
-
-    return {
-      color,
-      radius,
-    };
+    return { color, radius };
   }
 
   public getTypeStyle(type: string): AtomStyle {
-    // Stable hash for type color
-    let hash = 0;
-    for (let i = 0; i < type.length; i++) {
-      hash = type.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-    const hex = "#" + "00000".substring(0, 6 - c.length) + c;
-
-    return {
-      color: hex,
-      radius: 0.5, // Default generic radius
-    };
+    return { color: hslColorFromString(type), radius: 0.5 };
   }
 
   public getBondStyle(_order: number, _type?: string): BondStyle {
-    return {
-      color: "#808080", // Standard gray bond
-      radius: 0.1,
-    };
+    return { color: "#808080", radius: 0.1 };
   }
 }

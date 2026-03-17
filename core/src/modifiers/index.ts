@@ -4,3 +4,4 @@ export { WrapPBCModifier } from "./WrapPBCModifier";
 export { SliceModifier, type GuideLine } from "./SliceModifier";
 export { ExpressionSelectionModifier } from "./ExpressionSelectionModifier";
 export { HideSelectionModifier } from "./HideSelectionModifier";
+export { ColorByPropertyModifier } from "./ColorByPropertyModifier";

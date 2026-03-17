@@ -76,6 +76,7 @@ export function bootstrapWebview(container: HTMLElement): void {
                 app.setTrajectory(trajectory),
               setViewMode: () => app.setMode("view"),
               resetCamera: () => app.world.resetCamera(),
+              loadPdb: (pdbText: string) => app.loadPdb(pdbText),
             },
             resources,
           );
@@ -113,6 +114,7 @@ export function bootstrapWebview(container: HTMLElement): void {
         setTrajectory: (trajectory: Trajectory) => app.setTrajectory(trajectory),
         setViewMode: () => app.setMode("view"),
         resetCamera: () => app.world.resetCamera(),
+        loadPdb: (pdbText: string) => app.loadPdb(pdbText),
       }, resources);
     } catch (e) {
       console.error("Failed to load dropped file:", e);
