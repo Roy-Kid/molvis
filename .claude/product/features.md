@@ -32,7 +32,7 @@
 | Isosurface | ❌ | ✅ | ✅ | P3 | Scalar field visualization, marching cubes in molrs |
 | Trajectory lines | ❌ | ✅ | ❌ | P2 | Particle path over time |
 | Non-spherical particles | ❌ | ✅ | ❌ | P3 | Ellipsoid, cube; custom glyph instances |
-| Bond order display | ❌ | ❌ | ✅ | P1 | Double/triple bond rendering, parallel cylinders |
+| Bond order display | ✅ | ❌ | ✅ | — | Double/triple bonds as parallel offset cylinders |
 | Non-covalent interactions | ❌ | ❌ | ✅ | P2 | H-bonds, halogen bonds; dashed lines |
 | Close contact display | ❌ | ❌ | ✅ | P3 | Salt bridges, repulsive contacts |
 | Per-atom labels | ✅ | ✅ | ✅ | — | LabelRenderer: element/index/custom templates, 3 modes, auto-cull |
@@ -211,7 +211,6 @@
 | Feature | Category |
 |---------|----------|
 | Vector arrows | Rendering |
-| Bond order display | Rendering |
 | Assign uniform color, Transparency | Coloring |
 | CIF, GRO, MOL/SDF, LAMMPS dump formats | File (molrs) |
 | Marquee select, Select by element, Transform selection | Interaction |

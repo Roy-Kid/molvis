@@ -22,6 +22,8 @@ export interface RegisterFrameOptions {
   box?: Box;
   atomBuffers?: Map<string, Float32Array>;
   bondBuffers?: Map<string, Float32Array>;
+  /** Total bond render instances (may exceed bondBlock.nrows() for multi-order bonds) */
+  bondInstanceCount?: number;
 }
 
 export interface RegisterAtomOptions {
@@ -496,6 +498,7 @@ export class SceneIndex {
       bondBlock,
       atomBuffers,
       bondBuffers,
+      bondInstanceCount,
     } = options;
 
     if (!atomBlock) throw new Error("SceneIndex: atomBlock required");
@@ -521,9 +524,10 @@ export class SceneIndex {
     if (bondMesh && bondBlock) {
       this.meshRegistry.registerBondLayer(bondMesh);
       if (bondBuffers) {
+        const renderCount = bondInstanceCount ?? bondBlock.nrows();
         this.meshRegistry
           .getBondState()
-          ?.setFrameDataAndFlush(bondBuffers, bondBlock.nrows());
+          ?.setFrameDataAndFlush(bondBuffers, renderCount);
       }
 
       this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);

@@ -10,7 +10,11 @@ import type { Block, Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 
 import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
-import { buildBondBuffers, refreshBondPositions } from "./artist/bond_buffer";
+import {
+  type BondBufferResult,
+  buildBondBuffers,
+  refreshBondPositions,
+} from "./artist/bond_buffer";
 import {
   compileShaderMaterial,
   createImpostorMaterial,
@@ -180,12 +184,12 @@ export class Artist {
 
     const atomColor = atomBuffers.get("instanceColor") as Float32Array;
     let bondBlockObj: Block | undefined;
-    let bondBuffers: Map<string, Float32Array> | undefined;
+    let bondResult: BondBufferResult | undefined;
 
     if (bondsBlock && bondsBlock.nrows() > 0) {
       bondBlockObj = bondsBlock;
       const visibleArr = options?.atoms?.visible;
-      bondBuffers = buildBondBuffers(
+      bondResult = buildBondBuffers(
         bondsBlock,
         atomsBlock,
         atomColor,
@@ -203,7 +207,8 @@ export class Artist {
       atomBlock: atomsBlock,
       bondBlock: bondBlockObj,
       atomBuffers,
-      bondBuffers,
+      bondBuffers: bondResult?.buffers,
+      bondInstanceCount: bondResult?.instanceCount,
     });
 
     this.app.events.emit("frame-rendered", { frame, box: _box });
