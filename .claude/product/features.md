@@ -46,7 +46,7 @@
 | Color by type | ✅ | ✅ | ❌ | — | Via ColorByPropertyModifier on "type" column |
 | Color by property (colormap) | ✅ | ✅ | ❌ | — | ColorByPropertyModifier: viridis/plasma/coolwarm/rainbow/grayscale |
 | Color by chain/residue | ❌ | ❌ | ✅ | P2 | Protein chain coloring, needs residue data from molrs |
-| Assign uniform color | ❌ | ✅ | ✅ | P1 | Selection → single color, as modifier |
+| Assign uniform color | ✅ | ✅ | ✅ | — | AssignColorModifier + color picker in SelectPanel |
 | Transparency / opacity | ❌ | ✅ | ✅ | P1 | Per-atom/group alpha, shader support needed |
 | Ambient occlusion | ❌ | ✅ | ❌ | P2 | BabylonJS SSAO post-process |
 | Dark / light theme | ✅ | ✅ | ❌ | — | StyleManager |
@@ -88,7 +88,7 @@
 | Click select atom/bond | ✅ | ✅ | ✅ | — | Select mode, ID-pass picking |
 | Fence (lasso) select | ✅ | ✅ | ✅ | — | Freeform polygon selection with camera disable |
 | Expression selection | ✅ | ✅ | ❌ | — | JME-like query language |
-| Select by element/type | ❌ | ✅ | ✅ | P1 | Quick filter in UI |
+| Select by element/type | ✅ | ✅ | ✅ | — | Quick element buttons in SelectPanel, auto-discovered |
 | Expand selection (neighbors) | ❌ | ✅ | ❌ | P2 | Select bonded neighbors |
 | Named selections (save/recall) | ❌ | ❌ | ✅ | P2 | Bookmark selections |
 | Add atom | ✅ | ❌ | ✅ | — | Edit mode |
@@ -211,12 +211,12 @@
 | Feature | Category |
 |---------|----------|
 | Vector arrows | Rendering |
-| Assign uniform color, Transparency | Coloring |
+| Transparency | Coloring |
 | CIF, GRO, MOL/SDF, LAMMPS dump formats | File (molrs) |
-| Select by element, Transform selection | Interaction |
+| Transform selection | Interaction |
 | Import by SMILES | Building (molrs) |
 | Displacement vectors, Histogram, Scatter plot | Analysis |
-| Assign color, Delete selected, Replicate, Create bonds, DataSource modifiers | Pipeline |
+| Replicate, Create bonds, DataSource modifiers | Pipeline |
 | Jupyter widget | Integration |
 
 ### P2 — Later (breadth expansion)

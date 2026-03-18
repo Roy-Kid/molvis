@@ -1,4 +1,6 @@
+import { AssignColorModifier } from "../modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
+import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
@@ -63,6 +65,16 @@ export class ModifierRegistry {
       "Hide Hydrogens",
       "Selection Insensitive",
       () => new HideHydrogensModifier(),
+    );
+    ModifierRegistry.register(
+      "Assign Color",
+      "Selection Sensitive",
+      () => new AssignColorModifier(),
+    );
+    ModifierRegistry.register(
+      "Delete Selected",
+      "Selection Sensitive",
+      () => new DeleteSelectedModifier(),
     );
   }
 }

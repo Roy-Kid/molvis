@@ -2,10 +2,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import type { Molvis } from "@molvis/core";
-import { Lasso } from "lucide-react";
+import {
+  type Molvis,
+  AssignColorModifier,
+  DeleteSelectedModifier,
+} from "@molvis/core";
+import { Lasso, Palette, Trash2 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { InspectorTab } from "./InspectorTab";
 import { useSelectionSnapshot } from "./useSelectionSnapshot";
 
@@ -13,25 +17,46 @@ interface SelectPanelProps {
   app: Molvis | null;
 }
 
+function discoverElements(app: Molvis | null): string[] {
+  if (!app) return [];
+  const frame = app.system.frame;
+  const atoms = frame?.getBlock("atoms");
+  if (!atoms) return [];
+  const elements = atoms.getColumnStrings("element");
+  if (!elements) return [];
+  const unique = new Set(elements);
+  return Array.from(unique).sort();
+}
+
 export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const [expression, setExpression] = useState("");
   const [fenceActive, setFenceActive] = useState(false);
+  const [assignColor, setAssignColor] = useState("#FF4444");
+  const [elements, setElements] = useState<string[]>([]);
   const snapshot = useSelectionSnapshot(app);
+
+  const refreshElements = useCallback(() => {
+    setElements(discoverElements(app));
+  }, [app]);
 
   useEffect(() => {
     if (!app) return;
+    refreshElements();
+
     const handler = (active: boolean) => setFenceActive(active);
     app.events.on("fence-select-change", handler);
+
+    const onFrame = () => refreshElements();
+    app.events.on("frame-rendered", onFrame);
+
     return () => {
       app.events.off("fence-select-change", handler);
+      app.events.off("frame-rendered", onFrame);
     };
-  }, [app]);
+  }, [app, refreshElements]);
 
   const handleSelect = () => {
-    if (!app || !expression.trim()) {
-      return;
-    }
-
+    if (!app || !expression.trim()) return;
     try {
       app.artist.selectByExpression(expression);
       app.events.emit("status-message", {
@@ -45,6 +70,36 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
         type: "error",
       });
     }
+  };
+
+  const handleElementSelect = (element: string) => {
+    if (!app) return;
+    app.artist.selectByExpression(`element == '${element}'`);
+  };
+
+  const handleAssignColor = () => {
+    if (!app || snapshot.atomCount === 0) return;
+    let mod = findAssignColorMod(app);
+    if (!mod) {
+      mod = new AssignColorModifier();
+      app.modifierPipeline.addModifier(mod);
+    }
+    const selectedIds = app.world.selectionManager.getSelectedAtomIds();
+    mod.addAssignment(selectedIds, assignColor);
+    app.applyPipeline({ fullRebuild: true });
+  };
+
+  const handleDeleteSelected = () => {
+    if (!app || snapshot.atomCount === 0) return;
+    let mod = findDeleteSelectedMod(app);
+    if (!mod) {
+      mod = new DeleteSelectedModifier();
+      app.modifierPipeline.addModifier(mod);
+    }
+    const selectedIds = app.world.selectionManager.getSelectedAtomIds();
+    mod.deleteIndices(selectedIds);
+    app.world.selectionManager.apply({ type: "clear" });
+    app.applyPipeline({ fullRebuild: true });
   };
 
   return (
@@ -107,6 +162,67 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
             </div>
           </SidebarSection>
 
+          {/* Quick Element Select */}
+          {elements.length > 0 && (
+            <SidebarSection
+              title="By Element"
+              subtitle="Quick select by element type"
+              defaultOpen={true}
+            >
+              <div className="flex flex-wrap gap-1">
+                {elements.map((el) => (
+                  <Button
+                    key={el}
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[10px] font-mono"
+                    onClick={() => handleElementSelect(el)}
+                  >
+                    {el}
+                  </Button>
+                ))}
+              </div>
+            </SidebarSection>
+          )}
+
+          {/* Actions on Selection */}
+          <SidebarSection
+            title="Actions"
+            subtitle="Apply to selected atoms"
+            defaultOpen={true}
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={assignColor}
+                  onChange={(e) => setAssignColor(e.target.value)}
+                  className="w-7 h-7 rounded cursor-pointer border-0 p-0 shrink-0"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px] gap-1 flex-1"
+                  onClick={handleAssignColor}
+                  disabled={snapshot.atomCount === 0}
+                >
+                  <Palette className="h-3 w-3" />
+                  Color Selection
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px] gap-1 w-full text-red-400 hover:text-red-300"
+                onClick={handleDeleteSelected}
+                disabled={snapshot.atomCount === 0}
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete Selected
+              </Button>
+            </div>
+          </SidebarSection>
+
           <SidebarSection
             title="Inspector"
             subtitle="Selected atom attributes"
@@ -120,3 +236,21 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     </div>
   );
 };
+
+function findAssignColorMod(
+  app: Molvis,
+): AssignColorModifier | undefined {
+  for (const mod of app.modifierPipeline.getModifiers()) {
+    if (mod instanceof AssignColorModifier) return mod;
+  }
+  return undefined;
+}
+
+function findDeleteSelectedMod(
+  app: Molvis,
+): DeleteSelectedModifier | undefined {
+  for (const mod of app.modifierPipeline.getModifiers()) {
+    if (mod instanceof DeleteSelectedModifier) return mod;
+  }
+  return undefined;
+}
