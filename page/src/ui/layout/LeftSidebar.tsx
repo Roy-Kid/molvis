@@ -15,6 +15,7 @@ import { RdfPanel } from "../modes/select/RdfPanel";
 import { useSelectionSnapshot } from "../modes/select/useSelectionSnapshot";
 import { DataInspectorPanel } from "./DataInspectorPanel";
 import { HistogramPanel } from "./HistogramPanel";
+import { ScatterPlotPanel } from "./ScatterPlotPanel";
 
 interface LeftSidebarProps {
   app: Molvis | null;
@@ -37,6 +38,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
             <TabsTrigger value="histogram" className="text-[9px] uppercase h-5">
               Hist
             </TabsTrigger>
+            <TabsTrigger value="scatter" className="text-[9px] uppercase h-5">
+              Scatter
+            </TabsTrigger>
             <TabsTrigger value="analysis" className="text-[9px] uppercase h-5">
               Analysis
             </TabsTrigger>
@@ -49,6 +53,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
 
         <TabsContent value="histogram" className="flex-1 min-h-0 mt-0">
           <HistogramPanel app={app} />
+        </TabsContent>
+
+        <TabsContent value="scatter" className="flex-1 min-h-0 mt-0">
+          <ScatterPlotPanel app={app} />
         </TabsContent>
 
         <TabsContent value="analysis" className="flex-1 min-h-0 mt-0">

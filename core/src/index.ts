@@ -95,6 +95,12 @@ export type { ColormapName } from "./artist/colormaps";
 export { COLORMAP_NAMES } from "./artist/colormaps";
 
 export {
+  prepareScatter,
+  deterministicSample,
+  type ScatterResult,
+  type ScatterPoint,
+} from "./analysis/scatter";
+export {
   computeHistogram,
   discoverNumericColumns,
   type HistogramResult,
