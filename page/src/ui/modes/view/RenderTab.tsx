@@ -249,9 +249,9 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full overflow-y-auto">
-      <div className="space-y-2">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+    <div className="flex flex-col gap-2.5 p-2.5 h-full overflow-y-auto">
+      <div className="space-y-1.5">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Representation
         </h4>
         <Select
@@ -273,8 +273,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Visibility
         </h4>
 
@@ -290,8 +290,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Labels
         </h4>
 
@@ -351,8 +351,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           User Interface
         </h4>
 
@@ -386,8 +386,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Grid
         </h4>
 
@@ -425,8 +425,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Background
         </h4>
 
@@ -457,8 +457,8 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
       <Separator />
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-medium leading-none text-muted-foreground">
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           Graphics
         </h4>
 

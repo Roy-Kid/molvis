@@ -79,7 +79,7 @@ export const HistogramPanel: React.FC<HistogramPanelProps> = ({ app }) => {
   }, [app, refresh]);
 
   return (
-    <div className="flex flex-col gap-3 p-3 h-full overflow-y-auto">
+    <div className="flex flex-col gap-2 p-2 h-full overflow-y-auto">
       {/* Column selector */}
       <div className="space-y-1">
         <Label className="text-xs font-semibold">Property</Label>
@@ -107,7 +107,7 @@ export const HistogramPanel: React.FC<HistogramPanelProps> = ({ app }) => {
       </div>
 
       {/* Bins + selected only */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <div className="flex-1 space-y-1">
           <Label className="text-[10px]">Bins ({bins})</Label>
           <Slider
@@ -136,14 +136,14 @@ export const HistogramPanel: React.FC<HistogramPanelProps> = ({ app }) => {
       )}
 
       {selectedColumn && result && result.stats.count === 0 && (
-        <div className="text-[10px] text-muted-foreground text-center py-4">
+        <div className="text-[9px] text-muted-foreground text-center py-2">
           No data for selected column.
         </div>
       )}
 
       {!selectedColumn && (
-        <div className="text-[10px] text-muted-foreground text-center py-4">
-          Select a numeric property to plot distribution.
+        <div className="text-[9px] text-muted-foreground text-center py-2">
+          Select a numeric property to plot.
         </div>
       )}
     </div>

@@ -93,7 +93,7 @@ const App: React.FC = () => {
             </div>
 
             {app && trajectoryLength > 1 && (
-              <div className="h-12 border-t bg-muted/20 shrink-0 z-10">
+              <div className="h-9 border-t bg-muted/20 shrink-0 z-10">
                 <TimelineControl app={app} totalFrames={trajectoryLength} />
               </div>
             )}
@@ -119,7 +119,7 @@ const App: React.FC = () => {
         </ResizablePanelGroup>
 
         <div
-          className={`h-5 border-t bg-muted/60 flex items-center px-2 text-[10px] shrink-0 ${statusType === "error" ? "text-red-500 font-bold bg-red-100/10" : "text-muted-foreground"}`}
+          className={`h-4 border-t bg-muted/60 flex items-center px-2 text-[9px] shrink-0 ${statusType === "error" ? "text-red-500 font-bold bg-red-100/10" : "text-muted-foreground"}`}
         >
           {statusMessage}
         </div>

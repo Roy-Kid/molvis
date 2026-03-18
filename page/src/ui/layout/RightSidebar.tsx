@@ -55,8 +55,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   return (
     <div className="h-full w-full bg-background flex flex-col border-l">
-      <div className="border-b px-2 py-1.5 bg-muted/15 shrink-0">
-        <div className="grid grid-cols-5 gap-1">
+      <div className="border-b px-1.5 py-1 bg-muted/15 shrink-0">
+        <div className="grid grid-cols-5 gap-0.5">
           {MODE_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = currentMode === item.value;
@@ -67,12 +67,12 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 size="sm"
                 onClick={() => onModeChange(item.value)}
                 className={cn(
-                  "h-7 text-[10px] px-1.5 gap-1",
+                  "h-6 text-[9px] px-1 gap-0.5",
                   active && "font-semibold",
                 )}
                 title={item.label}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3 w-3" />
                 <span className="truncate">{item.label}</span>
               </Button>
             );

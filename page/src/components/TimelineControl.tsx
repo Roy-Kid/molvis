@@ -148,9 +148,9 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
   };
 
   return (
-    <div className="flex items-center w-full h-full bg-background border-t px-2 gap-4">
+    <div className="flex items-center w-full h-full bg-background border-t px-1.5 gap-2">
       {/* Progress Bar Area (Left) */}
-      <div className="flex-1 px-2">
+      <div className="flex-1 px-1">
         <Slider
           value={[currentFrame]}
           max={totalFrames - 1}
@@ -161,8 +161,8 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
       </div>
 
       {/* Counter (Middle) */}
-      <div className="font-mono text-xs text-muted-foreground shrink-0 w-20 text-right tabular-nums">
-        {currentFrame} / {totalFrames}
+      <div className="font-mono text-[10px] text-muted-foreground shrink-0 w-16 text-right tabular-nums">
+        {currentFrame}/{totalFrames}
       </div>
 
       {/* Speed selector */}
@@ -170,7 +170,7 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
         value={String(speed)}
         onValueChange={(v) => setSpeed(Number(v))}
       >
-        <SelectTrigger className="h-7 w-16 text-[10px] shrink-0">
+        <SelectTrigger className="h-6 w-14 text-[9px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -187,51 +187,51 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={goToStart}
           title="First Frame"
         >
-          <SkipBack className="h-3.5 w-3.5" />
+          <SkipBack className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={stepBack}
           title="Prev Frame"
         >
-          <StepBack className="h-3.5 w-3.5" />
+          <StepBack className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="h-7 w-7"
           onClick={togglePlay}
           title={isPlaying ? "Pause" : "Play"}
         >
           {isPlaying ? (
-            <Pause className="h-4 w-4" />
+            <Pause className="h-3.5 w-3.5" />
           ) : (
-            <Play className="h-4 w-4" />
+            <Play className="h-3.5 w-3.5" />
           )}
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={stepForward}
           title="Next Frame"
         >
-          <StepForward className="h-3.5 w-3.5" />
+          <StepForward className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={goToEnd}
           title="Last Frame"
         >
-          <SkipForward className="h-3.5 w-3.5" />
+          <SkipForward className="h-3 w-3" />
         </Button>
       </div>
     </div>

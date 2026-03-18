@@ -82,15 +82,15 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
   };
 
   return (
-    <div className="h-10 border-b bg-background flex items-center px-3 gap-3 shrink-0 justify-between">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="font-semibold tracking-wide text-sm">MolVis</div>
-        <div className="h-5 px-2 rounded border bg-muted/30 text-[10px] uppercase tracking-wide text-muted-foreground inline-flex items-center">
+    <div className="h-8 border-b bg-background flex items-center px-2 gap-2 shrink-0 justify-between">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="font-semibold tracking-wide text-xs">MolVis</div>
+        <div className="h-4 px-1.5 rounded border bg-muted/30 text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center">
           {currentMode}
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -100,7 +100,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           <Camera className="h-3.5 w-3.5" />
         </Button>
         <ExportDialog app={app} />
-        <Separator orientation="vertical" className="h-5 mx-1" />
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
 
         <Button
           variant="ghost"
@@ -121,7 +121,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           <Redo2 className="h-3.5 w-3.5" />
         </Button>
 
-        <Separator orientation="vertical" className="h-5 mx-1" />
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
 
         <Button
           variant="ghost"
@@ -132,7 +132,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           <Scan className="h-3.5 w-3.5" />
         </Button>
 
-        <Separator orientation="vertical" className="h-5 mx-1" />
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
 
         <SettingsDialog app={app} />
       </div>

@@ -104,12 +104,12 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="h-9 px-2.5 border-b bg-muted/15 shrink-0 flex items-center justify-between">
-        <div className="text-xs font-semibold tracking-wide uppercase">
-          Select Workbench
+      <div className="h-7 px-2 border-b bg-muted/15 shrink-0 flex items-center justify-between">
+        <div className="text-[10px] font-semibold tracking-wide uppercase">
+          Select
         </div>
-        <div className="text-[10px] text-muted-foreground">
-          {snapshot.atomCount} atom{snapshot.atomCount !== 1 ? "s" : ""}
+        <div className="text-[9px] text-muted-foreground tabular-nums">
+          {snapshot.atomCount}a / {snapshot.bondCount}b
         </div>
       </div>
 

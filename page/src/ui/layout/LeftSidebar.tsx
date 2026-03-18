@@ -29,15 +29,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
   return (
     <div className="h-full w-full bg-background flex flex-col border-r">
       <Tabs defaultValue="data" className="h-full flex flex-col">
-        <div className="shrink-0 border-b bg-muted/15">
-          <TabsList className="w-full rounded-none h-9 bg-transparent">
-            <TabsTrigger value="data" className="text-[10px] uppercase h-7">
+        <div className="shrink-0 border-b bg-muted/10">
+          <TabsList className="w-full rounded-none h-7 bg-transparent">
+            <TabsTrigger value="data" className="text-[9px] uppercase h-5">
               Data
             </TabsTrigger>
-            <TabsTrigger value="histogram" className="text-[10px] uppercase h-7">
-              Histogram
+            <TabsTrigger value="histogram" className="text-[9px] uppercase h-5">
+              Hist
             </TabsTrigger>
-            <TabsTrigger value="analysis" className="text-[10px] uppercase h-7">
+            <TabsTrigger value="analysis" className="text-[9px] uppercase h-5">
               Analysis
             </TabsTrigger>
           </TabsList>

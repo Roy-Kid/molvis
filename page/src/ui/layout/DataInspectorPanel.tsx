@@ -15,7 +15,7 @@ interface DataInspectorPanelProps {
   app: Molvis | null;
 }
 
-const ROW_HEIGHT = 24;
+const ROW_HEIGHT = 20;
 const OVERSCAN = 5;
 
 export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
@@ -99,11 +99,11 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
 
   return (
     <Tabs defaultValue="atoms" className="h-full flex flex-col">
-      <TabsList className="shrink-0 w-full rounded-none border-b h-8">
-        <TabsTrigger value="atoms" className="text-xs h-6">
+      <TabsList className="shrink-0 w-full rounded-none border-b h-6">
+        <TabsTrigger value="atoms" className="text-[10px] h-5">
           Atoms ({atomRows.length})
         </TabsTrigger>
-        <TabsTrigger value="bonds" className="text-xs h-6">
+        <TabsTrigger value="bonds" className="text-[10px] h-5">
           Bonds ({bondRows.length})
         </TabsTrigger>
       </TabsList>
@@ -111,12 +111,12 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
       <TabsContent value="atoms" className="flex-1 min-h-0 mt-0">
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="flex bg-muted/30 border-b text-[10px] font-semibold text-muted-foreground shrink-0">
-            <div className="w-10 px-1 py-1 text-right shrink-0">#</div>
+          <div className="flex bg-muted/30 border-b text-[9px] font-semibold text-muted-foreground shrink-0">
+            <div className="w-8 px-0.5 py-0.5 text-right shrink-0">#</div>
             {columns.map((col) => (
               <div
                 key={col.name}
-                className="flex-1 min-w-[60px] px-1 py-1 truncate"
+                className="flex-1 min-w-[52px] px-0.5 py-0.5 truncate"
                 title={`${col.name} (${col.dtype})`}
               >
                 {col.name}
@@ -142,7 +142,7 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
                 {visibleAtomRows.map((row) => (
                   <div
                     key={row.index}
-                    className={`flex text-[10px] font-mono cursor-pointer hover:bg-muted/30 border-b border-muted/10 ${
+                    className={`flex text-[9px] font-mono cursor-pointer hover:bg-muted/30 border-b border-muted/5 ${
                       selectedAtomIds.has(row.index)
                         ? "bg-blue-500/15 text-blue-200"
                         : ""
@@ -150,13 +150,13 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
                     style={{ height: ROW_HEIGHT }}
                     onClick={() => handleAtomRowClick(row.index)}
                   >
-                    <div className="w-10 px-1 flex items-center justify-end text-muted-foreground shrink-0">
+                    <div className="w-8 px-0.5 flex items-center justify-end text-muted-foreground shrink-0">
                       {row.index}
                     </div>
                     {columns.map((col) => (
                       <div
                         key={col.name}
-                        className="flex-1 min-w-[60px] px-1 flex items-center truncate"
+                        className="flex-1 min-w-[52px] px-0.5 flex items-center truncate"
                       >
                         {row.values.get(col.name) ?? "—"}
                       </div>
@@ -172,11 +172,11 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
       <TabsContent value="bonds" className="flex-1 min-h-0 mt-0">
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="flex bg-muted/30 border-b text-[10px] font-semibold text-muted-foreground shrink-0">
-            <div className="w-10 px-1 py-1 text-right shrink-0">#</div>
-            <div className="flex-1 min-w-[50px] px-1 py-1">Atom i</div>
-            <div className="flex-1 min-w-[50px] px-1 py-1">Atom j</div>
-            <div className="flex-1 min-w-[50px] px-1 py-1">Order</div>
+          <div className="flex bg-muted/30 border-b text-[9px] font-semibold text-muted-foreground shrink-0">
+            <div className="w-8 px-0.5 py-0.5 text-right shrink-0">#</div>
+            <div className="flex-1 min-w-[40px] px-0.5 py-0.5">i</div>
+            <div className="flex-1 min-w-[40px] px-0.5 py-0.5">j</div>
+            <div className="flex-1 min-w-[40px] px-0.5 py-0.5">ord</div>
           </div>
 
           {/* Body */}
@@ -184,26 +184,26 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
             {bondRows.map((row) => (
               <div
                 key={row.index}
-                className="flex text-[10px] font-mono border-b border-muted/10"
+                className="flex text-[9px] font-mono border-b border-muted/5"
                 style={{ height: ROW_HEIGHT }}
               >
-                <div className="w-10 px-1 flex items-center justify-end text-muted-foreground shrink-0">
+                <div className="w-8 px-0.5 flex items-center justify-end text-muted-foreground shrink-0">
                   {row.index}
                 </div>
-                <div className="flex-1 min-w-[50px] px-1 flex items-center">
+                <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
                   {row.i}
                 </div>
-                <div className="flex-1 min-w-[50px] px-1 flex items-center">
+                <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
                   {row.j}
                 </div>
-                <div className="flex-1 min-w-[50px] px-1 flex items-center">
+                <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
                   {row.order}
                 </div>
               </div>
             ))}
             {bondRows.length === 0 && (
-              <div className="p-2 text-[10px] text-muted-foreground">
-                No bonds in current frame.
+              <div className="p-1.5 text-[9px] text-muted-foreground">
+                No bonds.
               </div>
             )}
           </div>

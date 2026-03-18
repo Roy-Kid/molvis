@@ -15,12 +15,12 @@ export const ViewPanel: React.FC<ViewPanelProps> = ({ app }) => {
       defaultValue="pipeline"
       className="flex-1 flex flex-col h-full w-full"
     >
-      <div className="border-b px-2 py-1.5 bg-muted/10 shrink-0">
-        <TabsList className="w-full grid grid-cols-2 h-7 p-0.5">
-          <TabsTrigger value="pipeline" className="text-[11px] px-1.5 py-0.5">
+      <div className="border-b px-1.5 py-1 bg-muted/10 shrink-0">
+        <TabsList className="w-full grid grid-cols-2 h-6 p-0.5">
+          <TabsTrigger value="pipeline" className="text-[10px] px-1 py-0">
             Pipeline
           </TabsTrigger>
-          <TabsTrigger value="render" className="text-[11px] px-1.5 py-0.5">
+          <TabsTrigger value="render" className="text-[10px] px-1 py-0">
             Render
           </TabsTrigger>
         </TabsList>
