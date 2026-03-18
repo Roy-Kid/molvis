@@ -215,7 +215,7 @@
 | CIF, GRO, MOL/SDF, LAMMPS dump formats | File (molrs) |
 | Transform selection | Interaction |
 | Import by SMILES | Building (molrs) |
-| Displacement vectors, Histogram, Scatter plot | Analysis |
+| Displacement vectors, Scatter plot | Analysis |
 | Replicate, Create bonds, DataSource modifiers | Pipeline |
 | Jupyter widget | Integration |
 

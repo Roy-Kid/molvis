@@ -95,6 +95,12 @@ export type { ColormapName } from "./artist/colormaps";
 export { COLORMAP_NAMES } from "./artist/colormaps";
 
 export {
+  computeHistogram,
+  discoverNumericColumns,
+  type HistogramResult,
+  type HistogramStats,
+} from "./analysis/histogram";
+export {
   discoverAtomColumns,
   extractAtomRows,
   extractBondRows,

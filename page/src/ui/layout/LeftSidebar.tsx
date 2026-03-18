@@ -14,6 +14,7 @@ import { useState } from "react";
 import { RdfPanel } from "../modes/select/RdfPanel";
 import { useSelectionSnapshot } from "../modes/select/useSelectionSnapshot";
 import { DataInspectorPanel } from "./DataInspectorPanel";
+import { HistogramPanel } from "./HistogramPanel";
 
 interface LeftSidebarProps {
   app: Molvis | null;
@@ -33,6 +34,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
             <TabsTrigger value="data" className="text-[10px] uppercase h-7">
               Data
             </TabsTrigger>
+            <TabsTrigger value="histogram" className="text-[10px] uppercase h-7">
+              Histogram
+            </TabsTrigger>
             <TabsTrigger value="analysis" className="text-[10px] uppercase h-7">
               Analysis
             </TabsTrigger>
@@ -41,6 +45,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
 
         <TabsContent value="data" className="flex-1 min-h-0 mt-0">
           <DataInspectorPanel app={app} />
+        </TabsContent>
+
+        <TabsContent value="histogram" className="flex-1 min-h-0 mt-0">
+          <HistogramPanel app={app} />
         </TabsContent>
 
         <TabsContent value="analysis" className="flex-1 min-h-0 mt-0">
