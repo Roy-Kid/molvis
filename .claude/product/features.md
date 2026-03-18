@@ -225,4 +225,4 @@ Licorice, Surface, Trajectory lines, Non-covalent, AO, Video export, glTF, XTC/T
 
 ### P3 — Much later (advanced / niche)
 
-Cartoon/Ribbon, Coordination polyhedra, Isosurface, Non-spherical particles, Close contact, Multiple viewports, Auto-adjust hydrogens, Bond-centric manipulation, Functional group templates, Surface mesh, Frame interpolation, Camera animation, Plugin system
+Coordination polyhedra, Isosurface, Non-spherical particles, Close contact, Multiple viewports, Auto-adjust hydrogens, Bond-centric manipulation, Functional group templates, Surface mesh, Frame interpolation, Camera animation, Plugin system

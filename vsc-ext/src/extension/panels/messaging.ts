@@ -1,9 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type {
-  HostToWebviewMessage,
-  WebviewToHostMessage,
-} from "../types";
+import type { HostToWebviewMessage, WebviewToHostMessage } from "../types";
 
 /**
  * Send a message from extension host to webview.

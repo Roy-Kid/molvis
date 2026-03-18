@@ -1,9 +1,6 @@
 import * as vscode from "vscode";
+import { createInitMessage, getMolvisWebviewOptions } from "../configuration";
 import type { Logger, PanelRegistry } from "../types";
-import {
-  createInitMessage,
-  getMolvisWebviewOptions,
-} from "../configuration";
 import { getViewerHtml } from "./html";
 import { onWebviewMessage, sendToWebview } from "./messaging";
 

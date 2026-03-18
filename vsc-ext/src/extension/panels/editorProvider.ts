@@ -1,13 +1,13 @@
 import * as vscode from "vscode";
-import type { Logger, PanelRegistry } from "../types";
 import { createInitMessage } from "../configuration";
+import type { Logger, PanelRegistry } from "../types";
+import { getPreviewHtml } from "./html";
 import {
   handleSaveFile,
   loadTextDocumentToWebview,
   onWebviewMessage,
   sendToWebview,
 } from "./messaging";
-import { getPreviewHtml } from "./html";
 
 /**
  * Custom text editor provider for molecular text formats (`.pdb/.xyz/.data`).
@@ -68,9 +68,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
             void handleSaveFile(message.data, message.suggestedName);
             break;
           case "dirtyStateChanged":
-            webviewPanel.title = message.isDirty
-              ? `● ${baseTitle}`
-              : baseTitle;
+            webviewPanel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;
             break;
           case "error":
             this.logger.error(`MolVis: ${message.message}`);

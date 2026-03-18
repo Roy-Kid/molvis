@@ -189,11 +189,6 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
       key,
       value: finalValue,
     });
-
-    setSelection((prev) => ({
-      atoms: new Set(prev.atoms),
-      bonds: new Set(prev.bonds),
-    }));
   };
 
   const handleAdd = () => {

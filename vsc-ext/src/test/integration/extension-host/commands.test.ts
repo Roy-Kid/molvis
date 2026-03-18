@@ -44,7 +44,10 @@ suite("extension host commands", () => {
   });
 
   test("quickView accepts URI argument", async () => {
-    const filePath = path.join(os.tmpdir(), `molvis-quickview-${Date.now()}.xyz`);
+    const filePath = path.join(
+      os.tmpdir(),
+      `molvis-quickview-${Date.now()}.xyz`,
+    );
     const fileUri = vscode.Uri.file(filePath);
 
     await vscode.workspace.fs.writeFile(

@@ -15,7 +15,11 @@ export class MolecularFileLoader {
     if (isZarrUriPath(uri, stat.type)) {
       return {
         filename: getDisplayName(uri),
-        payload: await readZarrDirectoryWithFs(uri, vscode.workspace.fs, vscode.Uri),
+        payload: await readZarrDirectoryWithFs(
+          uri,
+          vscode.workspace.fs,
+          vscode.Uri,
+        ),
       };
     }
 

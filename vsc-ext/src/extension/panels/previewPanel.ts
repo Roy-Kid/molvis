@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
-import type { Logger } from "../types";
+import { createInitMessage } from "../configuration";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
-import { createInitMessage } from "../configuration";
-import { handleSaveFile, onWebviewMessage, sendToWebview } from "./messaging";
+import type { Logger } from "../types";
 import type { PanelRegistry } from "../types";
 import { getPreviewHtml } from "./html";
+import { handleSaveFile, onWebviewMessage, sendToWebview } from "./messaging";
 
 async function sendLoadedFile(
   panel: vscode.WebviewPanel,

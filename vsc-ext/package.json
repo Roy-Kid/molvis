@@ -17,9 +17,7 @@
     "vscode": "^1.108.1"
   },
   "publisher": "molcrafts",
-  "categories": [
-    "Visualization"
-  ],
+  "categories": ["Visualization"],
   "keywords": [
     "molecular",
     "visualization",
@@ -191,10 +189,7 @@
               "type": "number"
             },
             "cameraMaxRadius": {
-              "type": [
-                "number",
-                "null"
-              ]
+              "type": ["number", "null"]
             },
             "grid": {
               "type": "object",
