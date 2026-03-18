@@ -38,6 +38,7 @@ interface RenderState {
   labelTemplate: string;
   labelFontSize: number;
   backgroundColor: string;
+  globalOpacity: number;
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -94,6 +95,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       labelTemplate: labelCfg.template,
       labelFontSize: labelCfg.fontSize,
       backgroundColor: bgHex,
+      globalOpacity: app.artist.globalOpacity,
     });
     setHasChanges(false);
   }, [app]);
@@ -167,6 +169,12 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     state.graphics.hardwareScaling,
     "graphics.hardwareScaling",
   );
+
+  const handleGlobalOpacity = (value: number) => {
+    if (!app) return;
+    app.artist.setGlobalOpacity(value);
+    setState((prev) => (prev ? { ...prev, globalOpacity: value } : prev));
+  };
 
   const handleBackgroundColor = (hex: string) => {
     if (!app) return;
@@ -284,6 +292,19 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
             id="hide-hydrogens"
             checked={state.hideHydrogens}
             onCheckedChange={handleHideHydrogens}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px]">
+            Opacity ({Math.round(state.globalOpacity * 100)}%)
+          </Label>
+          <Slider
+            min={0.05}
+            max={1}
+            step={0.05}
+            value={[state.globalOpacity]}
+            onValueChange={([v]) => handleGlobalOpacity(v)}
           />
         </div>
       </div>

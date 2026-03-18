@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import {
   type Molvis,
@@ -32,6 +34,7 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const [expression, setExpression] = useState("");
   const [fenceActive, setFenceActive] = useState(false);
   const [assignColor, setAssignColor] = useState("#FF4444");
+  const [selectionOpacity, setSelectionOpacity] = useState(1.0);
   const [elements, setElements] = useState<string[]>([]);
   const snapshot = useSelectionSnapshot(app);
 
@@ -87,6 +90,13 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     const selectedIds = app.world.selectionManager.getSelectedAtomIds();
     mod.addAssignment(selectedIds, assignColor);
     app.applyPipeline({ fullRebuild: true });
+  };
+
+  const handleSelectionOpacity = (opacity: number) => {
+    if (!app || snapshot.atomCount === 0) return;
+    setSelectionOpacity(opacity);
+    const selectedIds = app.world.selectionManager.getSelectedAtomIds();
+    app.artist.setAtomOpacity(selectedIds, opacity);
   };
 
   const handleDeleteSelected = () => {
@@ -209,6 +219,19 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
                   <Palette className="h-3 w-3" />
                   Color Selection
                 </Button>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px]">
+                  Opacity ({Math.round(selectionOpacity * 100)}%)
+                </Label>
+                <Slider
+                  min={0.05}
+                  max={1}
+                  step={0.05}
+                  value={[selectionOpacity]}
+                  onValueChange={([v]) => handleSelectionOpacity(v)}
+                  disabled={snapshot.atomCount === 0}
+                />
               </div>
               <Button
                 size="sm"

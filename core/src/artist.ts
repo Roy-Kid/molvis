@@ -65,11 +65,74 @@ export interface DrawBondOptions {
  */
 export class Artist {
   private app: MolvisApp;
+  private _globalOpacity = 1.0;
 
   public atomMesh: Mesh;
   public bondMesh: Mesh;
   public ribbonRenderer: RibbonRenderer;
   public labelRenderer: LabelRenderer;
+
+  get globalOpacity(): number {
+    return this._globalOpacity;
+  }
+
+  /**
+   * Set global opacity for all atoms and bonds.
+   * Modifies instanceColor alpha on existing buffers in-place.
+   */
+  setGlobalOpacity(opacity: number): void {
+    this._globalOpacity = Math.max(0.02, Math.min(1.0, opacity));
+    this.applyGlobalOpacity();
+  }
+
+  /**
+   * Set opacity for specific atom indices.
+   * Modifies instanceColor alpha in-place for the given atoms.
+   */
+  setAtomOpacity(indices: Iterable<number>, opacity: number): void {
+    const clamped = Math.max(0.02, Math.min(1.0, opacity));
+    const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+    if (!atomState) return;
+
+    const colorDesc = atomState.buffers.get("instanceColor");
+    if (!colorDesc) return;
+
+    for (const idx of indices) {
+      if (idx >= 0 && idx < atomState.frameOffset + atomState.count) {
+        colorDesc.data[idx * 4 + 3] = clamped;
+      }
+    }
+    atomState.mesh.thinInstanceBufferUpdated("instanceColor");
+  }
+
+  private applyGlobalOpacity(): void {
+    const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+    if (atomState) {
+      const colorDesc = atomState.buffers.get("instanceColor");
+      if (colorDesc) {
+        const total = atomState.frameOffset + atomState.count;
+        for (let i = 0; i < total; i++) {
+          colorDesc.data[i * 4 + 3] = this._globalOpacity;
+        }
+        atomState.mesh.thinInstanceBufferUpdated("instanceColor");
+      }
+    }
+
+    const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+    if (bondState) {
+      const c0 = bondState.buffers.get("instanceColor0");
+      const c1 = bondState.buffers.get("instanceColor1");
+      if (c0 && c1) {
+        const total = bondState.frameOffset + bondState.count;
+        for (let i = 0; i < total; i++) {
+          c0.data[i * 4 + 3] = this._globalOpacity;
+          c1.data[i * 4 + 3] = this._globalOpacity;
+        }
+        bondState.mesh.thinInstanceBufferUpdated("instanceColor0");
+        bondState.mesh.thinInstanceBufferUpdated("instanceColor1");
+      }
+    }
+  }
 
   constructor(options: ArtistOptions) {
     this.app = options.app;

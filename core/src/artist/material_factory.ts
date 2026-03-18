@@ -60,12 +60,10 @@ export function createImpostorMaterial(
     },
   );
 
-  const isGhost = name.includes("ghost");
-
   material.backFaceCulling = false;
-  material.alphaMode = isGhost ? Engine.ALPHA_COMBINE : Engine.ALPHA_DISABLE;
+  material.alphaMode = Engine.ALPHA_COMBINE;
   material.disableDepthWrite = false;
-  material.forceDepthWrite = !isGhost;
+  material.forceDepthWrite = true;
 
   applyLightingUniforms(material, app);
 

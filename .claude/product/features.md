@@ -47,7 +47,7 @@
 | Color by property (colormap) | ✅ | ✅ | ❌ | — | ColorByPropertyModifier: viridis/plasma/coolwarm/rainbow/grayscale |
 | Color by chain/residue | ❌ | ❌ | ✅ | P2 | Protein chain coloring, needs residue data from molrs |
 | Assign uniform color | ✅ | ✅ | ✅ | — | AssignColorModifier + color picker in SelectPanel |
-| Transparency / opacity | ❌ | ✅ | ✅ | P1 | Per-atom/group alpha, shader support needed |
+| Transparency / opacity | ✅ | ✅ | ✅ | — | Alpha blending enabled, global + per-selection opacity sliders |
 | Ambient occlusion | ❌ | ✅ | ❌ | P2 | BabylonJS SSAO post-process |
 | Dark / light theme | ✅ | ✅ | ❌ | — | StyleManager |
 | Background color | ✅ | ✅ | ✅ | — | RenderTab color picker with presets (black/gray/white/custom) |
@@ -211,7 +211,6 @@
 | Feature | Category |
 |---------|----------|
 | Vector arrows | Rendering |
-| Transparency | Coloring |
 | CIF, GRO, MOL/SDF, LAMMPS dump formats | File (molrs) |
 | Transform selection | Interaction |
 | Import by SMILES | Building (molrs) |
