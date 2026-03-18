@@ -274,6 +274,7 @@ export class Artist {
       bondInstanceCount: bondResult?.instanceCount,
     });
 
+
     this.app.events.emit("frame-rendered", { frame, box: _box });
     updateVisualGuide(
       this.app.world.scene,

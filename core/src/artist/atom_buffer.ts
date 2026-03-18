@@ -5,7 +5,7 @@ import {
   COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_R,
 } from "../modifiers/ColorByPropertyModifier";
-import { encodePickingColor } from "../picker";
+import { encodePickingColorInto } from "../picker";
 import type { StyleManager } from "./style_manager";
 
 export interface AtomBufferOptions {
@@ -106,12 +106,8 @@ export function buildAtomBuffers(
       atomColor[idx4 + 3] = visible ? style.a : 0.2;
     }
 
-    // Picking color
-    const pCol = encodePickingColor(atomMeshUniqueId, i);
-    atomPick[idx4 + 0] = pCol[0];
-    atomPick[idx4 + 1] = pCol[1];
-    atomPick[idx4 + 2] = pCol[2];
-    atomPick[idx4 + 3] = pCol[3];
+    // Picking color (zero-allocation write)
+    encodePickingColorInto(atomMeshUniqueId, i, atomPick, idx4);
   }
 
   const buffers = new Map<string, Float32Array>();

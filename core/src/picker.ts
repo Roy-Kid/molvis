@@ -374,3 +374,22 @@ export function encodePickingColor(
 
   return [r, g, b, a];
 }
+
+/**
+ * Write picking color directly into a Float32Array at the given offset.
+ * Zero-allocation variant for hot buffer-building loops.
+ */
+export function encodePickingColorInto(
+  meshId: number,
+  thinId: number,
+  target: Float32Array,
+  offset: number,
+): void {
+  const fullId =
+    ((meshId & MAX_MESH_ID) << INSTANCE_ID_BITS) | (thinId & MAX_INSTANCE_ID);
+
+  target[offset] = ((fullId >>> 24) & 0xff) / 255.0;
+  target[offset + 1] = ((fullId >>> 16) & 0xff) / 255.0;
+  target[offset + 2] = ((fullId >>> 8) & 0xff) / 255.0;
+  target[offset + 3] = (fullId & 0xff) / 255.0;
+}

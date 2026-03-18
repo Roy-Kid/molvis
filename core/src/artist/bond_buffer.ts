@@ -1,6 +1,6 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molrs";
-import { encodePickingColor } from "../picker";
+import { encodePickingColorInto } from "../picker";
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
 const TMP_P1 = new Vector3();
@@ -90,16 +90,18 @@ export function buildBondBuffers(
   if (!xCoords || !yCoords || !zCoords) return undefined;
 
   const orderCol = bondsBlock.getColumnU8("order");
-  const totalInstances = countBondInstances(bondsBlock);
 
-  const bondMatrix = new Float32Array(totalInstances * 16);
-  const bondData0 = new Float32Array(totalInstances * 4);
-  const bondData1 = new Float32Array(totalInstances * 4);
-  const bondCol0 = new Float32Array(totalInstances * 4);
-  const bondCol1 = new Float32Array(totalInstances * 4);
-  const bondSplit = new Float32Array(totalInstances * 4);
-  const bondPick = new Float32Array(totalInstances * 4);
-  const instanceMap = new Uint32Array(totalInstances);
+  // Pre-allocate with upper bound (3x for all-triple), trim unused at end
+  const maxInstances = orderCol ? logicalCount * 3 : logicalCount;
+
+  const bondMatrix = new Float32Array(maxInstances * 16);
+  const bondData0 = new Float32Array(maxInstances * 4);
+  const bondData1 = new Float32Array(maxInstances * 4);
+  const bondCol0 = new Float32Array(maxInstances * 4);
+  const bondCol1 = new Float32Array(maxInstances * 4);
+  const bondSplit = new Float32Array(maxInstances * 4);
+  const bondPick = new Float32Array(maxInstances * 4);
+  const instanceMap = new Uint32Array(maxInstances);
 
   const baseBondRadius = options?.radius ?? 0.1;
   const isVisible = options?.visible ?? (() => true);
@@ -131,9 +133,6 @@ export function buildBondBuffers(
     const alpha = visible ? 1.0 : 0.2;
     const iOff = i * 4;
     const jOff = j * 4;
-
-    // Picking color — all sub-instances share logical bond index
-    const pickColor = encodePickingColor(bondMeshUniqueId, b);
 
     for (const [ox, oy] of config.offsets) {
       // Compute offset position for this sub-bond
@@ -187,32 +186,36 @@ export function buildBondBuffers(
       bondCol1[idx4 + 2] = atomColor[jOff + 2];
       bondCol1[idx4 + 3] = atomColor[jOff + 3] * alpha;
 
-      // Picking — all sub-instances share logical bond index
-      bondPick[idx4 + 0] = pickColor[0];
-      bondPick[idx4 + 1] = pickColor[1];
-      bondPick[idx4 + 2] = pickColor[2];
-      bondPick[idx4 + 3] = pickColor[3];
+      // Picking — zero-allocation, all sub-instances share logical bond index
+      encodePickingColorInto(bondMeshUniqueId, b, bondPick, idx4);
 
       instanceMap[renderIdx] = b;
       renderIdx++;
     }
   }
 
-  const buffers = new Map<string, Float32Array>();
-  buffers.set("matrix", bondMatrix);
-  buffers.set("instanceData0", bondData0);
-  buffers.set("instanceData1", bondData1);
-  buffers.set("instanceColor0", bondCol0);
-  buffers.set("instanceColor1", bondCol1);
-  buffers.set("instanceSplit", bondSplit);
-  buffers.set("instancePickingColor", bondPick);
+  // Trim to actual size if we over-allocated
+  const totalInstances = renderIdx;
+  const trim = <T extends Float32Array | Uint32Array>(arr: T, stride: number): T =>
+    arr.length === totalInstances * stride
+      ? arr
+      : (arr.slice(0, totalInstances * stride) as T);
 
-  return { buffers, instanceCount: totalInstances, instanceMap };
+  const buffers = new Map<string, Float32Array>();
+  buffers.set("matrix", trim(bondMatrix, 16));
+  buffers.set("instanceData0", trim(bondData0, 4));
+  buffers.set("instanceData1", trim(bondData1, 4));
+  buffers.set("instanceColor0", trim(bondCol0, 4));
+  buffers.set("instanceColor1", trim(bondCol1, 4));
+  buffers.set("instanceSplit", trim(bondSplit, 4));
+  buffers.set("instancePickingColor", trim(bondPick, 4));
+
+  return { buffers, instanceCount: totalInstances, instanceMap: trim(instanceMap, 1) };
 }
 
 /**
  * In-place refresh of bond positions from updated atom coordinates.
- * Handles multi-instance bonds via instance map.
+ * Handles multi-instance bonds via order column.
  */
 export function refreshBondPositions(
   bondsBlock: Block,
@@ -228,13 +231,15 @@ export function refreshBondPositions(
   const iAtoms = bondsBlock.getColumnU32("i");
   const jAtoms = bondsBlock.getColumnU32("j");
   const orderCol = bondsBlock.getColumnU8("order");
+  if (!iAtoms || !jAtoms) return;
+
+  const logicalCount = bondsBlock.nrows();
   const matB = bondState.buffers.get("matrix");
   const d0B = bondState.buffers.get("instanceData0");
   const d1B = bondState.buffers.get("instanceData1");
 
-  if (!iAtoms || !jAtoms || !matB || !d0B || !d1B) return;
+  if (!matB || !d0B || !d1B) return;
 
-  const logicalCount = bondsBlock.nrows();
   let renderIdx = 0;
 
   for (let b = 0; b < logicalCount; b++) {
