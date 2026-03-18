@@ -101,6 +101,7 @@ export {
   type BondRow,
 } from "./data_inspector";
 export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
+export { pointInPolygon, simplifyPolyline, type Point2D } from "./selection/fence";
 
 export {
   LabelRenderer,

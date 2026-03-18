@@ -86,7 +86,7 @@
 |---------|--------|-------|----------|-----|-------|
 | Orbit / pan / zoom | ✅ | ✅ | ✅ | — | View mode |
 | Click select atom/bond | ✅ | ✅ | ✅ | — | Select mode, ID-pass picking |
-| Marquee (box) select | ❌ | ✅ | ✅ | P1 | Drag rectangle to select region |
+| Fence (lasso) select | ✅ | ✅ | ✅ | — | Freeform polygon selection with camera disable |
 | Expression selection | ✅ | ✅ | ❌ | — | JME-like query language |
 | Select by element/type | ❌ | ✅ | ✅ | P1 | Quick filter in UI |
 | Expand selection (neighbors) | ❌ | ✅ | ❌ | P2 | Select bonded neighbors |
@@ -213,7 +213,7 @@
 | Vector arrows | Rendering |
 | Assign uniform color, Transparency | Coloring |
 | CIF, GRO, MOL/SDF, LAMMPS dump formats | File (molrs) |
-| Marquee select, Select by element, Transform selection | Interaction |
+| Select by element, Transform selection | Interaction |
 | Import by SMILES | Building (molrs) |
 | Displacement vectors, Histogram, Scatter plot | Analysis |
 | Assign color, Delete selected, Replicate, Create bonds, DataSource modifiers | Pipeline |

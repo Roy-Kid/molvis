@@ -3,8 +3,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import type { Molvis } from "@molvis/core";
+import { Lasso } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { InspectorTab } from "./InspectorTab";
 import { useSelectionSnapshot } from "./useSelectionSnapshot";
 
@@ -14,7 +15,17 @@ interface SelectPanelProps {
 
 export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const [expression, setExpression] = useState("");
+  const [fenceActive, setFenceActive] = useState(false);
   const snapshot = useSelectionSnapshot(app);
+
+  useEffect(() => {
+    if (!app) return;
+    const handler = (active: boolean) => setFenceActive(active);
+    app.events.on("fence-select-change", handler);
+    return () => {
+      app.events.off("fence-select-change", handler);
+    };
+  }, [app]);
 
   const handleSelect = () => {
     if (!app || !expression.trim()) {
@@ -72,8 +83,27 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
                 Select
               </Button>
             </div>
-            <div className="text-[10px] text-muted-foreground">
-              Ctrl + Click to toggle atoms and bonds.
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                variant={fenceActive ? "default" : "outline"}
+                className="h-7 px-2 text-[11px] gap-1"
+                onClick={() => {
+                  if (fenceActive) {
+                    app?.exitFenceSelect();
+                  } else {
+                    app?.enterFenceSelect();
+                  }
+                }}
+              >
+                <Lasso className="h-3 w-3" />
+                {fenceActive ? "Drawing..." : "Fence Select"}
+              </Button>
+              <span className="text-[10px] text-muted-foreground">
+                {fenceActive
+                  ? "Draw on canvas, release to select"
+                  : "Ctrl+Click to toggle"}
+              </span>
             </div>
           </SidebarSection>
 

@@ -18,6 +18,7 @@ export interface MolvisEventMap {
   "dirty-change": boolean;
   "status-message": { text: string; type: "info" | "error" };
   "representation-change": RepresentationStyle;
+  "fence-select-change": boolean;
 }
 
 export type Listener<T = unknown> = (data: T) => void;

@@ -9,6 +9,7 @@ import { ArrayFrameSource } from "./commands/sources";
 import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { ModeManager, ModeType } from "./mode";
+import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import type { FrameSource } from "./pipeline/pipeline";
@@ -514,6 +515,27 @@ export class MolvisApp {
       default:
         logger.warn(`Unknown mode: ${mode}`);
         break;
+    }
+  }
+
+  /**
+   * Enter fence (lasso) selection mode. Disables camera, enables drawing.
+   * Only works when in Select mode.
+   */
+  public enterFenceSelect(): void {
+    const mode = this._world.mode;
+    if (mode instanceof SelectMode) {
+      mode.enterFenceMode();
+    }
+  }
+
+  /**
+   * Exit fence selection mode. Re-enables camera.
+   */
+  public exitFenceSelect(): void {
+    const mode = this._world.mode;
+    if (mode instanceof SelectMode) {
+      mode.exitFenceMode();
     }
   }
 
