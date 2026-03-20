@@ -140,6 +140,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
     }
 
+    this.app.artist.redrawFromSceneIndex(this.frame);
     return { success: true };
   }
 
@@ -227,17 +228,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       instanceDataBuffer[idx4 + 3] = radius;
     }
 
-    // Notify ImpostorState that we modified the data?
-    // ImpostorState.updateMulti? Use setFrameDataAndFlush?
-    // Simply calling thinInstanceBufferUpdated on mesh is enough IF we modified the array it uses.
-    // Babylon's ThinInstanceSetBuffer uses the array reference if not static?
-    // Wait, ImpostorState calls `thinInstanceSetBuffer(..., true)`.
-    // Static buffers might need explicit update call.
-
-    // Flush via ImpostorState
-    atomState.needsFlush = true;
-    atomState.flush();
-    mesh.thinInstanceRefreshBoundingInfo(true);
+    atomState.needsUpload = true;
   }
 
   private updateBondBuffer(
@@ -342,10 +333,7 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       }
     }
 
-    // Flush via ImpostorState
-    bondState.needsFlush = true;
-    bondState.flush();
-    mesh.thinInstanceRefreshBoundingInfo(true);
+    bondState.needsUpload = true;
   }
 
   /**

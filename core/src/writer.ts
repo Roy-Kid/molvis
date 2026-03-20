@@ -29,6 +29,9 @@ export function exportFrame(
   return writeFrame(frame, options);
 }
 
+/**
+ * Return the preferred filename extension for a serialized format.
+ */
 export function defaultExtensionForFormat(format: string): string {
   switch (format.toLowerCase()) {
     case "pdb":
@@ -42,6 +45,9 @@ export function defaultExtensionForFormat(format: string): string {
   }
 }
 
+/**
+ * Return the download MIME type for a serialized format.
+ */
 export function mimeForFormat(format: string): string {
   switch (format.toLowerCase()) {
     case "pdb":

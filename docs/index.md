@@ -33,5 +33,10 @@ MolVis is a high-performance molecular visualization toolkit that brings interac
 - [Getting Started](getting-started.md) -- Installation and basic usage
 - [Architecture](architecture.md) -- System design and key concepts
 - [Core API Reference](api/core.md) -- TypeScript API documentation
+- [Python Widget API Reference](api/python.md) -- Jupyter widget API and packaging notes
+- [Page Runtime Reference](api/page.md) -- Web app runtime surface and engineering commands
+- [VS Code Extension Reference](api/vsc-ext.md) -- Commands, settings, and test entry points
+- [0.0.2 Release Checklist](release/0.0.2-release-checklist.md) -- Multi-package release runbook
 - [Core Release Checklist](release/core-release-checklist.md) -- Manual release runbook
+- [0.0.2 Pre-Release Fix List](release/0.0.2-pre-release-fix-list.md) -- Release blockers and verification gates
 - [Source Code](https://github.com/molcrafts/molvis) -- GitHub repository

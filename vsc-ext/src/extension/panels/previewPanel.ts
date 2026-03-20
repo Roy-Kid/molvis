@@ -4,6 +4,7 @@ import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
 import type { Logger } from "../types";
 import type { PanelRegistry } from "../types";
+import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import { handleSaveFile, onWebviewMessage, sendToWebview } from "./messaging";
 
@@ -68,31 +69,30 @@ export async function openQuickViewPanel(
   });
 
   const baseTitle = panel.title;
-  const messageDisposable = onWebviewMessage(panel.webview, async (message) => {
-    switch (message.type) {
-      case "ready":
-        sendToWebview(panel.webview, createInitMessage("standalone"));
-        if (targetUri) {
-          try {
+  const messageDisposable = onWebviewMessage(
+    panel.webview,
+    withErrorHandler(async (message) => {
+      switch (message.type) {
+        case "ready":
+          sendToWebview(panel.webview, createInitMessage("standalone"));
+          if (targetUri) {
             await sendLoadedFile(panel, targetUri, fileLoader);
-          } catch (error) {
-            logger.error(`MolVis: Failed to load file: ${error}`);
           }
-        }
-        break;
-      case "saveFile":
-        await handleSaveFile(message.data, message.suggestedName);
-        break;
-      case "dirtyStateChanged":
-        panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;
-        break;
-      case "error":
-        logger.error(`MolVis: ${message.message}`);
-        break;
-      default:
-        break;
-    }
-  });
+          break;
+        case "saveFile":
+          await handleSaveFile(message.data, message.suggestedName, logger);
+          break;
+        case "dirtyStateChanged":
+          panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;
+          break;
+        case "error":
+          logger.error(`MolVis: ${message.message}`);
+          break;
+        default:
+          break;
+      }
+    }, logger),
+  );
 
   panel.onDidDispose(() => {
     panelRegistry.unregister(panel);

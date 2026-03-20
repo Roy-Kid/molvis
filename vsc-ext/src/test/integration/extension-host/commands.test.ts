@@ -12,13 +12,29 @@ async function activateExtension(): Promise<void> {
   }
 }
 
-function hasWebviewTab(viewType: string): boolean {
-  return vscode.window.tabGroups.all
-    .flatMap((group) => group.tabs)
-    .some((tab) => {
-      const input = tab.input as unknown as { viewType?: string };
-      return input.viewType === viewType;
-    });
+async function getRegisteredPanels(): Promise<readonly string[]> {
+  return (
+    (await vscode.commands.executeCommand<readonly string[]>(
+      "molvis._test.getRegisteredPanelViewTypes",
+    )) ?? []
+  );
+}
+
+async function waitForRegisteredPanel(
+  viewType: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await getRegisteredPanels()).includes(viewType)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const registered = await getRegisteredPanels();
+  assert.fail(
+    `Expected panel ${viewType} to appear within ${timeoutMs}ms; registered=${registered.join(",")}`,
+  );
 }
 
 suite("extension host commands", () => {
@@ -39,7 +55,7 @@ suite("extension host commands", () => {
 
   test("openEditor creates molvis editor webview", async () => {
     await vscode.commands.executeCommand("molvis.openEditor");
-    assert.ok(hasWebviewTab("molvis.workspace"));
+    await waitForRegisteredPanel("molvis.workspace");
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
 
@@ -56,7 +72,7 @@ suite("extension host commands", () => {
     );
 
     await vscode.commands.executeCommand("molvis.quickView", fileUri);
-    assert.ok(hasWebviewTab("molvis.quickView"));
+    await waitForRegisteredPanel("molvis.quickView");
 
     await vscode.commands.executeCommand("molvis.reload");
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");

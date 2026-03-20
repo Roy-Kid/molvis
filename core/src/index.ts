@@ -1,6 +1,9 @@
 import init, { type InitOutput } from "@molcrafts/molrs";
 declare const __WASM_INLINE__: boolean;
 
+/**
+ * Shared initialized `@molcrafts/molrs` runtime for advanced integrations.
+ */
 export let wasmInstance: InitOutput;
 
 if (__WASM_INLINE__) {
@@ -18,6 +21,9 @@ import type { MolvisConfig } from "./config";
 import type { MolvisSetting } from "./settings";
 export { MOLVIS_VERSION } from "./version";
 
+/**
+ * Mount a new MolVis application into an existing DOM container.
+ */
 export function mountMolvis(
   container: HTMLElement,
   config: MolvisConfig = {},
@@ -81,7 +87,7 @@ export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
 export type { Modifier } from "./pipeline/modifier";
 export { ArrayFrameSource, ZarrFrameSource } from "./commands/sources";
-export { ZarrReader } from "@molcrafts/molrs";
+export { SimulationReader as ZarrReader } from "@molcrafts/molrs";
 
 export { DataSourceModifier } from "./pipeline/data_source_modifier";
 export { SliceModifier } from "./modifiers/SliceModifier";
@@ -91,6 +97,7 @@ export { AssignColorModifier } from "./modifiers/AssignColorModifier";
 export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
+export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
 export type { ColormapName } from "./artist/colormaps";
 export { COLORMAP_NAMES } from "./artist/colormaps";
 

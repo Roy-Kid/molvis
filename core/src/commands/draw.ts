@@ -213,13 +213,10 @@ export class DrawFrameCommand extends Command<void> {
   async do(): Promise<void> {
     const artist = this.app.artist;
 
-    // 1. Clear Renderer & Registry
-    artist.clear();
+    // 1. Draw Frame via Artist
+    await artist.drawFrame(this.frame, this.box, this.options);
 
-    // 2. Render Frame via Artist
-    await artist.renderFrame(this.frame, this.box, this.options);
-
-    // 3. Draw Box (Delegate to DrawBoxCommand)
+    // 2. Draw Box (Delegate to DrawBoxCommand)
     if (this.box) {
       this.app.execute("draw_box", { box: this.box });
     }
@@ -262,8 +259,8 @@ export class DrawAtomCommand extends Command<{ atomId: number }> {
       options.atomId ?? (app.world.sceneIndex.getNextAtomId?.() || 0);
   }
 
-  do(): { atomId: number } {
-    const result = this.app.artist.drawAtom(this.position, {
+  async do(): Promise<{ atomId: number }> {
+    const result = await this.app.artist.drawAtom(this.position, {
       ...this.options,
       atomId: this.atomId,
     });
@@ -386,7 +383,7 @@ export class DeleteAtomCommand extends Command<void> {
     this.app.artist.deleteAtom(atomState.mesh.uniqueId, this.atomId);
   }
 
-  undo(): Command {
+  async undo(): Promise<Command> {
     if (!this.savedAtomData || !this.savedAtomMeta)
       return new NoOpCommand(this.app);
 
@@ -395,7 +392,7 @@ export class DeleteAtomCommand extends Command<void> {
     for (const [name, data] of Object.entries(this.savedAtomData)) {
       buffers.set(name, data);
     }
-    this.app.world.sceneIndex.createAtom(
+    await this.app.artist.drawAtomFromBuffers(
       {
         atomId: this.atomId,
         element: this.savedAtomMeta.element,
@@ -411,7 +408,7 @@ export class DeleteAtomCommand extends Command<void> {
       for (const [name, buf] of Object.entries(data)) {
         bondBuffers.set(name, buf);
       }
-      this.app.world.sceneIndex.createBond(
+      await this.app.artist.drawBondFromBuffers(
         {
           bondId,
           atomId1: meta.atomId1,
@@ -447,8 +444,8 @@ export class DrawBondCommand extends Command<{ bondId: number }> {
       options.bondId ?? (app.world.sceneIndex.getNextBondId?.() || 0);
   }
 
-  do(): { bondId: number } {
-    const result = this.app.artist.drawBond(this.startPos, this.endPos, {
+  async do(): Promise<{ bondId: number }> {
+    const result = await this.app.artist.drawBond(this.startPos, this.endPos, {
       ...this.options,
       bondId: this.bondId,
     });
@@ -524,14 +521,14 @@ export class DeleteBondCommand extends Command<void> {
     this.app.artist.deleteBond(bondState.mesh.uniqueId, this.bondId);
   }
 
-  undo(): Command {
+  async undo(): Promise<Command> {
     if (!this.savedData || !this.savedMeta) return new NoOpCommand(this.app);
 
     const buffers = new Map<string, Float32Array>();
     for (const [name, data] of Object.entries(this.savedData)) {
       buffers.set(name, data);
     }
-    this.app.world.sceneIndex.createBond(
+    await this.app.artist.drawBondFromBuffers(
       { bondId: this.bondId, ...this.savedMeta },
       buffers,
     );

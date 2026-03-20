@@ -5,6 +5,7 @@ import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
+import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
 import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { DataSourceModifier } from "./data_source_modifier";
 import type { Modifier } from "./modifier";
@@ -70,6 +71,11 @@ export class ModifierRegistry {
       "Assign Color",
       "Selection Sensitive",
       () => new AssignColorModifier(),
+    );
+    ModifierRegistry.register(
+      "Transparent",
+      "Selection Sensitive",
+      () => new TransparentSelectionModifier(),
     );
     ModifierRegistry.register(
       "Delete Selected",

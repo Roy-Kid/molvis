@@ -1,17 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Slider } from "@/components/ui/slider";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import {
-  type Molvis,
-  AssignColorModifier,
-  DeleteSelectedModifier,
-} from "@molvis/core";
-import { Lasso, Palette, Trash2 } from "lucide-react";
+import { ExpressionSelectionModifier, type Molvis } from "@molvis/core";
+import { Lasso } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { InspectorTab } from "./InspectorTab";
 import { useSelectionSnapshot } from "./useSelectionSnapshot";
 
@@ -19,51 +13,37 @@ interface SelectPanelProps {
   app: Molvis | null;
 }
 
-function discoverElements(app: Molvis | null): string[] {
-  if (!app) return [];
-  const frame = app.system.frame;
-  const atoms = frame?.getBlock("atoms");
-  if (!atoms) return [];
-  const elements = atoms.getColumnStrings("element");
-  if (!elements) return [];
-  const unique = new Set(elements);
-  return Array.from(unique).sort();
-}
-
 export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const [expression, setExpression] = useState("");
   const [fenceActive, setFenceActive] = useState(false);
-  const [assignColor, setAssignColor] = useState("#FF4444");
-  const [selectionOpacity, setSelectionOpacity] = useState(1.0);
-  const [elements, setElements] = useState<string[]>([]);
   const snapshot = useSelectionSnapshot(app);
-
-  const refreshElements = useCallback(() => {
-    setElements(discoverElements(app));
-  }, [app]);
 
   useEffect(() => {
     if (!app) return;
-    refreshElements();
 
     const handler = (active: boolean) => setFenceActive(active);
     app.events.on("fence-select-change", handler);
 
-    const onFrame = () => refreshElements();
-    app.events.on("frame-rendered", onFrame);
-
     return () => {
       app.events.off("fence-select-change", handler);
-      app.events.off("frame-rendered", onFrame);
     };
-  }, [app, refreshElements]);
+  }, [app]);
 
-  const handleSelect = () => {
-    if (!app || !expression.trim()) return;
+  const addExpressionSelection = (
+    nextExpression: string,
+    message = "Expression selection added to pipeline",
+  ) => {
+    if (!app || !nextExpression.trim()) return;
     try {
-      app.artist.selectByExpression(expression);
+      app.modifierPipeline.addModifier(
+        new ExpressionSelectionModifier(
+          `expr-sel-${Date.now()}`,
+          nextExpression.trim(),
+        ),
+      );
+      void app.applyPipeline({ fullRebuild: true });
       app.events.emit("status-message", {
-        text: "Expression selection updated",
+        text: message,
         type: "info",
       });
     } catch (error) {
@@ -75,41 +55,8 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     }
   };
 
-  const handleElementSelect = (element: string) => {
-    if (!app) return;
-    app.artist.selectByExpression(`element == '${element}'`);
-  };
-
-  const handleAssignColor = () => {
-    if (!app || snapshot.atomCount === 0) return;
-    let mod = findAssignColorMod(app);
-    if (!mod) {
-      mod = new AssignColorModifier();
-      app.modifierPipeline.addModifier(mod);
-    }
-    const selectedIds = app.world.selectionManager.getSelectedAtomIds();
-    mod.addAssignment(selectedIds, assignColor);
-    app.applyPipeline({ fullRebuild: true });
-  };
-
-  const handleSelectionOpacity = (opacity: number) => {
-    if (!app || snapshot.atomCount === 0) return;
-    setSelectionOpacity(opacity);
-    const selectedIds = app.world.selectionManager.getSelectedAtomIds();
-    app.artist.setAtomOpacity(selectedIds, opacity);
-  };
-
-  const handleDeleteSelected = () => {
-    if (!app || snapshot.atomCount === 0) return;
-    let mod = findDeleteSelectedMod(app);
-    if (!mod) {
-      mod = new DeleteSelectedModifier();
-      app.modifierPipeline.addModifier(mod);
-    }
-    const selectedIds = app.world.selectionManager.getSelectedAtomIds();
-    mod.deleteIndices(selectedIds);
-    app.world.selectionManager.apply({ type: "clear" });
-    app.applyPipeline({ fullRebuild: true });
+  const handleSelect = () => {
+    addExpressionSelection(expression);
   };
 
   return (
@@ -126,8 +73,8 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
       <ScrollArea className="flex-1 min-h-0">
         <div className="min-h-full">
           <SidebarSection
-            title="Selection"
-            subtitle="Expression query"
+            title="Expression Selection"
+            subtitle="Add expression selection modifiers"
             badge={`${snapshot.atomCount}/${snapshot.bondCount}`}
             defaultOpen={true}
           >
@@ -148,11 +95,23 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
                 Select
               </Button>
             </div>
-            <div className="flex items-center gap-2 pt-1">
+          </SidebarSection>
+
+          <SidebarSection
+            title="Manual Selection"
+            subtitle="Select directly in the canvas"
+            defaultOpen={true}
+          >
+            <div className="space-y-2 pt-1">
+              <div className="text-[10px] leading-4 text-muted-foreground">
+                {fenceActive
+                  ? "Fence mode is active. Draw a closed region on the canvas and release to select. Shift adds, Cmd on macOS / Ctrl elsewhere removes."
+                  : "Click atoms or bonds in the canvas to select. Cmd on macOS / Ctrl elsewhere toggles the current selection."}
+              </div>
               <Button
                 size="sm"
                 variant={fenceActive ? "default" : "outline"}
-                className="h-7 px-2 text-[11px] gap-1"
+                className="h-7 w-full px-2 text-[11px] gap-1"
                 onClick={() => {
                   if (fenceActive) {
                     app?.exitFenceSelect();
@@ -162,86 +121,7 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
                 }}
               >
                 <Lasso className="h-3 w-3" />
-                {fenceActive ? "Drawing..." : "Fence Select"}
-              </Button>
-              <span className="text-[10px] text-muted-foreground">
-                {fenceActive
-                  ? "Draw on canvas, release to select"
-                  : "Ctrl+Click to toggle"}
-              </span>
-            </div>
-          </SidebarSection>
-
-          {/* Quick Element Select */}
-          {elements.length > 0 && (
-            <SidebarSection
-              title="By Element"
-              subtitle="Quick select by element type"
-              defaultOpen={true}
-            >
-              <div className="flex flex-wrap gap-1">
-                {elements.map((el) => (
-                  <Button
-                    key={el}
-                    size="sm"
-                    variant="outline"
-                    className="h-6 px-2 text-[10px] font-mono"
-                    onClick={() => handleElementSelect(el)}
-                  >
-                    {el}
-                  </Button>
-                ))}
-              </div>
-            </SidebarSection>
-          )}
-
-          {/* Actions on Selection */}
-          <SidebarSection
-            title="Actions"
-            subtitle="Apply to selected atoms"
-            defaultOpen={true}
-          >
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="color"
-                  value={assignColor}
-                  onChange={(e) => setAssignColor(e.target.value)}
-                  className="w-7 h-7 rounded cursor-pointer border-0 p-0 shrink-0"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-[11px] gap-1 flex-1"
-                  onClick={handleAssignColor}
-                  disabled={snapshot.atomCount === 0}
-                >
-                  <Palette className="h-3 w-3" />
-                  Color Selection
-                </Button>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px]">
-                  Opacity ({Math.round(selectionOpacity * 100)}%)
-                </Label>
-                <Slider
-                  min={0.05}
-                  max={1}
-                  step={0.05}
-                  value={[selectionOpacity]}
-                  onValueChange={([v]) => handleSelectionOpacity(v)}
-                  disabled={snapshot.atomCount === 0}
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[11px] gap-1 w-full text-red-400 hover:text-red-300"
-                onClick={handleDeleteSelected}
-                disabled={snapshot.atomCount === 0}
-              >
-                <Trash2 className="h-3 w-3" />
-                Delete Selected
+                {fenceActive ? "Cancel Fence" : "Fence"}
               </Button>
             </div>
           </SidebarSection>
@@ -259,21 +139,3 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     </div>
   );
 };
-
-function findAssignColorMod(
-  app: Molvis,
-): AssignColorModifier | undefined {
-  for (const mod of app.modifierPipeline.getModifiers()) {
-    if (mod instanceof AssignColorModifier) return mod;
-  }
-  return undefined;
-}
-
-function findDeleteSelectedMod(
-  app: Molvis,
-): DeleteSelectedModifier | undefined {
-  for (const mod of app.modifierPipeline.getModifiers()) {
-    if (mod instanceof DeleteSelectedModifier) return mod;
-  }
-  return undefined;
-}

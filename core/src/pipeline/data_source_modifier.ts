@@ -9,7 +9,7 @@ import type { PipelineContext } from "./types";
  */
 export class DataSourceModifier extends BaseModifier {
   // Properties for UI binding
-  public sourceType: "file" | "zarr" | "empty" = "empty";
+  public sourceType: "file" | "empty" = "empty";
   public filename = "";
 
   // Visibility

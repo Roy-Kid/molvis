@@ -4,6 +4,8 @@ import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
 import { logger } from "../utils/logger";
 
+export type SelectModifierMode = "replace" | "add" | "remove" | "toggle";
+
 /**
  * Selection modifier that creates or updates a named selection.
  */
@@ -12,10 +14,11 @@ export class SelectModifier extends BaseModifier {
     id: string,
     private expression: string | number[],
     private selectionName?: string,
+    public mode: SelectModifierMode = "replace",
   ) {
     super(
       id,
-      `Select: ${selectionName ?? "Current"}`,
+      `Select (${mode})`,
       ModifierCategory.SelectionSensitive,
     );
   }
@@ -55,13 +58,33 @@ export class SelectModifier extends BaseModifier {
       mask = SelectionMask.all(atomCount);
     }
 
+    let nextMask = mask;
+    switch (this.mode) {
+      case "add":
+        nextMask = context.currentSelection.union(mask);
+        break;
+      case "remove":
+        nextMask = context.currentSelection.intersection(mask.invert());
+        break;
+      case "toggle": {
+        const union = context.currentSelection.union(mask);
+        const intersection = context.currentSelection.intersection(mask);
+        nextMask = union.intersection(intersection.invert());
+        break;
+      }
+      case "replace":
+      default:
+        nextMask = mask;
+        break;
+    }
+
     // Store in selectionSet if named
     if (this.selectionName) {
-      context.selectionSet.set(this.selectionName, mask);
+      context.selectionSet.set(this.selectionName, nextMask);
     }
 
     // Update currentSelection
-    context.currentSelection = mask;
+    context.currentSelection = nextMask;
 
     // Frame is unchanged (selection is context-only)
     return input;
@@ -71,7 +94,7 @@ export class SelectModifier extends BaseModifier {
     const exprKey = Array.isArray(this.expression)
       ? this.expression.join(",")
       : this.expression;
-    return `${super.getCacheKey()}:${exprKey}:${this.selectionName ?? ""}`;
+    return `${super.getCacheKey()}:${exprKey}:${this.selectionName ?? ""}:${this.mode}`;
   }
 }
 

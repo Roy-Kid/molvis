@@ -1,14 +1,17 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
+  AssignColorModifier,
+  DeleteSelectedModifier,
   HideSelectionModifier,
   type Modifier,
   type Molvis,
   PipelineEvents,
-  parseSelectionKey,
+  TransparentSelectionModifier,
 } from "@molvis/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
+import { getSelectedAtomIndices } from "../modifiers/selectionUtils";
 
 const DEFAULT_PROPERTIES_HEIGHT = 250;
 const MIN_PROPERTIES_HEIGHT = 100;
@@ -27,23 +30,6 @@ interface PipelineState {
   handleToggleModifier: (modifier: Modifier) => void;
   handleDragEnd: (event: DragEndEvent) => void;
   refreshModifiers: () => void;
-}
-
-function getSelectedAtomIndices(app: Molvis): number[] {
-  const atomIndices = new Set<number>();
-  const selection = app.world.selectionManager.getState();
-  for (const key of selection.atoms) {
-    const ref = parseSelectionKey(key);
-    if (!ref) {
-      continue;
-    }
-    const meta = app.world.sceneIndex.getMeta(ref.meshId, ref.subIndex);
-    if (meta?.type !== "atom") {
-      continue;
-    }
-    atomIndices.add(meta.atomId);
-  }
-  return [...atomIndices];
 }
 
 export function usePipelineTabState(app: Molvis | null): PipelineState {
@@ -137,6 +123,22 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
         const selectedAtomIndices = getSelectedAtomIndices(app);
         if (selectedAtomIndices.length > 0) {
           modifier.hideIndices(selectedAtomIndices);
+          app.world.selectionManager.clearSelection();
+        }
+      } else if (modifier instanceof AssignColorModifier) {
+        const selectedAtomIndices = getSelectedAtomIndices(app);
+        if (selectedAtomIndices.length > 0) {
+          modifier.setSelection(selectedAtomIndices);
+        }
+      } else if (modifier instanceof TransparentSelectionModifier) {
+        const selectedAtomIndices = getSelectedAtomIndices(app);
+        if (selectedAtomIndices.length > 0) {
+          modifier.setIndices(selectedAtomIndices);
+        }
+      } else if (modifier instanceof DeleteSelectedModifier) {
+        const selectedAtomIndices = getSelectedAtomIndices(app);
+        if (selectedAtomIndices.length > 0) {
+          modifier.deleteIndices(selectedAtomIndices);
           app.world.selectionManager.clearSelection();
         }
       }

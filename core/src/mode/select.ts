@@ -1,11 +1,13 @@
-import { type PointerInfo, Vector3 } from "@babylonjs/core";
+import { Matrix, type PointerInfo, Vector3 } from "@babylonjs/core";
 
 import type { MolvisApp as Molvis } from "../app";
+import { SelectModifier } from "../modifiers/SelectModifier";
 
 import type { SelectionOp } from "../selection_manager";
 import { makeSelectionKey } from "../selection_manager";
 import { pointInPolygon, simplifyPolyline, type Point2D } from "../selection/fence";
 import { ContextMenuController } from "../ui/menus/controller";
+import { isCtrlOrMeta } from "../utils/platform";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { HitResult, MenuItem } from "./types";
@@ -39,6 +41,8 @@ class SelectMode extends BaseMode {
   private _fenceActive = false;
   private _fenceDrawing = false;
   private _fencePath: Point2D[] = [];
+  private _fenceOverlay: SVGSVGElement | null = null;
+  private _fenceOverlayPath: SVGPathElement | null = null;
 
   constructor(app: Molvis) {
     super(ModeType.Select, app);
@@ -59,6 +63,8 @@ class SelectMode extends BaseMode {
     this._fenceActive = true;
     this._fenceDrawing = false;
     this._fencePath = [];
+    this.ensureFenceOverlay();
+    this.updateFenceOverlay();
     this.app.world.camera.detachControl();
     this.app.events.emit("fence-select-change", true);
   }
@@ -70,6 +76,7 @@ class SelectMode extends BaseMode {
     this._fenceActive = false;
     this._fenceDrawing = false;
     this._fencePath = [];
+    this.disposeFenceOverlay();
     const canvas = this.app.world.scene.getEngine().getRenderingCanvas();
     if (canvas) {
       this.app.world.camera.attachControl(canvas, true);
@@ -86,7 +93,7 @@ class SelectMode extends BaseMode {
     if (this._fenceActive) {
       this.exitFenceMode();
     }
-    this.app.world.selectionManager.apply({ type: "clear" });
+    this.disposeFenceOverlay();
     super.finish();
   }
 
@@ -97,16 +104,17 @@ class SelectMode extends BaseMode {
     this._fencePath = [
       { x: pointerInfo.event.offsetX, y: pointerInfo.event.offsetY },
     ];
+    this.updateFenceOverlay();
   }
 
   override async _on_left_up(pointerInfo: PointerInfo): Promise<void> {
     if (this._fenceActive && this._fenceDrawing) {
-      this.completeFenceSelect(pointerInfo);
+      await this.completeFenceSelect(pointerInfo);
       return;
     }
 
     // Normal click-select behavior
-    const isCtrl = pointerInfo.event.ctrlKey;
+    const isCtrl = isCtrlOrMeta(pointerInfo.event);
 
     const hit = await this.pickHit();
 
@@ -128,7 +136,14 @@ class SelectMode extends BaseMode {
       thinIndex >= 0 ? thinIndex : undefined,
     );
 
-    const isSelected = this.app.world.selectionManager.isSelected(key);
+    const bondKey =
+      meta.type === "bond"
+        ? this.app.world.sceneIndex.getSelectionKeyForBond(meta.bondId) ?? key
+        : key;
+    const targetKeys = meta.type === "bond" ? [bondKey] : [key];
+    const isSelected = targetKeys.some((selectionKey) =>
+      this.app.world.selectionManager.isSelected(selectionKey),
+    );
     let op: SelectionOp;
 
     if (meta.type === "atom") {
@@ -141,11 +156,11 @@ class SelectMode extends BaseMode {
       }
     } else {
       if (isCtrl) {
-        op = { type: "toggle", bonds: [key] };
+        op = { type: "toggle", bonds: targetKeys };
       } else if (isSelected) {
-        op = { type: "remove", bonds: [key] };
+        op = { type: "remove", bonds: targetKeys };
       } else {
-        op = { type: "replace", bonds: [key] };
+        op = { type: "replace", bonds: targetKeys };
       }
     }
 
@@ -158,6 +173,7 @@ class SelectMode extends BaseMode {
         x: pointerInfo.event.offsetX,
         y: pointerInfo.event.offsetY,
       });
+      this.updateFenceOverlay();
       return;
     }
     return super._on_pointer_move(pointerInfo);
@@ -175,12 +191,13 @@ class SelectMode extends BaseMode {
    * Complete fence selection: project all atoms to screen space,
    * test against simplified fence polygon, apply selection.
    */
-  private completeFenceSelect(pointerInfo: PointerInfo): void {
+  private async completeFenceSelect(pointerInfo: PointerInfo): Promise<void> {
     // Add final point and close
     this._fencePath.push({
       x: pointerInfo.event.offsetX,
       y: pointerInfo.event.offsetY,
     });
+    this.updateFenceOverlay();
 
     const polygon = simplifyPolyline(this._fencePath, 3);
 
@@ -190,22 +207,45 @@ class SelectMode extends BaseMode {
     }
 
     // Project all atoms to screen space and test against polygon
-    const selectedKeys = this.projectAndSelect(polygon);
+    const selectedIndices = this.projectAndSelect(polygon);
+    const selectedBondKeys = this.projectAndSelectBonds(polygon);
 
     // Apply selection based on modifier keys
     const isShift = pointerInfo.event.shiftKey;
-    const isCtrl = pointerInfo.event.ctrlKey;
+    const isCtrl = isCtrlOrMeta(pointerInfo.event);
 
-    let op: SelectionOp;
+    let mode: "replace" | "add" | "remove";
     if (isShift) {
-      op = { type: "add", atoms: selectedKeys };
+      mode = "add";
     } else if (isCtrl) {
-      op = { type: "remove", atoms: selectedKeys };
+      mode = "remove";
     } else {
-      op = { type: "replace", atoms: selectedKeys };
+      mode = "replace";
     }
 
-    this.app.world.selectionManager.apply(op);
+    this.app.modifierPipeline.addModifier(
+      new SelectModifier(`fence-select-${Date.now()}`, selectedIndices, undefined, mode),
+    );
+    await this.app.applyPipeline({ fullRebuild: true });
+
+    const currentAtoms = [...this.app.world.selectionManager.getState().atoms];
+    if (mode === "add") {
+      this.app.world.selectionManager.apply({
+        type: "add",
+        bonds: selectedBondKeys,
+      });
+    } else if (mode === "remove") {
+      this.app.world.selectionManager.apply({
+        type: "remove",
+        bonds: selectedBondKeys,
+      });
+    } else {
+      this.app.world.selectionManager.apply({
+        type: "replace",
+        atoms: currentAtoms,
+        bonds: selectedBondKeys,
+      });
+    }
     this.exitFenceMode();
   }
 
@@ -213,7 +253,7 @@ class SelectMode extends BaseMode {
    * Project all atom positions to screen space and return selection keys
    * for atoms inside the fence polygon.
    */
-  private projectAndSelect(polygon: Point2D[]): string[] {
+  private projectAndSelect(polygon: Point2D[]): number[] {
     const frame = this.app.system.frame;
     const atoms = frame?.getBlock("atoms");
     if (!atoms) return [];
@@ -232,27 +272,144 @@ class SelectMode extends BaseMode {
     const height = engine.getRenderHeight();
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = scene.getTransformMatrix();
+    const worldMatrix = Matrix.Identity();
 
     const atomCount = atoms.nrows();
     const tmpVec = new Vector3();
-    const selectedKeys: string[] = [];
+    const selectedIndices: number[] = [];
 
     for (let i = 0; i < atomCount; i++) {
       tmpVec.set(xCoords[i], yCoords[i], zCoords[i]);
       const projected = Vector3.Project(
         tmpVec,
-        transformMatrix,
+        worldMatrix,
         transformMatrix,
         viewportMatrix,
       );
 
       if (pointInPolygon({ x: projected.x, y: projected.y }, polygon)) {
-        const key = this.app.world.sceneIndex.getSelectionKeyForAtom(i);
-        if (key) selectedKeys.push(key);
+        selectedIndices.push(i);
       }
     }
 
-    return selectedKeys;
+    return selectedIndices;
+  }
+
+  private projectAndSelectBonds(polygon: Point2D[]): string[] {
+    const scene = this.app.world.scene;
+    const camera = scene.activeCamera;
+    if (!camera) return [];
+
+    const engine = scene.getEngine();
+    const width = engine.getRenderWidth();
+    const height = engine.getRenderHeight();
+    const viewportMatrix = camera.viewport.toGlobal(width, height);
+    const transformMatrix = scene.getTransformMatrix();
+    const worldMatrix = Matrix.Identity();
+    const tmpVec = new Vector3();
+    const selected = new Set<string>();
+
+    for (const bondId of this.app.world.sceneIndex.metaRegistry.bonds.getAllIds()) {
+      const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
+      if (!meta) continue;
+
+      tmpVec.set(
+        (meta.start.x + meta.end.x) * 0.5,
+        (meta.start.y + meta.end.y) * 0.5,
+        (meta.start.z + meta.end.z) * 0.5,
+      );
+      const projected = Vector3.Project(
+        tmpVec,
+        worldMatrix,
+        transformMatrix,
+        viewportMatrix,
+      );
+
+      if (!pointInPolygon({ x: projected.x, y: projected.y }, polygon)) {
+        continue;
+      }
+
+      const key = this.app.world.sceneIndex.getSelectionKeyForBond(meta.bondId);
+      if (key) {
+        selected.add(key);
+      }
+    }
+
+    return [...selected];
+  }
+
+  private ensureFenceOverlay(): void {
+    if (this._fenceOverlay) {
+      this.syncFenceOverlayViewport();
+      return;
+    }
+
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("data-role", "molvis-fence-overlay");
+    svg.style.position = "absolute";
+    svg.style.inset = "0";
+    svg.style.width = "100%";
+    svg.style.height = "100%";
+    svg.style.pointerEvents = "none";
+    svg.style.overflow = "visible";
+    svg.style.zIndex = "20";
+
+    const path = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "path",
+    );
+    path.setAttribute("fill", "#60a5fa");
+    path.setAttribute("fill-opacity", "0.10");
+    path.setAttribute("stroke", "#60a5fa");
+    path.setAttribute("stroke-width", "2");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    path.setAttribute("vector-effect", "non-scaling-stroke");
+
+    svg.appendChild(path);
+    this.app.uiContainer.appendChild(svg);
+
+    this._fenceOverlay = svg;
+    this._fenceOverlayPath = path;
+    this.syncFenceOverlayViewport();
+  }
+
+  private syncFenceOverlayViewport(): void {
+    if (!this._fenceOverlay) return;
+
+    const width = this.app.canvas.clientWidth || this.app.displaySize.width || 1;
+    const height =
+      this.app.canvas.clientHeight || this.app.displaySize.height || 1;
+    this._fenceOverlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    this._fenceOverlay.setAttribute("preserveAspectRatio", "none");
+  }
+
+  private updateFenceOverlay(): void {
+    if (!this._fenceOverlayPath) return;
+
+    this.syncFenceOverlayViewport();
+
+    if (this._fencePath.length < 2) {
+      this._fenceOverlayPath.setAttribute("d", "");
+      return;
+    }
+
+    const d = this._fencePath
+      .map((point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`,
+      )
+      .join(" ");
+    const first = this._fencePath[0];
+    const closedPath = `${d} L ${first.x.toFixed(2)} ${first.y.toFixed(2)} Z`;
+    this._fenceOverlayPath.setAttribute("d", closedPath);
+  }
+
+  private disposeFenceOverlay(): void {
+    this._fenceOverlayPath = null;
+    if (this._fenceOverlay) {
+      this._fenceOverlay.remove();
+      this._fenceOverlay = null;
+    }
   }
 }
 

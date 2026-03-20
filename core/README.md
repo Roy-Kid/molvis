@@ -19,9 +19,9 @@ if (!container) {
 }
 
 const app = mountMolvis(container);
-const frame = readFrame("example.pdb", pdbText);
+const frame = readFrame(pdbText, "example.pdb");
 app.loadFrame(frame);
-app.start();
+await app.start();
 ```
 
 ## Dev Commands

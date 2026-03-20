@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { createInitMessage } from "../configuration";
 import type { Logger, PanelRegistry } from "../types";
+import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import {
   handleSaveFile,
@@ -58,14 +59,18 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
     const baseTitle = webviewPanel.title;
     const messageDisposable = onWebviewMessage(
       webviewPanel.webview,
-      (message) => {
+      withErrorHandler(async (message) => {
         switch (message.type) {
           case "ready":
             sendToWebview(webviewPanel.webview, createInitMessage("editor"));
-            void loadTextDocumentToWebview(webviewPanel.webview, document);
+            await loadTextDocumentToWebview(webviewPanel.webview, document);
             break;
           case "saveFile":
-            void handleSaveFile(message.data, message.suggestedName);
+            await handleSaveFile(
+              message.data,
+              message.suggestedName,
+              this.logger,
+            );
             break;
           case "dirtyStateChanged":
             webviewPanel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;
@@ -76,7 +81,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
           default:
             break;
         }
-      },
+      }, this.logger),
     );
 
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(

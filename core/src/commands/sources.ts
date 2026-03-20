@@ -1,4 +1,4 @@
-import type { Frame, ZarrReader } from "@molcrafts/molrs";
+import type { Frame, SimulationReader } from "@molcrafts/molrs";
 import type { FrameSource } from "../pipeline/pipeline";
 
 /**
@@ -8,6 +8,9 @@ import type { FrameSource } from "../pipeline/pipeline";
 export class ArrayFrameSource implements FrameSource {
   private frames: Frame[];
 
+  /**
+   * Wrap a preloaded list of frames as a pipeline frame source.
+   */
   constructor(frames: Frame[]) {
     this.frames = frames;
   }
@@ -33,6 +36,9 @@ export class ArrayFrameSource implements FrameSource {
 export class SingleFrameSource implements FrameSource {
   private frame: Frame;
 
+  /**
+   * Wrap a single frame as a frame source.
+   */
   constructor(frame: Frame) {
     this.frame = frame;
   }
@@ -55,6 +61,9 @@ export class AsyncFrameSource implements FrameSource {
   private getFrameFn: (index: number) => Promise<Frame>;
   private frameCount: number | null;
 
+  /**
+   * Wrap an async callback as a frame source.
+   */
   constructor(
     getFrameFn: (index: number) => Promise<Frame>,
     frameCount: number | null = null,
@@ -76,16 +85,19 @@ export class AsyncFrameSource implements FrameSource {
  * ZarrFrameSource provides frames from a Zarr archive.
  */
 export class ZarrFrameSource implements FrameSource {
-  private reader: ZarrReader;
+  private reader: SimulationReader;
   private frameCount: number;
 
-  constructor(reader: ZarrReader) {
+  /**
+   * Wrap a `SimulationReader` so it can drive the modifier pipeline.
+   */
+  constructor(reader: SimulationReader) {
     this.reader = reader;
-    this.frameCount = reader.len();
+    this.frameCount = reader.countFrames();
   }
 
   async getFrame(index: number): Promise<Frame> {
-    const frame = this.reader.read(index);
+    const frame = this.reader.readFrame(index);
     if (!frame) throw new Error(`Frame index ${index} out of range`);
     return frame;
   }

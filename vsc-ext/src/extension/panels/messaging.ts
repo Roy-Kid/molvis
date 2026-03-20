@@ -1,6 +1,10 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type { HostToWebviewMessage, WebviewToHostMessage } from "../types";
+import type {
+  HostToWebviewMessage,
+  Logger,
+  WebviewToHostMessage,
+} from "../types";
 
 /**
  * Send a message from extension host to webview.
@@ -28,22 +32,27 @@ export function onWebviewMessage(
 export async function handleSaveFile(
   base64Data: string,
   suggestedName: string,
+  logger: Logger,
 ): Promise<void> {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-  const defaultUri = workspaceFolder
-    ? vscode.Uri.joinPath(workspaceFolder, suggestedName)
-    : vscode.Uri.file(suggestedName);
+  try {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const defaultUri = workspaceFolder
+      ? vscode.Uri.joinPath(workspaceFolder, suggestedName)
+      : vscode.Uri.file(suggestedName);
 
-  const uri = await vscode.window.showSaveDialog({
-    defaultUri,
-    filters: {
-      "Molecular files": ["pdb", "xyz", "lammps"],
-    },
-  });
-  if (!uri) return;
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri,
+      filters: {
+        "Molecular files": ["pdb", "xyz", "lammps"],
+      },
+    });
+    if (!uri) return;
 
-  const binary = Buffer.from(base64Data, "base64");
-  await vscode.workspace.fs.writeFile(uri, binary);
+    const binary = Buffer.from(base64Data, "base64");
+    await vscode.workspace.fs.writeFile(uri, binary);
+  } catch (error) {
+    logger.error(`MolVis: Failed to save file: ${error}`);
+  }
 }
 
 /**

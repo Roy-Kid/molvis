@@ -8,6 +8,10 @@ import {
   type EntityType,
   MetaRegistry,
 } from "./entity_source";
+import {
+  ATOM_IMPOSTOR_SPEC,
+  BOND_IMPOSTOR_SPEC,
+} from "./artist/material_spec";
 import { encodePickingColor } from "./picker";
 import { makeSelectionKey } from "./selection_manager";
 import { Topology } from "./system/topology";
@@ -24,6 +28,8 @@ export interface RegisterFrameOptions {
   bondBuffers?: Map<string, Float32Array>;
   /** Total bond render instances (may exceed bondBlock.nrows() for multi-order bonds) */
   bondInstanceCount?: number;
+  /** Optional render-instance to logical bond-id map. */
+  bondInstanceMap?: Uint32Array;
 }
 
 export interface RegisterAtomOptions {
@@ -51,7 +57,8 @@ export class ImpostorState {
   public count = 0; // Number of EDIT atoms (added on top of frame)
   public capacity: number;
   public frameOffset = 0; // Number of FRAME atoms
-  public needsFlush = false;
+  public needsUpload = false;
+  public frameIdToIndex = new Map<number, number>();
 
   public buffers = new Map<string, { data: Float32Array; stride: number }>();
 
@@ -73,14 +80,16 @@ export class ImpostorState {
     }
   }
 
-  setFrameDataAndFlush(
+  setFrameData(
     buffers: Map<string, Float32Array>,
     frameCount: number,
+    frameInstanceMap?: Uint32Array,
   ): void {
     this.frameOffset = frameCount;
     this.count = 0;
     this.idToIndex.clear();
     this.indexToId.clear();
+    this.frameIdToIndex.clear();
 
     // 1. Ensure capacity
     if (this.capacity < frameCount) {
@@ -111,8 +120,14 @@ export class ImpostorState {
       }
     }
 
-    this.needsFlush = true;
-    this.flush();
+    for (let i = 0; i < frameCount; i++) {
+      const logicalId = frameInstanceMap?.[i] ?? i;
+      if (!this.frameIdToIndex.has(logicalId)) {
+        this.frameIdToIndex.set(logicalId, i);
+      }
+    }
+
+    this.needsUpload = true;
   }
 
   getStride(name: string): number {
@@ -129,6 +144,8 @@ export class ImpostorState {
   }
 
   getIndex(id: number): number | undefined {
+    const frameIndex = this.frameIdToIndex.get(id);
+    if (frameIndex !== undefined) return frameIndex;
     if (id < this.frameOffset) return id; // Implicit Frame Index
 
     const editIndex = this.idToIndex.get(id);
@@ -158,7 +175,7 @@ export class ImpostorState {
     this.idToIndex.set(id, editIndex);
     this.indexToId.set(editIndex, id);
     this.count++;
-    this.needsFlush = true;
+    this.needsUpload = true;
     return absIndex;
   }
 
@@ -213,7 +230,7 @@ export class ImpostorState {
     this.idToIndex.delete(id);
     this.indexToId.delete(lastEditIndex);
     this.count--;
-    this.needsFlush = true;
+    this.needsUpload = true;
   }
 
   updateMulti(id: number, values: Map<string, Float32Array | number[]>): void {
@@ -235,43 +252,15 @@ export class ImpostorState {
       const arr = vals instanceof Float32Array ? vals : new Float32Array(vals);
       desc.data.set(arr, absIndex * desc.stride);
     }
-    this.needsFlush = true;
+    this.needsUpload = true;
   }
 
-  flush(): void {
-    if (!this.needsFlush) return;
+  getTotalCount(): number {
+    return this.frameOffset + this.count;
+  }
 
-    const totalCount = this.frameOffset + this.count;
-
-    // If no instances, hide and disable mesh
-    if (totalCount === 0) {
-      this.mesh.isVisible = false;
-      this.mesh.setEnabled(false);
-      this.mesh.thinInstanceCount = 0;
-      this.needsFlush = false;
-      return;
-    }
-
-    // Ensure mesh is visible when it has instances
-    if (!this.mesh.isEnabled()) {
-      this.mesh.setEnabled(true);
-      this.mesh.isVisible = true;
-    }
-
-    const matrixDesc = this.buffers.get("matrix");
-    if (matrixDesc) {
-      const view = matrixDesc.data.subarray(0, totalCount * matrixDesc.stride);
-      this.mesh.thinInstanceSetBuffer("matrix", view, matrixDesc.stride, false);
-    }
-
-    for (const [name, desc] of this.buffers) {
-      if (name === "matrix") continue;
-      const view = desc.data.subarray(0, totalCount * desc.stride);
-      this.mesh.thinInstanceSetBuffer(name, view, desc.stride, false);
-    }
-
-    this.mesh.thinInstanceEnablePicking = true;
-    this.needsFlush = false;
+  markUploaded(): void {
+    this.needsUpload = false;
   }
 
   private grow(): void {
@@ -322,35 +311,16 @@ export class ImpostorState {
   }
 }
 
-// ============ Mesh Registry ============
-
-export const ATOM_BUFFER_DEFS = [
-  { name: "matrix", stride: 16 },
-  { name: "instanceData", stride: 4 },
-  { name: "instanceColor", stride: 4 },
-  { name: "instancePickingColor", stride: 4 },
-];
-
-export const BOND_BUFFER_DEFS = [
-  { name: "matrix", stride: 16 },
-  { name: "instanceData0", stride: 4 },
-  { name: "instanceData1", stride: 4 },
-  { name: "instanceColor0", stride: 4 },
-  { name: "instanceColor1", stride: 4 },
-  { name: "instanceSplit", stride: 4 },
-  { name: "instancePickingColor", stride: 4 },
-];
-
 export class MeshRegistry {
   private atoms: ImpostorState | null = null;
   private bonds: ImpostorState | null = null;
 
   registerAtomLayer(mesh: Mesh): void {
-    this.atoms = new ImpostorState(mesh, ATOM_BUFFER_DEFS);
+    this.atoms = new ImpostorState(mesh, ATOM_IMPOSTOR_SPEC.bufferDefs);
   }
 
   registerBondLayer(mesh: Mesh): void {
-    this.bonds = new ImpostorState(mesh, BOND_BUFFER_DEFS);
+    this.bonds = new ImpostorState(mesh, BOND_IMPOSTOR_SPEC.bufferDefs);
   }
 
   registerBox(_mesh: Mesh): void {
@@ -394,14 +364,6 @@ export class MeshRegistry {
 
   freeBond(id: number): void {
     if (this.bonds) this.bonds.remove(id);
-  }
-
-  flushAtom(): void {
-    if (this.atoms) this.atoms.flush();
-  }
-
-  flushBond(): void {
-    if (this.bonds) this.bonds.flush();
   }
 
   clear(): void {
@@ -480,6 +442,19 @@ export class SceneIndex {
     return null;
   }
 
+  /**
+   * Get the selection key (MeshID:SubIndex) for a logical Bond ID.
+   * For multi-order bonds this returns the first render instance.
+   */
+  getSelectionKeyForBond(bondId: number): string | null {
+    const bondState = this.meshRegistry.getBondState();
+    if (!bondState) return null;
+
+    const absIndex = bondState.getIndex(bondId);
+    if (absIndex === undefined) return null;
+    return makeSelectionKey(bondState.mesh.uniqueId, absIndex);
+  }
+
   getNextAtomId(): number {
     return this.metaRegistry.atoms.getMaxId() + 1;
   }
@@ -499,6 +474,7 @@ export class SceneIndex {
       atomBuffers,
       bondBuffers,
       bondInstanceCount,
+      bondInstanceMap,
     } = options;
 
     if (!atomBlock) throw new Error("SceneIndex: atomBlock required");
@@ -508,7 +484,7 @@ export class SceneIndex {
     if (atomBuffers) {
       this.meshRegistry
         .getAtomState()
-        ?.setFrameDataAndFlush(atomBuffers, atomBlock.nrows());
+        ?.setFrameData(atomBuffers, atomBlock.nrows());
     }
 
     // 2. Setup MetaRegistry
@@ -527,7 +503,7 @@ export class SceneIndex {
         const renderCount = bondInstanceCount ?? bondBlock.nrows();
         this.meshRegistry
           .getBondState()
-          ?.setFrameDataAndFlush(bondBuffers, renderCount);
+          ?.setFrameData(bondBuffers, renderCount, bondInstanceMap);
       }
 
       this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
@@ -564,7 +540,6 @@ export class SceneIndex {
     this.meshRegistry.allocateAtom(meta.atomId, buffers);
     this.metaRegistry.atoms.setEdit(meta.atomId, { type: "atom", ...meta });
     this.topology.addAtom(meta.atomId);
-    this.meshRegistry.flushAtom();
     this.markAllUnsaved();
   }
 
@@ -575,7 +550,6 @@ export class SceneIndex {
     this.meshRegistry.allocateBond(meta.bondId, buffers);
     this.metaRegistry.bonds.setEdit(meta.bondId, { type: "bond", ...meta });
     this.topology.addBond(meta.bondId, meta.atomId1, meta.atomId2);
-    this.meshRegistry.flushBond();
     this.markAllUnsaved();
   }
 
@@ -584,7 +558,6 @@ export class SceneIndex {
     this.metaRegistry.atoms.removeEdit(atomId);
     this.topology.removeAtom(atomId);
     this.meshRegistry.freeAtom(atomId);
-    this.meshRegistry.flushAtom();
     this.markAllUnsaved();
   }
 
@@ -592,7 +565,6 @@ export class SceneIndex {
     this.metaRegistry.bonds.removeEdit(bondId);
     this.topology.removeBond(bondId);
     this.meshRegistry.freeBond(bondId);
-    this.meshRegistry.flushBond();
     this.markAllUnsaved();
   }
 
@@ -610,7 +582,6 @@ export class SceneIndex {
 
     if (bufferUpdates) {
       this.meshRegistry.updateAtom(atomId, bufferUpdates);
-      this.meshRegistry.flushAtom();
     }
     this.markAllUnsaved();
   }
@@ -629,7 +600,6 @@ export class SceneIndex {
 
     if (bufferUpdates) {
       this.meshRegistry.updateBond(bondId, bufferUpdates);
-      this.meshRegistry.flushBond();
     }
     this.markAllUnsaved();
   }

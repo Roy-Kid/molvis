@@ -4,6 +4,7 @@ import {
   type Scene,
   type ShaderMaterial,
 } from "@babylonjs/core";
+import type { ImpostorMaterialSpec } from "./material_spec";
 
 /**
  * Create a temporary warmup mesh with minimal instance buffers.
@@ -13,7 +14,7 @@ export function createWarmupMesh(
   name: string,
   scene: Scene,
   material: ShaderMaterial,
-  target: "atom" | "bond",
+  spec: ImpostorMaterialSpec,
 ): Mesh {
   const mesh = MeshBuilder.CreatePlane(name, { size: 1.0 }, scene);
   mesh.material = material;
@@ -27,60 +28,11 @@ export function createWarmupMesh(
   matrix[15] = 1;
   mesh.thinInstanceSetBuffer("matrix", matrix, 16, false);
 
-  if (target === "atom") {
+  for (const buffer of spec.warmupBuffers) {
     mesh.thinInstanceSetBuffer(
-      "instanceData",
-      new Float32Array([0, 0, 0, 0.5]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instanceColor",
-      new Float32Array([1, 1, 1, 1]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instancePickingColor",
-      new Float32Array([0, 0, 0, 1]),
-      4,
-      false,
-    );
-  } else {
-    mesh.thinInstanceSetBuffer(
-      "instanceData0",
-      new Float32Array([0, 0, 0, 0.1]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instanceData1",
-      new Float32Array([0, 1, 0, 1]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instanceColor0",
-      new Float32Array([1, 1, 1, 1]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instanceColor1",
-      new Float32Array([1, 1, 1, 1]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instanceSplit",
-      new Float32Array([0, 0, 0, 0]),
-      4,
-      false,
-    );
-    mesh.thinInstanceSetBuffer(
-      "instancePickingColor",
-      new Float32Array([0, 0, 0, 1]),
-      4,
+      buffer.name,
+      buffer.data,
+      buffer.stride,
       false,
     );
   }

@@ -224,9 +224,7 @@ export class World {
    */
   public start() {
     this._engine.runRenderLoop(() => {
-      this.scene.render();
-      // Render axis helper in viewport corner
-      this.axisHelper.render();
+      this.renderOnce();
       const fps = this._engine.getFps();
       this._app.events.emit("fps-change", fps);
     });
@@ -257,7 +255,12 @@ export class World {
    */
   public resize() {
     this._engine.resize();
+    this.renderOnce();
+  }
+
+  public renderOnce() {
     this.scene.render();
+    this.axisHelper.render();
   }
 
   /**

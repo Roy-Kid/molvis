@@ -60,8 +60,7 @@ export class MolvisApp {
   private _modeManager!: ModeManager;
   private _guiManager!: GUIManager;
   private _isRunning = false;
-  private _rendererReady = false;
-  private _rendererInitPromise!: Promise<void>;
+  private _rendererReady = true;
 
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
@@ -158,18 +157,6 @@ export class MolvisApp {
     // Initialize Artist (Drawing Logic)
     this.artist = new Artist({ app: this });
 
-    // Renderer warmup is started during initialization but awaited in start().
-    // Keep this internal: host layers should not manually compile shaders.
-    this._rendererInitPromise = this.artist
-      .prepareRenderer()
-      .then(() => {
-        this._rendererReady = true;
-      })
-      .catch((error) => {
-        logger.error("Renderer warmup failed during app initialization", error);
-        throw error;
-      });
-
     // Initialize command registry (use shared singleton)
     this.commands = commands;
 
@@ -191,7 +178,12 @@ export class MolvisApp {
         const key = this._world.sceneIndex.getSelectionKeyForAtom(idx);
         if (key) keys.push(key);
       }
-      this._world.selectionManager.apply({ type: "replace", atoms: keys });
+      const existingBonds = [...this._world.selectionManager.getState().bonds];
+      this._world.selectionManager.apply({
+        type: "replace",
+        atoms: keys,
+        bonds: existingBonds,
+      });
     });
   }
 
@@ -393,10 +385,6 @@ export class MolvisApp {
 
   public async start(): Promise<void> {
     if (this._isRunning) return;
-
-    // Single guard for renderer readiness.
-    // First frame and all mode interactions happen only after warmup completes.
-    await this._rendererInitPromise;
 
     this._isRunning = true;
     this._world.start();
@@ -782,7 +770,7 @@ export class MolvisApp {
     if (options?.fullRebuild) {
       this.renderFrame(computed);
     } else {
-      this.artist.refreshFrame(computed);
+      this.artist.redrawFrame(computed);
     }
   }
 

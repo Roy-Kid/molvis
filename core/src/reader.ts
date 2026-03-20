@@ -7,6 +7,9 @@ import {
 import { PeriodicTable } from "./system/elements";
 import { logger } from "./utils/logger";
 
+/**
+ * Parse a PDB payload into a normalized frame.
+ */
 export function readPDBFrame(content: string): Frame {
   const reader = new PdbReader(content);
   const frame = reader.read(0);
@@ -48,6 +51,9 @@ function processXYZFrame(frame: Frame): void {
   }
 }
 
+/**
+ * Parse an XYZ payload into a normalized frame.
+ */
 export function readXYZFrame(content: string): Frame {
   const reader = new XyzReader(content);
   const frame = reader.read(0);
@@ -62,6 +68,9 @@ export function readXYZFrame(content: string): Frame {
   return frame;
 }
 
+/**
+ * Parse a LAMMPS data payload into a normalized frame.
+ */
 export function readLAMMPSData(content: string): Frame {
   const reader = new LammpsReader(content);
   const frame = reader.read(0);
@@ -167,15 +176,24 @@ export class TrajectoryReader {
   private reader: XyzReader;
   private frameCount: number;
 
+  /**
+   * Create a multi-frame reader for XYZ trajectory payloads.
+   */
   constructor(content: string) {
     this.reader = new XyzReader(content);
     this.frameCount = this.reader.len();
   }
 
+  /**
+   * Return the number of readable frames in the source payload.
+   */
   getFrameCount(): number {
     return this.frameCount;
   }
 
+  /**
+   * Read and normalize a single frame by index.
+   */
   readFrame(index: number): Frame {
     if (index < 0 || index >= this.frameCount) {
       throw new Error(
@@ -192,6 +210,9 @@ export class TrajectoryReader {
     return frame;
   }
 
+  /**
+   * Release the underlying WASM reader.
+   */
   free(): void {
     this.reader.free();
   }

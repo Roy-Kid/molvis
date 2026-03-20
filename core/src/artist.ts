@@ -18,11 +18,18 @@ import {
 import {
   compileShaderMaterial,
   createImpostorMaterial,
+  syncImpostorMaterialUniforms,
 } from "./artist/material_factory";
+import {
+  type ImpostorTarget,
+  getImpostorMaterialSpec,
+} from "./artist/material_spec";
 import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
 import { LabelRenderer } from "./artist/label_renderer";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
 import { createWarmupMesh } from "./artist/warmup";
+import type { AtomMeta, BondMeta } from "./entity_source";
+import type { ImpostorState } from "./scene_index";
 import "./shaders/impostor";
 
 /**
@@ -66,6 +73,7 @@ export interface DrawBondOptions {
 export class Artist {
   private app: MolvisApp;
   private _globalOpacity = 1.0;
+  private shaderCompileTasks = new Map<ImpostorTarget, Promise<void>>();
 
   public atomMesh: Mesh;
   public bondMesh: Mesh;
@@ -155,35 +163,45 @@ export class Artist {
 
   // ============ Shader Preparation ============
 
-  public async prepareRenderer(): Promise<void> {
+  private async ensureShadersForVisibleGeometry(
+    targets: ImpostorTarget[],
+  ): Promise<void> {
+    if (targets.length === 0) return;
+
+    this.app.world.renderOnce();
+    await Promise.all(targets.map((target) => this.ensureTargetShaderReady(target)));
+  }
+
+  private ensureTargetShaderReady(target: ImpostorTarget): Promise<void> {
+    const existing = this.shaderCompileTasks.get(target);
+    if (existing) return existing;
+
     const scene = this.app.world.scene;
-    const atomMaterial = this.atomMesh.material as ShaderMaterial | null;
-    const bondMaterial = this.bondMesh.material as ShaderMaterial | null;
+    const spec = getImpostorMaterialSpec(target);
+    const mesh = target === "atom" ? this.atomMesh : this.bondMesh;
+    const material = mesh.material as ShaderMaterial | null;
 
-    const atomWarmupMesh = atomMaterial
-      ? createWarmupMesh("__molvis_warmup_atom__", scene, atomMaterial, "atom")
-      : null;
-    const bondWarmupMesh = bondMaterial
-      ? createWarmupMesh("__molvis_warmup_bond__", scene, bondMaterial, "bond")
-      : null;
-
-    try {
-      await Promise.all([
-        compileShaderMaterial(
-          atomWarmupMesh ?? this.atomMesh,
-          atomMaterial,
-          "atoms",
-        ),
-        compileShaderMaterial(
-          bondWarmupMesh ?? this.bondMesh,
-          bondMaterial,
-          "bonds",
-        ),
-      ]);
-    } finally {
-      atomWarmupMesh?.dispose();
-      bondWarmupMesh?.dispose();
+    if (material) {
+      syncImpostorMaterialUniforms(material, scene, this.app);
     }
+
+    const warmupMesh = material
+      ? createWarmupMesh(`__molvis_warmup_${target}__`, scene, material, spec)
+      : null;
+
+    const compileTask = compileShaderMaterial(
+      warmupMesh ?? mesh,
+      material,
+      spec,
+    ).finally(() => {
+      warmupMesh?.dispose();
+    });
+
+    this.shaderCompileTasks.set(target, compileTask);
+    return compileTask.catch((error) => {
+      this.shaderCompileTasks.delete(target);
+      throw error;
+    });
   }
 
   // ============ Scene Lifecycle ============
@@ -217,7 +235,7 @@ export class Artist {
 
   // ============ Frame Rendering (Bulk) ============
 
-  public async renderFrame(
+  public async drawFrame(
     frame: Frame,
     _box?: Box,
     options?: {
@@ -225,9 +243,16 @@ export class Artist {
       bonds?: { radii?: number; impostor?: boolean };
     },
   ): Promise<void> {
-    const sceneIndex = this.app.world.sceneIndex;
     const atomsBlock = frame.getBlock("atoms");
     const bondsBlock = frame.getBlock("bonds");
+
+    const visibleTargets = this.collectVisibleTargets({
+      atomCount: atomsBlock?.nrows() ?? 0,
+      bondCount: bondsBlock?.nrows() ?? 0,
+    });
+
+    await this.ensureShadersForVisibleGeometry(visibleTargets);
+    this.clear();
 
     if (!atomsBlock || atomsBlock.nrows() === 0) {
       this.app.events.emit("frame-rendered", { frame, box: _box });
@@ -264,7 +289,7 @@ export class Artist {
       );
     }
 
-    sceneIndex.registerFrame({
+    this.app.world.sceneIndex.registerFrame({
       atomMesh: this.atomMesh,
       bondMesh: this.bondMesh,
       atomBlock: atomsBlock,
@@ -272,8 +297,10 @@ export class Artist {
       atomBuffers,
       bondBuffers: bondResult?.buffers,
       bondInstanceCount: bondResult?.instanceCount,
+      bondInstanceMap: bondResult?.instanceMap,
     });
 
+    this.applySceneIndexToMeshes();
 
     this.app.events.emit("frame-rendered", { frame, box: _box });
     updateVisualGuide(
@@ -284,7 +311,7 @@ export class Artist {
 
   // ============ Frame Refresh (Fast Path) ============
 
-  public refreshFrame(frame: Frame): void {
+  public redrawFrame(frame: Frame): void {
     const atomsBlock = frame.getBlock("atoms");
     if (!atomsBlock || atomsBlock.nrows() === 0) return;
 
@@ -295,7 +322,7 @@ export class Artist {
     if (!x || !y || !z || !atomState) return;
 
     // Update atom positions in-place
-    const count = Math.min(atomsBlock.nrows(), atomState.count);
+    const count = Math.min(atomsBlock.nrows(), atomState.getTotalCount());
     const matDesc = atomState.buffers.get("matrix");
     const dataDesc = atomState.buffers.get("instanceData");
 
@@ -330,10 +357,10 @@ export class Artist {
 
   // ============ Single Entity Drawing ============
 
-  public drawAtom(
+  public async drawAtom(
     position: Vector3,
     options: DrawAtomOptions,
-  ): { atomId: number; meshId: number } {
+  ): Promise<{ atomId: number; meshId: number }> {
     const atomId = options.atomId ?? this.app.world.sceneIndex.getNextAtomId();
     const element = options.element;
     const style = this.app.styleManager.getAtomStyle(element);
@@ -364,6 +391,11 @@ export class Artist {
     );
     values.set("instancePickingColor", new Float32Array(4));
 
+    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
+      atomCount: 1,
+      bondCount: 0,
+    }));
+
     this.app.world.sceneIndex.createAtom(
       {
         atomId,
@@ -372,17 +404,18 @@ export class Artist {
       },
       values,
     );
+    this.applySceneIndexToMeshes();
 
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     const meshId = atomState ? atomState.mesh.uniqueId : 0;
     return { atomId, meshId };
   }
 
-  public drawBond(
+  public async drawBond(
     start: Vector3,
     end: Vector3,
     options: DrawBondOptions = {},
-  ): { bondId: number; meshId: number } {
+  ): Promise<{ bondId: number; meshId: number }> {
     const bondId = options.bondId ?? this.app.world.sceneIndex.getNextBondId();
     const order = options.order ?? 1;
     const bondRadius =
@@ -429,6 +462,11 @@ export class Artist {
     values.set("instanceSplit", new Float32Array([splitOffset, 0, 0, 0]));
     values.set("instancePickingColor", new Float32Array(4));
 
+    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
+      atomCount: 0,
+      bondCount: 1,
+    }));
+
     this.app.world.sceneIndex.createBond(
       {
         bondId,
@@ -440,6 +478,7 @@ export class Artist {
       },
       values,
     );
+    this.applySceneIndexToMeshes();
 
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
     const meshId = bondState ? bondState.mesh.uniqueId : 0;
@@ -448,6 +487,7 @@ export class Artist {
 
   public deleteAtom(meshId: number, atomId: number): void {
     this.app.world.sceneIndex.unregisterEditAtom(meshId, atomId);
+    this.applySceneIndexToMeshes();
   }
 
   public selectByExpression(expression: string): void {
@@ -456,6 +496,54 @@ export class Artist {
 
   public deleteBond(meshId: number, bondId: number): void {
     this.app.world.sceneIndex.unregisterEditBond(meshId, bondId);
+    this.applySceneIndexToMeshes();
+  }
+
+  public async drawAtomFromBuffers(
+    meta: Omit<AtomMeta, "type">,
+    buffers: Map<string, Float32Array | number[]>,
+  ): Promise<void> {
+    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
+      atomCount: 1,
+      bondCount: 0,
+    }));
+    this.app.world.sceneIndex.createAtom(meta, buffers);
+    this.applySceneIndexToMeshes();
+  }
+
+  public async drawBondFromBuffers(
+    meta: Omit<BondMeta, "type">,
+    buffers: Map<string, Float32Array | number[]>,
+  ): Promise<void> {
+    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
+      atomCount: 0,
+      bondCount: 1,
+    }));
+    this.app.world.sceneIndex.createBond(meta, buffers);
+    this.applySceneIndexToMeshes();
+  }
+
+  public async redrawRepresentation(frame?: Frame, box?: Box): Promise<void> {
+    const repr = this.app.styleManager.getRepresentation();
+    this.ribbonRenderer.setVisible(repr.showRibbon);
+
+    if (!frame) {
+      this.redrawFromSceneIndex();
+      return;
+    }
+
+    await this.drawFrame(frame, box);
+    this.ribbonRenderer.setVisible(repr.showRibbon);
+  }
+
+  public redrawFromSceneIndex(frame?: Frame): void {
+    this.applySceneIndexToMeshes();
+
+    const sliceMod = findSliceModifier(this.app.modifierPipeline);
+    updateVisualGuide(this.app.world.scene, sliceMod);
+    if (frame && sliceMod?.visibilityMask) {
+      this.applySliceVisibility(sliceMod.visibilityMask, frame);
+    }
   }
 
   // ============ Private Helpers ============
@@ -475,7 +563,8 @@ export class Artist {
       materialName,
     ) as ShaderMaterial | null;
     if (!material) {
-      material = createImpostorMaterial(materialName, scene, this.app);
+      const target = materialName.includes("atom") ? "atom" : "bond";
+      material = createImpostorMaterial(target, scene, this.app);
     }
 
     const mesh = MeshBuilder.CreatePlane(name, { size: 1.0 }, scene);
@@ -485,6 +574,81 @@ export class Artist {
     mesh.setEnabled(false);
     mesh.thinInstanceCount = 0;
     return mesh;
+  }
+
+  private collectVisibleTargets(counts: {
+    atomCount: number;
+    bondCount: number;
+  }): ImpostorTarget[] {
+    const repr = this.app.styleManager.getRepresentation();
+    const targets: ImpostorTarget[] = [];
+
+    if (repr.showAtoms && counts.atomCount > 0) {
+      targets.push("atom");
+    }
+    if (repr.showBonds && counts.bondCount > 0) {
+      targets.push("bond");
+    }
+
+    return targets;
+  }
+
+  private applySceneIndexToMeshes(): void {
+    const repr = this.app.styleManager.getRepresentation();
+    this.applyStateToMesh(
+      this.app.world.sceneIndex.meshRegistry.getAtomState(),
+      this.atomMesh,
+      repr.showAtoms,
+    );
+    this.applyStateToMesh(
+      this.app.world.sceneIndex.meshRegistry.getBondState(),
+      this.bondMesh,
+      repr.showBonds,
+    );
+  }
+
+  private applyStateToMesh(
+    state: ImpostorState | null,
+    mesh: Mesh,
+    allowVisible: boolean,
+  ): void {
+    const totalCount = state?.getTotalCount() ?? 0;
+
+    if (totalCount === 0) {
+      mesh.isVisible = false;
+      mesh.setEnabled(false);
+      mesh.thinInstanceCount = 0;
+      state?.markUploaded();
+      return;
+    }
+
+    if (!allowVisible) {
+      mesh.isVisible = false;
+      mesh.setEnabled(false);
+      return;
+    }
+
+    if (state?.needsUpload) {
+      const matrixDesc = state.buffers.get("matrix");
+      if (matrixDesc) {
+        const view = matrixDesc.data.subarray(0, totalCount * matrixDesc.stride);
+        mesh.thinInstanceSetBuffer("matrix", view, matrixDesc.stride, false);
+      }
+
+      for (const [name, desc] of state.buffers) {
+        if (name === "matrix") continue;
+        const view = desc.data.subarray(0, totalCount * desc.stride);
+        mesh.thinInstanceSetBuffer(name, view, desc.stride, false);
+      }
+
+      mesh.thinInstanceCount = totalCount;
+      mesh.thinInstanceEnablePicking = true;
+      mesh.thinInstanceRefreshBoundingInfo(true);
+      state.markUploaded();
+    }
+
+    mesh.setEnabled(true);
+    mesh.isVisible = true;
   }
 
   /**

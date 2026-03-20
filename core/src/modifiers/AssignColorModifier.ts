@@ -31,6 +31,20 @@ export class AssignColorModifier extends BaseModifier {
     return this._assignments;
   }
 
+  get selectedCount(): number {
+    const indices = new Set<number>();
+    for (const assignment of this._assignments) {
+      for (const idx of assignment.indices) {
+        indices.add(idx);
+      }
+    }
+    return indices.size;
+  }
+
+  get primaryColor(): string {
+    return this._assignments[0]?.color ?? "#FF4444";
+  }
+
   /**
    * Add a color assignment for a set of atom indices.
    */
@@ -39,6 +53,33 @@ export class AssignColorModifier extends BaseModifier {
       indices: new Set(indices),
       color,
     });
+  }
+
+  /**
+   * Replace all assignments with a single captured selection.
+   */
+  setSelection(indices: Iterable<number>, color = this.primaryColor): void {
+    this._assignments = [
+      {
+        indices: new Set(indices),
+        color,
+      },
+    ];
+  }
+
+  /**
+   * Update the primary color used by the first assignment.
+   */
+  setPrimaryColor(color: string): void {
+    if (this._assignments.length === 0) {
+      this._assignments.push({
+        indices: new Set(),
+        color,
+      });
+      return;
+    }
+
+    this._assignments[0].color = color;
   }
 
   /**

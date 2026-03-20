@@ -15,6 +15,10 @@ export class InMemoryPanelRegistry implements PanelRegistry {
     this.panels.delete(panel);
   }
 
+  public getRegisteredViewTypes(): readonly string[] {
+    return [...this.panels.keys()].map((panel) => panel.viewType);
+  }
+
   public async forEachVisible(
     callback: (
       panel: vscode.WebviewPanel,

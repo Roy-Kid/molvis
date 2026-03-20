@@ -12,15 +12,19 @@ import { openQuickViewPanel } from "./panels/previewPanel";
 import { openEditorPanel } from "./panels/viewerPanel";
 import { VsCodeLogger } from "./types";
 
+let activePanelRegistry: InMemoryPanelRegistry | undefined;
+
 /**
  * Extension entry point. Registers custom editor, preview/viewer commands and hot reload.
  */
 export function activate(context: vscode.ExtensionContext): void {
   const panelRegistry = new InMemoryPanelRegistry();
+  activePanelRegistry = panelRegistry;
   const logger = new VsCodeLogger();
   const fileLoader = new MolecularFileLoader();
 
   context.subscriptions.push(
+    logger,
     MolvisEditorProvider.register(context, panelRegistry, logger),
     vscode.commands.registerCommand(
       "molvis.quickView",
@@ -53,6 +57,14 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
     ...(context.extensionMode !== vscode.ExtensionMode.Production
+      ? [
+          vscode.commands.registerCommand(
+            "molvis._test.getRegisteredPanelViewTypes",
+            () => panelRegistry.getRegisteredViewTypes(),
+          ),
+        ]
+      : []),
+    ...(context.extensionMode !== vscode.ExtensionMode.Production
       ? [createHotReloadWatcher(context, panelRegistry)]
       : []),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
@@ -66,6 +78,10 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
   );
+}
+
+export function getRegisteredPanelViewTypesForTests(): readonly string[] {
+  return activePanelRegistry?.getRegisteredViewTypes() ?? [];
 }
 
 export function deactivate(): void {}

@@ -5,6 +5,7 @@ import {
   COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_R,
 } from "../modifiers/ColorByPropertyModifier";
+import { ALPHA_OVERRIDE } from "../modifiers/TransparentSelectionModifier";
 import { encodePickingColorInto } from "../picker";
 import type { StyleManager } from "./style_manager";
 
@@ -51,6 +52,7 @@ export function buildAtomBuffers(
   const overrideR = atomsBlock.getColumnF32(COLOR_OVERRIDE_R);
   const overrideG = atomsBlock.getColumnF32(COLOR_OVERRIDE_G);
   const overrideB = atomsBlock.getColumnF32(COLOR_OVERRIDE_B);
+  const overrideAlpha = atomsBlock.getColumnF32(ALPHA_OVERRIDE);
   const hasColorOverride = overrideR && overrideG && overrideB;
 
   const atomMatrix = new Float32Array(atomCount * 16);
@@ -94,16 +96,21 @@ export function buildAtomBuffers(
 
     // Color: use override if present, otherwise fall back to style
     const visible = visibleArr ? visibleArr[i] : true;
+    const alphaOverride = overrideAlpha?.[i];
+    const resolvedAlpha =
+      typeof alphaOverride === "number" && Number.isFinite(alphaOverride)
+        ? alphaOverride
+        : style.a;
     if (hasColorOverride) {
       atomColor[idx4 + 0] = overrideR[i];
       atomColor[idx4 + 1] = overrideG[i];
       atomColor[idx4 + 2] = overrideB[i];
-      atomColor[idx4 + 3] = visible ? 1.0 : 0.2;
+      atomColor[idx4 + 3] = visible ? resolvedAlpha : 0.2;
     } else {
       atomColor[idx4 + 0] = style.r;
       atomColor[idx4 + 1] = style.g;
       atomColor[idx4 + 2] = style.b;
-      atomColor[idx4 + 3] = visible ? style.a : 0.2;
+      atomColor[idx4 + 3] = visible ? resolvedAlpha : 0.2;
     }
 
     // Picking color (zero-allocation write)

@@ -98,27 +98,17 @@ Runtime settings applied after initialization:
 vsc-ext/
   src/
     extension/          # Extension host (Node.js)
-      activate.ts       # Entry point: registers providers, commands, watchers
+      activate.ts       # Entry point: registers providers and commands
       configuration.ts  # Reads molvis.config / molvis.settings
-      types.ts          # Message types, Logger, PanelRegistry interfaces
-      panels/
-        editorProvider.ts   # CustomTextEditorProvider for .pdb/.xyz/.data
-        previewPanel.ts     # Quick View side panel
-        viewerPanel.ts      # Full editor workspace panel
-        html.ts             # Webview HTML generation with CSP
-        messaging.ts        # Host <-> webview message helpers
-        hotReload.ts        # Dev file watcher for auto-reload
-      loading/
-        molecularFileLoader.ts      # Unified file loading (text + zarr)
-        zarrDirectoryReaderCore.ts  # Recursive zarr directory reader
-        pathUtils.ts                # URI / path utilities
-    webview/            # Webview bundle (browser)
-      index.ts          # Entry point
-      controller.ts     # Bootstraps MolVis core, handles messages & drop
-      loader.ts         # File parsing (PDB/XYZ/LAMMPS/Zarr)
-    browser/            # Alternative webview entries
-      preview.tsx       # Preview entry (uses controller.ts)
-      editor.tsx        # Editor entry (uses React App from page/)
+      loading/          # File and Zarr loading helpers
+      panels/           # Custom editor / preview panel plumbing
+      types.ts          # Message types, logging, registry interfaces
+    webview/            # Lightweight runtime bootstrap for file loading
+      controller.ts     # Bootstraps MolVis core and host messaging
+      loader.ts         # Parses PDB/XYZ/LAMMPS/Zarr payloads
+    viewer/             # React-based full editor workspace bundle
+      index.tsx         # Viewer entry
+      main.css          # Viewer styling
     test/
       unit/             # Mocha unit tests
       integration/      # VSCode integration tests

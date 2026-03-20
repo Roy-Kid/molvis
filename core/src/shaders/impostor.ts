@@ -2,7 +2,7 @@ import { Effect } from "@babylonjs/core";
 
 /**
  * Shader source registration is intentionally module-scoped side effect.
- * Artist imports this file once, then app.start() waits for warmup compilation.
+ * Artist imports this file once and compiles visible geometry on demand.
  * Do not move this into webview/extension code paths.
  */
 Effect.ShadersStore.sphereImpostorVertexShader = `

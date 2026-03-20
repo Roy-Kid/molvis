@@ -16,11 +16,13 @@ The core library (`@molvis/core`) provides all rendering, data processing, and i
 
 ### MolvisApp
 
-`MolvisApp` is the main entry point. It wires together the rendering engine, command system, modifier pipeline, mode manager, and UI.
+`MolvisApp` is the main runtime class. In normal usage you create it through `mountMolvis(...)`, which wires together the rendering engine, command system, modifier pipeline, mode manager, and UI.
 
 ```typescript
-const app = new MolvisApp(container, config, settings);
-app.start();
+import { mountMolvis } from "@molvis/core";
+
+const app = mountMolvis(container, config, settings);
+await app.start();
 ```
 
 Key responsibilities:

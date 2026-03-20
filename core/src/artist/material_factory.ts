@@ -6,6 +6,11 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import type { MolvisApp } from "../app";
+import {
+  type ImpostorMaterialSpec,
+  type ImpostorTarget,
+  getImpostorMaterialSpec,
+} from "./material_spec";
 
 // Module-level scratch vector for lighting uniform updates.
 // Avoids allocating a new Vector3 on every onBind callback (~120/sec at 60fps).
@@ -15,48 +20,22 @@ const TMP_LIGHT_DIR = new Vector3();
  * Create the impostor shader material for atom or bond rendering.
  */
 export function createImpostorMaterial(
-  name: string,
+  target: ImpostorTarget,
   scene: Scene,
   app: MolvisApp,
 ): ShaderMaterial {
-  const isAtom = name.includes("atom");
+  const spec = getImpostorMaterialSpec(target);
 
   const material = new ShaderMaterial(
-    name,
+    spec.materialName,
     scene,
     {
-      vertex: isAtom ? "sphereImpostor" : "bondImpostor",
-      fragment: isAtom ? "sphereImpostor" : "bondImpostor",
+      vertex: spec.shaderName,
+      fragment: spec.shaderName,
     },
     {
-      attributes: isAtom
-        ? [
-            "position",
-            "uv",
-            "instanceData",
-            "instanceColor",
-            "instancePickingColor",
-          ]
-        : [
-            "position",
-            "uv",
-            "instanceData0",
-            "instanceData1",
-            "instanceColor0",
-            "instanceColor1",
-            "instanceSplit",
-            "instancePickingColor",
-          ],
-      uniforms: [
-        "view",
-        "projection",
-        "lightDir",
-        "lightAmbient",
-        "lightDiffuse",
-        "lightSpecular",
-        "lightSpecularPower",
-        "uPickingEnabled",
-      ],
+      attributes: spec.attributes,
+      uniforms: spec.uniforms,
     },
   );
 
@@ -65,20 +44,27 @@ export function createImpostorMaterial(
   material.disableDepthWrite = false;
   material.forceDepthWrite = true;
 
-  applyLightingUniforms(material, app);
+  syncImpostorMaterialUniforms(material, scene, app);
 
   material.onBindObservable.add(() => {
-    if (!material) return;
-    material.setMatrix("view", scene.getViewMatrix());
-    material.setMatrix("projection", scene.getProjectionMatrix());
-    material.setFloat(
-      "uPickingEnabled",
-      app.world.picker?.isPicking ? 1.0 : 0.0,
-    );
-    applyLightingUniforms(material, app);
+    syncImpostorMaterialUniforms(material, scene, app);
   });
 
   return material;
+}
+
+export function syncImpostorMaterialUniforms(
+  material: ShaderMaterial,
+  scene: Scene,
+  app: MolvisApp,
+): void {
+  material.setMatrix("view", scene.getViewMatrix());
+  material.setMatrix("projection", scene.getProjectionMatrix());
+  material.setFloat(
+    "uPickingEnabled",
+    app.world.picker?.isPicking ? 1.0 : 0.0,
+  );
+  applyLightingUniforms(material, app);
 }
 
 function applyLightingUniforms(material: ShaderMaterial, app: MolvisApp): void {
@@ -98,23 +84,72 @@ function applyLightingUniforms(material: ShaderMaterial, app: MolvisApp): void {
 }
 
 /**
- * Compile a shader material against a mesh, ensuring the instanced variant is ready.
+ * Maximum time (ms) to wait for a shader to compile before giving up.
  */
-export async function compileShaderMaterial(
+const SHADER_COMPILE_TIMEOUT_MS = 10_000;
+
+/**
+ * Interval (ms) between readiness polls during shader warmup.
+ */
+const SHADER_POLL_INTERVAL_MS = 16;
+
+/**
+ * Compile a shader material against a mesh, ensuring the **instanced** variant is ready.
+ *
+ * BabylonJS `forceCompilationAsync` ignores the `useInstances` option for
+ * non-submesh materials — it calls `isReady()` without the mesh or the flag,
+ * so it compiles the non-instanced variant while we need the instanced one
+ * (with `#define INSTANCES` / `#define THIN_INSTANCES`).
+ *
+ * Each call to `isReady(mesh, true)` triggers the engine to enqueue the
+ * instanced effect for compilation if it hasn't been yet. We poll until the
+ * GPU is done or the timeout fires.
+ */
+export function compileShaderMaterial(
   mesh: Mesh,
   material: ShaderMaterial | null,
-  label: string,
+  spec: ImpostorMaterialSpec,
 ): Promise<void> {
   if (!material) {
-    throw new Error(`Missing shader material for ${label}`);
-  }
-  if (material.isReady(mesh, true)) return;
-
-  await material.forceCompilationAsync(mesh, { useInstances: true });
-
-  if (!material.isReady(mesh, true)) {
-    throw new Error(
-      `Shader material "${material.name}" for ${label} is not ready after compilation`,
+    return Promise.reject(
+      new Error(`Missing shader material for ${spec.target}s`),
     );
   }
+
+  if (material.isReady(mesh, true)) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const start = performance.now();
+
+    const poll = () => {
+      if (material.isReady(mesh, true)) {
+        resolve();
+        return;
+      }
+      if (performance.now() - start > SHADER_COMPILE_TIMEOUT_MS) {
+        const effect = material.getEffect();
+        const compilationError = effect?.getCompilationError();
+        const details = [
+          `target=${spec.target}`,
+          `shader=${spec.shaderName}`,
+          `mesh=${mesh.name}`,
+          `attributes=${spec.attributes.join(",")}`,
+        ];
+        if (compilationError) {
+          details.push(`compilationError=${compilationError}`);
+        }
+        reject(
+          new Error(
+            `Shader material "${material.name}" did not compile within ${SHADER_COMPILE_TIMEOUT_MS}ms (${details.join("; ")})`,
+          ),
+        );
+        return;
+      }
+      setTimeout(poll, SHADER_POLL_INTERVAL_MS);
+    };
+
+    setTimeout(poll, SHADER_POLL_INTERVAL_MS);
+  });
 }

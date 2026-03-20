@@ -8,3 +8,4 @@ export { AssignColorModifier } from "./AssignColorModifier";
 export { ColorByPropertyModifier } from "./ColorByPropertyModifier";
 export { DeleteSelectedModifier } from "./DeleteSelectedModifier";
 export { HideHydrogensModifier } from "./HideHydrogensModifier";
+export { TransparentSelectionModifier } from "./TransparentSelectionModifier";

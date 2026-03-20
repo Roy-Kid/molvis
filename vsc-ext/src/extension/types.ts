@@ -3,12 +3,39 @@ import * as vscode from "vscode";
 // --- Logger (was infra/logger.ts) ---
 
 export interface Logger {
+  debug(message: string): void;
+  info(message: string): void;
+  warn(message: string): void;
   error(message: string): void;
 }
 
-export class VsCodeLogger implements Logger {
+export class VsCodeLogger implements Logger, vscode.Disposable {
+  private readonly channel: vscode.OutputChannel;
+
+  constructor() {
+    this.channel = vscode.window.createOutputChannel("MolVis");
+  }
+
+  public debug(message: string): void {
+    this.channel.appendLine(`[DEBUG] ${message}`);
+  }
+
+  public info(message: string): void {
+    this.channel.appendLine(`[INFO] ${message}`);
+  }
+
+  public warn(message: string): void {
+    this.channel.appendLine(`[WARN] ${message}`);
+    vscode.window.showWarningMessage(message);
+  }
+
   public error(message: string): void {
+    this.channel.appendLine(`[ERROR] ${message}`);
     vscode.window.showErrorMessage(message);
+  }
+
+  public dispose(): void {
+    this.channel.dispose();
   }
 }
 
@@ -44,6 +71,7 @@ export interface WebviewPanelMeta {
 export interface PanelRegistry {
   register(panel: vscode.WebviewPanel, meta: WebviewPanelMeta): void;
   unregister(panel: vscode.WebviewPanel): void;
+  getRegisteredViewTypes(): readonly string[];
   forEachVisible(
     callback: (
       panel: vscode.WebviewPanel,

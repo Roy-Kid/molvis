@@ -1,10 +1,11 @@
 {
   "name": "@molvis/python",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "build": "rslib build",
-    "dev": "rslib build --watch"
+    "dev": "rslib build --watch",
+    "test": "npm run build && python3 -m pytest tests"
   },
   "devDependencies": {
     "@anywidget/types": "^0.2.0",

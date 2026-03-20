@@ -1,16 +1,26 @@
 # Molvis Page
 
-Minimal example keeping only the core rendering area.
+React web application for MolVis.
 
-- Removed original sidebar, buttons, placeholders, Chinese comments
-- `MolvisWrapper` handles create/destroy of Molvis instance & resize
-- Internal Molvis UI is hidden; only 3D canvas shown
+Current app capabilities include:
+
+- Full MolVis canvas integration through `MolvisWrapper`
+- Left and right sidebars for mode-specific controls
+- Timeline controls for trajectory playback
+- Analysis panels such as histogram, scatter, and data inspection
+- Export, settings, and keyboard shortcuts dialogs
 
 ## Development
 
 ```bash
 npm install
 npm run dev
+```
+
+## Test
+
+```bash
+npm run test
 ```
 
 ## Build
@@ -21,8 +31,9 @@ npm run build
 
 ## Structure
 
-- `src/App.tsx` App entry, mounts `MolvisWrapper` + tiny optional panel
-- `src/MolvisWrapper.tsx` Molvis wrapper component
-- `src/index.tsx` React root mounting
+- `src/App.tsx` application shell and panel layout
+- `src/MolvisWrapper.tsx` mounts and manages the MolVis runtime
+- `src/ui/` mode panels, pipeline controls, dialogs, and analysis views
+- `test/` lightweight frontend smoke tests
 
-For future interaction (load molecules, change representation, capture), add a lightweight control layer instead of a heavy sidebar.
+This package is the primary web UI surface for MolVis, not a minimal canvas demo.

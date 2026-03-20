@@ -1,83 +1,51 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   type Molvis,
   type SelectionState,
   parseSelectionKey,
 } from "@molvis/core";
-import { Plus } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { SelectionSnapshot } from "./useSelectionSnapshot";
 
 interface InspectorTabProps {
   app: Molvis | null;
   compact?: boolean;
-  /** If provided, skips internal subscription and uses parent snapshot. */
   snapshot?: SelectionSnapshot;
 }
 
-const COMMON_ELEMENTS = [
-  "H",
-  "He",
-  "Li",
-  "Be",
-  "B",
-  "C",
-  "N",
-  "O",
-  "F",
-  "Ne",
-  "Na",
-  "Mg",
-  "Al",
-  "Si",
-  "P",
-  "S",
-  "Cl",
-  "Ar",
-  "K",
-  "Ca",
-  "Fe",
-  "Cu",
-  "Zn",
-  "Br",
-  "I",
-];
+interface AttributeRow {
+  atomId: number;
+  element: string;
+  x: string;
+  y: string;
+  z: string;
+}
+
+function formatValue(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "—";
+  }
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(4);
+  }
+  return String(value);
+}
 
 export const InspectorTab: React.FC<InspectorTabProps> = ({
   app,
   compact = false,
   snapshot: externalSnapshot,
 }) => {
-  // Use external snapshot if provided; otherwise maintain own subscription
   const [internalSelection, setInternalSelection] = useState<SelectionState>({
     atoms: new Set(),
     bonds: new Set(),
   });
-  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-  const [newKey, setNewKey] = useState("");
-  const [newValue, setNewValue] = useState("");
 
   useEffect(() => {
-    // Skip internal subscription when snapshot is provided by parent
     if (externalSnapshot || !app) return;
 
     const manager = app.world.selectionManager;
-    if (!manager) return;
-
-    const state = manager.getState();
-    setInternalSelection(state);
-
     const handler = (state: SelectionState) => {
       setInternalSelection({
         atoms: new Set(state.atoms),
@@ -85,14 +53,12 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
       });
     };
 
+    handler(manager.getState());
     return manager.on("selection-change", handler);
   }, [app, externalSnapshot]);
 
-  // Derive effective selection: from external snapshot or internal state
-  const selection = React.useMemo<SelectionState>(() => {
+  const selection = useMemo<SelectionState>(() => {
     if (externalSnapshot) {
-      // Reconstruct SelectionState-like object from snapshot's atomIds
-      // For display purposes we only need atom count / bond count
       return {
         atoms: new Set(
           externalSnapshot.atomIds.map((id) => {
@@ -106,9 +72,11 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
     return internalSelection;
   }, [externalSnapshot, internalSelection, app]);
 
-  const atomIds = React.useMemo(() => {
-    if (externalSnapshot) return externalSnapshot.atomIds;
-    if (!app) return [];
+  const atomIds = useMemo(() => {
+    if (!app) {
+      return [];
+    }
+
     const ids = new Set<number>();
     for (const key of selection.atoms) {
       const ref = parseSelectionKey(key);
@@ -118,217 +86,92 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         ids.add(meta.atomId);
       }
     }
-    return [...ids];
-  }, [selection, app, externalSnapshot]);
 
-  const attributes = React.useMemo(() => {
-    if (!app || atomIds.length === 0) return {};
+    return [...ids].sort((a, b) => a - b);
+  }, [selection, app]);
 
-    const attrs: Record<string, { value: unknown; mixed: boolean }> = {};
-    const allKeys = new Set<string>();
-
-    allKeys.add("element");
-    for (const id of atomIds) {
-      const registry = app.world.sceneIndex.metaRegistry;
-      const edit = registry?.atoms.edits.get(id);
-      if (!edit) continue;
-      for (const key of Object.keys(edit)) {
-        if (key !== "type" && key !== "atomId" && key !== "position") {
-          allKeys.add(key);
-        }
-      }
+  const rows = useMemo<AttributeRow[]>(() => {
+    if (!app || atomIds.length === 0) {
+      return [];
     }
 
-    for (const key of allKeys) {
-      let commonValue: unknown = undefined;
-      let mixed = false;
-
-      const first = app.world.sceneIndex.getAttribute("atom", atomIds[0], key);
-      for (let i = 1; i < atomIds.length; i++) {
-        if (
-          app.world.sceneIndex.getAttribute("atom", atomIds[i], key) !== first
-        ) {
-          mixed = true;
-          break;
-        }
-      }
-      commonValue = first;
-
-      attrs[key] = {
-        value: mixed ? undefined : commonValue,
-        mixed,
-      };
-    }
-
-    return attrs;
-  }, [atomIds, app]);
-
-  useEffect(() => {
-    const nextDrafts: Record<string, string> = {};
-    for (const [key, info] of Object.entries(attributes)) {
-      nextDrafts[key] =
-        info.mixed || info.value === undefined || info.value === null
-          ? ""
-          : String(info.value);
-    }
-    setDraftValues(nextDrafts);
-  }, [attributes]);
-
-  const handleUpdate = (key: string, value: string) => {
-    if (!app || atomIds.length === 0) return;
-
-    let finalValue: unknown = value;
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric) && value.trim() !== "") {
-      finalValue = numeric;
-    }
-
-    app.execute("set_attribute", {
-      type: "atom",
-      ids: atomIds,
-      key,
-      value: finalValue,
-    });
-  };
-
-  const handleAdd = () => {
-    if (!newKey.trim()) return;
-    handleUpdate(newKey.trim(), newValue);
-    setNewKey("");
-    setNewValue("");
-  };
-
-  const commitAttribute = (
-    key: string,
-    info: { value: unknown; mixed: boolean },
-  ) => {
-    const next = draftValues[key] ?? "";
-    const prev =
-      info.mixed || info.value === undefined || info.value === null
-        ? ""
-        : String(info.value);
-    if (next === prev) return;
-    handleUpdate(key, next);
-  };
+    return atomIds.map((atomId) => ({
+      atomId,
+      element: formatValue(
+        app.world.sceneIndex.getAttribute("atom", atomId, "element"),
+      ),
+      x: formatValue(app.world.sceneIndex.getAttribute("atom", atomId, "x")),
+      y: formatValue(app.world.sceneIndex.getAttribute("atom", atomId, "y")),
+      z: formatValue(app.world.sceneIndex.getAttribute("atom", atomId, "z")),
+    }));
+  }, [app, atomIds]);
 
   if (selection.atoms.size === 0 && selection.bonds.size === 0) {
     return (
       <div
         className={cn(
-          "rounded border bg-muted/10 text-muted-foreground text-center",
-          compact ? "p-2 text-[11px]" : "p-4 text-sm",
+          "rounded border bg-muted/10 text-center text-muted-foreground",
+          compact ? "p-2 text-[11px] leading-4" : "p-4 text-sm",
         )}
       >
-        No selection. Select atoms to inspect and edit attributes.
+        No selection.
       </div>
     );
   }
 
   const content = (
-    <div className={cn("space-y-3", compact ? "p-0" : "p-4")}>
-      <div className="rounded border bg-muted/10 px-2 py-1 text-[11px] text-muted-foreground">
-        {selection.atoms.size} atom{selection.atoms.size !== 1 ? "s" : ""},{" "}
-        {selection.bonds.size} bond{selection.bonds.size !== 1 ? "s" : ""}
+    <div className={cn("space-y-2", compact ? "p-0" : "p-4")}>
+      <div className="flex items-center justify-between rounded border bg-muted/10 px-2 py-1 text-[10px] text-muted-foreground">
+        <span>
+          {selection.atoms.size} atom{selection.atoms.size !== 1 ? "s" : ""} /{" "}
+          {selection.bonds.size} bond{selection.bonds.size !== 1 ? "s" : ""}
+        </span>
+        {rows.length > 0 && (
+          <span className="font-mono">
+            {rows[0].atomId}
+            {rows.length > 1 ? ` … ${rows[rows.length - 1].atomId}` : ""}
+          </span>
+        )}
       </div>
 
-      {atomIds.length > 0 && (
-        <div className="space-y-2">
-          <div className="grid gap-2">
-            {Object.entries(attributes).map(([key, info]) => {
-              const isElement = key === "element";
-              return (
+      {rows.length > 0 ? (
+        <div className="rounded border bg-background">
+          <div className="grid grid-cols-[54px_40px_1fr] gap-2 border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <div>Atom</div>
+            <div>El</div>
+            <div className="font-mono">x y z</div>
+          </div>
+          <div className="divide-y">
+            {rows.map((row) => (
+              <div
+                key={row.atomId}
+                className="grid grid-cols-[54px_40px_1fr] items-center gap-2 px-2 py-1.5"
+              >
                 <div
-                  key={key}
-                  className="grid grid-cols-[78px_1fr] items-center gap-2"
+                  className="truncate font-mono text-[11px] text-muted-foreground"
+                  title={String(row.atomId)}
                 >
-                  <Label
-                    className={cn(
-                      "text-[11px] truncate text-muted-foreground",
-                      isElement && "text-foreground font-semibold",
-                    )}
-                    title={key}
-                  >
-                    {key}
-                  </Label>
-
-                  {isElement ? (
-                    <Select
-                      value={info.mixed ? "" : (info.value as string)}
-                      onValueChange={(value) => handleUpdate(key, value)}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-full" size="sm">
-                        <SelectValue
-                          placeholder={
-                            info.mixed ? "<multiple>" : "Select element"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COMMON_ELEMENTS.map((element) => (
-                          <SelectItem
-                            key={element}
-                            value={element}
-                            className="text-xs"
-                          >
-                            {element}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      className="h-7 text-xs font-mono bg-transparent"
-                      value={draftValues[key] ?? ""}
-                      placeholder={info.mixed ? "<mixed>" : "Value"}
-                      onChange={(event) =>
-                        setDraftValues((prev) => ({
-                          ...prev,
-                          [key]: event.target.value,
-                        }))
-                      }
-                      onBlur={() => commitAttribute(key, info)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          commitAttribute(key, info);
-                          (event.currentTarget as HTMLInputElement).blur();
-                        }
-                      }}
-                    />
-                  )}
+                  #{row.atomId}
                 </div>
-              );
-            })}
+                <div
+                  className="truncate text-[11px] font-semibold text-foreground"
+                  title={row.element}
+                >
+                  {row.element}
+                </div>
+                <div
+                  className="truncate font-mono text-[11px] text-foreground"
+                  title={`${row.x} ${row.y} ${row.z}`}
+                >
+                  {row.x} {row.y} {row.z}
+                </div>
+              </div>
+            ))}
           </div>
-
-          <div className="rounded border bg-background px-1.5 py-1 flex items-center gap-1">
-            <Input
-              className="h-6 text-[11px] border-0 shadow-none focus-visible:ring-0 px-1.5"
-              placeholder="property"
-              value={newKey}
-              onChange={(event) => setNewKey(event.target.value)}
-            />
-            <Input
-              className="h-6 text-[11px] border-0 shadow-none focus-visible:ring-0 px-1.5"
-              placeholder="value"
-              value={newValue}
-              onChange={(event) => setNewValue(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  handleAdd();
-                }
-              }}
-            />
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              className="h-6 w-6"
-              onClick={handleAdd}
-              disabled={!newKey.trim()}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
+        </div>
+      ) : (
+        <div className="rounded border bg-muted/10 px-2 py-1.5 text-[11px] text-muted-foreground">
+          Bond metadata is not listed here yet.
         </div>
       )}
     </div>

@@ -21,18 +21,22 @@ npm install
 ### TypeScript / JavaScript
 
 ```typescript
-import { mountMolvis } from '@molvis/core';
+import { mountMolvis } from "@molvis/core";
 
-// Mount Molvis into a container element
-const app = mountMolvis(document.getElementById('viewer'));
-app.start();
+const container = document.getElementById("viewer");
+if (!container) {
+  throw new Error("viewer container not found");
+}
+
+const app = mountMolvis(container);
+await app.start();
 ```
 
 The `mountMolvis` function accepts an optional config and settings object:
 
 ```typescript
-import { mountMolvis } from '@molvis/core';
-import type { MolvisConfig, MolvisSetting } from '@molvis/core';
+import { mountMolvis } from "@molvis/core";
+import type { MolvisConfig, MolvisSetting } from "@molvis/core";
 
 const config: MolvisConfig = {
   showUI: true,
@@ -47,7 +51,7 @@ const settings: Partial<MolvisSetting> = {
 };
 
 const app = mountMolvis(container, config, settings);
-app.start();
+await app.start();
 ```
 
 ### Loading a Structure
@@ -55,10 +59,10 @@ app.start();
 Use the command system to load molecular structures:
 
 ```typescript
-import { readFrame } from '@molvis/core';
+import { readFrame } from "@molvis/core";
 
 // Read a frame from file content
-const frame = readFrame('structure.pdb', pdbContent);
+const frame = readFrame(pdbContent, "structure.pdb");
 
 // Load and render the frame
 app.loadFrame(frame);
@@ -85,11 +89,13 @@ In edit mode:
 ### Python (Jupyter)
 
 ```python
-import molvis
+import molvis as mv
+import molpy as mp
 
-viewer = molvis.Viewer()
-viewer.load('structure.pdb')
-viewer.show()
+scene = mv.Molvis(name="demo")
+frame = mp.Frame(...)
+scene.draw_frame(frame)
+scene
 ```
 
 ## Development

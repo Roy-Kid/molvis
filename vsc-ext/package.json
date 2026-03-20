@@ -12,11 +12,18 @@
   },
   "license": "BSD-3-Clause",
   "icon": "image/molvis-icon.png",
-  "version": "0.0.3",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.108.1"
   },
   "publisher": "molcrafts",
+  "activationEvents": [
+    "onCommand:molvis.quickView",
+    "onCommand:molvis.openEditor",
+    "onCommand:molvis.reload",
+    "onCommand:molvis.save",
+    "onCustomEditor:molvis.editor"
+  ],
   "categories": ["Visualization"],
   "keywords": [
     "molecular",
@@ -273,7 +280,7 @@
     "test:unit:run": "mocha --ui tdd \"out-test/test/unit/**/*.test.js\"",
     "test:unit": "npm-run-all test:compile test:unit:run",
     "test:integration:run": "vscode-test --config .vscode-test.mjs",
-    "test:integration": "npm-run-all test:compile test:integration:run",
+    "test:integration": "npm-run-all package test:compile test:integration:run",
     "test": "npm-run-all test:unit test:integration",
     "deploy:vsce": "vsce publish",
     "deploy": "npm run deploy:vsce",

@@ -3,28 +3,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   type DataSourceModifier as CoreDataSourceModifier,
   Frame,
-  type FrameProvider,
   type Molvis,
-  Trajectory,
-  ZarrReader,
   inferFormatFromFilename,
   readFrame,
 } from "@molvis/core";
-import { FileUp, FolderUp, Trash2 } from "lucide-react";
+import { FileUp, Trash2 } from "lucide-react";
 import type React from "react";
 
 interface DataSourceModifierProps {
   modifier: CoreDataSourceModifier;
   app: Molvis | null;
   onUpdate: () => void;
-}
-
-// Add webkitdirectory to InputHTMLAttributes
-declare module "react" {
-  interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
-    webkitdirectory?: string | boolean;
-    directory?: string | boolean;
-  }
 }
 
 export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
@@ -64,88 +53,6 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     }
   };
 
-  const handleZarrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !app) return;
-
-    try {
-      const fileMap = new Map<string, Uint8Array>();
-      let rootName = "";
-
-      await Promise.all(
-        Array.from(files).map(async (file) => {
-          const buffer = await file.arrayBuffer();
-          const parts = file.webkitRelativePath.split("/");
-          if (parts.length > 1) {
-            if (!rootName) rootName = parts[0];
-            const relPath = parts.slice(1).join("/");
-            fileMap.set(relPath, new Uint8Array(buffer));
-          } else {
-            fileMap.set(file.name, new Uint8Array(buffer));
-          }
-        }),
-      );
-
-      const reader = new ZarrReader(fileMap);
-      const frameCount = reader.len();
-      if (frameCount <= 0) {
-        throw new Error("Zarr archive has no frames");
-      }
-
-      const frameCache = new Map<number, Frame>();
-      const provider: FrameProvider = {
-        length: frameCount,
-        get(index: number): Frame {
-          if (index < 0 || index >= frameCount) {
-            throw new Error(
-              `Zarr frame ${index} out of range [0, ${frameCount})`,
-            );
-          }
-          const cached = frameCache.get(index);
-          if (cached) {
-            return cached;
-          }
-          const frame = reader.read(index);
-          if (!frame) {
-            throw new Error(`Failed to read Zarr frame ${index}`);
-          }
-          frameCache.set(index, frame);
-          if (frameCache.size > 16) {
-            const oldestKey = frameCache.keys().next().value as
-              | number
-              | undefined;
-            if (oldestKey !== undefined && oldestKey !== index) {
-              frameCache.delete(oldestKey);
-            }
-          }
-          return frame;
-        },
-      };
-
-      // Validate first frame early so users get immediate errors for malformed archives.
-      provider.get(0);
-
-      modifier.sourceType = "zarr";
-      modifier.filename = rootName || "trajectory.zarr";
-      // Trajectory frames come from provider; keep DataSourceModifier pass-through.
-      modifier.setFrame(null);
-      app.setMode("view");
-      app.setTrajectory(Trajectory.fromProvider(provider));
-      app.events.emit("status-message", {
-        text: `Loaded trajectory: ${modifier.filename} (${frameCount} frames)`,
-        type: "info",
-      });
-      onUpdate();
-    } catch (err) {
-      app.events.emit("status-message", {
-        text: `Failed to load Zarr: ${err instanceof Error ? err.message : String(err)}`,
-        type: "error",
-      });
-    } finally {
-      e.target.value = "";
-    }
-  };
-
   const filename = modifier.filename === "" ? "-" : modifier.filename;
   const frame = app?.system.frame;
   const atomCount = frame?.getBlock("atoms")?.nrows() ?? 0;
@@ -164,6 +71,7 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   const handleClear = () => {
     if (!app) return;
     modifier.setFrame(null);
+    modifier.sourceType = "empty";
     modifier.filename = "";
     app.loadFrame(new Frame());
     onUpdate();
@@ -182,21 +90,6 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
           />
           <Button variant="outline" size="sm" className="w-full gap-2">
             <FileUp className="h-4 w-4" /> Load File
-          </Button>
-        </div>
-
-        <div className="relative flex-1">
-          <input
-            type="file"
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            onChange={handleZarrUpload}
-            webkitdirectory=""
-            directory=""
-            multiple
-            title="Load Zarr directory"
-          />
-          <Button variant="outline" size="sm" className="w-full gap-2">
-            <FolderUp className="h-4 w-4" /> Load Zarr
           </Button>
         </div>
 

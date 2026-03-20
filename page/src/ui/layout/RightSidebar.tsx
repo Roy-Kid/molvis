@@ -23,8 +23,8 @@ const MODE_ITEMS: Array<{
   { value: "view", label: "View", icon: Video },
   { value: "select", label: "Select", icon: MousePointer2 },
   { value: "edit", label: "Edit", icon: Edit3 },
-  { value: "manipulate", label: "Manip", icon: Move },
   { value: "measure", label: "Measure", icon: Ruler },
+  { value: "manipulate", label: "Manip", icon: Move },
 ];
 
 export const RightSidebar: React.FC<RightSidebarProps> = ({
@@ -67,13 +67,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 size="sm"
                 onClick={() => onModeChange(item.value)}
                 className={cn(
-                  "h-6 text-[9px] px-1 gap-0.5",
+                  "h-7 w-full px-0",
                   active && "font-semibold",
                 )}
                 title={item.label}
+                aria-label={item.label}
               >
-                <Icon className="h-3 w-3" />
-                <span className="truncate">{item.label}</span>
+                <Icon className="h-3.5 w-3.5" />
               </Button>
             );
           })}

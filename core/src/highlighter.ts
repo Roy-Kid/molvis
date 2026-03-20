@@ -18,7 +18,7 @@ export class Highlighter {
   // Key: `${uniqueId}:${thinIndex}`
   private thinOriginalColors = new Map<
     string,
-    { r: number; g: number; b: number; a: number }
+    Array<{ bufferName: string; r: number; g: number; b: number; a: number }>
   >();
 
   // State
@@ -123,26 +123,32 @@ export class Highlighter {
     thinIndex: number,
     color: number[],
   ): void {
-    const colorBuffer = this.getThinInstanceColorBuffer(mesh);
-    if (!colorBuffer) return;
-
-    const offset = thinIndex * 4;
     const key = `${mesh.uniqueId}:${thinIndex}`;
+    const colorBuffers = this.getThinInstanceColorBuffers(mesh);
+    if (colorBuffers.length === 0) return;
 
     // Store original color (sparse) if not already stored
     if (!this.thinOriginalColors.has(key)) {
-      this.thinOriginalColors.set(key, {
-        r: colorBuffer[offset],
-        g: colorBuffer[offset + 1],
-        b: colorBuffer[offset + 2],
-        a: colorBuffer[offset + 3],
-      });
+      this.thinOriginalColors.set(
+        key,
+        colorBuffers.map(({ name, data }) => {
+          const offset = thinIndex * 4;
+          return {
+            bufferName: name,
+            r: data[offset],
+            g: data[offset + 1],
+            b: data[offset + 2],
+            a: data[offset + 3],
+          };
+        }),
+      );
     }
 
-    // Apply visual
-    colorBuffer.set(color, offset);
-
-    mesh.thinInstanceSetBuffer("instanceColor", colorBuffer, 4, false);
+    for (const { name, data } of colorBuffers) {
+      const offset = thinIndex * 4;
+      data.set(color, offset);
+      mesh.thinInstanceSetBuffer(name, data, 4, false);
+    }
   }
 
   /**
@@ -150,7 +156,7 @@ export class Highlighter {
    */
   clearAll(): void {
     // Restore thin instance colors
-    for (const [key, color] of this.thinOriginalColors) {
+    for (const [key, colors] of this.thinOriginalColors) {
       const [uniqueIdStr, thinIndexStr] = key.split(":");
       const uniqueId = Number.parseInt(uniqueIdStr);
       const thinIndex = Number.parseInt(thinIndexStr);
@@ -158,16 +164,24 @@ export class Highlighter {
       const mesh = this.scene.getMeshByUniqueId(uniqueId) as Mesh;
       if (!mesh) continue;
 
-      const colorBuffer = this.getThinInstanceColorBuffer(mesh);
-      if (!colorBuffer) continue;
+      const buffers = new Map(
+        this.getThinInstanceColorBuffers(mesh).map(({ name, data }) => [
+          name,
+          data,
+        ]),
+      );
+      for (const color of colors) {
+        const buffer = buffers.get(color.bufferName);
+        if (!buffer) continue;
 
-      const offset = thinIndex * 4;
-      colorBuffer[offset] = color.r;
-      colorBuffer[offset + 1] = color.g;
-      colorBuffer[offset + 2] = color.b;
-      colorBuffer[offset + 3] = color.a;
+        const offset = thinIndex * 4;
+        buffer[offset] = color.r;
+        buffer[offset + 1] = color.g;
+        buffer[offset + 2] = color.b;
+        buffer[offset + 3] = color.a;
 
-      mesh.thinInstanceSetBuffer("instanceColor", colorBuffer, 4, false);
+        mesh.thinInstanceSetBuffer(color.bufferName, buffer, 4, false);
+      }
     }
     this.thinOriginalColors.clear();
   }
@@ -187,7 +201,9 @@ export class Highlighter {
     this.clearAll();
   }
 
-  private getThinInstanceColorBuffer(mesh: Mesh): Float32Array | null {
+  private getThinInstanceColorBuffers(
+    mesh: Mesh,
+  ): Array<{ name: string; data: Float32Array }> {
     const storage = (
       mesh as unknown as {
         _userThinInstanceBuffersStorage?: {
@@ -196,8 +212,19 @@ export class Highlighter {
       }
     )._userThinInstanceBuffersStorage;
 
-    // Key is 'instanceColor' in storage, but 'color' in public API
-    const buffer = storage?.data?.instanceColor ?? null;
-    return buffer instanceof Float32Array ? buffer : null;
+    const buffers: Array<{ name: string; data: Float32Array }> = [];
+    const single = storage?.data?.instanceColor;
+    if (single instanceof Float32Array) {
+      buffers.push({ name: "instanceColor", data: single });
+    }
+    const start = storage?.data?.instanceColor0;
+    if (start instanceof Float32Array) {
+      buffers.push({ name: "instanceColor0", data: start });
+    }
+    const end = storage?.data?.instanceColor1;
+    if (end instanceof Float32Array) {
+      buffers.push({ name: "instanceColor1", data: end });
+    }
+    return buffers;
   }
 }

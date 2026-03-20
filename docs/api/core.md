@@ -142,12 +142,12 @@ app.enableFitContainer(enabled: boolean): void           // Toggle 100% containe
 
 ## Readers
 
-### `readFrame(filename, content)`
+### `readFrame(content, filename)`
 
 Infers format from filename and parses a `Frame`.
 
 ```typescript
-function readFrame(filename: string, content: string): Frame;
+function readFrame(content: string, filename: string): Frame;
 ```
 
 ### Format-specific readers

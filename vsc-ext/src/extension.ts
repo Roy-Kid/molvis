@@ -1,1 +1,5 @@
-export { activate, deactivate } from "./extension/activate";
+export {
+  activate,
+  deactivate,
+  getRegisteredPanelViewTypesForTests,
+} from "./extension/activate";

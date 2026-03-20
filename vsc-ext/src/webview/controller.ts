@@ -19,6 +19,33 @@ declare const acquireVsCodeApi: () => {
   postMessage: (message: WebviewToHostMessage) => void;
 };
 
+const VALID_HOST_MESSAGE_TYPES = new Set([
+  "init",
+  "applySettings",
+  "loadFile",
+  "triggerSave",
+  "error",
+]);
+
+function isValidHostMessage(data: unknown): data is HostToWebviewMessage {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "type" in data &&
+    typeof (data as { type: unknown }).type === "string" &&
+    VALID_HOST_MESSAGE_TYPES.has((data as { type: string }).type)
+  );
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const CHUNK_SIZE = 0x8000;
+  const chunks: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE)));
+  }
+  return btoa(chunks.join(""));
+}
+
 export function bootstrapWebview(container: HTMLElement): void {
   const app = mountMolvis(
     container,
@@ -47,50 +74,43 @@ export function bootstrapWebview(container: HTMLElement): void {
   // (showSaveFilePicker is blocked in cross-origin webview iframes)
   app.saveFile = async (blob: Blob, suggestedName: string) => {
     const buffer = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    const data = btoa(binary);
+    const data = uint8ArrayToBase64(new Uint8Array(buffer));
     vscode.postMessage({ type: "saveFile", data, suggestedName });
   };
 
-  window.addEventListener(
-    "message",
-    (event: MessageEvent<HostToWebviewMessage>) => {
-      const message = event.data;
-      switch (message.type) {
-        case "init":
-          applyOptions(message.config, message.settings);
-          break;
-        case "applySettings":
-          applyOptions(message.config, message.settings);
-          break;
-        case "loadFile":
-          loadMolecularPayload(
-            message.content,
-            message.filename,
-            {
-              setTrajectory: (trajectory: Trajectory) =>
-                app.setTrajectory(trajectory),
-              setViewMode: () => app.setMode("view"),
-              resetCamera: () => app.world.resetCamera(),
-              loadPdb: (pdbText: string) => app.loadPdb(pdbText),
-            },
-            resources,
-          );
-          break;
-        case "triggerSave":
-          app.save();
-          break;
-        case "error":
-          break;
-        default:
-          break;
-      }
-    },
-  );
+  window.addEventListener("message", (event: MessageEvent<unknown>) => {
+    if (!isValidHostMessage(event.data)) return;
+    const message = event.data;
+    switch (message.type) {
+      case "init":
+        applyOptions(message.config, message.settings);
+        break;
+      case "applySettings":
+        applyOptions(message.config, message.settings);
+        break;
+      case "loadFile":
+        loadMolecularPayload(
+          message.content,
+          message.filename,
+          {
+            setTrajectory: (trajectory: Trajectory) =>
+              app.setTrajectory(trajectory),
+            setViewMode: () => app.setMode("view"),
+            resetCamera: () => app.world.resetCamera(),
+            loadPdb: (pdbText: string) => app.loadPdb(pdbText),
+          },
+          resources,
+        );
+        break;
+      case "triggerSave":
+        app.save();
+        break;
+      case "error":
+        break;
+      default:
+        break;
+    }
+  });
 
   app.events.on("dirty-change", (isDirty: boolean) => {
     vscode.postMessage({ type: "dirtyStateChanged", isDirty });
@@ -133,8 +153,8 @@ export function bootstrapWebview(container: HTMLElement): void {
     app.destroy();
   });
 
-  // App start awaits renderer warmup internally.
-  // Signal ready only after that gate passes.
+  // App startup is independent from molecule shader compilation.
+  // Molecular visibility is gated inside Artist draw/redraw flows.
   void app
     .start()
     .then(() => {

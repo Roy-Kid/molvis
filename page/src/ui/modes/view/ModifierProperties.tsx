@@ -1,18 +1,22 @@
 import {
+  AssignColorModifier as CoreAssignColorModifier,
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   DataSourceModifier as CoreDataSourceModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   HideSelectionModifier as CoreHideModifier,
   SliceModifier as CoreSliceModifier,
+  TransparentSelectionModifier as CoreTransparentSelectionModifier,
   type Modifier,
   type Molvis,
 } from "@molvis/core";
 import type React from "react";
+import { AssignColorModifier } from "./modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
 import { DataSourceModifier } from "./modifiers/DataSourceModifier";
 import { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 import { SliceModifier } from "./modifiers/SliceModifier";
+import { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
 
 interface ModifierPropertiesProps {
   modifier: Modifier;
@@ -58,6 +62,18 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   } else if (modifier instanceof CoreColorByPropertyModifier) {
     content = (
       <ColorByPropertyModifier
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
+    );
+  } else if (modifier instanceof CoreAssignColorModifier) {
+    content = (
+      <AssignColorModifier modifier={modifier} app={app} onUpdate={onUpdate} />
+    );
+  } else if (modifier instanceof CoreTransparentSelectionModifier) {
+    content = (
+      <TransparentSelectionModifier
         modifier={modifier}
         app={app}
         onUpdate={onUpdate}
