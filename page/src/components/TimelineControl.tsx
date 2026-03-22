@@ -83,7 +83,7 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
         lastTimeRef.current = time;
       }
       const deltaTime = time - lastTimeRef.current;
-      const interval = (1000 / BASE_FPS) / speedRef.current;
+      const interval = 1000 / BASE_FPS / speedRef.current;
 
       if (deltaTime >= interval) {
         const next =
@@ -166,10 +166,7 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
       </div>
 
       {/* Speed selector */}
-      <Select
-        value={String(speed)}
-        onValueChange={(v) => setSpeed(Number(v))}
-      >
+      <Select value={String(speed)} onValueChange={(v) => setSpeed(Number(v))}>
         <SelectTrigger className="h-6 w-14 text-[9px] shrink-0">
           <SelectValue />
         </SelectTrigger>

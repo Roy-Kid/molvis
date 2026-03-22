@@ -1,15 +1,21 @@
 import { describe, expect, it } from "@rstest/core";
+import type { SecondaryStructureType } from "../src/artist/ribbon/pdb_backbone";
 import { buildRibbonGeometry } from "../src/artist/ribbon/ribbon_geometry";
 import type { SplinePoint } from "../src/artist/ribbon/spline";
-import type { SecondaryStructureType } from "../src/artist/ribbon/pdb_backbone";
 
 function makeSplinePoints(n: number): SplinePoint[] {
   const points: SplinePoint[] = [];
   for (let i = 0; i < n; i++) {
     points.push({
-      x: i, y: 0, z: 0,
-      tx: 1, ty: 0, tz: 0,
-      nx: 0, ny: 1, nz: 0,
+      x: i,
+      y: 0,
+      z: 0,
+      tx: 1,
+      ty: 0,
+      tz: 0,
+      nx: 0,
+      ny: 1,
+      nz: 0,
       t: i,
     });
   }
@@ -49,19 +55,16 @@ describe("buildRibbonGeometry", () => {
     const mesh = buildRibbonGeometry(points, ss);
 
     // First ring (helix) should have different color from third ring (sheet)
-    const ring0Color = [
-      mesh.colors[0],
-      mesh.colors[1],
-      mesh.colors[2],
-    ];
+    const ring0Color = [mesh.colors[0], mesh.colors[1], mesh.colors[2]];
     const ring2Color = [
       mesh.colors[2 * VERTS_PER_RING * 4],
       mesh.colors[2 * VERTS_PER_RING * 4 + 1],
       mesh.colors[2 * VERTS_PER_RING * 4 + 2],
     ];
-    const diff = Math.abs(ring0Color[0] - ring2Color[0]) +
-                 Math.abs(ring0Color[1] - ring2Color[1]) +
-                 Math.abs(ring0Color[2] - ring2Color[2]);
+    const diff =
+      Math.abs(ring0Color[0] - ring2Color[0]) +
+      Math.abs(ring0Color[1] - ring2Color[1]) +
+      Math.abs(ring0Color[2] - ring2Color[2]);
     expect(diff).toBeGreaterThan(0.1);
   });
 
@@ -87,8 +90,8 @@ describe("buildRibbonGeometry", () => {
     for (let i = 0; i < mesh.normals.length; i += 3) {
       const len = Math.sqrt(
         mesh.normals[i] ** 2 +
-        mesh.normals[i + 1] ** 2 +
-        mesh.normals[i + 2] ** 2,
+          mesh.normals[i + 1] ** 2 +
+          mesh.normals[i + 2] ** 2,
       );
       // Allow small tolerance for near-zero normals at degenerate points
       if (len > 0.01) {

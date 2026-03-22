@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@rstest/core";
-import { pointInPolygon, simplifyPolyline, type Point2D } from "../src/selection/fence";
+import {
+  type Point2D,
+  pointInPolygon,
+  simplifyPolyline,
+} from "../src/selection/fence";
 
 describe("pointInPolygon", () => {
   // Simple square: (0,0), (10,0), (10,10), (0,10)
@@ -90,7 +94,10 @@ describe("pointInPolygon", () => {
 
 describe("simplifyPolyline", () => {
   it("should return same points for short polylines", () => {
-    const pts: Point2D[] = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    const pts: Point2D[] = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
     const result = simplifyPolyline(pts, 5);
     expect(result.length).toBe(2);
   });
@@ -99,8 +106,8 @@ describe("simplifyPolyline", () => {
     const pts: Point2D[] = [
       { x: 0, y: 0 },
       { x: 0.5, y: 0.5 }, // within tolerance of first
-      { x: 1, y: 1 },     // within tolerance of first
-      { x: 10, y: 10 },   // far enough
+      { x: 1, y: 1 }, // within tolerance of first
+      { x: 10, y: 10 }, // far enough
     ];
     const result = simplifyPolyline(pts, 5);
     // first (0,0) and (10,10) — last input equals last kept, not duplicated

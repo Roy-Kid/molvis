@@ -39,7 +39,6 @@ test("syntheticRdfAdapter respects abort signals", async () => {
 
   await assert.rejects(
     () => syntheticRdfAdapter.compute(params, snapshot, controller.signal),
-    (error: unknown) =>
-      error instanceof Error && error.name === "AbortError",
+    (error: unknown) => error instanceof Error && error.name === "AbortError",
   );
 });

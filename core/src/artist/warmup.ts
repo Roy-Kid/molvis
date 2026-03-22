@@ -29,12 +29,7 @@ export function createWarmupMesh(
   mesh.thinInstanceSetBuffer("matrix", matrix, 16, false);
 
   for (const buffer of spec.warmupBuffers) {
-    mesh.thinInstanceSetBuffer(
-      buffer.name,
-      buffer.data,
-      buffer.stride,
-      false,
-    );
+    mesh.thinInstanceSetBuffer(buffer.name, buffer.data, buffer.stride, false);
   }
 
   mesh.thinInstanceCount = 1;

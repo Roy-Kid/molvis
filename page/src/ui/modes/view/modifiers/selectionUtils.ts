@@ -1,4 +1,4 @@
-import { parseSelectionKey, type Molvis } from "@molvis/core";
+import { type Molvis, parseSelectionKey } from "@molvis/core";
 
 export function getSelectedAtomIndices(app: Molvis): number[] {
   const atomIndices = new Set<number>();

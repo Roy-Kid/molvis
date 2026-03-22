@@ -5,15 +5,8 @@
  * controls positioned via manual 3D→screen projection each frame.
  */
 
-import {
-  type Camera,
-  type Scene,
-  Vector3,
-} from "@babylonjs/core";
-import {
-  AdvancedDynamicTexture,
-  TextBlock,
-} from "@babylonjs/gui";
+import { type Camera, type Scene, Vector3 } from "@babylonjs/core";
+import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
 
 export type LabelMode = "none" | "all" | "selected";
 
@@ -112,10 +105,7 @@ export class LabelRenderer {
       );
     }
 
-    const indices = this.resolveVisibleIndices(
-      atoms.count,
-      selectedIndices,
-    );
+    const indices = this.resolveVisibleIndices(atoms.count, selectedIndices);
 
     for (const i of indices) {
       const columnValues = new Map<string, string>();

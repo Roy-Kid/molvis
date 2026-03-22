@@ -2,8 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import type {
-  Molvis,
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
+  Molvis,
 } from "@molvis/core";
 import type React from "react";
 import { getSelectedAtomIndices } from "./selectionUtils";

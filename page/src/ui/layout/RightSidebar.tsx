@@ -66,10 +66,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                 variant={active ? "secondary" : "ghost"}
                 size="sm"
                 onClick={() => onModeChange(item.value)}
-                className={cn(
-                  "h-7 w-full px-0",
-                  active && "font-semibold",
-                )}
+                className={cn("h-7 w-full px-0", active && "font-semibold")}
                 title={item.label}
                 aria-label={item.label}
               >

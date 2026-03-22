@@ -60,10 +60,7 @@ export function syncImpostorMaterialUniforms(
 ): void {
   material.setMatrix("view", scene.getViewMatrix());
   material.setMatrix("projection", scene.getProjectionMatrix());
-  material.setFloat(
-    "uPickingEnabled",
-    app.world.picker?.isPicking ? 1.0 : 0.0,
-  );
+  material.setFloat("uPickingEnabled", app.world.picker?.isPicking ? 1.0 : 0.0);
   applyLightingUniforms(material, app);
 }
 

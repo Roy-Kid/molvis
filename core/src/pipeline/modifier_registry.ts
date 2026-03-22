@@ -1,8 +1,8 @@
 import { AssignColorModifier } from "../modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
-import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
+import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
 import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";

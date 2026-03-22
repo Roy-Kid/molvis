@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
-import { prepareScatter, deterministicSample } from "../src/analysis/scatter";
+import { deterministicSample, prepareScatter } from "../src/analysis/scatter";
 
 describe("prepareScatter", () => {
   it("should return points with correct x/y values", () => {

@@ -54,9 +54,7 @@ const SECTIONS: { title: string; shortcuts: Shortcut[] }[] = [
   },
   {
     title: "Other",
-    shortcuts: [
-      { keys: "?", description: "Show this help" },
-    ],
+    shortcuts: [{ keys: "?", description: "Show this help" }],
   },
 ];
 

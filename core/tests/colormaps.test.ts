@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@rstest/core";
-import { sampleColormap, COLORMAP_NAMES, type ColormapName } from "../src/artist/colormaps";
+import {
+  COLORMAP_NAMES,
+  type ColormapName,
+  sampleColormap,
+} from "../src/artist/colormaps";
 
 describe("sampleColormap", () => {
   for (const name of COLORMAP_NAMES) {
@@ -63,9 +67,10 @@ describe("sampleColormap", () => {
     const viridis = sampleColormap("viridis", 0.5);
     const plasma = sampleColormap("plasma", 0.5);
     // At least one channel should differ significantly
-    const diff = Math.abs(viridis[0] - plasma[0]) +
-                 Math.abs(viridis[1] - plasma[1]) +
-                 Math.abs(viridis[2] - plasma[2]);
+    const diff =
+      Math.abs(viridis[0] - plasma[0]) +
+      Math.abs(viridis[1] - plasma[1]) +
+      Math.abs(viridis[2] - plasma[2]);
     expect(diff).toBeGreaterThan(0.01);
   });
 });

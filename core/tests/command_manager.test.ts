@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
-import { EventEmitter, type MolvisEventMap } from "../src/events";
-import { CommandManager } from "../src/commands/manager";
 import type { Command } from "../src/commands/base";
+import { CommandManager } from "../src/commands/manager";
+import { EventEmitter, type MolvisEventMap } from "../src/events";
 
 // Minimal mock app with events
 function mockApp() {

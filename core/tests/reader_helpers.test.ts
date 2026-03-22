@@ -1,8 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
-import {
-  inferFormatFromFilename,
-  deriveElementFromType,
-} from "../src/reader";
+import { deriveElementFromType, inferFormatFromFilename } from "../src/reader";
 
 describe("inferFormatFromFilename", () => {
   it("should detect PDB files", () => {

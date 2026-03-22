@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
-import { hslColorFromString, hexToLinearRgb } from "../src/artist/palette";
+import { hexToLinearRgb, hslColorFromString } from "../src/artist/palette";
 
 describe("hslColorFromString", () => {
   it("should return a hex color string", () => {

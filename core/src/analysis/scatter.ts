@@ -37,7 +37,12 @@ export function prepareScatter(
 
   if (indices && indices.size > 0) {
     for (const i of indices) {
-      if (i >= 0 && i < count && Number.isFinite(xData[i]) && Number.isFinite(yData[i])) {
+      if (
+        i >= 0 &&
+        i < count &&
+        Number.isFinite(xData[i]) &&
+        Number.isFinite(yData[i])
+      ) {
         allPoints.push({ x: xData[i], y: yData[i], index: i });
       }
     }
@@ -64,9 +69,10 @@ export function prepareScatter(
   const yRange = computeRange(allPoints, (p) => p.y);
 
   // Downsample if needed
-  const points = allPoints.length > maxPoints
-    ? deterministicSample(allPoints, maxPoints)
-    : allPoints;
+  const points =
+    allPoints.length > maxPoints
+      ? deterministicSample(allPoints, maxPoints)
+      : allPoints;
 
   return {
     points,
@@ -95,10 +101,7 @@ function computeRange(
  * Deterministic downsampling via stride-based selection.
  * Preserves distribution better than random sampling.
  */
-export function deterministicSample<T>(
-  items: T[],
-  maxCount: number,
-): T[] {
+export function deterministicSample<T>(items: T[], maxCount: number): T[] {
   if (items.length <= maxCount) return items;
   const stride = items.length / maxCount;
   const result: T[] = [];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 import {
-  resolveTemplate,
   DEFAULT_LABEL_CONFIG,
+  resolveTemplate,
 } from "../src/artist/label_renderer";
 
 describe("resolveTemplate", () => {
@@ -26,7 +26,10 @@ describe("resolveTemplate", () => {
   });
 
   it("should resolve column values from map", () => {
-    const cols = new Map([["charge", "0.5"], ["type", "CA"]]);
+    const cols = new Map([
+      ["charge", "0.5"],
+      ["type", "CA"],
+    ]);
     const result = resolveTemplate("{type}: {charge}", 0, "C", cols);
     expect(result).toBe("CA: 0.5");
   });

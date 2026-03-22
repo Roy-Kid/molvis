@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
-import { parsePdbBackbone, getSecondaryStructure } from "../src/artist/ribbon/pdb_backbone";
+import {
+  getSecondaryStructure,
+  parsePdbBackbone,
+} from "../src/artist/ribbon/pdb_backbone";
 
 const MINI_PDB = `\
 HELIX    1   1 ALA A    1  ALA A    5  1                                   5
@@ -30,9 +33,9 @@ describe("parsePdbBackbone", () => {
     const chains = parsePdbBackbone(MINI_PDB);
     const res1 = chains[0].residues[0];
     expect(res1.ca).not.toBeUndefined();
-    expect(res1.ca!.x).toBeCloseTo(1.5, 3);
-    expect(res1.ca!.y).toBeCloseTo(2.5, 3);
-    expect(res1.ca!.z).toBeCloseTo(3.5, 3);
+    expect(res1.ca?.x).toBeCloseTo(1.5, 3);
+    expect(res1.ca?.y).toBeCloseTo(2.5, 3);
+    expect(res1.ca?.z).toBeCloseTo(3.5, 3);
   });
 
   it("should assign backbone atoms (N, CA, C, O)", () => {

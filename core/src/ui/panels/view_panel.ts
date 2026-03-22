@@ -215,7 +215,7 @@ export class ViewPanel implements GUIComponent {
   }
 
   private ensureMenu(): boolean {
-    if (this.menu && this.menu.isConnected) {
+    if (this.menu?.isConnected) {
       return true;
     }
 

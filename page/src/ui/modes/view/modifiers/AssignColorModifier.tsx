@@ -1,6 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import type { AssignColorModifier as CoreAssignColorModifier, Molvis } from "@molvis/core";
+import type {
+  AssignColorModifier as CoreAssignColorModifier,
+  Molvis,
+} from "@molvis/core";
 import type React from "react";
 import { getSelectedAtomIndices } from "./selectionUtils";
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
 import {
   SelectionManager,
-  parseSelectionKey,
   makeSelectionKey,
+  parseSelectionKey,
 } from "../src/selection_manager";
 
 // Minimal SceneIndex mock
@@ -10,7 +10,8 @@ function mockSceneIndex(atomMeta?: Map<string, any>) {
   const meta = atomMeta ?? new Map();
   return {
     getMeta(meshId: number, subIndex?: number) {
-      const key = subIndex !== undefined ? `${meshId}:${subIndex}` : String(meshId);
+      const key =
+        subIndex !== undefined ? `${meshId}:${subIndex}` : String(meshId);
       return meta.get(key) ?? null;
     },
     getSelectionKeyForAtom(atomId: number): string | null {
@@ -167,18 +168,14 @@ describe("SelectionManager", () => {
 
   describe("isSelected", () => {
     it("should return true for selected atom", () => {
-      const meta = new Map([
-        ["1:0", { type: "atom", atomId: 0 }],
-      ]);
+      const meta = new Map([["1:0", { type: "atom", atomId: 0 }]]);
       const mgr = new SelectionManager(mockSceneIndex(meta));
       mgr.apply({ type: "replace", atoms: ["1:0"] });
       expect(mgr.isSelected("1:0")).toBe(true);
     });
 
     it("should return false for unselected key", () => {
-      const meta = new Map([
-        ["1:0", { type: "atom", atomId: 0 }],
-      ]);
+      const meta = new Map([["1:0", { type: "atom", atomId: 0 }]]);
       const mgr = new SelectionManager(mockSceneIndex(meta));
       expect(mgr.isSelected("1:0")).toBe(false);
     });
