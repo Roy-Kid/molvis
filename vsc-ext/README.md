@@ -1,175 +1,102 @@
-# MolVis VSCode Extension
+# MolVis — Molecular Visualization for VSCode
 
-A VSCode extension for visualizing molecular structures directly within your editor. Built on [Babylon.js](https://www.babylonjs.com/) and the MolVis rendering engine.
+Interactive 3D molecular viewer directly inside VSCode. Open PDB, XYZ, or LAMMPS files and explore structures with GPU-accelerated rendering.
 
 ## Features
 
-- **Custom Editor** for `.pdb`, `.xyz`, `.data` files with interactive 3D viewing
-- **Quick View** panel for side-by-side text + visualization
-- **Editor Workspace** with full React-based MolVis UI
-- **Drag-and-drop** file loading onto the canvas
-- **Hot reload** during development (watches build output)
-- **Zarr directory** support for trajectory data
-- **Configurable** camera, graphics, grid, and UI settings via `molvis.config` / `molvis.settings`
+- Open `.pdb`, `.xyz`, `.data` files as interactive 3D views
+- Multi-frame trajectory playback for XYZ files
+- Zarr directory support for large simulation trajectories
+- Three representations: Ball & Stick, Spacefill, Stick
+- Simulation box wireframe with color/thickness controls
+- Modifier pipeline: hide hydrogens, color by property, slice, expression selection
+- Drag-and-drop file loading onto any MolVis canvas
 
-## Supported File Formats
+## Supported Formats
 
 | Format | Extension | Notes |
 |--------|-----------|-------|
-| PDB    | `.pdb`    | Protein Data Bank |
-| XYZ    | `.xyz`    | Multi-frame trajectory support |
-| LAMMPS | `.data`   | LAMMPS data format |
-| Zarr   | `.zarr`   | Directory-based binary trajectory |
+| PDB | `.pdb` | Protein Data Bank, CRYST1 box support |
+| XYZ | `.xyz` | ExtXYZ, multi-frame trajectory |
+| LAMMPS | `.data`, `.lmp` | LAMMPS data format |
+| Zarr | `.zarr` | Directory-based binary trajectory |
 
-## Workflows
+## Getting Started
 
-### 1. Custom Editor
+1. Install the extension from the VS Marketplace
+2. Open any `.pdb`, `.xyz`, or `.data` file
+3. Right-click the editor tab → **Reopen Editor With...** → **MolVis Viewer**
 
-1. Open a `.pdb`, `.xyz`, or `.data` file in VSCode
-2. Right-click the editor tab -> **Reopen Editor With...** -> **MolVis Viewer**
-
-### 2. Quick View (side-by-side)
-
-1. Open a supported file in the text editor
-2. Click the **Open Preview to the Side** button in the editor title bar
-3. Visualization opens alongside your text editor
-
-### 3. Editor Workspace
-
-1. Right-click a supported file in the Explorer -> **MolVis: Open Editor**
-2. A full MolVis workspace opens with React-based UI
-
-### 4. Drag-and-drop
-
-Drop a molecular file directly onto any MolVis canvas to load it.
+Or use the command palette: `MolVis: Quick View` for a side-by-side preview.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `MolVis: Quick View` | Open a side-by-side preview panel |
-| `MolVis: Open Editor` | Open full MolVis editor workspace |
-| `MolVis: Reload` | Reload the active MolVis webview |
+| `MolVis: Quick View` | Side-by-side preview panel |
+| `MolVis: Open Editor` | Full MolVis editor workspace |
+| `MolVis: Reload` | Reload the active webview |
 
 ## Configuration
 
 ### `molvis.config`
 
-Controls the MolVis core initialization:
-
 ```jsonc
 {
   "molvis.config": {
-    "showUI": true,
     "useRightHandedSystem": true,
-    "ui": {
-      "showInfoPanel": true,
-      "showViewPanel": true,
-      "showPerfPanel": true,
-      "showContextMenu": true
-    },
-    "canvas": {
-      "antialias": true
-    }
+    "canvas": { "antialias": true }
   }
 }
 ```
 
 ### `molvis.settings`
 
-Runtime settings applied after initialization:
-
 ```jsonc
 {
   "molvis.settings": {
-    "cameraPanSpeed": 1.0,
-    "cameraRotateSpeed": 1.0,
-    "cameraZoomSpeed": 1.0,
-    "cameraInertia": 0.9,
-    "grid": { "enabled": true, "size": 100, "opacity": 0.5 },
+    "grid": { "enabled": true, "size": 100, "opacity": 0.3 },
     "graphics": { "fxaa": true, "hardwareScaling": 1.0 }
   }
 }
 ```
 
-## Architecture
-
-```
-vsc-ext/
-  src/
-    extension/          # Extension host (Node.js)
-      activate.ts       # Entry point: registers providers and commands
-      configuration.ts  # Reads molvis.config / molvis.settings
-      loading/          # File and Zarr loading helpers
-      panels/           # Custom editor / preview panel plumbing
-      types.ts          # Message types, logging, registry interfaces
-    webview/            # Lightweight runtime bootstrap for file loading
-      controller.ts     # Bootstraps MolVis core and host messaging
-      loader.ts         # Parses PDB/XYZ/LAMMPS/Zarr payloads
-    viewer/             # React-based full editor workspace bundle
-      index.tsx         # Viewer entry
-      main.css          # Viewer styling
-    test/
-      unit/             # Mocha unit tests
-      integration/      # VSCode integration tests
-```
-
-### Message Protocol
-
-**Host -> Webview**: `init`, `applySettings`, `loadFile`, `error`
-
-**Webview -> Host**: `ready`, `saveFile`, `error`
-
-### Build Strategy
-
-Three separate Rslib configurations:
-
-- **Extension host** (`rslib.extension.config.ts`): CJS bundle for Node.js
-- **Webview** (`rslib.webview.config.ts`): ESM bundle for browser, with code splitting (vendor / molvis-core / runtime) and inline WASM
-
 ## Development
 
-### Build
-
 ```bash
+# From monorepo root
 npm install
-npm run build          # Build everything
-npm run build:extension  # Extension host only
-npm run build:webview    # Webview bundles only
+npm run build:all
+
+# Launch extension dev host
+# Open vsc-ext/ in VSCode, press F5
+
+# Tests
+npm run test:vsc-ext
 ```
 
-### Watch mode
+### Publish
+
+Automated via GitHub Actions on tag push:
 
 ```bash
-npm run watch          # Watch extension + webview + typecheck
+git tag v0.0.2
+git push origin v0.0.2
 ```
 
-### Run
+Requires `VSCE_PAT` and `OVSX_PAT` secrets configured in the GitHub repo.
 
-1. Open this folder in VSCode
-2. Press `F5` to launch the Extension Development Host
-3. Test the extension in the new VSCode window
-
-### Test
+Manual publish:
 
 ```bash
-npm run test           # Unit + integration
-npm run test:unit      # Unit tests only
-npm run test:integration  # Integration tests only
-```
-
-### Package & Deploy
-
-```bash
-npm run package        # Production build
-npm run deploy:vsce    # Publish to VS Code Marketplace
-npm run deploy:ovsx    # Publish to Open VSX
+cd vsc-ext
+npx vsce publish --no-dependencies
+npx ovsx publish --no-dependencies
 ```
 
 ## Requirements
 
 - VSCode 1.108.1+
-- WebGL-capable browser engine (included in VSCode)
 
 ## License
 

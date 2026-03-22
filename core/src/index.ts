@@ -1,20 +1,3 @@
-import init, { type InitOutput } from "@molcrafts/molrs";
-declare const __WASM_INLINE__: boolean;
-
-/**
- * Shared initialized `@molcrafts/molrs` runtime for advanced integrations.
- */
-export let wasmInstance: InitOutput;
-
-if (__WASM_INLINE__) {
-  const { default: wasmUrl } = await import(
-    /* webpackMode: "eager" */ "@molcrafts/molrs/molwasm_bg.wasm?inline"
-  );
-  wasmInstance = await init(wasmUrl);
-} else {
-  wasmInstance = await init();
-}
-
 import { MolvisApp } from "./app";
 import type { MolvisConfig } from "./config";
 
@@ -48,6 +31,7 @@ export {
   Frame,
   Block,
   Box,
+  WasmArray,
   Trajectory,
   type FrameProvider,
 } from "./system/index";
@@ -86,8 +70,11 @@ export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
 export type { Modifier } from "./pipeline/modifier";
-export { ArrayFrameSource, ZarrFrameSource } from "./commands/sources";
-export { SimulationReader as ZarrReader } from "@molcrafts/molrs";
+export {
+  ArrayFrameSource,
+  ZarrFrameSource,
+  type ZarrReaderLike as ZarrReader,
+} from "./commands/sources";
 
 export { DataSourceModifier } from "./pipeline/data_source_modifier";
 export { SliceModifier } from "./modifiers/SliceModifier";
@@ -122,7 +109,11 @@ export {
   type BondRow,
 } from "./data_inspector";
 export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
-export { pointInPolygon, simplifyPolyline, type Point2D } from "./selection/fence";
+export {
+  pointInPolygon,
+  simplifyPolyline,
+  type Point2D,
+} from "./selection/fence";
 
 export {
   LabelRenderer,
@@ -136,9 +127,6 @@ export {
   BALL_AND_STICK,
   SPACEFILL,
   STICK,
-  WIREFRAME,
-  RIBBON,
-  RIBBON_AND_STICK,
   findRepresentation,
 } from "./artist/representation";
 

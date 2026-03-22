@@ -52,42 +52,6 @@ class ViewModeContextMenu extends ContextMenuController {
       },
     });
 
-    const atomDiameterScale = this.mode.getAtomDiameterScale();
-    items.push({
-      type: "binding",
-      bindingConfig: {
-        view: "slider",
-        label: "Atom Diameter",
-        value: atomDiameterScale,
-        min: 0.2,
-        max: 2.0,
-        step: 0.02,
-      },
-      action: (ev) => {
-        if (typeof ev.value === "number") {
-          this.mode.setAtomDiameterScale(ev.value);
-        }
-      },
-    });
-
-    const bondDiameterScale = this.mode.getBondDiameterScale();
-    items.push({
-      type: "binding",
-      bindingConfig: {
-        view: "slider",
-        label: "Bond Diameter",
-        value: bondDiameterScale,
-        min: 0.2,
-        max: 2.0,
-        step: 0.02,
-      },
-      action: (ev) => {
-        if (typeof ev.value === "number") {
-          this.mode.setBondDiameterScale(ev.value);
-        }
-      },
-    });
-
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

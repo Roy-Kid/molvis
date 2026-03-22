@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
@@ -8,6 +8,7 @@ export type SelectModifierMode = "replace" | "add" | "remove" | "toggle";
 
 /**
  * Selection modifier that creates or updates a named selection.
+ * Supports atom indices and bond IDs.
  */
 export class SelectModifier extends BaseModifier {
   constructor(
@@ -15,12 +16,9 @@ export class SelectModifier extends BaseModifier {
     private expression: string | number[],
     private selectionName?: string,
     public mode: SelectModifierMode = "replace",
+    private bondIds: number[] = [],
   ) {
-    super(
-      id,
-      `Select (${mode})`,
-      ModifierCategory.SelectionSensitive,
-    );
+    super(id, `Select (${mode})`, ModifierCategory.SelectionSensitive);
   }
 
   validate(input: Frame, _context: PipelineContext): ValidationResult {
@@ -72,7 +70,6 @@ export class SelectModifier extends BaseModifier {
         nextMask = union.intersection(intersection.invert());
         break;
       }
-      case "replace":
       default:
         nextMask = mask;
         break;
@@ -86,6 +83,9 @@ export class SelectModifier extends BaseModifier {
     // Update currentSelection
     context.currentSelection = nextMask;
 
+    // Store bond IDs on context for COMPUTED sync
+    context.selectedBondIds = this.bondIds;
+
     // Frame is unchanged (selection is context-only)
     return input;
   }
@@ -94,7 +94,9 @@ export class SelectModifier extends BaseModifier {
     const exprKey = Array.isArray(this.expression)
       ? this.expression.join(",")
       : this.expression;
-    return `${super.getCacheKey()}:${exprKey}:${this.selectionName ?? ""}:${this.mode}`;
+    const bondKey =
+      this.bondIds.length > 0 ? `:b${this.bondIds.join(",")}` : "";
+    return `${super.getCacheKey()}:${exprKey}:${this.selectionName ?? ""}:${this.mode}${bondKey}`;
   }
 }
 
@@ -110,6 +112,7 @@ export class ClearSelectionModifier extends BaseModifier {
     const atomsBlock = input.getBlock("atoms");
     const atomCount = atomsBlock?.nrows() ?? 0;
     context.currentSelection = SelectionMask.all(atomCount);
+    context.selectedBondIds = [];
     return input;
   }
 }

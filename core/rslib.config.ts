@@ -17,7 +17,7 @@ export default defineConfig({
           "@babylonjs/gui",
           "@babylonjs/inspector",
           "@babylonjs/materials",
-          "@molcrafts/molrs",
+          "molrs-wasm",
           "tslog",
         ],
       },

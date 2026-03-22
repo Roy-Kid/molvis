@@ -1,27 +1,21 @@
 import { describe, expect, it } from "@rstest/core";
-import { initSync, Block, Frame } from "@molcrafts/molrs";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { Block, Frame } from "molrs-wasm";
+import "./setup_wasm";
 import { AssignColorModifier } from "../src/modifiers/AssignColorModifier";
 import {
-  COLOR_OVERRIDE_R,
-  COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_B,
+  COLOR_OVERRIDE_G,
+  COLOR_OVERRIDE_R,
 } from "../src/modifiers/ColorByPropertyModifier";
 import { createDefaultContext } from "../src/pipeline/types";
-
-const require = createRequire(__filename);
-const wasmPath = require.resolve("@molcrafts/molrs/molwasm_bg.wasm");
-const wasmBuffer = readFileSync(wasmPath);
-initSync({ module: wasmBuffer });
 
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColumnF32("x", new Float32Array(elements.length));
-  atoms.setColumnF32("y", new Float32Array(elements.length));
-  atoms.setColumnF32("z", new Float32Array(elements.length));
-  atoms.setColumnStrings("element", elements);
+  atoms.setColF32("x", new Float32Array(elements.length));
+  atoms.setColF32("y", new Float32Array(elements.length));
+  atoms.setColF32("z", new Float32Array(elements.length));
+  atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;
 }
@@ -43,9 +37,9 @@ describe("AssignColorModifier", () => {
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const r = atoms.getColumnF32(COLOR_OVERRIDE_R)!;
-    const g = atoms.getColumnF32(COLOR_OVERRIDE_G)!;
-    const b = atoms.getColumnF32(COLOR_OVERRIDE_B)!;
+    const r = atoms.viewColF32(COLOR_OVERRIDE_R)!;
+    const g = atoms.viewColF32(COLOR_OVERRIDE_G)!;
+    const b = atoms.viewColF32(COLOR_OVERRIDE_B)!;
 
     // Atom 0 should be red (linear space)
     expect(r[0]).toBeGreaterThan(0.5);
@@ -62,8 +56,8 @@ describe("AssignColorModifier", () => {
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const r = atoms.getColumnF32(COLOR_OVERRIDE_R)!;
-    const b = atoms.getColumnF32(COLOR_OVERRIDE_B)!;
+    const r = atoms.viewColF32(COLOR_OVERRIDE_R)!;
+    const b = atoms.viewColF32(COLOR_OVERRIDE_B)!;
 
     expect(r[0]).toBeGreaterThan(0.5); // atom 0 is red
     expect(b[1]).toBeGreaterThan(0.5); // atom 1 is blue
@@ -72,8 +66,8 @@ describe("AssignColorModifier", () => {
   it("should preserve bonds and box", () => {
     const frame = makeFrame(["C", "O"]);
     const bonds = new Block();
-    bonds.setColumnU32("i", new Uint32Array([0]));
-    bonds.setColumnU32("j", new Uint32Array([1]));
+    bonds.setColU32("i", new Uint32Array([0]));
+    bonds.setColU32("j", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
 
     const mod = new AssignColorModifier();

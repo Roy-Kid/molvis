@@ -50,8 +50,8 @@ export const ScatterPlotPanel: React.FC<ScatterPlotPanelProps> = ({ app }) => {
       return;
     }
 
-    const xData = atoms.getColumnF32(xCol);
-    const yData = atoms.getColumnF32(yCol);
+    const xData = atoms.viewColF32(xCol);
+    const yData = atoms.viewColF32(yCol);
     if (!xData || !yData) {
       setResult(null);
       return;
@@ -182,6 +182,8 @@ const ScatterChart: React.FC<{
     <svg
       viewBox={`0 0 ${width} ${height}`}
       className="w-full border rounded bg-muted/10"
+      role="img"
+      aria-label="Scatter plot chart"
     >
       {/* Grid lines */}
       <line

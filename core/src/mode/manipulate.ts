@@ -1,5 +1,5 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
-import { type Block, Frame } from "@molcrafts/molrs";
+import { type Block, Frame } from "molrs-wasm";
 import type { MolvisApp as Molvis } from "../app";
 import { DrawFrameCommand } from "../commands/draw";
 import { syncSceneToFrame } from "../scene_sync";

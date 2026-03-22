@@ -1,17 +1,19 @@
 import {
+  Box,
   type Frame,
-  LammpsReader,
-  PdbReader,
-  XyzReader,
-} from "@molcrafts/molrs";
+  LAMMPSReader,
+  PDBReader,
+  XYZReader,
+} from "molrs-wasm";
 import { PeriodicTable } from "./system/elements";
 import { logger } from "./utils/logger";
 
 /**
  * Parse a PDB payload into a normalized frame.
+ * Normalizes element names, bond column types (i32→u32), and CRYST1 box.
  */
 export function readPDBFrame(content: string): Frame {
-  const reader = new PdbReader(content);
+  const reader = new PDBReader(content);
   const frame = reader.read(0);
   reader.free();
 
@@ -24,16 +26,74 @@ export function readPDBFrame(content: string): Frame {
     throw new Error("PDB frame has no atoms block");
   }
 
-  if (!atomBlock.getColumnStrings("element")) {
-    const typeSymbol = atomBlock.getColumnStrings("type_symbol");
+  if (!atomBlock.dtype("element")) {
+    const typeSymbol = atomBlock.copyColStr("type_symbol");
     if (!typeSymbol) {
       throw new Error("PDB atoms block missing 'type_symbol' column");
     }
-    atomBlock.setColumnStrings("element", typeSymbol);
+    atomBlock.setColStr("element", typeSymbol);
+  }
+
+  // Normalize bond columns: WASM PDBReader may store i/j as i32, convert to u32
+  normalizeBondColumns(frame);
+
+  // Parse CRYST1 record for box if WASM reader didn't populate simbox
+  if (!frame.simbox) {
+    const box = parseCryst1(content);
+    if (box) {
+      frame.simbox = box;
+    }
   }
 
   logger.info("[reader] Successfully read PDB frame");
   return frame;
+}
+
+/**
+ * Convert bond i/j columns from i32 to u32 if needed.
+ * The WASM PDBReader may store CONECT indices as i32 — the rendering
+ * pipeline expects u32.
+ */
+function normalizeBondColumns(frame: Frame): void {
+  const bonds = frame.getBlock("bonds");
+  if (!bonds || bonds.nrows() === 0) return;
+
+  for (const col of ["i", "j"]) {
+    if (!bonds.keys().includes(col)) continue;
+
+    const dtype = bonds.dtype(col);
+    if (dtype === "u32") continue; // already u32
+
+    if (dtype === "i32") {
+      const i32 = bonds.viewColI32(col);
+      if (i32) {
+        bonds.setColU32(col, new Uint32Array(i32));
+      }
+    }
+  }
+}
+
+/**
+ * Parse the CRYST1 record from PDB content to extract box dimensions.
+ * Format: CRYST1    a      b      c     alpha  beta   gamma sGroup
+ */
+function parseCryst1(content: string): Box | null {
+  const line = content.split("\n").find((l) => l.startsWith("CRYST1"));
+  if (!line || line.length < 54) return null;
+
+  const a = Number.parseFloat(line.slice(6, 15));
+  const b = Number.parseFloat(line.slice(15, 24));
+  const c = Number.parseFloat(line.slice(24, 33));
+
+  if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(c)) return null;
+  if (a <= 0 || b <= 0 || c <= 0) return null;
+
+  const origin = new Float32Array([0, 0, 0]);
+
+  if (a === b && b === c) {
+    return Box.cube(a, origin, true, true, true);
+  }
+  return Box.ortho(new Float32Array([a, b, c]), origin, true, true, true);
 }
 
 function processXYZFrame(frame: Frame): void {
@@ -42,12 +102,12 @@ function processXYZFrame(frame: Frame): void {
     throw new Error("XYZ frame has no atoms block");
   }
 
-  if (!atomBlock.getColumnStrings("element")) {
-    const symbol = atomBlock.getColumnStrings("species");
+  if (!atomBlock.dtype("element")) {
+    const symbol = atomBlock.copyColStr("species");
     if (!symbol) {
       throw new Error("XYZ atoms block missing 'species' column");
     }
-    atomBlock.setColumnStrings("element", symbol);
+    atomBlock.setColStr("element", symbol);
   }
 }
 
@@ -55,7 +115,7 @@ function processXYZFrame(frame: Frame): void {
  * Parse an XYZ payload into a normalized frame.
  */
 export function readXYZFrame(content: string): Frame {
-  const reader = new XyzReader(content);
+  const reader = new XYZReader(content);
   const frame = reader.read(0);
   reader.free();
 
@@ -72,7 +132,7 @@ export function readXYZFrame(content: string): Frame {
  * Parse a LAMMPS data payload into a normalized frame.
  */
 export function readLAMMPSData(content: string): Frame {
-  const reader = new LammpsReader(content);
+  const reader = new LAMMPSReader(content);
   const frame = reader.read(0);
   reader.free();
 
@@ -86,12 +146,12 @@ export function readLAMMPSData(content: string): Frame {
   }
 
   // LAMMPS format: element/type is in 'species' column
-  if (!atomBlock.getColumnStrings("element")) {
-    const species = atomBlock.getColumnStrings("species");
+  if (!atomBlock.dtype("element")) {
+    const species = atomBlock.copyColStr("species");
     if (!species) {
       throw new Error("LAMMPS atoms block missing 'species' column");
     }
-    atomBlock.setColumnStrings("element", species);
+    atomBlock.setColStr("element", species);
   }
 
   // LAMMPS bonds: already uses 'i' and 'j', no mapping needed
@@ -161,11 +221,11 @@ export function deriveElementFromType(typeName: string): string {
 export function processZarrFrame(frame: Frame): Frame {
   const atoms = frame.getBlock("atoms");
   if (!atoms) return frame;
-  if (atoms.getColumnStrings("element")) return frame;
-  const types = atoms.getColumnStrings("type");
+  if (atoms.dtype("element")) return frame;
+  const types = atoms.copyColStr("type");
   if (!types) return frame;
   const derived = types.map(deriveElementFromType);
-  atoms.setColumnStrings("element", derived);
+  atoms.setColStr("element", derived);
   return frame;
 }
 
@@ -173,14 +233,14 @@ export function processZarrFrame(frame: Frame): Frame {
  * Trajectory reader for multi-frame files (XYZ format).
  */
 export class TrajectoryReader {
-  private reader: XyzReader;
+  private reader: XYZReader;
   private frameCount: number;
 
   /**
    * Create a multi-frame reader for XYZ trajectory payloads.
    */
   constructor(content: string) {
-    this.reader = new XyzReader(content);
+    this.reader = new XYZReader(content);
     this.frameCount = this.reader.len();
   }
 

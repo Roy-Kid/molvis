@@ -1,33 +1,33 @@
 import { describe, expect, it } from "@rstest/core";
-import { initSync, Block, Frame } from "@molcrafts/molrs";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { Block, Frame } from "molrs-wasm";
+import "./setup_wasm";
 import {
   discoverAtomColumns,
   extractAtomRows,
   extractBondRows,
 } from "../src/data_inspector";
 
-const require = createRequire(__filename);
-const wasmPath = require.resolve("@molcrafts/molrs/molwasm_bg.wasm");
-const wasmBuffer = readFileSync(wasmPath);
-initSync({ module: wasmBuffer });
-
 function makeAtomBlock(
   elements: string[],
   positions: [number, number, number][],
 ): Block {
   const block = new Block();
-  block.setColumnStrings("element", elements);
-  block.setColumnF32("x", new Float32Array(positions.map((p) => p[0])));
-  block.setColumnF32("y", new Float32Array(positions.map((p) => p[1])));
-  block.setColumnF32("z", new Float32Array(positions.map((p) => p[2])));
+  block.setColStr("element", elements);
+  block.setColF32("x", new Float32Array(positions.map((p) => p[0])));
+  block.setColF32("y", new Float32Array(positions.map((p) => p[1])));
+  block.setColF32("z", new Float32Array(positions.map((p) => p[2])));
   return block;
 }
 
 describe("discoverAtomColumns", () => {
   it("should discover element, x, y, z columns", () => {
-    const block = makeAtomBlock(["C", "O"], [[0, 0, 0], [1, 1, 1]]);
+    const block = makeAtomBlock(
+      ["C", "O"],
+      [
+        [0, 0, 0],
+        [1, 1, 1],
+      ],
+    );
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).toContain("element");
@@ -47,7 +47,7 @@ describe("discoverAtomColumns", () => {
 
   it("should skip internal __ columns", () => {
     const block = makeAtomBlock(["C"], [[0, 0, 0]]);
-    block.setColumnF32("__color_r", new Float32Array([1.0]));
+    block.setColF32("__color_r", new Float32Array([1.0]));
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).not.toContain("__color_r");
@@ -55,7 +55,7 @@ describe("discoverAtomColumns", () => {
 
   it("should include additional columns", () => {
     const block = makeAtomBlock(["C"], [[0, 0, 0]]);
-    block.setColumnF32("charge", new Float32Array([0.5]));
+    block.setColF32("charge", new Float32Array([0.5]));
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).toContain("charge");
@@ -66,7 +66,11 @@ describe("extractAtomRows", () => {
   it("should extract all rows with values", () => {
     const block = makeAtomBlock(
       ["C", "O", "N"],
-      [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+      [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ],
     );
     const cols = discoverAtomColumns(block);
     const rows = extractAtomRows(block, cols);
@@ -86,7 +90,10 @@ describe("extractAtomRows", () => {
 
   it("should support start/count pagination", () => {
     const elements = Array.from({ length: 10 }, () => "C");
-    const positions = Array.from({ length: 10 }, (_, i) => [i, 0, 0] as [number, number, number]);
+    const positions = Array.from(
+      { length: 10 },
+      (_, i) => [i, 0, 0] as [number, number, number],
+    );
     const block = makeAtomBlock(elements, positions);
     const cols = discoverAtomColumns(block);
     const rows = extractAtomRows(block, cols, 3, 4);
@@ -105,13 +112,19 @@ describe("extractAtomRows", () => {
 describe("extractBondRows", () => {
   it("should extract bond data", () => {
     const frame = new Frame();
-    const atoms = makeAtomBlock(["C", "O"], [[0, 0, 0], [1, 0, 0]]);
+    const atoms = makeAtomBlock(
+      ["C", "O"],
+      [
+        [0, 0, 0],
+        [1, 0, 0],
+      ],
+    );
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColumnU32("i", new Uint32Array([0]));
-    bonds.setColumnU32("j", new Uint32Array([1]));
-    bonds.setColumnU8("order", new Uint8Array([2]));
+    bonds.setColU32("i", new Uint32Array([0]));
+    bonds.setColU32("j", new Uint32Array([1]));
+    bonds.setColU32("order", new Uint32Array([2]));
     frame.insertBlock("bonds", bonds);
 
     const rows = extractBondRows(frame);
@@ -129,12 +142,18 @@ describe("extractBondRows", () => {
 
   it("should default order to 1 when column missing", () => {
     const frame = new Frame();
-    const atoms = makeAtomBlock(["C", "O"], [[0, 0, 0], [1, 0, 0]]);
+    const atoms = makeAtomBlock(
+      ["C", "O"],
+      [
+        [0, 0, 0],
+        [1, 0, 0],
+      ],
+    );
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColumnU32("i", new Uint32Array([0]));
-    bonds.setColumnU32("j", new Uint32Array([1]));
+    bonds.setColU32("i", new Uint32Array([0]));
+    bonds.setColU32("j", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
 
     const rows = extractBondRows(frame);

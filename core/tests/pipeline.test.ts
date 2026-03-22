@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
+import type { Frame } from "molrs-wasm";
 import type { Modifier } from "../src/pipeline/modifier";
 import { ModifierCategory } from "../src/pipeline/modifier";
 import { ModifierPipeline } from "../src/pipeline/pipeline";
-import type { Frame } from "@molcrafts/molrs";
 
 /**
  * Test suite for Pipeline System

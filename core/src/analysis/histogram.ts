@@ -120,14 +120,16 @@ function computeStats(values: number[]): HistogramStats {
  */
 export function discoverNumericColumns(block: {
   keys(): string[];
-  getDtype(key: string): string | undefined;
+  dtype(key: string): string | undefined;
 }): { name: string; dtype: string }[] {
   const result: { name: string; dtype: string }[] = [];
   for (const key of block.keys()) {
     if (key.startsWith("__")) continue;
-    const dtype = block.getDtype(key);
-    if (dtype === "f32" || dtype === "f64" || dtype === "u32" || dtype === "u8") {
-      result.push({ name: key, dtype });
+    const dt = block.dtype(key);
+    if (!dt) continue;
+    if (dt === "string") continue; // skip string columns
+    if (dt === "f32" || dt === "u32" || dt === "i32") {
+      result.push({ name: key, dtype: dt });
     }
   }
   return result;

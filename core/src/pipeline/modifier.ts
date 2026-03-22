@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import type {
   PipelineContext,
   SelectionMask as SelectionMaskType,

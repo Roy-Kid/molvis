@@ -1,6 +1,6 @@
 import * as BABYLON from "@babylonjs/core";
 import type { Vector3 } from "@babylonjs/core";
-import type { Box, Frame } from "@molcrafts/molrs";
+import type { Box, Frame } from "molrs-wasm";
 import type { MolvisApp } from "../app";
 import type { DrawAtomOptions, DrawBondOptions } from "../artist";
 import { Command, command } from "./base";
@@ -38,11 +38,11 @@ export class DrawBoxCommand extends Command<void> {
 
   do(): void {
     const scene = this.app.world.scene;
-    const copyAndFree = (view: { toCopy(): Float32Array; free(): void }) => {
+    const copyAndFree = (wa: { toCopy(): Float32Array; free(): void }) => {
       try {
-        return view.toCopy();
+        return wa.toCopy();
       } finally {
-        view.free();
+        wa.free();
       }
     };
 
@@ -53,7 +53,7 @@ export class DrawBoxCommand extends Command<void> {
       existingBox.dispose();
     }
 
-    // Get corners from molrs Box
+    // Get corners from molrs Box (returns WasmArray)
     const corners = copyAndFree(this.box.get_corners()); // Float32Array length 24
 
     // Create a root mesh for the box
@@ -150,7 +150,8 @@ export class DrawBoxCommand extends Command<void> {
         scene.activeCamera.position,
         center,
       );
-      let scale = dist * 0.002;
+      const userScale = (this.boxMesh as any)._userThicknessScale ?? 1.0;
+      let scale = dist * 0.002 * userScale;
       scale = Math.max(scale, 0.015);
 
       const children = this.boxMesh.getChildren() as BABYLON.Mesh[];

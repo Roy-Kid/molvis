@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 
 export interface BoundingBox {
   min: [number, number, number];
@@ -19,9 +19,9 @@ export function calculateBoundingBox(
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.getColumnF32("x");
-  const y = atoms.getColumnF32("y");
-  const z = atoms.getColumnF32("z");
+  const x = atoms.viewColF32("x");
+  const y = atoms.viewColF32("y");
+  const z = atoms.viewColF32("z");
 
   if (!x || !y || !z || x.length === 0) return null;
 

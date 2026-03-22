@@ -1,4 +1,4 @@
-import { Frame, WasmArray } from "@molcrafts/molrs";
+import { Frame, WasmArray } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { logger } from "../utils/logger";
@@ -24,9 +24,9 @@ export class WrapPBCModifier extends BaseModifier {
       return input;
     }
 
-    const x = atoms.getColumnF32("x");
-    const y = atoms.getColumnF32("y");
-    const z = atoms.getColumnF32("z");
+    const x = atoms.viewColF32("x");
+    const y = atoms.viewColF32("y");
+    const z = atoms.viewColF32("z");
     if (!x || !y || !z) {
       logger.warn("WrapPBC: missing x/y/z columns, skipping");
       return input;
@@ -37,21 +37,23 @@ export class WrapPBCModifier extends BaseModifier {
       return input;
     }
 
-    // Allocate WASM coord buffer directly to avoid an extra JS->WASM copy.
-    const coordsView = new WasmArray(new Uint32Array([atomCount, 3]));
-    const coords = coordsView.toTypedArray();
+    // Build interleaved coords and write into WASM WasmArray.
+    const interleaved = new Float32Array(atomCount * 3);
     for (let i = 0; i < atomCount; i++) {
       const i3 = i * 3;
-      coords[i3] = x[i];
-      coords[i3 + 1] = y[i];
-      coords[i3 + 2] = z[i];
+      interleaved[i3] = x[i];
+      interleaved[i3 + 1] = y[i];
+      interleaved[i3 + 2] = z[i];
     }
+    const coordsArr = WasmArray.from(
+      interleaved,
+      new Uint32Array([atomCount, 3]),
+    );
 
-    let wrappedView: WasmArray | null = null;
+    let wrappedArr: WasmArray | null = null;
     try {
-      wrappedView = box.wrap(coordsView);
-      // Read wrapped coords via zero-copy view, then deinterleave once.
-      const wrapped = wrappedView.toTypedArray();
+      wrappedArr = box.wrap(coordsArr);
+      const wrapped = wrappedArr.toCopy();
 
       const wrappedX = new Float32Array(atomCount);
       const wrappedY = new Float32Array(atomCount);
@@ -64,15 +66,14 @@ export class WrapPBCModifier extends BaseModifier {
       }
 
       const result = new Frame();
-      // Let WASM copy the full block once, then patch xyz columns.
       result.insertBlock("atoms", atoms);
       const resultAtoms = result.getBlock("atoms");
       if (!resultAtoms) {
         throw new Error("WrapPBC: failed to clone atoms block");
       }
-      resultAtoms.setColumnF32("x", wrappedX);
-      resultAtoms.setColumnF32("y", wrappedY);
-      resultAtoms.setColumnF32("z", wrappedZ);
+      resultAtoms.setColF32("x", wrappedX);
+      resultAtoms.setColF32("y", wrappedY);
+      resultAtoms.setColF32("z", wrappedZ);
 
       const bonds = input.getBlock("bonds");
       if (bonds) {
@@ -82,8 +83,8 @@ export class WrapPBCModifier extends BaseModifier {
       result.simbox = box;
       return result;
     } finally {
-      wrappedView?.free();
-      coordsView.free();
+      wrappedArr?.free();
+      coordsArr.free();
     }
   }
 

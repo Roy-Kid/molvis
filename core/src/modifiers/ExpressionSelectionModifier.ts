@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
@@ -48,7 +48,7 @@ export class ExpressionSelectionModifier extends BaseModifier {
 
     // Select indices from frame
     let indices: number[] = [];
-    if (this.expression && this.expression.trim()) {
+    if (this.expression?.trim()) {
       indices = ExpressionSelector.selectFromFrame(input, this.expression);
     }
 

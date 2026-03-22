@@ -50,7 +50,7 @@ export const HistogramPanel: React.FC<HistogramPanelProps> = ({ app }) => {
       return;
     }
 
-    const data = atoms.getColumnF32(selectedColumn);
+    const data = atoms.viewColF32(selectedColumn);
     if (!data) {
       setResult(null);
       return;
@@ -120,10 +120,7 @@ export const HistogramPanel: React.FC<HistogramPanelProps> = ({ app }) => {
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <Label className="text-[10px]">Selected</Label>
-          <Switch
-            checked={selectedOnly}
-            onCheckedChange={setSelectedOnly}
-          />
+          <Switch checked={selectedOnly} onCheckedChange={setSelectedOnly} />
         </div>
       </div>
 
@@ -168,6 +165,8 @@ const HistogramChart: React.FC<{ result: HistogramResult }> = ({ result }) => {
     <svg
       viewBox={`0 0 ${width} ${height}`}
       className="w-full border rounded bg-muted/10"
+      role="img"
+      aria-label="Histogram chart"
     >
       {/* Bars */}
       {Array.from(counts).map((count, i) => {

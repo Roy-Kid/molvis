@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import type { MolvisApp } from "../app";
 import { EventEmitter } from "../events";
 import { logger } from "../utils/logger";

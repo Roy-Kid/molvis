@@ -1,13 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
-import { initSync, Frame } from "@molcrafts/molrs";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { Frame } from "molrs-wasm";
+import "./setup_wasm";
 import { Trajectory } from "../src/system/trajectory";
-
-const require = createRequire(__filename);
-const wasmPath = require.resolve("@molcrafts/molrs/molwasm_bg.wasm");
-const wasmBuffer = readFileSync(wasmPath);
-initSync({ module: wasmBuffer });
 
 function makeFrames(n: number): Frame[] {
   return Array.from({ length: n }, () => new Frame());

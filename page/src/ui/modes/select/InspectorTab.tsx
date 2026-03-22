@@ -5,7 +5,8 @@ import {
   type SelectionState,
   parseSelectionKey,
 } from "@molvis/core";
-import React, { useEffect, useMemo, useState } from "react";
+import type React from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SelectionSnapshot } from "./useSelectionSnapshot";
 
 interface InspectorTabProps {
@@ -20,6 +21,13 @@ interface AttributeRow {
   x: string;
   y: string;
   z: string;
+}
+
+interface BondRow {
+  bondId: number;
+  atomId1: number;
+  atomId2: number;
+  order: number;
 }
 
 function formatValue(value: unknown): string {
@@ -66,7 +74,12 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
             return key ?? String(id);
           }),
         ),
-        bonds: new Set<string>(),
+        bonds: new Set(
+          (externalSnapshot.bondIds ?? []).flatMap((id) => {
+            const key = app?.world.sceneIndex.getSelectionKeyForBond(id);
+            return key ? [key] : [];
+          }),
+        ),
       };
     }
     return internalSelection;
@@ -90,6 +103,22 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
     return [...ids].sort((a, b) => a - b);
   }, [selection, app]);
 
+  const bondIds = useMemo(() => {
+    if (!app) return [];
+
+    const ids = new Set<number>();
+    for (const key of selection.bonds) {
+      const ref = parseSelectionKey(key);
+      if (!ref) continue;
+      const meta = app.world.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+      if (meta?.type === "bond") {
+        ids.add(meta.bondId);
+      }
+    }
+
+    return [...ids].sort((a, b) => a - b);
+  }, [selection, app]);
+
   const rows = useMemo<AttributeRow[]>(() => {
     if (!app || atomIds.length === 0) {
       return [];
@@ -105,6 +134,23 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
       z: formatValue(app.world.sceneIndex.getAttribute("atom", atomId, "z")),
     }));
   }, [app, atomIds]);
+
+  const bondRows = useMemo<BondRow[]>(() => {
+    if (!app || bondIds.length === 0) return [];
+
+    return bondIds.flatMap((bondId) => {
+      const meta = app.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
+      if (!meta) return [];
+      return [
+        {
+          bondId: meta.bondId,
+          atomId1: meta.atomId1,
+          atomId2: meta.atomId2,
+          order: meta.order,
+        },
+      ];
+    });
+  }, [app, bondIds]);
 
   if (selection.atoms.size === 0 && selection.bonds.size === 0) {
     return (
@@ -134,7 +180,7 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
         )}
       </div>
 
-      {rows.length > 0 ? (
+      {rows.length > 0 && (
         <div className="rounded border bg-background">
           <div className="grid grid-cols-[54px_40px_1fr] gap-2 border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
             <div>Atom</div>
@@ -169,9 +215,34 @@ export const InspectorTab: React.FC<InspectorTabProps> = ({
             ))}
           </div>
         </div>
-      ) : (
-        <div className="rounded border bg-muted/10 px-2 py-1.5 text-[11px] text-muted-foreground">
-          Bond metadata is not listed here yet.
+      )}
+
+      {bondRows.length > 0 && (
+        <div className="rounded border bg-background">
+          <div className="grid grid-cols-[54px_1fr_40px] gap-2 border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <div>Bond</div>
+            <div>Atoms</div>
+            <div>Ord</div>
+          </div>
+          <div className="divide-y">
+            {bondRows.map((row) => (
+              <div
+                key={row.bondId}
+                className="grid grid-cols-[54px_1fr_40px] items-center gap-2 px-2 py-1.5"
+              >
+                <div
+                  className="truncate font-mono text-[11px] text-muted-foreground"
+                  title={String(row.bondId)}
+                >
+                  #{row.bondId}
+                </div>
+                <div className="truncate font-mono text-[11px] text-foreground">
+                  {row.atomId1}–{row.atomId2}
+                </div>
+                <div className="text-[11px] text-foreground">{row.order}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

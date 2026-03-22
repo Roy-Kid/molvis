@@ -8,11 +8,7 @@
       "import": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "build": "rslib build",
     "build:demo": "rsbuild build",
@@ -21,12 +17,17 @@
     "preview:demo": "rsbuild preview",
     "test": "rstest run",
     "test:watch": "rstest watch",
-    "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
+    "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@rslib/core": "^0.5.4",
     "@rsbuild/core": "^1.2.14",
-    "@rstest/core": "^0.8.2",
+    "@rslib/core": "^0.5.4",
+    "@rstest/browser": "^0.9.4",
+    "@rstest/core": "^0.9.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "playwright": "^1.58.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
@@ -34,7 +35,7 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
-    "@molcrafts/molrs": "file:../../molrs/molrs-wasm/pkg",
+    "molrs-wasm": "^0.0.4",
     "tslog": "^4.9.3"
   },
   "directories": {

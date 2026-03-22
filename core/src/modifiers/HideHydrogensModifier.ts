@@ -1,4 +1,4 @@
-import { Block, Frame } from "@molcrafts/molrs";
+import { Block, Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 
@@ -31,8 +31,8 @@ export class HideHydrogensModifier extends BaseModifier {
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
 
-    const elements = atoms.getColumnStrings("element");
-    if (!elements) return input;
+    if (!atoms.dtype("element")) return input;
+    const elements = atoms.copyColStr("element") as string[];
 
     const nrows = atoms.nrows();
     const indexMap = new Int32Array(nrows);
@@ -52,17 +52,17 @@ export class HideHydrogensModifier extends BaseModifier {
 
     // Filter atoms
     const newAtoms = new Block();
-    copyFilteredColumnF32(atoms, newAtoms, "x", indexMap, nrows, newCount);
-    copyFilteredColumnF32(atoms, newAtoms, "y", indexMap, nrows, newCount);
-    copyFilteredColumnF32(atoms, newAtoms, "z", indexMap, nrows, newCount);
-    copyFilteredColumnStr(atoms, newAtoms, "element", indexMap, nrows);
+    copyFilteredF32(atoms, newAtoms, "x", indexMap, nrows, newCount);
+    copyFilteredF32(atoms, newAtoms, "y", indexMap, nrows, newCount);
+    copyFilteredF32(atoms, newAtoms, "z", indexMap, nrows, newCount);
+    copyFilteredStr(atoms, newAtoms, "element", indexMap, nrows);
 
     // Optional columns
     for (const col of ["vx", "vy", "vz", "occupancy", "tempFactor", "charge"]) {
-      copyFilteredColumnF32(atoms, newAtoms, col, indexMap, nrows, newCount);
+      copyFilteredF32(atoms, newAtoms, col, indexMap, nrows, newCount);
     }
     for (const col of ["type", "species"]) {
-      copyFilteredColumnStr(atoms, newAtoms, col, indexMap, nrows);
+      copyFilteredStr(atoms, newAtoms, col, indexMap, nrows);
     }
 
     // Filter bonds
@@ -70,9 +70,11 @@ export class HideHydrogensModifier extends BaseModifier {
     let newBonds: Block | undefined;
 
     if (bonds) {
-      const iCol = bonds.getColumnU32("i");
-      const jCol = bonds.getColumnU32("j");
-      const orderCol = bonds.getColumnU8("order");
+      const iCol = bonds.viewColU32("i");
+      const jCol = bonds.viewColU32("j");
+      const orderCol = bonds.dtype("order")
+        ? bonds.viewColU32("order")
+        : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -96,14 +98,14 @@ export class HideHydrogensModifier extends BaseModifier {
             newJ[k] = indexMap[jCol[orig]];
           }
 
-          newBonds.setColumnU32("i", newI);
-          newBonds.setColumnU32("j", newJ);
+          newBonds.setColU32("i", newI);
+          newBonds.setColU32("j", newJ);
           if (orderCol) {
-            const newOrder = new Uint8Array(nb);
+            const newOrder = new Uint32Array(nb);
             for (let k = 0; k < nb; k++) {
               newOrder[k] = orderCol[validBonds[k]];
             }
-            newBonds.setColumnU8("order", newOrder);
+            newBonds.setColU32("order", newOrder);
           }
         }
       }
@@ -121,7 +123,7 @@ export class HideHydrogensModifier extends BaseModifier {
   }
 }
 
-function copyFilteredColumnF32(
+function copyFilteredF32(
   src: Block,
   dst: Block,
   name: string,
@@ -129,28 +131,28 @@ function copyFilteredColumnF32(
   nrows: number,
   newCount: number,
 ): void {
-  const col = src.getColumnF32(name);
+  const col = src.dtype(name) === "f32" ? src.viewColF32(name) : undefined;
   if (!col) return;
   const out = new Float32Array(newCount);
   let ptr = 0;
   for (let i = 0; i < nrows; i++) {
     if (indexMap[i] !== -1) out[ptr++] = col[i];
   }
-  dst.setColumnF32(name, out);
+  dst.setColF32(name, out);
 }
 
-function copyFilteredColumnStr(
+function copyFilteredStr(
   src: Block,
   dst: Block,
   name: string,
   indexMap: Int32Array,
   nrows: number,
 ): void {
-  const col = src.getColumnStrings(name);
+  const col = src.dtype(name) === "string" ? src.copyColStr(name) : undefined;
   if (!col) return;
   const out: string[] = [];
   for (let i = 0; i < nrows; i++) {
     if (indexMap[i] !== -1) out.push(col[i]);
   }
-  dst.setColumnStrings(name, out);
+  dst.setColStr(name, out);
 }

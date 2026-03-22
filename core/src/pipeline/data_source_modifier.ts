@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "./modifier";
 import type { PipelineContext } from "./types";
 

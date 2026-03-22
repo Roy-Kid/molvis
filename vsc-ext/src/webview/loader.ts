@@ -4,10 +4,11 @@ import {
   type FrameProvider,
   Trajectory,
   TrajectoryReader,
-  ZarrReader,
+  type ZarrReader,
   processZarrFrame,
   readFrame,
 } from "@molvis/core";
+import { SimulationReader } from "molrs-wasm";
 import type { MolecularFilePayload } from "../extension/types";
 
 export interface RuntimeLoadContext {
@@ -100,10 +101,10 @@ function loadZarr(
     fileMap.set(filePath, decodeBase64ToBytes(contentB64));
   }
 
-  resources.zarrReader = new ZarrReader(fileMap);
-  const frameCount = resources.zarrReader.len();
+  const reader = new SimulationReader(fileMap);
+  resources.zarrReader = reader as unknown as ZarrReader;
+  const frameCount = reader.countFrames();
   const cache = new Map<number, Frame>();
-  const reader = resources.zarrReader;
 
   const provider: FrameProvider = {
     length: frameCount,
@@ -113,7 +114,7 @@ function loadZarr(
         return cached;
       }
 
-      const raw = reader.read(index);
+      const raw = reader.readFrame(index);
       if (!raw) {
         throw new Error(`Zarr frame ${index} out of range`);
       }

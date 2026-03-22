@@ -1,5 +1,5 @@
-import type { Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
+import type { Frame } from "molrs-wasm";
 import { classifyFrameTransition } from "../src/system/frame_diff";
 
 interface AtomSpec {
@@ -18,10 +18,9 @@ interface BondSpec {
 
 interface MockBlock {
   nrows(): number;
-  getColumnF32(name: string): Float32Array | null;
-  getColumnU32(name: string): Uint32Array | null;
-  getColumnU8(name: string): Uint8Array | null;
-  getColumnStrings(name: string): string[] | null;
+  dtype(name: string): string | undefined;
+  viewColU32(name: string): Uint32Array;
+  copyColStr(name: string): string[];
 }
 
 interface MockFrame {
@@ -29,17 +28,12 @@ interface MockFrame {
 }
 
 function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
-  const columnsF32 = new Map<string, Float32Array>([
-    ["x", new Float32Array(atoms.map((atom) => atom.x))],
-    ["y", new Float32Array(atoms.map((atom) => atom.y))],
-    ["z", new Float32Array(atoms.map((atom) => atom.z))],
-  ]);
-  const columnsStrings = new Map<string, string[]>([
+  const columnsStr = new Map<string, string[]>([
     ["element", atoms.map((atom) => atom.element)],
   ]);
 
   if (atoms.some((atom) => atom.type !== undefined)) {
-    columnsStrings.set(
+    columnsStr.set(
       "type",
       atoms.map((atom) => atom.type ?? ""),
     );
@@ -49,17 +43,17 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
     nrows() {
       return atoms.length;
     },
-    getColumnF32(name: string) {
-      return columnsF32.get(name) ?? null;
+    dtype(name: string) {
+      if (columnsStr.has(name)) return "string";
+      return undefined;
     },
-    getColumnU32() {
-      return null;
+    viewColU32(_name: string): Uint32Array {
+      throw new Error("No u32 columns in atom block");
     },
-    getColumnU8() {
-      return null;
-    },
-    getColumnStrings(name: string) {
-      return columnsStrings.get(name) ?? null;
+    copyColStr(name: string): string[] {
+      const col = columnsStr.get(name);
+      if (!col) throw new Error(`Column '${name}' not found`);
+      return col;
     },
   };
 }
@@ -68,26 +62,24 @@ function buildBondBlock(bonds: BondSpec[]): MockBlock {
   const columnsU32 = new Map<string, Uint32Array>([
     ["i", new Uint32Array(bonds.map((bond) => bond.i))],
     ["j", new Uint32Array(bonds.map((bond) => bond.j))],
-  ]);
-  const columnsU8 = new Map<string, Uint8Array>([
-    ["order", new Uint8Array(bonds.map((bond) => bond.order ?? 1))],
+    ["order", new Uint32Array(bonds.map((bond) => bond.order ?? 1))],
   ]);
 
   return {
     nrows() {
       return bonds.length;
     },
-    getColumnF32() {
-      return null;
+    dtype(name: string) {
+      if (columnsU32.has(name)) return "u32";
+      return undefined;
     },
-    getColumnU32(name: string) {
-      return columnsU32.get(name) ?? null;
+    viewColU32(name: string): Uint32Array {
+      const col = columnsU32.get(name);
+      if (!col) throw new Error(`Column '${name}' not found`);
+      return col;
     },
-    getColumnU8(name: string) {
-      return columnsU8.get(name) ?? null;
-    },
-    getColumnStrings() {
-      return null;
+    copyColStr(_name: string): string[] {
+      throw new Error("No string columns in bond block");
     },
   };
 }

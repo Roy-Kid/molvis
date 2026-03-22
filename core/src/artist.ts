@@ -6,7 +6,7 @@ import {
   type ShaderMaterial,
   type Vector3,
 } from "@babylonjs/core";
-import type { Block, Box, Frame } from "@molcrafts/molrs";
+import type { Block, Box, Frame } from "molrs-wasm";
 import type { MolvisApp } from "./app";
 
 import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
@@ -15,6 +15,7 @@ import {
   buildBondBuffers,
   refreshBondPositions,
 } from "./artist/bond_buffer";
+import { LabelRenderer } from "./artist/label_renderer";
 import {
   compileShaderMaterial,
   createImpostorMaterial,
@@ -24,9 +25,8 @@ import {
   type ImpostorTarget,
   getImpostorMaterialSpec,
 } from "./artist/material_spec";
-import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
-import { LabelRenderer } from "./artist/label_renderer";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
+import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
 import { createWarmupMesh } from "./artist/warmup";
 import type { AtomMeta, BondMeta } from "./entity_source";
 import type { ImpostorState } from "./scene_index";
@@ -169,7 +169,9 @@ export class Artist {
     if (targets.length === 0) return;
 
     this.app.world.renderOnce();
-    await Promise.all(targets.map((target) => this.ensureTargetShaderReady(target)));
+    await Promise.all(
+      targets.map((target) => this.ensureTargetShaderReady(target)),
+    );
   }
 
   private ensureTargetShaderReady(target: ImpostorTarget): Promise<void> {
@@ -211,6 +213,13 @@ export class Artist {
 
     this.atomMesh.dispose();
     this.bondMesh.dispose();
+
+    // Dispose box mesh if present
+    const boxMesh = scene.getMeshByName("sim_box");
+    if (boxMesh) {
+      boxMesh.dispose();
+    }
+
     this.app.world.sceneIndex.clear();
 
     this.atomMesh = this.createBaseMesh(
@@ -315,9 +324,9 @@ export class Artist {
     const atomsBlock = frame.getBlock("atoms");
     if (!atomsBlock || atomsBlock.nrows() === 0) return;
 
-    const x = atomsBlock.getColumnF32("x");
-    const y = atomsBlock.getColumnF32("y");
-    const z = atomsBlock.getColumnF32("z");
+    const x = atomsBlock.viewColF32("x");
+    const y = atomsBlock.viewColF32("y");
+    const z = atomsBlock.viewColF32("z");
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     if (!x || !y || !z || !atomState) return;
 
@@ -391,10 +400,12 @@ export class Artist {
     );
     values.set("instancePickingColor", new Float32Array(4));
 
-    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
-      atomCount: 1,
-      bondCount: 0,
-    }));
+    await this.ensureShadersForVisibleGeometry(
+      this.collectVisibleTargets({
+        atomCount: 1,
+        bondCount: 0,
+      }),
+    );
 
     this.app.world.sceneIndex.createAtom(
       {
@@ -462,10 +473,12 @@ export class Artist {
     values.set("instanceSplit", new Float32Array([splitOffset, 0, 0, 0]));
     values.set("instancePickingColor", new Float32Array(4));
 
-    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
-      atomCount: 0,
-      bondCount: 1,
-    }));
+    await this.ensureShadersForVisibleGeometry(
+      this.collectVisibleTargets({
+        atomCount: 0,
+        bondCount: 1,
+      }),
+    );
 
     this.app.world.sceneIndex.createBond(
       {
@@ -503,10 +516,12 @@ export class Artist {
     meta: Omit<AtomMeta, "type">,
     buffers: Map<string, Float32Array | number[]>,
   ): Promise<void> {
-    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
-      atomCount: 1,
-      bondCount: 0,
-    }));
+    await this.ensureShadersForVisibleGeometry(
+      this.collectVisibleTargets({
+        atomCount: 1,
+        bondCount: 0,
+      }),
+    );
     this.app.world.sceneIndex.createAtom(meta, buffers);
     this.applySceneIndexToMeshes();
   }
@@ -515,10 +530,12 @@ export class Artist {
     meta: Omit<BondMeta, "type">,
     buffers: Map<string, Float32Array | number[]>,
   ): Promise<void> {
-    await this.ensureShadersForVisibleGeometry(this.collectVisibleTargets({
-      atomCount: 0,
-      bondCount: 1,
-    }));
+    await this.ensureShadersForVisibleGeometry(
+      this.collectVisibleTargets({
+        atomCount: 0,
+        bondCount: 1,
+      }),
+    );
     this.app.world.sceneIndex.createBond(meta, buffers);
     this.applySceneIndexToMeshes();
   }
@@ -631,7 +648,10 @@ export class Artist {
     if (state?.needsUpload) {
       const matrixDesc = state.buffers.get("matrix");
       if (matrixDesc) {
-        const view = matrixDesc.data.subarray(0, totalCount * matrixDesc.stride);
+        const view = matrixDesc.data.subarray(
+          0,
+          totalCount * matrixDesc.stride,
+        );
         mesh.thinInstanceSetBuffer("matrix", view, matrixDesc.stride, false);
       }
 
@@ -675,9 +695,8 @@ export class Artist {
     const bondsBlock = frame.getBlock("bonds");
     if (!bondsBlock || !bondColor0 || !bondColor1) return;
 
-    const iAtoms = bondsBlock.getColumnU32("i");
-    const jAtoms = bondsBlock.getColumnU32("j");
-    if (!iAtoms || !jAtoms) return;
+    const iAtoms = bondsBlock.viewColU32("i");
+    const jAtoms = bondsBlock.viewColU32("j");
 
     const safeCount = Math.min(bondsBlock.nrows(), bondState.frameOffset);
     for (let b = 0; b < safeCount; b++) {

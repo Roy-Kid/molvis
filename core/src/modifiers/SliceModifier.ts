@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { calculateBoundingBox } from "../utils/bbox";
@@ -92,9 +92,9 @@ export class SliceModifier extends BaseModifier {
       return input;
     }
 
-    const xCol = atomsBlock.getColumnF32("x");
-    const yCol = atomsBlock.getColumnF32("y");
-    const zCol = atomsBlock.getColumnF32("z");
+    const xCol = atomsBlock.viewColF32("x");
+    const yCol = atomsBlock.viewColF32("y");
+    const zCol = atomsBlock.viewColF32("z");
 
     if (!xCol || !yCol || !zCol) {
       logger.warn("SliceModifier: Missing coordinate columns");
@@ -289,10 +289,10 @@ export class SliceModifier extends BaseModifier {
     const u = Vector3.Cross(up, n).normalize();
     const v = Vector3.Cross(n, u).normalize();
 
-    let minU = Number.POSITIVE_INFINITY,
-      maxU = Number.NEGATIVE_INFINITY;
-    let minV = Number.POSITIVE_INFINITY,
-      maxV = Number.NEGATIVE_INFINITY;
+    let minU = Number.POSITIVE_INFINITY;
+    let maxU = Number.NEGATIVE_INFINITY;
+    let minV = Number.POSITIVE_INFINITY;
+    let maxV = Number.NEGATIVE_INFINITY;
 
     for (const p of corners) {
       const dotU = Vector3.Dot(p, u);

@@ -1,4 +1,4 @@
-import { Block, type Frame } from "@molcrafts/molrs";
+import { Block, type Frame } from "molrs-wasm";
 import type { SceneIndex } from "./scene_index";
 import { logger } from "./utils/logger";
 
@@ -79,10 +79,10 @@ export function syncSceneToFrame(
       elements.push(atom.element);
     }
 
-    atomBlock.setColumnF32("x", x);
-    atomBlock.setColumnF32("y", y);
-    atomBlock.setColumnF32("z", z);
-    atomBlock.setColumnStrings("element", elements);
+    atomBlock.setColF32("x", x);
+    atomBlock.setColF32("y", y);
+    atomBlock.setColF32("z", z);
+    atomBlock.setColStr("element", elements);
 
     frame.insertBlock("atoms", atomBlock);
   }
@@ -92,7 +92,7 @@ export function syncSceneToFrame(
     const bondBlock = new Block();
     const iArr = new Uint32Array(bondCount);
     const jArr = new Uint32Array(bondCount);
-    const orderArr = new Uint8Array(bondCount);
+    const orderArr = new Uint32Array(bondCount);
 
     for (let idx = 0; idx < bonds.length; idx++) {
       const bond = bonds[idx];
@@ -101,9 +101,9 @@ export function syncSceneToFrame(
       orderArr[idx] = bond.order;
     }
 
-    bondBlock.setColumnU32("i", iArr);
-    bondBlock.setColumnU32("j", jArr);
-    bondBlock.setColumnU8("order", orderArr);
+    bondBlock.setColU32("i", iArr);
+    bondBlock.setColU32("j", jArr);
+    bondBlock.setColU32("order", orderArr);
 
     frame.insertBlock("bonds", bondBlock);
   }

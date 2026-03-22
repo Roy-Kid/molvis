@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -8,37 +8,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import {
-  type Molvis,
-  type MolvisConfig,
-  type LabelMode,
-  HideHydrogensModifier,
-  REPRESENTATIONS,
-} from "@molvis/core";
+import { type Molvis, REPRESENTATIONS } from "@molvis/core";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface RenderTabProps {
   app: Molvis | null;
 }
 
-type UIState = NonNullable<MolvisConfig["ui"]>;
-type GridState = ReturnType<Molvis["settings"]["getGrid"]>;
-type GraphicsState = ReturnType<Molvis["settings"]["getGraphics"]>;
-
 interface RenderState {
-  ui: UIState;
-  grid: GridState;
-  graphics: GraphicsState;
   representationName: string;
-  hideHydrogens: boolean;
-  labelMode: LabelMode;
-  labelTemplate: string;
-  labelFontSize: number;
+  atomDiameterScale: number;
+  bondDiameterScale: number;
+  boxVisible: boolean;
+  boxColor: string;
+  boxThicknessScale: number;
   backgroundColor: string;
-  globalOpacity: number;
+  gridEnabled: boolean;
+  gridOpacity: number;
+  gridSize: number;
+  fxaa: boolean;
+  hardwareScaling: number;
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -56,505 +47,324 @@ const BG_PRESETS = [
   { label: "White", value: "#ffffff" },
 ] as const;
 
-function findHideHydrogensMod(
-  app: Molvis,
-): HideHydrogensModifier | undefined {
-  for (const mod of app.modifierPipeline.getModifiers()) {
-    if (mod instanceof HideHydrogensModifier) return mod;
-  }
-  return undefined;
-}
+/** Compact number input that applies on blur or Enter. */
+function NumberField({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
 
-function requireValue<T>(value: T | undefined, key: string): T {
-  if (value === undefined) {
-    throw new Error(`Missing required config key: ${key}`);
-  }
-  return value;
+  const commit = () => {
+    let v = Number(draft);
+    if (Number.isNaN(v)) v = value;
+    if (min !== undefined) v = Math.max(min, v);
+    if (max !== undefined) v = Math.min(max, v);
+    if (step !== undefined) v = Math.round(v / step) * step;
+    onChange(v);
+    setDraft(String(v));
+  };
+
+  return (
+    <Input
+      type="number"
+      className="h-6 w-20 px-1.5 text-xs tabular-nums"
+      value={draft}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && commit()}
+    />
+  );
 }
 
 export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
   const [state, setState] = useState<RenderState | null>(null);
-  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     if (!app) return;
-    if (!app.config.ui) {
-      throw new Error("Missing required config key: ui");
-    }
-    const hMod = findHideHydrogensMod(app);
-    const labelCfg = app.artist.labelRenderer.config;
+    const repr = app.styleManager.getRepresentation();
     const cc = app.scene.clearColor;
-    const bgHex = rgbToHex(cc.r, cc.g, cc.b);
+    const grid = app.settings.getGrid();
+    const gfx = app.settings.getGraphics();
     setState({
-      ui: { ...app.config.ui },
-      grid: { ...app.settings.getGrid() },
-      graphics: { ...app.settings.getGraphics() },
-      representationName: app.styleManager.getRepresentation().name,
-      hideHydrogens: hMod?.hideHydrogens ?? false,
-      labelMode: labelCfg.mode,
-      labelTemplate: labelCfg.template,
-      labelFontSize: labelCfg.fontSize,
-      backgroundColor: bgHex,
-      globalOpacity: app.artist.globalOpacity,
+      representationName: repr.name,
+      atomDiameterScale: repr.atomRadiusScale,
+      bondDiameterScale: repr.bondRadiusScale,
+      boxVisible: !!app.scene.getMeshByName("sim_box")?.isEnabled(),
+      boxColor: app.styleManager.getTheme().boxColor ?? "#ffffff",
+      boxThicknessScale: 1.0,
+      backgroundColor: rgbToHex(cc.r, cc.g, cc.b),
+      gridEnabled: grid.enabled ?? false,
+      gridOpacity: grid.opacity ?? 0.3,
+      gridSize: grid.size ?? 100,
+      fxaa: gfx.fxaa ?? true,
+      hardwareScaling: gfx.hardwareScaling ?? 1.0,
     });
-    setHasChanges(false);
   }, [app]);
 
-  const updateUI = <K extends keyof UIState>(key: K, value: UIState[K]) => {
-    setState((prev) => {
-      if (!prev) return prev;
-      return { ...prev, ui: { ...prev.ui, [key]: value } };
-    });
-    setHasChanges(true);
-  };
-
-  const updateGrid = <K extends keyof GridState>(
-    key: K,
-    value: GridState[K],
-  ) => {
-    setState((prev) => {
-      if (!prev) return prev;
-      return { ...prev, grid: { ...prev.grid, [key]: value } };
-    });
-    setHasChanges(true);
-  };
-
-  const updateGraphics = <K extends keyof GraphicsState>(
-    key: K,
-    value: GraphicsState[K],
-  ) => {
-    setState((prev) => {
-      if (!prev) return prev;
-      return { ...prev, graphics: { ...prev.graphics, [key]: value } };
-    });
-    setHasChanges(true);
-  };
-
-  const handleApply = () => {
-    if (!app || !state) return;
-    app.setConfig({
-      useRightHandedSystem: true,
-      ui: state.ui,
-    });
-    app.settings.setGrid(state.grid);
-    app.settings.setGraphics(state.graphics);
-    setHasChanges(false);
-  };
-
-  if (!state) {
-    return null;
-  }
-
-  const showViewPanel = requireValue(
-    state.ui.showViewPanel,
-    "ui.showViewPanel",
-  );
-  const showPerfPanel = requireValue(
-    state.ui.showPerfPanel,
-    "ui.showPerfPanel",
-  );
-  const showTrajPanel = requireValue(
-    state.ui.showTrajPanel,
-    "ui.showTrajPanel",
-  );
-  const gridEnabled = requireValue(state.grid.enabled, "grid.enabled");
-  const gridOpacity = requireValue(state.grid.opacity, "grid.opacity");
-  const gridSize = requireValue(state.grid.size, "grid.size");
-  const gfxShadows = requireValue(state.graphics.shadows, "graphics.shadows");
-  const gfxSsao = requireValue(state.graphics.ssao, "graphics.ssao");
-  const gfxBloom = requireValue(state.graphics.bloom, "graphics.bloom");
-  const gfxFxaa = requireValue(state.graphics.fxaa, "graphics.fxaa");
-  const gfxDof = requireValue(state.graphics.dof, "graphics.dof");
-  const hwScaling = requireValue(
-    state.graphics.hardwareScaling,
-    "graphics.hardwareScaling",
+  const set = useCallback(
+    <K extends keyof RenderState>(key: K, value: RenderState[K]) => {
+      setState((prev) => (prev ? { ...prev, [key]: value } : prev));
+    },
+    [],
   );
 
-  const handleGlobalOpacity = (value: number) => {
-    if (!app) return;
-    app.artist.setGlobalOpacity(value);
-    setState((prev) => (prev ? { ...prev, globalOpacity: value } : prev));
+  if (!state || !app) return null;
+
+  // --- Immediate handlers ---
+
+  const onRepresentation = (name: string) => {
+    app.setRepresentation(name);
+    const repr = app.styleManager.getRepresentation();
+    set("representationName", name);
+    set("atomDiameterScale", repr.atomRadiusScale);
+    set("bondDiameterScale", repr.bondRadiusScale);
   };
 
-  const handleBackgroundColor = (hex: string) => {
-    if (!app) return;
+  const onAtomScale = (v: number) => {
+    app.styleManager.setAtomRadiusScale(v);
+    set("atomDiameterScale", v);
+    app.applyPipeline({ fullRebuild: true });
+  };
+
+  const onBondScale = (v: number) => {
+    app.styleManager.setBondRadiusScale(v);
+    set("bondDiameterScale", v);
+    app.applyPipeline({ fullRebuild: true });
+  };
+
+  const onBoxVisible = (c: boolean) => {
+    const m = app.scene.getMeshByName("sim_box");
+    if (m) m.setEnabled(c);
+    set("boxVisible", c);
+  };
+
+  const onBoxColor = (hex: string) => {
+    const m = app.scene.getMeshByName("sim_box");
+    if (m) {
+      const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
+      const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
+      const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
+      for (const child of m.getChildren()) {
+        const mat = (child as any).material;
+        if (mat?.diffuseColor) mat.diffuseColor.set(r, g, b);
+      }
+    }
+    set("boxColor", hex);
+  };
+
+  const onBoxThickness = (v: number) => {
+    const m = app.scene.getMeshByName("sim_box");
+    if (m) (m as any)._userThicknessScale = v;
+    set("boxThicknessScale", v);
+  };
+
+  const onBgColor = (hex: string) => {
     const r = Number.parseInt(hex.slice(1, 3), 16) / 255;
     const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
     const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
     app.scene.clearColor.set(r, g, b, 1);
-    setState((prev) => (prev ? { ...prev, backgroundColor: hex } : prev));
+    set("backgroundColor", hex);
   };
 
-  const rebuildLabels = (
-    mode: LabelMode,
-    template: string,
-    fontSize: number,
-  ) => {
-    if (!app) return;
-    const lr = app.artist.labelRenderer;
-    lr.setConfig({ mode, template, fontSize });
-
-    if (mode === "none") {
-      lr.clearLabels();
-      return;
-    }
-
-    const frame = app.system.frame;
-    const atoms = frame?.getBlock("atoms");
-    if (!atoms || atoms.nrows() === 0) {
-      lr.clearLabels();
-      return;
-    }
-
-    const x = atoms.getColumnF32("x");
-    const y = atoms.getColumnF32("y");
-    const z = atoms.getColumnF32("z");
-    const elements = atoms.getColumnStrings("element");
-    if (!x || !y || !z || !elements) return;
-
-    const selectedIndices =
-      mode === "selected"
-        ? app.world.selectionManager.getSelectedAtomIds()
-        : undefined;
-
-    lr.build(
-      { count: atoms.nrows(), x, y, z, elements },
-      selectedIndices,
-    );
+  const onGridEnabled = (c: boolean) => {
+    set("gridEnabled", c);
+    app.settings.setGrid({ ...app.settings.getGrid(), enabled: c });
   };
 
-  const handleLabelModeChange = (mode: LabelMode) => {
-    setState((prev) => (prev ? { ...prev, labelMode: mode } : prev));
-    rebuildLabels(mode, state.labelTemplate, state.labelFontSize);
+  const onGridOpacity = (v: number) => {
+    set("gridOpacity", v);
+    app.settings.setGrid({ ...app.settings.getGrid(), opacity: v });
   };
 
-  const handleLabelTemplateChange = (template: string) => {
-    setState((prev) => (prev ? { ...prev, labelTemplate: template } : prev));
-    rebuildLabels(state.labelMode, template, state.labelFontSize);
+  const onGridSize = (v: number) => {
+    set("gridSize", v);
+    app.settings.setGrid({ ...app.settings.getGrid(), size: v });
   };
 
-  const handleLabelFontSizeChange = (size: number) => {
-    setState((prev) => (prev ? { ...prev, labelFontSize: size } : prev));
-    rebuildLabels(state.labelMode, state.labelTemplate, size);
+  const onFxaa = (c: boolean) => {
+    set("fxaa", c);
+    app.settings.setGraphics({ ...app.settings.getGraphics(), fxaa: c });
   };
 
-  const handleHideHydrogens = (checked: boolean) => {
-    if (!app) return;
-    let mod = findHideHydrogensMod(app);
-    if (!mod) {
-      mod = new HideHydrogensModifier();
-      app.modifierPipeline.addModifier(mod);
-    }
-    mod.hideHydrogens = checked;
-    setState((prev) => (prev ? { ...prev, hideHydrogens: checked } : prev));
-    app.applyPipeline({ fullRebuild: true });
+  const onHwScaling = (v: number) => {
+    set("hardwareScaling", v);
+    app.settings.setGraphics({
+      ...app.settings.getGraphics(),
+      hardwareScaling: v,
+    });
   };
 
-  const handleRepresentationChange = (name: string) => {
-    if (!app) return;
-    app.setRepresentation(name);
-    setState((prev) => (prev ? { ...prev, representationName: name } : prev));
-  };
+  // --- Row helper ---
+  const Row = ({
+    label,
+    children,
+  }: { label: string; children: React.ReactNode }) => (
+    <div className="flex items-center justify-between gap-2">
+      <Label className="text-[10px] shrink-0">{label}</Label>
+      {children}
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-2.5 p-2.5 h-full overflow-y-auto">
-      <div className="space-y-1.5">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Representation
-        </h4>
-        <Select
-          value={state.representationName}
-          onValueChange={handleRepresentationChange}
-        >
-          <SelectTrigger className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {REPRESENTATIONS.map((r) => (
-              <SelectItem key={r.name} value={r.name}>
-                {r.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Visibility
-        </h4>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="hide-hydrogens">Hide Hydrogens</Label>
-          <Switch
-            id="hide-hydrogens"
-            checked={state.hideHydrogens}
-            onCheckedChange={handleHideHydrogens}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-[10px]">
-            Opacity ({Math.round(state.globalOpacity * 100)}%)
-          </Label>
-          <Slider
-            min={0.05}
-            max={1}
-            step={0.05}
-            value={[state.globalOpacity]}
-            onValueChange={([v]) => handleGlobalOpacity(v)}
-          />
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Labels
-        </h4>
-
-        <div className="space-y-1">
-          <Label className="text-xs">Show Labels</Label>
-          <Select
-            value={state.labelMode}
-            onValueChange={(v) => handleLabelModeChange(v as LabelMode)}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="all">All Atoms</SelectItem>
-              <SelectItem value="selected">Selected Only</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {state.labelMode !== "none" && (
-          <>
-            <div className="space-y-1">
-              <Label className="text-xs">Template</Label>
-              <Select
-                value={state.labelTemplate}
-                onValueChange={handleLabelTemplateChange}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="{element}">Element</SelectItem>
-                  <SelectItem value="{atomId}">Atom Index</SelectItem>
-                  <SelectItem value="{element} {atomId}">
-                    Element + Index
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs">
-                Font Size ({state.labelFontSize}px)
-              </Label>
-              <Slider
-                min={8}
-                max={24}
-                step={1}
-                value={[state.labelFontSize]}
-                onValueChange={([v]) => handleLabelFontSizeChange(v)}
-              />
-            </div>
-          </>
-        )}
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          User Interface
-        </h4>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="ui-view-panel">View Type (Top-Left)</Label>
-          <Switch
-            id="ui-view-panel"
-            checked={showViewPanel}
-            onCheckedChange={(c) => updateUI("showViewPanel", c)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="ui-perf-panel">FPS Counter (Bottom-Right)</Label>
-          <Switch
-            id="ui-perf-panel"
-            checked={showPerfPanel}
-            onCheckedChange={(c) => updateUI("showPerfPanel", c)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="ui-traj-panel">Trajectory Controls</Label>
-          <Switch
-            id="ui-traj-panel"
-            checked={showTrajPanel}
-            onCheckedChange={(c) => updateUI("showTrajPanel", c)}
-          />
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Grid
-        </h4>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="show-grid">Enabled</Label>
-          <Switch
-            id="show-grid"
-            checked={gridEnabled}
-            onCheckedChange={(c) => updateGrid("enabled", c)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Opacity ({gridOpacity})</Label>
-          <Slider
-            min={0}
-            max={1}
-            step={0.1}
-            value={[gridOpacity]}
-            onValueChange={([v]) => updateGrid("opacity", v)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Size ({gridSize})</Label>
-          <Slider
-            min={10}
-            max={500}
-            step={10}
-            value={[gridSize]}
-            onValueChange={([v]) => updateGrid("size", v)}
-          />
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Background
-        </h4>
-
-        <div className="flex items-center gap-2">
-          {BG_PRESETS.map((preset) => (
-            <button
-              key={preset.value}
-              type="button"
-              className={`w-6 h-6 rounded border-2 transition-colors ${
-                state.backgroundColor === preset.value
-                  ? "border-blue-500"
-                  : "border-muted"
-              }`}
-              style={{ backgroundColor: preset.value }}
-              title={preset.label}
-              onClick={() => handleBackgroundColor(preset.value)}
-            />
+    <div className="flex flex-col gap-2 p-2.5 h-full overflow-y-auto text-xs">
+      {/* Representation */}
+      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Representation
+      </h4>
+      <Select value={state.representationName} onValueChange={onRepresentation}>
+        <SelectTrigger className="h-7 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {REPRESENTATIONS.map((r) => (
+            <SelectItem key={r.name} value={r.name}>
+              {r.name}
+            </SelectItem>
           ))}
-          <input
-            type="color"
-            value={state.backgroundColor}
-            onChange={(e) => handleBackgroundColor(e.target.value)}
-            className="w-6 h-6 rounded cursor-pointer border-0 p-0"
-            title="Custom color"
+        </SelectContent>
+      </Select>
+
+      <Row label="Atom Diameter">
+        <NumberField
+          value={state.atomDiameterScale}
+          min={0.1}
+          max={3}
+          step={0.05}
+          onChange={onAtomScale}
+        />
+      </Row>
+      <Row label="Bond Diameter">
+        <NumberField
+          value={state.bondDiameterScale}
+          min={0}
+          max={3}
+          step={0.05}
+          onChange={onBondScale}
+        />
+      </Row>
+      <Separator />
+
+      {/* Simulation Box */}
+      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Simulation Box
+      </h4>
+      <Row label="Show Box">
+        <Switch checked={state.boxVisible} onCheckedChange={onBoxVisible} />
+      </Row>
+      {state.boxVisible && (
+        <>
+          <Row label="Color">
+            <input
+              type="color"
+              value={state.boxColor}
+              onChange={(e) => onBoxColor(e.target.value)}
+              className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+            />
+          </Row>
+          <Row label="Thickness">
+            <NumberField
+              value={state.boxThicknessScale}
+              min={0.5}
+              max={5}
+              step={0.1}
+              onChange={onBoxThickness}
+            />
+          </Row>
+        </>
+      )}
+
+      <Separator />
+
+      {/* Background */}
+      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Background
+      </h4>
+      <div className="flex items-center gap-1.5">
+        {BG_PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            className={`w-5 h-5 rounded border-2 ${
+              state.backgroundColor === p.value
+                ? "border-blue-500"
+                : "border-muted"
+            }`}
+            style={{ backgroundColor: p.value }}
+            title={p.label}
+            onClick={() => onBgColor(p.value)}
           />
-        </div>
+        ))}
+        <input
+          type="color"
+          value={state.backgroundColor}
+          onChange={(e) => onBgColor(e.target.value)}
+          className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+        />
       </div>
 
       <Separator />
 
-      <div className="space-y-2">
-        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Graphics
-        </h4>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="gfx-shadows">Shadows</Label>
-          <Switch
-            id="gfx-shadows"
-            checked={gfxShadows}
-            onCheckedChange={(c) => updateGraphics("shadows", c)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="gfx-ssao">SSAO (Ambient Occlusion)</Label>
-          <Switch
-            id="gfx-ssao"
-            checked={gfxSsao}
-            onCheckedChange={(c) => updateGraphics("ssao", c)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="gfx-bloom">Bloom</Label>
-          <Switch
-            id="gfx-bloom"
-            checked={gfxBloom}
-            onCheckedChange={(c) => updateGraphics("bloom", c)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="gfx-fxaa">FXAA (Anti-Aliasing)</Label>
-          <Switch
-            id="gfx-fxaa"
-            checked={gfxFxaa}
-            onCheckedChange={(c) => updateGraphics("fxaa", c)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="gfx-dof">Depth of Field</Label>
-          <Switch
-            id="gfx-dof"
-            checked={gfxDof}
-            onCheckedChange={(c) => updateGraphics("dof", c)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Hardware Scaling ({hwScaling})</Label>
-          <div className="text-xs text-muted-foreground mb-1">
-            Lower is faster, Higher is sharper
-          </div>
-          <Slider
-            min={0.5}
-            max={2.0}
-            step={0.1}
-            value={[hwScaling]}
-            onValueChange={([v]) => updateGraphics("hardwareScaling", v)}
-          />
-        </div>
-      </div>
+      {/* Grid */}
+      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Grid
+      </h4>
+      <Row label="Enabled">
+        <Switch checked={state.gridEnabled} onCheckedChange={onGridEnabled} />
+      </Row>
+      {state.gridEnabled && (
+        <>
+          <Row label="Opacity">
+            <NumberField
+              value={state.gridOpacity}
+              min={0}
+              max={1}
+              step={0.1}
+              onChange={onGridOpacity}
+            />
+          </Row>
+          <Row label="Size">
+            <NumberField
+              value={state.gridSize}
+              min={10}
+              max={500}
+              step={10}
+              onChange={onGridSize}
+            />
+          </Row>
+        </>
+      )}
 
       <Separator />
 
-      <div className="pt-2">
-        <Button
-          className="w-full"
-          onClick={handleApply}
-          disabled={!hasChanges}
-          variant={hasChanges ? "default" : "secondary"}
-        >
-          {hasChanges ? "Apply Changes" : "No Changes"}
-        </Button>
-      </div>
+      {/* Graphics */}
+      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Graphics
+      </h4>
+      <Row label="FXAA">
+        <Switch checked={state.fxaa} onCheckedChange={onFxaa} />
+      </Row>
+      <Row label="HW Scaling">
+        <NumberField
+          value={state.hardwareScaling}
+          min={0.5}
+          max={2}
+          step={0.1}
+          onChange={onHwScaling}
+        />
+      </Row>
     </div>
   );
 };

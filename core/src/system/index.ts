@@ -1,2 +1,2 @@
-export { Frame, Block, Box } from "@molcrafts/molrs";
+export { Frame, Block, Box, WasmArray } from "molrs-wasm";
 export { Trajectory, type FrameProvider } from "./trajectory";

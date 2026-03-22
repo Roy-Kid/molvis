@@ -65,10 +65,7 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
     return () => {
       app.events.off("frame-change", handleFrameChange);
       app.events.off("frame-rendered", handleFrameChange);
-      app.world.selectionManager.off(
-        "selection-change",
-        handleSelectionChange,
-      );
+      app.world.selectionManager.off("selection-change", handleSelectionChange);
     };
   }, [app, refresh]);
 
@@ -149,6 +146,12 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
                     }`}
                     style={{ height: ROW_HEIGHT }}
                     onClick={() => handleAtomRowClick(row.index)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ")
+                        handleAtomRowClick(row.index);
+                    }}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div className="w-8 px-0.5 flex items-center justify-end text-muted-foreground shrink-0">
                       {row.index}

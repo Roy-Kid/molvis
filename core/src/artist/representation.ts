@@ -41,40 +41,10 @@ export const STICK: RepresentationStyle = {
   showRibbon: false,
 } as const;
 
-export const WIREFRAME: RepresentationStyle = {
-  name: "Wireframe",
-  atomRadiusScale: 0.0,
-  bondRadiusScale: 0.15,
-  showAtoms: false,
-  showBonds: true,
-  showRibbon: false,
-} as const;
-
-export const RIBBON: RepresentationStyle = {
-  name: "Ribbon",
-  atomRadiusScale: 0.0,
-  bondRadiusScale: 0.0,
-  showAtoms: false,
-  showBonds: false,
-  showRibbon: true,
-} as const;
-
-export const RIBBON_AND_STICK: RepresentationStyle = {
-  name: "Ribbon + Stick",
-  atomRadiusScale: 0.15,
-  bondRadiusScale: 0.4,
-  showAtoms: true,
-  showBonds: true,
-  showRibbon: true,
-} as const;
-
 export const REPRESENTATIONS: readonly RepresentationStyle[] = [
   BALL_AND_STICK,
   SPACEFILL,
   STICK,
-  WIREFRAME,
-  RIBBON,
-  RIBBON_AND_STICK,
 ] as const;
 
 export function findRepresentation(

@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 export interface SelectionSnapshot {
   selection: SelectionState;
   atomIds: number[];
+  bondIds: number[];
   elements: string[];
   atomCount: number;
   bondCount: number;
@@ -71,6 +72,26 @@ export function useSelectionSnapshot(app: Molvis | null): SelectionSnapshot {
     return [...ids].sort((a, b) => a - b);
   }, [app, selection]);
 
+  const bondIds = useMemo(() => {
+    if (!app) {
+      return [];
+    }
+
+    const ids = new Set<number>();
+    for (const key of selection.bonds) {
+      const ref = parseSelectionKey(key);
+      if (!ref) {
+        continue;
+      }
+      const meta = app.world.sceneIndex.getMeta(ref.meshId, ref.subIndex);
+      if (meta?.type === "bond") {
+        ids.add(meta.bondId);
+      }
+    }
+
+    return [...ids].sort((a, b) => a - b);
+  }, [app, selection]);
+
   const elements = useMemo(() => {
     if (!app || atomIds.length === 0) {
       return [];
@@ -94,6 +115,7 @@ export function useSelectionSnapshot(app: Molvis | null): SelectionSnapshot {
   return {
     selection,
     atomIds,
+    bondIds,
     elements,
     atomCount: selection.atoms.size,
     bondCount: selection.bonds.size,

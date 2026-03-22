@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 
 /**
  * Selection mask representing a subset of atoms/bonds.
@@ -159,6 +159,13 @@ export interface PipelineContext {
   currentSelection: SelectionMask;
 
   /**
+   * Logical bond IDs selected by the current pipeline run.
+   * Set by selection modifiers that carry bond info (e.g., SelectModifier).
+   * Read by the COMPUTED sync handler to update SelectionManager.
+   */
+  selectedBondIds: number[];
+
+  /**
    * Frame index in trajectory (if applicable).
    */
   frameIndex?: number;
@@ -182,6 +189,7 @@ export function createDefaultContext(
   return {
     selectionSet: new Map(),
     currentSelection: SelectionMask.all(atomCount),
+    selectedBondIds: [],
     frameIndex,
     app,
   };

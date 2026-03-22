@@ -1,4 +1,4 @@
-import type { Frame } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import type { SceneIndex } from "../scene_index";
 
 /**
@@ -15,7 +15,7 @@ export class ExpressionSelector {
    */
   static select(sceneIndex: SceneIndex, expression: string): string[] {
     const matchingKeys: string[] = [];
-    const evaluator = this.createEvaluator(expression);
+    const evaluator = ExpressionSelector.createEvaluator(expression);
 
     const atomSource = sceneIndex.metaRegistry.atoms;
 
@@ -46,16 +46,18 @@ export class ExpressionSelector {
    */
   static selectFromFrame(frame: Frame, expression: string): number[] {
     const indices: number[] = [];
-    const evaluator = this.createEvaluator(expression);
+    const evaluator = ExpressionSelector.createEvaluator(expression);
 
     const atomsBlock = frame.getBlock("atoms");
     if (!atomsBlock) return [];
 
     const count = atomsBlock.nrows();
-    const xCol = atomsBlock.getColumnF32("x");
-    const yCol = atomsBlock.getColumnF32("y");
-    const zCol = atomsBlock.getColumnF32("z");
-    const elCol = atomsBlock.getColumnStrings("element");
+    const xCol = atomsBlock.viewColF32("x");
+    const yCol = atomsBlock.viewColF32("y");
+    const zCol = atomsBlock.viewColF32("z");
+    const elCol = atomsBlock.dtype("element")
+      ? (atomsBlock.copyColStr("element") as string[])
+      : undefined;
 
     if (!xCol || !yCol || !zCol || !elCol) return [];
 

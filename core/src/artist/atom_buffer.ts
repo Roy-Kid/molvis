@@ -1,5 +1,5 @@
 import { Color3 } from "@babylonjs/core";
-import type { Block } from "@molcrafts/molrs";
+import type { Block } from "molrs-wasm";
 import {
   COLOR_OVERRIDE_B,
   COLOR_OVERRIDE_G,
@@ -37,11 +37,15 @@ export function buildAtomBuffers(
   options?: AtomBufferOptions,
 ): Map<string, Float32Array> {
   const atomCount = atomsBlock.nrows();
-  const xCoords = atomsBlock.getColumnF32("x");
-  const yCoords = atomsBlock.getColumnF32("y");
-  const zCoords = atomsBlock.getColumnF32("z");
-  const elementsColumn = atomsBlock.getColumnStrings("element");
-  const typesColumn = atomsBlock.getColumnStrings("type");
+  const xCoords = atomsBlock.viewColF32("x");
+  const yCoords = atomsBlock.viewColF32("y");
+  const zCoords = atomsBlock.viewColF32("z");
+  const elementsColumn = atomsBlock.dtype("element")
+    ? (atomsBlock.copyColStr("element") as string[])
+    : undefined;
+  const typesColumn = atomsBlock.dtype("type")
+    ? (atomsBlock.copyColStr("type") as string[])
+    : undefined;
 
   if (!elementsColumn && !typesColumn)
     throw new Error("No elements or types column found");
@@ -49,10 +53,18 @@ export function buildAtomBuffers(
     throw new Error("No coordinates column");
 
   // Check for color override columns from ColorByPropertyModifier
-  const overrideR = atomsBlock.getColumnF32(COLOR_OVERRIDE_R);
-  const overrideG = atomsBlock.getColumnF32(COLOR_OVERRIDE_G);
-  const overrideB = atomsBlock.getColumnF32(COLOR_OVERRIDE_B);
-  const overrideAlpha = atomsBlock.getColumnF32(ALPHA_OVERRIDE);
+  const overrideR = atomsBlock.dtype(COLOR_OVERRIDE_R)
+    ? atomsBlock.viewColF32(COLOR_OVERRIDE_R)
+    : undefined;
+  const overrideG = atomsBlock.dtype(COLOR_OVERRIDE_G)
+    ? atomsBlock.viewColF32(COLOR_OVERRIDE_G)
+    : undefined;
+  const overrideB = atomsBlock.dtype(COLOR_OVERRIDE_B)
+    ? atomsBlock.viewColF32(COLOR_OVERRIDE_B)
+    : undefined;
+  const overrideAlpha = atomsBlock.dtype(ALPHA_OVERRIDE)
+    ? atomsBlock.viewColF32(ALPHA_OVERRIDE)
+    : undefined;
   const hasColorOverride = overrideR && overrideG && overrideB;
 
   const atomMatrix = new Float32Array(atomCount * 16);

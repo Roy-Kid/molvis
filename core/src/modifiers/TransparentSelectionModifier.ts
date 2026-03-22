@@ -1,4 +1,4 @@
-import { Frame } from "@molcrafts/molrs";
+import { Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 
@@ -49,7 +49,9 @@ export class TransparentSelectionModifier extends BaseModifier {
     const atomCount = atoms.nrows();
     if (atomCount === 0) return input;
 
-    const existingAlpha = atoms.getColumnF32(ALPHA_OVERRIDE);
+    const existingAlpha = atoms.dtype(ALPHA_OVERRIDE)
+      ? atoms.viewColF32(ALPHA_OVERRIDE)
+      : undefined;
     const alpha = existingAlpha
       ? new Float32Array(existingAlpha)
       : new Float32Array(atomCount).fill(Number.NaN);
@@ -68,7 +70,7 @@ export class TransparentSelectionModifier extends BaseModifier {
     const resultAtoms = result.getBlock("atoms");
     if (!resultAtoms) return input;
 
-    resultAtoms.setColumnF32(ALPHA_OVERRIDE, alpha);
+    resultAtoms.setColF32(ALPHA_OVERRIDE, alpha);
 
     const bonds = input.getBlock("bonds");
     if (bonds) result.insertBlock("bonds", bonds);

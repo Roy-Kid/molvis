@@ -1,24 +1,22 @@
 import { describe, expect, it } from "@rstest/core";
-import { initSync, Block, Frame } from "@molcrafts/molrs";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { Block, Frame } from "molrs-wasm";
+import "./setup_wasm";
 import { HideHydrogensModifier } from "../src/modifiers/HideHydrogensModifier";
 import { createDefaultContext } from "../src/pipeline/types";
 
-const require = createRequire(__filename);
-const wasmPath = require.resolve("@molcrafts/molrs/molwasm_bg.wasm");
-const wasmBuffer = readFileSync(wasmPath);
-initSync({ module: wasmBuffer });
-
-function makeFrame(elements: string[], positions?: [number, number, number][]): Frame {
+function makeFrame(
+  elements: string[],
+  positions?: [number, number, number][],
+): Frame {
   const frame = new Frame();
   const atoms = new Block();
   const n = elements.length;
-  const pos = positions ?? elements.map((_, i) => [i, 0, 0] as [number, number, number]);
-  atoms.setColumnF32("x", new Float32Array(pos.map((p) => p[0])));
-  atoms.setColumnF32("y", new Float32Array(pos.map((p) => p[1])));
-  atoms.setColumnF32("z", new Float32Array(pos.map((p) => p[2])));
-  atoms.setColumnStrings("element", elements);
+  const pos =
+    positions ?? elements.map((_, i) => [i, 0, 0] as [number, number, number]);
+  atoms.setColF32("x", new Float32Array(pos.map((p) => p[0])));
+  atoms.setColF32("y", new Float32Array(pos.map((p) => p[1])));
+  atoms.setColF32("z", new Float32Array(pos.map((p) => p[2])));
+  atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;
 }
@@ -29,8 +27,8 @@ function makeFrameWithBonds(
 ): Frame {
   const frame = makeFrame(elements);
   const bondsBlock = new Block();
-  bondsBlock.setColumnU32("i", new Uint32Array(bonds.map((b) => b[0])));
-  bondsBlock.setColumnU32("j", new Uint32Array(bonds.map((b) => b[1])));
+  bondsBlock.setColU32("i", new Uint32Array(bonds.map((b) => b[0])));
+  bondsBlock.setColU32("j", new Uint32Array(bonds.map((b) => b[1])));
   frame.insertBlock("bonds", bondsBlock);
   return frame;
 }
@@ -54,8 +52,8 @@ describe("HideHydrogensModifier", () => {
 
     const atoms = result.getBlock("atoms");
     expect(atoms).not.toBeNull();
-    expect(atoms!.nrows()).toBe(2); // C and O remain
-    const elements = atoms!.getColumnStrings("element");
+    expect(atoms?.nrows()).toBe(2); // C and O remain
+    const elements = atoms?.copyColStr("element");
     expect(elements).toEqual(["C", "O"]);
   });
 
@@ -66,22 +64,26 @@ describe("HideHydrogensModifier", () => {
     mod.hideHydrogens = true;
     const frame = makeFrameWithBonds(
       ["C", "H", "O", "H"],
-      [[0, 1], [0, 2], [2, 3]],
+      [
+        [0, 1],
+        [0, 2],
+        [2, 3],
+      ],
     );
     const ctx = createDefaultContext(frame);
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms");
-    expect(atoms!.nrows()).toBe(2); // C(->0) and O(->1)
+    expect(atoms?.nrows()).toBe(2); // C(->0) and O(->1)
 
     const bonds = result.getBlock("bonds");
     expect(bonds).not.toBeNull();
-    expect(bonds!.nrows()).toBe(1); // Only C-O survives
+    expect(bonds?.nrows()).toBe(1); // Only C-O survives
 
-    const iCol = bonds!.getColumnU32("i");
-    const jCol = bonds!.getColumnU32("j");
-    expect(iCol![0]).toBe(0); // C remapped to 0
-    expect(jCol![0]).toBe(1); // O remapped to 1
+    const iCol = bonds?.viewColU32("i");
+    const jCol = bonds?.viewColU32("j");
+    expect(iCol?.[0]).toBe(0); // C remapped to 0
+    expect(jCol?.[0]).toBe(1); // O remapped to 1
   });
 
   it("should pass through if no hydrogens exist", () => {
@@ -109,15 +111,20 @@ describe("HideHydrogensModifier", () => {
     mod.hideHydrogens = true;
     const frame = makeFrame(
       ["H", "C", "H", "O"],
-      [[0, 0, 0], [1, 2, 3], [0, 0, 0], [4, 5, 6]],
+      [
+        [0, 0, 0],
+        [1, 2, 3],
+        [0, 0, 0],
+        [4, 5, 6],
+      ],
     );
     const ctx = createDefaultContext(frame);
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const x = atoms.getColumnF32("x")!;
-    const y = atoms.getColumnF32("y")!;
-    const z = atoms.getColumnF32("z")!;
+    const x = atoms.viewColF32("x")!;
+    const y = atoms.viewColF32("y")!;
+    const z = atoms.viewColF32("z")!;
     expect(x[0]).toBeCloseTo(1, 5); // C
     expect(y[0]).toBeCloseTo(2, 5);
     expect(z[0]).toBeCloseTo(3, 5);
@@ -149,7 +156,7 @@ describe("HideHydrogensModifier", () => {
     mod.hideHydrogens = true;
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColumnF32("x", new Float32Array([1, 2]));
+    atoms.setColF32("x", new Float32Array([1, 2]));
     frame.insertBlock("atoms", atoms);
     const ctx = createDefaultContext(frame);
     const result = mod.apply(frame, ctx);

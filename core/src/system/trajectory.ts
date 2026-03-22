@@ -1,4 +1,4 @@
-import { type Box, Frame } from "@molcrafts/molrs";
+import { type Box, Frame } from "molrs-wasm";
 import { logger } from "../utils/logger";
 
 /**

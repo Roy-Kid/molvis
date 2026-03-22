@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import type { Block } from "@molcrafts/molrs";
+import type { Block } from "molrs-wasm";
 import { encodePickingColorInto } from "../picker";
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
@@ -27,12 +27,25 @@ export interface BondBufferResult {
 }
 
 // Sub-bond radius multipliers and offset factors per bond order
-const ORDER_CONFIG: Record<number, { radiusScale: number; offsets: number[][] }> = {
+const ORDER_CONFIG: Record<
+  number,
+  { radiusScale: number; offsets: number[][] }
+> = {
   1: { radiusScale: 1.0, offsets: [[0, 0]] },
-  2: { radiusScale: 0.55, offsets: [[1, 0], [-1, 0]] },
+  2: {
+    radiusScale: 0.55,
+    offsets: [
+      [1, 0],
+      [-1, 0],
+    ],
+  },
   3: {
     radiusScale: 0.4,
-    offsets: [[0, 1], [-0.866, -0.5], [0.866, -0.5]], // equilateral triangle
+    offsets: [
+      [0, 1],
+      [-0.866, -0.5],
+      [0.866, -0.5],
+    ], // equilateral triangle
   },
 };
 
@@ -57,7 +70,9 @@ function computePerpFrame(dir: Vector3): void {
  * Count total render instances needed for all bonds.
  */
 export function countBondInstances(bondsBlock: Block): number {
-  const orderCol = bondsBlock.getColumnU8("order");
+  const orderCol = bondsBlock.dtype("order")
+    ? bondsBlock.viewColU32("order")
+    : undefined;
   if (!orderCol) return bondsBlock.nrows();
   let total = 0;
   for (let b = 0; b < bondsBlock.nrows(); b++) {
@@ -80,16 +95,18 @@ export function buildBondBuffers(
   if (!bondsBlock || bondsBlock.nrows() === 0) return undefined;
 
   const logicalCount = bondsBlock.nrows();
-  const iAtoms = bondsBlock.getColumnU32("i");
-  const jAtoms = bondsBlock.getColumnU32("j");
+  const iAtoms = bondsBlock.viewColU32("i");
+  const jAtoms = bondsBlock.viewColU32("j");
   if (!iAtoms || !jAtoms) return undefined;
 
-  const xCoords = atomsBlock.getColumnF32("x");
-  const yCoords = atomsBlock.getColumnF32("y");
-  const zCoords = atomsBlock.getColumnF32("z");
+  const xCoords = atomsBlock.viewColF32("x");
+  const yCoords = atomsBlock.viewColF32("y");
+  const zCoords = atomsBlock.viewColF32("z");
   if (!xCoords || !yCoords || !zCoords) return undefined;
 
-  const orderCol = bondsBlock.getColumnU8("order");
+  const orderCol = bondsBlock.dtype("order")
+    ? bondsBlock.viewColU32("order")
+    : undefined;
 
   // Pre-allocate with upper bound (3x for all-triple), trim unused at end
   const maxInstances = orderCol ? logicalCount * 3 : logicalCount;
@@ -196,7 +213,10 @@ export function buildBondBuffers(
 
   // Trim to actual size if we over-allocated
   const totalInstances = renderIdx;
-  const trim = <T extends Float32Array | Uint32Array>(arr: T, stride: number): T =>
+  const trim = <T extends Float32Array | Uint32Array>(
+    arr: T,
+    stride: number,
+  ): T =>
     arr.length === totalInstances * stride
       ? arr
       : (arr.slice(0, totalInstances * stride) as T);
@@ -210,7 +230,11 @@ export function buildBondBuffers(
   buffers.set("instanceSplit", trim(bondSplit, 4));
   buffers.set("instancePickingColor", trim(bondPick, 4));
 
-  return { buffers, instanceCount: totalInstances, instanceMap: trim(instanceMap, 1) };
+  return {
+    buffers,
+    instanceCount: totalInstances,
+    instanceMap: trim(instanceMap, 1),
+  };
 }
 
 /**
@@ -228,9 +252,11 @@ export function refreshBondPositions(
     buffers: Map<string, { data: Float32Array }>;
   },
 ): void {
-  const iAtoms = bondsBlock.getColumnU32("i");
-  const jAtoms = bondsBlock.getColumnU32("j");
-  const orderCol = bondsBlock.getColumnU8("order");
+  const iAtoms = bondsBlock.viewColU32("i");
+  const jAtoms = bondsBlock.viewColU32("j");
+  const orderCol = bondsBlock.dtype("order")
+    ? bondsBlock.viewColU32("order")
+    : undefined;
   if (!iAtoms || !jAtoms) return;
 
   const logicalCount = bondsBlock.nrows();

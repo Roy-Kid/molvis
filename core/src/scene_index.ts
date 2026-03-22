@@ -1,5 +1,6 @@
 import type { Mesh } from "@babylonjs/core";
-import type { Block, Box } from "@molcrafts/molrs";
+import type { Block, Box } from "molrs-wasm";
+import { ATOM_IMPOSTOR_SPEC, BOND_IMPOSTOR_SPEC } from "./artist/material_spec";
 import {
   type AtomMeta,
   type BondMeta,
@@ -8,10 +9,6 @@ import {
   type EntityType,
   MetaRegistry,
 } from "./entity_source";
-import {
-  ATOM_IMPOSTOR_SPEC,
-  BOND_IMPOSTOR_SPEC,
-} from "./artist/material_spec";
 import { encodePickingColor } from "./picker";
 import { makeSelectionKey } from "./selection_manager";
 import { Topology } from "./system/topology";
@@ -100,6 +97,8 @@ export class ImpostorState {
       }
     }
 
+    const hasPreBuiltPicking = buffers.has("instancePickingColor");
+
     for (const [name, data] of buffers) {
       const desc = this.buffers.get(name);
       if (desc) {
@@ -111,12 +110,18 @@ export class ImpostorState {
       }
     }
 
-    const pickBuf = this.buffers.get("instancePickingColor");
-    if (pickBuf) {
-      for (let i = 0; i < frameCount; i++) {
-        const pCol = encodePickingColor(this.mesh.uniqueId, i);
-        const offset = i * 4;
-        pickBuf.data.set(pCol, offset);
+    // Only re-encode picking colors when the caller did NOT supply them.
+    // buildAtomBuffers/buildBondBuffers encode correct logical IDs into picking
+    // colors; overwriting them here would destroy the logical-bond-ID mapping
+    // for multi-order bonds (where render instance != logical bond index).
+    if (!hasPreBuiltPicking) {
+      const pickBuf = this.buffers.get("instancePickingColor");
+      if (pickBuf) {
+        for (let i = 0; i < frameCount; i++) {
+          const pCol = encodePickingColor(this.mesh.uniqueId, i);
+          const offset = i * 4;
+          pickBuf.data.set(pCol, offset);
+        }
       }
     }
 
@@ -509,8 +514,8 @@ export class SceneIndex {
       this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
 
       const bondCount = bondBlock.nrows();
-      const iAtoms = bondBlock.getColumnU32("i");
-      const jAtoms = bondBlock.getColumnU32("j");
+      const iAtoms = bondBlock.viewColU32("i");
+      const jAtoms = bondBlock.viewColU32("j");
       if (iAtoms && jAtoms) {
         for (let b = 0; b < bondCount; b++) {
           this.topology.addBond(b, iAtoms[b], jAtoms[b]);

@@ -1,5 +1,16 @@
-import type { Frame, SimulationReader } from "@molcrafts/molrs";
+import type { Frame } from "molrs-wasm";
 import type { FrameSource } from "../pipeline/pipeline";
+
+/**
+ * Interface matching the SimulationReader WASM class for Zarr trajectory reading.
+ * The concrete implementation is provided by molrs-wasm.
+ */
+export interface ZarrReaderLike {
+  countFrames(): number;
+  countAtoms(): number;
+  readFrame(t: number): Frame | undefined;
+  free(): void;
+}
 
 /**
  * ArrayFrameSource provides frames from an array of Frame objects.
@@ -85,13 +96,13 @@ export class AsyncFrameSource implements FrameSource {
  * ZarrFrameSource provides frames from a Zarr archive.
  */
 export class ZarrFrameSource implements FrameSource {
-  private reader: SimulationReader;
+  private reader: ZarrReaderLike;
   private frameCount: number;
 
   /**
-   * Wrap a `SimulationReader` so it can drive the modifier pipeline.
+   * Wrap a `ZarrReaderLike` so it can drive the modifier pipeline.
    */
-  constructor(reader: SimulationReader) {
+  constructor(reader: ZarrReaderLike) {
     this.reader = reader;
     this.frameCount = reader.countFrames();
   }

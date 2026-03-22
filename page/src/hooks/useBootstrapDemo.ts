@@ -25,15 +25,15 @@ export function useBootstrapDemo(
 
       if (pipeline.getModifiers().length === 0) {
         const atomsBlock = new Block();
-        atomsBlock.setColumnF32("x", new Float32Array([0.0, 0.757, -0.757]));
-        atomsBlock.setColumnF32("y", new Float32Array([0.0, 0.586, 0.586]));
-        atomsBlock.setColumnF32("z", new Float32Array([0.0, 0.0, 0.0]));
-        atomsBlock.setColumnStrings("element", ["O", "H", "H"]);
+        atomsBlock.setColF32("x", new Float32Array([0.0, 0.757, -0.757]));
+        atomsBlock.setColF32("y", new Float32Array([0.0, 0.586, 0.586]));
+        atomsBlock.setColF32("z", new Float32Array([0.0, 0.0, 0.0]));
+        atomsBlock.setColStr("element", ["O", "H", "H"]);
 
         const bondsBlock = new Block();
-        bondsBlock.setColumnU32("i", new Uint32Array([0, 0]));
-        bondsBlock.setColumnU32("j", new Uint32Array([1, 2]));
-        bondsBlock.setColumnU8("order", new Uint8Array([1, 1]));
+        bondsBlock.setColU32("i", new Uint32Array([0, 0]));
+        bondsBlock.setColU32("j", new Uint32Array([1, 2]));
+        bondsBlock.setColU32("order", new Uint32Array([1, 1]));
 
         const frame = new Frame();
         frame.insertBlock("atoms", atomsBlock);

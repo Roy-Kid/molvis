@@ -1,13 +1,10 @@
 import { describe, expect, it } from "@rstest/core";
-import { computeHistogram, discoverNumericColumns } from "../src/analysis/histogram";
-import { initSync, Block } from "@molcrafts/molrs";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-
-const require = createRequire(__filename);
-const wasmPath = require.resolve("@molcrafts/molrs/molwasm_bg.wasm");
-const wasmBuffer = readFileSync(wasmPath);
-initSync({ module: wasmBuffer });
+import { Block } from "molrs-wasm";
+import {
+  computeHistogram,
+  discoverNumericColumns,
+} from "../src/analysis/histogram";
+import "./setup_wasm";
 
 describe("computeHistogram", () => {
   it("should compute correct bin counts for uniform data", () => {
@@ -67,7 +64,13 @@ describe("computeHistogram", () => {
   });
 
   it("should skip NaN and Infinity values", () => {
-    const data = new Float32Array([1, Number.NaN, 3, Number.POSITIVE_INFINITY, 5]);
+    const data = new Float32Array([
+      1,
+      Number.NaN,
+      3,
+      Number.POSITIVE_INFINITY,
+      5,
+    ]);
     const result = computeHistogram(data, 10);
     expect(result.stats.count).toBe(3); // 1, 3, 5
   });
@@ -99,9 +102,9 @@ describe("computeHistogram", () => {
 describe("discoverNumericColumns", () => {
   it("should find f32 columns", () => {
     const block = new Block();
-    block.setColumnF32("x", new Float32Array([1]));
-    block.setColumnF32("y", new Float32Array([1]));
-    block.setColumnStrings("element", ["C"]);
+    block.setColF32("x", new Float32Array([1]));
+    block.setColF32("y", new Float32Array([1]));
+    block.setColStr("element", ["C"]);
     const cols = discoverNumericColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).toContain("x");
@@ -111,8 +114,8 @@ describe("discoverNumericColumns", () => {
 
   it("should skip __ internal columns", () => {
     const block = new Block();
-    block.setColumnF32("charge", new Float32Array([0.5]));
-    block.setColumnF32("__color_r", new Float32Array([1.0]));
+    block.setColF32("charge", new Float32Array([0.5]));
+    block.setColF32("__color_r", new Float32Array([1.0]));
     const cols = discoverNumericColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).toContain("charge");

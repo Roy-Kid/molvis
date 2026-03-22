@@ -1,4 +1,4 @@
-import { Block, Frame } from "@molcrafts/molrs";
+import { Block, Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 
@@ -84,33 +84,27 @@ export class HideSelectionModifier extends BaseModifier {
 
     // Helper to copy generic column
     const copyColF32 = (name: string) => {
-      try {
-        const src = atoms.getColumnF32(name);
-        if (src) {
-          const dst = new Float32Array(newCount);
-          let ptr = 0;
-          for (let i = 0; i < nrows; i++) {
-            if (indexMap[i] !== -1) dst[ptr++] = src[i];
-          }
-          newAtoms.setColumnF32(name, dst);
+      const src =
+        atoms.dtype(name) === "f32" ? atoms.viewColF32(name) : undefined;
+      if (src) {
+        const dst = new Float32Array(newCount);
+        let ptr = 0;
+        for (let i = 0; i < nrows; i++) {
+          if (indexMap[i] !== -1) dst[ptr++] = src[i];
         }
-      } catch (e) {
-        // Column likely doesn't exist
+        newAtoms.setColF32(name, dst);
       }
     };
 
     const copyColStr = (name: string) => {
-      try {
-        const src = atoms.getColumnStrings(name);
-        if (src) {
-          const dst: string[] = [];
-          for (let i = 0; i < nrows; i++) {
-            if (indexMap[i] !== -1) dst.push(src[i]);
-          }
-          newAtoms.setColumnStrings(name, dst);
+      const src =
+        atoms.dtype(name) === "string" ? atoms.copyColStr(name) : undefined;
+      if (src) {
+        const dst: string[] = [];
+        for (let i = 0; i < nrows; i++) {
+          if (indexMap[i] !== -1) dst.push(src[i]);
         }
-      } catch (e) {
-        // Column likely doesn't exist
+        newAtoms.setColStr(name, dst);
       }
     };
 
@@ -132,9 +126,11 @@ export class HideSelectionModifier extends BaseModifier {
     let newBonds: Block | undefined;
 
     if (bonds) {
-      const iCol = bonds.getColumnU32("i");
-      const jCol = bonds.getColumnU32("j");
-      const orderCol = bonds.getColumnU8("order");
+      const iCol = bonds.viewColU32("i");
+      const jCol = bonds.viewColU32("j");
+      const orderCol = bonds.dtype("order")
+        ? bonds.viewColU32("order")
+        : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -153,7 +149,7 @@ export class HideSelectionModifier extends BaseModifier {
           const newNb = validBonds.length;
           const newI = new Uint32Array(newNb);
           const newJ = new Uint32Array(newNb);
-          const newOrder = new Uint8Array(newNb);
+          const newOrder = new Uint32Array(newNb);
 
           for (let k = 0; k < newNb; k++) {
             const originalIdx = validBonds[k];
@@ -163,9 +159,9 @@ export class HideSelectionModifier extends BaseModifier {
             else newOrder[k] = 1;
           }
 
-          newBonds.setColumnU32("i", newI);
-          newBonds.setColumnU32("j", newJ);
-          if (orderCol) newBonds.setColumnU8("order", newOrder);
+          newBonds.setColU32("i", newI);
+          newBonds.setColU32("j", newJ);
+          if (orderCol) newBonds.setColU32("order", newOrder);
         }
       }
     }
@@ -173,6 +169,9 @@ export class HideSelectionModifier extends BaseModifier {
     const result = new Frame();
     result.insertBlock("atoms", newAtoms);
     if (newBonds) result.insertBlock("bonds", newBonds);
+
+    const box = input.simbox;
+    if (box) result.simbox = box;
 
     return result;
   }

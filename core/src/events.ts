@@ -1,4 +1,4 @@
-import type { Box, Frame } from "@molcrafts/molrs";
+import type { Box, Frame } from "molrs-wasm";
 import type { RepresentationStyle } from "./artist/representation";
 import type { ModeType } from "./mode/base";
 import type { Trajectory } from "./system/trajectory";
@@ -19,6 +19,7 @@ export interface MolvisEventMap {
   "status-message": { text: string; type: "info" | "error" };
   "representation-change": RepresentationStyle;
   "fence-select-change": boolean;
+  "pending-selection-change": { atomKeys: string[]; bondKeys: string[] };
 }
 
 export type Listener<T = unknown> = (data: T) => void;
@@ -29,7 +30,6 @@ export type Listener<T = unknown> = (data: T) => void;
  * When instantiated as EventEmitter<MolvisEventMap>, all emit/on/off calls
  * are checked against the event map at compile time.
  */
-// biome-ignore lint: generic event maps don't need index signatures
 export class EventEmitter<TMap = Record<string, unknown>> {
   private listeners = new Map<string, Set<Listener<unknown>>>();
 

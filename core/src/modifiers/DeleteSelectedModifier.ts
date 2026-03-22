@@ -1,6 +1,7 @@
-import { Block, Frame } from "@molcrafts/molrs";
+import { Block, Frame } from "molrs-wasm";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { probeColumnDtype } from "../utils/block_helpers";
 
 /**
  * Modifier that removes specific atoms from the pipeline output.
@@ -79,25 +80,26 @@ export class DeleteSelectedModifier extends BaseModifier {
     // Filter atoms
     const newAtoms = new Block();
     for (const key of atoms.keys()) {
-      const dtype = atoms.getDtype(key);
-      if (dtype === "str" || dtype === "string") {
-        const src = atoms.getColumnStrings(key);
+      const dtype = probeColumnDtype(atoms, key);
+      if (dtype === "str") {
+        const src = atoms.copyColStr(key) as string[] | undefined;
         if (src) {
           const dst: string[] = [];
           for (let i = 0; i < nrows; i++) {
             if (indexMap[i] !== -1) dst.push(src[i]);
           }
-          newAtoms.setColumnStrings(key, dst);
+          newAtoms.setColStr(key, dst);
         }
       } else {
-        const src = atoms.getColumnF32(key);
+        const src =
+          atoms.dtype(key) === "f32" ? atoms.viewColF32(key) : undefined;
         if (src) {
           const dst = new Float32Array(newCount);
           let ptr = 0;
           for (let i = 0; i < nrows; i++) {
             if (indexMap[i] !== -1) dst[ptr++] = src[i];
           }
-          newAtoms.setColumnF32(key, dst);
+          newAtoms.setColF32(key, dst);
         }
       }
     }
@@ -107,9 +109,11 @@ export class DeleteSelectedModifier extends BaseModifier {
     let newBonds: Block | undefined;
 
     if (bonds) {
-      const iCol = bonds.getColumnU32("i");
-      const jCol = bonds.getColumnU32("j");
-      const orderCol = bonds.getColumnU8("order");
+      const iCol = bonds.viewColU32("i");
+      const jCol = bonds.viewColU32("j");
+      const orderCol = bonds.dtype("order")
+        ? bonds.viewColU32("order")
+        : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -133,14 +137,14 @@ export class DeleteSelectedModifier extends BaseModifier {
             newJ[k] = indexMap[jCol[orig]];
           }
 
-          newBonds.setColumnU32("i", newI);
-          newBonds.setColumnU32("j", newJ);
+          newBonds.setColU32("i", newI);
+          newBonds.setColU32("j", newJ);
           if (orderCol) {
-            const newOrder = new Uint8Array(nb);
+            const newOrder = new Uint32Array(nb);
             for (let k = 0; k < nb; k++) {
               newOrder[k] = orderCol[validBonds[k]];
             }
-            newBonds.setColumnU8("order", newOrder);
+            newBonds.setColU32("order", newOrder);
           }
         }
       }

@@ -1,5 +1,8 @@
 import { Engine, Tools } from "@babylonjs/core";
 import { Artist } from "./artist";
+import { findRepresentation } from "./artist/representation";
+import { StyleManager } from "./artist/style_manager";
+import type { Theme } from "./artist/theme";
 import { type CommandRegistry, commands } from "./commands";
 import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
 import { UpdateFrameCommand } from "./commands/frame";
@@ -13,12 +16,9 @@ import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import type { FrameSource } from "./pipeline/pipeline";
+import { readPDBFrame } from "./reader";
 import { syncSceneToFrame } from "./scene_sync";
 import { type MolvisSetting, Settings } from "./settings";
-import { findRepresentation } from "./artist/representation";
-import { readPDBFrame } from "./reader";
-import { StyleManager } from "./artist/style_manager";
-import type { Theme } from "./artist/theme";
 import { System } from "./system";
 import {
   type FrameTransitionDecision,
@@ -31,7 +31,7 @@ import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
 
-import type { Box, Frame } from "@molcrafts/molrs";
+import type { Box, Frame } from "molrs-wasm";
 import {
   MolvisButton,
   MolvisFolder,
@@ -173,16 +173,22 @@ export class MolvisApp {
       const mask = context.currentSelection;
       if (!mask) return;
 
-      const keys: string[] = [];
+      const atomKeys: string[] = [];
       for (const idx of mask.getIndices()) {
         const key = this._world.sceneIndex.getSelectionKeyForAtom(idx);
-        if (key) keys.push(key);
+        if (key) atomKeys.push(key);
       }
-      const existingBonds = [...this._world.selectionManager.getState().bonds];
+
+      const bondKeys: string[] = [];
+      for (const bondId of context.selectedBondIds) {
+        const key = this._world.sceneIndex.getSelectionKeyForBond(bondId);
+        if (key) bondKeys.push(key);
+      }
+
       this._world.selectionManager.apply({
         type: "replace",
-        atoms: keys,
-        bonds: existingBonds,
+        atoms: atomKeys,
+        bonds: bondKeys,
       });
     });
   }
@@ -527,6 +533,28 @@ export class MolvisApp {
     }
   }
 
+  /**
+   * Confirm the pending manual selection by committing it as a SelectModifier.
+   * Only works when in Select mode.
+   */
+  public confirmPendingSelection(): void {
+    const mode = this._world.mode;
+    if (mode instanceof SelectMode) {
+      mode.confirmPendingSelection();
+    }
+  }
+
+  /**
+   * Clear the pending selection without committing.
+   * Only works when in Select mode.
+   */
+  public clearPendingSelection(): void {
+    const mode = this._world.mode;
+    if (mode instanceof SelectMode) {
+      mode.clearPending();
+    }
+  }
+
   public setTheme(theme: Theme): void {
     this._styleManager.setTheme(theme);
     if (this._system.frame) {
@@ -768,7 +796,7 @@ export class MolvisApp {
     );
 
     if (options?.fullRebuild) {
-      this.renderFrame(computed);
+      await this.renderFrameInternal(computed);
     } else {
       this.artist.redrawFrame(computed);
     }
@@ -779,6 +807,9 @@ export class MolvisApp {
    * Emits 'trajectory-change' event.
    */
   public setTrajectory(trajectory: Trajectory): void {
+    this.artist.clear();
+    this.artist.ribbonRenderer.dispose();
+    this.commandManager.clearHistory();
     this._system.trajectory = trajectory;
     this._currentFrame = this._system.trajectory.currentIndex;
     this._lastRenderedFrame = null;

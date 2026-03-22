@@ -1,5 +1,5 @@
 import * as BABYLON from "@babylonjs/core";
-import { type Block, Frame } from "@molcrafts/molrs";
+import { type Block, Frame } from "molrs-wasm";
 import type { MolvisApp } from "../app";
 import { syncSceneToFrame } from "../scene_sync";
 import { Command, command } from "./base";
@@ -147,13 +147,15 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
   private updateAtomBuffer(mesh: BABYLON.Mesh, atomsBlock: Block) {
     const count = atomsBlock.nrows();
     if (!count) throw new Error("Atoms block has no rows");
-    const xCoords = atomsBlock.getColumnF32("x");
+    const xCoords = atomsBlock.viewColF32("x");
     if (!xCoords) throw new Error("Missing x coordinates");
-    const yCoords = atomsBlock.getColumnF32("y");
+    const yCoords = atomsBlock.viewColF32("y");
     if (!yCoords) throw new Error("Missing y coordinates");
-    const zCoords = atomsBlock.getColumnF32("z");
+    const zCoords = atomsBlock.viewColF32("z");
     if (!zCoords) throw new Error("Missing z coordinates");
-    const elements = atomsBlock.getColumnStrings("element");
+    const elements = atomsBlock.dtype("element")
+      ? (atomsBlock.copyColStr("element") as string[])
+      : undefined;
 
     // Retrieve Metalayer/ImpostorState from SceneIndex
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
@@ -238,15 +240,15 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
   ) {
     const count = bondsBlock.nrows();
     if (!count) throw new Error("Bonds block has no rows");
-    const xCoords = atomsBlock.getColumnF32("x");
+    const xCoords = atomsBlock.viewColF32("x");
     if (!xCoords) throw new Error("Missing x coordinates");
-    const yCoords = atomsBlock.getColumnF32("y");
+    const yCoords = atomsBlock.viewColF32("y");
     if (!yCoords) throw new Error("Missing y coordinates");
-    const zCoords = atomsBlock.getColumnF32("z");
+    const zCoords = atomsBlock.viewColF32("z");
     if (!zCoords) throw new Error("Missing z coordinates");
-    const i_atoms = bondsBlock.getColumnU32("i");
+    const i_atoms = bondsBlock.viewColU32("i");
     if (!i_atoms) throw new Error("Missing bond i atoms");
-    const j_atoms = bondsBlock.getColumnU32("j");
+    const j_atoms = bondsBlock.viewColU32("j");
     if (!j_atoms) throw new Error("Missing bond j atoms");
 
     // Retrieve Bond State
@@ -367,10 +369,10 @@ export class ExportFrameCommand extends Command<{
 
     const atomsBlock = tempFrame.getBlock("atoms");
     if (atomsBlock) {
-      const x = atomsBlock.getColumnF32("x");
-      const y = atomsBlock.getColumnF32("y");
-      const z = atomsBlock.getColumnF32("z");
-      const elements = atomsBlock.getColumnStrings("element");
+      const x = atomsBlock.viewColF32("x");
+      const y = atomsBlock.viewColF32("y");
+      const z = atomsBlock.viewColF32("z");
+      const elements = atomsBlock.copyColStr("element");
 
       if (x && y && z) {
         blocks.atoms = {
@@ -384,20 +386,17 @@ export class ExportFrameCommand extends Command<{
 
     const bondsBlock = tempFrame.getBlock("bonds");
     if (bondsBlock) {
-      const i = bondsBlock.getColumnU32("i");
-      const j = bondsBlock.getColumnU32("j");
-      const orderU8 = bondsBlock.getColumnU8("order");
-      const orderF32 = bondsBlock.getColumnF32("order");
+      const i = bondsBlock.viewColU32("i");
+      const j = bondsBlock.viewColU32("j");
+      const order = bondsBlock.dtype("order")
+        ? bondsBlock.viewColU32("order")
+        : undefined;
 
       if (i && j) {
         blocks.bonds = {
           i: Array.from(i),
           j: Array.from(j),
-          order: orderU8
-            ? Array.from(orderU8)
-            : orderF32
-              ? Array.from(orderF32)
-              : undefined,
+          order: order ? Array.from(order) : undefined,
         };
       }
     }

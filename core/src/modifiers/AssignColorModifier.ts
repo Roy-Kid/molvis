@@ -1,12 +1,12 @@
-import { Frame } from "@molcrafts/molrs";
+import { Frame } from "molrs-wasm";
 import { hexToLinearRgb } from "../artist/palette";
+import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
+import type { PipelineContext } from "../pipeline/types";
 import {
   COLOR_OVERRIDE_B,
   COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_R,
 } from "./ColorByPropertyModifier";
-import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
-import type { PipelineContext } from "../pipeline/types";
 
 export interface ColorAssignment {
   /** Atom indices to color */
@@ -103,9 +103,15 @@ export class AssignColorModifier extends BaseModifier {
     if (atomCount === 0) return input;
 
     // Start from existing overrides or default (NaN = no override)
-    const existingR = atoms.getColumnF32(COLOR_OVERRIDE_R);
-    const existingG = atoms.getColumnF32(COLOR_OVERRIDE_G);
-    const existingB = atoms.getColumnF32(COLOR_OVERRIDE_B);
+    const existingR = atoms.dtype(COLOR_OVERRIDE_R)
+      ? atoms.viewColF32(COLOR_OVERRIDE_R)
+      : undefined;
+    const existingG = atoms.dtype(COLOR_OVERRIDE_G)
+      ? atoms.viewColF32(COLOR_OVERRIDE_G)
+      : undefined;
+    const existingB = atoms.dtype(COLOR_OVERRIDE_B)
+      ? atoms.viewColF32(COLOR_OVERRIDE_B)
+      : undefined;
 
     const colorR = existingR
       ? new Float32Array(existingR)
@@ -140,9 +146,9 @@ export class AssignColorModifier extends BaseModifier {
     const resultAtoms = result.getBlock("atoms");
     if (!resultAtoms) return input;
 
-    resultAtoms.setColumnF32(COLOR_OVERRIDE_R, colorR);
-    resultAtoms.setColumnF32(COLOR_OVERRIDE_G, colorG);
-    resultAtoms.setColumnF32(COLOR_OVERRIDE_B, colorB);
+    resultAtoms.setColF32(COLOR_OVERRIDE_R, colorR);
+    resultAtoms.setColF32(COLOR_OVERRIDE_G, colorG);
+    resultAtoms.setColF32(COLOR_OVERRIDE_B, colorB);
 
     // Copy bonds block if present
     const bonds = input.getBlock("bonds");

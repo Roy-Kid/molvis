@@ -1,4 +1,4 @@
-import type { Block, Frame } from "@molcrafts/molrs";
+import type { Block, Frame } from "molrs-wasm";
 
 export type FrameUpdateKind = "position" | "bond" | "full";
 
@@ -25,8 +25,8 @@ function decision(
 }
 
 function equalNumberArray(
-  left: Float32Array | Uint32Array | Uint8Array,
-  right: Float32Array | Uint32Array | Uint8Array,
+  left: Float32Array | Uint32Array,
+  right: Float32Array | Uint32Array,
 ): boolean {
   if (left.length !== right.length) return false;
   for (let i = 0; i < left.length; i++) {
@@ -48,26 +48,29 @@ function compareOptionalStringColumns(
   rightAtoms: Block,
   column: "element" | "type",
 ): boolean {
-  const left = leftAtoms.getColumnStrings(column);
-  const right = rightAtoms.getColumnStrings(column);
+  const leftHas = leftAtoms.dtype(column) !== undefined;
+  const rightHas = rightAtoms.dtype(column) !== undefined;
 
-  if (!left && !right) return true;
-  if (!left || !right) return false;
-  return equalStringArray(left, right);
+  if (!leftHas && !rightHas) return true;
+  if (!leftHas || !rightHas) return false;
+  return equalStringArray(
+    leftAtoms.copyColStr(column),
+    rightAtoms.copyColStr(column),
+  );
 }
 
 function getBondOrder(
-  orders: Uint8Array | null | undefined,
+  orders: Uint32Array | null | undefined,
   index: number,
 ): number {
   return orders ? orders[index] : 1;
 }
 
 function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
-  const leftI = leftBonds.getColumnU32("i");
-  const leftJ = leftBonds.getColumnU32("j");
-  const rightI = rightBonds.getColumnU32("i");
-  const rightJ = rightBonds.getColumnU32("j");
+  const leftI = leftBonds.viewColU32("i");
+  const leftJ = leftBonds.viewColU32("j");
+  const rightI = rightBonds.viewColU32("i");
+  const rightJ = rightBonds.viewColU32("j");
 
   if (!leftI || !leftJ || !rightI || !rightJ) {
     return false;
@@ -75,8 +78,12 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   if (!equalNumberArray(leftI, rightI)) return false;
   if (!equalNumberArray(leftJ, rightJ)) return false;
 
-  const leftOrder = leftBonds.getColumnU8("order");
-  const rightOrder = rightBonds.getColumnU8("order");
+  const leftOrder = leftBonds.dtype("order")
+    ? leftBonds.viewColU32("order")
+    : undefined;
+  const rightOrder = rightBonds.dtype("order")
+    ? rightBonds.viewColU32("order")
+    : undefined;
   const count = leftBonds.nrows();
 
   for (let i = 0; i < count; i++) {
