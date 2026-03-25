@@ -1,5 +1,5 @@
 import type { AnyModel } from "@anywidget/types";
-import { Molvis, mountMolvis } from "@molvis/core";
+import { type Molvis, mountMolvis } from "@molvis/core";
 import { Logger } from "tslog";
 import { DEFAULT_CONFIG } from "./config";
 import { JsonRpcHandler } from "./jsonrpc";
@@ -76,7 +76,9 @@ export class MolvisWidget {
     MolvisWidget.attachedElements.clear();
 
     if (errors.length > 0) {
-      logger.warn(`Failed to dispose ${errors.length} widget instance(s)`, { errors });
+      logger.warn(`Failed to dispose ${errors.length} widget instance(s)`, {
+        errors,
+      });
     }
   }
 
@@ -95,7 +97,10 @@ export class MolvisWidget {
     }
 
     if (errors.length > 0) {
-      logger.warn(`Failed to clear content for ${errors.length} widget instance(s)`, { errors });
+      logger.warn(
+        `Failed to clear content for ${errors.length} widget instance(s)`,
+        { errors },
+      );
     }
   }
 
@@ -107,7 +112,10 @@ export class MolvisWidget {
       this.initializeMolvisCore();
       this._isInitialized = true;
     } catch (error) {
-      logger.error("Failed to initialize MolvisWidget", { name: this._name, error });
+      logger.error("Failed to initialize MolvisWidget", {
+        name: this._name,
+        error,
+      });
       throw error;
     }
   }
@@ -141,20 +149,29 @@ export class MolvisWidget {
         this.model.on("change:width", this.resize);
         this.model.on("change:height", this.resize);
       } else {
-        logger.warn("Model does not have 'on' method, event listeners not bound", {
-          name: this._name,
-          modelType: typeof this.model,
-        });
+        logger.warn(
+          "Model does not have 'on' method, event listeners not bound",
+          {
+            name: this._name,
+            modelType: typeof this.model,
+          },
+        );
       }
 
       logger.info("Molvis core initialized successfully", { name: this._name });
     } catch (error) {
-      logger.error("Failed to initialize Molvis core", { name: this._name, error });
+      logger.error("Failed to initialize Molvis core", {
+        name: this._name,
+        error,
+      });
       throw error;
     }
   }
 
-  public handleCustomMessage = async (msg: string, buffers: DataView[] = []) => {
+  public handleCustomMessage = async (
+    msg: string,
+    buffers: DataView[] = [],
+  ) => {
     if (!this.jsonRpcHandler) {
       logger.error("JSON-RPC handler not initialized", { name: this._name });
       const errorResponse = {
@@ -187,7 +204,7 @@ export class MolvisWidget {
       } else {
         logger.warn("JsonRpcHandler returned undefined response", {
           name: this._name,
-          method: cmd.method
+          method: cmd.method,
         });
         const errorResponse = {
           jsonrpc: "2.0",

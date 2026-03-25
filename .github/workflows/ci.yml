@@ -7,7 +7,7 @@ on:
     branches: [master]
 
 jobs:
-  lint-build-test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,14 +19,39 @@ jobs:
 
       - run: npm ci
 
-      - name: Lint
+      - name: Biome lint & format check
         run: npx biome check
 
-      - name: Build core
-        run: npm run build:core
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
 
       - name: Test core
         run: npm run test:core
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build core
+        run: npm run build:core
 
       - name: Build page
         run: npm run build:page

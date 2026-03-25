@@ -21,13 +21,7 @@
     "test": "npm run test:core && npm run test:page && npm run test:python && npm run test:vsc-ext",
     "test:watch": "npm run test:watch -w core",
     "release:core:check": "npm run release:check -w core",
-    "lint": "npx biome check --write",
-    "prepare": "husky"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,json}": [
-      "npx biome check --write --unsafe --no-errors-on-unmatched"
-    ]
+    "lint": "npx biome check --write"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

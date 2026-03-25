@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: biome-check
+        name: biome check
+        entry: npx biome check --no-errors-on-unmatched
+        language: system
+        types_or: [javascript, jsx, ts, tsx, json]
+
+      - id: test-core
+        name: test core
+        entry: npm run test:core
+        language: system
+        pass_filenames: false
+        always_run: true

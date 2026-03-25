@@ -17,16 +17,13 @@
     "preview:demo": "rsbuild preview",
     "test": "rstest run",
     "test:watch": "rstest watch",
-    "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run",
-    "prepare": "husky"
+    "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
   },
   "devDependencies": {
     "@rsbuild/core": "^1.2.14",
     "@rslib/core": "^0.5.4",
     "@rstest/browser": "^0.9.4",
     "@rstest/core": "^0.9.4",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
     "playwright": "^1.58.2",
     "typescript": "^5.8.3"
   },

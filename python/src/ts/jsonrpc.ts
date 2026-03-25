@@ -33,7 +33,7 @@ export class JsonRpcHandler {
 
   public async execute(
     request: JsonRPCRequest,
-    buffers: DataView[] = []
+    buffers: DataView[] = [],
   ): Promise<JsonRPCResponse | undefined> {
     const { jsonrpc, method, id, params = {} } = request;
 
@@ -43,7 +43,7 @@ export class JsonRpcHandler {
       return createErrorResponse(
         id,
         JsonRPCErrorCode.InvalidRequest,
-        "Invalid Request: jsonrpc must be '2.0'"
+        "Invalid Request: jsonrpc must be '2.0'",
       );
     }
 
@@ -52,13 +52,17 @@ export class JsonRpcHandler {
       return createSuccessResponse(id, result);
     } catch (error) {
       // Check if it's a "command not found" error
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes("not found") || errorMessage.includes("Unknown command")) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (
+        errorMessage.includes("not found") ||
+        errorMessage.includes("Unknown command")
+      ) {
         logger.warn("Method not found:", { method, id });
         return createErrorResponse(
           id,
           JsonRPCErrorCode.MethodNotFound,
-          `Method not found: ${method}`
+          `Method not found: ${method}`,
         );
       }
 
@@ -66,7 +70,7 @@ export class JsonRpcHandler {
       return createErrorResponse(
         id,
         JsonRPCErrorCode.InternalError,
-        `Internal error: ${errorMessage}`
+        `Internal error: ${errorMessage}`,
       );
     }
   }
@@ -74,7 +78,7 @@ export class JsonRpcHandler {
   private async callMethod(
     method: string,
     params: Record<string, unknown> = {},
-    _buffers: DataView[] = []
+    _buffers: DataView[] = [],
   ): Promise<unknown> {
     // Handle widget-specific methods
     if (WIDGET_METHODS.has(method)) {

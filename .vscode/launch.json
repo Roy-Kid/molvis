@@ -1,17 +1,13 @@
 {
-	"version": "0.2.0",
-	"configurations": [
-		{
-			"name": "Run Extension",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}/vsc-ext"
-			],
-			"outFiles": [
-				"${workspaceFolder}/vsc-ext/out/**/*.js"
-			],
-			"preLaunchTask": "vsc-ext: watch"
-		}
-	]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/vsc-ext"],
+      "outFiles": ["${workspaceFolder}/vsc-ext/out/**/*.js"],
+      "preLaunchTask": "vsc-ext: watch"
+    }
+  ]
 }

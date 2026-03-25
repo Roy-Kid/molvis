@@ -10,10 +10,10 @@ export type { CoreMolvisConfig };
 
 // Widget configuration interface (extends core config conceptually)
 export interface WidgetConfig {
-  name?: string;  // Named scene identifier
+  name?: string; // Named scene identifier
   width: number;
   height: number;
-  session_id?: number;  // Legacy, prefer name
+  session_id?: number; // Legacy, prefer name
   showUI?: boolean;
 }
 
@@ -53,7 +53,10 @@ export interface JsonRPCError {
 }
 
 // JSON-RPC utility functions
-export function createSuccessResponse(id: number, result: unknown): JsonRPCResponse {
+export function createSuccessResponse(
+  id: number,
+  result: unknown,
+): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
     id,
@@ -65,7 +68,7 @@ export function createErrorResponse(
   id: number | null,
   code: number,
   message: string,
-  data?: unknown
+  data?: unknown,
 ): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
