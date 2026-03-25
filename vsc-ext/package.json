@@ -1,0 +1,318 @@
+{
+  "name": "molvis",
+  "displayName": "MolVis",
+  "description": "Interactive 3D molecular structure viewer for PDB, XYZ, LAMMPS, and Zarr files.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/molcrafts/molvis"
+  },
+  "homepage": "https://github.com/molcrafts/molvis",
+  "bugs": {
+    "url": "https://github.com/molcrafts/molvis/issues"
+  },
+  "license": "BSD-3-Clause",
+  "icon": "image/molvis-icon.png",
+  "version": "0.0.2",
+  "engines": {
+    "vscode": "^1.108.1"
+  },
+  "publisher": "molcrafts",
+  "activationEvents": [
+    "onCommand:molvis.quickView",
+    "onCommand:molvis.openEditor",
+    "onCommand:molvis.reload",
+    "onCommand:molvis.save",
+    "onCustomEditor:molvis.editor"
+  ],
+  "categories": ["Visualization"],
+  "keywords": [
+    "molecular",
+    "visualization",
+    "pdb",
+    "lammps",
+    "chemistry",
+    "biology",
+    "babylonjs"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "molvis.quickView",
+        "title": "MolVis: Quick View",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "molvis.openEditor",
+        "title": "MolVis: Open Editor",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "molvis.reload",
+        "title": "MolVis: Reload",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "molvis.save",
+        "title": "MolVis: Save"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "molvis.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "activeCustomEditorId == molvis.editor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.workspace"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "molvis.editor",
+        "displayName": "MolVis Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.pdb"
+          },
+          {
+            "filenamePattern": "*.xyz"
+          },
+          {
+            "filenamePattern": "*.data"
+          },
+          {
+            "filenamePattern": "*.dump"
+          },
+          {
+            "filenamePattern": "*.lammpstrj"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "molvis.quickView",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .zarr",
+          "group": "navigation"
+        },
+        {
+          "command": "molvis.openEditor",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .zarr",
+          "group": "navigation"
+        },
+        {
+          "command": "molvis.reload",
+          "when": "activeCustomEditorId == molvis.editor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.workspace",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "molvis.quickView",
+          "when": "resourceExtname == .zarr || resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MolVis",
+      "properties": {
+        "molvis.config": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Overrides passed to `@molvis/core` config (`mountMolvis(container, config, settings)`).",
+          "properties": {
+            "showUI": {
+              "type": "boolean",
+              "description": "Show MolVis built-in overlay UI."
+            },
+            "useRightHandedSystem": {
+              "type": "boolean",
+              "description": "Use right-handed coordinate system."
+            },
+            "ui": {
+              "type": "object",
+              "description": "UI panel visibility flags.",
+              "properties": {
+                "showInfoPanel": {
+                  "type": "boolean"
+                },
+                "showModePanel": {
+                  "type": "boolean"
+                },
+                "showViewPanel": {
+                  "type": "boolean"
+                },
+                "showPerfPanel": {
+                  "type": "boolean"
+                },
+                "showTrajPanel": {
+                  "type": "boolean"
+                },
+                "showContextMenu": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            },
+            "canvas": {
+              "type": "object",
+              "description": "Canvas render context options.",
+              "properties": {
+                "antialias": {
+                  "type": "boolean"
+                },
+                "alpha": {
+                  "type": "boolean"
+                },
+                "preserveDrawingBuffer": {
+                  "type": "boolean"
+                },
+                "stencil": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "molvis.settings": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Runtime overrides for `@molvis/core` settings (`app.settings`).",
+          "properties": {
+            "cameraPanSpeed": {
+              "type": "number"
+            },
+            "cameraRotateSpeed": {
+              "type": "number"
+            },
+            "cameraZoomSpeed": {
+              "type": "number"
+            },
+            "cameraInertia": {
+              "type": "number"
+            },
+            "cameraPanInertia": {
+              "type": "number"
+            },
+            "cameraMinRadius": {
+              "type": "number"
+            },
+            "cameraMaxRadius": {
+              "type": ["number", "null"]
+            },
+            "grid": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "mainColor": {
+                  "type": "string"
+                },
+                "lineColor": {
+                  "type": "string"
+                },
+                "opacity": {
+                  "type": "number"
+                },
+                "majorUnitFrequency": {
+                  "type": "number"
+                },
+                "minorUnitVisibility": {
+                  "type": "number"
+                },
+                "size": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            },
+            "graphics": {
+              "type": "object",
+              "properties": {
+                "shadows": {
+                  "type": "boolean"
+                },
+                "postProcessing": {
+                  "type": "boolean"
+                },
+                "ssao": {
+                  "type": "boolean"
+                },
+                "bloom": {
+                  "type": "boolean"
+                },
+                "ssr": {
+                  "type": "boolean"
+                },
+                "dof": {
+                  "type": "boolean"
+                },
+                "fxaa": {
+                  "type": "boolean"
+                },
+                "hardwareScaling": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean:out": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
+    "clean:out-test": "node -e \"require('node:fs').rmSync('out-test',{recursive:true,force:true})\"",
+    "clean": "npm-run-all clean:out clean:out-test",
+    "build:extension": "rslib build -c rslib.extension.config.ts",
+    "build:webview": "rslib build -c rslib.webview.config.ts",
+    "build:all": "npm-run-all build:extension build:webview",
+    "build": "npm run build:all",
+    "watch:extension": "rslib build --watch -c rslib.extension.config.ts",
+    "watch:webview": "rslib build --watch -c rslib.webview.config.ts",
+    "watch:typecheck": "tsc --noEmit --watch --project tsconfig.json",
+    "watch": "npm-run-all -p watch:extension watch:webview watch:typecheck",
+    "package:prepare": "NODE_ENV=production npm-run-all clean build:all",
+    "package": "npm run package:prepare",
+    "vscode:prepublish": "npm run package",
+    "test:compile": "tsc --project tsconfig.test.json",
+    "test:unit:run": "mocha --ui tdd \"out-test/test/unit/**/*.test.js\"",
+    "test:unit": "npm-run-all test:compile test:unit:run",
+    "test:integration:run": "vscode-test --config .vscode-test.mjs",
+    "test:integration": "npm-run-all package test:compile test:integration:run",
+    "test": "npm-run-all test:unit test:integration",
+    "deploy:vsce": "vsce publish",
+    "deploy": "npm run deploy:vsce",
+    "deploy:ovsx": "ovsx publish"
+  },
+  "devDependencies": {
+    "@molvis/core": "file:../core",
+    "@rslib/core": "^0.5.5",
+    "@rsbuild/plugin-react": "^1.4.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "@types/vscode": "^1.108.1",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.2.1",
+    "npm-run-all": "^4.1.5",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "ovsx": "^0.10.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "@tailwindcss/postcss": "^4.1.17",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.17"
+  }
+}

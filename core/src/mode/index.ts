@@ -1,23 +1,22 @@
 import { KeyboardEventTypes, type KeyboardInfo } from "@babylonjs/core";
-
-import { Logger } from "tslog";
-import type { Molvis } from "@molvis/core";
-
-const logger = new Logger({ name: "molvis-core" });
+import type { MolvisApp } from "../app";
 
 import type { BaseMode } from "./base";
 import { ModeType } from "./base";
 import { ViewMode } from "./view";
+
 import { EditMode } from "./edit";
+import { ManipulateMode } from "./manipulate";
+import { MeasureMode } from "./measure";
 import { SelectMode } from "./select";
 
 class ModeManager {
-  private _app: Molvis;
-  private _mode: BaseMode;
+  private _app: MolvisApp;
+  private _mode: BaseMode | null = null;
 
-  constructor(app: Molvis) {
+  constructor(app: MolvisApp) {
     this._app = app;
-    this._mode = this.switch_mode(ModeType.View);
+    this.switch_mode(ModeType.View);
     this._register_keyboard_events();
   }
 
@@ -31,43 +30,65 @@ class ModeManager {
         case KeyboardEventTypes.KEYDOWN:
           switch (kbInfo.event.key) {
             case "1":
-              this._mode = this.switch_mode(ModeType.View);
+              this.switch_mode(ModeType.View);
               break;
             case "2":
-              this._mode = this.switch_mode(ModeType.Select);
+              this.switch_mode(ModeType.Select);
               break;
+
             case "3":
-              this._mode = this.switch_mode(ModeType.Edit);
+              this.switch_mode(ModeType.Edit);
               break;
-            // case "4":
-            //   this._mode = this.switch_mode("manupulate");
+
+            case "4":
+              this.switch_mode(ModeType.Measure);
+              break;
+            case "5":
+              this.switch_mode(ModeType.Manipulate);
+              break;
           }
           break;
       }
     });
-    // return new ViewMode(this);
   };
 
   public switch_mode = (mode: ModeType) => {
+    if (this._mode?.name === mode) return;
+
     if (this._mode) this._mode.finish();
-    let _mode;
+
     switch (mode) {
-      case ModeType.Edit:
-        _mode = new EditMode(this._app);
-        break;
       case ModeType.View:
-        _mode = new ViewMode(this._app);
+        this._mode = new ViewMode(this._app);
         break;
       case ModeType.Select:
-        _mode = new SelectMode(this._app);
+        this._mode = new SelectMode(this._app);
         break;
-      // case "manupulate":
+      case ModeType.Edit:
+        this._mode = new EditMode(this._app);
+        break;
+      case ModeType.Measure:
+        this._mode = new MeasureMode(this._app);
+        break;
+      case ModeType.Manipulate:
+        this._mode = new ManipulateMode(this._app);
+        break;
 
       default:
         throw new Error(`unknown mode: ${mode}`);
     }
-    return _mode;
+
+    this._mode?.start();
+    this._app.events?.emit("mode-change", mode);
   };
+
+  public get currentMode(): BaseMode | null {
+    return this._mode;
+  }
+
+  public get currentModeName(): string {
+    return this._mode?.name || ModeType.View;
+  }
 }
 
-export { ModeManager };
+export { ModeManager, ModeType };

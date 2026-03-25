@@ -1,0 +1,31 @@
+# Exclude parent directory contents
+../**
+
+# Development files
+.vscode/**
+.vscode-test/**
+src/**
+node_modules/**
+out-test/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+tsconfig.test.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+**/.vscode-test.*
+biome.json
+
+# Build config
+rslib.config.ts
+rslib.extension.config.ts
+rslib.webview.config.ts
+postcss.config.mjs
+package-lock.json
+
+# Only include what we need:
+# - out/ directory (compiled code and page)
+# - package.json (metadata)
+# - README.md (description)

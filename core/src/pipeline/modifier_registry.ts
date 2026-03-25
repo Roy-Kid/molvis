@@ -1,0 +1,103 @@
+import { AssignColorModifier } from "../modifiers/AssignColorModifier";
+import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
+import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
+import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
+import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
+import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
+import { SliceModifier } from "../modifiers/SliceModifier";
+import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
+import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
+import { DataSourceModifier } from "./data_source_modifier";
+import type { Modifier } from "./modifier";
+
+// Type for a modifier factory function
+export type ModifierFactory = () => Modifier;
+
+interface RegistryEntry {
+  name: string;
+  category: string;
+  factory: ModifierFactory;
+}
+
+/**
+ * Module-level counter for deterministic modifier IDs.
+ * Avoids non-deterministic Date.now() patterns.
+ */
+let _idCounter = 0;
+
+/**
+ * Generate a deterministic modifier ID with the given prefix.
+ */
+export function nextModifierId(prefix: string): string {
+  return `${prefix}-${++_idCounter}`;
+}
+
+// biome-ignore lint/complexity/noStaticOnlyClass: ModifierRegistry is a singleton registry pattern used across the app
+export class ModifierRegistry {
+  private static entries: RegistryEntry[] = [];
+
+  static register(name: string, category: string, factory: ModifierFactory) {
+    ModifierRegistry.entries.push({ name, category, factory });
+  }
+
+  static getAvailableModifiers(): ReadonlyArray<RegistryEntry> {
+    return ModifierRegistry.entries;
+  }
+
+  // Pre-register core modifiers
+  static initialize() {
+    ModifierRegistry.register(
+      "Data Source",
+      "Data",
+      () => new DataSourceModifier(),
+    );
+    ModifierRegistry.register(
+      "Slice",
+      "Selection Insensitive",
+      () => new SliceModifier(),
+    );
+    ModifierRegistry.register(
+      "Wrap PBC",
+      "Selection Insensitive",
+      () => new WrapPBCModifier(nextModifierId("wrap-pbc")),
+    );
+    ModifierRegistry.register(
+      "Expression Select",
+      "Selection Sensitive",
+      () => new ExpressionSelectionModifier(nextModifierId("expr-sel"), ""),
+    );
+    ModifierRegistry.register(
+      "Hide Selection",
+      "Selection Sensitive",
+      () => new HideSelectionModifier(),
+    );
+    ModifierRegistry.register(
+      "Color by Property",
+      "Selection Insensitive",
+      () => new ColorByPropertyModifier(),
+    );
+    ModifierRegistry.register(
+      "Hide Hydrogens",
+      "Selection Insensitive",
+      () => new HideHydrogensModifier(),
+    );
+    ModifierRegistry.register(
+      "Assign Color",
+      "Selection Sensitive",
+      () => new AssignColorModifier(),
+    );
+    ModifierRegistry.register(
+      "Transparent",
+      "Selection Sensitive",
+      () => new TransparentSelectionModifier(),
+    );
+    ModifierRegistry.register(
+      "Delete Selected",
+      "Selection Sensitive",
+      () => new DeleteSelectedModifier(),
+    );
+  }
+}
+
+// Initialize immediately
+ModifierRegistry.initialize();

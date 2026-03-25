@@ -1,0 +1,103 @@
+# MolVis — Molecular Visualization for VSCode
+
+Interactive 3D molecular viewer directly inside VSCode. Open PDB, XYZ, or LAMMPS files and explore structures with GPU-accelerated rendering.
+
+## Features
+
+- Open `.pdb`, `.xyz`, `.data` files as interactive 3D views
+- Multi-frame trajectory playback for XYZ files
+- Zarr directory support for large simulation trajectories
+- Three representations: Ball & Stick, Spacefill, Stick
+- Simulation box wireframe with color/thickness controls
+- Modifier pipeline: hide hydrogens, color by property, slice, expression selection
+- Drag-and-drop file loading onto any MolVis canvas
+
+## Supported Formats
+
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| PDB | `.pdb` | Protein Data Bank, CRYST1 box support |
+| XYZ | `.xyz` | ExtXYZ, multi-frame trajectory |
+| LAMMPS | `.data`, `.lmp` | LAMMPS data format |
+| Zarr | `.zarr` | Directory-based binary trajectory |
+
+## Getting Started
+
+1. Install the extension from the VS Marketplace
+2. Open any `.pdb`, `.xyz`, or `.data` file
+3. Right-click the editor tab → **Reopen Editor With...** → **MolVis Viewer**
+
+Or use the command palette: `MolVis: Quick View` for a side-by-side preview.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `MolVis: Quick View` | Side-by-side preview panel |
+| `MolVis: Open Editor` | Full MolVis editor workspace |
+| `MolVis: Reload` | Reload the active webview |
+
+## Configuration
+
+### `molvis.config`
+
+```jsonc
+{
+  "molvis.config": {
+    "useRightHandedSystem": true,
+    "canvas": { "antialias": true }
+  }
+}
+```
+
+### `molvis.settings`
+
+```jsonc
+{
+  "molvis.settings": {
+    "grid": { "enabled": true, "size": 100, "opacity": 0.3 },
+    "graphics": { "fxaa": true, "hardwareScaling": 1.0 }
+  }
+}
+```
+
+## Development
+
+```bash
+# From monorepo root
+npm install
+npm run build:all
+
+# Launch extension dev host
+# Open vsc-ext/ in VSCode, press F5
+
+# Tests
+npm run test:vsc-ext
+```
+
+### Publish
+
+Automated via GitHub Actions on tag push:
+
+```bash
+git tag v0.0.2
+git push origin v0.0.2
+```
+
+Requires `VSCE_PAT` and `OVSX_PAT` secrets configured in the GitHub repo.
+
+Manual publish:
+
+```bash
+cd vsc-ext
+npx vsce publish --no-dependencies
+npx ovsx publish --no-dependencies
+```
+
+## Requirements
+
+- VSCode 1.108.1+
+
+## License
+
+BSD-3-Clause

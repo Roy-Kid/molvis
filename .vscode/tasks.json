@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "label": "vsc-ext: build",
+      "script": "build",
+      "options": {
+        "cwd": "${workspaceFolder}/vsc-ext"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always"
+      },
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "label": "vsc-ext: watch",
+      "script": "watch",
+      "options": { "cwd": "${workspaceFolder}/vsc-ext" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "rslib-watch",
+        "pattern": {
+          "regexp": "^\\b$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*start\\s+build started.*$",
+          "endsPattern": "^.*ready\\s+built in.*$"
+        }
+      }
+    },
+    {
+      "type": "npm",
+      "label": "vsc-ext: test",
+      "script": "test",
+      "options": {
+        "cwd": "${workspaceFolder}/vsc-ext"
+      },
+      "presentation": {
+        "reveal": "always"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
