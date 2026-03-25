@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@molvis/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "../core/src/types/**/*"],
+  "exclude": ["rslib.*.config.ts"]
+}

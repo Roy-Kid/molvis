@@ -1,125 +1,248 @@
+import { type PointerInfo, Vector3 } from "@babylonjs/core";
+import type { MolvisApp } from "../app";
+import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
+import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
-import { Molvis, draw_frame } from "@molvis/core";
-import { PointerInfo } from "@babylonjs/core";
-import { Pane } from "tweakpane";
+import { CommonMenuItems } from "./menu_items";
+import type { HitResult, MenuItem } from "./types";
 
-class ViewModeMenu {
-  private container: HTMLDivElement;
-  private pane: Pane;
-
-  constructor(private vm: ViewMode) {
-    this.container = document.createElement("div");
-    this.container.style.position = "absolute";
-    document.body.appendChild(this.container);
-    this.pane = new Pane({ container: this.container });
-    this.pane.hidden = true;
-    this.build();
+/**
+ * Context menu controller for View mode.
+ * Shows menu on any right-click (if not dragging).
+ */
+class ViewModeContextMenu extends ContextMenuController {
+  constructor(
+    app: MolvisApp,
+    private mode: ViewMode,
+  ) {
+    super(app, "molvis-view-menu");
   }
 
-  private build() {
-    this.pane.children.forEach((c) => this.pane.remove(c));
+  protected shouldShowMenu(
+    _hit: HitResult | null,
+    isDragging: boolean,
+  ): boolean {
+    // Show menu on any right-click (if not dragging)
+    return !isDragging;
+  }
 
-    const viewFolder = this.pane.addFolder({ title: "View" });
-    const options = [
-      { text: "perspective", value: "perspective" },
-      { text: "ortho", value: "ortho" },
-      { text: "front", value: "front" },
-      { text: "back", value: "back" },
-      { text: "left", value: "left" },
-      { text: "right", value: "right" },
-    ];
+  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
+    const items: MenuItem[] = [];
 
-    viewFolder
-      .addBlade({
-        view: "list",
-        label: "mode",
-        options,
-        value: "perspective",
-      })
-      .on("change", (ev) => {
-        switch (ev.value) {
-          case "perspective":
-            this.vm.world.setPerspective();
-            break;
-          case "ortho":
-            this.vm.world.setOrthographic();
-            break;
-          case "front":
-            this.vm.world.viewFront();
-            break;
-          case "back":
-            this.vm.world.viewBack();
-            break;
-          case "left":
-            this.vm.world.viewLeft();
-            break;
-          case "right":
-            this.vm.world.viewRight();
-            break;
-        }
-      });
+    // Reset Camera (using common item)
+    items.push(CommonMenuItems.resetCamera(this.app));
 
-    const tools = this.pane.addFolder({ title: "Tools" });
-    tools.addButton({ title: "snapshot" }).on("click", () => {
-      this.vm.world.takeScreenShot();
+    // Enable/Disable Grid
+    const gridEnabled = this.mode.isGridEnabled();
+    items.push({
+      type: "button",
+      title: gridEnabled ? "Grid On" : "Grid Off",
+      action: () => {
+        this.mode.setGridEnabled(!gridEnabled);
+      },
     });
-  }
 
-  public show(x: number, y: number) {
-    this.container.style.left = `${x}px`;
-    this.container.style.top = `${y}px`;
-    this.pane.hidden = false;
-  }
+    // Enable/Disable PBC wrapping
+    const pbcEnabled = this.mode.isPbcEnabled();
+    items.push({
+      type: "button",
+      title: pbcEnabled ? "PBC On" : "PBC Off",
+      action: () => {
+        this.mode.setPbcEnabled(!pbcEnabled);
+      },
+    });
 
-  public hide() {
-    this.pane.hidden = true;
+    return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
 
 class ViewMode extends BaseMode {
-  private menu: ViewModeMenu;
-  constructor(app: Molvis) {
+  private static readonly DOUBLE_CLICK_THRESHOLD_MS = 300;
+
+  private lastClickTime = 0;
+  private _diameterRafId: number | null = null;
+
+  constructor(app: MolvisApp) {
     super(ModeType.View, app);
-    this.menu = new ViewModeMenu(this);
   }
 
-  override _on_pointer_down(pointerInfo: PointerInfo) {
-    super._on_pointer_down(pointerInfo);
-    if (pointerInfo.event.button === 0) {
-      this.menu.hide();
+  protected createContextMenuController(): ContextMenuController {
+    return new ViewModeContextMenu(this.app, this);
+  }
+
+  public isGridEnabled(): boolean {
+    return this.app.world.grid ? this.app.world.grid.isEnabled : false;
+  }
+
+  public setGridEnabled(enabled: boolean): void {
+    if (this.app.world.grid) {
+      if (enabled) {
+        this.app.world.grid.enable();
+      } else {
+        this.app.world.grid.disable();
+      }
     }
   }
 
-  override _on_pointer_up(pointerInfo: PointerInfo) {
-    super._on_pointer_up(pointerInfo);
-    if (pointerInfo.event.button === 2) {
-      pointerInfo.event.preventDefault();
-      this.menu.show(pointerInfo.event.clientX, pointerInfo.event.clientY);
+  public getAtomDiameterScale(): number {
+    return this.app.styleManager.getAtomRadiusScale();
+  }
+
+  public getBondDiameterScale(): number {
+    return this.app.styleManager.getBondRadiusScale();
+  }
+
+  public setAtomDiameterScale(scale: number): void {
+    const clamped = Math.min(2.0, Math.max(0.2, scale));
+    this.app.styleManager.setAtomRadiusScale(clamped);
+    this.scheduleStyleRedraw();
+  }
+
+  public setBondDiameterScale(scale: number): void {
+    const clamped = Math.min(2.0, Math.max(0.2, scale));
+    this.app.styleManager.setBondRadiusScale(clamped);
+    this.scheduleStyleRedraw();
+  }
+
+  /** Debounce style redraws to at most one per animation frame. */
+  private scheduleStyleRedraw(): void {
+    if (this._diameterRafId !== null) return;
+    this._diameterRafId = requestAnimationFrame(() => {
+      this._diameterRafId = null;
+      this.app.renderFrame(this.app.system.frame, this.app.system.box);
+    });
+  }
+
+  public isPbcEnabled(): boolean {
+    for (const modifier of this.getWrapPbcModifiers()) {
+      if (modifier.enabled) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public setPbcEnabled(enabled: boolean): void {
+    const pipeline = this.app.modifierPipeline;
+    const modifiers = this.getWrapPbcModifiers();
+
+    if (enabled) {
+      if (modifiers.length === 0) {
+        pipeline.addModifier(new WrapPBCModifier(`wrap-pbc-${Date.now()}`));
+      } else {
+        for (const modifier of modifiers) {
+          modifier.enabled = true;
+        }
+      }
+    } else {
+      for (const modifier of modifiers) {
+        modifier.enabled = false;
+      }
+    }
+
+    void this.app.applyPipeline({ fullRebuild: true });
+  }
+
+  private getWrapPbcModifiers(): WrapPBCModifier[] {
+    return this.app.modifierPipeline
+      .getModifiers()
+      .filter(
+        (modifier): modifier is WrapPBCModifier =>
+          modifier instanceof WrapPBCModifier,
+      );
+  }
+
+  /**
+   * Start ViewMode - activate 3D scene helpers
+   */
+  public start(): void {
+    super.start();
+
+    // Invalidate highlights for mode switch (View uses thin instances)
+    this.app.world.highlighter.invalidateAndRebuild();
+  }
+
+  /**
+   * Finish ViewMode - deactivate 3D scene helpers
+   */
+  public finish(): void {
+    if (this._diameterRafId !== null) {
+      cancelAnimationFrame(this._diameterRafId);
+      this._diameterRafId = null;
+    }
+    this.world.targetIndicator.hide();
+
+    super.finish();
+  }
+
+  override async _on_pointer_down(pointerInfo: PointerInfo) {
+    await super._on_pointer_down(pointerInfo);
+
+    // Detect double-click
+    const now = Date.now();
+    const timeSinceLastClick = now - this.lastClickTime;
+
+    if (
+      timeSinceLastClick < ViewMode.DOUBLE_CLICK_THRESHOLD_MS &&
+      pointerInfo.event.button === 0
+    ) {
+      // Left button only
+      await this.handleDoubleClick();
+    }
+
+    this.lastClickTime = now;
+  }
+
+  /**
+   * Handle double-click to set camera target (like Ovito)
+   */
+  private async handleDoubleClick(): Promise<void> {
+    const hit = await this.pickHit();
+
+    if (hit && (hit.type === "atom" || hit.type === "bond")) {
+      let target: Vector3 | null = null;
+      if (hit.type === "atom") {
+        target = new Vector3(
+          hit.metadata.position.x,
+          hit.metadata.position.y,
+          hit.metadata.position.z,
+        );
+      } else if (hit.type === "bond") {
+        // Midpoint of bond from metadata
+        const start = hit.metadata.start;
+        const end = hit.metadata.end;
+        target = new Vector3(
+          (start.x + end.x) / 2,
+          (start.y + end.y) / 2,
+          (start.z + end.z) / 2,
+        );
+      }
+
+      if (target) {
+        // Only set camera target, don't move camera position (Ovito-like behavior)
+        this.world.camera.setTarget(target);
+
+        // Show target indicator at the picked point
+        this.world.targetIndicator.show(target);
+      }
     }
   }
 
-  override _on_pointer_move(pointerInfo: PointerInfo) {
-    const mesh = this.pick_mesh();
-    const name = mesh ? mesh.name : "";
-    this.gui.updateInfoText(name);
+  override async _on_pointer_up(pointerInfo: PointerInfo) {
+    await super._on_pointer_up(pointerInfo);
   }
 
-  _on_press_e() {
-    const frame = this.system.next_frame();
-    draw_frame(this.app, frame, { atoms: {}, bonds: {}, clean: true });
-    this.gui.updateFrameIndicator(
-      this.system.current_frame_index,
-      this.system.n_frames,
-    );
+  override async _on_pointer_move(_pointerInfo: PointerInfo) {
+    // ViewMode inherits atom info display functionality from BaseMode
+    await super._on_pointer_move(_pointerInfo);
   }
 
-  _on_press_q() {
-    const frame = this.system.prev_frame();
-    draw_frame(this.app, frame, { atoms: {}, bonds: {}, clean: true });
-    this.gui.updateFrameIndicator(
-      this.system.current_frame_index,
-      this.system.n_frames,
-    );
+  override _on_press_q(): void {
+    this.app.prevFrame();
+  }
+
+  override _on_press_e(): void {
+    this.app.nextFrame();
   }
 }
 
