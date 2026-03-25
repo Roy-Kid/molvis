@@ -187,15 +187,17 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       try {
         const content = await file.text();
         const app = molvisRef.current;
-        if (file.name.toLowerCase().endsWith(".xyz")) {
-          const reader = new TrajectoryReader(content);
+        const format = inferFormatFromFilename(file.name);
+        const trajectoryFormats = new Set(["xyz", "lammps-dump"]);
+        if (trajectoryFormats.has(format)) {
+          const reader = new TrajectoryReader(content, format);
           const frames: Frame[] = [];
           for (let i = 0; i < reader.getFrameCount(); i++) {
             frames.push(reader.readFrame(i));
           }
           app.setTrajectory(new Trajectory(frames));
           reader.free();
-        } else if (inferFormatFromFilename(file.name) === "pdb") {
+        } else if (format === "pdb") {
           // PDB: use loadPdb to also build ribbon geometry
           app.loadPdb(content);
         } else {

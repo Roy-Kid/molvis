@@ -1,2 +1,11 @@
-export { Frame, Block, Box, WasmArray } from "molrs-wasm";
+export {
+  Frame,
+  Block,
+  Box,
+  WasmArray,
+  SimulationReader,
+  parseSMILES,
+  generate3D,
+} from "@molcrafts/molrs";
+export type { SmilesIR } from "@molcrafts/molrs";
 export { Trajectory, type FrameProvider } from "./trajectory";

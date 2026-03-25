@@ -1,10 +1,11 @@
 import {
   Box,
   type Frame,
+  LAMMPSDumpReader,
   LAMMPSReader,
   PDBReader,
   XYZReader,
-} from "molrs-wasm";
+} from "@molcrafts/molrs";
 import { PeriodicTable } from "./system/elements";
 import { logger } from "./utils/logger";
 
@@ -161,6 +162,49 @@ export function readLAMMPSData(content: string): Frame {
 }
 
 /**
+ * Parse a LAMMPS dump payload into a normalized frame (first timestep).
+ */
+export function readLAMMPSDump(content: string): Frame {
+  const reader = new LAMMPSDumpReader(content);
+  const frame = reader.read(0);
+  reader.free();
+
+  if (!frame) {
+    throw new Error("LAMMPS dump reader returned null frame");
+  }
+
+  processLAMMPSDumpFrame(frame);
+  logger.info("[reader] Successfully read LAMMPS dump frame");
+  return frame;
+}
+
+/**
+ * Normalize a LAMMPS dump frame: ensure `element` column exists.
+ * LAMMPS dump columns depend on the dump command; commonly `id`, `type`, `x`, `y`, `z`.
+ * We derive element from `type` if `element` is missing.
+ */
+function processLAMMPSDumpFrame(frame: Frame): void {
+  const atoms = frame.getBlock("atoms");
+  if (!atoms) {
+    throw new Error("LAMMPS dump frame has no atoms block");
+  }
+
+  if (!atoms.dtype("element")) {
+    // Try 'type' column (integer type IDs) or 'species' (string names)
+    const species = atoms.copyColStr("species");
+    if (species) {
+      atoms.setColStr("element", species);
+    } else {
+      const types = atoms.copyColStr("type");
+      if (types) {
+        const derived = types.map(deriveElementFromType);
+        atoms.setColStr("element", derived);
+      }
+    }
+  }
+}
+
+/**
  * Unified helper to read a frame based on filename extension.
  * Dispatches to specific readers.
  *
@@ -175,6 +219,8 @@ export function readFrame(content: string, filename: string): Frame {
       return readXYZFrame(content);
     case "lammps":
       return readLAMMPSData(content);
+    case "lammps-dump":
+      return readLAMMPSDump(content);
     default:
       return readPDBFrame(content);
   }
@@ -194,6 +240,7 @@ export function inferFormatFromFilename(
   if (ext === "pdb") return "pdb";
   if (ext === "xyz") return "xyz";
   if (ext === "lammps" || ext === "lmp" || ext === "data") return "lammps";
+  if (ext === "dump" || ext === "lammpstrj") return "lammps-dump";
 
   return fallback;
 }
@@ -229,31 +276,38 @@ export function processZarrFrame(frame: Frame): Frame {
   return frame;
 }
 
+/** Common interface for multi-frame WASM readers. */
+interface MultiFrameReader {
+  len(): number;
+  read(step: number): Frame | undefined;
+  free(): void;
+}
+
 /**
- * Trajectory reader for multi-frame files (XYZ format).
+ * Trajectory reader for multi-frame files.
+ * Supports XYZ and LAMMPS dump formats.
  */
 export class TrajectoryReader {
-  private reader: XYZReader;
+  private reader: MultiFrameReader;
   private frameCount: number;
+  private postProcess: (frame: Frame) => void;
 
-  /**
-   * Create a multi-frame reader for XYZ trajectory payloads.
-   */
-  constructor(content: string) {
-    this.reader = new XYZReader(content);
+  constructor(content: string, format?: string) {
+    const fmt = format ?? "xyz";
+    if (fmt === "lammps-dump") {
+      this.reader = new LAMMPSDumpReader(content);
+      this.postProcess = processLAMMPSDumpFrame;
+    } else {
+      this.reader = new XYZReader(content);
+      this.postProcess = processXYZFrame;
+    }
     this.frameCount = this.reader.len();
   }
 
-  /**
-   * Return the number of readable frames in the source payload.
-   */
   getFrameCount(): number {
     return this.frameCount;
   }
 
-  /**
-   * Read and normalize a single frame by index.
-   */
   readFrame(index: number): Frame {
     if (index < 0 || index >= this.frameCount) {
       throw new Error(
@@ -266,13 +320,10 @@ export class TrajectoryReader {
       throw new Error(`Failed to read frame ${index}`);
     }
 
-    processXYZFrame(frame);
+    this.postProcess(frame);
     return frame;
   }
 
-  /**
-   * Release the underlying WASM reader.
-   */
   free(): void {
     this.reader.free();
   }

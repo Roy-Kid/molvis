@@ -1,4 +1,4 @@
-import { Frame, WasmArray } from "molrs-wasm";
+import { Frame, WasmArray } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { logger } from "../utils/logger";
@@ -37,7 +37,7 @@ export class WrapPBCModifier extends BaseModifier {
       return input;
     }
 
-    // Build interleaved coords and write into WASM WasmArray.
+    // Build interleaved coords for WASM wrap operation.
     const interleaved = new Float32Array(atomCount * 3);
     for (let i = 0; i < atomCount; i++) {
       const i3 = i * 3;
@@ -50,11 +50,24 @@ export class WrapPBCModifier extends BaseModifier {
       new Uint32Array([atomCount, 3]),
     );
 
-    let wrappedArr: WasmArray | null = null;
     try {
-      wrappedArr = box.wrap(coordsArr);
-      const wrapped = wrappedArr.toCopy();
+      // Clone atoms into new frame, then write wrapped coords directly into it.
+      const result = new Frame();
+      result.insertBlock("atoms", atoms);
+      const resultAtoms = result.getBlock("atoms");
+      if (!resultAtoms) {
+        throw new Error("WrapPBC: failed to clone atoms block");
+      }
 
+      // wrapToBlock writes wrapped xyz directly into a Block column,
+      // avoiding an intermediate WasmArray copy + JS-side deinterleave.
+      box.wrapToBlock(coordsArr, resultAtoms, "pos");
+      const wrapped = resultAtoms.viewColF32("pos");
+      if (!wrapped) {
+        throw new Error("WrapPBC: wrapToBlock did not produce pos column");
+      }
+
+      // Deinterleave the wrapped [x0,y0,z0,...] back into separate columns.
       const wrappedX = new Float32Array(atomCount);
       const wrappedY = new Float32Array(atomCount);
       const wrappedZ = new Float32Array(atomCount);
@@ -63,13 +76,6 @@ export class WrapPBCModifier extends BaseModifier {
         wrappedX[i] = wrapped[i3];
         wrappedY[i] = wrapped[i3 + 1];
         wrappedZ[i] = wrapped[i3 + 2];
-      }
-
-      const result = new Frame();
-      result.insertBlock("atoms", atoms);
-      const resultAtoms = result.getBlock("atoms");
-      if (!resultAtoms) {
-        throw new Error("WrapPBC: failed to clone atoms block");
       }
       resultAtoms.setColF32("x", wrappedX);
       resultAtoms.setColF32("y", wrappedY);
@@ -83,7 +89,6 @@ export class WrapPBCModifier extends BaseModifier {
       result.simbox = box;
       return result;
     } finally {
-      wrappedArr?.free();
       coordsArr.free();
     }
   }

@@ -1,5 +1,6 @@
-import * as path from "node:path";
 import * as vscode from "vscode";
+import type { MolecularFileLoader } from "../loading/molecularFileLoader";
+import { getDisplayName } from "../loading/pathUtils";
 import type {
   HostToWebviewMessage,
   Logger,
@@ -43,7 +44,7 @@ export async function handleSaveFile(
     const uri = await vscode.window.showSaveDialog({
       defaultUri,
       filters: {
-        "Molecular files": ["pdb", "xyz", "lammps"],
+        "Molecular files": ["pdb", "xyz", "lammps", "dump", "lammpstrj"],
       },
     });
     if (!uri) return;
@@ -65,6 +66,28 @@ export async function loadTextDocumentToWebview(
   sendToWebview(webview, {
     type: "loadFile",
     content: document.getText(),
-    filename: path.basename(document.uri.fsPath) || "unknown",
+    filename: getDisplayName(document.uri),
   });
+}
+
+/**
+ * Handle dropUri message: read the file via remote-aware FS and send to webview.
+ */
+export async function handleDropUri(
+  uriString: string,
+  webview: vscode.Webview,
+  fileLoader: MolecularFileLoader,
+  logger: Logger,
+): Promise<void> {
+  try {
+    const uri = vscode.Uri.parse(uriString);
+    const loaded = await fileLoader.load(uri);
+    sendToWebview(webview, {
+      type: "loadFile",
+      content: loaded.payload,
+      filename: loaded.filename,
+    });
+  } catch (error) {
+    logger.error(`MolVis: Failed to load dropped file: ${error}`);
+  }
 }

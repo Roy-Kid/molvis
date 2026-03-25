@@ -1,4 +1,4 @@
-import type { Frame } from "molrs-wasm";
+import type { Frame } from "@molcrafts/molrs";
 
 /**
  * Selection mask representing a subset of atoms/bonds.
@@ -53,12 +53,14 @@ export class SelectionMask {
   }
 
   /**
-   * Set selection state for an index.
+   * Return a new mask with the given index set to the specified state.
    */
-  setSelected(index: number, selected: boolean): void {
-    if (index >= 0 && index < this.mask.length) {
-      this.mask[index] = selected;
+  withSelected(index: number, selected: boolean): SelectionMask {
+    const result = this.clone();
+    if (index >= 0 && index < result.mask.length) {
+      result.mask[index] = selected;
     }
+    return result;
   }
 
   /**
@@ -166,6 +168,25 @@ export interface PipelineContext {
   selectedBondIds: number[];
 
   /**
+   * When true, the pipeline selection should not trigger visual highlighting.
+   * Set by SelectModifier when its highlight property is false.
+   */
+  suppressHighlight: boolean;
+
+  /**
+   * Callbacks to run AFTER rendering + highlighting.
+   * Modifiers push GPU buffer patches here during apply().
+   */
+  postRenderEffects: Array<() => void>;
+
+  /**
+   * Cache of selection masks keyed by modifier ID.
+   * Selection-producing modifiers store their output here so that
+   * child modifiers can look up the parent selection by ID.
+   */
+  selectionCache: Map<string, SelectionMask>;
+
+  /**
    * Frame index in trajectory (if applicable).
    */
   frameIndex?: number;
@@ -190,6 +211,9 @@ export function createDefaultContext(
     selectionSet: new Map(),
     currentSelection: SelectionMask.all(atomCount),
     selectedBondIds: [],
+    suppressHighlight: false,
+    postRenderEffects: [],
+    selectionCache: new Map(),
     frameIndex,
     app,
   };

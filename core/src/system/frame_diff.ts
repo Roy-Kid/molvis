@@ -1,4 +1,4 @@
-import type { Block, Frame } from "molrs-wasm";
+import type { Block, Frame } from "@molcrafts/molrs";
 
 export type FrameUpdateKind = "position" | "bond" | "full";
 
@@ -53,10 +53,14 @@ function compareOptionalStringColumns(
 
   if (!leftHas && !rightHas) return true;
   if (!leftHas || !rightHas) return false;
-  return equalStringArray(
-    leftAtoms.copyColStr(column),
-    rightAtoms.copyColStr(column),
-  );
+
+  // Fast path: if row counts already differ (checked by caller), skip the
+  // expensive WASM→JS string copy. Row-count equality is a prerequisite.
+  // We still need to compare content, but only cross the WASM boundary
+  // when the above structural checks pass.
+  const left = leftAtoms.copyColStr(column);
+  const right = rightAtoms.copyColStr(column);
+  return equalStringArray(left, right);
 }
 
 function getBondOrder(

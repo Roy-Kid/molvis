@@ -32,8 +32,12 @@ export {
   Block,
   Box,
   WasmArray,
+  SimulationReader,
   Trajectory,
   type FrameProvider,
+  parseSMILES,
+  generate3D,
+  type SmilesIR,
 } from "./system/index";
 export { Topology } from "./system/topology";
 export { System } from "./system";
@@ -60,6 +64,7 @@ export {
   readPDBFrame,
   readXYZFrame,
   readLAMMPSData,
+  readLAMMPSDump,
   inferFormatFromFilename,
   TrajectoryReader,
   deriveElementFromType,
@@ -69,7 +74,14 @@ export {
 export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
+export { ModifierCategory } from "./pipeline/modifier";
 export type { Modifier } from "./pipeline/modifier";
+export { SelectionMask } from "./pipeline/types";
+export { nextModifierId } from "./pipeline/modifier_registry";
+export {
+  isSelectionProducer,
+  isTopologyChanging,
+} from "./pipeline/nato_ids";
 export {
   ArrayFrameSource,
   ZarrFrameSource,
@@ -85,21 +97,43 @@ export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
+export { SelectModifier } from "./modifiers/SelectModifier";
 export type { ColormapName } from "./artist/colormaps";
-export { COLORMAP_NAMES } from "./artist/colormaps";
+export { COLORMAP_NAMES, sampleColormap } from "./artist/colormaps";
 
 export {
-  prepareScatter,
-  deterministicSample,
-  type ScatterResult,
-  type ScatterPoint,
-} from "./analysis/scatter";
+  computeRdf,
+  type RdfParams,
+  type RdfResult,
+} from "./analysis/rdf";
 export {
-  computeHistogram,
-  discoverNumericColumns,
-  type HistogramResult,
-  type HistogramStats,
-} from "./analysis/histogram";
+  computeClusters,
+  type ClusterParams,
+  type ClusterResult,
+  type ConnectivityMode,
+} from "./analysis/cluster";
+export {
+  MsdAnalyzer,
+  computeMsd,
+  type MsdFrameResult,
+  type MsdResult,
+} from "./analysis/msd";
+export {
+  computeClusterProperties,
+  type ClusterPropertiesParams,
+  type ClusterPropertiesResult,
+} from "./analysis/cluster_properties";
+export {
+  detectRings,
+  isAtomInRing,
+  type RingInfo,
+} from "./analysis/rings";
+export {
+  analyzeTopology,
+  getTopologyNeighbors,
+  getTopologyDegree,
+  type TopologyAnalysisResult,
+} from "./analysis/topology_analysis";
 export {
   discoverAtomColumns,
   extractAtomRows,

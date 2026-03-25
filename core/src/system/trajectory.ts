@@ -1,4 +1,4 @@
-import { type Box, Frame } from "molrs-wasm";
+import { type Box, Frame } from "@molcrafts/molrs";
 import { logger } from "../utils/logger";
 
 /**
@@ -159,6 +159,9 @@ export class Trajectory {
   }
   /**
    * Replace a frame at the specified index.
+   * NOTE: This mutates the trajectory in place for performance — it is called
+   * on every pipeline-driven visual update. The caller (System.updateCurrentFrame)
+   * relies on in-place mutation to avoid reconstructing the entire Trajectory.
    */
   replaceFrame(index: number, frame: Frame, box?: Box): boolean {
     if (index >= 0 && index < this._length) {

@@ -1,55 +1,26 @@
-import { Block, Frame } from "molrs-wasm";
+import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { probeColumnDtype } from "../utils/block_helpers";
 
 /**
- * Modifier that removes specific atoms from the pipeline output.
- * Similar to HideSelectionModifier but performs actual removal (filtering)
- * rather than visual hiding. Remaps bond indices after atom removal.
+ * Modifier that removes atoms based on the current pipeline selection.
+ * Reads selection from context.currentSelection (set by a preceding SelectModifier).
+ * Performs actual removal (filtering) and remaps bond indices after atom removal.
  */
 export class DeleteSelectedModifier extends BaseModifier {
-  private _deletedIndices: Set<number> = new Set();
-
-  constructor(id = `delete-selected-${Date.now()}`) {
+  constructor(id = "delete-selected-default") {
     super(id, "Delete Selected", ModifierCategory.SelectionSensitive);
   }
 
-  get deletedCount(): number {
-    return this._deletedIndices.size;
-  }
-
-  /**
-   * Mark atom indices for deletion.
-   */
-  deleteIndices(indices: Iterable<number>): boolean {
-    let changed = false;
-    for (const idx of indices) {
-      if (!this._deletedIndices.has(idx)) {
-        this._deletedIndices.add(idx);
-        changed = true;
-      }
-    }
-    return changed;
-  }
-
-  /**
-   * Restore all deleted atoms.
-   */
-  restoreAll(): boolean {
-    if (this._deletedIndices.size > 0) {
-      this._deletedIndices.clear();
-      return true;
-    }
-    return false;
-  }
-
   getCacheKey(): string {
-    return `${super.getCacheKey()}:${this._deletedIndices.size}`;
+    return `${super.getCacheKey()}`;
   }
 
-  apply(input: Frame, _context: PipelineContext): Frame {
-    if (this._deletedIndices.size === 0) return input;
+  apply(input: Frame, context: PipelineContext): Frame {
+    const selection = context.currentSelection;
+    const deletedIndices = new Set(selection.getIndices());
+    if (deletedIndices.size === 0) return input;
 
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
@@ -57,18 +28,18 @@ export class DeleteSelectedModifier extends BaseModifier {
     const nrows = atoms.nrows();
     let needFilter = false;
     for (let i = 0; i < nrows; i++) {
-      if (this._deletedIndices.has(i)) {
+      if (deletedIndices.has(i)) {
         needFilter = true;
         break;
       }
     }
     if (!needFilter) return input;
 
-    // Build index map: old → new (-1 = deleted)
+    // Build index map: old -> new (-1 = deleted)
     const indexMap = new Int32Array(nrows);
     let newCount = 0;
     for (let i = 0; i < nrows; i++) {
-      if (this._deletedIndices.has(i)) {
+      if (deletedIndices.has(i)) {
         indexMap[i] = -1;
       } else {
         indexMap[i] = newCount++;
@@ -77,7 +48,7 @@ export class DeleteSelectedModifier extends BaseModifier {
 
     if (newCount === 0) return new Frame();
 
-    // Filter atoms
+    // Filter atoms — handle all column dtypes
     const newAtoms = new Block();
     for (const key of atoms.keys()) {
       const dtype = probeColumnDtype(atoms, key);
@@ -90,9 +61,8 @@ export class DeleteSelectedModifier extends BaseModifier {
           }
           newAtoms.setColStr(key, dst);
         }
-      } else {
-        const src =
-          atoms.dtype(key) === "f32" ? atoms.viewColF32(key) : undefined;
+      } else if (dtype === "f32") {
+        const src = atoms.viewColF32(key);
         if (src) {
           const dst = new Float32Array(newCount);
           let ptr = 0;
@@ -100,6 +70,26 @@ export class DeleteSelectedModifier extends BaseModifier {
             if (indexMap[i] !== -1) dst[ptr++] = src[i];
           }
           newAtoms.setColF32(key, dst);
+        }
+      } else if (dtype === "u32") {
+        const src = atoms.viewColU32(key);
+        if (src) {
+          const dst = new Uint32Array(newCount);
+          let ptr = 0;
+          for (let i = 0; i < nrows; i++) {
+            if (indexMap[i] !== -1) dst[ptr++] = src[i];
+          }
+          newAtoms.setColU32(key, dst);
+        }
+      } else if (dtype === "i32") {
+        const src = atoms.viewColI32(key);
+        if (src) {
+          const dst = new Int32Array(newCount);
+          let ptr = 0;
+          for (let i = 0; i < nrows; i++) {
+            if (indexMap[i] !== -1) dst[ptr++] = src[i];
+          }
+          newAtoms.setColI32(key, dst);
         }
       }
     }

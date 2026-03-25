@@ -1,5 +1,5 @@
 import * as BABYLON from "@babylonjs/core";
-import { type Block, Frame } from "molrs-wasm";
+import { type Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
 import { syncSceneToFrame } from "../scene_sync";
 import { Command, command } from "./base";
@@ -153,10 +153,6 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     if (!yCoords) throw new Error("Missing y coordinates");
     const zCoords = atomsBlock.viewColF32("z");
     if (!zCoords) throw new Error("Missing z coordinates");
-    const elements = atomsBlock.dtype("element")
-      ? (atomsBlock.copyColStr("element") as string[])
-      : undefined;
-
     // Retrieve Metalayer/ImpostorState from SceneIndex
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     if (!atomState || atomState.mesh !== mesh) {
@@ -192,28 +188,17 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       throw new Error("InstanceData buffer missing in AtomState");
     const instanceDataBuffer = instanceDataDesc.data;
 
-    const styleManager = this.app.styleManager;
-    const drawOptions = this.options ?? {};
-    const styleCache = new Map<string, { radius: number }>();
-
+    // Position-only update: radii/scale have not changed, so read the existing
+    // radius from instanceData buffer (idx4+3) instead of re-resolving styles.
+    // This avoids a costly WASM→JS copyColStr("element") on every frame seek.
     for (let i = 0; i < count; i++) {
-      const element = elements ? elements[i] : "C";
-      let radius = drawOptions.atoms?.radii?.[i];
-
-      if (radius === undefined) {
-        let style = styleCache.get(element);
-        if (!style) {
-          const s = styleManager.getAtomStyle(element);
-          style = { radius: s.radius };
-          styleCache.set(element, style);
-        }
-        radius = style.radius;
-      }
-
-      const scale = radius * 2;
       const offset = i * 16;
+      const idx4 = i * 4;
 
-      // Re-build matrix
+      // Read existing radius from instanceData (set during full DrawFrameCommand)
+      const radius = instanceDataBuffer[idx4 + 3];
+      const scale = radius * 2;
+
       matrixBuffer[offset + 0] = scale;
       matrixBuffer[offset + 5] = scale;
       matrixBuffer[offset + 10] = scale;
@@ -223,11 +208,10 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       matrixBuffer[offset + 13] = yCoords[i];
       matrixBuffer[offset + 14] = zCoords[i];
 
-      const idx4 = i * 4;
       instanceDataBuffer[idx4 + 0] = xCoords[i];
       instanceDataBuffer[idx4 + 1] = yCoords[i];
       instanceDataBuffer[idx4 + 2] = zCoords[i];
-      instanceDataBuffer[idx4 + 3] = radius;
+      // idx4+3 (radius) unchanged
     }
 
     atomState.needsUpload = true;

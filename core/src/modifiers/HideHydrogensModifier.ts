@@ -1,4 +1,4 @@
-import { Block, Frame } from "molrs-wasm";
+import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 
@@ -7,7 +7,7 @@ import type { PipelineContext } from "../pipeline/types";
  * Filters atoms where element === "H" and remaps bond indices.
  */
 export class HideHydrogensModifier extends BaseModifier {
-  private _hideHydrogens = false;
+  private _hideHydrogens = true;
 
   constructor(id = "hide-hydrogens-default") {
     super(id, "Hide Hydrogens", ModifierCategory.SelectionInsensitive);
@@ -50,19 +50,19 @@ export class HideHydrogensModifier extends BaseModifier {
     if (newCount === nrows) return input;
     if (newCount === 0) return new Frame();
 
-    // Filter atoms
+    // Filter atoms — iterate all columns dynamically
     const newAtoms = new Block();
-    copyFilteredF32(atoms, newAtoms, "x", indexMap, nrows, newCount);
-    copyFilteredF32(atoms, newAtoms, "y", indexMap, nrows, newCount);
-    copyFilteredF32(atoms, newAtoms, "z", indexMap, nrows, newCount);
-    copyFilteredStr(atoms, newAtoms, "element", indexMap, nrows);
-
-    // Optional columns
-    for (const col of ["vx", "vy", "vz", "occupancy", "tempFactor", "charge"]) {
-      copyFilteredF32(atoms, newAtoms, col, indexMap, nrows, newCount);
-    }
-    for (const col of ["type", "species"]) {
-      copyFilteredStr(atoms, newAtoms, col, indexMap, nrows);
+    for (const col of atoms.keys()) {
+      const dtype = atoms.dtype(col);
+      if (dtype === "f32") {
+        copyFilteredF32(atoms, newAtoms, col, indexMap, nrows, newCount);
+      } else if (dtype === "string") {
+        copyFilteredStr(atoms, newAtoms, col, indexMap, nrows);
+      } else if (dtype === "u32") {
+        copyFilteredU32(atoms, newAtoms, col, indexMap, nrows, newCount);
+      } else if (dtype === "i32") {
+        copyFilteredI32(atoms, newAtoms, col, indexMap, nrows, newCount);
+      }
     }
 
     // Filter bonds
@@ -155,4 +155,40 @@ function copyFilteredStr(
     if (indexMap[i] !== -1) out.push(col[i]);
   }
   dst.setColStr(name, out);
+}
+
+function copyFilteredU32(
+  src: Block,
+  dst: Block,
+  name: string,
+  indexMap: Int32Array,
+  nrows: number,
+  newCount: number,
+): void {
+  const col = src.dtype(name) === "u32" ? src.viewColU32(name) : undefined;
+  if (!col) return;
+  const out = new Uint32Array(newCount);
+  let ptr = 0;
+  for (let i = 0; i < nrows; i++) {
+    if (indexMap[i] !== -1) out[ptr++] = col[i];
+  }
+  dst.setColU32(name, out);
+}
+
+function copyFilteredI32(
+  src: Block,
+  dst: Block,
+  name: string,
+  indexMap: Int32Array,
+  nrows: number,
+  newCount: number,
+): void {
+  const col = src.dtype(name) === "i32" ? src.viewColI32(name) : undefined;
+  if (!col) return;
+  const out = new Int32Array(newCount);
+  let ptr = 0;
+  for (let i = 0; i < nrows; i++) {
+    if (indexMap[i] !== -1) out[ptr++] = col[i];
+  }
+  dst.setColI32(name, out);
 }

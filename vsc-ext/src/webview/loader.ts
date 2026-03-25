@@ -2,13 +2,14 @@ import {
   type Box,
   type Frame,
   type FrameProvider,
+  SimulationReader,
   Trajectory,
   TrajectoryReader,
   type ZarrReader,
+  inferFormatFromFilename,
   processZarrFrame,
   readFrame,
 } from "@molvis/core";
-import { SimulationReader } from "molrs-wasm";
 import type { MolecularFilePayload } from "../extension/types";
 
 export interface RuntimeLoadContext {
@@ -33,8 +34,12 @@ export function createRuntimeResources(): RuntimeResources {
   };
 }
 
-function isXYZFile(filename: string): boolean {
-  return filename.toLowerCase().endsWith(".xyz");
+/** Formats that support multi-frame trajectories. */
+const TRAJECTORY_FORMATS = new Set(["xyz", "lammps-dump"]);
+
+function isTrajectoryFile(filename: string): boolean {
+  const format = inferFormatFromFilename(filename);
+  return TRAJECTORY_FORMATS.has(format);
 }
 
 function isPDBFile(filename: string): boolean {
@@ -65,26 +70,49 @@ export function freeRuntimeResources(resources: RuntimeResources): void {
   resources.boxes = [];
 }
 
+const FRAME_CACHE_SIZE = 16;
+
+/**
+ * Evict the oldest entry from a frame cache, freeing the WASM Frame.
+ */
+function evictOldest(cache: Map<number, Frame>): void {
+  const oldest = cache.keys().next().value as number | undefined;
+  if (oldest !== undefined) {
+    cache.get(oldest)?.free();
+    cache.delete(oldest);
+  }
+}
+
 function loadTrajectory(
   content: string,
+  filename: string,
   context: RuntimeLoadContext,
   resources: RuntimeResources,
 ): void {
   freeRuntimeResources(resources);
 
-  resources.trajectoryReader = new TrajectoryReader(content);
+  const format = inferFormatFromFilename(filename);
+  resources.trajectoryReader = new TrajectoryReader(content, format);
   const frameCount = resources.trajectoryReader.getFrameCount();
-  const frames: Frame[] = [];
-  const boxes: Array<Box | undefined> = [];
+  const reader = resources.trajectoryReader;
+  const cache = new Map<number, Frame>();
 
-  for (let i = 0; i < frameCount; i++) {
-    const frame = resources.trajectoryReader.readFrame(i);
-    frames.push(frame);
-    boxes.push(frame.simbox || undefined);
-  }
+  const provider: FrameProvider = {
+    length: frameCount,
+    get(index: number): Frame {
+      const cached = cache.get(index);
+      if (cached) return cached;
 
-  context.setTrajectory(new Trajectory(frames, boxes));
-  resources.boxes = boxes;
+      const frame = reader.readFrame(index);
+      if (cache.size >= FRAME_CACHE_SIZE) {
+        evictOldest(cache);
+      }
+      cache.set(index, frame);
+      return frame;
+    },
+  };
+
+  context.setTrajectory(Trajectory.fromProvider(provider));
   context.setViewMode();
   context.resetCamera();
 }
@@ -120,11 +148,8 @@ function loadZarr(
       }
       const frame = processZarrFrame(raw);
 
-      if (cache.size >= 8) {
-        const oldest = cache.keys().next().value as number | undefined;
-        if (oldest !== undefined) {
-          cache.delete(oldest);
-        }
+      if (cache.size >= FRAME_CACHE_SIZE) {
+        evictOldest(cache);
       }
       cache.set(index, frame);
       return frame;
@@ -147,8 +172,8 @@ export function loadMolecularPayload(
     return;
   }
 
-  if (isXYZFile(filename)) {
-    loadTrajectory(payload, context, resources);
+  if (isTrajectoryFile(filename)) {
+    loadTrajectory(payload, filename, context, resources);
     return;
   }
 
