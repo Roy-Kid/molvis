@@ -101,8 +101,8 @@ export class ExpressionSelector {
         `"use strict"; return (${expression});`,
       );
       _cachedExpression = expression;
-      _cachedEvaluator = evaluator;
-      return evaluator;
+      _cachedEvaluator = evaluator as ExpressionEvaluator;
+      return evaluator as ExpressionEvaluator;
     } catch (e) {
       throw new Error(`Invalid expression: ${expression}`);
     }

@@ -353,7 +353,7 @@ export class MolvisApp {
     try {
       const data = await Tools.CreateScreenshotUsingRenderTargetAsync(
         this._engine,
-        this._world.scene.activeCamera as BABYLON.Camera,
+        this._world.scene.activeCamera!,
         { width, height },
       );
       return data;
