@@ -146,7 +146,12 @@ export class Highlighter {
 
     for (const { name, data } of colorBuffers) {
       const offset = thinIndex * 4;
-      data.set(color, offset);
+      // Overwrite RGB but preserve the existing alpha so that pipeline-computed
+      // transparency (e.g. TransparentSelectionModifier) is not destroyed.
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      // Keep data[offset + 3] unchanged
       mesh.thinInstanceSetBuffer(name, data, 4, false);
     }
   }
@@ -178,11 +183,20 @@ export class Highlighter {
         buffer[offset] = color.r;
         buffer[offset + 1] = color.g;
         buffer[offset + 2] = color.b;
-        buffer[offset + 3] = color.a;
+        // Do NOT restore alpha — it is managed by the pipeline
+        // (TransparentSelectionModifier, SliceModifier, globalOpacity).
 
         mesh.thinInstanceSetBuffer(color.bufferName, buffer, 4, false);
       }
     }
+    this.thinOriginalColors.clear();
+  }
+
+  /**
+   * Discard saved originals without restoring them.
+   * Use after a full scene rebuild when the old buffer data is stale.
+   */
+  discardSavedOriginals(): void {
     this.thinOriginalColors.clear();
   }
 

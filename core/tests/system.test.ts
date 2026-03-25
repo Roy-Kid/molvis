@@ -1,5 +1,5 @@
+import { Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { Frame } from "molrs-wasm";
 import "./setup_wasm";
 import { EventEmitter, type MolvisEventMap } from "../src/events";
 import { System } from "../src/system";

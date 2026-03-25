@@ -16,6 +16,7 @@ import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import type { FrameSource } from "./pipeline/pipeline";
+import type { PipelineContext, SelectionMask } from "./pipeline/types";
 import { readPDBFrame } from "./reader";
 import { syncSceneToFrame } from "./scene_sync";
 import { type MolvisSetting, Settings } from "./settings";
@@ -31,14 +32,9 @@ import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
 
-import type { Box, Frame } from "molrs-wasm";
-import {
-  MolvisButton,
-  MolvisFolder,
-  MolvisSeparator,
-  MolvisSlider,
-} from "./ui/components";
-import { MolvisContextMenu } from "./ui/menus/context_menu";
+import type { Box, Frame } from "@molcrafts/molrs";
+import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
+import { defaultSaveFile } from "./save_file";
 
 interface StructuralSelectionSnapshot {
   atomIds: number[];
@@ -65,7 +61,9 @@ export class MolvisApp {
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
   private _currentFrame = 0;
+  private _sourceFrame: Frame | null = null; // original frame, never overwritten by pipeline
   private _lastRenderedFrame: Frame | null = null;
+  private _lastSelectionSet: Map<string, SelectionMask> = new Map();
   private _frameRenderQueue: Promise<void> = Promise.resolve();
   private _pendingFrameRender: { forceFull: boolean } | null = null;
 
@@ -104,18 +102,12 @@ export class MolvisApp {
     this._container = container;
     logger.info(`Molvis initializing (v${MOLVIS_VERSION})`);
 
-    // Register Web Components
-    this.registerWebComponents();
-
-    // Create DOM structure
-    this._root = this._createRoot();
-    this._canvas = this._createCanvas();
-    this._uiOverlay = this._createUIOverlay();
-
-    // Assemble DOM (order is critical!)
-    this._root.appendChild(this._canvas);
-    this._root.appendChild(this._uiOverlay);
-    this._container.appendChild(this._root);
+    // Register Web Components & create DOM
+    registerWebComponents();
+    const dom = createMolvisDOM(this._container, this._config);
+    this._root = dom.root;
+    this._canvas = dom.canvas;
+    this._uiOverlay = dom.uiOverlay;
 
     // Initialize Babylon engine
     this._engine = new Engine(
@@ -168,119 +160,11 @@ export class MolvisApp {
       this.events.emit("dirty-change", isDirty);
     };
 
-    // Sync pipeline selection output to SelectionManager
+    // Store named selections for analysis tools (RDF, etc.).
+    // Selection-to-scene sync is handled exclusively in applyPipeline().
     this._modifierPipeline.on(PipelineEvents.COMPUTED, ({ context }) => {
-      const mask = context.currentSelection;
-      if (!mask) return;
-
-      const atomKeys: string[] = [];
-      for (const idx of mask.getIndices()) {
-        const key = this._world.sceneIndex.getSelectionKeyForAtom(idx);
-        if (key) atomKeys.push(key);
-      }
-
-      const bondKeys: string[] = [];
-      for (const bondId of context.selectedBondIds) {
-        const key = this._world.sceneIndex.getSelectionKeyForBond(bondId);
-        if (key) bondKeys.push(key);
-      }
-
-      this._world.selectionManager.apply({
-        type: "replace",
-        atoms: atomKeys,
-        bonds: bondKeys,
-      });
+      this._lastSelectionSet = new Map(context.selectionSet);
     });
-  }
-
-  /**
-   * Register all web components for context menus
-   */
-  private registerWebComponents(): void {
-    // Register custom elements
-    if (!customElements.get("molvis-context-menu")) {
-      customElements.define("molvis-context-menu", MolvisContextMenu);
-    }
-    if (!customElements.get("molvis-button")) {
-      customElements.define("molvis-button", MolvisButton);
-    }
-    if (!customElements.get("molvis-separator")) {
-      customElements.define("molvis-separator", MolvisSeparator);
-    }
-    if (!customElements.get("molvis-folder")) {
-      customElements.define("molvis-folder", MolvisFolder);
-    }
-    if (!customElements.get("molvis-slider")) {
-      customElements.define("molvis-slider", MolvisSlider);
-    }
-  }
-
-  private _createRoot(): HTMLElement {
-    const root = document.createElement("div");
-    root.className = "molvis-root";
-
-    // Fill parent container completely (no scrollbars, no white edges)
-    root.style.position = "relative";
-    root.style.width = "100%";
-    root.style.height = "100%";
-    root.style.overflow = "hidden";
-    root.style.margin = "0";
-    root.style.padding = "0";
-
-    return root;
-  }
-
-  private _createCanvas(): HTMLCanvasElement {
-    const canvas = document.createElement("canvas");
-    canvas.className = "molvis-canvas";
-
-    // Canvas fills the root container
-    canvas.style.position = "absolute";
-    canvas.style.top = "0";
-    canvas.style.left = "0";
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
-    canvas.style.display = "block";
-    canvas.style.outline = "none";
-    canvas.style.touchAction = "none";
-
-    // Prevent default scrolling when zooming
-    canvas.addEventListener(
-      "wheel",
-      (evt) => {
-        evt.preventDefault();
-      },
-      { passive: false },
-    );
-
-    // Set initial canvas resolution based on container size.
-    // Babylon will manage the backing-store scale via engine.resize().
-    const width = this._container.clientWidth || 800;
-    const height = this._container.clientHeight || 600;
-
-    canvas.width = Math.floor(width);
-    canvas.height = Math.floor(height);
-
-    return canvas;
-  }
-
-  private _createUIOverlay(): HTMLElement {
-    const overlay = document.createElement("div");
-    overlay.className = "molvis-ui-overlay";
-
-    // Absolute positioned to cover canvas
-    overlay.style.position = "absolute";
-    overlay.style.top = "0";
-    overlay.style.left = "0";
-    overlay.style.width = "100%";
-    overlay.style.height = "100%";
-    overlay.style.pointerEvents = "none";
-
-    if (this._config.showUI === false) {
-      overlay.style.display = "none";
-    }
-
-    return overlay;
   }
 
   // Getters
@@ -302,6 +186,11 @@ export class MolvisApp {
 
   get modifierPipeline(): ModifierPipeline {
     return this._modifierPipeline;
+  }
+
+  /** Named selections from the last pipeline run. */
+  get selectionSet(): ReadonlyMap<string, SelectionMask> {
+    return this._lastSelectionSet;
   }
 
   get styleManager(): StyleManager {
@@ -464,7 +353,7 @@ export class MolvisApp {
     try {
       const data = await Tools.CreateScreenshotUsingRenderTargetAsync(
         this._engine,
-        this._world.scene.activeCamera!,
+        this._world.scene.activeCamera as BABYLON.Camera,
         { width, height },
       );
       return data;
@@ -735,8 +624,8 @@ export class MolvisApp {
     box?: Box,
     options?: DrawFrameOption,
   ): Promise<void> {
-    this._system.updateCurrentFrame(frame, box);
-
+    // NOTE: does NOT overwrite _system.frame — the source frame is preserved
+    // so the pipeline always operates on the original data.
     const drawResult = this.execute("draw_frame", { frame, box, options });
     const done = drawResult instanceof Promise ? drawResult : Promise.resolve();
     return done.then(() => {
@@ -759,6 +648,7 @@ export class MolvisApp {
     this.artist.ribbonRenderer.dispose();
     this.commandManager.clearHistory();
     this._lastRenderedFrame = null;
+    this._sourceFrame = frame;
     this._system.setFrame(frame, box);
     this.renderFrame(frame, box);
   }
@@ -778,27 +668,79 @@ export class MolvisApp {
   }
 
   /**
-   * Run the modifier pipeline on the current system frame and apply the result.
-   * Use fullRebuild when the atom count or topology changes (e.g. file load).
-   * Default is fast-path (visibility-only update, no flicker).
+   * Run the modifier pipeline on the original source frame and apply the result.
+   * Always operates on the unmodified source frame so modifiers are composable.
+   * Use fullRebuild when atom count or topology changes (e.g. HideHydrogens).
    */
   public async applyPipeline(options?: {
     fullRebuild?: boolean;
   }): Promise<void> {
-    const sourceFrame = this._system.frame;
+    const sourceFrame = this._sourceFrame ?? this._system.frame;
     if (!sourceFrame) return;
 
     const source = new ArrayFrameSource([sourceFrame]);
+
+    // Capture pipeline context from the COMPUTED event
+    const captured: { context: PipelineContext | null } = { context: null };
+    const captureContext = ({ context }: { context: PipelineContext }) => {
+      captured.context = context;
+    };
+    this._modifierPipeline.on(PipelineEvents.COMPUTED, captureContext);
+
     const computed = await this._modifierPipeline.compute(
       source,
       this._currentFrame,
       this,
     );
 
+    this._modifierPipeline.off(PipelineEvents.COMPUTED, captureContext);
+
+    // Render the pipeline output
     if (options?.fullRebuild) {
+      // Discard stale Highlighter originals before rebuilding — the old buffer
+      // data is about to be replaced, so restoring it would overwrite the
+      // pipeline-computed colors (e.g. transparency alpha).
+      this._world.highlighter.discardSavedOriginals();
       await this.renderFrameInternal(computed);
     } else {
       this.artist.redrawFrame(computed);
+    }
+
+    // Unified selection sync — single path, no duplication
+    const ctx = captured.context;
+    if (ctx && ctx.selectionSet.size > 0) {
+      const mask = ctx.currentSelection;
+      if (mask) {
+        const atomKeys: string[] = [];
+        for (const idx of mask.getIndices()) {
+          const key = this._world.sceneIndex.getSelectionKeyForAtom(idx);
+          if (key) atomKeys.push(key);
+        }
+        const bondKeys: string[] = [];
+        for (const bondId of ctx.selectedBondIds) {
+          const keys = this._world.sceneIndex.getSelectionKeysForBond(bondId);
+          for (const key of keys) bondKeys.push(key);
+        }
+        // Always sync selection data (for other modifiers to reference)
+        this._world.selectionManager.apply({
+          type: "replace",
+          atoms: atomKeys,
+          bonds: bondKeys,
+        });
+        // If highlight is suppressed, remove the visual overlay but keep selection
+        if (ctx.suppressHighlight) {
+          this._world.highlighter.clearAll();
+        }
+      }
+    } else {
+      this._world.selectionManager.clearSelection();
+    }
+
+    // Execute post-render effects registered by modifiers during apply().
+    if (ctx) {
+      for (const effect of ctx.postRenderEffects) {
+        effect();
+      }
     }
   }
 
@@ -812,6 +754,7 @@ export class MolvisApp {
     this.commandManager.clearHistory();
     this._system.trajectory = trajectory;
     this._currentFrame = this._system.trajectory.currentIndex;
+    this._sourceFrame = this._system.frame;
     this._lastRenderedFrame = null;
     this.queueTrajectoryFrameRender(true);
   }
@@ -822,6 +765,7 @@ export class MolvisApp {
   public nextFrame(): void {
     if (this._system.nextFrame()) {
       this._currentFrame = this._system.trajectory.currentIndex;
+      this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
     }
   }
@@ -832,6 +776,7 @@ export class MolvisApp {
   public prevFrame(): void {
     if (this._system.prevFrame()) {
       this._currentFrame = this._system.trajectory.currentIndex;
+      this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
     }
   }
@@ -842,50 +787,8 @@ export class MolvisApp {
   public seekFrame(index: number): void {
     if (this._system.seekFrame(index)) {
       this._currentFrame = this._system.trajectory.currentIndex;
+      this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
     }
   }
-}
-
-// File System Access API — not yet in lib.dom.d.ts
-declare global {
-  interface Window {
-    showSaveFilePicker?: (options?: {
-      suggestedName?: string;
-      types?: { description?: string; accept: Record<string, string[]> }[];
-    }) => Promise<{
-      createWritable(): Promise<{
-        write(data: Blob): Promise<void>;
-        close(): Promise<void>;
-      }>;
-    }>;
-  }
-}
-
-async function defaultSaveFile(
-  blob: Blob,
-  suggestedName: string,
-): Promise<void> {
-  if (typeof window.showSaveFilePicker !== "function") {
-    throw new Error(
-      "Save dialog not available in this environment. Override app.saveFile to provide a custom implementation.",
-    );
-  }
-
-  const handle = await window.showSaveFilePicker({
-    suggestedName,
-    types: [
-      {
-        description: "Molecular structure files",
-        accept: {
-          "chemical/x-pdb": [".pdb"],
-          "chemical/x-xyz": [".xyz"],
-          "text/plain": [".lammps"],
-        },
-      },
-    ],
-  });
-  const writable = await handle.createWritable();
-  await writable.write(blob);
-  await writable.close();
 }

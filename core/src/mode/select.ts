@@ -155,6 +155,7 @@ class SelectMode extends BaseMode {
         this._pendingBondIds.clear();
       }
       this._emitPendingChange();
+      this.confirmPendingSelection();
       return;
     }
 
@@ -179,6 +180,8 @@ class SelectMode extends BaseMode {
     }
 
     this._emitPendingChange();
+    // Auto-confirm click selection immediately
+    this.confirmPendingSelection();
   }
 
   override async _on_pointer_move(pointerInfo: PointerInfo): Promise<void> {
@@ -219,15 +222,18 @@ class SelectMode extends BaseMode {
         bondIds,
       ),
     );
-    void this.app.applyPipeline({ fullRebuild: true });
 
-    // Clear pending after committing
+    // Clear pending state (keep preview highlight until pipeline finishes)
     this._pendingAtomIds.clear();
     this._pendingBondIds.clear();
-    this.app.world.highlighter.highlightPreview([]);
     this.app.events.emit("pending-selection-change", {
       atomKeys: [],
       bondKeys: [],
+    });
+
+    // Apply pipeline; clear preview highlight only after rendering completes
+    this.app.applyPipeline({ fullRebuild: true }).then(() => {
+      this.app.world.highlighter.highlightPreview([]);
     });
   }
 
@@ -279,6 +285,9 @@ class SelectMode extends BaseMode {
 
     this._emitPendingChange();
     this.exitFenceMode();
+
+    // Auto-confirm fence selection immediately
+    this.confirmPendingSelection();
   }
 
   /**
@@ -292,8 +301,9 @@ class SelectMode extends BaseMode {
     }
     const bondKeys: string[] = [];
     for (const id of this._pendingBondIds) {
-      const key = this.app.world.sceneIndex.getSelectionKeyForBond(id);
-      if (key) bondKeys.push(key);
+      // Use all render instance keys so multi-order bonds are fully highlighted
+      const keys = this.app.world.sceneIndex.getSelectionKeysForBond(id);
+      for (const key of keys) bondKeys.push(key);
     }
 
     this.app.world.highlighter.highlightPreview([...atomKeys, ...bondKeys]);
@@ -318,9 +328,11 @@ class SelectMode extends BaseMode {
     const camera = scene.activeCamera;
     if (!camera) return [];
 
-    const engine = scene.getEngine();
-    const width = engine.getRenderWidth();
-    const height = engine.getRenderHeight();
+    // Use CSS dimensions (not render-buffer dimensions) because
+    // the fence polygon coordinates come from event.offsetX/offsetY
+    // which are in CSS pixel space, not device-pixel space.
+    const width = this.app.canvas.clientWidth || 1;
+    const height = this.app.canvas.clientHeight || 1;
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = scene.getTransformMatrix();
     const worldMatrix = Matrix.Identity();
@@ -351,9 +363,9 @@ class SelectMode extends BaseMode {
     const camera = scene.activeCamera;
     if (!camera) return [];
 
-    const engine = scene.getEngine();
-    const width = engine.getRenderWidth();
-    const height = engine.getRenderHeight();
+    // CSS pixel space to match fence polygon coordinates
+    const width = this.app.canvas.clientWidth || 1;
+    const height = this.app.canvas.clientHeight || 1;
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = scene.getTransformMatrix();
     const worldMatrix = Matrix.Identity();

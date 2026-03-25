@@ -1,4 +1,4 @@
-import type { Frame } from "molrs-wasm";
+import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
@@ -11,9 +11,12 @@ export type SelectModifierMode = "replace" | "add" | "remove" | "toggle";
  * Supports atom indices and bond IDs.
  */
 export class SelectModifier extends BaseModifier {
+  /** When false, the pipeline selection will not trigger visual highlighting. */
+  public highlight = true;
+
   constructor(
     id: string,
-    private expression: string | number[],
+    private _expression: string | number[],
     private selectionName?: string,
     public mode: SelectModifierMode = "replace",
     private bondIds: number[] = [],
@@ -21,12 +24,25 @@ export class SelectModifier extends BaseModifier {
     super(id, `Select (${mode})`, ModifierCategory.SelectionSensitive);
   }
 
+  /** The selection source: atom indices array or expression string. */
+  get selectionSource(): string | number[] {
+    return this._expression;
+  }
+
+  /** Human-readable summary for UI display. */
+  get selectionSummary(): string {
+    if (Array.isArray(this._expression)) {
+      return `${this._expression.length} atoms`;
+    }
+    return this._expression || "empty";
+  }
+
   validate(input: Frame, _context: PipelineContext): ValidationResult {
-    if (Array.isArray(this.expression)) {
+    if (Array.isArray(this._expression)) {
       // Validate indices
       const atomsBlock = input.getBlock("atoms");
       const atomCount = atomsBlock?.nrows() ?? 0;
-      const invalidIndices = this.expression.filter(
+      const invalidIndices = this._expression.filter(
         (idx) => idx < 0 || idx >= atomCount,
       );
       if (invalidIndices.length > 0) {
@@ -45,9 +61,9 @@ export class SelectModifier extends BaseModifier {
     const atomsBlock = input.getBlock("atoms");
     const atomCount = atomsBlock?.nrows() ?? 0;
 
-    if (Array.isArray(this.expression)) {
+    if (Array.isArray(this._expression)) {
       // Selection by indices
-      mask = SelectionMask.fromIndices(atomCount, this.expression);
+      mask = SelectionMask.fromIndices(atomCount, this._expression);
     } else {
       // Expression evaluation is not wired in this modifier yet.
       logger.warn(
@@ -75,8 +91,9 @@ export class SelectModifier extends BaseModifier {
         break;
     }
 
-    // Store in selectionSet if named
-    if (this.selectionName) {
+    // Always store in selectionSet using modifier ID as key
+    context.selectionSet.set(this.id, nextMask);
+    if (this.selectionName && this.selectionName !== this.id) {
       context.selectionSet.set(this.selectionName, nextMask);
     }
 
@@ -86,14 +103,19 @@ export class SelectModifier extends BaseModifier {
     // Store bond IDs on context for COMPUTED sync
     context.selectedBondIds = this.bondIds;
 
+    // Propagate highlight suppression
+    if (!this.highlight) {
+      context.suppressHighlight = true;
+    }
+
     // Frame is unchanged (selection is context-only)
     return input;
   }
 
   getCacheKey(): string {
-    const exprKey = Array.isArray(this.expression)
-      ? this.expression.join(",")
-      : this.expression;
+    const exprKey = Array.isArray(this._expression)
+      ? this._expression.join(",")
+      : this._expression;
     const bondKey =
       this.bondIds.length > 0 ? `:b${this.bondIds.join(",")}` : "";
     return `${super.getCacheKey()}:${exprKey}:${this.selectionName ?? ""}:${this.mode}${bondKey}`;

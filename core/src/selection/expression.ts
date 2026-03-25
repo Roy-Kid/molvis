@@ -1,13 +1,16 @@
-import type { Frame } from "molrs-wasm";
+import type { Frame } from "@molcrafts/molrs";
 import type { SceneIndex } from "../scene_index";
 
 /**
  * Parses and evaluates boolean expressions for atom selection.
  */
+type ExpressionEvaluator = (...args: unknown[]) => boolean;
+
 /** Single-entry cache for compiled expression evaluators. */
 let _cachedExpression: string | null = null;
-let _cachedEvaluator: Function | null = null;
+let _cachedEvaluator: ExpressionEvaluator | null = null;
 
+// biome-ignore lint/complexity/noStaticOnlyClass: ExpressionSelector groups related static methods for selection evaluation
 export class ExpressionSelector {
   /**
    * Select atoms based on a boolean expression from SceneIndex.
@@ -82,7 +85,7 @@ export class ExpressionSelector {
     return indices;
   }
 
-  private static createEvaluator(expression: string): Function {
+  private static createEvaluator(expression: string): ExpressionEvaluator {
     if (_cachedExpression === expression && _cachedEvaluator) {
       return _cachedEvaluator;
     }

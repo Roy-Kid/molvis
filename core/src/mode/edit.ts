@@ -7,6 +7,7 @@ import {
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
+import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import type { Artist } from "../artist";
 import { CompositeCommand } from "../commands/composite";
@@ -16,6 +17,7 @@ import {
   DrawAtomCommand,
   DrawBondCommand,
 } from "../commands/draw";
+import { PlaceMoleculeCommand } from "../commands/place_molecule";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
@@ -217,6 +219,7 @@ class EditMode extends BaseMode {
 
   private element_ = "C";
   private bondOrder_ = 1;
+  private pendingMolecule_: Frame | null = null;
 
   public artist: Artist;
   private previews: PreviewManager;
@@ -233,6 +236,18 @@ class EditMode extends BaseMode {
   }
   set bondOrder(v: number) {
     this.bondOrder_ = v;
+  }
+
+  /** Set a 3D Frame to place on next canvas click. Set null to cancel. */
+  get pendingMolecule(): Frame | null {
+    return this.pendingMolecule_;
+  }
+  set pendingMolecule(frame: Frame | null) {
+    // Free the old WASM Frame if overwriting with a different one
+    if (this.pendingMolecule_ && this.pendingMolecule_ !== frame) {
+      this.pendingMolecule_.free();
+    }
+    this.pendingMolecule_ = frame;
   }
 
   constructor(app: Molvis) {
@@ -528,6 +543,21 @@ class EditMode extends BaseMode {
         this.pendingAtom = false;
         return;
       }
+
+      // If a molecule is queued for placement, place it at click position
+      if (this.pendingMolecule_) {
+        const target = Vector3.FromArray([xyz.x, xyz.y, xyz.z]);
+        const frame = this.pendingMolecule_;
+        this.pendingMolecule_ = null;
+        this.app.commandManager.execute(
+          new PlaceMoleculeCommand(this.app, frame, target),
+        );
+        // PlaceMoleculeCommand extracts all data in do(); safe to free now
+        frame.free();
+        this.pendingAtom = false;
+        return;
+      }
+
       const atomName = makeId("atom");
       const atomId = this.app.world.sceneIndex.getNextAtomId();
       this.app.commandManager.execute(
@@ -587,6 +617,10 @@ class EditMode extends BaseMode {
     this.startAtom = null;
     this.startAtomIndex = -1;
     this.pendingAtom = false;
+    if (this.pendingMolecule_) {
+      this.pendingMolecule_.free();
+      this.pendingMolecule_ = null;
+    }
     this.hoverAtom = null;
     this.previews.clear();
     this.restoreSceneFromFrame();

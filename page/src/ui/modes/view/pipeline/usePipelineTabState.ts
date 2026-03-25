@@ -1,21 +1,28 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
-  AssignColorModifier,
-  DeleteSelectedModifier,
-  HideSelectionModifier,
   type Modifier,
+  ModifierCategory,
   type Molvis,
   PipelineEvents,
-  TransparentSelectionModifier,
+  SelectModifier,
+  isSelectionProducer,
+  isTopologyChanging,
+  nextModifierId,
 } from "@molvis/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { getSelectedAtomIndices } from "../modifiers/selectionUtils";
+import { getDescendants } from "./tree_utils";
 
 const DEFAULT_PROPERTIES_HEIGHT = 250;
 const MIN_PROPERTIES_HEIGHT = 100;
 const MAX_PROPERTIES_RATIO = 0.8;
+
+interface PendingDelete {
+  modifier: Modifier;
+  descendants: Modifier[];
+}
 
 interface PipelineState {
   modifiers: Modifier[];
@@ -23,12 +30,17 @@ interface PipelineState {
   selectedModifier: Modifier | undefined;
   propertiesHeight: number;
   isResizing: boolean;
+  expandedIds: Set<string>;
+  pendingDelete: PendingDelete | null;
   setSelectedId: (id: string | null) => void;
   startResizing: (event: React.MouseEvent) => void;
   handleAddModifier: (factory: () => Modifier) => void;
   handleRemoveModifier: (id: string) => void;
   handleToggleModifier: (modifier: Modifier) => void;
   handleDragEnd: (event: DragEndEvent) => void;
+  handleToggleExpand: (id: string) => void;
+  handleConfirmDelete: () => void;
+  handleCancelDelete: () => void;
   refreshModifiers: () => void;
 }
 
@@ -39,6 +51,10 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     DEFAULT_PROPERTIES_HEIGHT,
   );
   const [isResizing, setIsResizing] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
+    null,
+  );
 
   const refreshModifiers = useCallback(() => {
     if (!app) {
@@ -110,6 +126,18 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     event.preventDefault();
   }, []);
 
+  const handleToggleExpand = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   const handleAddModifier = useCallback(
     (factory: () => Modifier) => {
       if (!app) {
@@ -119,27 +147,39 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
       const pipeline = app.modifierPipeline;
       const modifier = factory();
 
-      if (modifier instanceof HideSelectionModifier) {
-        const selectedAtomIndices = getSelectedAtomIndices(app);
-        if (selectedAtomIndices.length > 0) {
-          modifier.hideIndices(selectedAtomIndices);
-          app.world.selectionManager.clearSelection();
-        }
-      } else if (modifier instanceof AssignColorModifier) {
-        const selectedAtomIndices = getSelectedAtomIndices(app);
-        if (selectedAtomIndices.length > 0) {
-          modifier.setSelection(selectedAtomIndices);
-        }
-      } else if (modifier instanceof TransparentSelectionModifier) {
-        const selectedAtomIndices = getSelectedAtomIndices(app);
-        if (selectedAtomIndices.length > 0) {
-          modifier.setIndices(selectedAtomIndices);
-        }
-      } else if (modifier instanceof DeleteSelectedModifier) {
-        const selectedAtomIndices = getSelectedAtomIndices(app);
-        if (selectedAtomIndices.length > 0) {
-          modifier.deleteIndices(selectedAtomIndices);
-          app.world.selectionManager.clearSelection();
+      const isSelSensitive =
+        modifier.category === ModifierCategory.SelectionSensitive;
+      const isSelProducer = isSelectionProducer(modifier);
+      const isTopChange = isTopologyChanging(modifier);
+
+      // For selection-sensitive, non-producer, non-topology modifiers:
+      // attach to an existing SelectModifier if one exists, otherwise auto-create
+      if (isSelSensitive && !isSelProducer && !isTopChange) {
+        // Find the last selection-producing modifier in the pipeline
+        const existingParent = [...pipeline.getModifiers()]
+          .reverse()
+          .find((m) => isSelectionProducer(m));
+
+        if (existingParent) {
+          // Reuse existing SelectModifier as parent
+          modifier.parentId = existingParent.id;
+          setExpandedIds((prev) => new Set([...prev, existingParent.id]));
+        } else {
+          // No select modifier exists — auto-create one from current selection
+          const selectedAtomIndices = getSelectedAtomIndices(app);
+          if (selectedAtomIndices.length > 0) {
+            const selectMod = new SelectModifier(
+              nextModifierId("select"),
+              selectedAtomIndices,
+              undefined,
+              "replace",
+              [],
+            );
+            selectMod.highlight = false;
+            pipeline.addModifier(selectMod);
+            modifier.parentId = selectMod.id;
+            setExpandedIds((prev) => new Set([...prev, selectMod.id]));
+          }
         }
       }
 
@@ -155,14 +195,37 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
       if (!app) {
         return;
       }
+      const mod = modifiers.find((m) => m.id === id);
+      if (!mod) {
+        return;
+      }
+
+      const descendants = getDescendants(id, modifiers);
+      if (descendants.length > 0) {
+        setPendingDelete({ modifier: mod, descendants });
+        return;
+      }
+
       app.modifierPipeline.removeModifier(id);
-      setSelectedId((prevSelectedId) =>
-        prevSelectedId === id ? null : prevSelectedId,
-      );
+      setSelectedId((prev) => (prev === id ? null : prev));
       void app.applyPipeline({ fullRebuild: true });
     },
-    [app],
+    [app, modifiers],
   );
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!app || !pendingDelete) {
+      return;
+    }
+    app.modifierPipeline.removeModifier(pendingDelete.modifier.id);
+    setSelectedId(null);
+    setPendingDelete(null);
+    void app.applyPipeline({ fullRebuild: true });
+  }, [app, pendingDelete]);
+
+  const handleCancelDelete = useCallback(() => {
+    setPendingDelete(null);
+  }, []);
 
   const handleToggleModifier = useCallback(
     (modifier: Modifier) => {
@@ -213,12 +276,17 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     selectedModifier,
     propertiesHeight,
     isResizing,
+    expandedIds,
+    pendingDelete,
     setSelectedId,
     startResizing,
     handleAddModifier,
     handleRemoveModifier,
     handleToggleModifier,
     handleDragEnd,
+    handleToggleExpand,
+    handleConfirmDelete,
+    handleCancelDelete,
     refreshModifiers,
   };
 }

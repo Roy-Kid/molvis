@@ -57,7 +57,8 @@ export class StyleManager {
   }
 
   public getAtomStyle(element: string): AtomStyle {
-    const style = this.currentTheme.getAtomStyle(element);
+    const normalized = normalizeElement(element);
+    const style = this.currentTheme.getAtomStyle(normalized);
     return {
       ...style,
       radius: style.radius * this._representation.atomRadiusScale,
@@ -81,11 +82,12 @@ export class StyleManager {
   }
 
   public getAtomMaterial(element: string): StandardMaterial {
-    const key = `atom_${element}_${this.currentTheme.name}`;
+    const normalized = normalizeElement(element);
+    const key = `atom_${normalized}_${this.currentTheme.name}`;
     const cached = this.materialCache.get(key);
     if (cached) return cached;
 
-    const style = this.currentTheme.getAtomStyle(element);
+    const style = this.currentTheme.getAtomStyle(normalized);
     const mat = new StandardMaterial(key, this.scene);
     mat.diffuseColor = Color3.FromHexString(style.color);
 
@@ -145,4 +147,13 @@ export class StyleManager {
     this.materialCache.set(key, mat);
     return mat;
   }
+}
+
+/**
+ * Normalize element symbol to standard form: first letter uppercase, rest lowercase.
+ * Handles aromatic SMILES notation (e.g. "c" → "C", "si" → "Si").
+ */
+function normalizeElement(element: string): string {
+  if (element.length === 0) return element;
+  return element[0].toUpperCase() + element.slice(1).toLowerCase();
 }

@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import type { Frame } from "molrs-wasm";
+import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { calculateBoundingBox } from "../utils/bbox";

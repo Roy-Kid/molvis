@@ -1,4 +1,4 @@
-import { Block, Frame } from "molrs-wasm";
+import { Block, Frame } from "@molcrafts/molrs";
 import { Molvis, Trajectory } from "../src/index";
 
 /**

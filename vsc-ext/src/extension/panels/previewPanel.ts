@@ -6,7 +6,12 @@ import type { Logger } from "../types";
 import type { PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
-import { handleSaveFile, onWebviewMessage, sendToWebview } from "./messaging";
+import {
+  handleDropUri,
+  handleSaveFile,
+  onWebviewMessage,
+  sendToWebview,
+} from "./messaging";
 
 async function sendLoadedFile(
   panel: vscode.WebviewPanel,
@@ -81,6 +86,9 @@ export async function openQuickViewPanel(
           break;
         case "saveFile":
           await handleSaveFile(message.data, message.suggestedName, logger);
+          break;
+        case "dropUri":
+          await handleDropUri(message.uri, panel.webview, fileLoader, logger);
           break;
         case "dirtyStateChanged":
           panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;

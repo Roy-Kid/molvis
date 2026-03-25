@@ -125,6 +125,21 @@ export function bootstrapWebview(container: HTMLElement): void {
     event.preventDefault();
     event.stopPropagation();
 
+    // VSCode Explorer drag: carries uri-list, delegate to extension host
+    // so it works over SSH remote connections
+    const uriList = event.dataTransfer?.getData("text/uri-list");
+    if (uriList) {
+      const uri = uriList
+        .split("\n")
+        .filter((l) => l.trim())[0]
+        ?.trim();
+      if (uri) {
+        vscode.postMessage({ type: "dropUri", uri });
+        return;
+      }
+    }
+
+    // OS file manager drag: browser File API (local only)
     const file = event.dataTransfer?.files?.[0];
     if (!file) return;
 

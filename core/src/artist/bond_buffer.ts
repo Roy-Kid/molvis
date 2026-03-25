@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import type { Block } from "molrs-wasm";
+import type { Block } from "@molcrafts/molrs";
 import { encodePickingColorInto } from "../picker";
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
@@ -33,7 +33,7 @@ const ORDER_CONFIG: Record<
 > = {
   1: { radiusScale: 1.0, offsets: [[0, 0]] },
   2: {
-    radiusScale: 0.55,
+    radiusScale: 0.7,
     offsets: [
       [1, 0],
       [-1, 0],
@@ -42,14 +42,14 @@ const ORDER_CONFIG: Record<
   3: {
     radiusScale: 0.4,
     offsets: [
-      [0, 1],
-      [-0.866, -0.5],
-      [0.866, -0.5],
-    ], // equilateral triangle
+      [0, 0],
+      [1, 0],
+      [-1, 0],
+    ], // coplanar: center + two sides
   },
 };
 
-const MULTI_BOND_SPACING = 0.12; // base offset distance between sub-bonds
+const MULTI_BOND_SPACING = 0.08; // base offset distance between sub-bonds
 
 /**
  * Compute a perpendicular frame (perp1, perp2) for a bond direction.
@@ -248,7 +248,7 @@ export function refreshBondPositions(
   z: Float32Array,
   bondState: {
     count: number;
-    mesh: { thinInstanceBufferUpdated(name: string): void };
+    uploadBuffer(name: string): void;
     buffers: Map<string, { data: Float32Array }>;
   },
 ): void {
@@ -326,7 +326,7 @@ export function refreshBondPositions(
     }
   }
 
-  bondState.mesh.thinInstanceBufferUpdated("matrix");
-  bondState.mesh.thinInstanceBufferUpdated("instanceData0");
-  bondState.mesh.thinInstanceBufferUpdated("instanceData1");
+  bondState.uploadBuffer("matrix");
+  bondState.uploadBuffer("instanceData0");
+  bondState.uploadBuffer("instanceData1");
 }

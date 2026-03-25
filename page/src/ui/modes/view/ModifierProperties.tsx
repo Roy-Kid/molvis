@@ -4,10 +4,12 @@ import {
   DataSourceModifier as CoreDataSourceModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   HideSelectionModifier as CoreHideModifier,
+  SelectModifier as CoreSelectModifier,
   SliceModifier as CoreSliceModifier,
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
   type Modifier,
   type Molvis,
+  isSelectionProducer,
 } from "@molvis/core";
 import type React from "react";
 import { AssignColorModifier } from "./modifiers/AssignColorModifier";
@@ -15,20 +17,28 @@ import { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
 import { DataSourceModifier } from "./modifiers/DataSourceModifier";
 import { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 import { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
+import { SelectModifierProps } from "./modifiers/SelectModifierProps";
 import { SliceModifier } from "./modifiers/SliceModifier";
 import { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
+import { ParentSelector } from "./pipeline/ParentSelector";
 
 interface ModifierPropertiesProps {
   modifier: Modifier;
+  allModifiers: readonly Modifier[];
   app: Molvis | null;
   onUpdate: () => void;
 }
 
 export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   modifier,
+  allModifiers,
   app,
   onUpdate,
 }) => {
+  const showParentSelector =
+    modifier.category === "selection-sensitive" &&
+    !isSelectionProducer(modifier);
+
   let content: React.ReactNode = (
     <div className="p-4 bg-muted/20 border-t text-sm text-muted-foreground text-center">
       No properties available for {modifier.name}.
@@ -79,6 +89,10 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
         onUpdate={onUpdate}
       />
     );
+  } else if (modifier instanceof CoreSelectModifier) {
+    content = (
+      <SelectModifierProps modifier={modifier} app={app} onUpdate={onUpdate} />
+    );
   }
 
   return (
@@ -91,6 +105,14 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
           {modifier.category}
         </span>
       </div>
+      {showParentSelector && (
+        <ParentSelector
+          modifier={modifier}
+          allModifiers={allModifiers}
+          app={app}
+          onUpdate={onUpdate}
+        />
+      )}
       {content}
     </div>
   );

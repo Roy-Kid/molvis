@@ -1,12 +1,10 @@
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import type {
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
   Molvis,
 } from "@molvis/core";
 import type React from "react";
-import { getSelectedAtomIndices } from "./selectionUtils";
 
 interface ModifierProps {
   modifier: CoreTransparentSelectionModifier;
@@ -19,15 +17,10 @@ export const TransparentSelectionModifier: React.FC<ModifierProps> = ({
   app,
   onUpdate,
 }) => {
-  const handleCaptureSelection = () => {
-    if (!app) return;
-    modifier.setIndices(getSelectedAtomIndices(app));
-    onUpdate();
-    void app.applyPipeline({ fullRebuild: true });
-  };
-
-  const handleOpacityChange = (opacity: number) => {
-    modifier.opacity = opacity;
+  const apply = (value: string) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return;
+    modifier.opacity = Math.max(0.02, Math.min(1.0, num));
     onUpdate();
     void app?.applyPipeline({ fullRebuild: true });
   };
@@ -35,32 +28,28 @@ export const TransparentSelectionModifier: React.FC<ModifierProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-xs">
-        <Label>Captured Atoms</Label>
+        <Label>Affected Atoms</Label>
         <span className="font-mono text-muted-foreground">
           {modifier.selectedCount}
         </span>
       </div>
 
       <div className="space-y-2">
-        <Label>Opacity ({Math.round(modifier.opacity * 100)}%)</Label>
-        <Slider
-          min={0.05}
-          max={1}
+        <Label className="text-xs">Transparency</Label>
+        <Input
+          type="number"
+          min={0}
+          max={0.98}
           step={0.05}
-          value={[modifier.opacity]}
-          onValueChange={([value]) => handleOpacityChange(value)}
+          defaultValue={1 - modifier.opacity}
+          onBlur={(e) => {
+            const t = Number(e.target.value);
+            if (!Number.isFinite(t)) return;
+            apply(String(1 - t));
+          }}
+          className="h-7 px-2 text-xs"
         />
       </div>
-
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full"
-        onClick={handleCaptureSelection}
-        disabled={!app}
-      >
-        Use Current Selection
-      </Button>
     </div>
   );
 };

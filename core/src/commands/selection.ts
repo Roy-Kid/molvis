@@ -90,7 +90,11 @@ export class MoveSelectionCommand extends Command<void> {
       matrices[offset + 13] += this.delta.y;
       matrices[offset + 14] += this.delta.z;
 
-      mesh.thinInstanceBufferUpdated("matrix");
+      const pool = this.app.world.sceneIndex.meshRegistry.getPoolForMesh(
+        entity.meshId,
+      );
+      if (pool) pool.uploadBuffer("matrix");
+      else mesh.thinInstanceBufferUpdated("matrix");
     }
 
     // Update connected bonds
@@ -118,7 +122,11 @@ export class MoveSelectionCommand extends Command<void> {
       matrices[offset + 13] = originalPos.y;
       matrices[offset + 14] = originalPos.z;
 
-      mesh.thinInstanceBufferUpdated("matrix");
+      const pool = this.app.world.sceneIndex.meshRegistry.getPoolForMesh(
+        entity.meshId,
+      );
+      if (pool) pool.uploadBuffer("matrix");
+      else mesh.thinInstanceBufferUpdated("matrix");
     }
 
     // Update connected bonds
@@ -215,7 +223,11 @@ export class MoveSelectionCommand extends Command<void> {
         }
       }
 
-      bondMesh.thinInstanceBufferUpdated("matrix");
+      const bondPool = this.app.world.sceneIndex.meshRegistry.getPoolForMesh(
+        bondMesh.uniqueId,
+      );
+      if (bondPool) bondPool.uploadBuffer("matrix");
+      else bondMesh.thinInstanceBufferUpdated("matrix");
     }
   }
 }

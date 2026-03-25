@@ -22,32 +22,44 @@ import {
 } from "@dnd-kit/sortable";
 import { type Modifier, ModifierRegistry } from "@molvis/core";
 import { Plus } from "lucide-react";
+import { useMemo } from "react";
 import { SortableModifierItem } from "./SortableModifierItem";
+import { buildTree, flattenTree } from "./tree_utils";
 
 interface PipelineListProps {
   modifiers: Modifier[];
   selectedId: string | null;
+  expandedIds: Set<string>;
   onSelectModifier: (id: string) => void;
   onToggleModifier: (modifier: Modifier) => void;
   onRemoveModifier: (id: string) => void;
   onAddModifier: (factory: () => Modifier) => void;
   onDragEnd: (event: DragEndEvent) => void;
+  onToggleExpand: (id: string) => void;
 }
 
 export function PipelineList({
   modifiers,
   selectedId,
+  expandedIds,
   onSelectModifier,
   onToggleModifier,
   onRemoveModifier,
   onAddModifier,
   onDragEnd,
+  onToggleExpand,
 }: PipelineListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
+  );
+
+  const tree = useMemo(() => buildTree(modifiers), [modifiers]);
+  const flatNodes = useMemo(
+    () => flattenTree(tree, expandedIds),
+    [tree, expandedIds],
   );
 
   return (
@@ -65,17 +77,21 @@ export function PipelineList({
             onDragEnd={onDragEnd}
           >
             <SortableContext
-              items={modifiers.map((modifier) => modifier.id)}
+              items={flatNodes.map((n) => n.modifier.id)}
               strategy={verticalListSortingStrategy}
             >
-              {modifiers.map((modifier) => (
+              {flatNodes.map((node) => (
                 <SortableModifierItem
-                  key={modifier.id}
-                  modifier={modifier}
-                  selected={selectedId === modifier.id}
-                  onSelect={() => onSelectModifier(modifier.id)}
-                  onToggle={() => onToggleModifier(modifier)}
-                  onRemove={() => onRemoveModifier(modifier.id)}
+                  key={node.modifier.id}
+                  modifier={node.modifier}
+                  selected={selectedId === node.modifier.id}
+                  depth={node.depth}
+                  hasChildren={node.children.length > 0}
+                  isExpanded={expandedIds.has(node.modifier.id)}
+                  onSelect={() => onSelectModifier(node.modifier.id)}
+                  onToggle={() => onToggleModifier(node.modifier)}
+                  onRemove={() => onRemoveModifier(node.modifier.id)}
+                  onToggleExpand={() => onToggleExpand(node.modifier.id)}
                 />
               ))}
             </SortableContext>

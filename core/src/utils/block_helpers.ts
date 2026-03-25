@@ -1,4 +1,4 @@
-import type { Block } from "molrs-wasm";
+import type { Block } from "@molcrafts/molrs";
 
 /**
  * Probe the dtype of a column using the native Block.dtype() API.

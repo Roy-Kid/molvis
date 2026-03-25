@@ -9,10 +9,14 @@ import {
   extractBondRows,
 } from "@molvis/core";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface DataInspectorPanelProps {
   app: Molvis | null;
+  filterAtomIds?: Set<number>;
+  /** Bump to force re-filter when filterAtomIds content changes */
+  filterRevision?: number;
+  compact?: boolean;
 }
 
 const ROW_HEIGHT = 20;
@@ -20,6 +24,9 @@ const OVERSCAN = 5;
 
 export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
   app,
+  filterAtomIds,
+  filterRevision = 0,
+  compact = false,
 }) => {
   const [columns, setColumns] = useState<ColumnDescriptor[]>([]);
   const [atomRows, setAtomRows] = useState<AtomRow[]>([]);
@@ -81,27 +88,55 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
     setScrollTop(e.currentTarget.scrollTop);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filterRevision is an intentional cache-buster for Set identity changes
+  const filteredAtomRows = useMemo(
+    () =>
+      filterAtomIds
+        ? atomRows.filter((r) => filterAtomIds.has(r.index))
+        : atomRows,
+    [atomRows, filterAtomIds, filterRevision],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filterRevision is an intentional cache-buster for Set identity changes
+  const filteredBondRows = useMemo(
+    () =>
+      filterAtomIds
+        ? bondRows.filter(
+            (b) => filterAtomIds.has(b.i) && filterAtomIds.has(b.j),
+          )
+        : bondRows,
+    [bondRows, filterAtomIds, filterRevision],
+  );
+
   // Virtual scrolling
-  const totalHeight = atomRows.length * ROW_HEIGHT;
+  const totalHeight = filteredAtomRows.length * ROW_HEIGHT;
   const visibleCount = containerRef.current
     ? Math.ceil(containerRef.current.clientHeight / ROW_HEIGHT)
     : 30;
   const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const endIdx = Math.min(
-    atomRows.length,
+    filteredAtomRows.length,
     startIdx + visibleCount + OVERSCAN * 2,
   );
-  const visibleAtomRows = atomRows.slice(startIdx, endIdx);
+  const visibleAtomRows = filteredAtomRows.slice(startIdx, endIdx);
   const offsetY = startIdx * ROW_HEIGHT;
 
   return (
     <Tabs defaultValue="atoms" className="h-full flex flex-col">
-      <TabsList className="shrink-0 w-full rounded-none border-b h-6">
-        <TabsTrigger value="atoms" className="text-[10px] h-5">
-          Atoms ({atomRows.length})
+      <TabsList
+        className={`shrink-0 w-full rounded-none border-b ${compact ? "h-5" : "h-6"}`}
+      >
+        <TabsTrigger
+          value="atoms"
+          className={`text-[10px] ${compact ? "h-4" : "h-5"}`}
+        >
+          Atoms ({filteredAtomRows.length})
         </TabsTrigger>
-        <TabsTrigger value="bonds" className="text-[10px] h-5">
-          Bonds ({bondRows.length})
+        <TabsTrigger
+          value="bonds"
+          className={`text-[10px] ${compact ? "h-4" : "h-5"}`}
+        >
+          Bonds ({filteredBondRows.length})
         </TabsTrigger>
       </TabsList>
 
@@ -184,7 +219,7 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
 
           {/* Body */}
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {bondRows.map((row) => (
+            {filteredBondRows.map((row) => (
               <div
                 key={row.index}
                 className="flex text-[9px] font-mono border-b border-muted/5"
@@ -204,7 +239,7 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
                 </div>
               </div>
             ))}
-            {bondRows.length === 0 && (
+            {filteredBondRows.length === 0 && (
               <div className="p-1.5 text-[9px] text-muted-foreground">
                 No bonds.
               </div>

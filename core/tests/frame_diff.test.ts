@@ -1,5 +1,5 @@
+import type { Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import type { Frame } from "molrs-wasm";
 import { classifyFrameTransition } from "../src/system/frame_diff";
 
 interface AtomSpec {

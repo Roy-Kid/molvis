@@ -1,5 +1,5 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, test } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
 import type { MolvisApp } from "../src/core/app";
 import { ExpressionSelectionModifier } from "../src/modifiers/ExpressionSelectionModifier";

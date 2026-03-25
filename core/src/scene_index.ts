@@ -1,5 +1,5 @@
 import type { Mesh } from "@babylonjs/core";
-import type { Block, Box } from "molrs-wasm";
+import type { Block, Box } from "@molcrafts/molrs";
 import { ATOM_IMPOSTOR_SPEC, BOND_IMPOSTOR_SPEC } from "./artist/material_spec";
 import {
   type AtomMeta,
@@ -56,6 +56,8 @@ export class ImpostorState {
   public frameOffset = 0; // Number of FRAME atoms
   public needsUpload = false;
   public frameIdToIndex = new Map<number, number>();
+  /** All render instance indices per logical ID (for multi-order bonds). */
+  public logicalToAllIndices = new Map<number, number[]>();
 
   public buffers = new Map<string, { data: Float32Array; stride: number }>();
 
@@ -87,6 +89,7 @@ export class ImpostorState {
     this.idToIndex.clear();
     this.indexToId.clear();
     this.frameIdToIndex.clear();
+    this.logicalToAllIndices.clear();
 
     // 1. Ensure capacity
     if (this.capacity < frameCount) {
@@ -129,6 +132,13 @@ export class ImpostorState {
       const logicalId = frameInstanceMap?.[i] ?? i;
       if (!this.frameIdToIndex.has(logicalId)) {
         this.frameIdToIndex.set(logicalId, i);
+      }
+      // Store ALL render indices per logical ID (needed for multi-order bonds)
+      const group = this.logicalToAllIndices.get(logicalId);
+      if (group) {
+        group.push(i);
+      } else {
+        this.logicalToAllIndices.set(logicalId, [i]);
       }
     }
 
@@ -268,6 +278,18 @@ export class ImpostorState {
     this.needsUpload = false;
   }
 
+  /**
+   * Force-upload a named buffer to the GPU via thinInstanceSetBuffer.
+   * This is the single reliable path — thinInstanceBufferUpdated is unreliable.
+   */
+  uploadBuffer(name: string): void {
+    const desc = this.buffers.get(name);
+    if (!desc) return;
+    const total = this.frameOffset + this.count;
+    const view = desc.data.subarray(0, total * desc.stride);
+    this.mesh.thinInstanceSetBuffer(name, view, desc.stride, false);
+  }
+
   private grow(): void {
     const newCapacity = this.capacity * 2;
     for (const [, desc] of this.buffers) {
@@ -288,6 +310,9 @@ export class ImpostorState {
   /**
    * Promote the frame segment [0..frameOffset) into edit space.
    * After promotion, frameOffset becomes 0 and all existing instances are editable.
+   *
+   * Uses frameIdToIndex/logicalToAllIndices to promote only actual logical IDs,
+   * avoiding phantom entries for multi-order bond render instances.
    */
   promoteFrameSegmentToEdits(): void {
     if (this.frameOffset === 0) return;
@@ -298,9 +323,17 @@ export class ImpostorState {
     const newIdToIndex = new Map<number, number>();
     const newIndexToId = new Map<number, number>();
 
-    for (let i = 0; i < oldFrameOffset; i++) {
-      newIdToIndex.set(i, i);
-      newIndexToId.set(i, i);
+    // Promote using logical-ID-to-render-index mapping.
+    // For multi-order bonds, frameIdToIndex contains only actual logical IDs
+    // (not the extra render instances), preventing phantom edit entries.
+    for (const [logicalId, firstRenderIndex] of this.frameIdToIndex) {
+      newIdToIndex.set(logicalId, firstRenderIndex);
+    }
+    // Map ALL render indices back to their logical IDs (needed for picking)
+    for (const [logicalId, renderIndices] of this.logicalToAllIndices) {
+      for (const renderIndex of renderIndices) {
+        newIndexToId.set(renderIndex, logicalId);
+      }
     }
 
     for (const [id, editIndex] of this.idToIndex) {
@@ -458,6 +491,20 @@ export class SceneIndex {
     const absIndex = bondState.getIndex(bondId);
     if (absIndex === undefined) return null;
     return makeSelectionKey(bondState.mesh.uniqueId, absIndex);
+  }
+
+  /**
+   * Get ALL selection keys for a logical Bond ID.
+   * For multi-order bonds returns one key per render instance (e.g. 2 for double bond).
+   */
+  getSelectionKeysForBond(bondId: number): string[] {
+    const bondState = this.meshRegistry.getBondState();
+    if (!bondState) return [];
+
+    const indices = bondState.logicalToAllIndices.get(bondId);
+    if (!indices || indices.length === 0) return [];
+
+    return indices.map((idx) => makeSelectionKey(bondState.mesh.uniqueId, idx));
   }
 
   getNextAtomId(): number {
@@ -649,8 +696,9 @@ export class SceneIndex {
 
     const bondState = this.meshRegistry.getBondState();
     if (bondState && bondState.frameOffset > 0) {
-      const bondFrameCount = bondState.frameOffset;
-      for (let bondId = 0; bondId < bondFrameCount; bondId++) {
+      // Iterate logical bond IDs (not render instance indices) to avoid
+      // promoting phantom entries for multi-order bond render instances.
+      for (const bondId of bondState.frameIdToIndex.keys()) {
         const meta = this.metaRegistry.bonds.getMeta(bondId);
         if (meta) {
           this.metaRegistry.bonds.setEdit(bondId, { ...meta });

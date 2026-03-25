@@ -58,6 +58,7 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "saveFile"; data: string; suggestedName: string }
+  | { type: "dropUri"; uri: string }
   | { type: "dirtyStateChanged"; isDirty: boolean }
   | { type: "error"; message: string };
 

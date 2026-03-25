@@ -1,5 +1,5 @@
+import type { Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import type { Frame } from "molrs-wasm";
 import type { Modifier } from "../src/pipeline/modifier";
 import { ModifierCategory } from "../src/pipeline/modifier";
 import { ModifierPipeline } from "../src/pipeline/pipeline";
@@ -14,6 +14,7 @@ describe("Pipeline System", () => {
         id: "test-1",
         name: "Test Modifier",
         enabled: true,
+        parentId: null,
         category: ModifierCategory.SelectionInsensitive,
         apply: (frame: Frame) => frame,
         validate: () => ({ valid: true }),
@@ -30,6 +31,7 @@ describe("Pipeline System", () => {
         id: "test-2",
         name: "Test Modifier",
         enabled: true,
+        parentId: null,
         category: ModifierCategory.SelectionInsensitive,
         apply: (frame: Frame) => frame,
         validate: () => ({ valid: true }),
@@ -54,6 +56,7 @@ describe("Pipeline System", () => {
         id: "test-1",
         name: "Test Modifier",
         enabled: true,
+        parentId: null,
         category: ModifierCategory.SelectionInsensitive,
         apply: (frame: Frame) => frame,
         validate: () => ({ valid: true }),
@@ -64,7 +67,8 @@ describe("Pipeline System", () => {
 
       const modifiers = pipeline.getModifiers();
       expect(modifiers.length).toBe(1);
-      expect(modifiers[0].id).toBe("test-1");
+      // ID is reassigned by addModifier to a NATO name
+      expect(testModifier.id).toBe(modifiers[0].id);
     });
 
     it("should remove modifiers from pipeline", () => {
@@ -74,6 +78,7 @@ describe("Pipeline System", () => {
         id: "test-1",
         name: "Test Modifier",
         enabled: true,
+        parentId: null,
         category: ModifierCategory.SelectionInsensitive,
         apply: (frame: Frame) => frame,
         validate: () => ({ valid: true }),
@@ -83,7 +88,7 @@ describe("Pipeline System", () => {
       pipeline.addModifier(testModifier);
       expect(pipeline.getModifiers().length).toBe(1);
 
-      pipeline.removeModifier("test-1");
+      pipeline.removeModifier(testModifier.id); // use reassigned ID
       expect(pipeline.getModifiers().length).toBe(0);
     });
 
@@ -94,6 +99,7 @@ describe("Pipeline System", () => {
         id: "test-1",
         name: "Test 1",
         enabled: true,
+        parentId: null,
         category: ModifierCategory.SelectionInsensitive,
         apply: (frame: Frame) => frame,
         validate: () => ({ valid: true }),
@@ -104,6 +110,7 @@ describe("Pipeline System", () => {
         id: "test-2",
         name: "Test 2",
         enabled: true,
+        parentId: null,
         category: ModifierCategory.SelectionInsensitive,
         apply: (frame: Frame) => frame,
         validate: () => ({ valid: true }),

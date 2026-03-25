@@ -1,4 +1,4 @@
-import type { Frame } from "molrs-wasm";
+import type { Frame } from "@molcrafts/molrs";
 import type { FrameSource } from "../pipeline/pipeline";
 
 /**

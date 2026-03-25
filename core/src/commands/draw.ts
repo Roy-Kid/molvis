@@ -1,6 +1,6 @@
 import * as BABYLON from "@babylonjs/core";
 import type { Vector3 } from "@babylonjs/core";
-import type { Box, Frame } from "molrs-wasm";
+import type { Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
 import type { DrawAtomOptions, DrawBondOptions } from "../artist";
 import { Command, command } from "./base";
@@ -90,14 +90,12 @@ export class DrawBoxCommand extends Command<void> {
     const origin = new BABYLON.Vector3(o[0], o[1], o[2]);
     const center = origin.add(lengths.scale(0.5));
 
-    edges.forEach(([i, j]) => {
+    for (const [i, j] of edges) {
       const p1 = getPoint(i);
       const p2 = getPoint(j);
       const diff = p2.subtract(p1);
       const len = diff.length();
 
-      // Create Cylinder (defaults to Y axis alignment, diameter 1, height 1)
-      // Diameter 1 allows easy scaling: scaling.x/z = diameter
       const cyl = BABYLON.MeshBuilder.CreateCylinder(
         "box_edge",
         {
@@ -112,25 +110,19 @@ export class DrawBoxCommand extends Command<void> {
       cyl.parent = this.boxMesh;
       cyl.isPickable = false;
 
-      // Position at midpoint
       cyl.position = p1.add(diff.scale(0.5));
 
-      // Rotation: Cylinder is Y-aligned. We need to rotate Y to match 'diff' direction.
       const up = new BABYLON.Vector3(0, 1, 0);
       const dir = diff.normalizeToNew();
-
-      // Compute rotation quaternion
       const dot = BABYLON.Vector3.Dot(up, dir);
 
       if (dot < -0.9999) {
-        // Parallel opposite - flip 180 on X
         cyl.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(
           Math.PI,
           0,
           0,
         );
       } else if (dot > 0.9999) {
-        // Parallel same - no rotation
         cyl.rotationQuaternion = BABYLON.Quaternion.Identity();
       } else {
         const axis = BABYLON.Vector3.Cross(up, dir);
@@ -140,7 +132,7 @@ export class DrawBoxCommand extends Command<void> {
           angle,
         );
       }
-    });
+    }
 
     const updateThickness = () => {
       if (!this.boxMesh || this.boxMesh.isDisposed()) return;
@@ -150,7 +142,9 @@ export class DrawBoxCommand extends Command<void> {
         scene.activeCamera.position,
         center,
       );
-      const userScale = (this.boxMesh as any)._userThicknessScale ?? 1.0;
+      const userScale =
+        (this.boxMesh as BABYLON.Mesh & { _userThicknessScale?: number })
+          ._userThicknessScale ?? 1.0;
       let scale = dist * 0.002 * userScale;
       scale = Math.max(scale, 0.015);
 

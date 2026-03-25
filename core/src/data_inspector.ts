@@ -3,7 +3,7 @@
  * Pure functions that convert Frame Block data into table-friendly structures.
  */
 
-import type { Block, Frame } from "molrs-wasm";
+import type { Block, Frame } from "@molcrafts/molrs";
 import { probeColumnDtype } from "./utils/block_helpers";
 
 export interface ColumnDescriptor {

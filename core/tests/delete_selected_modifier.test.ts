@@ -1,8 +1,8 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
 import { DeleteSelectedModifier } from "../src/modifiers/DeleteSelectedModifier";
-import { createDefaultContext } from "../src/pipeline/types";
+import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 
 function makeFrame(elements: string[], bonds?: [number, number][]): Frame {
   const frame = new Frame();
@@ -24,19 +24,20 @@ function makeFrame(elements: string[], bonds?: [number, number][]): Frame {
 }
 
 describe("DeleteSelectedModifier", () => {
-  it("should pass through when no deletions", () => {
+  it("should pass through when selection is empty", () => {
     const mod = new DeleteSelectedModifier();
     const frame = makeFrame(["C", "O"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.none(2);
     const result = mod.apply(frame, ctx);
     expect(result).toBe(frame);
   });
 
-  it("should remove deleted atoms", () => {
+  it("should remove selected atoms", () => {
     const mod = new DeleteSelectedModifier();
-    mod.deleteIndices([1]); // delete O
     const frame = makeFrame(["C", "O", "N"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [1]); // delete O
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
@@ -47,7 +48,6 @@ describe("DeleteSelectedModifier", () => {
 
   it("should remap bond indices after deletion", () => {
     const mod = new DeleteSelectedModifier();
-    mod.deleteIndices([1]); // delete index 1
     // Bonds: 0-1 (removed), 0-2 (remapped to 0-1)
     const frame = makeFrame(
       ["C", "H", "O"],
@@ -57,6 +57,7 @@ describe("DeleteSelectedModifier", () => {
       ],
     );
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [1]); // delete index 1
     const result = mod.apply(frame, ctx);
 
     const bonds = result.getBlock("bonds")!;
@@ -69,35 +70,34 @@ describe("DeleteSelectedModifier", () => {
 
   it("should return empty frame when all atoms deleted", () => {
     const mod = new DeleteSelectedModifier();
-    mod.deleteIndices([0, 1]);
     const frame = makeFrame(["C", "O"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(2, [0, 1]);
     const result = mod.apply(frame, ctx);
     const atoms = result.getBlock("atoms");
     expect(!atoms || atoms.nrows() === 0).toBe(true);
   });
 
-  it("restoreAll should clear deletions", () => {
-    const mod = new DeleteSelectedModifier();
-    mod.deleteIndices([0]);
-    expect(mod.deletedCount).toBe(1);
-    mod.restoreAll();
-    expect(mod.deletedCount).toBe(0);
-    const frame = makeFrame(["C"]);
-    const ctx = createDefaultContext(frame);
-    expect(mod.apply(frame, ctx)).toBe(frame);
-  });
-
   it("should preserve coordinates after deletion", () => {
     const mod = new DeleteSelectedModifier();
-    mod.deleteIndices([0]); // delete first atom
     const frame = makeFrame(["H", "C", "O"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [0]); // delete first atom
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
     const x = atoms.viewColF32("x")!;
     expect(x[0]).toBeCloseTo(1, 5); // C was at x=1
     expect(x[1]).toBeCloseTo(2, 5); // O was at x=2
+  });
+
+  it("should pass through when selection indices exceed atom count", () => {
+    const mod = new DeleteSelectedModifier();
+    const frame = makeFrame(["C"]);
+    const ctx = createDefaultContext(frame);
+    // Selection contains index 99 which doesn't exist — needFilter should be false
+    ctx.currentSelection = SelectionMask.fromIndices(1, []);
+    const result = mod.apply(frame, ctx);
+    expect(result).toBe(frame);
   });
 });

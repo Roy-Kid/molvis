@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     logger,
-    MolvisEditorProvider.register(context, panelRegistry, logger),
+    MolvisEditorProvider.register(context, panelRegistry, logger, fileLoader),
     vscode.commands.registerCommand(
       "molvis.quickView",
       async (uri?: vscode.Uri) => {
@@ -39,7 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand("molvis.openEditor", () => {
-      openEditorPanel(context, panelRegistry, logger);
+      openEditorPanel(context, panelRegistry, logger, fileLoader);
     }),
     vscode.commands.registerCommand("molvis.save", async () => {
       await panelRegistry.forEachVisible((panel) => {
@@ -73,6 +73,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const message = createApplySettingsMessage();
+      // biome-ignore lint/complexity/noForEach: panelRegistry.forEach is a custom async iterator, not Array.forEach
       await panelRegistry.forEach((panel) => {
         sendToWebview(panel.webview, message);
       });

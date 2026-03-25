@@ -1,4 +1,4 @@
-import type { Box, Frame } from "molrs-wasm";
+import type { Box, Frame } from "@molcrafts/molrs";
 import type { RepresentationStyle } from "./artist/representation";
 import type { ModeType } from "./mode/base";
 import type { Trajectory } from "./system/trajectory";

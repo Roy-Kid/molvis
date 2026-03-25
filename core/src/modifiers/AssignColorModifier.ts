@@ -1,4 +1,4 @@
-import { Frame } from "molrs-wasm";
+import { Frame } from "@molcrafts/molrs";
 import { hexToLinearRgb } from "../artist/palette";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
@@ -8,93 +8,44 @@ import {
   COLOR_OVERRIDE_R,
 } from "./ColorByPropertyModifier";
 
-export interface ColorAssignment {
-  /** Atom indices to color */
-  indices: Set<number>;
-  /** Hex color string, e.g. "#FF0000" */
-  color: string;
-}
-
 /**
- * Modifier that assigns a uniform color to specific atoms.
+ * Modifier that assigns a uniform color to the current pipeline selection.
+ * Reads selection from context.currentSelection (set by a preceding SelectModifier).
  * Injects __color_r/g/b override columns (same as ColorByPropertyModifier).
- * Multiple color assignments can be stacked.
  */
 export class AssignColorModifier extends BaseModifier {
-  private _assignments: ColorAssignment[] = [];
+  private _color = "#FF4444";
+  private _lastCount = 0;
 
-  constructor(id = `assign-color-${Date.now()}`) {
+  constructor(id = "assign-color-default") {
     super(id, "Assign Color", ModifierCategory.SelectionSensitive);
   }
 
-  get assignments(): readonly ColorAssignment[] {
-    return this._assignments;
-  }
-
   get selectedCount(): number {
-    const indices = new Set<number>();
-    for (const assignment of this._assignments) {
-      for (const idx of assignment.indices) {
-        indices.add(idx);
-      }
-    }
-    return indices.size;
+    return this._lastCount;
   }
 
   get primaryColor(): string {
-    return this._assignments[0]?.color ?? "#FF4444";
+    return this._color;
   }
 
   /**
-   * Add a color assignment for a set of atom indices.
-   */
-  addAssignment(indices: Iterable<number>, color: string): void {
-    this._assignments.push({
-      indices: new Set(indices),
-      color,
-    });
-  }
-
-  /**
-   * Replace all assignments with a single captured selection.
-   */
-  setSelection(indices: Iterable<number>, color = this.primaryColor): void {
-    this._assignments = [
-      {
-        indices: new Set(indices),
-        color,
-      },
-    ];
-  }
-
-  /**
-   * Update the primary color used by the first assignment.
+   * Update the color used for the selection.
    */
   setPrimaryColor(color: string): void {
-    if (this._assignments.length === 0) {
-      this._assignments.push({
-        indices: new Set(),
-        color,
-      });
-      return;
-    }
-
-    this._assignments[0].color = color;
-  }
-
-  /**
-   * Clear all color assignments.
-   */
-  clearAssignments(): void {
-    this._assignments = [];
+    this._color = color;
   }
 
   getCacheKey(): string {
-    return `${super.getCacheKey()}:${this._assignments.length}:${this._assignments.map((a) => `${a.color}:${a.indices.size}`).join(",")}`;
+    return `${super.getCacheKey()}:${this._color}`;
   }
 
-  apply(input: Frame, _context: PipelineContext): Frame {
-    if (this._assignments.length === 0) return input;
+  apply(input: Frame, context: PipelineContext): Frame {
+    const selection = context.currentSelection;
+    const indices = selection.getIndices();
+    if (indices.length === 0) return input;
+
+    this._lastCount = indices.length;
 
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
@@ -115,26 +66,24 @@ export class AssignColorModifier extends BaseModifier {
 
     const colorR = existingR
       ? new Float32Array(existingR)
-      : new Float32Array(atomCount);
+      : new Float32Array(atomCount).fill(Number.NaN);
     const colorG = existingG
       ? new Float32Array(existingG)
-      : new Float32Array(atomCount);
+      : new Float32Array(atomCount).fill(Number.NaN);
     const colorB = existingB
       ? new Float32Array(existingB)
-      : new Float32Array(atomCount);
+      : new Float32Array(atomCount).fill(Number.NaN);
 
     let hasOverride = existingR !== undefined;
 
-    // Apply each assignment (later assignments override earlier ones)
-    for (const assignment of this._assignments) {
-      const [r, g, b] = hexToLinearRgb(assignment.color);
-      for (const idx of assignment.indices) {
-        if (idx < atomCount) {
-          colorR[idx] = r;
-          colorG[idx] = g;
-          colorB[idx] = b;
-          hasOverride = true;
-        }
+    // Apply color to selected indices
+    const [r, g, b] = hexToLinearRgb(this._color);
+    for (const idx of indices) {
+      if (idx < atomCount) {
+        colorR[idx] = r;
+        colorG[idx] = g;
+        colorB[idx] = b;
+        hasOverride = true;
       }
     }
 

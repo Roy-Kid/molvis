@@ -1,25 +1,41 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, test } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
-import type { MolvisApp } from "../src/core/app";
+import type { MolvisApp } from "../src/app";
 import { HideSelectionModifier } from "../src/modifiers/HideSelectionModifier";
-import { createDefaultContext } from "../src/pipeline/types";
+import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 
 describe("HideSelectionModifier", () => {
   // Mock app
   const mockApp = {} as MolvisApp;
 
+  test("Should pass through when selection is empty", () => {
+    const frame = new Frame();
+    const atoms = new Block();
+    atoms.setColF32("x", new Float32Array([0, 1, 2, 3, 4]));
+    atoms.setColF32("y", new Float32Array(5));
+    atoms.setColF32("z", new Float32Array(5));
+    atoms.setColStr("element", ["C", "C", "H", "H", "O"]);
+    frame.insertBlock("atoms", atoms);
+
+    const context = createDefaultContext(frame, mockApp);
+    context.currentSelection = SelectionMask.none(5);
+
+    const modifier = new HideSelectionModifier();
+    expect(modifier.validate(frame, context).valid).toBe(true);
+    const out = modifier.apply(frame, context);
+    expect(out.getBlock("atoms")?.nrows()).toBe(5);
+  });
+
   test("Should hide selected atoms", () => {
-    // Setup Frame
     const frame = new Frame();
     const atoms = new Block();
     const count = 5;
     const xs = new Float32Array(count);
     const ys = new Float32Array(count);
     const zs = new Float32Array(count);
-    const elements = ["C", "C", "H", "H", "O"]; // 0,1,2,3,4
+    const elements = ["C", "C", "H", "H", "O"];
 
-    // Fill data
     for (let i = 0; i < count; i++) {
       xs[i] = i;
       ys[i] = 0;
@@ -32,22 +48,12 @@ describe("HideSelectionModifier", () => {
     atoms.setColStr("element", elements);
     frame.insertBlock("atoms", atoms);
 
-    // Context
     const context = createDefaultContext(frame, mockApp);
+    // Select indices 1 and 3 to hide
+    context.currentSelection = SelectionMask.fromIndices(5, [1, 3]);
 
-    // Modifier
     const modifier = new HideSelectionModifier();
-
-    // Validate empty
-    expect(modifier.validate(frame, context).valid).toBe(true);
-    let out = modifier.apply(frame, context);
-    expect(out.getBlock("atoms")?.nrows()).toBe(5);
-
-    // Hide indices 1 and 3
-    modifier.hideIndices([1, 3]);
-    expect(modifier.hiddenCount).toBe(2);
-
-    out = modifier.apply(frame, context);
+    const out = modifier.apply(frame, context);
     const outAtoms = out.getBlock("atoms")!;
     expect(outAtoms.nrows()).toBe(3);
 
@@ -80,20 +86,15 @@ describe("HideSelectionModifier", () => {
     frame.insertBlock("bonds", bonds);
 
     const context = createDefaultContext(frame, mockApp);
-    const modifier = new HideSelectionModifier();
-
     // Hide atom 1 (middle)
-    modifier.hideIndices([1]);
+    context.currentSelection = SelectionMask.fromIndices(3, [1]);
 
+    const modifier = new HideSelectionModifier();
     const out = modifier.apply(frame, context);
     const outAtoms = out.getBlock("atoms")!;
     expect(outAtoms.nrows()).toBe(2); // 0 and 2 remain
 
     const outBonds = out.getBlock("bonds");
-    // Should handle empty bonds block if all removed?
-    // Or return block with 0 rows?
-    // Logic returns block if validBonds > 0.
-
     // Both bonds 0-1 and 1-2 connected to 1, so both should be removed.
     if (outBonds) {
       expect(outBonds.nrows()).toBe(0);
@@ -119,11 +120,10 @@ describe("HideSelectionModifier", () => {
     frame.insertBlock("bonds", bonds);
 
     const context = createDefaultContext(frame, mockApp);
-    const modifier = new HideSelectionModifier();
-
     // Hide 2 (isolated)
-    modifier.hideIndices([2]);
+    context.currentSelection = SelectionMask.fromIndices(3, [2]);
 
+    const modifier = new HideSelectionModifier();
     const out = modifier.apply(frame, context);
     const outAtoms = out.getBlock("atoms")!;
     expect(outAtoms.nrows()).toBe(2); // 0, 1

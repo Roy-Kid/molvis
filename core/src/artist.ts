@@ -6,7 +6,7 @@ import {
   type ShaderMaterial,
   type Vector3,
 } from "@babylonjs/core";
-import type { Block, Box, Frame } from "molrs-wasm";
+import type { Block, Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 
 import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
@@ -105,12 +105,56 @@ export class Artist {
     const colorDesc = atomState.buffers.get("instanceColor");
     if (!colorDesc) return;
 
+    const total = atomState.frameOffset + atomState.count;
     for (const idx of indices) {
-      if (idx >= 0 && idx < atomState.frameOffset + atomState.count) {
+      if (idx >= 0 && idx < total) {
         colorDesc.data[idx * 4 + 3] = clamped;
       }
     }
-    atomState.mesh.thinInstanceBufferUpdated("instanceColor");
+    atomState.uploadBuffer("instanceColor");
+  }
+
+  /**
+   * Set opacity on bonds whose either endpoint is in the given atom set.
+   * Iterates all logical bonds and applies opacity to all render instances.
+   */
+  setBondOpacityForAtoms(
+    atomIndices: ReadonlySet<number>,
+    opacity: number,
+  ): void {
+    const clamped = Math.max(0.02, Math.min(1.0, opacity));
+    const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+    if (!bondState) return;
+
+    const c0 = bondState.buffers.get("instanceColor0");
+    const c1 = bondState.buffers.get("instanceColor1");
+    if (!c0 || !c1) return;
+
+    const bondsBlock = this.app.world.sceneIndex.metaRegistry.bonds.frameBlock;
+    if (!bondsBlock) return;
+
+    const iAtoms = bondsBlock.viewColU32("i");
+    const jAtoms = bondsBlock.viewColU32("j");
+    const orderCol = bondsBlock.dtype("order")
+      ? bondsBlock.viewColU32("order")
+      : undefined;
+    if (!iAtoms || !jAtoms) return;
+
+    const logicalCount = bondsBlock.nrows();
+    let renderIdx = 0;
+    for (let b = 0; b < logicalCount; b++) {
+      const order = orderCol ? orderCol[b] : 1;
+      const hit = atomIndices.has(iAtoms[b]) || atomIndices.has(jAtoms[b]);
+      for (let s = 0; s < order && renderIdx < bondState.frameOffset; s++) {
+        if (hit) {
+          c0.data[renderIdx * 4 + 3] = clamped;
+          c1.data[renderIdx * 4 + 3] = clamped;
+        }
+        renderIdx++;
+      }
+    }
+    bondState.uploadBuffer("instanceColor0");
+    bondState.uploadBuffer("instanceColor1");
   }
 
   private applyGlobalOpacity(): void {
@@ -122,7 +166,7 @@ export class Artist {
         for (let i = 0; i < total; i++) {
           colorDesc.data[i * 4 + 3] = this._globalOpacity;
         }
-        atomState.mesh.thinInstanceBufferUpdated("instanceColor");
+        atomState.uploadBuffer("instanceColor");
       }
     }
 
@@ -136,8 +180,8 @@ export class Artist {
           c0.data[i * 4 + 3] = this._globalOpacity;
           c1.data[i * 4 + 3] = this._globalOpacity;
         }
-        bondState.mesh.thinInstanceBufferUpdated("instanceColor0");
-        bondState.mesh.thinInstanceBufferUpdated("instanceColor1");
+        bondState.uploadBuffer("instanceColor0");
+        bondState.uploadBuffer("instanceColor1");
       }
     }
   }
@@ -311,11 +355,14 @@ export class Artist {
 
     this.applySceneIndexToMeshes();
 
+    // Apply slice visibility if a SliceModifier is in the pipeline
+    const sliceMod = findSliceModifier(this.app.modifierPipeline);
+    if (sliceMod?.visibilityMask) {
+      this.applySliceVisibility(sliceMod.visibilityMask, frame);
+    }
+
     this.app.events.emit("frame-rendered", { frame, box: _box });
-    updateVisualGuide(
-      this.app.world.scene,
-      findSliceModifier(this.app.modifierPipeline),
-    );
+    updateVisualGuide(this.app.world.scene, sliceMod);
   }
 
   // ============ Frame Refresh (Fast Path) ============
@@ -345,8 +392,8 @@ export class Artist {
         dataDesc.data[i * 4 + 1] = y[i];
         dataDesc.data[i * 4 + 2] = z[i];
       }
-      atomState.mesh.thinInstanceBufferUpdated("matrix");
-      atomState.mesh.thinInstanceBufferUpdated("instanceData");
+      atomState.uploadBuffer("matrix");
+      atomState.uploadBuffer("instanceData");
     }
 
     // Update bond positions
@@ -373,7 +420,7 @@ export class Artist {
     const atomId = options.atomId ?? this.app.world.sceneIndex.getNextAtomId();
     const element = options.element;
     const style = this.app.styleManager.getAtomStyle(element);
-    const radius = options.radius || style.radius * 0.6;
+    const radius = options.radius || style.radius;
     const scale = radius * 2;
 
     const c = Color3.FromHexString(style.color).toLinearSpace();
@@ -685,7 +732,7 @@ export class Artist {
     for (let i = 0; i < totalCount; i++) {
       instanceColorDesc.data[i * 4 + 3] = visMask[i] ? 1.0 : 0.0;
     }
-    atomState.mesh.thinInstanceBufferUpdated("instanceColor");
+    atomState.uploadBuffer("instanceColor");
 
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
     if (!bondState) return;
@@ -697,15 +744,25 @@ export class Artist {
 
     const iAtoms = bondsBlock.viewColU32("i");
     const jAtoms = bondsBlock.viewColU32("j");
+    const orderCol = bondsBlock.dtype("order")
+      ? bondsBlock.viewColU32("order")
+      : undefined;
 
-    const safeCount = Math.min(bondsBlock.nrows(), bondState.frameOffset);
-    for (let b = 0; b < safeCount; b++) {
+    // Iterate with a running render index that advances by the bond's order,
+    // because multi-order bonds expand to multiple GPU instances.
+    const logicalCount = bondsBlock.nrows();
+    let renderIdx = 0;
+    for (let b = 0; b < logicalCount; b++) {
+      const order = orderCol ? orderCol[b] : 1;
       const alpha = !visMask[iAtoms[b]] || !visMask[jAtoms[b]] ? 0.0 : 1.0;
-      bondColor0.data[b * 4 + 3] = alpha;
-      bondColor1.data[b * 4 + 3] = alpha;
+      for (let s = 0; s < order && renderIdx < bondState.frameOffset; s++) {
+        bondColor0.data[renderIdx * 4 + 3] = alpha;
+        bondColor1.data[renderIdx * 4 + 3] = alpha;
+        renderIdx++;
+      }
     }
-    bondState.mesh.thinInstanceBufferUpdated("instanceColor0");
-    bondState.mesh.thinInstanceBufferUpdated("instanceColor1");
+    bondState.uploadBuffer("instanceColor0");
+    bondState.uploadBuffer("instanceColor1");
   }
 
   private getAtomColor(atomId: number): Float32Array {

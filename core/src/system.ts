@@ -1,4 +1,4 @@
-import { type Box, Frame } from "molrs-wasm";
+import { type Box, Frame } from "@molcrafts/molrs";
 import type { EventEmitter, MolvisEventMap } from "./events";
 import { Trajectory } from "./system/trajectory";
 import { logger } from "./utils/logger";

@@ -1,4 +1,4 @@
-import type { Frame } from "molrs-wasm";
+import type { Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
@@ -54,8 +54,9 @@ export class ExpressionSelectionModifier extends BaseModifier {
 
     const mask = SelectionMask.fromIndices(count, indices);
 
-    // Store in selectionSet if named
-    if (this.selectionName) {
+    // Always store in selectionSet using modifier ID
+    context.selectionSet.set(this.id, mask);
+    if (this.selectionName && this.selectionName !== this.id) {
       context.selectionSet.set(this.selectionName, mask);
     }
 

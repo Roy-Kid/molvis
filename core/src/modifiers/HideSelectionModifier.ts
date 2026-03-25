@@ -1,53 +1,25 @@
-import { Block, Frame } from "molrs-wasm";
+import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 
 /**
- * Modifier that hides specific atoms based on a persistent selection.
+ * Modifier that hides atoms based on the current pipeline selection.
+ * Reads selection from context.currentSelection (set by a preceding SelectModifier).
+ * This is topology-changing: it removes atoms and remaps bond indices.
  */
 export class HideSelectionModifier extends BaseModifier {
-  // Set of atom indices to hide
-  private _hiddenIndices: Set<number> = new Set();
-
   constructor(id = "hide-selection-default") {
     super(id, "Hide Selection", ModifierCategory.SelectionSensitive);
   }
 
-  get hiddenCount(): number {
-    return this._hiddenIndices.size;
-  }
-
-  /**
-   * Add indices to the hidden set
-   */
-  public hideIndices(indices: number[] | Iterable<number>) {
-    let changed = false;
-    for (const idx of indices) {
-      if (!this._hiddenIndices.has(idx)) {
-        this._hiddenIndices.add(idx);
-        changed = true;
-      }
-    }
-    return changed; // Return true if valid change
-  }
-
-  /**
-   * Clear hidden set (Show all)
-   */
-  public showAll() {
-    if (this._hiddenIndices.size > 0) {
-      this._hiddenIndices.clear();
-      return true;
-    }
-    return false;
-  }
-
   getCacheKey(): string {
-    return `${super.getCacheKey()}:${this._hiddenIndices.size}`;
+    return `${super.getCacheKey()}`;
   }
 
-  apply(input: Frame, _context: PipelineContext): Frame {
-    if (this._hiddenIndices.size === 0) return input;
+  apply(input: Frame, context: PipelineContext): Frame {
+    const selection = context.currentSelection;
+    const hiddenIndices = new Set(selection.getIndices());
+    if (hiddenIndices.size === 0) return input;
 
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
@@ -56,7 +28,7 @@ export class HideSelectionModifier extends BaseModifier {
     // Check if we need to filter
     let needFilter = false;
     for (let i = 0; i < nrows; i++) {
-      if (this._hiddenIndices.has(i)) {
+      if (hiddenIndices.has(i)) {
         needFilter = true;
         break;
       }
@@ -69,7 +41,7 @@ export class HideSelectionModifier extends BaseModifier {
     let newCount = 0;
 
     for (let i = 0; i < nrows; i++) {
-      if (this._hiddenIndices.has(i)) {
+      if (hiddenIndices.has(i)) {
         indexMap[i] = -1;
       } else {
         indexMap[i] = newCount++;

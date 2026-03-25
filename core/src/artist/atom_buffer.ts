@@ -1,11 +1,10 @@
 import { Color3 } from "@babylonjs/core";
-import type { Block } from "molrs-wasm";
+import type { Block } from "@molcrafts/molrs";
 import {
   COLOR_OVERRIDE_B,
   COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_R,
 } from "../modifiers/ColorByPropertyModifier";
-import { ALPHA_OVERRIDE } from "../modifiers/TransparentSelectionModifier";
 import { encodePickingColorInto } from "../picker";
 import type { StyleManager } from "./style_manager";
 
@@ -62,9 +61,6 @@ export function buildAtomBuffers(
   const overrideB = atomsBlock.dtype(COLOR_OVERRIDE_B)
     ? atomsBlock.viewColF32(COLOR_OVERRIDE_B)
     : undefined;
-  const overrideAlpha = atomsBlock.dtype(ALPHA_OVERRIDE)
-    ? atomsBlock.viewColF32(ALPHA_OVERRIDE)
-    : undefined;
   const hasColorOverride = overrideR && overrideG && overrideB;
 
   const atomMatrix = new Float32Array(atomCount * 16);
@@ -106,23 +102,19 @@ export function buildAtomBuffers(
     atomData[idx4 + 2] = zCoords[i];
     atomData[idx4 + 3] = radius;
 
-    // Color: use override if present, otherwise fall back to style
+    // Color: use override if present and finite, otherwise fall back to style
     const visible = visibleArr ? visibleArr[i] : true;
-    const alphaOverride = overrideAlpha?.[i];
-    const resolvedAlpha =
-      typeof alphaOverride === "number" && Number.isFinite(alphaOverride)
-        ? alphaOverride
-        : style.a;
-    if (hasColorOverride) {
+    const useOverride = hasColorOverride && Number.isFinite(overrideR[i]);
+    if (useOverride) {
       atomColor[idx4 + 0] = overrideR[i];
       atomColor[idx4 + 1] = overrideG[i];
       atomColor[idx4 + 2] = overrideB[i];
-      atomColor[idx4 + 3] = visible ? resolvedAlpha : 0.2;
+      atomColor[idx4 + 3] = visible ? style.a : 0.2;
     } else {
       atomColor[idx4 + 0] = style.r;
       atomColor[idx4 + 1] = style.g;
       atomColor[idx4 + 2] = style.b;
-      atomColor[idx4 + 3] = visible ? resolvedAlpha : 0.2;
+      atomColor[idx4 + 3] = visible ? style.a : 0.2;
     }
 
     // Picking color (zero-allocation write)

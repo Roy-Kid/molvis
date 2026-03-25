@@ -1,5 +1,5 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
 import { HideHydrogensModifier } from "../src/modifiers/HideHydrogensModifier";
 import { createDefaultContext } from "../src/pipeline/types";

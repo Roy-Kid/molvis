@@ -1,0 +1,125 @@
+/* Kekule Composer — dark-first compact theme */
+
+.kekule-container {
+  --kk-bg: hsl(240 8% 12%);
+  --kk-chrome: hsl(240 8% 15%);
+  --kk-border: hsl(240 6% 22%);
+  --kk-canvas: hsl(240 6% 18%);
+  --kk-text: hsl(240 4% 70%);
+  --kk-btn: hsl(240 6% 20%);
+  --kk-btn-hover: hsl(240 6% 26%);
+  --kk-btn-checked: hsl(240 6% 32%);
+  --kk-accent: hsl(220 50% 50%);
+  --kk-icon-filter: invert(1) brightness(2);
+  --kk-canvas-filter: invert(1);
+}
+
+/* Light mode override */
+:root:not(.dark) .kekule-container {
+  --kk-bg: hsl(240 6% 96%);
+  --kk-chrome: hsl(240 6% 93%);
+  --kk-border: hsl(240 6% 85%);
+  --kk-canvas: hsl(0 0% 100%);
+  --kk-text: hsl(240 6% 30%);
+  --kk-btn: hsl(240 6% 88%);
+  --kk-btn-hover: hsl(240 6% 82%);
+  --kk-btn-checked: hsl(240 6% 75%);
+  --kk-accent: hsl(220 50% 50%);
+  --kk-icon-filter: none;
+  --kk-canvas-filter: none;
+}
+
+/* ── Scale ── */
+.kekule-container .K-Chem-Composer {
+  transform: scale(0.75);
+  transform-origin: top left;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+/* ── Shell ── */
+.kekule-container .K-Chem-Composer {
+  background-color: var(--kk-bg) !important;
+  border: 1px solid var(--kk-border) !important;
+}
+
+/* ── Toolbar regions ── */
+.kekule-container .K-Chem-Composer-Top-Region,
+.kekule-container .K-Chem-Composer-Left-Region,
+.kekule-container .K-Chem-Composer-Bottom-Region {
+  background-color: var(--kk-chrome) !important;
+}
+.kekule-container .K-Chem-Composer-Top-Region {
+  border-bottom: 1px solid var(--kk-border) !important;
+}
+.kekule-container .K-Chem-Composer-Left-Region {
+  border-right: 1px solid var(--kk-border) !important;
+}
+.kekule-container .K-Chem-Composer-Bottom-Region {
+  border-top: 1px solid var(--kk-border) !important;
+}
+
+/* ── Canvas ── */
+.kekule-container .K-Chem-Editor,
+.kekule-container .K-Chem-Editor .K-Chem-Editor-Client {
+  background-color: var(--kk-canvas) !important;
+}
+
+/* Invert canvas strokes in dark mode (black→white) */
+.kekule-container .K-Chem-Editor canvas {
+  filter: var(--kk-canvas-filter);
+}
+
+/* ── Panels ── */
+.kekule-container .K-Normal-Background,
+.kekule-container .K-Container.K-Panel,
+.kekule-container .K-ComboBox .K-TextBox {
+  background-color: var(--kk-chrome) !important;
+}
+
+/* ── Text ── */
+.kekule-container .K-Widget {
+  color: var(--kk-text) !important;
+}
+
+/* ── Icons — use token for invert ── */
+.kekule-container .K-Button img,
+.kekule-container .K-DropDownButton img {
+  filter: var(--kk-icon-filter);
+}
+
+/* ── Buttons — same hue, depth = state ── */
+.kekule-container .K-Button,
+.kekule-container .K-DropDownButton {
+  background-color: var(--kk-btn) !important;
+  border: 1px solid transparent !important;
+  border-radius: 3px !important;
+  transition: background-color 0.1s;
+}
+
+.kekule-container .K-State-Hover {
+  background-color: var(--kk-btn-hover) !important;
+}
+
+.kekule-container .K-State-Active,
+.kekule-container .K-State-Focused {
+  background-color: var(--kk-btn-hover) !important;
+}
+
+.kekule-container .K-State-Checked {
+  background-color: var(--kk-btn-checked) !important;
+  border-color: var(--kk-border) !important;
+}
+
+/* ── Dropdowns ── */
+.kekule-container .K-Popup,
+.kekule-container .K-DropDownPanel {
+  background-color: var(--kk-chrome) !important;
+  border: 1px solid var(--kk-border) !important;
+  border-radius: 5px !important;
+}
+
+/* ── Range input ── */
+.kekule-container input[type="range"] {
+  accent-color: var(--kk-accent);
+}

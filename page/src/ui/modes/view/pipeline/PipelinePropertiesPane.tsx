@@ -6,6 +6,7 @@ import { ModifierProperties } from "../ModifierProperties";
 interface PipelinePropertiesPaneProps {
   app: Molvis | null;
   selectedModifier: Modifier | undefined;
+  allModifiers: readonly Modifier[];
   propertiesHeight: number;
   isResizing: boolean;
   onResizeStart: (event: React.MouseEvent) => void;
@@ -15,6 +16,7 @@ interface PipelinePropertiesPaneProps {
 export function PipelinePropertiesPane({
   app,
   selectedModifier,
+  allModifiers,
   propertiesHeight,
   isResizing,
   onResizeStart,
@@ -35,6 +37,7 @@ export function PipelinePropertiesPane({
           <ScrollArea className="flex-1">
             <ModifierProperties
               modifier={selectedModifier}
+              allModifiers={allModifiers}
               app={app}
               onUpdate={onUpdate}
             />

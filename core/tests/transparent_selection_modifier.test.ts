@@ -1,11 +1,8 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
-import {
-  ALPHA_OVERRIDE,
-  TransparentSelectionModifier,
-} from "../src/modifiers/TransparentSelectionModifier";
-import { createDefaultContext } from "../src/pipeline/types";
+import { TransparentSelectionModifier } from "../src/modifiers/TransparentSelectionModifier";
+import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();
@@ -19,31 +16,44 @@ function makeFrame(elements: string[]): Frame {
 }
 
 describe("TransparentSelectionModifier", () => {
-  it("should pass through when no indices are captured", () => {
+  it("should pass through when selection is empty", () => {
     const mod = new TransparentSelectionModifier();
     const frame = makeFrame(["C", "O"]);
     const ctx = createDefaultContext(frame);
+    // Default context has all atoms selected; set to none for this test
+    ctx.currentSelection = SelectionMask.none(2);
     expect(mod.apply(frame, ctx)).toBe(frame);
+    expect(ctx.postRenderEffects).toHaveLength(0);
   });
 
-  it("should inject alpha override for selected atoms", () => {
+  it("should register a post-render effect for selected atoms", () => {
     const mod = new TransparentSelectionModifier();
     mod.opacity = 0.25;
-    mod.setIndices([1]);
 
     const frame = makeFrame(["C", "O", "N"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [1]);
     const result = mod.apply(frame, ctx);
 
-    const atoms = result.getBlock("atoms")!;
-    const alpha = atoms.viewColF32(ALPHA_OVERRIDE)!;
-
-    expect(Number.isNaN(alpha[0])).toBe(true);
-    expect(alpha[1]).toBeCloseTo(0.25, 5);
-    expect(Number.isNaN(alpha[2])).toBe(true);
+    // Frame is returned unchanged — GPU alpha is patched via postRenderEffect
+    expect(result).toBe(frame);
+    expect(ctx.postRenderEffects).toHaveLength(1);
   });
 
-  it("should preserve bonds and box", () => {
+  it("should expose selectedCount after apply", () => {
+    const mod = new TransparentSelectionModifier();
+    mod.opacity = 0.4;
+
+    const frame = makeFrame(["C", "O", "N"]);
+    const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [0, 2]);
+    mod.apply(frame, ctx);
+
+    expect(mod.selectedCount).toBe(2);
+    expect(mod.opacity).toBe(0.4);
+  });
+
+  it("should preserve frame when bonds present", () => {
     const frame = makeFrame(["C", "O"]);
     const bonds = new Block();
     bonds.setColU32("i", new Uint32Array([0]));
@@ -51,10 +61,16 @@ describe("TransparentSelectionModifier", () => {
     frame.insertBlock("bonds", bonds);
 
     const mod = new TransparentSelectionModifier();
-    mod.setIndices([0]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(2, [0]);
     const result = mod.apply(frame, ctx);
 
+    expect(result).toBe(frame);
     expect(result.getBlock("bonds")).not.toBeNull();
+  });
+
+  it("should report selectedCount 0 before first apply", () => {
+    const mod = new TransparentSelectionModifier();
+    expect(mod.selectedCount).toBe(0);
   });
 });

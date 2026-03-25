@@ -19,7 +19,7 @@ export class ModernTheme implements Theme {
   public readonly name = "Modern";
 
   public readonly backgroundColor = "#1E1E1E";
-  public readonly selectionColor = "#E74C3C";
+  public readonly selectionColor = "#89CFF0";
   public readonly boxColor = "#FFFFFF";
   public readonly defaultSpecular = "#888888";
 

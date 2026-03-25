@@ -1,5 +1,5 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
 import { AssignColorModifier } from "../src/modifiers/AssignColorModifier";
 import {
@@ -7,7 +7,7 @@ import {
   COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_R,
 } from "../src/modifiers/ColorByPropertyModifier";
-import { createDefaultContext } from "../src/pipeline/types";
+import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();
@@ -21,19 +21,21 @@ function makeFrame(elements: string[]): Frame {
 }
 
 describe("AssignColorModifier", () => {
-  it("should pass through when no assignments", () => {
+  it("should pass through when selection is empty", () => {
     const mod = new AssignColorModifier();
     const frame = makeFrame(["C", "O"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.none(2);
     const result = mod.apply(frame, ctx);
     expect(result).toBe(frame);
   });
 
-  it("should inject color override columns for assigned atoms", () => {
+  it("should inject color override columns for selected atoms", () => {
     const mod = new AssignColorModifier();
-    mod.addAssignment([0], "#FF0000");
+    mod.setPrimaryColor("#FF0000");
     const frame = makeFrame(["C", "O", "N"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [0]);
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
@@ -47,19 +49,18 @@ describe("AssignColorModifier", () => {
     expect(b[0]).toBeCloseTo(0, 2);
   });
 
-  it("should handle multiple assignments", () => {
+  it("should color all selected atoms with the primary color", () => {
     const mod = new AssignColorModifier();
-    mod.addAssignment([0], "#FF0000"); // red
-    mod.addAssignment([1], "#0000FF"); // blue
+    mod.setPrimaryColor("#0000FF"); // blue
     const frame = makeFrame(["C", "O"]);
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(2, [0, 1]);
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const r = atoms.viewColF32(COLOR_OVERRIDE_R)!;
     const b = atoms.viewColF32(COLOR_OVERRIDE_B)!;
 
-    expect(r[0]).toBeGreaterThan(0.5); // atom 0 is red
+    expect(b[0]).toBeGreaterThan(0.5); // atom 0 is blue
     expect(b[1]).toBeGreaterThan(0.5); // atom 1 is blue
   });
 
@@ -71,28 +72,35 @@ describe("AssignColorModifier", () => {
     frame.insertBlock("bonds", bonds);
 
     const mod = new AssignColorModifier();
-    mod.addAssignment([0], "#FF0000");
+    mod.setPrimaryColor("#FF0000");
     const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(2, [0]);
     const result = mod.apply(frame, ctx);
 
     expect(result.getBlock("bonds")).not.toBeNull();
   });
 
-  it("clearAssignments should reset", () => {
-    const mod = new AssignColorModifier();
-    mod.addAssignment([0], "#FF0000");
-    mod.clearAssignments();
-    const frame = makeFrame(["C"]);
-    const ctx = createDefaultContext(frame);
-    const result = mod.apply(frame, ctx);
-    expect(result).toBe(frame);
-  });
-
-  it("should produce different cache keys", () => {
+  it("should produce different cache keys for different colors", () => {
     const mod = new AssignColorModifier();
     const key1 = mod.getCacheKey();
-    mod.addAssignment([0], "#FF0000");
+    mod.setPrimaryColor("#00FF00");
     const key2 = mod.getCacheKey();
     expect(key1).not.toBe(key2);
+  });
+
+  it("should expose selectedCount after apply", () => {
+    const mod = new AssignColorModifier();
+    mod.setPrimaryColor("#FF0000");
+    const frame = makeFrame(["C", "O", "N"]);
+    const ctx = createDefaultContext(frame);
+    ctx.currentSelection = SelectionMask.fromIndices(3, [0, 2]);
+    mod.apply(frame, ctx);
+
+    expect(mod.selectedCount).toBe(2);
+  });
+
+  it("should expose default primary color", () => {
+    const mod = new AssignColorModifier();
+    expect(mod.primaryColor).toBe("#FF4444");
   });
 });

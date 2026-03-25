@@ -1,4 +1,4 @@
-import type { Block } from "molrs-wasm";
+import type { Block } from "@molcrafts/molrs";
 
 // ============ Entity Types ============
 

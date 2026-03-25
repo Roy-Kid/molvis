@@ -19,6 +19,20 @@ interface RegistryEntry {
   factory: ModifierFactory;
 }
 
+/**
+ * Module-level counter for deterministic modifier IDs.
+ * Avoids non-deterministic Date.now() patterns.
+ */
+let _idCounter = 0;
+
+/**
+ * Generate a deterministic modifier ID with the given prefix.
+ */
+export function nextModifierId(prefix: string): string {
+  return `${prefix}-${++_idCounter}`;
+}
+
+// biome-ignore lint/complexity/noStaticOnlyClass: ModifierRegistry is a singleton registry pattern used across the app
 export class ModifierRegistry {
   private static entries: RegistryEntry[] = [];
 
@@ -39,18 +53,18 @@ export class ModifierRegistry {
     );
     ModifierRegistry.register(
       "Slice",
-      "Selection Insensitive", // Use correct category string or check enum
+      "Selection Insensitive",
       () => new SliceModifier(),
     );
     ModifierRegistry.register(
       "Wrap PBC",
       "Selection Insensitive",
-      () => new WrapPBCModifier(`wrap-pbc-${Date.now()}`),
+      () => new WrapPBCModifier(nextModifierId("wrap-pbc")),
     );
     ModifierRegistry.register(
       "Expression Select",
       "Selection Sensitive",
-      () => new ExpressionSelectionModifier(`expr-sel-${Date.now()}`, ""),
+      () => new ExpressionSelectionModifier(nextModifierId("expr-sel"), ""),
     );
     ModifierRegistry.register(
       "Hide Selection",

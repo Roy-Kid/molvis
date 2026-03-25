@@ -1,11 +1,9 @@
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type {
   AssignColorModifier as CoreAssignColorModifier,
   Molvis,
 } from "@molvis/core";
 import type React from "react";
-import { getSelectedAtomIndices } from "./selectionUtils";
 
 interface ModifierProps {
   modifier: CoreAssignColorModifier;
@@ -24,17 +22,10 @@ export const AssignColorModifier: React.FC<ModifierProps> = ({
     void app?.applyPipeline({ fullRebuild: true });
   };
 
-  const handleCaptureSelection = () => {
-    if (!app) return;
-    modifier.setSelection(getSelectedAtomIndices(app), modifier.primaryColor);
-    onUpdate();
-    void app.applyPipeline({ fullRebuild: true });
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-xs">
-        <Label>Captured Atoms</Label>
+        <Label>Affected Atoms</Label>
         <span className="font-mono text-muted-foreground">
           {modifier.selectedCount}
         </span>
@@ -55,16 +46,6 @@ export const AssignColorModifier: React.FC<ModifierProps> = ({
           </div>
         </div>
       </div>
-
-      <Button
-        size="sm"
-        variant="outline"
-        className="w-full"
-        onClick={handleCaptureSelection}
-        disabled={!app}
-      >
-        Use Current Selection
-      </Button>
     </div>
   );
 };

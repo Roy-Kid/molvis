@@ -127,7 +127,7 @@ export class ClassicTheme implements Theme {
   public readonly name = "Classic";
 
   public readonly backgroundColor = "#000000";
-  public readonly selectionColor = "#FFB343";
+  public readonly selectionColor = "#89CFF0";
   public readonly defaultSpecular = "#4D4D4D";
   public readonly boxColor = "#FFFFFF";
 

@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "molrs-wasm";
+import { Block, Box, Frame } from "@molcrafts/molrs";
 import { DrawBoxCommand, DrawFrameCommand } from "../src/commands/draw";
 import { Molvis } from "../src/index";
 

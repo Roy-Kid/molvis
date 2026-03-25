@@ -22,6 +22,13 @@ export {
 export { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 
 // Modifier registry
-export { ModifierRegistry } from "./modifier_registry";
-// export { ModifierRegistry, globalModifierRegistry } from "./registry"; // Commented out to avoid conflict
-export type { ModifierFactory } from "./modifier_registry"; // Use type from modifier_registry
+export { ModifierRegistry, nextModifierId } from "./modifier_registry";
+export type { ModifierFactory } from "./modifier_registry";
+
+// NATO IDs and DAG utilities
+export {
+  NATO_ALPHABET,
+  generateNatoId,
+  isSelectionProducer,
+  isTopologyChanging,
+} from "./nato_ids";

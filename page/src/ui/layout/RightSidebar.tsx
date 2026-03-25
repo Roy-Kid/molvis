@@ -15,6 +15,11 @@ interface RightSidebarProps {
   onModeChange: (mode: string) => void;
 }
 
+/** Prevent pointer events from leaking to the BabylonJS canvas. */
+const stopPointerPropagation = (e: React.PointerEvent) => {
+  e.stopPropagation();
+};
+
 const MODE_ITEMS: Array<{
   value: string;
   label: string;
@@ -54,7 +59,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   };
 
   return (
-    <div className="h-full w-full bg-background flex flex-col border-l">
+    <div
+      className="h-full w-full bg-background flex flex-col border-l"
+      onPointerDown={stopPointerPropagation}
+    >
       <div className="border-b px-1.5 py-1 bg-muted/15 shrink-0">
         <div className="grid grid-cols-5 gap-0.5">
           {MODE_ITEMS.map((item) => {

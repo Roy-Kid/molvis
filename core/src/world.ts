@@ -9,7 +9,8 @@ import {
   Tools,
   Vector3,
 } from "@babylonjs/core";
-import { Inspector } from "@babylonjs/inspector";
+// Inspector is lazy-loaded to avoid bundling 17MB in the main chunk
+// import { Inspector } from "@babylonjs/inspector";
 import type { MolvisApp } from "./app";
 import { AxisHelper } from "./axis_helper";
 import { GridGround } from "./grid";
@@ -237,12 +238,13 @@ export class World {
     this._engine.stopRenderLoop();
   }
 
-  public toggleInspector() {
+  public async toggleInspector() {
     const scene = this.scene;
     if (scene.debugLayer.isVisible()) {
       scene.debugLayer.hide();
       return;
     }
+    const { Inspector } = await import("@babylonjs/inspector");
     Inspector.Show(scene, {
       embedMode: true,
     });

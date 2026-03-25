@@ -1,5 +1,5 @@
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { Block, Frame } from "molrs-wasm";
 import "./setup_wasm";
 import {
   buildBondBuffers,
@@ -138,9 +138,9 @@ describe("buildBondBuffers with bond order", () => {
       radius: 0.1,
     });
     const data0 = result?.buffers.get("instanceData0")!;
-    // Sub-bond radius should be 0.1 * 0.55 = 0.055
-    expect(data0[3]).toBeCloseTo(0.055, 3);
-    expect(data0[7]).toBeCloseTo(0.055, 3);
+    // Sub-bond radius should be 0.1 * 0.7 = 0.07
+    expect(data0[3]).toBeCloseTo(0.07, 3);
+    expect(data0[7]).toBeCloseTo(0.07, 3);
   });
 
   it("double bond sub-instances should be offset from center", () => {

@@ -1,4 +1,4 @@
-import { type Block, Frame } from "molrs-wasm";
+import { type Block, Frame } from "@molcrafts/molrs";
 import type { ColormapName } from "../artist/colormaps";
 import { sampleColormap } from "../artist/colormaps";
 import { hexToLinearRgb, hslColorFromString } from "../artist/palette";
@@ -45,7 +45,7 @@ export class ColorByPropertyModifier extends BaseModifier {
   /** Available colorable columns — populated by inspect(), exposed for UI dropdown. */
   public availableColumns: { name: string; dtype: string }[] = [];
 
-  constructor(id = `color-by-property-${Date.now()}`) {
+  constructor(id = "color-by-property-default") {
     super(id, "Color by Property", ModifierCategory.SelectionInsensitive);
   }
 

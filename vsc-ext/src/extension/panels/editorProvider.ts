@@ -1,9 +1,11 @@
 import * as vscode from "vscode";
 import { createInitMessage } from "../configuration";
+import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import type { Logger, PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import {
+  handleDropUri,
   handleSaveFile,
   loadTextDocumentToWebview,
   onWebviewMessage,
@@ -21,8 +23,14 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
     context: vscode.ExtensionContext,
     panelRegistry: PanelRegistry,
     logger: Logger,
+    fileLoader: MolecularFileLoader,
   ): vscode.Disposable {
-    const provider = new MolvisEditorProvider(context, panelRegistry, logger);
+    const provider = new MolvisEditorProvider(
+      context,
+      panelRegistry,
+      logger,
+      fileLoader,
+    );
     return vscode.window.registerCustomEditorProvider(
       MolvisEditorProvider.viewType,
       provider,
@@ -38,6 +46,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
     private readonly context: vscode.ExtensionContext,
     private readonly panelRegistry: PanelRegistry,
     private readonly logger: Logger,
+    private readonly fileLoader: MolecularFileLoader,
   ) {}
 
   public async resolveCustomTextEditor(
@@ -69,6 +78,14 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
             await handleSaveFile(
               message.data,
               message.suggestedName,
+              this.logger,
+            );
+            break;
+          case "dropUri":
+            await handleDropUri(
+              message.uri,
+              webviewPanel.webview,
+              this.fileLoader,
               this.logger,
             );
             break;

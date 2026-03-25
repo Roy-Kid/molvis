@@ -1,4 +1,4 @@
-import { Block, type Frame } from "molrs-wasm";
+import { Block, type Frame } from "@molcrafts/molrs";
 import type { SceneIndex } from "./scene_index";
 import { logger } from "./utils/logger";
 

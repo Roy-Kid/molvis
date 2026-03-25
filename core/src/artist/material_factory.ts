@@ -36,6 +36,7 @@ export function createImpostorMaterial(
     {
       attributes: spec.attributes,
       uniforms: spec.uniforms,
+      needAlphaBlending: true,
     },
   );
 
