@@ -82,12 +82,10 @@ export default defineConfig({
         },
       };
 
-      addRules([
-        {
-          test: /\.wasm$/,
-          type: "asset/inline",
-        },
-      ]);
+      config.experiments = {
+        ...config.experiments,
+        asyncWebAssembly: true,
+      };
 
       config.performance = {
         hints: false,
