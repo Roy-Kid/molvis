@@ -1,4 +1,4 @@
-import type { MolvisApp } from "../../core/app";
+import type { MolvisApp } from "../../app";
 import type { ModeType } from "../../mode";
 import type { GUIComponent } from "../types";
 

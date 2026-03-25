@@ -1,13 +1,15 @@
-import * as BABYLON from "@babylonjs/core"; // Used for mesh types
-import { Vector3 } from "@babylonjs/core";
-import type { Box, Frame } from "molwasm";
-import type { MolvisApp } from "../core/app";
+import * as BABYLON from "@babylonjs/core";
+import type { Vector3 } from "@babylonjs/core";
+import type { Box, Frame } from "@molcrafts/molrs";
+import type { MolvisApp } from "../app";
+import type { DrawAtomOptions, DrawBondOptions } from "../artist";
 import { Command, command } from "./base";
 
 export interface DrawAtomsOption {
   radii?: number[];
   color?: string[];
   impostor?: boolean;
+  visible?: boolean[];
 }
 
 export interface DrawBondsOption {
@@ -36,6 +38,13 @@ export class DrawBoxCommand extends Command<void> {
 
   do(): void {
     const scene = this.app.world.scene;
+    const copyAndFree = (wa: { toCopy(): Float32Array; free(): void }) => {
+      try {
+        return wa.toCopy();
+      } finally {
+        wa.free();
+      }
+    };
 
     // Clear existing box
     const existingBox = scene.getMeshByName("sim_box");
@@ -44,80 +53,123 @@ export class DrawBoxCommand extends Command<void> {
       existingBox.dispose();
     }
 
-    // Get corners from molrs Box
-    const cornersView = this.box.get_corners();
-    const corners = cornersView.to_js_array(); // Float32Array length 24
+    // Get corners from molrs Box (returns WasmArray)
+    const corners = copyAndFree(this.box.get_corners()); // Float32Array length 24
 
     // Create a root mesh for the box
     this.boxMesh = new BABYLON.Mesh("sim_box", scene);
+    this.boxMesh.isPickable = false;
 
-    // Styling
-    const radius = 0.01; // Tube radius
     const material = this.app.styleManager.getBoxMaterial();
 
-    this.createEdges(corners, radius, material, scene);
+    const edges = [
+      [0, 1],
+      [0, 3],
+      [0, 4], // From 0
+      [1, 5],
+      [4, 5],
+      [6, 5], // Connected to 5
+      [2, 6],
+      [2, 3],
+      [1, 2], // From 2 or connecting
+      [4, 7],
+      [3, 7],
+      [6, 7], // Connected to 7
+    ];
+
+    const getPoint = (idx: number) =>
+      new BABYLON.Vector3(
+        corners[idx * 3],
+        corners[idx * 3 + 1],
+        corners[idx * 3 + 2],
+      );
+
+    const l = copyAndFree(this.box.lengths());
+    const lengths = new BABYLON.Vector3(l[0], l[1], l[2]);
+    const o = copyAndFree(this.box.origin());
+    const origin = new BABYLON.Vector3(o[0], o[1], o[2]);
+    const center = origin.add(lengths.scale(0.5));
+
+    for (const [i, j] of edges) {
+      const p1 = getPoint(i);
+      const p2 = getPoint(j);
+      const diff = p2.subtract(p1);
+      const len = diff.length();
+
+      const cyl = BABYLON.MeshBuilder.CreateCylinder(
+        "box_edge",
+        {
+          height: len,
+          diameter: 1,
+          tessellation: 8,
+        },
+        scene,
+      );
+
+      cyl.material = material;
+      cyl.parent = this.boxMesh;
+      cyl.isPickable = false;
+
+      cyl.position = p1.add(diff.scale(0.5));
+
+      const up = new BABYLON.Vector3(0, 1, 0);
+      const dir = diff.normalizeToNew();
+      const dot = BABYLON.Vector3.Dot(up, dir);
+
+      if (dot < -0.9999) {
+        cyl.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(
+          Math.PI,
+          0,
+          0,
+        );
+      } else if (dot > 0.9999) {
+        cyl.rotationQuaternion = BABYLON.Quaternion.Identity();
+      } else {
+        const axis = BABYLON.Vector3.Cross(up, dir);
+        const angle = Math.acos(dot);
+        cyl.rotationQuaternion = BABYLON.Quaternion.RotationAxis(
+          axis.normalize(),
+          angle,
+        );
+      }
+    }
+
+    const updateThickness = () => {
+      if (!this.boxMesh || this.boxMesh.isDisposed()) return;
+      if (!scene.activeCamera) return;
+
+      const dist = BABYLON.Vector3.Distance(
+        scene.activeCamera.position,
+        center,
+      );
+      const userScale =
+        (this.boxMesh as BABYLON.Mesh & { _userThicknessScale?: number })
+          ._userThicknessScale ?? 1.0;
+      let scale = dist * 0.002 * userScale;
+      scale = Math.max(scale, 0.015);
+
+      const children = this.boxMesh.getChildren() as BABYLON.Mesh[];
+      for (const child of children) {
+        if (Math.abs(child.scaling.x - scale) > 0.0001) {
+          child.scaling.x = scale;
+          child.scaling.z = scale;
+        }
+      }
+    };
+
+    const observer = scene.onBeforeRenderObservable.add(updateThickness);
+    this.boxMesh.onDisposeObservable.add(() => {
+      scene.onBeforeRenderObservable.remove(observer);
+    });
 
     // Register
     this.app.world.sceneIndex.registerBox({
       mesh: this.boxMesh,
       meta: {
-        dimensions: (() => {
-          const l = this.box.lengths().to_js_array();
-          return [l[0], l[1], l[2]] as [number, number, number];
-        })(),
-        origin: (() => {
-          const o = this.box.origin().to_js_array();
-          return [o[0], o[1], o[2]] as [number, number, number];
-        })(),
+        dimensions: [l[0], l[1], l[2]],
+        origin: [o[0], o[1], o[2]],
       },
     });
-  }
-
-  private createEdges(
-    corners: Float32Array,
-    radius: number,
-    material: BABYLON.Material,
-    scene: BABYLON.Scene,
-  ) {
-    // Pairs of indices defining the 12 edges
-    const edges = [
-      [0, 1],
-      [0, 3],
-      [0, 4],
-      [1, 5],
-      [4, 5],
-      [6, 5],
-      [2, 6],
-      [2, 3],
-      [1, 2],
-      [4, 7],
-      [3, 7],
-      [6, 7],
-    ];
-
-    // Helper to get Vector3 from flat array
-    const getPoint = (idx: number) =>
-      new Vector3(corners[idx * 3], corners[idx * 3 + 1], corners[idx * 3 + 2]);
-
-    for (const [i, j] of edges) {
-      const p1 = getPoint(i);
-      const p2 = getPoint(j);
-
-      const tube = BABYLON.MeshBuilder.CreateTube(
-        "box_edge",
-        {
-          path: [p1, p2],
-          radius: radius,
-          tessellation: 8,
-          cap: BABYLON.Mesh.CAP_ALL,
-        },
-        scene,
-      );
-
-      tube.material = material;
-      tube.parent = this.boxMesh;
-      tube.isPickable = false;
-    }
   }
 
   undo(): Command {
@@ -128,7 +180,7 @@ export class DrawBoxCommand extends Command<void> {
     }
     return new NoOpCommand(this.app);
   }
-}
+} // End class
 
 /**
  * Command to draw atoms and bonds using Thin Instances via Artist
@@ -153,16 +205,13 @@ export class DrawFrameCommand extends Command<void> {
     this.options = args.options;
   }
 
-  do(): void {
+  async do(): Promise<void> {
     const artist = this.app.artist;
 
-    // 1. Clear Renderer & Registry
-    artist.clear();
+    // 1. Draw Frame via Artist
+    await artist.drawFrame(this.frame, this.box, this.options);
 
-    // 2. Render Frame via Artist
-    artist.renderFrame(this.frame, this.box, this.options);
-
-    // 3. Draw Box (Delegate to DrawBoxCommand)
+    // 2. Draw Box (Delegate to DrawBoxCommand)
     if (this.box) {
       this.app.execute("draw_box", { box: this.box });
     }
@@ -184,28 +233,8 @@ class NoOpCommand extends Command<void> {
   }
 }
 
-/**
- * Command to draw an atom
- */
-export interface DrawAtomOptions {
-  element: string;
-  name?: string;
-  radius?: number;
-  color?: string;
-  atomId?: number;
-}
-
-/**
- * Options for drawing a bond
- */
-export interface DrawBondOptions {
-  order?: number;
-  radius?: number;
-  color?: string;
-  atomId1?: number;
-  atomId2?: number;
-  bondId?: number;
-}
+// DrawAtomOptions and DrawBondOptions are defined in artist.ts
+export type { DrawAtomOptions, DrawBondOptions } from "../artist";
 
 /**
  * Command to draw an atom in Edit mode.
@@ -225,8 +254,8 @@ export class DrawAtomCommand extends Command<{ atomId: number }> {
       options.atomId ?? (app.world.sceneIndex.getNextAtomId?.() || 0);
   }
 
-  do(): { atomId: number } {
-    const result = this.app.artist.drawAtom(this.position, {
+  async do(): Promise<{ atomId: number }> {
+    const result = await this.app.artist.drawAtom(this.position, {
       ...this.options,
       atomId: this.atomId,
     });
@@ -249,23 +278,25 @@ export class DrawAtomCommand extends Command<{ atomId: number }> {
 }
 
 /**
- * Command to delete an edit-mode atom and connected bonds.
+ * Command to delete an atom and connected bonds.
+ * Operates on the edit pool.
  */
 export class DeleteAtomCommand extends Command<void> {
   private savedAtomData: Record<string, Float32Array> | null = null;
-  // We would need robust state restoration for true undo, which might be out of scope for this refactor.
-  // The previous implementation stored data buffers.
-  // Since Artist is high level, maybe it should support "restoreAtom(data)"?
-  // For now, I will keep the previous logic of manual data backup if possible, or simplifying.
-  // The previous code accessed SceneIndex directly to backup data. That is still valid as Command is close to app.
-  // However, Artist is "Unified Graphics Engine".
-  // Ideally Command asks Artist to delete and Artist returns the deleted data?
-  // Current Artist.deleteAtom returns void.
-  // I'll stick to SceneIndex access for data backup to minimize changes to existing logic, but delegate deletion to Artist.
-
+  private savedAtomMeta: {
+    element: string;
+    position: { x: number; y: number; z: number };
+  } | null = null;
   private deletedBonds: Array<{
     bondId: number;
     data: Record<string, Float32Array>;
+    meta: {
+      atomId1: number;
+      atomId2: number;
+      order: number;
+      start: { x: number; y: number; z: number };
+      end: { x: number; y: number; z: number };
+    } | null;
   }> = [];
 
   constructor(
@@ -278,11 +309,10 @@ export class DeleteAtomCommand extends Command<void> {
   do(): void {
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     if (!atomState) return;
+
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
 
-    // Save atom data (Keep using SceneIndex for deep state access if not exposed by Artist)
-    // Or better: Artist should expose `getAtomData(id)`?
-    // Let's rely on SceneIndex for data retrieval as it is the store.
+    // Save atom buffers
     this.savedAtomData = {};
     for (const bufName of [
       "matrix",
@@ -294,7 +324,18 @@ export class DeleteAtomCommand extends Command<void> {
       if (data) this.savedAtomData[bufName] = new Float32Array(data);
     }
 
-    // Find and remove connected bonds
+    // Save atom metadata
+    const meta = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(
+      this.atomId,
+    );
+    if (meta) {
+      this.savedAtomMeta = {
+        element: meta.element,
+        position: { ...meta.position },
+      };
+    }
+
+    // Save and remove connected bonds
     const connectedBonds = this.app.world.sceneIndex.topology.getBondsForAtom(
       this.atomId,
     );
@@ -315,18 +356,66 @@ export class DeleteAtomCommand extends Command<void> {
           const data = bondState.read(bondId, bufName);
           if (data) bondData[bufName] = new Float32Array(data);
         }
-        this.deletedBonds.push({ bondId, data: bondData });
+        const bondMeta =
+          this.app.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
+        this.deletedBonds.push({
+          bondId,
+          data: bondData,
+          meta: bondMeta
+            ? {
+                atomId1: bondMeta.atomId1,
+                atomId2: bondMeta.atomId2,
+                order: bondMeta.order,
+                start: { ...bondMeta.start },
+                end: { ...bondMeta.end },
+              }
+            : null,
+        });
         this.app.artist.deleteBond(bondState.mesh.uniqueId, bondId);
       }
     }
 
-    // Remove atom
     this.app.artist.deleteAtom(atomState.mesh.uniqueId, this.atomId);
   }
 
-  undo(): Command {
-    // Restore implementation would go here (using Artist.restoreAtom/Bond if available, or direct SceneIndex)
-    // Previous code just returned NoOpCommand. Keeping that.
+  async undo(): Promise<Command> {
+    if (!this.savedAtomData || !this.savedAtomMeta)
+      return new NoOpCommand(this.app);
+
+    // Restore atom
+    const buffers = new Map<string, Float32Array>();
+    for (const [name, data] of Object.entries(this.savedAtomData)) {
+      buffers.set(name, data);
+    }
+    await this.app.artist.drawAtomFromBuffers(
+      {
+        atomId: this.atomId,
+        element: this.savedAtomMeta.element,
+        position: this.savedAtomMeta.position,
+      },
+      buffers,
+    );
+
+    // Restore bonds
+    for (const { bondId, data, meta } of this.deletedBonds) {
+      if (!meta) continue;
+      const bondBuffers = new Map<string, Float32Array>();
+      for (const [name, buf] of Object.entries(data)) {
+        bondBuffers.set(name, buf);
+      }
+      await this.app.artist.drawBondFromBuffers(
+        {
+          bondId,
+          atomId1: meta.atomId1,
+          atomId2: meta.atomId2,
+          order: meta.order,
+          start: meta.start,
+          end: meta.end,
+        },
+        bondBuffers,
+      );
+    }
+
     return new NoOpCommand(this.app);
   }
 }
@@ -350,8 +439,8 @@ export class DrawBondCommand extends Command<{ bondId: number }> {
       options.bondId ?? (app.world.sceneIndex.getNextBondId?.() || 0);
   }
 
-  do(): { bondId: number } {
-    const result = this.app.artist.drawBond(this.startPos, this.endPos, {
+  async do(): Promise<{ bondId: number }> {
+    const result = await this.app.artist.drawBond(this.startPos, this.endPos, {
       ...this.options,
       bondId: this.bondId,
     });
@@ -377,6 +466,15 @@ export class DrawBondCommand extends Command<{ bondId: number }> {
  * Command to delete an edit-mode bond.
  */
 export class DeleteBondCommand extends Command<void> {
+  private savedData: Record<string, Float32Array> | null = null;
+  private savedMeta: {
+    atomId1: number;
+    atomId2: number;
+    order: number;
+    start: { x: number; y: number; z: number };
+    end: { x: number; y: number; z: number };
+  } | null = null;
+
   constructor(
     app: MolvisApp,
     private bondId: number,
@@ -387,10 +485,48 @@ export class DeleteBondCommand extends Command<void> {
   do(): void {
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
     if (!bondState) return;
+
+    // Save bond buffers and metadata before deletion
+    this.savedData = {};
+    for (const bufName of [
+      "matrix",
+      "instanceData0",
+      "instanceData1",
+      "instanceColor0",
+      "instanceColor1",
+      "instanceSplit",
+      "instancePickingColor",
+    ]) {
+      const data = bondState.read(this.bondId, bufName);
+      if (data) this.savedData[bufName] = new Float32Array(data);
+    }
+    const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(
+      this.bondId,
+    );
+    if (meta) {
+      this.savedMeta = {
+        atomId1: meta.atomId1,
+        atomId2: meta.atomId2,
+        order: meta.order,
+        start: { ...meta.start },
+        end: { ...meta.end },
+      };
+    }
+
     this.app.artist.deleteBond(bondState.mesh.uniqueId, this.bondId);
   }
 
-  undo(): Command {
+  async undo(): Promise<Command> {
+    if (!this.savedData || !this.savedMeta) return new NoOpCommand(this.app);
+
+    const buffers = new Map<string, Float32Array>();
+    for (const [name, data] of Object.entries(this.savedData)) {
+      buffers.set(name, data);
+    }
+    await this.app.artist.drawBondFromBuffers(
+      { bondId: this.bondId, ...this.savedMeta },
+      buffers,
+    );
     return new NoOpCommand(this.app);
   }
 }

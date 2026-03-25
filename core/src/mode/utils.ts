@@ -14,31 +14,24 @@ import {
 export function pointOnScreenAlignedPlane(
   scene: Scene,
   camera: Camera,
-  clientX: number,
-  clientY: number,
+  pointerX: number,
+  pointerY: number,
   anchor?: Vector3,
 ): Vector3 {
-  const engine = scene.getEngine();
-  const canvas = engine.getRenderingCanvas();
-
-  let x = clientX;
-  let y = clientY;
-  if (canvas) {
-    const rect = canvas.getBoundingClientRect();
-    x -= rect.left;
-    y -= rect.top;
-  }
-  const s = engine.getHardwareScalingLevel();
-  const rx = x * s;
-  const ry = y * s;
-
   const forward = camera.getDirection(Vector3.Forward());
   const normal = forward.scale(-1).normalize();
   const origin =
     anchor ?? (camera as ArcRotateCamera).target ?? camera.position.add(normal);
   const plane = Plane.FromPositionAndNormal(origin, normal);
 
-  const ray = scene.createPickingRay(rx, ry, Matrix.Identity(), camera);
+  // Use Babylon's picking ray transform path directly.
+  // It applies hardware scaling and camera viewport offsets internally.
+  const ray = scene.createPickingRay(
+    pointerX,
+    pointerY,
+    Matrix.Identity(),
+    camera,
+  );
   const hit = ray.intersectsPlane(plane);
   if (!hit) {
     throw new Error("Cannot project point onto screen-aligned plane.");

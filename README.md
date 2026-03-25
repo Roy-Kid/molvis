@@ -2,7 +2,7 @@
 
 > Interactive molecular visualization toolkit built with modern web technologies
 
-[![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)](https://github.com/molcrafts/molvis)
+[![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)](https://github.com/molcrafts/molvis)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-blue.svg)](https://www.typescriptlang.org/)
 
@@ -47,16 +47,20 @@ Visit `http://localhost:3000` to see the application.
 ### Basic Usage
 
 ```typescript
-import { MolvisApp } from '@molvis/core';
+import { mountMolvis, readFrame } from "@molvis/core";
 
-// Create a Molvis instance
-const app = new MolvisApp(canvas);
+const container = document.getElementById("viewer");
+if (!container) {
+  throw new Error("viewer container not found");
+}
 
-// Load a molecular structure
-await app.loadFile('path/to/structure.pdb');
+const app = mountMolvis(container);
+const response = await fetch("/structure.pdb");
+const pdbText = await response.text();
+const frame = readFrame(pdbText, "structure.pdb");
 
-// Start rendering
-app.start();
+app.loadFrame(frame);
+await app.start();
 ```
 
 ## Project Structure
@@ -79,8 +83,7 @@ molvis/
 │   └── src/molvis/    # Python package source
 ├── vsc-ext/           # VSCode extension
 │   └── src/           # Extension source
-├── electron/          # Electron desktop app (WIP)
-└── CHANGELOG.md       # Version history
+└── docs/              # Documentation and release runbooks
 ```
 
 ### Core Package (`@molvis/core`)
@@ -104,19 +107,21 @@ A modern React-based interface featuring:
 - Export capabilities
 - Dark/light theme support
 
-### Python Widget (`@molvis/python`)
+### Python Widget (`molvis`)
 
 Jupyter notebook integration:
 
 ```python
-import molvis
+import molvis as mv
+import molpy as mp
 
-# Create a viewer
-viewer = molvis.Viewer()
+# Create a named scene
+scene = mv.Molvis(name="protein_view", width=800, height=600)
 
-# Load and display a structure
-viewer.load('structure.pdb')
-viewer.show()
+# Draw a frame and display the widget
+frame = mp.Frame(...)
+scene.draw_frame(frame)
+scene
 ```
 
 ### VSCode Extension
@@ -154,17 +159,22 @@ npm run dev:python  # Python widget
 
 ### Testing
 
-Molvis uses [rstest](https://rstest.rs) as the testing framework.
+Molvis uses multiple test lanes:
+
+- `core`: [rstest](https://rstest.rs)
+- `page`: Node's built-in test runner
+- `python`: `pytest`
+- `vsc-ext`: TypeScript + Mocha / VS Code test host
 
 ```bash
 # Run all tests
 npm test
 
-# Watch mode
-npm run test:watch
-
-# Run tests for specific package
+# Run tests for a specific package
 npm run test -w core
+npm run test -w page
+npm run test -w python
+npm run test -w vsc-ext
 ```
 
 ### Code Quality
@@ -172,9 +182,6 @@ npm run test -w core
 ```bash
 # Lint and format
 npx biome check --write
-
-# Type check
-npm run check-types -w core
 ```
 
 ## Building and Publishing
@@ -195,13 +202,8 @@ npm run build:python
 ### Publishing
 
 ```bash
-# Publish to npm (core package)
-cd core
-npm publish
-
-# Package VSCode extension
-cd vsc-ext
-vsce package
+# See the multi-package release runbook
+open docs/release/0.0.2-release-checklist.md
 ```
 
 ## Architecture
@@ -312,7 +314,7 @@ If you use Molvis in your research, please cite:
   title = {Molvis: Interactive Molecular Visualization Toolkit},
   author = {Roy Kid},
   year = {2026},
-  version = {0.0.1},
+  version = {0.0.2},
   url = {https://github.com/molcrafts/molvis}
 }
 ```

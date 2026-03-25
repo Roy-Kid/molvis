@@ -22,7 +22,6 @@ export class MolvisContextMenu extends MolvisElement {
     }
 
     // Clear previous items
-    // Clear previous items
     this.container.innerHTML = "";
 
     if (!items) {
@@ -30,23 +29,8 @@ export class MolvisContextMenu extends MolvisElement {
       return;
     }
 
-    // Wrap actions to auto-close menu
-    const wrappedItems = items.map((item) => {
-      if (item.type === "button" && item.action) {
-        const originalAction = item.action;
-        return {
-          ...item,
-          action: () => {
-            originalAction();
-            this.hide();
-          },
-        };
-      }
-      return item;
-    });
-
     // Render menu items
-    for (const item of wrappedItems) {
+    for (const item of items) {
       const control = createControl(item);
       if (control) {
         this.container?.appendChild(control);

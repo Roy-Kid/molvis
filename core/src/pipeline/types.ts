@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 
 /**
  * Selection mask representing a subset of atoms/bonds.
@@ -53,12 +53,14 @@ export class SelectionMask {
   }
 
   /**
-   * Set selection state for an index.
+   * Return a new mask with the given index set to the specified state.
    */
-  setSelected(index: number, selected: boolean): void {
-    if (index >= 0 && index < this.mask.length) {
-      this.mask[index] = selected;
+  withSelected(index: number, selected: boolean): SelectionMask {
+    const result = this.clone();
+    if (index >= 0 && index < result.mask.length) {
+      result.mask[index] = selected;
     }
+    return result;
   }
 
   /**
@@ -140,6 +142,10 @@ export class SelectionMask {
   }
 }
 
+import type { MolvisApp } from "../app";
+
+// ... existing imports ...
+
 /**
  * Pipeline execution context that flows through modifiers.
  */
@@ -155,9 +161,40 @@ export interface PipelineContext {
   currentSelection: SelectionMask;
 
   /**
+   * Logical bond IDs selected by the current pipeline run.
+   * Set by selection modifiers that carry bond info (e.g., SelectModifier).
+   * Read by the COMPUTED sync handler to update SelectionManager.
+   */
+  selectedBondIds: number[];
+
+  /**
+   * When true, the pipeline selection should not trigger visual highlighting.
+   * Set by SelectModifier when its highlight property is false.
+   */
+  suppressHighlight: boolean;
+
+  /**
+   * Callbacks to run AFTER rendering + highlighting.
+   * Modifiers push GPU buffer patches here during apply().
+   */
+  postRenderEffects: Array<() => void>;
+
+  /**
+   * Cache of selection masks keyed by modifier ID.
+   * Selection-producing modifiers store their output here so that
+   * child modifiers can look up the parent selection by ID.
+   */
+  selectionCache: Map<string, SelectionMask>;
+
+  /**
    * Frame index in trajectory (if applicable).
    */
   frameIndex?: number;
+
+  /**
+   * Application instance for modifiers to trigger refreshes.
+   */
+  readonly app: MolvisApp;
 }
 
 /**
@@ -165,6 +202,7 @@ export interface PipelineContext {
  */
 export function createDefaultContext(
   frame: Frame,
+  app: MolvisApp,
   frameIndex?: number,
 ): PipelineContext {
   const atomsBlock = frame.getBlock("atoms");
@@ -172,7 +210,12 @@ export function createDefaultContext(
   return {
     selectionSet: new Map(),
     currentSelection: SelectionMask.all(atomCount),
+    selectedBondIds: [],
+    suppressHighlight: false,
+    postRenderEffects: [],
+    selectionCache: new Map(),
     frameIndex,
+    app,
   };
 }
 

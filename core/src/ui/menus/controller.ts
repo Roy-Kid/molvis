@@ -1,6 +1,13 @@
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp as Molvis } from "../../app";
 import type { HitResult, MenuItem } from "../../mode/types";
 import type { MolvisContextMenu } from "../menus/context_menu";
+import { contextMenuRegistry } from "./registry";
+
+interface ContextMenuTriggerEvent {
+  preventDefault(): void;
+  clientX: number;
+  clientY: number;
+}
 
 /**
  * Base class for mode-specific context menu controllers.
@@ -51,7 +58,7 @@ export abstract class ContextMenuController {
    * @param ev Mouse event from Babylon.js (IMouseEvent)
    */
   public handleRightClick(
-    ev: MouseEvent,
+    ev: ContextMenuTriggerEvent,
     hit: HitResult | null,
     isDragging: boolean,
   ): boolean {
@@ -95,8 +102,10 @@ export abstract class ContextMenuController {
 
     if (!this.menu) return;
 
-    // Show (the component handles clearing and rendering items)
-    this.menu.show(x, y, items);
+    // Keep all context menus mutually exclusive.
+    contextMenuRegistry.activate(this.containerId, () => this.hide());
+
+    this.menu.show(x, y, this.wrapMenuItems(items));
     this.isVisible = true;
 
     // Add document listeners to handle click outside and ESC
@@ -117,6 +126,7 @@ export abstract class ContextMenuController {
 
     const wasVisible = this.isVisible;
     this.isVisible = false;
+    contextMenuRegistry.deactivate(this.containerId);
 
     // Notify callback if menu was visible and is now closed
     if (wasVisible && this.onCloseCallback) {
@@ -143,6 +153,7 @@ export abstract class ContextMenuController {
    */
   public dispose(): void {
     this.removeDocumentListeners();
+    contextMenuRegistry.deactivate(this.containerId);
     if (this.menu) {
       this.menu.remove();
       this.menu = null;
@@ -169,6 +180,26 @@ export abstract class ContextMenuController {
       // Mount to UI overlay container
       this.app.uiContainer.appendChild(this.menu);
     }
+  }
+
+  private wrapMenuItems(items: MenuItem[]): MenuItem[] {
+    return items.map((item) => {
+      if (item.type !== "button") {
+        return item;
+      }
+
+      const originalAction = item.action;
+      return {
+        ...item,
+        action: () => {
+          try {
+            originalAction();
+          } finally {
+            this.hide();
+          }
+        },
+      };
+    });
   }
 
   private handleDocumentClick(e: MouseEvent): void {

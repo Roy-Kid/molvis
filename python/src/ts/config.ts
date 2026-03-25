@@ -8,7 +8,7 @@ import { type MolvisConfig as CoreMolvisConfig, defaultMolvisConfig } from "@mol
 // Default widget configuration (passed to core)
 export const DEFAULT_CONFIG = defaultMolvisConfig({
   showUI: true,
-  uiComponents: {
+  ui: {
     showModePanel: true,
     showViewPanel: true,
     showInfoPanel: true,

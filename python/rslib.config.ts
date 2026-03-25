@@ -1,27 +1,29 @@
-import { defineConfig } from '@rslib/core';
+import path from "node:path";
+import { defineConfig } from "@rslib/core";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+    },
+  },
   lib: [
     {
-      format: 'esm',
+      format: "esm",
       bundle: true,
       autoExtension: false,
-      syntax: 'esnext',
+      syntax: "esnext",
       source: {
-        entry: {
-          index: './src/ts/index.ts'
-        },
+        entry: { index: "./src/ts/index.ts" },
         define: {
           __WASM_INLINE__: JSON.stringify(true),
         },
       },
       output: {
-        target: 'web',
-        externals: ['@rslib/core'],
-        distPath: {
-          root: 'src/molvis/dist'
-        }
-      }
+        target: "web",
+        externals: ["@rslib/core"],
+        distPath: { root: "src/molvis/dist" },
+      },
     },
   ],
   tools: {
@@ -33,16 +35,9 @@ export default defineConfig({
       config.output = {
         ...(config.output || {}),
         module: true,
-        library: {
-          type: 'module',
-        },
+        library: { type: "module" },
       };
-      addRules([
-        {
-          test: /\.wasm$/,
-          type: 'asset/inline'
-        },
-      ]);
+      addRules([{ test: /\.wasm$/, type: "asset/inline" }]);
     },
-  }
+  },
 });

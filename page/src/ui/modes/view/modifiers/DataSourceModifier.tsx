@@ -1,12 +1,17 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { Modifier, Molvis } from "@molvis/core";
-import { ArrayFrameSource, Frame, readFrame } from "@molvis/core";
+import {
+  type DataSourceModifier as CoreDataSourceModifier,
+  Frame,
+  type Molvis,
+  inferFormatFromFilename,
+  readFrame,
+} from "@molvis/core";
 import { FileUp, Trash2 } from "lucide-react";
 import type React from "react";
 
 interface DataSourceModifierProps {
-  modifier: Modifier;
+  modifier: CoreDataSourceModifier;
   app: Molvis | null;
   onUpdate: () => void;
 }
@@ -16,119 +21,60 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   app,
   onUpdate,
 }) => {
-  const handleChange = (key: string, value: any) => {
-    (modifier as any)[key] = value;
-    onUpdate();
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !app) return;
 
     try {
       const text = await file.text();
-      const ext = (file.name.split(".").pop() || "pdb").toLowerCase();
 
-      console.log(`Reading file ${file.name} as ${ext}`);
+      modifier.sourceType = "file";
+      modifier.filename = file.name;
 
-      // Clear existing scene and history
-      if (app && (app as any).artist) {
-        (app as any).artist.clear();
+      if (inferFormatFromFilename(file.name) === "pdb") {
+        app.loadPdb(text);
+        const frame = app.system.frame;
+        if (frame) modifier.setFrame(frame);
+      } else {
+        const frame = readFrame(text, file.name);
+        modifier.setFrame(frame);
+        app.loadFrame(frame, frame.simbox);
       }
-      if (app && (app as any).commandManager) {
-        (app as any).commandManager.clearHistory();
-      }
-
-      let frame;
-      try {
-        frame = readFrame(text, file.name);
-        console.log("[DataSourceModifier] read returned:", frame);
-      } catch (err) {
-        console.error("Parse error", err);
-        if (app?.events) {
-          app.events.emit("status-message", {
-            text: `Failed to parse file: ${(err as Error).message}`,
-            type: "error",
-          });
-        }
-        return;
-      }
-
-      if (frame) {
-        // Update Modifier State
-        (modifier as any).sourceType = "file";
-        (modifier as any).filename = file.name;
-
-        if (
-          "setFrame" in modifier &&
-          typeof (modifier as any).setFrame === "function"
-        ) {
-          (modifier as any).setFrame(frame);
-        }
-
-        onUpdate();
-
-        // Trigger pipeline update
-        app.setMode("view");
-
-        // Force re-compute
-        const pipeline = (app as any).modifierPipeline;
-        if (pipeline) {
-          const dummySource = new ArrayFrameSource([new Frame()]);
-          const computed = await (app as any).computeFrame(0, dummySource);
-          (app as any).renderFrame(computed);
-          onUpdate();
-        }
-
-        (app as any).frameCount = 1;
-      }
-    } catch (e) {
-      console.error("Upload failed", e);
-      if (app?.events) {
-        app.events.emit("status-message", {
-          text: `Error: ${(e as Error).message}`,
-          type: "error",
-        });
-      }
+      app.setMode("view");
+      await app.applyPipeline({ fullRebuild: true });
+      onUpdate();
+    } catch (err) {
+      app.events.emit("status-message", {
+        text: `Failed to load file: ${err instanceof Error ? err.message : String(err)}`,
+        type: "error",
+      });
     } finally {
-      // Reset value to allow re-selection of same file
       e.target.value = "";
     }
   };
 
-  const filename = (modifier as any).filename || "-";
-  // Get counts from the modifiers frame if possible, or system frame
-  const frame = app?.system?.frame;
+  const filename = modifier.filename === "" ? "-" : modifier.filename;
+  const frame = app?.system.frame;
   const atomCount = frame?.getBlock("atoms")?.nrows() ?? 0;
   const bondCount = frame?.getBlock("bonds")?.nrows() ?? 0;
-  const hasBox = !!frame?.box;
+  const hasBox = frame?.simbox !== undefined;
 
-  const showAtoms = (modifier as any).showAtoms ?? true;
-  const showBonds = (modifier as any).showBonds ?? true;
-  const showBox = (modifier as any).showBox ?? true;
-
-  const triggerUpdate = async () => {
-    if (!app) return;
-    const dummySource = new ArrayFrameSource([new Frame()]);
-    const computed = await (app as any).computeFrame(0, dummySource);
-    (app as any).renderFrame(computed);
+  const handleToggle = (
+    prop: "showAtoms" | "showBonds" | "showBox",
+    checked: boolean,
+  ) => {
+    modifier[prop] = checked;
     onUpdate();
-  };
-
-  const handleToggle = (prop: string, checked: boolean) => {
-    handleChange(prop, checked);
-    triggerUpdate();
+    app?.applyPipeline({ fullRebuild: true });
   };
 
   const handleClear = () => {
-    if (app && (app as any).artist) (app as any).artist.clear();
-    if (app && (app as any).commandManager)
-      (app as any).commandManager.clearHistory();
-
-    if ("setFrame" in modifier) (modifier as any).setFrame(null);
-    (modifier as any).filename = "";
+    if (!app) return;
+    modifier.setFrame(null);
+    modifier.sourceType = "empty";
+    modifier.filename = "";
+    app.loadFrame(new Frame());
     onUpdate();
-    triggerUpdate();
   };
 
   return (
@@ -140,6 +86,7 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             className="absolute inset-0 opacity-0 cursor-pointer"
             onChange={handleFileUpload}
             accept=".pdb,.xyz,.lmp,.lammps"
+            title="Load single file"
           />
           <Button variant="outline" size="sm" className="w-full gap-2">
             <FileUp className="h-4 w-4" /> Load File
@@ -161,7 +108,6 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
         Src: <span className="font-mono text-foreground">{filename}</span>
       </div>
 
-      {/* Visibility Table */}
       <div className="border rounded-md overflow-hidden bg-background">
         <table className="w-full text-xs">
           <thead className="bg-muted text-muted-foreground font-medium">
@@ -175,9 +121,9 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             <tr className="hover:bg-muted/50 transition-colors">
               <td className="px-3 py-2">
                 <Checkbox
-                  checked={showAtoms}
-                  onCheckedChange={(c) =>
-                    handleToggle("showAtoms", c as boolean)
+                  checked={modifier.showAtoms}
+                  onCheckedChange={(checked) =>
+                    handleToggle("showAtoms", checked === true)
                   }
                   className="h-3.5 w-3.5"
                 />
@@ -190,9 +136,9 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             <tr className="hover:bg-muted/50 transition-colors">
               <td className="px-3 py-2">
                 <Checkbox
-                  checked={showBonds}
-                  onCheckedChange={(c) =>
-                    handleToggle("showBonds", c as boolean)
+                  checked={modifier.showBonds}
+                  onCheckedChange={(checked) =>
+                    handleToggle("showBonds", checked === true)
                   }
                   className="h-3.5 w-3.5"
                 />
@@ -205,8 +151,10 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             <tr className="hover:bg-muted/50 transition-colors">
               <td className="px-3 py-2">
                 <Checkbox
-                  checked={showBox}
-                  onCheckedChange={(c) => handleToggle("showBox", c as boolean)}
+                  checked={modifier.showBox}
+                  onCheckedChange={(checked) =>
+                    handleToggle("showBox", checked === true)
+                  }
                   className="h-3.5 w-3.5"
                 />
               </td>

@@ -1,4 +1,4 @@
-import type { Frame } from "molwasm";
+import { Frame, WasmArray } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { logger } from "../utils/logger";
@@ -13,22 +13,84 @@ export class WrapPBCModifier extends BaseModifier {
   }
 
   apply(input: Frame, _context: PipelineContext): Frame {
-    // Check if frame has a box
-    if (!input.box) {
+    const box = input.simbox;
+    if (!box) {
       logger.warn("WrapPBC: Frame has no box, skipping");
       return input;
     }
 
-    // TODO: Implement actual PBC wrapping logic
-    // For now, this is a placeholder that returns the input unchanged
-    logger.info("WrapPBC: Wrapping atoms into periodic box (placeholder)");
+    const atoms = input.getBlock("atoms");
+    if (!atoms) {
+      return input;
+    }
 
-    // In a real implementation, this would:
-    // 1. Clone the frame
-    // 2. Wrap atom positions into the box
-    // 3. Return the modified frame
+    const x = atoms.viewColF32("x");
+    const y = atoms.viewColF32("y");
+    const z = atoms.viewColF32("z");
+    if (!x || !y || !z) {
+      logger.warn("WrapPBC: missing x/y/z columns, skipping");
+      return input;
+    }
 
-    return input;
+    const atomCount = atoms.nrows();
+    if (atomCount === 0) {
+      return input;
+    }
+
+    // Build interleaved coords for WASM wrap operation.
+    const interleaved = new Float32Array(atomCount * 3);
+    for (let i = 0; i < atomCount; i++) {
+      const i3 = i * 3;
+      interleaved[i3] = x[i];
+      interleaved[i3 + 1] = y[i];
+      interleaved[i3 + 2] = z[i];
+    }
+    const coordsArr = WasmArray.from(
+      interleaved,
+      new Uint32Array([atomCount, 3]),
+    );
+
+    try {
+      // Clone atoms into new frame, then write wrapped coords directly into it.
+      const result = new Frame();
+      result.insertBlock("atoms", atoms);
+      const resultAtoms = result.getBlock("atoms");
+      if (!resultAtoms) {
+        throw new Error("WrapPBC: failed to clone atoms block");
+      }
+
+      // wrapToBlock writes wrapped xyz directly into a Block column,
+      // avoiding an intermediate WasmArray copy + JS-side deinterleave.
+      box.wrapToBlock(coordsArr, resultAtoms, "pos");
+      const wrapped = resultAtoms.viewColF32("pos");
+      if (!wrapped) {
+        throw new Error("WrapPBC: wrapToBlock did not produce pos column");
+      }
+
+      // Deinterleave the wrapped [x0,y0,z0,...] back into separate columns.
+      const wrappedX = new Float32Array(atomCount);
+      const wrappedY = new Float32Array(atomCount);
+      const wrappedZ = new Float32Array(atomCount);
+      for (let i = 0; i < atomCount; i++) {
+        const i3 = i * 3;
+        wrappedX[i] = wrapped[i3];
+        wrappedY[i] = wrapped[i3 + 1];
+        wrappedZ[i] = wrapped[i3 + 2];
+      }
+      resultAtoms.setColF32("x", wrappedX);
+      resultAtoms.setColF32("y", wrappedY);
+      resultAtoms.setColF32("z", wrappedZ);
+
+      const bonds = input.getBlock("bonds");
+      if (bonds) {
+        result.insertBlock("bonds", bonds);
+      }
+
+      result.simbox = box;
+      return result;
+    } finally {
+      coordsArr.free();
+    }
   }
 
   getCacheKey(): string {

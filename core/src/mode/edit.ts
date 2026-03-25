@@ -7,7 +7,9 @@ import {
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
-import type { Molvis } from "@molvis/core";
+import type { Frame } from "@molcrafts/molrs";
+import type { MolvisApp as Molvis } from "../app";
+import type { Artist } from "../artist";
 import { CompositeCommand } from "../commands/composite";
 import {
   DeleteAtomCommand,
@@ -15,14 +17,12 @@ import {
   DrawAtomCommand,
   DrawBondCommand,
 } from "../commands/draw";
-import type { Artist } from "../core/artist";
-import { syncSceneToFrame } from "../core/scene_sync";
+import { PlaceMoleculeCommand } from "../commands/place_molecule";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { HitResult, MenuItem } from "./types";
-import { pointOnScreenAlignedPlane } from "./utils";
+import type { BindingEvent, HitResult, MenuItem } from "./types";
 
 /**
  * =============================
@@ -178,8 +178,8 @@ class EditModeContextMenu extends ContextMenuController {
         ],
         value: this.mode.element,
       },
-      action: (ev: Event) => {
-        this.mode.element = ev.value;
+      action: (ev: BindingEvent) => {
+        this.mode.element = String(ev.value);
       },
     });
     items.push({ type: "separator" });
@@ -195,8 +195,8 @@ class EditModeContextMenu extends ContextMenuController {
         ],
         value: this.mode.bondOrder,
       },
-      action: (ev: Event) => {
-        this.mode.bondOrder = ev.value;
+      action: (ev: BindingEvent) => {
+        this.mode.bondOrder = Number(ev.value);
       },
     });
     return CommonMenuItems.appendCommonTail(items, this.app);
@@ -219,6 +219,7 @@ class EditMode extends BaseMode {
 
   private element_ = "C";
   private bondOrder_ = 1;
+  private pendingMolecule_: Frame | null = null;
 
   public artist: Artist;
   private previews: PreviewManager;
@@ -235,6 +236,18 @@ class EditMode extends BaseMode {
   }
   set bondOrder(v: number) {
     this.bondOrder_ = v;
+  }
+
+  /** Set a 3D Frame to place on next canvas click. Set null to cancel. */
+  get pendingMolecule(): Frame | null {
+    return this.pendingMolecule_;
+  }
+  set pendingMolecule(frame: Frame | null) {
+    // Free the old WASM Frame if overwriting with a different one
+    if (this.pendingMolecule_ && this.pendingMolecule_ !== frame) {
+      this.pendingMolecule_.free();
+    }
+    this.pendingMolecule_ = frame;
   }
 
   constructor(app: Molvis) {
@@ -275,6 +288,7 @@ class EditMode extends BaseMode {
 
   override start(): void {
     super.start();
+    this.app.world.sceneIndex.promoteFrameToEditPool();
     this.app.world.highlighter.invalidateAndRebuild();
   }
 
@@ -322,19 +336,25 @@ class EditMode extends BaseMode {
     // Use resolved position as anchor for drag plane
     const startPos = this.getAtomPosition(this.startAtom, this.startAtomIndex);
 
-    const xyz = pointOnScreenAlignedPlane(
-      this.world.scene,
-      this.world.camera,
-      pointerInfo.event.clientX,
-      pointerInfo.event.clientY,
-      startPos,
-    );
+    const xyz = this.projectPointerOnScreenPlane(startPos);
+    if (!xyz) {
+      this.previews.hideAtom();
+      this.previews.hideBond();
+      return;
+    }
 
     const hit = await this.pickHit();
     let hover: AbstractMesh | null = null;
     let hoverIndex = -1;
 
-    if (hit && hit.type === "atom" && hit.mesh && hit.mesh !== this.startAtom) {
+    const samePickedAtom = Boolean(
+      hit &&
+        hit.type === "atom" &&
+        hit.mesh === this.startAtom &&
+        (hit.thinInstanceIndex ?? -1) === this.startAtomIndex,
+    );
+
+    if (hit && hit.type === "atom" && hit.mesh && !samePickedAtom) {
       hover = hit.mesh;
       hoverIndex = hit.thinInstanceIndex ?? -1;
     }
@@ -419,13 +439,20 @@ class EditMode extends BaseMode {
         this.startAtom,
         this.startAtomIndex,
       );
-      const xyz = pointOnScreenAlignedPlane(
-        this.world.scene,
-        this.world.camera,
-        pointerInfo.event.clientX,
-        pointerInfo.event.clientY,
-        startPos, // Use correct anchor
-      );
+      const xyz = this.projectPointerOnScreenPlane(startPos);
+      if (!xyz) {
+        this.world.camera.attachControl(
+          this.world.scene.getEngine().getRenderingCanvas(),
+          false,
+        );
+        this.previews.clear();
+        this.startAtom = null;
+        this.startAtomIndex = -1;
+        this.hoverAtom = null;
+        this.hoverAtomIndex = -1;
+        this.clickedAtom = null;
+        return;
+      }
 
       if (this.hoverAtom) {
         const endPos = this.getAtomPosition(
@@ -511,12 +538,26 @@ class EditMode extends BaseMode {
     }
 
     if (isLeft && this.pendingAtom && !this._is_dragging) {
-      const xyz = pointOnScreenAlignedPlane(
-        this.world.scene,
-        this.world.camera,
-        pointerInfo.event.clientX,
-        pointerInfo.event.clientY,
-      );
+      const xyz = this.projectPointerOnScreenPlane();
+      if (!xyz) {
+        this.pendingAtom = false;
+        return;
+      }
+
+      // If a molecule is queued for placement, place it at click position
+      if (this.pendingMolecule_) {
+        const target = Vector3.FromArray([xyz.x, xyz.y, xyz.z]);
+        const frame = this.pendingMolecule_;
+        this.pendingMolecule_ = null;
+        this.app.commandManager.execute(
+          new PlaceMoleculeCommand(this.app, frame, target),
+        );
+        // PlaceMoleculeCommand extracts all data in do(); safe to free now
+        frame.free();
+        this.pendingAtom = false;
+        return;
+      }
+
       const atomName = makeId("atom");
       const atomId = this.app.world.sceneIndex.getNextAtomId();
       this.app.commandManager.execute(
@@ -547,15 +588,15 @@ class EditMode extends BaseMode {
     _pointerInfo: PointerInfo,
     hit: HitResult | null,
   ): void {
-    if (!hit || !hit.metadata) return;
+    if (!hit || hit.type === "empty") return;
 
-    if (hit.type === "atom" && hit.metadata.type === "atom") {
+    if (hit.type === "atom") {
       const atomId = hit.metadata.atomId;
       // Clear highlight before modifying geometry (indices might change)
       this.app.world.highlighter.clearAll();
       // Delete atom (and connected bonds via Command logic)
       this.app.commandManager.execute(new DeleteAtomCommand(this.app, atomId));
-    } else if (hit.type === "bond" && hit.metadata.type === "bond") {
+    } else if (hit.type === "bond") {
       const bondId = hit.metadata.bondId;
       this.app.world.highlighter.clearAll();
       this.app.commandManager.execute(new DeleteBondCommand(this.app, bondId));
@@ -569,26 +610,20 @@ class EditMode extends BaseMode {
     this.app.commandManager.redo();
   }
   _on_press_ctrl_s(): void {
-    this.saveToFrame();
-  }
-
-  private saveToFrame(): void {
-    const frame = this.app.system.frame;
-    if (!frame) {
-      logger.warn("[EditMode] No Frame loaded, cannot save");
-      return;
-    }
-    logger.info("[EditMode] Saving scene to Frame...");
-    syncSceneToFrame(this.world.sceneIndex, frame);
-    logger.info("[EditMode] Successfully saved to Frame");
+    this.app.save();
   }
 
   public finish() {
     this.startAtom = null;
     this.startAtomIndex = -1;
     this.pendingAtom = false;
+    if (this.pendingMolecule_) {
+      this.pendingMolecule_.free();
+      this.pendingMolecule_ = null;
+    }
     this.hoverAtom = null;
     this.previews.clear();
+    this.restoreSceneFromFrame();
     super.finish();
   }
 }

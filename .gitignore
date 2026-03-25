@@ -3,6 +3,7 @@ static/
 
 # build
 build/
+site/
 
 # python
 __pycache__/
@@ -95,6 +96,7 @@ web_modules/
 # Next.js build output
 .next
 out
+out-test
 
 # Nuxt.js build / generate output
 .nuxt

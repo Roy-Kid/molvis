@@ -7,15 +7,14 @@ interface MeasurePanelProps {
 
 export const MeasurePanel: React.FC<MeasurePanelProps> = ({ app: _app }) => {
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h3 className="font-semibold text-lg">Measure Mode</h3>
-      <p className="text-sm text-muted-foreground">
-        Click on atoms to measure distances, angles, and dihedrals.
-      </p>
-      <div className="text-xs text-muted-foreground p-2 border rounded bg-muted/20">
-        • Click 2 atoms for distance
-        <br />• Click 3 atoms for angle
-        <br />• Click 4 atoms for dihedral
+    <div className="h-full p-2.5 space-y-2 text-xs">
+      <div className="text-xs font-semibold tracking-wide uppercase">
+        Measure
+      </div>
+      <div className="rounded border bg-muted/10 p-2 text-muted-foreground space-y-1">
+        <div>2 atoms: distance</div>
+        <div>3 atoms: angle</div>
+        <div>4 atoms: dihedral</div>
       </div>
     </div>
   );

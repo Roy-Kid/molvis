@@ -20,4 +20,4 @@ from .scene import Molvis
 from .utils import NumpyEncoder
 
 __all__ = ["Molvis", "NumpyEncoder"]
-__version__ = "0.1.0"
+__version__ = "0.0.2"

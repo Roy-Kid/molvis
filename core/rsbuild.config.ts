@@ -1,22 +1,22 @@
-import { defineConfig } from '@rsbuild/core';
+import { defineConfig } from "@rsbuild/core";
 
 export default defineConfig({
   html: {
     title: "molvis dev",
     meta: {
       charset: {
-        charset: 'UTF-8',
+        charset: "UTF-8",
       },
-      viewport: 'width=device-width, initial-scale=1.0',
+      viewport: "width=device-width, initial-scale=1.0",
     },
-    template: './examples/index.html'
+    template: "./examples/index.html",
   },
   source: {
     entry: {
-      index: "./examples/demo_frame.ts"
+      index: "./examples/demo_empty.ts",
     },
     define: {
       __WASM_INLINE__: JSON.stringify(false),
     },
-  }
+  },
 });

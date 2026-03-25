@@ -1,4 +1,11 @@
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import type { Molvis } from "@molvis/core";
 import {
@@ -17,85 +24,105 @@ interface TimelineControlProps {
   totalFrames?: number;
 }
 
+const BASE_FPS = 30;
+const SPEED_OPTIONS = [0.5, 1, 2, 5, 10] as const;
+
 export const TimelineControl: React.FC<TimelineControlProps> = ({
   app,
   totalFrames = 1,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(0);
+  const [speed, setSpeed] = useState(1);
   const requestRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number | undefined>(undefined);
-  const fps = 30; // Target FPS
+  const currentFrameRef = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
+  const speedRef = useRef(1);
 
-  // Sync with app state if available
+  useEffect(() => {
+    currentFrameRef.current = currentFrame;
+  }, [currentFrame]);
+
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
+
   useEffect(() => {
     if (!app) return;
 
-    // Listen for frame changes from app (if externally controlled)
-    const handleFrameChange = (event: any) => {
-      if (event.current !== currentFrame) {
-        setCurrentFrame(event.current);
-      }
+    setCurrentFrame(app.system.trajectory.currentIndex);
+
+    const handleFrameChange = (index: number) => {
+      setCurrentFrame((prev) => (prev === index ? prev : index));
     };
+
+    const handleTrajectoryChange = () => {
+      setCurrentFrame(app.system.trajectory.currentIndex);
+    };
+
     app.events.on("frame-change", handleFrameChange);
+    app.events.on("trajectory-change", handleTrajectoryChange);
     return () => {
       app.events.off("frame-change", handleFrameChange);
+      app.events.off("trajectory-change", handleTrajectoryChange);
     };
   }, [app]);
 
   const updateFrame = useCallback(
     (newFrame: number) => {
-      if (!app) return;
+      if (!app || totalFrames <= 0) return;
       const frame = Math.max(0, Math.min(newFrame, totalFrames - 1));
-      setCurrentFrame(frame);
-      app.currentFrame = frame; // Update core state
-
-      // Trigger render (in a real scenario, this would compute and render)
-      // For now, we just log/simulate or if app has correct pipeline set up:
-      // app.computeFrame(frame).then(f => app.renderFrame(f));
-      // Since we don't have a full trajectory in the demo, this is mostly UI state.
+      app.seekFrame(frame);
     },
     [app, totalFrames],
   );
 
   const animate = useCallback(
     (time: number) => {
-      if (lastTimeRef.current === undefined) {
+      if (lastTimeRef.current === null) {
         lastTimeRef.current = time;
       }
       const deltaTime = time - lastTimeRef.current;
+      const interval = 1000 / BASE_FPS / speedRef.current;
 
-      if (deltaTime >= 1000 / fps) {
-        setCurrentFrame((prev) => {
-          const next = prev + 1;
-          if (next >= totalFrames) {
-            // Loop or stop
-            return 0;
-          }
-          // Sync with app
-          if (app) app.currentFrame = next;
-          return next;
-        });
+      if (deltaTime >= interval) {
+        const next =
+          currentFrameRef.current + 1 >= totalFrames
+            ? 0
+            : currentFrameRef.current + 1;
+        updateFrame(next);
         lastTimeRef.current = time;
       }
       requestRef.current = requestAnimationFrame(animate);
     },
-    [app, fps, totalFrames],
+    [totalFrames, updateFrame],
   );
 
   useEffect(() => {
-    if (isPlaying) {
+    if (isPlaying && totalFrames > 1) {
       requestRef.current = requestAnimationFrame(animate);
     } else {
       if (requestRef.current !== null) cancelAnimationFrame(requestRef.current);
-      lastTimeRef.current = undefined;
+      lastTimeRef.current = null;
     }
     return () => {
       if (requestRef.current !== null) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying, animate]);
+  }, [isPlaying, totalFrames, animate]);
 
-  const togglePlay = () => setIsPlaying(!isPlaying);
+  useEffect(() => {
+    if (totalFrames <= 0) {
+      setCurrentFrame(0);
+      setIsPlaying(false);
+      return;
+    }
+    setCurrentFrame((prev) => Math.max(0, Math.min(prev, totalFrames - 1)));
+  }, [totalFrames]);
+
+  const togglePlay = () => {
+    if (totalFrames <= 1) return;
+    setIsPlaying((prev) => !prev);
+  };
   const stepForward = () => {
     setIsPlaying(false);
     updateFrame(currentFrame + 1);
@@ -114,14 +141,16 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
   };
 
   const handleSliderChange = (vals: number[]) => {
+    const [value] = vals;
+    if (value === undefined) return;
     setIsPlaying(false);
-    updateFrame(vals[0]);
+    updateFrame(value);
   };
 
   return (
-    <div className="flex items-center w-full h-full bg-background border-t px-2 gap-4">
+    <div className="flex items-center w-full h-full bg-background border-t px-1.5 gap-2">
       {/* Progress Bar Area (Left) */}
-      <div className="flex-1 px-2">
+      <div className="flex-1 px-1">
         <Slider
           value={[currentFrame]}
           max={totalFrames - 1}
@@ -132,60 +161,74 @@ export const TimelineControl: React.FC<TimelineControlProps> = ({
       </div>
 
       {/* Counter (Middle) */}
-      <div className="font-mono text-xs text-muted-foreground shrink-0 w-20 text-right tabular-nums">
-        {currentFrame} / {totalFrames}
+      <div className="font-mono text-[10px] text-muted-foreground shrink-0 w-16 text-right tabular-nums">
+        {currentFrame}/{totalFrames}
       </div>
+
+      {/* Speed selector */}
+      <Select value={String(speed)} onValueChange={(v) => setSpeed(Number(v))}>
+        <SelectTrigger className="h-6 w-14 text-[9px] shrink-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SPEED_OPTIONS.map((s) => (
+            <SelectItem key={s} value={String(s)} className="text-xs">
+              {s}x
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Controls Area (Right) */}
       <div className="flex items-center gap-1 shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={goToStart}
           title="First Frame"
         >
-          <SkipBack className="h-3.5 w-3.5" />
+          <SkipBack className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={stepBack}
           title="Prev Frame"
         >
-          <StepBack className="h-3.5 w-3.5" />
+          <StepBack className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="h-7 w-7"
           onClick={togglePlay}
           title={isPlaying ? "Pause" : "Play"}
         >
           {isPlaying ? (
-            <Pause className="h-4 w-4" />
+            <Pause className="h-3.5 w-3.5" />
           ) : (
-            <Play className="h-4 w-4" />
+            <Play className="h-3.5 w-3.5" />
           )}
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={stepForward}
           title="Next Frame"
         >
-          <StepForward className="h-3.5 w-3.5" />
+          <StepForward className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-6 w-6"
           onClick={goToEnd}
           title="Last Frame"
         >
-          <SkipForward className="h-3.5 w-3.5" />
+          <SkipForward className="h-3 w-3" />
         </Button>
       </div>
     </div>

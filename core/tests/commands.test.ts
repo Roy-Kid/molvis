@@ -8,7 +8,7 @@ import { CompositeCommand } from "../src/commands/composite";
 describe("Command System", () => {
   describe("Command Base", () => {
     it("should create a command with app instance", () => {
-      const mockApp = {} as any;
+      const mockApp = {};
       const command = new (class extends Command<void> {
         do(): void {}
         undo(): void {}
@@ -21,12 +21,12 @@ describe("Command System", () => {
 
   describe("CompositeCommand", () => {
     it("should execute multiple commands in sequence", async () => {
-      const mockApp = {} as any;
+      const mockApp = {};
       const executionOrder: number[] = [];
 
       class TestCommand extends Command<void> {
         constructor(
-          app: any,
+          app: unknown,
           private id: number,
         ) {
           super(app);
@@ -53,12 +53,12 @@ describe("Command System", () => {
     });
 
     it("should undo commands in reverse order", async () => {
-      const mockApp = {} as any;
+      const mockApp = {};
       const executionOrder: number[] = [];
 
       class TestCommand extends Command<void> {
         constructor(
-          app: any,
+          app: unknown,
           private id: number,
         ) {
           super(app);

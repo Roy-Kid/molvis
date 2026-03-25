@@ -1,10 +1,7 @@
 import { type Mesh, type Scene, Vector3 } from "@babylonjs/core";
-import type { MolvisApp } from "../core/app";
-import type { SceneIndex } from "../core/scene_index";
-import type {
-  GetSelectedResponse,
-  SelectedEntity,
-} from "../core/selection_manager";
+import type { MolvisApp } from "../app";
+import type { SceneIndex } from "../scene_index";
+import type { GetSelectedResponse, SelectedEntity } from "../selection_manager";
 import { logger } from "../utils/logger";
 import { Command, command } from "./base";
 import { commands } from "./registry";
@@ -93,7 +90,11 @@ export class MoveSelectionCommand extends Command<void> {
       matrices[offset + 13] += this.delta.y;
       matrices[offset + 14] += this.delta.z;
 
-      mesh.thinInstanceBufferUpdated("matrix");
+      const pool = this.app.world.sceneIndex.meshRegistry.getPoolForMesh(
+        entity.meshId,
+      );
+      if (pool) pool.uploadBuffer("matrix");
+      else mesh.thinInstanceBufferUpdated("matrix");
     }
 
     // Update connected bonds
@@ -121,7 +122,11 @@ export class MoveSelectionCommand extends Command<void> {
       matrices[offset + 13] = originalPos.y;
       matrices[offset + 14] = originalPos.z;
 
-      mesh.thinInstanceBufferUpdated("matrix");
+      const pool = this.app.world.sceneIndex.meshRegistry.getPoolForMesh(
+        entity.meshId,
+      );
+      if (pool) pool.uploadBuffer("matrix");
+      else mesh.thinInstanceBufferUpdated("matrix");
     }
 
     // Update connected bonds
@@ -218,7 +223,11 @@ export class MoveSelectionCommand extends Command<void> {
         }
       }
 
-      bondMesh.thinInstanceBufferUpdated("matrix");
+      const bondPool = this.app.world.sceneIndex.meshRegistry.getPoolForMesh(
+        bondMesh.uniqueId,
+      );
+      if (bondPool) bondPool.uploadBuffer("matrix");
+      else bondMesh.thinInstanceBufferUpdated("matrix");
     }
   }
 }
@@ -304,7 +313,7 @@ export class PasteSelectionCommand extends Command<void> {
       // Add color (default white for now, could be element-based)
       newAtomColors.push(1.0, 1.0, 1.0, 1.0);
 
-      // TODO: Update SceneIndex with new elements?
+      // SceneIndex metadata sync for pasted atoms is intentionally deferred.
       // atomElements.push(atomData.element);
 
       // Track created atom index

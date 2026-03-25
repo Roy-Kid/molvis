@@ -1,21 +1,13 @@
 {
-	"compilerOptions": {
-		"module": "Node16",
-		"target": "ES2022",
-		"lib": [
-			"ES2022",
-			"DOM",
-			"DOM.Iterable"
-		],
-		"sourceMap": true,
-		"rootDir": "src",
-		"strict": true
-	},
-	"include": [
-		"src/**/*"
-	],
-	"exclude": [
-		"src/webview/**/*",
-		"rslib.config.ts"
-	]
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@molvis/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "../core/src/types/**/*"],
+  "exclude": ["rslib.*.config.ts"]
 }

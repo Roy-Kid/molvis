@@ -1,19 +1,33 @@
 {
   "name": "@molvis/core",
-  "version": "0.0.1",
-  "main": "./src/index.ts",
+  "version": "0.0.2",
   "type": "module",
-  "module": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "rsbuild build",
-    "dev": "rsbuild dev",
-    "preview": "rsbuild preview",
-    "test": "rstest",
-    "test:watch": "rstest --watch"
+    "build": "rslib build",
+    "build:demo": "rsbuild build",
+    "dev": "npm run dev:demo",
+    "dev:demo": "rsbuild dev",
+    "preview:demo": "rsbuild preview",
+    "test": "rstest run",
+    "test:watch": "rstest watch",
+    "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@rsbuild/core": "^1.2.14",
-    "@rstest/core": "^0.8.2",
+    "@rslib/core": "^0.5.4",
+    "@rstest/browser": "^0.9.4",
+    "@rstest/core": "^0.9.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "playwright": "^1.58.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
@@ -21,7 +35,14 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
-    "molwasm": "^0.0.3",
+    "@molcrafts/molrs": "^0.0.7",
     "tslog": "^4.9.3"
-  }
+  },
+  "directories": {
+    "example": "examples",
+    "test": "tests"
+  },
+  "author": "Roy Kid",
+  "license": "BSD-3-Clause",
+  "description": "Molvis: interactive molecular visualization library"
 }

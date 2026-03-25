@@ -1,6 +1,7 @@
-import type { MolvisApp } from "../core/app";
-import type { MolvisConfig } from "../core/config";
-import type { Trajectory } from "../core/system/trajectory";
+import type { MolvisApp } from "../app";
+import type { MolvisConfig } from "../config";
+import type { ModeType } from "../mode";
+import type { Trajectory } from "../system/trajectory";
 import { InfoPanel } from "./panels/info_panel";
 import { ModePanel } from "./panels/mode_panel";
 import { PerfPanel } from "./panels/perf_panel";
@@ -16,6 +17,7 @@ export class GUIManager {
   private app: MolvisApp;
   private config: MolvisConfig;
   private uiOverlay: HTMLElement | null = null;
+  private layoutObserver: ResizeObserver | null = null;
 
   // Components
   private infoPanel: InfoPanel | null = null;
@@ -27,6 +29,16 @@ export class GUIManager {
   // Playback state
   private playbackInterval: ReturnType<typeof setInterval> | null = null;
   private playbackSpeed = 100; // ms per frame
+  private readonly infoChangeHandler = (text: string) =>
+    this.handleInfoChange(text);
+  private readonly modeChangeHandler = (mode: ModeType) =>
+    this.handleModeChange(mode);
+  private readonly fpsChangeHandler = (fps: number) =>
+    this.handleFpsChange(fps);
+  private readonly trajectoryChangeHandler = (trajectory: Trajectory) =>
+    this.handleTrajectoryChange(trajectory);
+  private readonly frameChangeHandler = (index: number) =>
+    this.handleFrameChange(index);
 
   constructor(container: HTMLElement, app: MolvisApp, config: MolvisConfig) {
     this.container = container;
@@ -88,6 +100,11 @@ export class GUIManager {
     if (this.uiOverlay) {
       this.uiOverlay.remove();
       this.uiOverlay = null;
+    }
+
+    if (this.layoutObserver) {
+      this.layoutObserver.disconnect();
+      this.layoutObserver = null;
     }
   }
 
@@ -155,6 +172,12 @@ export class GUIManager {
       ) as MolvisTrajectoryPanel;
       this.uiOverlay.appendChild(this.trajectoryPanel);
 
+      // Sync initial trajectory state immediately so single-frame datasets stay hidden.
+      this.trajectoryPanel.length = this.app.system.trajectory.length;
+      this.trajectoryPanel.current = this.app.system.trajectory.currentIndex;
+      this.trajectoryPanel.playing = false;
+      this.updateTrajectoryPanelLayout();
+
       // Bind panel events
       this.trajectoryPanel.addEventListener("seek", (e: Event) => {
         this.app.seekFrame((e as CustomEvent).detail);
@@ -176,36 +199,32 @@ export class GUIManager {
         this.stopPlayback();
       });
     }
+
+    this.setupLayoutObserver();
   }
 
   /**
    * Setup event listeners
    */
   private setupEventListeners(): void {
-    this.app.events.on("info-text-change", this.handleInfoChange.bind(this));
-    this.app.events.on("mode-change", this.handleModeChange.bind(this));
-    this.app.events.on("fps-change", this.handleFpsChange.bind(this));
+    this.app.events.on("info-text-change", this.infoChangeHandler);
+    this.app.events.on("mode-change", this.modeChangeHandler);
+    this.app.events.on("fps-change", this.fpsChangeHandler);
 
-    this.app.events.on(
-      "trajectory-change",
-      this.handleTrajectoryChange.bind(this),
-    );
-    this.app.events.on("frame-change", this.handleFrameChange.bind(this));
+    this.app.events.on("trajectory-change", this.trajectoryChangeHandler);
+    this.app.events.on("frame-change", this.frameChangeHandler);
   }
 
   /**
    * Remove event listeners
    */
   private removeEventListeners(): void {
-    this.app.events.off("info-text-change", this.handleInfoChange.bind(this));
-    this.app.events.off("mode-change", this.handleModeChange.bind(this));
-    this.app.events.off("fps-change", this.handleFpsChange.bind(this));
+    this.app.events.off("info-text-change", this.infoChangeHandler);
+    this.app.events.off("mode-change", this.modeChangeHandler);
+    this.app.events.off("fps-change", this.fpsChangeHandler);
 
-    this.app.events.off(
-      "trajectory-change",
-      this.handleTrajectoryChange.bind(this),
-    );
-    this.app.events.off("frame-change", this.handleFrameChange.bind(this));
+    this.app.events.off("trajectory-change", this.trajectoryChangeHandler);
+    this.app.events.off("frame-change", this.frameChangeHandler);
   }
 
   /**
@@ -220,7 +239,7 @@ export class GUIManager {
   /**
    * Handle mode change event
    */
-  private handleModeChange(mode: string): void {
+  private handleModeChange(mode: ModeType): void {
     if (this.modePanel) {
       this.modePanel.update(mode);
     }
@@ -238,6 +257,7 @@ export class GUIManager {
   private handleTrajectoryChange(traj: Trajectory): void {
     if (this.trajectoryPanel) {
       this.trajectoryPanel.length = traj.length;
+      this.updateTrajectoryPanelLayout();
       this.stopPlayback(); // Stop ensuring no weirdness
     }
   }
@@ -246,6 +266,30 @@ export class GUIManager {
     if (this.trajectoryPanel) {
       this.trajectoryPanel.current = index;
     }
+  }
+
+  private setupLayoutObserver(): void {
+    if (!this.uiOverlay) return;
+    if (!this.trajectoryPanel) return;
+    if (this.layoutObserver) {
+      this.layoutObserver.disconnect();
+      this.layoutObserver = null;
+    }
+
+    this.layoutObserver = new ResizeObserver(() => {
+      this.updateTrajectoryPanelLayout();
+    });
+    this.layoutObserver.observe(this.uiOverlay);
+  }
+
+  private updateTrajectoryPanelLayout(): void {
+    if (!this.trajectoryPanel) return;
+
+    const width =
+      this.app.canvas.clientWidth || this.uiOverlay?.clientWidth || 0;
+    const height =
+      this.app.canvas.clientHeight || this.uiOverlay?.clientHeight || 0;
+    this.trajectoryPanel.setViewportSize(width, height);
   }
 
   private startPlayback() {

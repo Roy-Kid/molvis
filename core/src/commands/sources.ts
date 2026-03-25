@@ -1,5 +1,16 @@
-import type { Frame } from "molwasm";
+import type { Frame } from "@molcrafts/molrs";
 import type { FrameSource } from "../pipeline/pipeline";
+
+/**
+ * Interface matching the SimulationReader WASM class for Zarr trajectory reading.
+ * The concrete implementation is provided by molrs-wasm.
+ */
+export interface ZarrReaderLike {
+  countFrames(): number;
+  countAtoms(): number;
+  readFrame(t: number): Frame | undefined;
+  free(): void;
+}
 
 /**
  * ArrayFrameSource provides frames from an array of Frame objects.
@@ -8,6 +19,9 @@ import type { FrameSource } from "../pipeline/pipeline";
 export class ArrayFrameSource implements FrameSource {
   private frames: Frame[];
 
+  /**
+   * Wrap a preloaded list of frames as a pipeline frame source.
+   */
   constructor(frames: Frame[]) {
     this.frames = frames;
   }
@@ -33,6 +47,9 @@ export class ArrayFrameSource implements FrameSource {
 export class SingleFrameSource implements FrameSource {
   private frame: Frame;
 
+  /**
+   * Wrap a single frame as a frame source.
+   */
   constructor(frame: Frame) {
     this.frame = frame;
   }
@@ -55,6 +72,9 @@ export class AsyncFrameSource implements FrameSource {
   private getFrameFn: (index: number) => Promise<Frame>;
   private frameCount: number | null;
 
+  /**
+   * Wrap an async callback as a frame source.
+   */
   constructor(
     getFrameFn: (index: number) => Promise<Frame>,
     frameCount: number | null = null,
@@ -65,6 +85,32 @@ export class AsyncFrameSource implements FrameSource {
 
   async getFrame(index: number): Promise<Frame> {
     return this.getFrameFn(index);
+  }
+
+  getFrameCount(): number | null {
+    return this.frameCount;
+  }
+}
+
+/**
+ * ZarrFrameSource provides frames from a Zarr archive.
+ */
+export class ZarrFrameSource implements FrameSource {
+  private reader: ZarrReaderLike;
+  private frameCount: number;
+
+  /**
+   * Wrap a `ZarrReaderLike` so it can drive the modifier pipeline.
+   */
+  constructor(reader: ZarrReaderLike) {
+    this.reader = reader;
+    this.frameCount = reader.countFrames();
+  }
+
+  async getFrame(index: number): Promise<Frame> {
+    const frame = this.reader.readFrame(index);
+    if (!frame) throw new Error(`Frame index ${index} out of range`);
+    return frame;
   }
 
   getFrameCount(): number | null {

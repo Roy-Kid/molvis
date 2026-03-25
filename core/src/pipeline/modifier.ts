@@ -1,5 +1,10 @@
-import type { Frame } from "molwasm";
-import type { PipelineContext, ValidationResult } from "./types";
+import type { Frame } from "@molcrafts/molrs";
+import type {
+  PipelineContext,
+  SelectionMask as SelectionMaskType,
+  ValidationResult,
+} from "./types";
+import { SelectionMask } from "./types";
 
 /**
  * Modifier category determines default selection behavior.
@@ -47,6 +52,12 @@ export interface Modifier {
   readonly category: ModifierCategory;
 
   /**
+   * ID of the parent selection-producing modifier, or null for root-level.
+   * When set, this modifier consumes the selection produced by the parent.
+   */
+  parentId: string | null;
+
+  /**
    * Validate that this modifier can be applied to the input frame.
    */
   validate(input: Frame, context: PipelineContext): ValidationResult;
@@ -69,6 +80,7 @@ export interface Modifier {
  */
 export abstract class BaseModifier implements Modifier {
   public enabled = true;
+  public parentId: string | null = null;
 
   constructor(
     public readonly id: string,
@@ -105,12 +117,11 @@ export abstract class BaseModifier implements Modifier {
   protected getEffectiveSelection(
     context: PipelineContext,
     frameSize: number,
-  ): import("./types").SelectionMask {
+  ): SelectionMaskType {
     if (this.category === ModifierCategory.SelectionSensitive) {
       return context.currentSelection;
     }
     // Selection-insensitive: operate on all atoms
-    const { SelectionMask } = require("./types");
     return SelectionMask.all(frameSize);
   }
 }

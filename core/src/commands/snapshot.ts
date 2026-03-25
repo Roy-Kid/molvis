@@ -1,5 +1,5 @@
 import * as BABYLON from "@babylonjs/core";
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 import { Command, command } from "./base";
 
 /**

@@ -1,28 +1,67 @@
-import { defineConfig } from '@rsbuild/core';
-import { pluginReact } from '@rsbuild/plugin-react';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import path from "node:path";
+import { defineConfig } from "@rsbuild/core";
+import { pluginReact } from "@rsbuild/plugin-react";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Docs: https://rsbuild.rs/config/
-export default defineConfig(({ command }) => {
-  return {
-    server: {
-      port: 3000,
+export default defineConfig({
+  server: { port: 3000 },
+  plugins: [pluginReact()],
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
     },
-    plugins: [pluginReact()],
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, './src'),
+  },
+  source: {
+    define: {
+      __WASM_INLINE__: "false",
+    },
+    watchFiles: {
+      paths: [path.resolve(import.meta.dirname, "../core/src/**")],
+    },
+  },
+  performance: {
+    chunkSplit: {
+      strategy: "custom",
+      splitChunks: {
+        chunks: "all",
+        cacheGroups: {
+          // BabylonJS core/gui/materials — sync, cached separately (large, stable)
+          babylonjs: {
+            test: /[\\/]node_modules[\\/]@babylonjs[\\/](?!inspector)/,
+            name: "lib-babylonjs",
+            chunks: "initial",
+            priority: 20,
+          },
+          // React — sync, small
+          react: {
+            test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+            name: "lib-react",
+            chunks: "initial",
+            priority: 15,
+          },
+          // Other sync vendor deps (Radix UI, etc.)
+          vendors: {
+            test: /[\\/]node_modules[\\/]/,
+            name: "lib-vendors",
+            chunks: "initial",
+            priority: 10,
+            minSize: 20000,
+          },
+        },
       },
     },
-    source: {
-      define: {
-        // Core expects WASM to be fetched, not inlined as base64 or similar
-        __WASM_INLINE__: 'false',
+  },
+  tools: {
+    rspack: {
+      node: {
+        // kekule.js uses __dirname internally — mock it silently
+        __dirname: "mock",
       },
+      ignoreWarnings: [
+        // kekule.js uses dynamic require internally — harmless in browser
+        /Critical dependency/,
+        /__dirname/,
+      ],
     },
-  };
+  },
 });

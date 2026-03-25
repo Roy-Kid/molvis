@@ -1,100 +1,103 @@
-# MolVis VSCode Extension
+# MolVis — Molecular Visualization for VSCode
 
-A VSCode extension for visualizing molecular structures directly within your editor. Built on [Babylon.js](https://www.babylonjs.com/) and the MolVis rendering engine.
+Interactive 3D molecular viewer directly inside VSCode. Open PDB, XYZ, or LAMMPS files and explore structures with GPU-accelerated rendering.
 
 ## Features
 
-### 🔬 Molecular Visualization
+- Open `.pdb`, `.xyz`, `.data` files as interactive 3D views
+- Multi-frame trajectory playback for XYZ files
+- Zarr directory support for large simulation trajectories
+- Three representations: Ball & Stick, Spacefill, Stick
+- Simulation box wireframe with color/thickness controls
+- Modifier pipeline: hide hydrogens, color by property, slice, expression selection
+- Drag-and-drop file loading onto any MolVis canvas
 
-- **Custom Editor for .pdb/.xyz files**: Open `.pdb` or `.xyz` files in an interactive 3D viewer
-- **Side-by-side text/visualization**: Click the preview button in the editor title bar to view molecular structure alongside the text
-- **Command-based viewer**: Open an empty viewer and drag-and-drop molecular files
-- **Real-time updates**: Changes to the text file automatically update the visualization
+## Supported Formats
 
-### 🎯 Workflows
+| Format | Extension | Notes |
+|--------|-----------|-------|
+| PDB | `.pdb` | Protein Data Bank, CRYST1 box support |
+| XYZ | `.xyz` | ExtXYZ, multi-frame trajectory |
+| LAMMPS | `.data`, `.lmp` | LAMMPS data format |
+| Zarr | `.zarr` | Directory-based binary trajectory |
 
-#### 1. Open .pdb/.xyz file in MolVis viewer
+## Getting Started
 
-1. Open any `.pdb` or `.xyz` file in VSCode
-2. Right-click the editor tab → **Reopen Editor With...** → **MolVis Viewer**
-3. The file will open in the 3D molecular viewer
+1. Install the extension from the VS Marketplace
+2. Open any `.pdb`, `.xyz`, or `.data` file
+3. Right-click the editor tab → **Reopen Editor With...** → **MolVis Viewer**
 
-#### 2. Preview to the side (Markdown-style)
+Or use the command palette: `MolVis: Quick View` for a side-by-side preview.
 
-1. Open a `.pdb` or `.xyz` file in the text editor
-2. Click the **Open Preview to the Side** button (📖) in the editor title bar
-3. The molecular visualization will open in a split view alongside your text editor
+## Commands
 
-#### 3. Standalone viewer with drag-and-drop
+| Command | Description |
+|---------|-------------|
+| `MolVis: Quick View` | Side-by-side preview panel |
+| `MolVis: Open Editor` | Full MolVis editor workspace |
+| `MolVis: Reload` | Reload the active webview |
 
-1. Open the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
-2. Run **MolVis: Open Viewer**
-3. Drag and drop a `.pdb` or `.xyz` file from your file explorer into the viewer
+## Configuration
 
-## Supported File Formats
+### `molvis.config`
 
-- **PDB** (`.pdb`) - Protein Data Bank format
-- **XYZ** (`.xyz`) - XYZ molecular format
+```jsonc
+{
+  "molvis.config": {
+    "useRightHandedSystem": true,
+    "canvas": { "antialias": true }
+  }
+}
+```
 
-> **Note**: This extension currently supports small text-based molecular files (< 10MB). Support for additional formats (`.cif`, `.mol2`) and large files is planned for future releases.
+### `molvis.settings`
 
-## Requirements
-
-- VSCode 1.108.1 or higher
-- WebGL-capable browser engine (included in VSCode)
-
-## Extension Commands
-
-- `MolVis: Open Viewer` - Open an empty molecular viewer
-- `Open Preview to the Side` - Open molecular visualization alongside text editor (available when a `.pdb` or `.xyz` file is active)
-
-## Known Limitations
-
-- **Read-only visualization**: Editing molecular structures is not yet supported
-- **Small files only**: Files larger than 10MB may cause performance issues
-- **PDB/XYZ only**: Additional formats will be added in future releases
-
-## Validation Checklist
-
-- Open a `.pdb` file with explicit element columns; verify element colors match expectations.
-- Open a `.pdb` file without element columns; verify colors still appear and the model renders.
-- Open a `.xyz` file; verify atoms render and colors are visible.
-- Load a file without a box/CRYST1 entry; verify a tight-fit box is drawn around the atoms.
-
-## Release Checklist
-
-- `npm run build` completes without errors
-- `npm run package` completes without errors
-- Manual validation checklist passes on `.pdb` and `.xyz` fixtures
+```jsonc
+{
+  "molvis.settings": {
+    "grid": { "enabled": true, "size": 100, "opacity": 0.3 },
+    "graphics": { "fxaa": true, "hardwareScaling": 1.0 }
+  }
+}
+```
 
 ## Development
 
-### Building the extension
-
 ```bash
+# From monorepo root
 npm install
-npm run build
+npm run build:all
+
+# Launch extension dev host
+# Open vsc-ext/ in VSCode, press F5
+
+# Tests
+npm run test:vsc-ext
 ```
 
-### Running in development
+### Publish
 
-1. Open this folder in VSCode
-2. Press `F5` to launch the Extension Development Host
-3. Test the extension in the new VSCode window
+Automated via GitHub Actions on tag push:
 
-## Architecture
+```bash
+git tag v0.0.2
+git push origin v0.0.2
+```
 
-The extension uses a dual-webview strategy:
+Requires `VSCE_PAT` and `OVSX_PAT` secrets configured in the GitHub repo.
 
-- **Custom Text Editor**: Integrates with VSCode's document model for `.pdb` and `.xyz` files
-- **Webview Panel**: Standalone viewer for exploratory work
+Manual publish:
 
-Both webviews use the same Babylon.js-based rendering engine from `@molvis/core`, with message passing between the extension host (Node.js) and webview (browser) for file loading and state synchronization.
+```bash
+cd vsc-ext
+npx vsce publish --no-dependencies
+npx ovsx publish --no-dependencies
+```
+
+## Requirements
+
+- VSCode 1.108.1+
 
 ## License
 
-BSD-3-Clause - See [LICENSE](../LICENSE) for details.
-
-## Contributing
-
-This extension is part of the MolVis monorepo. See the [main README](../README.md) for contribution guidelines.
+BSD-3-Clause

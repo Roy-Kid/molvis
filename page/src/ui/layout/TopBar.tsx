@@ -1,17 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Molvis } from "@molvis/core";
-import {
-  Edit3,
-  MousePointer2,
-  Move,
-  Redo2,
-  Ruler,
-  Scan,
-  Undo2,
-  Video,
-} from "lucide-react";
+import { Camera, Redo2, Scan, Undo2 } from "lucide-react";
 import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -19,21 +9,19 @@ import { SettingsDialog } from "./SettingsDialog";
 interface TopBarProps {
   app: Molvis | null;
   currentMode: string;
-  onModeChange: (mode: string) => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({
-  app,
-  currentMode,
-  onModeChange,
-}) => {
+/**
+ * Compact toolbar with global actions.
+ * Mode switching is owned by the right workbench sidebar.
+ */
+export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
 
   React.useEffect(() => {
     if (!app) return;
 
-    // Initial state
     setCanUndo(app.commandManager.canUndo());
     setCanRedo(app.commandManager.canRedo());
 
@@ -44,7 +32,6 @@ export const TopBar: React.FC<TopBarProps> = ({
 
     app.events.on("history-change", updateHistory);
 
-    // Keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         if (e.shiftKey) {
@@ -79,83 +66,74 @@ export const TopBar: React.FC<TopBarProps> = ({
     }
   };
 
-  return (
-    <div className="h-12 border-b bg-background flex items-center px-4 gap-4 shrink-0 justify-between">
-      {/* Left Side: Logo & Tabs */}
-      <div className="flex items-center gap-4">
-        {/* App Menu / Logo */}
-        <div className="flex items-center gap-2 font-bold text-lg">
-          <span>MolVis</span>
-        </div>
+  const handleScreenshot = async () => {
+    if (!app) return;
+    try {
+      const dataUrl = await app.screenshot({ transparentBackground: false });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "molvis-screenshot.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Screenshot failed:", err);
+    }
+  };
 
-        {/* Mode Switcher */}
-        <Tabs
-          value={currentMode}
-          onValueChange={(val) => {
-            console.log("[TopBar] Switching mode to:", val);
-            onModeChange(val);
-          }}
-          className="w-[500px]"
-        >
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="view" className="flex gap-2 items-center">
-              <Video className="h-4 w-4" /> View
-            </TabsTrigger>
-            <TabsTrigger value="select" className="flex gap-2 items-center">
-              <MousePointer2 className="h-4 w-4" /> Select
-            </TabsTrigger>
-            <TabsTrigger value="edit" className="flex gap-2 items-center">
-              <Edit3 className="h-4 w-4" /> Edit
-            </TabsTrigger>
-            <TabsTrigger value="manipulate" className="flex gap-2 items-center">
-              <Move className="h-4 w-4" /> Manip
-            </TabsTrigger>
-            <TabsTrigger value="measure" className="flex gap-2 items-center">
-              <Ruler className="h-4 w-4" /> Measure
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+  return (
+    <div className="h-8 border-b bg-background flex items-center px-2 gap-2 shrink-0 justify-between">
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="font-semibold tracking-wide text-xs">MolVis</div>
+        <div className="h-4 px-1.5 rounded border bg-muted/30 text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center">
+          {currentMode}
+        </div>
       </div>
 
-      {/* Right Side: Toolbar and Settings */}
-      <div className="flex items-center gap-2">
-        {/* Action Toolbar */}
-        <div className="flex items-center gap-1">
-          <ExportDialog app={app} />
-          <Separator orientation="vertical" className="h-6 mx-2" />
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleScreenshot}
+          title="Screenshot (PNG)"
+        >
+          <Camera className="h-3.5 w-3.5" />
+        </Button>
+        <ExportDialog app={app} />
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleUndo}
-            title="Undo"
-            disabled={!canUndo}
-          >
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRedo}
-            title="Redo"
-            disabled={!canRedo}
-          >
-            <Redo2 className="h-4 w-4" />
-          </Button>
-          <Separator orientation="vertical" className="h-6 mx-2" />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleResetCamera}
-            title="Reset Camera"
-          >
-            <Scan className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleUndo}
+          title="Undo"
+          disabled={!canUndo}
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleRedo}
+          title="Redo"
+          disabled={!canRedo}
+        >
+          <Redo2 className="h-3.5 w-3.5" />
+        </Button>
 
-        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
 
-        {/* Settings Dialog Button */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleResetCamera}
+          title="Reset Camera"
+        >
+          <Scan className="h-3.5 w-3.5" />
+        </Button>
+
+        <Separator orientation="vertical" className="h-4 mx-0.5" />
+
         <SettingsDialog app={app} />
       </div>
     </div>

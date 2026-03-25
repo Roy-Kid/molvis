@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import pathlib
 import threading
 import uuid
 import weakref
 from collections import deque
 from dataclasses import asdict
+from importlib.resources import files
 from typing import Any
 
 import anywidget
@@ -26,11 +28,28 @@ logger = logging.getLogger("molvis")
 
 __all__ = ["Molvis"]
 
-# Locate the bundled JavaScript module
-module_dir = pathlib.Path(__file__).parent
-ESM_path = module_dir / "dist" / "index.js"
-if not ESM_path.exists():
-    raise FileNotFoundError(f"ESM file not found: {ESM_path}")
+
+def resolve_esm_path() -> pathlib.Path:
+    """
+    Resolve the bundled frontend module for the widget.
+
+    `MOLVIS_ESM_PATH` can be used to override the location for local development
+    or packaging diagnostics. Otherwise the path is resolved from the installed
+    `molvis` package resources.
+    """
+    override = os.environ.get("MOLVIS_ESM_PATH")
+    if override:
+        esm_path = pathlib.Path(override).expanduser().resolve()
+    else:
+        esm_resource = files("molvis").joinpath("dist").joinpath("index.js")
+        esm_path = pathlib.Path(str(esm_resource))
+
+    if not esm_path.exists():
+        raise FileNotFoundError(
+            f"ESM file not found: {esm_path}. Run `npm run build -w python` first."
+        )
+
+    return esm_path
 
 
 class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin, FrameCommandsMixin, SnapshotCommandsMixin):
@@ -71,7 +90,7 @@ class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin, 
     # Class variable to track all widget instances
     _instances: weakref.WeakSet["Molvis"] = weakref.WeakSet()
 
-    _esm = ESM_path
+    _esm = resolve_esm_path()
 
     def __init__(
         self, 
@@ -290,13 +309,23 @@ class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin, 
 
     @classmethod
     def get_frontend_instance_count(cls) -> int:
-        """Get the current number of frontend widget instances."""
+        """
+        Ask the frontend runtime how many widget instances are currently alive.
+        """
         try:
             instances = list(cls._instances)
             if not instances:
                 return 0
             first_instance = instances[0]
-            result = first_instance.send_cmd("get_instance_count", {})
+            response = first_instance.send_cmd(
+                "get_instance_count",
+                {},
+                wait_for_response=True,
+            )
+            if isinstance(response, dict) and "result" in response:
+                result = response["result"]
+            else:
+                result = response
             return result if isinstance(result, int) else 0
         except Exception as e:
             logger.error(f"Failed to get frontend instance count: {e}")
@@ -304,7 +333,7 @@ class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin, 
 
     @classmethod
     def clear_all_frontend_instances(cls) -> None:
-        """Clear all frontend widget instances."""
+        """Ask the frontend runtime to dispose every live widget instance."""
         try:
             instances = list(cls._instances)
             if not instances:
@@ -316,7 +345,7 @@ class Molvis(anywidget.AnyWidget, DrawingCommandsMixin, SelectionCommandsMixin, 
 
     @classmethod
     def clear_all_frontend_content(cls) -> None:
-        """Clear all 3D content from all frontend widget instances."""
+        """Clear staged 3D content from every live frontend widget instance."""
         try:
             instances = list(cls._instances)
             if not instances:

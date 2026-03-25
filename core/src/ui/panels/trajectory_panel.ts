@@ -3,6 +3,13 @@ export class MolvisTrajectoryPanel extends HTMLElement {
     return ["length", "current", "playing"];
   }
 
+  private static readonly WIDTH_RATIO = 0.62;
+  private static readonly BOTTOM_RATIO = 0.065;
+  private static readonly MIN_WIDTH = 280;
+  private static readonly MAX_WIDTH = 980;
+  private static readonly MIN_BOTTOM = 14;
+  private static readonly MAX_BOTTOM = 96;
+
   private shadow: ShadowRoot;
   private slider: HTMLInputElement;
   private currentLabel: HTMLSpanElement;
@@ -15,80 +22,71 @@ export class MolvisTrajectoryPanel extends HTMLElement {
     this.shadow.innerHTML = `
             <style>
                 :host {
-                    position: fixed;
-                    bottom: 20px;
+                    --traj-width: 560px;
+                    --traj-bottom: 36px;
+                    position: absolute;
+                    bottom: var(--traj-bottom);
                     left: 50%;
                     transform: translateX(-50%);
-                    background: rgba(20, 20, 20, 0.85);
-                    backdrop-filter: blur(8px);
+                    width: var(--traj-width);
+                    max-width: calc(100% - 24px);
+                    box-sizing: border-box;
+                    /* Dark capsule background */
+                    background: rgba(30, 30, 30, 0.8);
                     padding: 8px 16px;
-                    border-radius: 8px;
-                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 9999px; /* Capsule shape */
+                    border: 1px solid rgba(255, 255, 255, 0.08); /* Subtle border */
                     display: flex;
                     align-items: center;
-                    gap: 12px;
-                    color: white;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    gap: 16px;
+                    color: #eeeeee; /* Off-white text */
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
                     z-index: 2000;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
                     transition: opacity 0.3s, transform 0.3s;
-                    pointer-events: auto; /* Ensure events are captured */
+                    user-select: none;
+                    pointer-events: auto;
                 }
 
                 :host([hidden]) {
                     display: none;
                 }
 
-                input[type=range] {
-                    -webkit-appearance: none;
-                    width: 200px;
-                    height: 4px;
-                    background: rgba(255, 255, 255, 0.2);
-                    border-radius: 2px;
-                    outline: none;
-                }
-
-                input[type=range]::-webkit-slider-thumb {
-                    -webkit-appearance: none;
-                    width: 14px;
-                    height: 14px;
-                    background: #fff;
-                    border-radius: 50%;
-                    cursor: pointer;
-                    transition: transform 0.1s;
-                }
-
-                input[type=range]::-webkit-slider-thumb:hover {
-                    transform: scale(1.2);
-                }
-
+                /* Controls Layout */
                 .controls {
                     display: flex;
-                    gap: 4px;
+                    flex: 0 0 auto;
+                    align-items: center;
+                    gap: 12px;
                 }
 
                 button {
                     background: transparent;
                     border: none;
-                    color: rgba(255, 255, 255, 0.8);
+                    color: rgba(255, 255, 255, 0.7);
                     cursor: pointer;
-                    padding: 4px;
-                    border-radius: 4px;
+                    padding: 0;
                     display: flex;
                     align-items: center;
                     justify-content: center;
+                    transition: color 0.2s;
+                    width: 20px;
+                    height: 20px;
                 }
 
                 button:hover {
-                    background: rgba(255, 255, 255, 0.1);
-                    color: #fff;
+                    color: #ffffff;
                 }
 
-                .frame-info {
-                    font-size: 12px;
-                    font-variant-numeric: tabular-nums;
-                    min-width: 60px;
-                    text-align: center;
+                button:active {
+                    transform: scale(0.95);
+                }
+
+                /* Play button specific adjustment if needed */
+                #playBtn svg {
+                    width: 14px;
+                    height: 14px;
+                    fill: currentColor;
                 }
 
                 svg {
@@ -96,23 +94,71 @@ export class MolvisTrajectoryPanel extends HTMLElement {
                     height: 16px;
                     fill: currentColor;
                 }
+
+                /* Slider Styling */
+                input[type=range] {
+                    -webkit-appearance: none;
+                    flex: 1 1 auto;
+                    min-width: 120px;
+                    height: 4px;
+                    background: rgba(255, 255, 255, 0.15); /* Track color */
+                    border-radius: 2px;
+                    outline: none;
+                    margin: 0;
+                    cursor: pointer;
+                }
+
+                input[type=range]::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    width: 12px;
+                    height: 12px;
+                    background: #ffffff;
+                    border-radius: 50%;
+                    cursor: pointer;
+                    transition: transform 0.15s, box-shadow 0.15s;
+                    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+                    margin-top: 0; /* Align thumb center if webkit needs it, usually auto centered on height */
+                }
+
+                input[type=range]::-webkit-slider-thumb:hover {
+                    transform: scale(1.2);
+                    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+                }
+
+                /* Counter Styling */
+                .frame-info {
+                    flex: 0 0 auto;
+                    font-size: 13px;
+                    font-weight: 500;
+                    font-variant-numeric: tabular-nums;
+                    min-width: 60px;
+                    text-align: right;
+                    color: rgba(255, 255, 255, 0.9);
+                    letter-spacing: 0.5px;
+                }
             </style>
             
             <div class="controls">
                 <button id="prevBtn" title="Previous Frame (Q)">
+                    <!-- Minimal Chevron Left -->
                     <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
                 </button>
                 <button id="playBtn" title="Play/Pause (Space)">
+                    <!-- Minimal Play Icon (Triangle) -->
                     <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <!-- Pause Icon -->
                     <svg id="pauseIcon" viewBox="0 0 24 24" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                 </button>
                 <button id="nextBtn" title="Next Frame (E)">
+                    <!-- Minimal Chevron Right -->
                     <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                 </button>
             </div>
 
+            <!-- Slider -->
             <input type="range" id="slider" min="0" max="0" value="0" step="1">
 
+            <!-- Counter -->
             <div class="frame-info">
                 <span id="current">0</span> / <span id="total">0</span>
             </div>
@@ -126,6 +172,10 @@ export class MolvisTrajectoryPanel extends HTMLElement {
     this.playBtn = this.shadow.getElementById("playBtn") as HTMLButtonElement;
 
     this.bindEvents();
+  }
+
+  connectedCallback(): void {
+    this.updateLayoutFromHost();
   }
 
   private bindEvents() {
@@ -226,5 +276,35 @@ export class MolvisTrajectoryPanel extends HTMLElement {
     } else {
       this.removeAttribute("playing");
     }
+  }
+
+  public setViewportSize(width: number, height: number): void {
+    const safeWidth = Number.isFinite(width) ? Math.max(0, width) : 0;
+    const safeHeight = Number.isFinite(height) ? Math.max(0, height) : 0;
+
+    const panelWidth = Math.min(
+      MolvisTrajectoryPanel.MAX_WIDTH,
+      Math.max(
+        MolvisTrajectoryPanel.MIN_WIDTH,
+        Math.round(safeWidth * MolvisTrajectoryPanel.WIDTH_RATIO),
+      ),
+    );
+    const panelBottom = Math.min(
+      MolvisTrajectoryPanel.MAX_BOTTOM,
+      Math.max(
+        MolvisTrajectoryPanel.MIN_BOTTOM,
+        Math.round(safeHeight * MolvisTrajectoryPanel.BOTTOM_RATIO),
+      ),
+    );
+
+    this.style.setProperty("--traj-width", `${panelWidth}px`);
+    this.style.setProperty("--traj-bottom", `${panelBottom}px`);
+  }
+
+  private updateLayoutFromHost(): void {
+    const host = this.parentElement as HTMLElement | null;
+    if (!host) return;
+    const rect = host.getBoundingClientRect();
+    this.setViewportSize(rect.width, rect.height);
   }
 }

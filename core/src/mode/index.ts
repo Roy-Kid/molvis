@@ -1,5 +1,5 @@
 import { KeyboardEventTypes, type KeyboardInfo } from "@babylonjs/core";
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
 
 import type { BaseMode } from "./base";
 import { ModeType } from "./base";
@@ -50,11 +50,13 @@ class ModeManager {
           break;
       }
     });
-    // return new ViewMode(this);
   };
 
   public switch_mode = (mode: ModeType) => {
+    if (this._mode?.name === mode) return;
+
     if (this._mode) this._mode.finish();
+
     switch (mode) {
       case ModeType.View:
         this._mode = new ViewMode(this._app);
@@ -76,15 +78,8 @@ class ModeManager {
         throw new Error(`unknown mode: ${mode}`);
     }
 
-    // Call start() on the new mode
-    if (this._mode) {
-      this._mode.start();
-    }
-
-    // Emit mode change event
-    if (this._app.events) {
-      this._app.events.emit("mode-change", mode);
-    }
+    this._mode?.start();
+    this._app.events?.emit("mode-change", mode);
   };
 
   public get currentMode(): BaseMode | null {

@@ -67,7 +67,7 @@ scene.clear()
 Build the TypeScript widget:
 
 ```bash
-cd widget
+cd python
 npm install
 npm run build
 ```
@@ -76,4 +76,21 @@ Build in watch mode:
 
 ```bash
 npm run dev
+```
+
+## Test
+
+```bash
+npm run test
+```
+
+## Packaging
+
+The Python package expects the frontend bundle at `src/molvis/dist/index.js`.
+Build the widget bundle before creating a wheel or sdist:
+
+```bash
+cd python
+npm run build
+python3 -m build --no-isolation
 ```

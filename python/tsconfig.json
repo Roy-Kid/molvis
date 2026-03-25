@@ -1,23 +1,10 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
-    "target": "ESNext",
-    "noEmit": true,
-    "skipLibCheck": true,
-    "useDefineForClassFields": true,
     "experimentalDecorators": true,
-    /* modules */
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "isolatedModules": true,
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "allowImportingTsExtensions": true,
+    "paths": {
+      "@molvis/core": ["../core/src/index.ts"]
+    }
   },
-  "include": [
-    "src/ts/**/*.ts"
-  ]
+  "include": ["src/ts/**/*.ts"]
 }

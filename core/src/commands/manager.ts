@@ -1,5 +1,5 @@
-import { Logger } from "tslog";
-import type { MolvisApp } from "../core/app";
+import type { MolvisApp } from "../app";
+import { createLogger } from "../utils/logger";
 import type { Command } from "./base";
 
 /**
@@ -9,7 +9,7 @@ export class CommandManager {
   private app: MolvisApp;
   private undoStack: Command<unknown>[] = [];
   private redoStack: Command<unknown>[] = [];
-  private logger = new Logger({ name: "CommandManager" });
+  private logger = createLogger("CommandManager");
 
   constructor(app: MolvisApp) {
     this.app = app;
