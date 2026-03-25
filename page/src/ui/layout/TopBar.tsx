@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { Molvis } from "@molvis/core";
-import { Camera, Redo2, Scan, Undo2 } from "lucide-react";
+import { Camera, Redo2, Scan, Trash2, Undo2 } from "lucide-react";
 import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -66,6 +66,10 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
     }
   };
 
+  const handleReset = () => {
+    if (app) app.reset();
+  };
+
   const handleScreenshot = async () => {
     if (!app) return;
     try {
@@ -98,6 +102,14 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           title="Screenshot (PNG)"
         >
           <Camera className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleReset}
+          title="Reset Scene"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
         <ExportDialog app={app} />
         <Separator orientation="vertical" className="h-4 mx-0.5" />

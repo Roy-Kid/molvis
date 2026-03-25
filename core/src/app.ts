@@ -32,7 +32,7 @@ import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
 
-import type { Box, Frame } from "@molcrafts/molrs";
+import { type Box, Frame } from "@molcrafts/molrs";
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { defaultSaveFile } from "./save_file";
 
@@ -651,6 +651,19 @@ export class MolvisApp {
     this._sourceFrame = frame;
     this._system.setFrame(frame, box);
     this.renderFrame(frame, box);
+  }
+
+  /**
+   * Reset the app to its initial empty state.
+   * Clears the scene, pipeline, selection, history, and switches to View mode.
+   */
+  public reset(): void {
+    this._modifierPipeline.clear();
+    this._world.selectionManager.clearSelection();
+    this._world.highlighter.clearAll();
+    this._modeManager.switch_mode(ModeType.View);
+    this.loadFrame(new Frame());
+    this._lastSelectionSet = new Map();
   }
 
   /**
