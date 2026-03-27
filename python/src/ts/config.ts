@@ -4,9 +4,8 @@
  */
 
 import {
-  type MolvisConfig as CoreMolvisConfig,
   defaultMolvisConfig,
-} from "@molvis/core";
+} from "@molvis/core-internal/config";
 
 // Default widget configuration (passed to core)
 export const DEFAULT_CONFIG = defaultMolvisConfig({

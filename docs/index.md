@@ -12,6 +12,7 @@ MolVis is a high-performance molecular visualization toolkit that brings interac
 - **Extensible Pipeline** -- Modular modifier system for custom data transformations
 - **Modern Stack** -- TypeScript, React, Babylon.js, and Rsbuild
 - **Multiple Interfaces** -- Web app, Jupyter widget, and VSCode extension
+- **Notebook Engineering** -- Binary anywidget transport, shared Jupyter sessions, and Python-visible JSON-RPC errors
 
 ## Packages
 

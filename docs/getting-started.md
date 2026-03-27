@@ -92,11 +92,22 @@ In edit mode:
 import molvis as mv
 import molpy as mp
 
-scene = mv.Molvis(name="demo")
+scene = mv.Molvis(name="demo", session="shared-demo")
 frame = mp.Frame(...)
 scene.draw_frame(frame)
 scene
 ```
+
+MolVis uses binary anywidget buffers for dense numeric arrays automatically, so large coordinate arrays are not expanded into JSON lists.
+
+If you reuse the same `session` key in multiple widget handles, those cells share one frontend scene and one Babylon.js engine:
+
+```python
+primary = mv.Molvis(name="primary", session="protein")
+secondary = mv.Molvis(name="secondary", session="protein")
+```
+
+Frontend validation and runtime failures are returned to Python as `mv.MolvisRpcError`.
 
 ## Development
 

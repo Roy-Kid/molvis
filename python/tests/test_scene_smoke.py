@@ -107,5 +107,14 @@ def test_get_frontend_instance_count_waits_for_rpc_response():
     scene.send_cmd = fake_send_cmd
 
     assert molvis.Molvis.get_frontend_instance_count() == 7
-    assert captured["method"] == "get_instance_count"
+    assert captured["method"] == "session.get_session_count"
     assert captured["wait_for_response"] is True
+
+
+def test_scene_uses_explicit_session_key():
+    molvis = import_molvis_module()
+
+    scene = molvis.Molvis(name="shared-view", session="shared-session")
+
+    assert scene.name == "shared-view"
+    assert scene.session == "shared-session"

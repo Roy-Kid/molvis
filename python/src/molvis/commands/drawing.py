@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal
 import molpy as mp
 import numpy as np
 
+from .catalog import FrontendCommands
+
 if TYPE_CHECKING:
     from ..scene import Molvis
 
@@ -52,7 +54,7 @@ class DrawingCommandsMixin:
         clear: bool = True
     ) -> "Molvis":
         """
-        Create a new frame and set it as current.
+        Create a new empty frame in the current shared frontend session.
         
         Args:
             name: Optional name for the new frame
@@ -60,12 +62,19 @@ class DrawingCommandsMixin:
             
         Returns:
             Self for method chaining
+
+        Raises:
+            molvis.MolvisRpcError: If the frontend rejects the command.
         """
         params = {
             "name": name,
             "clear": clear
         }
-        self.send_cmd("new_frame", params, [])
+        self.send_cmd(
+            FrontendCommands.NEW_FRAME.method,
+            params,
+            wait_for_response=True,
+        )
         return self
 
     def draw_frame(
@@ -88,6 +97,9 @@ class DrawingCommandsMixin:
             
         Returns:
             Self for method chaining
+
+        Raises:
+            molvis.MolvisRpcError: If frontend validation or rendering fails.
         """
         if not isinstance(frame, mp.Frame):
             raise TypeError(f"frame must be a molpy.Frame instance, got {type(frame)}")
@@ -128,7 +140,7 @@ class DrawingCommandsMixin:
             draw_data["metadata"] = frame_dict["metadata"]
         
         params = {
-            "frameData": draw_data,
+            "frame": draw_data,
             "options": {
                 "atoms": {"radius": atom_radius},
                 "bonds": {"radius": bond_radius},
@@ -136,7 +148,11 @@ class DrawingCommandsMixin:
             }
         }
         
-        self.send_cmd("draw_frame", params, [])
+        self.send_cmd(
+            FrontendCommands.DRAW_FRAME.method,
+            params,
+            wait_for_response=True,
+        )
         return self
 
     def draw_atomistic(
@@ -161,6 +177,9 @@ class DrawingCommandsMixin:
             
         Returns:
             Self for method chaining
+
+        Raises:
+            molvis.MolvisRpcError: If the frontend rejects the command.
         """
         if not hasattr(atomistic, 'to_frame'):
             raise TypeError(
@@ -222,7 +241,7 @@ class DrawingCommandsMixin:
             raise ValueError(f"Box dict missing required fields: {missing_fields}")
             
         params = {
-            "boxData": box_dict,
+            "box": box_dict,
             "options": {
                 "color": color,
                 "lineWidth": line_width,
@@ -230,7 +249,11 @@ class DrawingCommandsMixin:
             }
         }
         
-        self.send_cmd("draw_box", params, [])
+        self.send_cmd(
+            FrontendCommands.DRAW_BOX.method,
+            params,
+            wait_for_response=True,
+        )
         return self
 
     def draw_atoms(
@@ -293,7 +316,7 @@ class DrawingCommandsMixin:
             y_list.append(float(y_val))
             z_list.append(float(z_val))
             element_list.append(element)
-            type_list.append(atom_type)
+            type_list.append(str(atom_type))
         
         atoms_block = {
             'x': np.array(x_list),
@@ -318,8 +341,17 @@ class DrawingCommandsMixin:
         )
 
     def clear(self: "Molvis") -> "Molvis":
-        """Clear all content from canvas."""
-        self.send_cmd("clear", {}, [])
+        """
+        Clear all content from the current shared frontend session.
+
+        Raises:
+            molvis.MolvisRpcError: If the frontend rejects the command.
+        """
+        self.send_cmd(
+            FrontendCommands.CLEAR.method,
+            {},
+            wait_for_response=True,
+        )
         return self
 
     def set_style(
@@ -328,21 +360,48 @@ class DrawingCommandsMixin:
         atom_radius: float | list[float] | None = None,
         bond_radius: float | None = None
     ) -> "Molvis":
-        """Set global visualization style parameters."""
+        """
+        Set global visualization style parameters for the current session.
+
+        Raises:
+            molvis.MolvisRpcError: If style validation or redraw fails.
+        """
         params = {
             "style": style,
             "atoms": {"radius": atom_radius},
             "bonds": {"radius": bond_radius}
         }
-        self.send_cmd("set_style", params, [])
+        self.send_cmd(
+            FrontendCommands.SET_STYLE.method,
+            params,
+            wait_for_response=True,
+        )
         return self
 
     def set_theme(self: "Molvis", theme: str) -> "Molvis":
-        """Set color theme for molecular visualization."""
-        self.send_cmd("set_theme", {"theme": theme}, [])
+        """
+        Set the current frontend theme.
+
+        Raises:
+            molvis.MolvisRpcError: If the frontend rejects the theme.
+        """
+        self.send_cmd(
+            FrontendCommands.SET_THEME.method,
+            {"theme": theme},
+            wait_for_response=True,
+        )
         return self
 
     def set_view_mode(self: "Molvis", mode: str) -> "Molvis":
-        """Set camera view mode."""
-        self.send_cmd("set_view_mode", {"mode": mode}, [])
+        """
+        Set camera interaction mode.
+
+        Raises:
+            molvis.MolvisRpcError: If the frontend rejects the mode.
+        """
+        self.send_cmd(
+            FrontendCommands.SET_VIEW_MODE.method,
+            {"mode": mode},
+            wait_for_response=True,
+        )
         return self

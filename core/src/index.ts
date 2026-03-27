@@ -155,6 +155,8 @@ export {
   type LabelMode,
   DEFAULT_LABEL_CONFIG,
 } from "./artist/label_renderer";
+export { ClassicTheme } from "./artist/presets/classic";
+export { ModernTheme } from "./artist/presets/modern";
 export type { RepresentationStyle } from "./artist/representation";
 export {
   REPRESENTATIONS,

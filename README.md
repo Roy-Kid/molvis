@@ -115,14 +115,26 @@ Jupyter notebook integration:
 import molvis as mv
 import molpy as mp
 
-# Create a named scene
-scene = mv.Molvis(name="protein_view", width=800, height=600)
+# Create a widget handle and an explicit shared session
+scene = mv.Molvis(
+    name="protein_view",
+    session="protein_session",
+    width=800,
+    height=600,
+)
 
 # Draw a frame and display the widget
 frame = mp.Frame(...)
 scene.draw_frame(frame)
 scene
 ```
+
+Widget-specific behavior:
+
+- Numeric NumPy payloads are transferred through anywidget binary buffers instead of JSON lists.
+- Multiple widget handles can share the same frontend `session` across notebook cells.
+- A shared session owns one Babylon.js engine and one live scene state.
+- Frontend JSON-RPC failures are raised back into Python as `molvis.MolvisRpcError`.
 
 ### VSCode Extension
 

@@ -15,6 +15,9 @@ nav = [
   { "API Reference" = [
     "api/core.md",
     "api/pipeline.md",
+    "api/python.md",
+    "api/page.md",
+    "api/vsc-ext.md",
   ]},
 ]
 
@@ -58,4 +61,3 @@ enabled = true
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
 link = "https://github.com/molcrafts/molvis"
-

@@ -1,33 +1,20 @@
 /**
  * Widget-specific type definitions.
- * Note: Some types like MolvisConfig extend core types with widget-specific settings.
  */
 
-import type { MolvisConfig as CoreMolvisConfig } from "@molvis/core";
+import type { AnyModel } from "@anywidget/types";
 
-// Re-export core config for convenience
-export type { CoreMolvisConfig };
-
-// Widget configuration interface (extends core config conceptually)
-export interface WidgetConfig {
-  name?: string; // Named scene identifier
+export interface MolvisModelState {
+  name: string;
+  session: string;
   width: number;
   height: number;
-  session_id?: number; // Legacy, prefer name
-  showUI?: boolean;
+  session_id: number;
+  ready: boolean;
 }
 
-// Widget model type (anywidget interface)
-export interface ModelType {
-  get<T = unknown>(key: string): T;
-  set<T = unknown>(key: string, value: T): void;
-  on(event: string, callback: (...args: unknown[]) => void): void;
-  off(event: string, callback: (...args: unknown[]) => void): void;
-  send(event: string, data: unknown): void;
-  save_changes(): void;
-}
+export type MolvisModel = AnyModel<MolvisModelState>;
 
-// JSON-RPC related types
 export interface JsonRPCRequest {
   jsonrpc: "2.0";
   method: string;
@@ -37,7 +24,7 @@ export interface JsonRPCRequest {
 
 export interface JsonRPCResponse {
   jsonrpc: "2.0";
-  id: number;
+  id: number | null;
   result?: unknown;
   error?: {
     code: number;
@@ -52,14 +39,33 @@ export interface JsonRPCError {
   data?: unknown;
 }
 
-// JSON-RPC utility functions
-export function createSuccessResponse(
-  id: number,
-  result: unknown,
-): JsonRPCResponse {
+export interface BinaryBufferRef {
+  __molvis_buffer__: true;
+  index: number;
+  dtype: string;
+  shape: number[];
+}
+
+export interface SerializedFrameData {
+  blocks: Record<string, Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SerializedBoxData {
+  matrix: unknown;
+  origin: unknown;
+  pbc?: boolean[];
+}
+
+export interface RpcResponseEnvelope {
+  content: JsonRPCResponse;
+  buffers?: ArrayBuffer[];
+}
+
+export function createSuccessResponse(id: number | null, result: unknown): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
-    id,
+    id: id ?? 0,
     result,
   };
 }
@@ -72,7 +78,7 @@ export function createErrorResponse(
 ): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
-    id: id || 0,
+    id: id ?? 0,
     error: {
       code,
       message,

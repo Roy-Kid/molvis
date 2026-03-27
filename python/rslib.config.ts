@@ -4,7 +4,8 @@ import { defineConfig } from "@rslib/core";
 export default defineConfig({
   resolve: {
     alias: {
-      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+      "@molvis/core$": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+      "@molvis/core-internal": path.resolve(import.meta.dirname, "../core/src"),
     },
   },
   lib: [

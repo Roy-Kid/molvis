@@ -14,8 +14,13 @@ pip install molvis
 import molvis as mv
 import molpy as mp
 
-# Create a named scene
-scene = mv.Molvis(name="protein_view", width=800, height=600)
+# Create a named scene and shared frontend session
+scene = mv.Molvis(
+    name="protein_view",
+    session="protein_session",
+    width=800,
+    height=600,
+)
 
 # Draw a molecular frame
 frame = mp.Frame(...)
@@ -44,6 +49,23 @@ scenes = mv.Molvis.list_scenes()  # ['structure1', 'structure2']
 view1.close()
 ```
 
+## Shared Sessions
+
+Multiple widget handles can point at the same frontend session:
+
+```python
+main = mv.Molvis(name="main-view", session="shared-protein")
+mirror = mv.Molvis(name="secondary-view", session="shared-protein")
+
+main.draw_frame(frame)
+```
+
+Display `main` in one cell and `mirror` in another cell to reuse the same frontend scene state and Babylon.js engine. Only one output cell is active for a shared session at a time; activating another cell re-attaches the live session there.
+
+## Binary Transport
+
+MolVis automatically sends numeric NumPy arrays through anywidget binary buffers instead of expanding them into JSON lists. This keeps large atom and bond arrays practical for notebook use.
+
 ## Drawing Methods
 
 ```python
@@ -60,6 +82,15 @@ scene.draw_atoms(atoms, style="spacefill")
 
 # Clear the scene
 scene.clear()
+```
+
+State-changing commands wait for a JSON-RPC acknowledgement from the frontend. If the frontend rejects a command or the MolVis runtime throws during execution, Python raises `mv.MolvisRpcError`.
+
+```python
+try:
+    scene.draw_frame(frame)
+except mv.MolvisRpcError as exc:
+    print(exc.code, exc)
 ```
 
 ## Development

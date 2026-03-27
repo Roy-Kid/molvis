@@ -1,10 +1,9 @@
 import {
   Box,
   type Frame,
-  LAMMPSDumpReader,
-  LAMMPSReader,
-  PDBReader,
-  XYZReader,
+  LammpsReader,
+  PdbReader,
+  XyzReader,
 } from "@molcrafts/molrs";
 import { PeriodicTable } from "./system/elements";
 import { logger } from "./utils/logger";
@@ -14,7 +13,7 @@ import { logger } from "./utils/logger";
  * Normalizes element names, bond column types (i32→u32), and CRYST1 box.
  */
 export function readPDBFrame(content: string): Frame {
-  const reader = new PDBReader(content);
+  const reader = new PdbReader(content);
   const frame = reader.read(0);
   reader.free();
 
@@ -116,7 +115,7 @@ function processXYZFrame(frame: Frame): void {
  * Parse an XYZ payload into a normalized frame.
  */
 export function readXYZFrame(content: string): Frame {
-  const reader = new XYZReader(content);
+  const reader = new XyzReader(content);
   const frame = reader.read(0);
   reader.free();
 
@@ -133,7 +132,7 @@ export function readXYZFrame(content: string): Frame {
  * Parse a LAMMPS data payload into a normalized frame.
  */
 export function readLAMMPSData(content: string): Frame {
-  const reader = new LAMMPSReader(content);
+  const reader = new LammpsReader(content);
   const frame = reader.read(0);
   reader.free();
 
@@ -165,17 +164,9 @@ export function readLAMMPSData(content: string): Frame {
  * Parse a LAMMPS dump payload into a normalized frame (first timestep).
  */
 export function readLAMMPSDump(content: string): Frame {
-  const reader = new LAMMPSDumpReader(content);
-  const frame = reader.read(0);
-  reader.free();
-
-  if (!frame) {
-    throw new Error("LAMMPS dump reader returned null frame");
-  }
-
-  processLAMMPSDumpFrame(frame);
-  logger.info("[reader] Successfully read LAMMPS dump frame");
-  return frame;
+  throw new Error(
+    "LAMMPS dump reading is not available in the current @molcrafts/molrs build.",
+  );
 }
 
 /**
@@ -295,10 +286,11 @@ export class TrajectoryReader {
   constructor(content: string, format?: string) {
     const fmt = format ?? "xyz";
     if (fmt === "lammps-dump") {
-      this.reader = new LAMMPSDumpReader(content);
-      this.postProcess = processLAMMPSDumpFrame;
+      throw new Error(
+        "LAMMPS dump trajectories are not available in the current @molcrafts/molrs build.",
+      );
     } else {
-      this.reader = new XYZReader(content);
+      this.reader = new XyzReader(content);
       this.postProcess = processXYZFrame;
     }
     this.frameCount = this.reader.len();
