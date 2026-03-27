@@ -17,13 +17,7 @@
     "vscode": "^1.108.1"
   },
   "publisher": "molcrafts",
-  "activationEvents": [
-    "onCommand:molvis.quickView",
-    "onCommand:molvis.openEditor",
-    "onCommand:molvis.reload",
-    "onCommand:molvis.save",
-    "onCustomEditor:molvis.editor"
-  ],
+  "activationEvents": [],
   "categories": ["Visualization"],
   "keywords": [
     "molecular",

@@ -142,3 +142,6 @@ dist
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
+
+# rspack
+.rspack*/

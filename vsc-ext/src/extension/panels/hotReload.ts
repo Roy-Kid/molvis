@@ -18,7 +18,6 @@ export function createHotReloadWatcher(
     }
 
     reloadTimer = setTimeout(() => {
-      // biome-ignore lint/complexity/noForEach: panelRegistry.forEach is a custom async iterator
       void panelRegistry.forEach((panel, meta) => {
         panel.webview.html = meta.getHtml();
       });
@@ -28,5 +27,12 @@ export function createHotReloadWatcher(
   watcher.onDidChange(scheduleReload);
   watcher.onDidCreate(scheduleReload);
 
-  return watcher;
+  return {
+    dispose() {
+      if (reloadTimer) {
+        clearTimeout(reloadTimer);
+      }
+      watcher.dispose();
+    },
+  };
 }

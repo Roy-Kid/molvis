@@ -18,7 +18,7 @@ export function openEditorPanel(
     {
       enableScripts: true,
       retainContextWhenHidden: true,
-      localResourceRoots: [context.extensionUri],
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "out")],
     },
   );
 

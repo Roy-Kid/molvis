@@ -158,7 +158,11 @@ export function bootstrapWebview(container: HTMLElement): void {
         resources,
       );
     } catch (e) {
-      console.error("Failed to load dropped file:", e);
+      const message = e instanceof Error ? e.message : String(e);
+      vscode.postMessage({
+        type: "error",
+        message: `Failed to load dropped file: ${message}`,
+      });
     }
   });
 
