@@ -561,8 +561,8 @@ export class SceneIndex {
       this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
 
       const bondCount = bondBlock.nrows();
-      const iAtoms = bondBlock.viewColU32("i");
-      const jAtoms = bondBlock.viewColU32("j");
+      const iAtoms = bondBlock.viewColU32("atomi");
+      const jAtoms = bondBlock.viewColU32("atomj");
       if (iAtoms && jAtoms) {
         for (let b = 0; b < bondCount; b++) {
           this.topology.addBond(b, iAtoms[b], jAtoms[b]);

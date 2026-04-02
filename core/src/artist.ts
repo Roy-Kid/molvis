@@ -1,12 +1,14 @@
 import {
   Color3,
-  type Mesh,
+  Mesh,
   MeshBuilder,
   type Scene,
   type ShaderMaterial,
+  StandardMaterial,
   type Vector3,
+  VertexData,
 } from "@babylonjs/core";
-import type { Block, Box, Frame } from "@molcrafts/molrs";
+import type { Block, Box, Frame, UniformGridField } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 
 import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
@@ -77,6 +79,7 @@ export class Artist {
 
   public atomMesh: Mesh;
   public bondMesh: Mesh;
+  public cloudMesh: Mesh | null = null;
   public ribbonRenderer: RibbonRenderer;
   public labelRenderer: LabelRenderer;
 
@@ -133,11 +136,13 @@ export class Artist {
     const bondsBlock = this.app.world.sceneIndex.metaRegistry.bonds.frameBlock;
     if (!bondsBlock) return;
 
-    const iAtoms = bondsBlock.viewColU32("i");
-    const jAtoms = bondsBlock.viewColU32("j");
-    const orderCol = bondsBlock.dtype("order")
-      ? bondsBlock.viewColU32("order")
-      : undefined;
+    const iAtoms = bondsBlock.viewColU32("atomi");
+    const jAtoms = bondsBlock.viewColU32("atomj");
+    if (!iAtoms || !jAtoms) return;
+    const orderCol =
+      bondsBlock.dtype("order") === "u32"
+        ? bondsBlock.viewColU32("order")
+        : undefined;
     if (!iAtoms || !jAtoms) return;
 
     const logicalCount = bondsBlock.nrows();
@@ -257,6 +262,8 @@ export class Artist {
 
     this.atomMesh.dispose();
     this.bondMesh.dispose();
+    this.cloudMesh?.dispose();
+    this.cloudMesh = null;
 
     // Dispose box mesh if present
     const boxMesh = scene.getMeshByName("sim_box");
@@ -282,6 +289,7 @@ export class Artist {
   public dispose(): void {
     this.atomMesh.dispose();
     this.bondMesh.dispose();
+    this.cloudMesh?.dispose();
     this.ribbonRenderer.dispose();
     this.labelRenderer.dispose();
   }
@@ -308,6 +316,7 @@ export class Artist {
     this.clear();
 
     if (!atomsBlock || atomsBlock.nrows() === 0) {
+      this.drawDefaultField(frame);
       this.app.events.emit("frame-rendered", { frame, box: _box });
       updateVisualGuide(
         this.app.world.scene,
@@ -354,6 +363,7 @@ export class Artist {
     });
 
     this.applySceneIndexToMeshes();
+    this.drawDefaultField(frame);
 
     // Apply slice visibility if a SliceModifier is in the pipeline
     const sliceMod = findSliceModifier(this.app.modifierPipeline);
@@ -365,11 +375,126 @@ export class Artist {
     updateVisualGuide(this.app.world.scene, sliceMod);
   }
 
+  public drawCloud(
+    field: UniformGridField,
+    options?: {
+      stride?: number;
+      threshold?: number;
+      pointSize?: number;
+      alpha?: number;
+    },
+  ): void {
+    this.cloudMesh?.dispose();
+    this.cloudMesh = null;
+
+    const valuesArray = field.values().toCopy();
+    if (valuesArray.length === 0) return;
+
+    let maxAbs = 0;
+    for (let i = 0; i < valuesArray.length; i++) {
+      const value = Math.abs(valuesArray[i]);
+      if (value > maxAbs) maxAbs = value;
+    }
+    if (maxAbs <= 0) return;
+
+    const shape = Array.from(field.shape());
+    const stride =
+      options?.stride ?? Math.max(1, Math.floor(Math.max(...shape) / 48));
+    const threshold = options?.threshold ?? maxAbs * 0.08;
+    const alpha = options?.alpha ?? 0.18;
+
+    const origin = Array.from(field.origin().toCopy()) as number[];
+    const cellFlat = Array.from(field.cell().toCopy()) as number[];
+    const cell: number[][] = [
+      [cellFlat[0], cellFlat[1], cellFlat[2]],
+      [cellFlat[3], cellFlat[4], cellFlat[5]],
+      [cellFlat[6], cellFlat[7], cellFlat[8]],
+    ];
+    const spacing = [
+      Math.hypot(
+        cell[0][0] / shape[0],
+        cell[0][1] / shape[0],
+        cell[0][2] / shape[0],
+      ),
+      Math.hypot(
+        cell[1][0] / shape[1],
+        cell[1][1] / shape[1],
+        cell[1][2] / shape[1],
+      ),
+      Math.hypot(
+        cell[2][0] / shape[2],
+        cell[2][1] / shape[2],
+        cell[2][2] / shape[2],
+      ),
+    ];
+    const pointSize =
+      options?.pointSize ?? Math.max(2, Math.min(...spacing) * 18);
+
+    const positions: number[] = [];
+    const colors: number[] = [];
+
+    const index = (ix: number, iy: number, iz: number) =>
+      (ix * shape[1] + iy) * shape[2] + iz;
+
+    for (let ix = 0; ix < shape[0]; ix += stride) {
+      for (let iy = 0; iy < shape[1]; iy += stride) {
+        for (let iz = 0; iz < shape[2]; iz += stride) {
+          const value = valuesArray[index(ix, iy, iz)];
+          const magnitude = Math.abs(value);
+          if (magnitude < threshold) continue;
+
+          const fx = ix / shape[0];
+          const fy = iy / shape[1];
+          const fz = iz / shape[2];
+          const px =
+            origin[0] + fx * cell[0][0] + fy * cell[1][0] + fz * cell[2][0];
+          const py =
+            origin[1] + fx * cell[0][1] + fy * cell[1][1] + fz * cell[2][1];
+          const pz =
+            origin[2] + fx * cell[0][2] + fy * cell[1][2] + fz * cell[2][2];
+          const t = Math.min(1, magnitude / maxAbs);
+
+          positions.push(px, py, pz);
+
+          colors.push(
+            0.08 + 0.92 * t,
+            0.28 + 0.62 * t,
+            0.95 - 0.35 * t,
+            alpha * (0.35 + 0.65 * t),
+          );
+        }
+      }
+    }
+
+    if (colors.length === 0) return;
+
+    const scene = this.app.world.scene;
+    const cloudMesh = new Mesh("field_cloud_renderer", scene);
+    const vertexData = new VertexData();
+    vertexData.positions = positions;
+    vertexData.colors = colors;
+    vertexData.applyToMesh(cloudMesh, true);
+
+    const material = new StandardMaterial("field_cloud_material", scene);
+    material.disableLighting = true;
+    material.emissiveColor = Color3.White();
+    material.pointsCloud = true;
+    material.pointSize = pointSize;
+    material.alphaMode = 2;
+    cloudMesh.material = material;
+    cloudMesh.isPickable = false;
+    cloudMesh.alwaysSelectAsActiveMesh = true;
+    this.cloudMesh = cloudMesh;
+  }
+
   // ============ Frame Refresh (Fast Path) ============
 
   public redrawFrame(frame: Frame): void {
     const atomsBlock = frame.getBlock("atoms");
-    if (!atomsBlock || atomsBlock.nrows() === 0) return;
+    if (!atomsBlock || atomsBlock.nrows() === 0) {
+      this.drawDefaultField(frame);
+      return;
+    }
 
     const x = atomsBlock.viewColF32("x");
     const y = atomsBlock.viewColF32("y");
@@ -406,6 +531,7 @@ export class Artist {
     // Update slice visibility
     const sliceMod = findSliceModifier(this.app.modifierPipeline);
     updateVisualGuide(this.app.world.scene, sliceMod);
+    this.drawDefaultField(frame);
     if (!sliceMod?.visibilityMask) return;
 
     this.applySliceVisibility(sliceMod.visibilityMask, frame);
@@ -618,6 +744,25 @@ export class Artist {
     meshRegistry.registerBondLayer(this.bondMesh);
   }
 
+  private drawDefaultField(frame: Frame): void {
+    const selected =
+      frame.getUniformGridField("electron_density") ??
+      this.firstUniformGridField(frame);
+    if (!selected) return;
+    this.drawCloud(selected);
+  }
+
+  private firstUniformGridField(frame: Frame): UniformGridField | null {
+    const names = frame.fieldNames();
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      if (typeof name !== "string") continue;
+      const field = frame.getUniformGridField(name);
+      if (field) return field;
+    }
+    return null;
+  }
+
   private createBaseMesh(
     name: string,
     materialName: string,
@@ -742,11 +887,12 @@ export class Artist {
     const bondsBlock = frame.getBlock("bonds");
     if (!bondsBlock || !bondColor0 || !bondColor1) return;
 
-    const iAtoms = bondsBlock.viewColU32("i");
-    const jAtoms = bondsBlock.viewColU32("j");
-    const orderCol = bondsBlock.dtype("order")
-      ? bondsBlock.viewColU32("order")
-      : undefined;
+    const iAtoms = bondsBlock.viewColU32("atomi");
+    const jAtoms = bondsBlock.viewColU32("atomj");
+    const orderCol =
+      bondsBlock.dtype("order") === "u32"
+        ? bondsBlock.viewColU32("order")
+        : undefined;
 
     // Iterate with a running render index that advances by the bond's order,
     // because multi-order bonds expand to multiple GPU instances.

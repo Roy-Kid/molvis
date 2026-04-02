@@ -134,11 +134,12 @@ export function extractBondRows(frame: Frame): BondRow[] {
   const bonds = frame.getBlock("bonds");
   if (!bonds) return [];
 
-  const iCol = bonds.viewColU32("i");
-  const jCol = bonds.viewColU32("j");
+  const iCol = readBondIndexColumn(bonds, "atomi", "i", "atom_i");
+  const jCol = readBondIndexColumn(bonds, "atomj", "j", "atom_j");
   if (!iCol || !jCol) return [];
 
-  const orderCol = bonds.dtype("order") ? bonds.viewColU32("order") : undefined;
+  const orderCol =
+    bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
   const rows: BondRow[] = [];
 
   for (let b = 0; b < bonds.nrows(); b++) {
@@ -151,6 +152,24 @@ export function extractBondRows(frame: Frame): BondRow[] {
   }
 
   return rows;
+}
+
+function readBondIndexColumn(
+  bonds: Block,
+  canonical: string,
+  shortAlias: string,
+  longAlias: string,
+): Uint32Array | undefined {
+  if (bonds.dtype(canonical) === "u32") {
+    return bonds.viewColU32(canonical);
+  }
+  if (bonds.dtype(shortAlias) === "u32") {
+    return bonds.viewColU32(shortAlias);
+  }
+  if (bonds.dtype(longAlias) === "u32") {
+    return bonds.viewColU32(longAlias);
+  }
+  return undefined;
 }
 
 function formatNumber(value: number): string {

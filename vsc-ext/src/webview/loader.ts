@@ -2,7 +2,7 @@ import {
   type Box,
   type Frame,
   type FrameProvider,
-  SimulationReader,
+  MolRecReader,
   Trajectory,
   TrajectoryReader,
   type ZarrReader,
@@ -129,7 +129,7 @@ function loadZarr(
     fileMap.set(filePath, decodeBase64ToBytes(contentB64));
   }
 
-  const reader = new SimulationReader(fileMap);
+  const reader = new MolRecReader(fileMap);
   resources.zarrReader = reader as unknown as ZarrReader;
   const frameCount = reader.countFrames();
   const cache = new Map<number, Frame>();

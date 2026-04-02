@@ -108,8 +108,8 @@ export class World {
       new Vector3(0, 0, 1),
       scene,
     );
-    hemiLight.intensity = 0.7;
-    hemiLight.groundColor = new Color3(0.6, 0.6, 0.6);
+    hemiLight.intensity = 0.84;
+    hemiLight.groundColor = new Color3(0.72, 0.72, 0.72);
     hemiLight.specular = Color3.Black();
     const dirLight = new DirectionalLight(
       "dirLight",
@@ -117,8 +117,8 @@ export class World {
       scene,
     );
     dirLight.parent = camera;
-    dirLight.intensity = 0.4;
-    dirLight.specular = new Color3(0.5, 0.5, 0.5);
+    dirLight.intensity = 0.48;
+    dirLight.specular = new Color3(0.6, 0.6, 0.6);
     this.sceneIndex = new SceneIndex();
     this.selectionManager = new SelectionManager(this.sceneIndex);
     this.highlighter = new Highlighter(app, scene);
@@ -263,6 +263,7 @@ export class World {
   public renderOnce() {
     this.scene.render();
     this.axisHelper.render();
+    this._app.overlayManager.updateScreenPositions();
   }
 
   /**

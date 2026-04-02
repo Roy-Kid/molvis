@@ -15,8 +15,8 @@ interface FrameDataBlock {
   y?: number[];
   z?: number[];
   element?: string[];
-  i?: number[];
-  j?: number[];
+  atomi?: number[];
+  atomj?: number[];
   order?: number[];
 }
 
@@ -230,10 +230,10 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     if (!yCoords) throw new Error("Missing y coordinates");
     const zCoords = atomsBlock.viewColF32("z");
     if (!zCoords) throw new Error("Missing z coordinates");
-    const i_atoms = bondsBlock.viewColU32("i");
-    if (!i_atoms) throw new Error("Missing bond i atoms");
-    const j_atoms = bondsBlock.viewColU32("j");
-    if (!j_atoms) throw new Error("Missing bond j atoms");
+    const i_atoms = bondsBlock.viewColU32("atomi");
+    if (!i_atoms) throw new Error("Missing bond atomi column");
+    const j_atoms = bondsBlock.viewColU32("atomj");
+    if (!j_atoms) throw new Error("Missing bond atomj column");
 
     // Retrieve Bond State
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
@@ -370,16 +370,17 @@ export class ExportFrameCommand extends Command<{
 
     const bondsBlock = tempFrame.getBlock("bonds");
     if (bondsBlock) {
-      const i = bondsBlock.viewColU32("i");
-      const j = bondsBlock.viewColU32("j");
-      const order = bondsBlock.dtype("order")
-        ? bondsBlock.viewColU32("order")
-        : undefined;
+      const atomi = bondsBlock.viewColU32("atomi");
+      const atomj = bondsBlock.viewColU32("atomj");
+      const order =
+        bondsBlock.dtype("order") === "u32"
+          ? bondsBlock.viewColU32("order")
+          : undefined;
 
-      if (i && j) {
+      if (atomi && atomj) {
         blocks.bonds = {
-          i: Array.from(i),
-          j: Array.from(j),
+          atomi: Array.from(atomi),
+          atomj: Array.from(atomj),
           order: order ? Array.from(order) : undefined,
         };
       }

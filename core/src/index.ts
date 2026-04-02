@@ -31,8 +31,9 @@ export {
   Frame,
   Block,
   Box,
+  UniformGridField,
   WasmArray,
-  SimulationReader,
+  MolRecReader,
   Trajectory,
   type FrameProvider,
   parseSMILES,
@@ -98,8 +99,7 @@ export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
 export { SelectModifier } from "./modifiers/SelectModifier";
-export type { ColormapName } from "./artist/colormaps";
-export { COLORMAP_NAMES, sampleColormap } from "./artist/colormaps";
+export { ColorMap, getColorMap, listColorMaps } from "./artist/palette";
 
 export {
   computeRdf,
@@ -165,6 +165,27 @@ export {
   STICK,
   findRepresentation,
 } from "./artist/representation";
+
+// Overlay system
+export { OverlayManager } from "./overlays/overlay_manager";
+export { Arrow3DOverlay } from "./overlays/arrow3d";
+export { Arrow2DOverlay } from "./overlays/arrow2d";
+export { TextLabelOverlay } from "./overlays/text_label";
+export { VectorFieldOverlay } from "./overlays/vector_field";
+export type {
+  Overlay,
+  Arrow3DProps,
+  Arrow2DProps,
+  TextLabelProps,
+  VectorFieldProps,
+} from "./overlays/types";
+export { VectorFieldModifier } from "./modifiers/VectorFieldModifier";
+export type { VectorFieldModifierConfig } from "./modifiers/VectorFieldModifier";
+export {
+  AddOverlayCommand,
+  RemoveOverlayCommand,
+  UpdateOverlayCommand,
+} from "./commands/overlays";
 
 // Register default commands
 import "./commands";

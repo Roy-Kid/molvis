@@ -240,11 +240,12 @@ export class BondSource {
   private getFromFrame(index: number): BondMeta | null {
     if (!this.frameBlock || !this.atomBlock) return null;
 
-    const iAtoms = this.frameBlock.viewColU32("i");
-    const jAtoms = this.frameBlock.viewColU32("j");
-    const orders = this.frameBlock.dtype("order")
-      ? this.frameBlock.viewColU32("order")
-      : undefined;
+    const iAtoms = this.frameBlock.viewColU32("atomi");
+    const jAtoms = this.frameBlock.viewColU32("atomj");
+    const orders =
+      this.frameBlock.dtype("order") === "u32"
+        ? this.frameBlock.viewColU32("order")
+        : undefined;
 
     const ax = this.atomBlock.viewColF32("x");
     const ay = this.atomBlock.viewColF32("y");

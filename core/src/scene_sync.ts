@@ -101,8 +101,8 @@ export function syncSceneToFrame(
       orderArr[idx] = bond.order;
     }
 
-    bondBlock.setColU32("i", iArr);
-    bondBlock.setColU32("j", jArr);
+    bondBlock.setColU32("atomi", iArr);
+    bondBlock.setColU32("atomj", jArr);
     bondBlock.setColU32("order", orderArr);
 
     frame.insertBlock("bonds", bondBlock);

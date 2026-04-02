@@ -1,4 +1,4 @@
-import { Engine, Tools } from "@babylonjs/core";
+import { Color4, Engine, Tools } from "@babylonjs/core";
 import { Artist } from "./artist";
 import { findRepresentation } from "./artist/representation";
 import { StyleManager } from "./artist/style_manager";
@@ -34,6 +34,8 @@ import { World } from "./world";
 
 import { type Box, Frame } from "@molcrafts/molrs";
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
+import { OverlayManager } from "./overlays/overlay_manager";
+import { TextLabelOverlay } from "./overlays/text_label";
 import { defaultSaveFile } from "./save_file";
 
 interface StructuralSelectionSnapshot {
@@ -82,6 +84,9 @@ export class MolvisApp {
   // Events
   public readonly events = new EventEmitter<MolvisEventMap>();
 
+  // Overlay system
+  public readonly overlayManager: OverlayManager;
+
   // User settings (public API)
   public readonly settings: Settings;
 
@@ -128,6 +133,9 @@ export class MolvisApp {
     // Initialize Style Manager (before ModeManager)
     this._styleManager = new StyleManager(this._world.scene);
 
+    // Initialize Overlay Manager
+    this.overlayManager = new OverlayManager(this._world.scene);
+
     // Initialize settings
     this.settings = new Settings(this, setting);
 
@@ -164,6 +172,11 @@ export class MolvisApp {
     // Selection-to-scene sync is handled exclusively in applyPipeline().
     this._modifierPipeline.on(PipelineEvents.COMPUTED, ({ context }) => {
       this._lastSelectionSet = new Map(context.selectionSet);
+    });
+
+    // Sync text label anchors to atom positions on each frame render.
+    this.events.on("frame-rendered", ({ frame }) => {
+      this._syncTextLabelAnchors(frame);
     });
   }
 
@@ -351,9 +364,13 @@ export class MolvisApp {
     }
 
     try {
+      const activeCamera = this._world.scene.activeCamera;
+      if (!activeCamera) {
+        throw new Error("Cannot capture screenshot without an active camera");
+      }
       const data = await Tools.CreateScreenshotUsingRenderTargetAsync(
         this._engine,
-        this._world.scene.activeCamera!,
+        activeCamera,
         { width, height },
       );
       return data;
@@ -364,8 +381,25 @@ export class MolvisApp {
     }
   }
 
+  private _syncTextLabelAnchors(frame: Frame): void {
+    const atoms = frame.getBlock("atoms");
+    if (!atoms) return;
+    const x = atoms.dtype("x") === "f32" ? atoms.viewColF32("x") : undefined;
+    const y = atoms.dtype("y") === "f32" ? atoms.viewColF32("y") : undefined;
+    const z = atoms.dtype("z") === "f32" ? atoms.viewColF32("z") : undefined;
+    if (!x || !y || !z) return;
+
+    for (const overlay of this.overlayManager.list()) {
+      if (!(overlay instanceof TextLabelOverlay)) continue;
+      const atomId = overlay.props.anchorAtomId;
+      if (atomId < 0 || atomId >= x.length) continue;
+      overlay.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
+    }
+  }
+
   public destroy(): void {
     this.stop();
+    this.overlayManager.dispose();
     this._guiManager.unmount();
     this._lastRenderedFrame = null;
     this._pendingFrameRender = null;
@@ -449,6 +483,16 @@ export class MolvisApp {
     if (this._system.frame) {
       this.renderFrame(this._system.frame);
     }
+  }
+
+  public setBackgroundColor(color: string): void {
+    const hex = color.replace(/^#/, "");
+    const r = Number.parseInt(hex.substring(0, 2), 16) / 255;
+    const g = Number.parseInt(hex.substring(2, 4), 16) / 255;
+    const b = Number.parseInt(hex.substring(4, 6), 16) / 255;
+    const a =
+      hex.length >= 8 ? Number.parseInt(hex.substring(6, 8), 16) / 255 : 1;
+    this._world.scene.clearColor = new Color4(r, g, b, a);
   }
 
   public setRepresentation(name: string): void {
@@ -643,14 +687,14 @@ export class MolvisApp {
    * Load a new frame into the system, clearing the existing scene.
    * Consolidates scene clearing, history reset, and initial rendering.
    */
-  public loadFrame(frame: Frame, box?: Box): void {
+  public async loadFrame(frame: Frame, box?: Box): Promise<void> {
     this.artist.clear();
     this.artist.ribbonRenderer.dispose();
     this.commandManager.clearHistory();
     this._lastRenderedFrame = null;
     this._sourceFrame = frame;
     this._system.setFrame(frame, box);
-    this.renderFrame(frame, box);
+    await this.renderFrameInternal(frame, box);
   }
 
   /**

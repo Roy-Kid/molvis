@@ -2,8 +2,9 @@ export {
   Frame,
   Block,
   Box,
+  UniformGridField,
   WasmArray,
-  SimulationReader,
+  MolRecReader,
   parseSMILES,
   generate3D,
 } from "@molcrafts/molrs";

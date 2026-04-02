@@ -29,6 +29,12 @@ export {
 } from "./frame";
 export { TakeSnapshotCommand } from "./snapshot";
 export { SetRepresentationCommand } from "./representation";
+export {
+  AddOverlayCommand,
+  RemoveOverlayCommand,
+  UpdateOverlayCommand,
+  AddOverlaySnapshotCommand,
+} from "./overlays";
 
 export type { GetSelectedResponse } from "../selection_manager";
 
@@ -50,3 +56,4 @@ import "./frame";
 import "./snapshot";
 import "./attributes";
 import "./representation";
+import "./overlays";
