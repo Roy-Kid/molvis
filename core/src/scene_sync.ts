@@ -79,9 +79,9 @@ export function syncSceneToFrame(
       elements.push(atom.element);
     }
 
-    atomBlock.setColF32("x", x);
-    atomBlock.setColF32("y", y);
-    atomBlock.setColF32("z", z);
+    atomBlock.setColF("x", x);
+    atomBlock.setColF("y", y);
+    atomBlock.setColF("z", z);
     atomBlock.setColStr("element", elements);
 
     frame.insertBlock("atoms", atomBlock);

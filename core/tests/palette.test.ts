@@ -1,34 +1,58 @@
 import { describe, expect, it } from "@rstest/core";
-import { hexToLinearRgb, hslColorFromString } from "../src/artist/palette";
+import { getColorMap, hexToLinearRgb } from "../src/artist/palette";
 
-describe("hslColorFromString", () => {
-  it("should return a hex color string", () => {
-    const color = hslColorFromString("C");
-    expect(color).toMatch(/^#[0-9A-F]{6}$/);
+describe("colorForKey", () => {
+  it("should return values in [0,1] for all channels", () => {
+    const cm = getColorMap("tol-bright");
+    const [r, g, b] = cm.colorForKey("C");
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
   });
 
-  it("should be deterministic", () => {
-    const a = hslColorFromString("Oxygen");
-    const b = hslColorFromString("Oxygen");
-    expect(a).toBe(b);
+  it("should be deterministic for same input on same colormap instance", () => {
+    const cm = getColorMap("tol-bright");
+    const a = cm.colorForKey("Oxygen");
+    const b = cm.colorForKey("Oxygen");
+    expect(a[0]).toBeCloseTo(b[0], 10);
+    expect(a[1]).toBeCloseTo(b[1], 10);
+    expect(a[2]).toBeCloseTo(b[2], 10);
   });
 
-  it("should produce different colors for different labels", () => {
-    const a = hslColorFromString("C");
-    const b = hslColorFromString("N");
-    const c = hslColorFromString("O");
+  it("should produce different colors for different keys on a qualitative colormap", () => {
+    const cm = getColorMap("tol-bright");
+    const a = cm.colorForKey("C");
+    const b = cm.colorForKey("N");
+    const c = cm.colorForKey("O");
     // At least two should differ
-    expect(a === b && b === c).toBe(false);
+    const abSame = a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+    const bcSame = b[0] === c[0] && b[1] === c[1] && b[2] === c[2];
+    expect(abSame && bcSame).toBe(false);
   });
 
-  it("should handle single-character strings", () => {
-    const color = hslColorFromString("H");
-    expect(color).toMatch(/^#[0-9A-F]{6}$/);
+  it("should work with single-character keys", () => {
+    const cm = getColorMap("tol-bright");
+    const [r, g, b] = cm.colorForKey("H");
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
   });
 
-  it("should handle empty string", () => {
-    const color = hslColorFromString("");
-    expect(color).toMatch(/^#[0-9A-F]{6}$/);
+  it("should work with empty string key", () => {
+    const cm = getColorMap("tol-bright");
+    const [r, g, b] = cm.colorForKey("");
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
   });
 });
 

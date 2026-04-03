@@ -62,14 +62,14 @@ export class DeleteSelectedModifier extends BaseModifier {
           newAtoms.setColStr(key, dst);
         }
       } else if (dtype === "f32") {
-        const src = atoms.viewColF32(key);
+        const src = atoms.viewColF(key);
         if (src) {
           const dst = new Float32Array(newCount);
           let ptr = 0;
           for (let i = 0; i < nrows; i++) {
             if (indexMap[i] !== -1) dst[ptr++] = src[i];
           }
-          newAtoms.setColF32(key, dst);
+          newAtoms.setColF(key, dst);
         }
       } else if (dtype === "u32") {
         const src = atoms.viewColU32(key);
@@ -99,11 +99,10 @@ export class DeleteSelectedModifier extends BaseModifier {
     let newBonds: Block | undefined;
 
     if (bonds) {
-      const iCol = bonds.viewColU32("i");
-      const jCol = bonds.viewColU32("j");
-      const orderCol = bonds.dtype("order")
-        ? bonds.viewColU32("order")
-        : undefined;
+      const iCol = bonds.viewColU32("atomi");
+      const jCol = bonds.viewColU32("atomj");
+      const orderCol =
+        bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -127,8 +126,8 @@ export class DeleteSelectedModifier extends BaseModifier {
             newJ[k] = indexMap[jCol[orig]];
           }
 
-          newBonds.setColU32("i", newI);
-          newBonds.setColU32("j", newJ);
+          newBonds.setColU32("atomi", newI);
+          newBonds.setColU32("atomj", newJ);
           if (orderCol) {
             const newOrder = new Uint32Array(nb);
             for (let k = 0; k < nb; k++) {

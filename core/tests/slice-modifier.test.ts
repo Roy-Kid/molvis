@@ -11,9 +11,9 @@ import { createDefaultContext } from "../src/pipeline/types";
 function makeFrame(positions: [number, number, number][]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColF32("x", new Float32Array(positions.map((p) => p[0])));
-  atoms.setColF32("y", new Float32Array(positions.map((p) => p[1])));
-  atoms.setColF32("z", new Float32Array(positions.map((p) => p[2])));
+  atoms.setColF("x", new Float32Array(positions.map((p) => p[0])));
+  atoms.setColF("y", new Float32Array(positions.map((p) => p[1])));
+  atoms.setColF("z", new Float32Array(positions.map((p) => p[2])));
   frame.insertBlock("atoms", atoms);
   return frame;
 }

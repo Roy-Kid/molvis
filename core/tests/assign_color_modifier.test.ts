@@ -12,9 +12,9 @@ import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColF32("x", new Float32Array(elements.length));
-  atoms.setColF32("y", new Float32Array(elements.length));
-  atoms.setColF32("z", new Float32Array(elements.length));
+  atoms.setColF("x", new Float32Array(elements.length));
+  atoms.setColF("y", new Float32Array(elements.length));
+  atoms.setColF("z", new Float32Array(elements.length));
   atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;
@@ -39,9 +39,9 @@ describe("AssignColorModifier", () => {
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const r = atoms.viewColF32(COLOR_OVERRIDE_R)!;
-    const g = atoms.viewColF32(COLOR_OVERRIDE_G)!;
-    const b = atoms.viewColF32(COLOR_OVERRIDE_B)!;
+    const r = atoms.viewColF(COLOR_OVERRIDE_R)!;
+    const g = atoms.viewColF(COLOR_OVERRIDE_G)!;
+    const b = atoms.viewColF(COLOR_OVERRIDE_B)!;
 
     // Atom 0 should be red (linear space)
     expect(r[0]).toBeGreaterThan(0.5);
@@ -58,7 +58,7 @@ describe("AssignColorModifier", () => {
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const b = atoms.viewColF32(COLOR_OVERRIDE_B)!;
+    const b = atoms.viewColF(COLOR_OVERRIDE_B)!;
 
     expect(b[0]).toBeGreaterThan(0.5); // atom 0 is blue
     expect(b[1]).toBeGreaterThan(0.5); // atom 1 is blue
@@ -67,8 +67,8 @@ describe("AssignColorModifier", () => {
   it("should preserve bonds and box", () => {
     const frame = makeFrame(["C", "O"]);
     const bonds = new Block();
-    bonds.setColU32("i", new Uint32Array([0]));
-    bonds.setColU32("j", new Uint32Array([1]));
+    bonds.setColU32("atomi", new Uint32Array([0]));
+    bonds.setColU32("atomj", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
 
     const mod = new AssignColorModifier();

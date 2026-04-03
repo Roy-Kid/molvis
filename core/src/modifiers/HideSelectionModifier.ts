@@ -57,14 +57,14 @@ export class HideSelectionModifier extends BaseModifier {
     // Helper to copy generic column
     const copyColF32 = (name: string) => {
       const src =
-        atoms.dtype(name) === "f32" ? atoms.viewColF32(name) : undefined;
+        atoms.dtype(name) === "f32" ? atoms.viewColF(name) : undefined;
       if (src) {
         const dst = new Float32Array(newCount);
         let ptr = 0;
         for (let i = 0; i < nrows; i++) {
           if (indexMap[i] !== -1) dst[ptr++] = src[i];
         }
-        newAtoms.setColF32(name, dst);
+        newAtoms.setColF(name, dst);
       }
     };
 
@@ -98,11 +98,10 @@ export class HideSelectionModifier extends BaseModifier {
     let newBonds: Block | undefined;
 
     if (bonds) {
-      const iCol = bonds.viewColU32("i");
-      const jCol = bonds.viewColU32("j");
-      const orderCol = bonds.dtype("order")
-        ? bonds.viewColU32("order")
-        : undefined;
+      const iCol = bonds.viewColU32("atomi");
+      const jCol = bonds.viewColU32("atomj");
+      const orderCol =
+        bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -131,8 +130,8 @@ export class HideSelectionModifier extends BaseModifier {
             else newOrder[k] = 1;
           }
 
-          newBonds.setColU32("i", newI);
-          newBonds.setColU32("j", newJ);
+          newBonds.setColU32("atomi", newI);
+          newBonds.setColU32("atomj", newJ);
           if (orderCol) newBonds.setColU32("order", newOrder);
         }
       }

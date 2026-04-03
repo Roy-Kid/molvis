@@ -38,13 +38,13 @@ declare module "@molcrafts/molrs" {
     keys(): string[];
     dtype(name: string): string | undefined;
     renameColumn(oldName: string, newName: string): boolean;
-    viewColF32(name: string): Float32Array;
+    viewColF(name: string): Float32Array;
     viewColI32(name: string): Int32Array;
     viewColU32(name: string): Uint32Array;
-    copyColF32(name: string): Float32Array;
+    copyColF(name: string): Float32Array;
     copyColU32(name: string): Uint32Array;
     copyColStr(name: string): string[];
-    setColF32(name: string, data: Float32Array): void;
+    setColF(name: string, data: Float32Array, shape?: Uint32Array | null): void;
     setColI32(name: string, data: Int32Array): void;
     setColU32(name: string, data: Uint32Array): void;
     setColStr(name: string, data: string[]): void;
@@ -80,6 +80,88 @@ declare module "@molcrafts/molrs" {
     toPointCloudFrame(threshold: number, stride: number): Frame;
   }
 
+  /**
+   * A uniform spatial grid storing one or more named scalar arrays
+   * (e.g. electron density, spin density).
+   *
+   * All arrays share the same spatial definition: grid dimensions [nx, ny, nz],
+   * Cartesian origin, and cell matrix (columns are lattice vectors, matching
+   * the VASP/molrs convention).
+   */
+  export class Grid {
+    /**
+     * Create a new empty grid.
+     *
+     * @param dim_x  Grid points along x.
+     * @param dim_y  Grid points along y.
+     * @param dim_z  Grid points along z.
+     * @param origin Float32Array of length 3 — Cartesian origin in Ångström.
+     * @param cell   Float32Array of length 9 — cell in column-major order:
+     *               elements 0-2 are the first lattice vector (a),
+     *               elements 3-5 are b, elements 6-8 are c.
+     * @param pbc_x  Periodic along x.
+     * @param pbc_y  Periodic along y.
+     * @param pbc_z  Periodic along z.
+     */
+    constructor(
+      dim_x: number,
+      dim_y: number,
+      dim_z: number,
+      origin: Float32Array,
+      cell: Float32Array,
+      pbc_x: boolean,
+      pbc_y: boolean,
+      pbc_z: boolean,
+    );
+
+    /** Grid dimensions [nx, ny, nz]. */
+    dim(): number[];
+
+    /** Cartesian origin in Ångström as a WasmArray of length 3. */
+    origin(): WasmArray;
+
+    /**
+     * Cell matrix as a WasmArray of length 9 in column-major order
+     * (columns are lattice vectors, same convention as the constructor).
+     */
+    cell(): WasmArray;
+
+    /** Periodic boundary flags: each element is 1 (periodic) or 0 (not periodic). */
+    pbc(): number[];
+
+    /** Total number of voxels: nx * ny * nz. */
+    total(): number;
+
+    /** Names of all scalar arrays stored in this grid. */
+    arrayNames(): string[];
+
+    /** Returns true if a named array is present. */
+    hasArray(name: string): boolean;
+
+    /** Number of named arrays stored. */
+    len(): number;
+
+    /** Returns true if no arrays are stored. */
+    isEmpty(): boolean;
+
+    /**
+     * Retrieve a named scalar array as a flat WasmArray with shape [nx, ny, nz].
+     * Returns undefined if the array does not exist.
+     */
+    getArray(name: string): WasmArray | undefined;
+
+    /**
+     * Insert (or replace) a named scalar array.
+     *
+     * @param name  Array name.
+     * @param data  Float32Array of length `total()` in row-major (ix, iy, iz) order.
+     * @throws if data.length !== total().
+     */
+    insertArray(name: string, data: Float32Array): void;
+
+    free(): void;
+  }
+
   export class Frame {
     constructor();
     getBlock(name: string): Block | undefined;
@@ -95,6 +177,27 @@ declare module "@molcrafts/molrs" {
     hasField(name: string): boolean;
     getUniformGridField(name: string): UniformGridField | undefined;
     simbox?: Box;
+
+    /** Names of all grids attached to this frame. */
+    gridNames(): string[];
+
+    /** Returns true if a named grid is attached to this frame. */
+    hasGrid(name: string): boolean;
+
+    /**
+     * Retrieve a named grid (cloned).
+     * Returns undefined if the grid does not exist.
+     */
+    getGrid(name: string): Grid | undefined;
+
+    /**
+     * Attach a grid to this frame under the given name.
+     * The Grid object is consumed and should not be reused afterwards.
+     */
+    insertGrid(name: string, grid: Grid): void;
+
+    /** Remove a named grid from this frame. */
+    removeGrid(name: string): void;
   }
 
   export class XYZReader {

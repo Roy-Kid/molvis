@@ -90,7 +90,7 @@ function normalizeFrame(frame: Frame): void {
   if (orderDtype && orderDtype !== "u32") {
     const nrows = bonds.nrows();
     if (orderDtype === "f32") {
-      const f32 = bonds.viewColF32("order");
+      const f32 = bonds.viewColF("order");
       if (f32) {
         const u32 = new Uint32Array(nrows);
         for (let i = 0; i < nrows; i++) {

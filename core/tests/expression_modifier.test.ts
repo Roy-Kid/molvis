@@ -13,9 +13,9 @@ describe("ExpressionSelectionModifier", () => {
     // Setup Frame
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF32("x", new Float32Array([0, 1, 2]));
-    atoms.setColF32("y", new Float32Array([0, 0, 0]));
-    atoms.setColF32("z", new Float32Array([0, 0, 0]));
+    atoms.setColF("x", new Float32Array([0, 1, 2]));
+    atoms.setColF("y", new Float32Array([0, 0, 0]));
+    atoms.setColF("z", new Float32Array([0, 0, 0]));
     atoms.setColStr("element", ["H", "C", "H"]);
     frame.insertBlock("atoms", atoms);
 
@@ -44,9 +44,9 @@ describe("ExpressionSelectionModifier", () => {
   test("Should support coordinate expressions", () => {
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF32("x", new Float32Array([0, 10, -5]));
-    atoms.setColF32("y", new Float32Array([0, 0, 0]));
-    atoms.setColF32("z", new Float32Array([0, 0, 0]));
+    atoms.setColF("x", new Float32Array([0, 10, -5]));
+    atoms.setColF("y", new Float32Array([0, 0, 0]));
+    atoms.setColF("z", new Float32Array([0, 0, 0]));
     atoms.setColStr("element", ["H", "H", "H"]);
     frame.insertBlock("atoms", atoms);
 
@@ -63,9 +63,9 @@ describe("ExpressionSelectionModifier", () => {
   test("Should handle invalid expressions gracefully during apply", () => {
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF32("x", new Float32Array([0]));
-    atoms.setColF32("y", new Float32Array([0]));
-    atoms.setColF32("z", new Float32Array([0]));
+    atoms.setColF("x", new Float32Array([0]));
+    atoms.setColF("y", new Float32Array([0]));
+    atoms.setColF("z", new Float32Array([0]));
     atoms.setColStr("element", ["H"]);
     frame.insertBlock("atoms", atoms);
 

@@ -35,12 +35,14 @@ export class PlaceMoleculeCommand extends Command<void> {
     if (nAtoms === 0) return;
 
     // Read atom positions
-    const xs = atomBlock.copyColF32("x");
-    const ys = atomBlock.copyColF32("y");
-    const zs = atomBlock.copyColF32("z");
+    const xs = atomBlock.copyColF("x");
+    const ys = atomBlock.copyColF("y");
+    const zs = atomBlock.copyColF("z");
 
-    // molrs uses "symbol" as the canonical column name for element symbols
-    const elements = atomBlock.copyColStr("symbol");
+    // Read element symbols — try canonical "element", fall back to "symbol" for
+    // older molrs builds that still use the atomistic-layer column name.
+    const elements =
+      atomBlock.copyColStr("element") ?? atomBlock.copyColStr("symbol");
 
     // Compute molecule center
     let cx = 0;
@@ -82,13 +84,13 @@ export class PlaceMoleculeCommand extends Command<void> {
 
     if (bondBlock && bondBlock.nrows() > 0) {
       const nBonds = bondBlock.nrows();
-      const is = bondBlock.copyColU32("i");
-      const js = bondBlock.copyColU32("j");
+      const is = bondBlock.copyColU32("atomi");
+      const js = bondBlock.copyColU32("atomj");
 
       // molrs stores bond order as float; read f32 first, fall back to u32
       let orderValues: number[];
       try {
-        const f = bondBlock.copyColF32("order");
+        const f = bondBlock.copyColF("order");
         orderValues = Array.from(f, (v) => Math.round(v));
       } catch {
         try {

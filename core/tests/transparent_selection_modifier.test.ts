@@ -7,9 +7,9 @@ import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColF32("x", new Float32Array(elements.length));
-  atoms.setColF32("y", new Float32Array(elements.length));
-  atoms.setColF32("z", new Float32Array(elements.length));
+  atoms.setColF("x", new Float32Array(elements.length));
+  atoms.setColF("y", new Float32Array(elements.length));
+  atoms.setColF("z", new Float32Array(elements.length));
   atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;
@@ -56,8 +56,8 @@ describe("TransparentSelectionModifier", () => {
   it("should preserve frame when bonds present", () => {
     const frame = makeFrame(["C", "O"]);
     const bonds = new Block();
-    bonds.setColU32("i", new Uint32Array([0]));
-    bonds.setColU32("j", new Uint32Array([1]));
+    bonds.setColU32("atomi", new Uint32Array([0]));
+    bonds.setColU32("atomj", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
 
     const mod = new TransparentSelectionModifier();

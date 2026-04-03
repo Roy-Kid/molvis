@@ -181,9 +181,9 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.copyColF32("x");
-  const y = atoms.copyColF32("y");
-  const z = atoms.copyColF32("z");
+  const x = atoms.copyColF("x");
+  const y = atoms.copyColF("y");
+  const z = atoms.copyColF("z");
   if (!x || !y || !z) return null;
 
   const n = indices.length;
@@ -197,9 +197,9 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   }
 
   const subBlock = new Block();
-  subBlock.setColF32("x", sx);
-  subBlock.setColF32("y", sy);
-  subBlock.setColF32("z", sz);
+  subBlock.setColF("x", sx);
+  subBlock.setColF("y", sy);
+  subBlock.setColF("z", sz);
 
   const elems = atoms.copyColStr("element");
   if (elems) {

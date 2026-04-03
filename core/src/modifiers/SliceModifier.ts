@@ -92,9 +92,9 @@ export class SliceModifier extends BaseModifier {
       return input;
     }
 
-    const xCol = atomsBlock.viewColF32("x");
-    const yCol = atomsBlock.viewColF32("y");
-    const zCol = atomsBlock.viewColF32("z");
+    const xCol = atomsBlock.viewColF("x");
+    const yCol = atomsBlock.viewColF("y");
+    const zCol = atomsBlock.viewColF("z");
 
     if (!xCol || !yCol || !zCol) {
       logger.warn("SliceModifier: Missing coordinate columns");

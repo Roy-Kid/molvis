@@ -496,9 +496,9 @@ export class Artist {
       return;
     }
 
-    const x = atomsBlock.viewColF32("x");
-    const y = atomsBlock.viewColF32("y");
-    const z = atomsBlock.viewColF32("z");
+    const x = atomsBlock.viewColF("x");
+    const y = atomsBlock.viewColF("y");
+    const z = atomsBlock.viewColF("z");
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     if (!x || !y || !z || !atomState) return;
 

@@ -91,7 +91,7 @@ export class AtomSource {
       if (key === "x" || key === "y" || key === "z") {
         const col =
           this.frameBlock.dtype(key) === "f32"
-            ? this.frameBlock.viewColF32(key)
+            ? this.frameBlock.viewColF(key)
             : undefined;
         if (col) return col[id];
       }
@@ -101,7 +101,7 @@ export class AtomSource {
       }
       const col =
         this.frameBlock.dtype(key) === "f32"
-          ? this.frameBlock.viewColF32(key)
+          ? this.frameBlock.viewColF(key)
           : undefined;
       if (col) return col[id];
       const strCol =
@@ -126,9 +126,9 @@ export class AtomSource {
   private getFromFrame(index: number): AtomMeta | null {
     if (!this.frameBlock) return null;
 
-    const x = this.frameBlock.viewColF32("x");
-    const y = this.frameBlock.viewColF32("y");
-    const z = this.frameBlock.viewColF32("z");
+    const x = this.frameBlock.viewColF("x");
+    const y = this.frameBlock.viewColF("y");
+    const z = this.frameBlock.viewColF("z");
     const elements = this.frameBlock.copyColStr("element");
 
     if (!x || !y || !z || !elements) return null;
@@ -215,7 +215,7 @@ export class BondSource {
       }
       const col =
         this.frameBlock.dtype(key) === "f32"
-          ? this.frameBlock.viewColF32(key)
+          ? this.frameBlock.viewColF(key)
           : undefined;
       if (col) return col[id];
       const strCol =
@@ -247,9 +247,9 @@ export class BondSource {
         ? this.frameBlock.viewColU32("order")
         : undefined;
 
-    const ax = this.atomBlock.viewColF32("x");
-    const ay = this.atomBlock.viewColF32("y");
-    const az = this.atomBlock.viewColF32("z");
+    const ax = this.atomBlock.viewColF("x");
+    const ay = this.atomBlock.viewColF("y");
+    const az = this.atomBlock.viewColF("z");
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 

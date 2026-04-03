@@ -13,9 +13,9 @@ function makeAtomBlock(
 ): Block {
   const block = new Block();
   block.setColStr("element", elements);
-  block.setColF32("x", new Float32Array(positions.map((p) => p[0])));
-  block.setColF32("y", new Float32Array(positions.map((p) => p[1])));
-  block.setColF32("z", new Float32Array(positions.map((p) => p[2])));
+  block.setColF("x", new Float32Array(positions.map((p) => p[0])));
+  block.setColF("y", new Float32Array(positions.map((p) => p[1])));
+  block.setColF("z", new Float32Array(positions.map((p) => p[2])));
   return block;
 }
 
@@ -47,7 +47,7 @@ describe("discoverAtomColumns", () => {
 
   it("should skip internal __ columns", () => {
     const block = makeAtomBlock(["C"], [[0, 0, 0]]);
-    block.setColF32("__color_r", new Float32Array([1.0]));
+    block.setColF("__color_r", new Float32Array([1.0]));
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).not.toContain("__color_r");
@@ -55,7 +55,7 @@ describe("discoverAtomColumns", () => {
 
   it("should include additional columns", () => {
     const block = makeAtomBlock(["C"], [[0, 0, 0]]);
-    block.setColF32("charge", new Float32Array([0.5]));
+    block.setColF("charge", new Float32Array([0.5]));
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).toContain("charge");
@@ -122,8 +122,8 @@ describe("extractBondRows", () => {
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColU32("i", new Uint32Array([0]));
-    bonds.setColU32("j", new Uint32Array([1]));
+    bonds.setColU32("atomi", new Uint32Array([0]));
+    bonds.setColU32("atomj", new Uint32Array([1]));
     bonds.setColU32("order", new Uint32Array([2]));
     frame.insertBlock("bonds", bonds);
 
@@ -152,8 +152,8 @@ describe("extractBondRows", () => {
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColU32("i", new Uint32Array([0]));
-    bonds.setColU32("j", new Uint32Array([1]));
+    bonds.setColU32("atomi", new Uint32Array([0]));
+    bonds.setColU32("atomj", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
 
     const rows = extractBondRows(frame);

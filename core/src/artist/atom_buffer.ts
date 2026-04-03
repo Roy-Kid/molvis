@@ -36,9 +36,9 @@ export function buildAtomBuffers(
   options?: AtomBufferOptions,
 ): Map<string, Float32Array> {
   const atomCount = atomsBlock.nrows();
-  const xCoords = atomsBlock.viewColF32("x");
-  const yCoords = atomsBlock.viewColF32("y");
-  const zCoords = atomsBlock.viewColF32("z");
+  const xCoords = atomsBlock.viewColF("x");
+  const yCoords = atomsBlock.viewColF("y");
+  const zCoords = atomsBlock.viewColF("z");
   const elementsColumn = atomsBlock.dtype("element")
     ? (atomsBlock.copyColStr("element") as string[])
     : undefined;
@@ -53,13 +53,13 @@ export function buildAtomBuffers(
 
   // Check for color override columns from ColorByPropertyModifier
   const overrideR = atomsBlock.dtype(COLOR_OVERRIDE_R)
-    ? atomsBlock.viewColF32(COLOR_OVERRIDE_R)
+    ? atomsBlock.viewColF(COLOR_OVERRIDE_R)
     : undefined;
   const overrideG = atomsBlock.dtype(COLOR_OVERRIDE_G)
-    ? atomsBlock.viewColF32(COLOR_OVERRIDE_G)
+    ? atomsBlock.viewColF(COLOR_OVERRIDE_G)
     : undefined;
   const overrideB = atomsBlock.dtype(COLOR_OVERRIDE_B)
-    ? atomsBlock.viewColF32(COLOR_OVERRIDE_B)
+    ? atomsBlock.viewColF(COLOR_OVERRIDE_B)
     : undefined;
   const hasColorOverride = overrideR && overrideG && overrideB;
 

@@ -384,9 +384,9 @@ export class MolvisApp {
   private _syncTextLabelAnchors(frame: Frame): void {
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
-    const x = atoms.dtype("x") === "f32" ? atoms.viewColF32("x") : undefined;
-    const y = atoms.dtype("y") === "f32" ? atoms.viewColF32("y") : undefined;
-    const z = atoms.dtype("z") === "f32" ? atoms.viewColF32("z") : undefined;
+    const x = atoms.dtype("x") === "f32" ? atoms.viewColF("x") : undefined;
+    const y = atoms.dtype("y") === "f32" ? atoms.viewColF("y") : undefined;
+    const z = atoms.dtype("z") === "f32" ? atoms.viewColF("z") : undefined;
     if (!x || !y || !z) return;
 
     for (const overlay of this.overlayManager.list()) {

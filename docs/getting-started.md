@@ -109,6 +109,65 @@ secondary = mv.Molvis(name="secondary", session="protein")
 
 Frontend validation and runtime failures are returned to Python as `mv.MolvisRpcError`.
 
+## Canonical Field Names
+
+All packages in the molcrafts ecosystem (molpy, molrs, molvis) share a
+single set of canonical column names for Frame data. When writing readers,
+modifiers, or renderers you **must** use these names — the normalization
+layers will reject or silently misinterpret non-canonical columns.
+
+The authoritative definitions live in `molpy.core.fields`.
+
+### Atom columns
+
+| Field | dtype | Description |
+|-------|-------|-------------|
+| `element` | string | Element symbol (e.g. `"C"`, `"Fe"`) |
+| `type` | string | Force-field type label |
+| `id` | i64 | Atom ID (1-indexed) |
+| `x`, `y`, `z` | f64 | Cartesian coordinates (Angstrom) |
+| `vx`, `vy`, `vz` | f64 | Velocities (Angstrom/fs) |
+| `charge` | f64 | Partial charge (e) |
+| `mass` | f64 | Atomic mass (amu) |
+| `mol_id` | i64 | Molecule ID (1-indexed) |
+| `res_id` | i64 | Residue ID |
+| `res_name` | string | Residue name |
+
+### Bond columns
+
+| Field | dtype | Description |
+|-------|-------|-------------|
+| `atomi` | i64 | First atom index (0-indexed) |
+| `atomj` | i64 | Second atom index (0-indexed) |
+| `type` | string | Bond type label |
+| `order` | f32 | Bond order (1, 1.5, 2, 3) |
+
+### Angle / Dihedral columns
+
+| Field | dtype | Description |
+|-------|-------|-------------|
+| `atomi`, `atomj`, `atomk` | i64 | Angle vertex indices (0-indexed) |
+| `atoml` | i64 | Fourth vertex for dihedrals |
+| `type` | string | Angle/dihedral type label |
+
+### Format-specific aliases
+
+File-format readers (LAMMPS, PDB, XYZ, …) may produce non-canonical
+column names. The normalization layer (`reader.ts` in molvis,
+`FieldFormatter.canonicalize` in molpy) maps them automatically:
+
+| Alias | Canonical | Where |
+|-------|-----------|-------|
+| `symbol`, `species`, `type_symbol` | `element` | Atom identity |
+| `i` / `j` | `atomi` / `atomj` | PDB, SMILES bond indices |
+| `atom_i` / `atom_j` | `atomi` / `atomj` | LAMMPS bond indices |
+| `q` | `charge` | LAMMPS charge |
+| `mol` | `mol_id` | LAMMPS molecule ID |
+
+When adding a new I/O format, define a `FieldFormatter` subclass in molpy
+(see `molpy/docs/developer/extending-io.md`) and add matching entries to
+`BOND_COLUMN_ALIASES` / `ATOM_COLUMN_ALIASES` in `core/src/reader.ts`.
+
 ## Development
 
 ### Prerequisites

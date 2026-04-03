@@ -1,19 +1,9 @@
 import { PeriodicTable } from "../../system/elements";
-import { hslColorFromString } from "../palette";
+import { getColorMap } from "../palette";
 import type { AtomStyle, BondStyle, Theme } from "../theme";
 
-const MODERN_COLORS: Record<string, string> = {
-  H: "#FFFFFF",
-  C: "#333333",
-  N: "#2980B9",
-  O: "#C0392B",
-  S: "#F39C12",
-  P: "#E67E22",
-  F: "#27AE60",
-  Cl: "#16A085",
-  Br: "#8E44AD",
-  I: "#8E44AD",
-};
+const modern = getColorMap("modern");
+const qualitative = getColorMap("tol-bright");
 
 export class ModernTheme implements Theme {
   public readonly name = "Modern";
@@ -24,7 +14,12 @@ export class ModernTheme implements Theme {
   public readonly defaultSpecular = "#888888";
 
   public getAtomStyle(element: string): AtomStyle {
-    const color = MODERN_COLORS[element] || "#95A5A6";
+    const [r, g, b] = modern.colorForKey(element);
+    const toHex = (v: number) => {
+      const s = Math.round(Math.min(1, Math.max(0, v)) ** (1 / 2.2) * 255);
+      return s.toString(16).padStart(2, "0");
+    };
+    const color = `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
     const radius = (PeriodicTable[element]?.radius || 0.3) * 0.8;
     return {
       color,
@@ -35,8 +30,13 @@ export class ModernTheme implements Theme {
   }
 
   public getTypeStyle(type: string): AtomStyle {
+    const [r, g, b] = qualitative.colorForKey(type);
+    const toHex = (v: number) => {
+      const s = Math.round(Math.min(1, Math.max(0, v)) ** (1 / 2.2) * 255);
+      return s.toString(16).padStart(2, "0");
+    };
     return {
-      color: hslColorFromString(type),
+      color: `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase(),
       radius: 0.4,
       specularColor: "#FFFFFF",
       emissiveColor: "#000000",

@@ -14,6 +14,7 @@
     "build:page": "npm run build -w page",
     "build:vsc-ext": "npm run build -w vsc-ext",
     "build:all": "npm run build:core && npm run build:python && npm run build:page && npm run build:vsc-ext",
+    "build:standalone": "npm run build:page && mkdir -p python/src/molvis/page_dist && cp -r page/dist/* python/src/molvis/page_dist/",
     "test:core": "npm run test -w core",
     "test:page": "npm run test -w page",
     "test:python": "npm run test -w python",
@@ -33,6 +34,6 @@
     "wait-on": "^9.0.3"
   },
   "dependencies": {
-    "@molcrafts/molrs": "^0.0.7"
+    "@molcrafts/molrs": "file:../molrs/molrs-wasm/pkg"
   }
 }

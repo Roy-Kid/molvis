@@ -88,7 +88,7 @@ export function extractAtomRows(
     } else if (dt === "f32") {
       columnData.set(col.name, {
         dtype: "f32",
-        f32: block.viewColF32(col.name),
+        f32: block.viewColF(col.name),
       });
     } else if (dt === "u32") {
       columnData.set(col.name, {

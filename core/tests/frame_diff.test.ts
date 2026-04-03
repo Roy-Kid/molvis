@@ -60,8 +60,8 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
 
 function buildBondBlock(bonds: BondSpec[]): MockBlock {
   const columnsU32 = new Map<string, Uint32Array>([
-    ["i", new Uint32Array(bonds.map((bond) => bond.i))],
-    ["j", new Uint32Array(bonds.map((bond) => bond.j))],
+    ["atomi", new Uint32Array(bonds.map((bond) => bond.i))],
+    ["atomj", new Uint32Array(bonds.map((bond) => bond.j))],
     ["order", new Uint32Array(bonds.map((bond) => bond.order ?? 1))],
   ]);
 

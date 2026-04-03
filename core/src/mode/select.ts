@@ -319,9 +319,9 @@ class SelectMode extends BaseMode {
     const atoms = frame?.getBlock("atoms");
     if (!atoms) return [];
 
-    const xCoords = atoms.viewColF32("x");
-    const yCoords = atoms.viewColF32("y");
-    const zCoords = atoms.viewColF32("z");
+    const xCoords = atoms.viewColF("x");
+    const yCoords = atoms.viewColF("y");
+    const zCoords = atoms.viewColF("z");
     if (!xCoords || !yCoords || !zCoords) return [];
 
     const scene = this.app.world.scene;

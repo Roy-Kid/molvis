@@ -16,9 +16,9 @@ import type { SelectionMask } from "../src/pipeline/types";
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColF32("x", new Float32Array(elements.length));
-  atoms.setColF32("y", new Float32Array(elements.length));
-  atoms.setColF32("z", new Float32Array(elements.length));
+  atoms.setColF("x", new Float32Array(elements.length));
+  atoms.setColF("y", new Float32Array(elements.length));
+  atoms.setColF("z", new Float32Array(elements.length));
   atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;

@@ -147,11 +147,11 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
   private updateAtomBuffer(mesh: BABYLON.Mesh, atomsBlock: Block) {
     const count = atomsBlock.nrows();
     if (!count) throw new Error("Atoms block has no rows");
-    const xCoords = atomsBlock.viewColF32("x");
+    const xCoords = atomsBlock.viewColF("x");
     if (!xCoords) throw new Error("Missing x coordinates");
-    const yCoords = atomsBlock.viewColF32("y");
+    const yCoords = atomsBlock.viewColF("y");
     if (!yCoords) throw new Error("Missing y coordinates");
-    const zCoords = atomsBlock.viewColF32("z");
+    const zCoords = atomsBlock.viewColF("z");
     if (!zCoords) throw new Error("Missing z coordinates");
     // Retrieve Metalayer/ImpostorState from SceneIndex
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
@@ -224,11 +224,11 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
   ) {
     const count = bondsBlock.nrows();
     if (!count) throw new Error("Bonds block has no rows");
-    const xCoords = atomsBlock.viewColF32("x");
+    const xCoords = atomsBlock.viewColF("x");
     if (!xCoords) throw new Error("Missing x coordinates");
-    const yCoords = atomsBlock.viewColF32("y");
+    const yCoords = atomsBlock.viewColF("y");
     if (!yCoords) throw new Error("Missing y coordinates");
-    const zCoords = atomsBlock.viewColF32("z");
+    const zCoords = atomsBlock.viewColF("z");
     if (!zCoords) throw new Error("Missing z coordinates");
     const i_atoms = bondsBlock.viewColU32("atomi");
     if (!i_atoms) throw new Error("Missing bond atomi column");
@@ -353,9 +353,9 @@ export class ExportFrameCommand extends Command<{
 
     const atomsBlock = tempFrame.getBlock("atoms");
     if (atomsBlock) {
-      const x = atomsBlock.viewColF32("x");
-      const y = atomsBlock.viewColF32("y");
-      const z = atomsBlock.viewColF32("z");
+      const x = atomsBlock.viewColF("x");
+      const y = atomsBlock.viewColF("y");
+      const z = atomsBlock.viewColF("z");
       const elements = atomsBlock.copyColStr("element");
 
       if (x && y && z) {
