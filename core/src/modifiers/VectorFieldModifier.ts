@@ -17,6 +17,7 @@ import type { Frame } from "@molcrafts/molrs";
 import { VectorFieldOverlay } from "../overlays/vector_field";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { DType } from "../utils/dtype";
 
 export interface VectorFieldModifierConfig {
   /** Column name for X coordinates (default: "x"). */
@@ -89,12 +90,18 @@ export class VectorFieldModifier extends BaseModifier {
       shaftRadius,
     } = this._cfg;
 
-    const x = atoms.dtype(xCol) === "f64" ? atoms.viewColF(xCol) : undefined;
-    const y = atoms.dtype(yCol) === "f64" ? atoms.viewColF(yCol) : undefined;
-    const z = atoms.dtype(zCol) === "f64" ? atoms.viewColF(zCol) : undefined;
-    const vx = atoms.dtype(vxCol) === "f64" ? atoms.viewColF(vxCol) : undefined;
-    const vy = atoms.dtype(vyCol) === "f64" ? atoms.viewColF(vyCol) : undefined;
-    const vz = atoms.dtype(vzCol) === "f64" ? atoms.viewColF(vzCol) : undefined;
+    const x =
+      atoms.dtype(xCol) === DType.F64 ? atoms.viewColF(xCol) : undefined;
+    const y =
+      atoms.dtype(yCol) === DType.F64 ? atoms.viewColF(yCol) : undefined;
+    const z =
+      atoms.dtype(zCol) === DType.F64 ? atoms.viewColF(zCol) : undefined;
+    const vx =
+      atoms.dtype(vxCol) === DType.F64 ? atoms.viewColF(vxCol) : undefined;
+    const vy =
+      atoms.dtype(vyCol) === DType.F64 ? atoms.viewColF(vyCol) : undefined;
+    const vz =
+      atoms.dtype(vzCol) === DType.F64 ? atoms.viewColF(vzCol) : undefined;
 
     if (!x || !y || !z || !vx || !vy || !vz) return input;
 

@@ -33,6 +33,7 @@ import { createWarmupMesh } from "./artist/warmup";
 import type { AtomMeta, BondMeta } from "./entity_source";
 import type { ImpostorState } from "./scene_index";
 import { registerImpostorShaders } from "./shaders/impostor";
+import { DType } from "./utils/dtype";
 
 /**
  * Artist options for initialization
@@ -140,7 +141,7 @@ export class Artist {
     const jAtoms = bondsBlock.viewColU32("atomj");
     if (!iAtoms || !jAtoms) return;
     const orderCol =
-      bondsBlock.dtype("order") === "u32"
+      bondsBlock.dtype("order") === DType.U32
         ? bondsBlock.viewColU32("order")
         : undefined;
     if (!iAtoms || !jAtoms) return;
@@ -891,7 +892,7 @@ export class Artist {
     const iAtoms = bondsBlock.viewColU32("atomi");
     const jAtoms = bondsBlock.viewColU32("atomj");
     const orderCol =
-      bondsBlock.dtype("order") === "u32"
+      bondsBlock.dtype("order") === DType.U32
         ? bondsBlock.viewColU32("order")
         : undefined;
 

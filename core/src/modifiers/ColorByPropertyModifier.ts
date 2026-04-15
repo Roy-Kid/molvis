@@ -6,6 +6,7 @@ import {
 } from "../artist/palette";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { DType } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
 // Columns injected into the atoms Block to override default element coloring.
@@ -104,21 +105,21 @@ export class ColorByPropertyModifier extends BaseModifier {
     }
 
     const dtype = atoms.dtype(this._config.columnName);
-    if (dtype === "f64") {
+    if (dtype === DType.F64) {
       const data = atoms.viewColF(this._config.columnName);
       if (data) {
         this.detectedRange = detectRange(data, atoms.nrows());
         return;
       }
     }
-    if (dtype === "u32") {
+    if (dtype === DType.U32) {
       const u32 = atoms.viewColU32(this._config.columnName);
       const f32 = new Float64Array(u32.length);
       for (let i = 0; i < u32.length; i++) f32[i] = u32[i];
       this.detectedRange = detectRange(f32, atoms.nrows());
       return;
     }
-    if (dtype === "i32") {
+    if (dtype === DType.I32) {
       const i32 = atoms.viewColI32(this._config.columnName);
       const f32 = new Float64Array(i32.length);
       for (let i = 0; i < i32.length; i++) f32[i] = i32[i];
@@ -143,7 +144,7 @@ export class ColorByPropertyModifier extends BaseModifier {
     const colorG = new Float64Array(atomCount);
     const colorB = new Float64Array(atomCount);
 
-    if (dtype === "string") {
+    if (dtype === DType.String) {
       const data = atoms.copyColStr(this._config.columnName) as
         | string[]
         | undefined;
@@ -192,13 +193,13 @@ export class ColorByPropertyModifier extends BaseModifier {
 
       // Numeric: read as f32 and use sample()
       let numData: Float64Array | null = null;
-      if (dtype === "f64") {
+      if (dtype === DType.F64) {
         numData = atoms.viewColF(this._config.columnName);
-      } else if (dtype === "u32") {
+      } else if (dtype === DType.U32) {
         const u32 = atoms.viewColU32(this._config.columnName);
         numData = new Float64Array(u32.length);
         for (let j = 0; j < u32.length; j++) numData[j] = u32[j];
-      } else if (dtype === "i32") {
+      } else if (dtype === DType.I32) {
         const i32 = atoms.viewColI32(this._config.columnName);
         numData = new Float64Array(i32.length);
         for (let j = 0; j < i32.length; j++) numData[j] = i32[j];

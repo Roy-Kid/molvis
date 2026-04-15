@@ -143,6 +143,9 @@ dist
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
+# Jupyter default scratch notebooks (auto-created by "New Notebook")
+Untitled*.ipynb
+
 # rspack
 .rspack*/
 

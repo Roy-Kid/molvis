@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { DType } from "../utils/dtype";
 
 /**
  * Modifier that hides hydrogen atoms from the scene.
@@ -54,13 +55,13 @@ export class HideHydrogensModifier extends BaseModifier {
     const newAtoms = new Block();
     for (const col of atoms.keys()) {
       const dtype = atoms.dtype(col);
-      if (dtype === "f64") {
+      if (dtype === DType.F64) {
         copyFilteredF32(atoms, newAtoms, col, indexMap, nrows, newCount);
-      } else if (dtype === "string") {
+      } else if (dtype === DType.String) {
         copyFilteredStr(atoms, newAtoms, col, indexMap, nrows);
-      } else if (dtype === "u32") {
+      } else if (dtype === DType.U32) {
         copyFilteredU32(atoms, newAtoms, col, indexMap, nrows, newCount);
-      } else if (dtype === "i32") {
+      } else if (dtype === DType.I32) {
         copyFilteredI32(atoms, newAtoms, col, indexMap, nrows, newCount);
       }
     }
@@ -73,7 +74,9 @@ export class HideHydrogensModifier extends BaseModifier {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
       const orderCol =
-        bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
+        bonds.dtype("order") === DType.U32
+          ? bonds.viewColU32("order")
+          : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -130,7 +133,7 @@ function copyFilteredF32(
   nrows: number,
   newCount: number,
 ): void {
-  const col = src.dtype(name) === "f64" ? src.viewColF(name) : undefined;
+  const col = src.dtype(name) === DType.F64 ? src.viewColF(name) : undefined;
   if (!col) return;
   const out = new Float64Array(newCount);
   let ptr = 0;
@@ -147,7 +150,8 @@ function copyFilteredStr(
   indexMap: Int32Array,
   nrows: number,
 ): void {
-  const col = src.dtype(name) === "string" ? src.copyColStr(name) : undefined;
+  const col =
+    src.dtype(name) === DType.String ? src.copyColStr(name) : undefined;
   if (!col) return;
   const out: string[] = [];
   for (let i = 0; i < nrows; i++) {
@@ -164,7 +168,7 @@ function copyFilteredU32(
   nrows: number,
   newCount: number,
 ): void {
-  const col = src.dtype(name) === "u32" ? src.viewColU32(name) : undefined;
+  const col = src.dtype(name) === DType.U32 ? src.viewColU32(name) : undefined;
   if (!col) return;
   const out = new Uint32Array(newCount);
   let ptr = 0;
@@ -182,7 +186,7 @@ function copyFilteredI32(
   nrows: number,
   newCount: number,
 ): void {
-  const col = src.dtype(name) === "i32" ? src.viewColI32(name) : undefined;
+  const col = src.dtype(name) === DType.I32 ? src.viewColI32(name) : undefined;
   if (!col) return;
   const out = new Int32Array(newCount);
   let ptr = 0;

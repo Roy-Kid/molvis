@@ -6,6 +6,7 @@ import {
   XYZReader,
 } from "@molcrafts/molrs";
 import { PeriodicTable } from "./system/elements";
+import { DType } from "./utils/dtype";
 import { logger } from "./utils/logger";
 
 /**
@@ -79,7 +80,7 @@ function normalizeFrame(frame: Frame): void {
   const bonds = frame.getBlock("bonds");
   if (!bonds || bonds.nrows() === 0) return;
   for (const col of ["atomi", "atomj"]) {
-    if (bonds.dtype(col) === "i32") {
+    if (bonds.dtype(col) === DType.I32) {
       const i32 = bonds.viewColI32(col);
       if (i32) bonds.setColU32(col, new Uint32Array(i32));
     }
@@ -89,7 +90,7 @@ function normalizeFrame(frame: Frame): void {
   const orderDtype = bonds.dtype("order");
   if (orderDtype && orderDtype !== "u32") {
     const nrows = bonds.nrows();
-    if (orderDtype === "f64") {
+    if (orderDtype === DType.F64) {
       const f32 = bonds.viewColF("order");
       if (f32) {
         const u32 = new Uint32Array(nrows);
@@ -98,7 +99,7 @@ function normalizeFrame(frame: Frame): void {
         }
         bonds.setColU32("order", u32);
       }
-    } else if (orderDtype === "i32") {
+    } else if (orderDtype === DType.I32) {
       const i32 = bonds.viewColI32("order");
       if (i32) {
         const u32 = new Uint32Array(nrows);

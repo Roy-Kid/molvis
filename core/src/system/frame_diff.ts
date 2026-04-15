@@ -1,4 +1,5 @@
 import type { Block, Frame } from "@molcrafts/molrs";
+import { DType } from "../utils/dtype";
 
 export type FrameUpdateKind = "position" | "bond" | "full";
 
@@ -83,11 +84,11 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   if (!equalNumberArray(leftJ, rightJ)) return false;
 
   const leftOrder =
-    leftBonds.dtype("order") === "u32"
+    leftBonds.dtype("order") === DType.U32
       ? leftBonds.viewColU32("order")
       : undefined;
   const rightOrder =
-    rightBonds.dtype("order") === "u32"
+    rightBonds.dtype("order") === DType.U32
       ? rightBonds.viewColU32("order")
       : undefined;
   const count = leftBonds.nrows();

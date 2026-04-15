@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { DType } from "../utils/dtype";
 
 /**
  * Modifier that removes atoms based on the current pipeline selection.
@@ -51,7 +52,7 @@ export class DeleteSelectedModifier extends BaseModifier {
     const newAtoms = new Block();
     for (const key of atoms.keys()) {
       const dtype = atoms.dtype(key);
-      if (dtype === "string") {
+      if (dtype === DType.String) {
         const src = atoms.copyColStr(key) as string[] | undefined;
         if (src) {
           const dst: string[] = [];
@@ -60,7 +61,7 @@ export class DeleteSelectedModifier extends BaseModifier {
           }
           newAtoms.setColStr(key, dst);
         }
-      } else if (dtype === "f64") {
+      } else if (dtype === DType.F64) {
         const src = atoms.viewColF(key);
         if (src) {
           const dst = new Float64Array(newCount);
@@ -70,7 +71,7 @@ export class DeleteSelectedModifier extends BaseModifier {
           }
           newAtoms.setColF(key, dst);
         }
-      } else if (dtype === "u32") {
+      } else if (dtype === DType.U32) {
         const src = atoms.viewColU32(key);
         if (src) {
           const dst = new Uint32Array(newCount);
@@ -80,7 +81,7 @@ export class DeleteSelectedModifier extends BaseModifier {
           }
           newAtoms.setColU32(key, dst);
         }
-      } else if (dtype === "i32") {
+      } else if (dtype === DType.I32) {
         const src = atoms.viewColI32(key);
         if (src) {
           const dst = new Int32Array(newCount);
@@ -101,7 +102,9 @@ export class DeleteSelectedModifier extends BaseModifier {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
       const orderCol =
-        bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
+        bonds.dtype("order") === DType.U32
+          ? bonds.viewColU32("order")
+          : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();

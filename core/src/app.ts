@@ -43,6 +43,7 @@ import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { OverlayManager } from "./overlays/overlay_manager";
 import { TextLabelOverlay } from "./overlays/text_label";
 import { defaultSaveFile } from "./save_file";
+import { DType } from "./utils/dtype";
 
 interface StructuralSelectionSnapshot {
   atomIds: number[];
@@ -417,9 +418,9 @@ export class MolvisApp {
   private _syncTextLabelAnchors(frame: Frame): void {
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
-    const x = atoms.dtype("x") === "f64" ? atoms.viewColF("x") : undefined;
-    const y = atoms.dtype("y") === "f64" ? atoms.viewColF("y") : undefined;
-    const z = atoms.dtype("z") === "f64" ? atoms.viewColF("z") : undefined;
+    const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
+    const y = atoms.dtype("y") === DType.F64 ? atoms.viewColF("y") : undefined;
+    const z = atoms.dtype("z") === DType.F64 ? atoms.viewColF("z") : undefined;
     if (!x || !y || !z) return;
 
     for (const overlay of this.overlayManager.list()) {

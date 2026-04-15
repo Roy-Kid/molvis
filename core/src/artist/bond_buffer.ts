@@ -1,6 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molrs";
 import { encodePickingColorInto } from "../picker";
+import { DType } from "../utils/dtype";
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
 const TMP_P1 = new Vector3();
@@ -71,7 +72,7 @@ function computePerpFrame(dir: Vector3): void {
  */
 export function countBondInstances(bondsBlock: Block): number {
   const orderCol =
-    bondsBlock.dtype("order") === "u32"
+    bondsBlock.dtype("order") === DType.U32
       ? bondsBlock.viewColU32("order")
       : undefined;
   if (!orderCol) return bondsBlock.nrows();
@@ -106,7 +107,7 @@ export function buildBondBuffers(
   if (!xCoords || !yCoords || !zCoords) return undefined;
 
   const orderCol =
-    bondsBlock.dtype("order") === "u32"
+    bondsBlock.dtype("order") === DType.U32
       ? bondsBlock.viewColU32("order")
       : undefined;
 
@@ -257,7 +258,7 @@ export function refreshBondPositions(
   const iAtoms = bondsBlock.viewColU32("atomi");
   const jAtoms = bondsBlock.viewColU32("atomj");
   const orderCol =
-    bondsBlock.dtype("order") === "u32"
+    bondsBlock.dtype("order") === DType.U32
       ? bondsBlock.viewColU32("order")
       : undefined;
   if (!iAtoms || !jAtoms) return;

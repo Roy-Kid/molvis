@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { DType } from "../utils/dtype";
 
 /**
  * Modifier that hides atoms based on the current pipeline selection.
@@ -57,7 +58,7 @@ export class HideSelectionModifier extends BaseModifier {
     // Helper to copy generic column
     const copyColF32 = (name: string) => {
       const src =
-        atoms.dtype(name) === "f64" ? atoms.viewColF(name) : undefined;
+        atoms.dtype(name) === DType.F64 ? atoms.viewColF(name) : undefined;
       if (src) {
         const dst = new Float64Array(newCount);
         let ptr = 0;
@@ -70,7 +71,7 @@ export class HideSelectionModifier extends BaseModifier {
 
     const copyColStr = (name: string) => {
       const src =
-        atoms.dtype(name) === "string" ? atoms.copyColStr(name) : undefined;
+        atoms.dtype(name) === DType.String ? atoms.copyColStr(name) : undefined;
       if (src) {
         const dst: string[] = [];
         for (let i = 0; i < nrows; i++) {
@@ -101,7 +102,9 @@ export class HideSelectionModifier extends BaseModifier {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
       const orderCol =
-        bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
+        bonds.dtype("order") === DType.U32
+          ? bonds.viewColU32("order")
+          : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
