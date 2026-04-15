@@ -101,6 +101,47 @@ export async function reencodeImage(
 }
 
 /**
+ * Crop a data URL to the explicit pixel bounds and re-encode. Bounds are
+ * clamped to the image extent; empty intersection throws.
+ */
+export async function cropToRect(
+  dataUrl: string,
+  bounds: CropBounds,
+  mimeType = "image/png",
+  quality = 0.92,
+): Promise<string> {
+  const img = await loadImage(dataUrl);
+  const width = img.naturalWidth;
+  const height = img.naturalHeight;
+
+  const x = Math.max(0, Math.min(width, Math.floor(bounds.x)));
+  const y = Math.max(0, Math.min(height, Math.floor(bounds.y)));
+  const right = Math.max(
+    x,
+    Math.min(width, Math.floor(bounds.x + bounds.width)),
+  );
+  const bottom = Math.max(
+    y,
+    Math.min(height, Math.floor(bounds.y + bounds.height)),
+  );
+  const w = right - x;
+  const h = bottom - y;
+  if (w <= 0 || h <= 0) {
+    throw new Error("Crop bounds have zero area");
+  }
+
+  const dest = document.createElement("canvas");
+  dest.width = w;
+  dest.height = h;
+  const ctx = dest.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to acquire 2D context for crop");
+  }
+  ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
+  return encodeCanvas(dest, mimeType, quality);
+}
+
+/**
  * Decode a data URL, scan its alpha channel for drawn content, crop to the tight
  * bounds (with optional padding), and re-encode to the requested mime type.
  *

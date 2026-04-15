@@ -203,3 +203,12 @@ export {
 
 export { registerDefaultCommands } from "./commands";
 export { registerDefaultModifiers } from "./pipeline/modifier_registry";
+
+export {
+  cropToContent,
+  cropToRect,
+  reencodeImage,
+  findAlphaBounds,
+  type CropBounds,
+  type CropOptions,
+} from "./utils/image_crop";

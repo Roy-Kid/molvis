@@ -1,15 +1,10 @@
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import type { Molvis } from "@molvis/core";
-import { Camera, Redo2, Scan, Trash2, Undo2 } from "lucide-react";
+import { Redo2, Scan, Trash2, Undo2 } from "lucide-react";
 import React from "react";
 import { ExportDialog } from "./ExportDialog";
+import { ScreenshotDialog } from "./ScreenshotDialog";
 import { SettingsDialog } from "./SettingsDialog";
 
 interface TopBarProps {
@@ -76,38 +71,6 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
     if (app) app.reset();
   };
 
-  const downloadDataUrl = (dataUrl: string, fileName: string) => {
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  const handleScreenshotPng = async () => {
-    if (!app) return;
-    try {
-      const dataUrl = await app.screenshot({ transparentBackground: false });
-      downloadDataUrl(dataUrl, "molvis-screenshot.png");
-    } catch (err) {
-      console.error("Screenshot failed:", err);
-    }
-  };
-
-  const handleScreenshotWebpCropped = async () => {
-    if (!app) return;
-    try {
-      const dataUrl = await app.screenshot({
-        format: "webp",
-        autoCrop: true,
-      });
-      downloadDataUrl(dataUrl, "molvis-screenshot.webp");
-    } catch (err) {
-      console.error("Screenshot failed:", err);
-    }
-  };
-
   return (
     <div className="h-8 border-b bg-background flex items-center px-2 gap-2 shrink-0 justify-between">
       <div className="flex items-center gap-2 min-w-0">
@@ -118,21 +81,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
       </div>
 
       <div className="flex items-center gap-0.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" title="Screenshot">
-              <Camera className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleScreenshotPng}>
-              PNG (full frame)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleScreenshotWebpCropped}>
-              Transparent WebP (cropped)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ScreenshotDialog app={app} />
         <Button
           variant="ghost"
           size="icon-sm"
