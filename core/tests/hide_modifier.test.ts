@@ -12,9 +12,9 @@ describe("HideSelectionModifier", () => {
   test("Should pass through when selection is empty", () => {
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF("x", new Float32Array([0, 1, 2, 3, 4]));
-    atoms.setColF("y", new Float32Array(5));
-    atoms.setColF("z", new Float32Array(5));
+    atoms.setColF("x", new Float64Array([0, 1, 2, 3, 4]));
+    atoms.setColF("y", new Float64Array(5));
+    atoms.setColF("z", new Float64Array(5));
     atoms.setColStr("element", ["C", "C", "H", "H", "O"]);
     frame.insertBlock("atoms", atoms);
 
@@ -31,9 +31,9 @@ describe("HideSelectionModifier", () => {
     const frame = new Frame();
     const atoms = new Block();
     const count = 5;
-    const xs = new Float32Array(count);
-    const ys = new Float32Array(count);
-    const zs = new Float32Array(count);
+    const xs = new Float64Array(count);
+    const ys = new Float64Array(count);
+    const zs = new Float64Array(count);
     const elements = ["C", "C", "H", "H", "O"];
 
     for (let i = 0; i < count; i++) {
@@ -72,9 +72,9 @@ describe("HideSelectionModifier", () => {
     const frame = new Frame();
     const atoms = new Block();
     // 0-1-2 chain
-    atoms.setColF("x", new Float32Array([0, 1, 2]));
-    atoms.setColF("y", new Float32Array([0, 0, 0]));
-    atoms.setColF("z", new Float32Array([0, 0, 0]));
+    atoms.setColF("x", new Float64Array([0, 1, 2]));
+    atoms.setColF("y", new Float64Array([0, 0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0, 0]));
     atoms.setColStr("element", ["C", "C", "C"]);
     frame.insertBlock("atoms", atoms);
 
@@ -108,9 +108,9 @@ describe("HideSelectionModifier", () => {
     const frame = new Frame();
     const atoms = new Block();
     // 0-1, 2 (isolated)
-    atoms.setColF("x", new Float32Array([0, 1, 10]));
-    atoms.setColF("y", new Float32Array([0, 0, 0]));
-    atoms.setColF("z", new Float32Array([0, 0, 0]));
+    atoms.setColF("x", new Float64Array([0, 1, 10]));
+    atoms.setColF("y", new Float64Array([0, 0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0, 0]));
     atoms.setColStr("element", ["C", "C", "C"]);
     frame.insertBlock("atoms", atoms);
 

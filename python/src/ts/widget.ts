@@ -1,9 +1,9 @@
 import { Frame } from "@molcrafts/molrs";
+import { type Molvis, mountMolvis } from "@molvis/core";
 import { Logger } from "tslog";
-import { MolvisApp, type MolvisApp as Molvis } from "@molvis/core-internal/app";
 import { DEFAULT_CONFIG } from "./config";
 import { JsonRpcRouter } from "./jsonrpc";
-import type { MolvisModel } from "./types";
+import { type MolvisModel, createErrorResponse } from "./types";
 
 const logger = new Logger({ name: "molvis-widget" });
 
@@ -25,20 +25,43 @@ export class MolvisSessionRuntime {
   public readonly sessionKey: string;
   public readonly app: Molvis;
 
+  /**
+   * Resolves when `app.start()` has completed.  RPC handlers must
+   * await this before touching the engine so commands that arrive
+   * before the render phase don't fail silently.
+   */
+  public readonly started: Promise<void>;
+
   private readonly host: HTMLDivElement;
   private readonly views = new Set<MolvisViewHandle>();
   private activeView: MolvisViewHandle | null = null;
   private width: number;
   private height: number;
   private disposed = false;
+  private resolveStarted!: () => void;
 
-  constructor(sessionKey: string, width: number, height: number) {
+  public readonly background: string;
+
+  constructor(
+    sessionKey: string,
+    width: number,
+    height: number,
+    background = "",
+  ) {
     this.sessionKey = sessionKey;
     this.width = width;
     this.height = height;
+    this.background = background;
     this.host = createHostContainer(width, height);
-    this.app = new MolvisApp(this.host, {
+    // Enable canvas alpha only when user requests a non-opaque background
+    const needsAlpha =
+      background.length >= 9 && background.slice(7, 9).toLowerCase() !== "ff";
+    this.app = mountMolvis(this.host, {
       ...DEFAULT_CONFIG,
+      canvas: { ...DEFAULT_CONFIG.canvas, alpha: needsAlpha },
+    });
+    this.started = new Promise<void>((resolve) => {
+      this.resolveStarted = resolve;
     });
   }
 
@@ -59,9 +82,9 @@ export class MolvisSessionRuntime {
       const fallback = Array.from(this.views).at(-1) ?? null;
       if (fallback) {
         this.activateView(fallback);
-      } else if (this.app.isRunning) {
-        this.app.stop();
       }
+      // Don't stop the app — it stays alive for the session.
+      // New views will reattach when the widget is re-displayed.
     }
   }
 
@@ -84,7 +107,10 @@ export class MolvisSessionRuntime {
       this.activeView.setInactive();
     }
 
-    if (this.host.parentElement && this.host.parentElement !== view.mountPoint) {
+    if (
+      this.host.parentElement &&
+      this.host.parentElement !== view.mountPoint
+    ) {
       this.host.parentElement.removeChild(this.host);
     }
 
@@ -100,7 +126,22 @@ export class MolvisSessionRuntime {
     }
 
     if (!this.app.isRunning) {
-      void this.app.start();
+      this.app.start().then(
+        () => {
+          this.app.world.grid.enable();
+          if (this.background) {
+            this.app.setBackgroundColor(this.background);
+          }
+          this.resolveStarted();
+        },
+        (err) => {
+          logger.error("Failed to start MolvisApp", {
+            session: this.sessionKey,
+            error: err,
+          });
+          this.resolveStarted();
+        },
+      );
     }
   }
 
@@ -120,6 +161,10 @@ export class MolvisSessionRuntime {
     this.app.loadFrame(new Frame());
   }
 
+  public get isDisposed(): boolean {
+    return this.disposed;
+  }
+
   public dispose(): void {
     if (this.disposed) {
       return;
@@ -136,105 +181,152 @@ export class MolvisSessionRuntime {
   }
 }
 
-export class MolvisSessionRegistry {
-  private static runtimes = new Map<string, MolvisSessionRuntime>();
-  private static retainCount = new Map<string, number>();
+const sessionRuntimes = new Map<string, MolvisSessionRuntime>();
+const sessionRetainCount = new Map<string, number>();
 
-  public static getOrCreate(
+export const MolvisSessionRegistry = {
+  getOrCreate(
     sessionKey: string,
     width: number,
     height: number,
+    background = "",
   ): MolvisSessionRuntime {
-    const existing = this.runtimes.get(sessionKey);
-    if (existing) {
+    const existing = sessionRuntimes.get(sessionKey);
+    if (existing && !existing.isDisposed) {
       return existing;
     }
-
-    const runtime = new MolvisSessionRuntime(sessionKey, width, height);
-    this.runtimes.set(sessionKey, runtime);
+    // Stale disposed entry — clean up before creating fresh runtime.
+    if (existing?.isDisposed) {
+      sessionRuntimes.delete(sessionKey);
+      sessionRetainCount.delete(sessionKey);
+    }
+    const runtime = new MolvisSessionRuntime(
+      sessionKey,
+      width,
+      height,
+      background,
+    );
+    sessionRuntimes.set(sessionKey, runtime);
     return runtime;
-  }
+  },
 
-  public static retain(sessionKey: string): void {
-    this.retainCount.set(sessionKey, (this.retainCount.get(sessionKey) ?? 0) + 1);
-  }
-
-  public static release(sessionKey: string): void {
-    const next = (this.retainCount.get(sessionKey) ?? 1) - 1;
+  /**
+   * Release a specific runtime instance. If the session has since been
+   * replaced with a new runtime (same key, different object), the old
+   * runtime is disposed in-place without affecting the new session's
+   * retain count.
+   */
+  releaseRuntime(key: string, runtime: MolvisSessionRuntime): void {
+    if (sessionRuntimes.get(key) !== runtime) {
+      // This controller was attached to an old runtime that has already been
+      // superseded — just ensure the old one is disposed.
+      runtime.dispose();
+      return;
+    }
+    const next = (sessionRetainCount.get(key) ?? 1) - 1;
     if (next > 0) {
-      this.retainCount.set(sessionKey, next);
+      sessionRetainCount.set(key, next);
+      return;
+    }
+    sessionRetainCount.delete(key);
+    runtime.dispose();
+    sessionRuntimes.delete(key);
+  },
+
+  /**
+   * Dispose and recreate a runtime for the given session key.
+   * Used when a widget with the same name is re-created (notebook cell re-run).
+   */
+  reset(
+    sessionKey: string,
+    width: number,
+    height: number,
+    background = "",
+  ): MolvisSessionRuntime {
+    const old = sessionRuntimes.get(sessionKey);
+    if (old) {
+      old.dispose();
+    }
+    sessionRetainCount.delete(sessionKey);
+    const runtime = new MolvisSessionRuntime(
+      sessionKey,
+      width,
+      height,
+      background,
+    );
+    sessionRuntimes.set(sessionKey, runtime);
+    return runtime;
+  },
+
+  retain(sessionKey: string): void {
+    sessionRetainCount.set(
+      sessionKey,
+      (sessionRetainCount.get(sessionKey) ?? 0) + 1,
+    );
+  },
+
+  release(sessionKey: string): void {
+    const next = (sessionRetainCount.get(sessionKey) ?? 1) - 1;
+    if (next > 0) {
+      sessionRetainCount.set(sessionKey, next);
       return;
     }
 
-    this.retainCount.delete(sessionKey);
-    const runtime = this.runtimes.get(sessionKey);
+    sessionRetainCount.delete(sessionKey);
+    const runtime = sessionRuntimes.get(sessionKey);
     runtime?.dispose();
-    this.runtimes.delete(sessionKey);
-  }
+    sessionRuntimes.delete(sessionKey);
+  },
 
-  public static getSessionCount(): number {
-    return this.runtimes.size;
-  }
+  getSessionCount(): number {
+    return sessionRuntimes.size;
+  },
 
-  public static listSessions(): string[] {
-    return Array.from(this.runtimes.keys()).sort();
-  }
+  listSessions(): string[] {
+    return Array.from(sessionRuntimes.keys()).sort();
+  },
 
-  public static clearAllSessions(): void {
-    for (const [key, runtime] of this.runtimes) {
+  clearAllSessions(): void {
+    for (const [key, runtime] of sessionRuntimes) {
       runtime.dispose();
-      this.retainCount.delete(key);
+      sessionRetainCount.delete(key);
     }
-    this.runtimes.clear();
-  }
+    sessionRuntimes.clear();
+  },
 
-  public static clearAllContent(): void {
-    for (const runtime of this.runtimes.values()) {
+  clearAllContent(): void {
+    for (const runtime of sessionRuntimes.values()) {
       runtime.clear();
     }
-  }
-}
+  },
+};
 
 class MolvisViewHandle {
   public readonly mountPoint: HTMLDivElement;
   public readonly controller: MolvisModelController;
 
-  private readonly placeholder: HTMLDivElement;
+  private readonly placeholder: HTMLButtonElement;
 
   constructor(controller: MolvisModelController, el: HTMLElement) {
     this.controller = controller;
     this.mountPoint = document.createElement("div");
     this.mountPoint.className = "molvis-session-view";
     this.mountPoint.style.cssText = `
-      width: 100%;
-      height: 100%;
+      width: fit-content;
       min-height: 120px;
       position: relative;
       overflow: hidden;
-      background: linear-gradient(135deg, #f7fafc, #edf2f7);
-      border: 1px solid #d7dee8;
-      border-radius: 12px;
+      background: transparent;
+      border: none;
+      border-radius: 0;
     `;
 
-    this.placeholder = document.createElement("div");
+    const sceneName = controller.model.get("name") || controller.sessionKey;
+    this.placeholder = document.createElement("button");
+    this.placeholder.type = "button";
+    this.placeholder.textContent = `Activate scene ${sceneName}`;
+    this.placeholder.title = sceneName;
     this.placeholder.style.cssText = `
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
-      padding: 16px;
-      color: #334155;
-      text-align: center;
-      font: 500 13px/1.5 ui-sans-serif, system-ui, sans-serif;
-    `;
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Activate session here";
-    button.style.cssText = `
       border: 0;
       border-radius: 999px;
       background: #0f172a;
@@ -243,12 +335,9 @@ class MolvisViewHandle {
       font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
       cursor: pointer;
     `;
-    button.addEventListener("click", () => {
+    this.placeholder.addEventListener("click", () => {
       this.controller.runtime.activateView(this);
     });
-
-    this.placeholder.appendChild(document.createElement("div"));
-    this.placeholder.appendChild(button);
     this.mountPoint.appendChild(this.placeholder);
     el.appendChild(this.mountPoint);
     this.setInactive();
@@ -274,21 +363,20 @@ class MolvisViewHandle {
   }
 
   public setActive(): void {
-    this.mountPoint.style.borderColor = "#0f172a";
-    this.mountPoint.style.background = "#ffffff";
+    this.mountPoint.style.width = "fit-content";
+    this.mountPoint.style.height = "";
+    this.mountPoint.style.border = "none";
+    this.mountPoint.style.background = "transparent";
   }
 
-  public setInactive(reason = "This cell shares a live Molvis session with another output."): void {
-    const label = this.placeholder.firstElementChild;
-    if (label) {
-      label.textContent = reason;
-    }
+  public setInactive(_reason?: string): void {
     if (!this.mountPoint.contains(this.placeholder)) {
       this.mountPoint.replaceChildren(this.placeholder);
     }
-    this.mountPoint.style.borderColor = "#d7dee8";
-    this.mountPoint.style.background =
-      "linear-gradient(135deg, #f7fafc, #edf2f7)";
+    this.mountPoint.style.width = "fit-content";
+    this.mountPoint.style.height = "";
+    this.mountPoint.style.border = "none";
+    this.mountPoint.style.background = "transparent";
   }
 
   public dispose(): void {
@@ -311,13 +399,17 @@ class MolvisModelController {
       this.sessionKey,
       this.width,
       this.height,
+      model.get("background") ?? "",
     );
     MolvisSessionRegistry.retain(this.sessionKey);
     this.router = new JsonRpcRouter(this.runtime);
     this.model.on("msg:custom", this.handleCustomMessage);
     this.model.on("change:width", this.handleSizeChange);
     this.model.on("change:height", this.handleSizeChange);
-    this.syncReadyFlag();
+
+    // Signal ready only after the engine has started so Python
+    // callers that observe `ready` can safely send commands.
+    this.runtime.started.then(() => this.syncReadyFlag());
   }
 
   public get width(): number {
@@ -329,6 +421,8 @@ class MolvisModelController {
   }
 
   public render(el: HTMLElement): () => void {
+    el.style.background = "transparent";
+    el.style.width = "fit-content";
     const view = new MolvisViewHandle(this, el);
     this.views.add(view);
     this.runtime.registerView(view);
@@ -350,19 +444,12 @@ class MolvisModelController {
       view.dispose();
     }
     this.views.clear();
-    MolvisSessionRegistry.release(this.sessionKey);
+    MolvisSessionRegistry.releaseRuntime(this.sessionKey, this.runtime);
   }
 
   private resolveSessionKey(model: MolvisModel): string {
-    const session = model.get("session");
-    if (session && session.length > 0) {
-      return session;
-    }
-    const name = model.get("name");
-    if (name && name.length > 0) {
-      return name;
-    }
-    return `scene_${model.get("session_id")}`;
+    const name = model.get("name") as string | undefined;
+    return name && name.length > 0 ? name : "default";
   }
 
   private syncReadyFlag(): void {
@@ -389,9 +476,50 @@ class MolvisModelController {
     message: unknown,
     buffers: DataView[] = [],
   ) => {
-    const response = await this.router.execute(message, buffers);
-    this.model.send(response.content, undefined, response.buffers ?? []);
+    try {
+      // Wait for the engine to be ready before processing commands.
+      await this.runtime.started;
+      const response = await this.router.execute(message, buffers);
+
+      // Surface RPC errors to the Python side via synced traitlet
+      // so they appear in the notebook cell output.
+      if (response.content.error) {
+        const err = response.content.error;
+        const msg = `[${err.code}] ${err.message}`;
+        logger.error("RPC error", { session: this.sessionKey, error: msg });
+        this.model.set("_last_error", msg);
+        this.model.save_changes();
+      }
+
+      this.model.send(response.content, undefined, response.buffers ?? []);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error("Unhandled error in RPC handler", {
+        session: this.sessionKey,
+        error,
+      });
+
+      // Always send a JSON-RPC error response so Python's
+      // wait_for_response queue doesn't time out with Empty.
+      const requestId =
+        typeof message === "object" && message !== null
+          ? (((message as Record<string, unknown>).id as number | null) ?? null)
+          : null;
+      this.model.send(
+        createErrorResponse(requestId, -32603, msg),
+        undefined,
+        [],
+      );
+    }
   };
+}
+
+// Dispose all sessions when the notebook tab is closed or refreshed,
+// preventing orphaned WebGL contexts from accumulating across page loads.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    MolvisSessionRegistry.clearAllSessions();
+  });
 }
 
 export function initializeModel(model: MolvisModel): () => void {

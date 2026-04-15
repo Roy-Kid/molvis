@@ -33,14 +33,14 @@ async function main() {
     // Oscillate between 0.74 and 1.5
     const phase = (frameIdx / 20) * Math.PI * 2;
     const distance = 0.74 + (Math.sin(phase) + 1) * 0.3;
-    const x = new Float32Array([-distance / 2, distance / 2]);
-    const y = new Float32Array([0.0, 0.0]);
-    const z = new Float32Array([0.0, 0.0]);
+    const x = new Float64Array([-distance / 2, distance / 2]);
+    const y = new Float64Array([0.0, 0.0]);
+    const z = new Float64Array([0.0, 0.0]);
     const elements = ["H", "H"];
 
-    atomsBlock.setColF32("x", x);
-    atomsBlock.setColF32("y", y);
-    atomsBlock.setColF32("z", z);
+    atomsBlock.setColF("x", x);
+    atomsBlock.setColF("y", y);
+    atomsBlock.setColF("z", z);
     atomsBlock.setColStr("element", elements);
 
     // Bond

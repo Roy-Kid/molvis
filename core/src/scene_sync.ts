@@ -66,9 +66,9 @@ export function syncSceneToFrame(
   const atomCount = atoms.length;
   if (atomCount > 0) {
     const atomBlock = new Block();
-    const x = new Float32Array(atomCount);
-    const y = new Float32Array(atomCount);
-    const z = new Float32Array(atomCount);
+    const x = new Float64Array(atomCount);
+    const y = new Float64Array(atomCount);
+    const z = new Float64Array(atomCount);
     const elements: string[] = [];
 
     for (let i = 0; i < atoms.length; i++) {

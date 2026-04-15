@@ -169,12 +169,12 @@ describe("VectorFieldModifier", () => {
   function makeFrame(n: number): Frame {
     const frame = new Frame();
     const atoms = new Block();
-    const xs = new Float32Array(n);
-    const ys = new Float32Array(n);
-    const zs = new Float32Array(n);
-    const vxs = new Float32Array(n).fill(1);
-    const vys = new Float32Array(n);
-    const vzs = new Float32Array(n);
+    const xs = new Float64Array(n);
+    const ys = new Float64Array(n);
+    const zs = new Float64Array(n);
+    const vxs = new Float64Array(n).fill(1);
+    const vys = new Float64Array(n);
+    const vzs = new Float64Array(n);
     for (let i = 0; i < n; i++) xs[i] = i;
     atoms.setColF("x", xs);
     atoms.setColF("y", ys);

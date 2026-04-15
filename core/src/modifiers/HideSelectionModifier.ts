@@ -57,9 +57,9 @@ export class HideSelectionModifier extends BaseModifier {
     // Helper to copy generic column
     const copyColF32 = (name: string) => {
       const src =
-        atoms.dtype(name) === "f32" ? atoms.viewColF(name) : undefined;
+        atoms.dtype(name) === "f64" ? atoms.viewColF(name) : undefined;
       if (src) {
-        const dst = new Float32Array(newCount);
+        const dst = new Float64Array(newCount);
         let ptr = 0;
         for (let i = 0; i < nrows; i++) {
           if (indexMap[i] !== -1) dst[ptr++] = src[i];

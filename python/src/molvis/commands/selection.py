@@ -49,18 +49,12 @@ class SelectionCommandsMixin:
             >>> print(selected.blocks['atoms']['element'])
             ['C', 'N', 'O', ...]
         """
-        response = self.send_cmd(
+        data = self.send_cmd(
             FrontendCommands.GET_SELECTED.method,
             {},
             wait_for_response=True,
             timeout=timeout,
         )
-        
-        # Extract result from JSON-RPC response
-        if isinstance(response, dict) and "result" in response:
-            data = response["result"]
-        else:
-            data = response
         
         # Construct molpy.Frame from the response
         blocks = {}
@@ -94,6 +88,5 @@ class SelectionCommandsMixin:
         self.send_cmd(
             FrontendCommands.SELECT_ATOMS.method,
             {"ids": atom_ids},
-            wait_for_response=True,
         )
         return self

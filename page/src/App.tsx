@@ -8,6 +8,7 @@ import {
 import { useBootstrapDemo } from "@/hooks/useBootstrapDemo";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
+import { useWebSocketBridge } from "@/hooks/useWebSocketBridge";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -17,8 +18,13 @@ import { LeftSidebar } from "./ui/layout/LeftSidebar";
 import { RightSidebar } from "./ui/layout/RightSidebar";
 import { TopBar } from "./ui/layout/TopBar";
 
+const MINIMAL_MODE = new URLSearchParams(window.location.search).has("minimal");
+
 /**
  * Main page application shell for the standalone MolVis viewer.
+ *
+ * When `?minimal=1` is in the URL (set by `mv.show(mode="core")`),
+ * all chrome is hidden and only the 3D canvas is rendered.
  */
 const App: React.FC = () => {
   const [app, setApp] = useState<Molvis | null>(null);
@@ -29,6 +35,7 @@ const App: React.FC = () => {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   useBootstrapDemo(app, setCurrentMode);
+  useWebSocketBridge(app);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -53,6 +60,20 @@ const App: React.FC = () => {
     app.setMode(mode);
     setCurrentMode(mode);
   };
+
+  // Minimal mode: canvas only, no UI chrome
+  if (MINIMAL_MODE) {
+    return (
+      <ErrorBoundary>
+        <div
+          className="h-screen w-screen bg-background overflow-hidden"
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <MolvisWrapper onMount={setApp} />
+        </div>
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>

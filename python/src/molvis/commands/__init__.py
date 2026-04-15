@@ -1,15 +1,17 @@
-from .catalog import FrontendCommand, FrontendCommandGroup, FrontendCommands
+from .catalog import FrontendCommands
 from .drawing import DrawingCommandsMixin
-from .selection import SelectionCommandsMixin
 from .frame import FrameCommandsMixin
+from .overlay import OverlayCommandsMixin
+from .palette import PaletteCommandsMixin
+from .selection import SelectionCommandsMixin
 from .snapshot import SnapshotCommandsMixin
 
 __all__ = [
-    "FrontendCommand",
-    "FrontendCommandGroup",
-    "FrontendCommands",
     "DrawingCommandsMixin",
-    "SelectionCommandsMixin",
+    "FrontendCommands",
     "FrameCommandsMixin",
-    "SnapshotCommandsMixin"
+    "OverlayCommandsMixin",
+    "PaletteCommandsMixin",
+    "SelectionCommandsMixin",
+    "SnapshotCommandsMixin",
 ]

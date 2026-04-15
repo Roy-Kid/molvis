@@ -1,8 +1,13 @@
-import { Box, Frame } from "@molcrafts/molrs";
+import { type Box, Frame } from "@molcrafts/molrs";
+import type { Molvis as MolvisApp } from "@molvis/core";
+import {
+  ClassicTheme,
+  ColorByPropertyModifier,
+  ModernTheme,
+  getPaletteDefinition,
+  listPaletteDefinitions,
+} from "@molvis/core";
 import { Logger } from "tslog";
-import type { MolvisApp as Molvis } from "@molvis/core-internal/app";
-import { ClassicTheme } from "@molvis/core-internal/artist/presets/classic";
-import { ModernTheme } from "@molvis/core-internal/artist/presets/modern";
 import { buildBox, buildFrame, decodeBinaryPayload } from "./serialization";
 import type {
   JsonRPCRequest,
@@ -60,7 +65,9 @@ const LEGACY_ALIASES: Record<string, string> = {
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function invalidParams(message: string, data?: unknown): RpcError {
@@ -102,7 +109,9 @@ function toNumberArray(value: unknown): number[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  if (!value.every((item) => typeof item === "number" && Number.isFinite(item))) {
+  if (
+    !value.every((item) => typeof item === "number" && Number.isFinite(item))
+  ) {
     return null;
   }
   return value as number[];
@@ -119,9 +128,12 @@ function toIntegerIdList(value: unknown, label: string): number[] {
   return values;
 }
 
-function applyStyle(app: Molvis, params: Record<string, unknown>): { manualAtomRadii: number[] | null } {
+function applyStyle(
+  app: Molvis,
+  params: Record<string, unknown>,
+): { manualAtomRadii: number[] | null } {
   const styleName = toRepresentationName(params.style);
-  if (params.style !== undefined && !styleName) {
+  if (params.style != null && !styleName) {
     throw invalidParams(
       "style must be one of 'ball_and_stick', 'spacefill', or 'wireframe'",
     );
@@ -134,9 +146,11 @@ function applyStyle(app: Molvis, params: Record<string, unknown>): { manualAtomR
   const bonds = asRecord(params.bonds);
   let manualAtomRadii: number[] | null = null;
 
-  if (atoms.radius !== undefined) {
+  if (atoms.radius != null) {
     if (typeof atoms.radius === "number") {
-      app.styleManager.setAtomRadiusScale(ensureFiniteNumber(atoms.radius, "atoms.radius"));
+      app.styleManager.setAtomRadiusScale(
+        ensureFiniteNumber(atoms.radius, "atoms.radius"),
+      );
     } else {
       manualAtomRadii = toNumberArray(atoms.radius);
       if (!manualAtomRadii) {
@@ -147,7 +161,7 @@ function applyStyle(app: Molvis, params: Record<string, unknown>): { manualAtomR
     }
   }
 
-  if (bonds.radius !== undefined) {
+  if (bonds.radius != null) {
     app.styleManager.setBondRadiusScale(
       ensureFiniteNumber(bonds.radius, "bonds.radius"),
     );
@@ -185,22 +199,8 @@ async function replaceCurrentFrame(
   app: Molvis,
   frame: Frame,
   box?: Box,
-  manualAtomRadii: number[] | null = null,
 ): Promise<void> {
-  app.artist.ribbonRenderer.dispose();
-  app.commandManager.clearHistory();
-  app.system.setFrame(frame, box);
-
-  const options =
-    manualAtomRadii && manualAtomRadii.length > 0
-      ? { atoms: { radii: manualAtomRadii } }
-      : undefined;
-  const result = app.execute("draw_frame", {
-    frame,
-    box,
-    options,
-  });
-  await Promise.resolve(result as void | Promise<void>);
+  await app.loadFrame(frame, box);
 }
 
 export class JsonRpcRouter {
@@ -221,10 +221,18 @@ export class JsonRpcRouter {
       ["view.set_style", this.handleSetStyle],
       ["view.set_theme", this.handleSetTheme],
       ["view.set_mode", this.handleSetMode],
+      ["view.set_background", this.handleSetBackground],
+      ["view.color_by", this.handleColorBy],
       ["session.get_session_count", this.handleSessionCount],
       ["session.list_sessions", this.handleListSessions],
       ["session.clear_all_sessions", this.handleClearAllSessions],
       ["session.clear_all_content", this.handleClearAllContent],
+      ["overlay.add", this.handleOverlayAdd],
+      ["overlay.remove", this.handleOverlayRemove],
+      ["overlay.update", this.handleOverlayUpdate],
+      ["overlay.clear", this.handleOverlayClear],
+      ["palette.list", this.handlePaletteList],
+      ["palette.get", this.handlePaletteGet],
     ]);
   }
 
@@ -239,7 +247,12 @@ export class JsonRpcRouter {
       const message = error instanceof Error ? error.message : String(error);
       if (error instanceof RpcError) {
         return {
-          content: createErrorResponse(null, error.code, error.message, error.data),
+          content: createErrorResponse(
+            null,
+            error.code,
+            error.message,
+            error.data,
+          ),
         };
       }
       return {
@@ -329,22 +342,25 @@ export class JsonRpcRouter {
     };
   }
 
-  private handleNewFrame: RpcHandler = (params) => {
+  private handleNewFrame: RpcHandler = async (params) => {
     if (params.clear === false) {
       return { success: true };
     }
-    return replaceCurrentFrame(this.runtime.app, new Frame()).then(() => ({
-      success: true,
-    }));
+    await replaceCurrentFrame(this.runtime.app, new Frame());
+    return { success: true };
   };
 
-  private handleDrawFrame: RpcHandler = (params, buffers) => {
+  private handleDrawFrame: RpcHandler = async (params, buffers) => {
     let frame: Frame;
     let box: Box | undefined;
     let manualAtomRadii: number[] | null;
+    let colorByOpts: { column: string; colormap: string } | null = null;
 
     try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<string, unknown>;
+      const decoded = decodeBinaryPayload(params, buffers) as Record<
+        string,
+        unknown
+      >;
       if (!decoded.frame) {
         throw invalidParams("scene.draw_frame requires a 'frame' payload");
       }
@@ -356,6 +372,14 @@ export class JsonRpcRouter {
       frame = buildFrame(frameData);
       box = boxData ? buildBox(boxData) : undefined;
       ({ manualAtomRadii } = applyStyle(this.runtime.app, options));
+
+      if (options.color_by != null) {
+        const cb = asRecord(options.color_by);
+        colorByOpts = {
+          column: String(cb.column ?? ""),
+          colormap: (cb.colormap as string) ?? "viridis",
+        };
+      }
     } catch (error) {
       if (error instanceof RpcError) {
         throw error;
@@ -365,18 +389,31 @@ export class JsonRpcRouter {
       );
     }
 
-    return replaceCurrentFrame(
-      this.runtime.app,
-      frame,
-      box,
-      manualAtomRadii,
-    ).then(() => ({ success: true }));
+    // Per-draw color_by: apply before loading (scene.color_by overrides this)
+    if (colorByOpts?.column) {
+      const mod = new ColorByPropertyModifier("draw-color-by");
+      mod.columnName = colorByOpts.column;
+      mod.colormap = colorByOpts.colormap;
+      frame = mod.apply(frame, {} as never);
+    }
+
+    await replaceCurrentFrame(this.runtime.app, frame, box);
+
+    // Persistent pipeline (scene.color_by) always runs last — overrides per-draw
+    if (this.runtime.app.modifierPipeline.getModifiers().length > 0) {
+      await this.runtime.app.applyPipeline({ fullRebuild: true });
+    }
+
+    return { success: true };
   };
 
   private handleDrawBox: RpcHandler = (params, buffers) => {
     let box: Box;
     try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<string, unknown>;
+      const decoded = decodeBinaryPayload(params, buffers) as Record<
+        string,
+        unknown
+      >;
       if (!decoded.box) {
         throw invalidParams("scene.draw_box requires a 'box' payload");
       }
@@ -400,16 +437,20 @@ export class JsonRpcRouter {
     return { success: true };
   };
 
-  private handleClear: RpcHandler = () => {
-    return replaceCurrentFrame(this.runtime.app, new Frame()).then(() => ({
-      success: true,
-    }));
+  private handleClear: RpcHandler = async () => {
+    this.runtime.app.reset();
+    return { success: true };
   };
 
   private handleExportFrame: RpcHandler = () => {
     const result = this.runtime.app.execute<
       Record<string, never>,
-      { frameData: { blocks: Record<string, Record<string, unknown>>; metadata: Record<string, unknown> } }
+      {
+        frameData: {
+          blocks: Record<string, Record<string, unknown>>;
+          metadata: Record<string, unknown>;
+        };
+      }
     >("export_frame", {});
     const resolved =
       result instanceof Promise ? result : Promise.resolve(result);
@@ -433,7 +474,10 @@ export class JsonRpcRouter {
   private handleSetStyle: RpcHandler = (params, buffers) => {
     let manualAtomRadii: number[] | null;
     try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<string, unknown>;
+      const decoded = decodeBinaryPayload(params, buffers) as Record<
+        string,
+        unknown
+      >;
       ({ manualAtomRadii } = applyStyle(this.runtime.app, decoded));
     } catch (error) {
       if (error instanceof RpcError) {
@@ -483,6 +527,53 @@ export class JsonRpcRouter {
     return { success: true };
   };
 
+  private handleSetBackground: RpcHandler = (params) => {
+    const color = String(params.color ?? "#000000FF");
+    this.runtime.app.setBackgroundColor(color);
+    return { success: true };
+  };
+
+  private handleColorBy: RpcHandler = async (params) => {
+    const app = this.runtime.app;
+    const column = params.column != null ? String(params.column) : null;
+
+    // Remove existing ColorByPropertyModifier if any
+    const existing = app.modifierPipeline
+      .getModifiers()
+      .find((m) => m instanceof ColorByPropertyModifier);
+    if (existing) {
+      app.modifierPipeline.removeModifier(existing.id);
+    }
+
+    // "element" or null → default CPK coloring (no modifier needed)
+    if (column == null || column === "element") {
+      if (app.frame) {
+        await app.applyPipeline({ fullRebuild: true });
+      }
+      return { success: true };
+    }
+
+    const modifier = new ColorByPropertyModifier("color-by-rpc");
+    modifier.columnName = column;
+    modifier.colormap = (params.colormap as string) ?? "viridis";
+    modifier.clampOutOfRange = params.clamp !== false;
+    if (
+      params.range != null &&
+      typeof params.range === "object" &&
+      "min" in (params.range as object) &&
+      "max" in (params.range as object)
+    ) {
+      const r = params.range as { min: number; max: number };
+      modifier.range = { min: r.min, max: r.max };
+    }
+
+    app.modifierPipeline.addModifier(modifier);
+    if (app.frame) {
+      await app.applyPipeline({ fullRebuild: true });
+    }
+    return { success: true };
+  };
+
   private handleSessionCount: RpcHandler = () =>
     MolvisSessionRegistry.getSessionCount();
 
@@ -497,5 +588,65 @@ export class JsonRpcRouter {
   private handleClearAllContent: RpcHandler = () => {
     MolvisSessionRegistry.clearAllContent();
     return { success: true };
+  };
+
+  private handleOverlayAdd: RpcHandler = (params) => {
+    this.runtime.app.execute("add_overlay", params);
+    return { success: true };
+  };
+
+  private handleOverlayRemove: RpcHandler = (params) => {
+    const id = String(params.id ?? "");
+    if (!id) {
+      throw invalidParams("overlay.remove requires an 'id'");
+    }
+    this.runtime.app.execute("remove_overlay", { id });
+    return { success: true };
+  };
+
+  private handleOverlayUpdate: RpcHandler = (params) => {
+    const id = String(params.id ?? "");
+    if (!id) {
+      throw invalidParams("overlay.update requires an 'id'");
+    }
+    const patch = asRecord(params.patch);
+    this.runtime.app.execute("update_overlay", { id, patch });
+    return { success: true };
+  };
+
+  private handleOverlayClear: RpcHandler = () => {
+    this.runtime.app.overlayManager.clear();
+    return { success: true };
+  };
+
+  private handlePaletteList: RpcHandler = () => {
+    try {
+      const result = listPaletteDefinitions();
+      return result;
+    } catch (error) {
+      logger.error("[palette.list] error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
+
+  private handlePaletteGet: RpcHandler = (params) => {
+    try {
+      const name = params.name;
+      if (typeof name !== "string") {
+        throw new RpcError(
+          JsonRPCErrorCode.InvalidParams,
+          "palette.get requires a 'name' string parameter",
+        );
+      }
+      const result = getPaletteDefinition(name);
+      return result;
+    } catch (error) {
+      logger.error("[palette.get] error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   };
 }

@@ -6,11 +6,11 @@ import type { AnyModel } from "@anywidget/types";
 
 export interface MolvisModelState {
   name: string;
-  session: string;
   width: number;
   height: number;
-  session_id: number;
+  background: string;
   ready: boolean;
+  _last_error: string;
 }
 
 export type MolvisModel = AnyModel<MolvisModelState>;
@@ -62,7 +62,10 @@ export interface RpcResponseEnvelope {
   buffers?: ArrayBuffer[];
 }
 
-export function createSuccessResponse(id: number | null, result: unknown): JsonRPCResponse {
+export function createSuccessResponse(
+  id: number | null,
+  result: unknown,
+): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
     id: id ?? 0,

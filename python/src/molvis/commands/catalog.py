@@ -12,6 +12,7 @@ class FrontendCommandGroup(str, Enum):
     SELECTION = "selection"
     SNAPSHOT = "snapshot"
     SESSION = "session"
+    OVERLAY = "overlay"
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,14 @@ class FrontendCommands:
         "set_mode",
         ("set_view_mode",),
     )
+    SET_BACKGROUND = FrontendCommand(
+        FrontendCommandGroup.VIEW,
+        "set_background",
+    )
+    COLOR_BY = FrontendCommand(
+        FrontendCommandGroup.VIEW,
+        "color_by",
+    )
     SESSION_COUNT = FrontendCommand(
         FrontendCommandGroup.SESSION,
         "get_session_count",
@@ -100,4 +109,20 @@ class FrontendCommands:
         FrontendCommandGroup.SESSION,
         "clear_all_content",
         ("clear_all_content",),
+    )
+    ADD_OVERLAY = FrontendCommand(
+        FrontendCommandGroup.OVERLAY,
+        "add",
+    )
+    REMOVE_OVERLAY = FrontendCommand(
+        FrontendCommandGroup.OVERLAY,
+        "remove",
+    )
+    UPDATE_OVERLAY = FrontendCommand(
+        FrontendCommandGroup.OVERLAY,
+        "update",
+    )
+    CLEAR_OVERLAYS = FrontendCommand(
+        FrontendCommandGroup.OVERLAY,
+        "clear",
     )

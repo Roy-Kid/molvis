@@ -31,15 +31,15 @@ export {
   Frame,
   Block,
   Box,
-  UniformGridField,
   WasmArray,
   MolRecReader,
   Trajectory,
   type FrameProvider,
   parseSMILES,
   generate3D,
-  type SmilesIR,
+  Grid,
 } from "./system/index";
+export type { SmilesIR } from "./system/index";
 export { Topology } from "./system/topology";
 export { System } from "./system";
 export { World } from "./world";
@@ -99,7 +99,21 @@ export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
 export { SelectModifier } from "./modifiers/SelectModifier";
-export { ColorMap, getColorMap, listColorMaps } from "./artist/palette";
+export {
+  ColorMap,
+  DEFAULT_CATEGORICAL_COLOR_MAP,
+  buildCategoricalColorLookup,
+  getCategoricalPalette,
+  getColorMap,
+  getPaletteDefinition,
+  listColorMaps,
+  listContinuousColorMaps,
+  listPaletteDefinitions,
+  type LinearRGB,
+  type PaletteDefinition,
+  type PaletteEntry,
+  type PaletteSummary,
+} from "./artist/palette";
 
 export {
   computeRdf,
@@ -187,5 +201,5 @@ export {
   UpdateOverlayCommand,
 } from "./commands/overlays";
 
-// Register default commands
-import "./commands";
+export { registerDefaultCommands } from "./commands";
+export { registerDefaultModifiers } from "./pipeline/modifier_registry";

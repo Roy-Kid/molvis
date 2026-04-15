@@ -354,41 +354,6 @@ export class GridGround {
   }
 
   /**
-   * Update grid appearance (Legacy - deprecated by update)
-   */
-  public updateAppearance(options: {
-    mainColor?: Color3;
-    lineColor?: Color3;
-    opacity?: number;
-    majorUnitFrequency?: number;
-    minorUnitVisibility?: number;
-    distanceThreshold?: number;
-    minGridStep?: number;
-  }): void {
-    if (options.mainColor) {
-      this._gridMaterial.mainColor = options.mainColor;
-    }
-    if (options.lineColor) {
-      this._gridMaterial.lineColor = options.lineColor;
-    }
-    if (options.opacity !== undefined) {
-      this._gridMaterial.opacity = options.opacity;
-    }
-    if (options.majorUnitFrequency !== undefined) {
-      this._gridMaterial.majorUnitFrequency = options.majorUnitFrequency;
-    }
-    if (options.minorUnitVisibility !== undefined) {
-      this._gridMaterial.minorUnitVisibility = options.minorUnitVisibility;
-    }
-    if (options.distanceThreshold !== undefined) {
-      this.DISTANCE_THRESHOLD = options.distanceThreshold;
-    }
-    if (options.minGridStep !== undefined) {
-      this.MIN_GRID_STEP = options.minGridStep;
-    }
-  }
-
-  /**
    * Set minimum grid size (grid will auto-expand beyond this based on camera)
    */
   public setSize(width: number, height: number): void {

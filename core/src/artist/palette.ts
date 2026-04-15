@@ -1,21 +1,606 @@
+import { logger } from "../utils/logger";
+
 /**
- * Unified ColorMap system for molecular visualization.
+ * Public palettes are intentionally minimal:
+ * - element lookups (`cpk`, `ovito`)
+ * - one categorical palette for arbitrary string types (`glasbey-vivid`)
  *
- * A ColorMap maps either continuous values (t ∈ [0, 1]) or discrete
- * string keys to linear RGB colors.  All presets — CPK element colors,
- * qualitative palettes, and sequential scientific colormaps — are
- * `ColorMap` instances accessed through `getColorMap(name)`.
+ * Numeric property coloring uses a single internal continuous ramp
+ * (`viridis`), registered separately in colormaps.ts.
  */
 
-// ---------------------------------------------------------------------------
-// Core types
-// ---------------------------------------------------------------------------
+export type LinearRGB = [number, number, number];
+export type ColorMapKind = "continuous" | "categorical" | "lookup";
+export type PaletteKind = "element" | "categorical";
 
-type LinearRGB = [number, number, number];
+export interface PaletteEntry {
+  label: string;
+  color: string;
+}
 
-// ---------------------------------------------------------------------------
-// sRGB ↔ linear helpers
-// ---------------------------------------------------------------------------
+export interface PaletteSummary {
+  name: string;
+  kind: PaletteKind;
+  size: number;
+}
+
+export interface PaletteDefinition extends PaletteSummary {
+  entries: PaletteEntry[];
+}
+
+export const DEFAULT_CATEGORICAL_COLOR_MAP = "glasbey-vivid";
+const INTERNAL_NUMERIC_COLOR_MAP = "viridis";
+
+// ============================================================================
+// Inline palette data
+// ============================================================================
+
+const CPK_RECORD = {
+  Ac: "#70ABFA",
+  Ag: "#C0C0C0",
+  Al: "#BFA6A6",
+  Am: "#545CF2",
+  Ar: "#80D1E3",
+  As: "#BD80E3",
+  At: "#754F45",
+  Au: "#FFD123",
+  B: "#FFB5B5",
+  Ba: "#00C900",
+  Be: "#C2FF00",
+  Bh: "#E00038",
+  Bi: "#9E4FB5",
+  Bk: "#8A4FE3",
+  Br: "#A62929",
+  C: "#909090",
+  Ca: "#3DFF00",
+  Cd: "#FFD98F",
+  Ce: "#FFFFC7",
+  Cf: "#A136D4",
+  Cl: "#1FF01F",
+  Cm: "#785CE3",
+  Cn: "#FF1493",
+  Co: "#F090A0",
+  Cr: "#8A99C7",
+  Cs: "#57178F",
+  Cu: "#C88033",
+  Db: "#D1004F",
+  Ds: "#FF1493",
+  Dy: "#1FFFC7",
+  Er: "#00E675",
+  Es: "#B31FD4",
+  Eu: "#61FFC7",
+  F: "#90E050",
+  Fe: "#E06633",
+  Fl: "#FF1493",
+  Fm: "#B31FBA",
+  Fr: "#420066",
+  Ga: "#C28F8F",
+  Gd: "#45FFC7",
+  Ge: "#668F8F",
+  H: "#FFFFFF",
+  He: "#D9FFFF",
+  Hf: "#4DC2FF",
+  Hg: "#B8B8D0",
+  Ho: "#00FF9C",
+  Hs: "#E6002E",
+  I: "#940094",
+  In: "#A67573",
+  Ir: "#175487",
+  K: "#8F40D4",
+  Kr: "#5CB8D1",
+  La: "#70D4FF",
+  Li: "#CC80FF",
+  Lr: "#C70066",
+  Lu: "#00AB24",
+  Lv: "#FF1493",
+  Mc: "#FF1493",
+  Md: "#B30DA6",
+  Mg: "#8AFF00",
+  Mn: "#9C7AC7",
+  Mo: "#54B5B5",
+  Mt: "#EB0026",
+  N: "#3050F8",
+  Na: "#AB5CF2",
+  Nb: "#73C2C9",
+  Nd: "#C7FFC7",
+  Ne: "#B3E3F5",
+  Nh: "#FF1493",
+  Ni: "#50D050",
+  No: "#BD0D87",
+  Np: "#0080FF",
+  O: "#FF0D0D",
+  Og: "#FF1493",
+  Os: "#266696",
+  P: "#FF8000",
+  Pa: "#00A1FF",
+  Pb: "#575961",
+  Pd: "#006985",
+  Pm: "#A3FFC7",
+  Po: "#AB5C00",
+  Pr: "#D9FFC7",
+  Pt: "#D0D0E0",
+  Pu: "#006BFF",
+  Ra: "#007D00",
+  Rb: "#702EB0",
+  Re: "#267DAB",
+  Rf: "#CC0059",
+  Rg: "#FF1493",
+  Rh: "#0A7D8C",
+  Rn: "#428296",
+  Ru: "#248F8F",
+  S: "#FFFF30",
+  Sb: "#9E63B5",
+  Sc: "#E6E6E6",
+  Se: "#FFA100",
+  Sg: "#D90045",
+  Si: "#F0C8A0",
+  Sm: "#8FFFC7",
+  Sn: "#668080",
+  Sr: "#00FF00",
+  Ta: "#4DA6FF",
+  Tb: "#30FFC7",
+  Tc: "#3B9E9E",
+  Te: "#D47A00",
+  Th: "#00BAFF",
+  Ti: "#BFC2C7",
+  Tl: "#A6544D",
+  Tm: "#00D452",
+  Ts: "#FF1493",
+  U: "#008FFF",
+  V: "#A6A6AB",
+  W: "#2194D6",
+  Xe: "#429EB0",
+  Y: "#94FFFF",
+  Yb: "#00BF38",
+  Zn: "#7D80B0",
+  Zr: "#94E0E0",
+} as const;
+
+const OVITO_RECORD = {
+  Ac: "#70ABFA",
+  Ag: "#E0E0FF",
+  Al: "#BFA6A6",
+  Am: "#545CF2",
+  Ar: "#80D1E3",
+  As: "#BD80E3",
+  At: "#754F45",
+  Au: "#FFD123",
+  B: "#FFB5B5",
+  Ba: "#00C900",
+  Be: "#C2FF00",
+  Bh: "#E07A33",
+  Bi: "#9E4FB5",
+  Bk: "#E3AB35",
+  Br: "#A62929",
+  C: "#909090",
+  Ca: "#3DFF00",
+  Cd: "#FFD98F",
+  Ce: "#FFFFC7",
+  Cf: "#EB3333",
+  Cl: "#1FF01F",
+  Cm: "#F24D4D",
+  Cn: "#BF7878",
+  Co: "#F090A0",
+  Cr: "#8A99C7",
+  Cs: "#57178F",
+  Cu: "#C88033",
+  Db: "#D1824F",
+  Ds: "#E04538",
+  Dy: "#1FFFC7",
+  Er: "#00E675",
+  Es: "#EB4F59",
+  Eu: "#61FFC7",
+  F: "#80B3FF",
+  Fe: "#E06633",
+  Fl: "#A38594",
+  Fm: "#E64D4D",
+  Fr: "#420066",
+  Ga: "#C28F8F",
+  Gd: "#45FFC7",
+  Ge: "#668F8F",
+  H: "#FFFFFF",
+  He: "#D9FFFF",
+  Hf: "#4DC2FF",
+  Hg: "#B5B5C2",
+  Ho: "#00FF9C",
+  Hs: "#E64D4D",
+  I: "#940094",
+  In: "#A67573",
+  Ir: "#175487",
+  K: "#8F40D4",
+  Kr: "#5CB8D1",
+  La: "#70D4FF",
+  Li: "#CC80FF",
+  Lr: "#C27D69",
+  Lu: "#00AB24",
+  Lv: "#878CAB",
+  Mc: "#998CAB",
+  Md: "#D17D33",
+  Mg: "#8AFF00",
+  Mn: "#9C7AC7",
+  Mo: "#54B5B5",
+  Mt: "#EB4A33",
+  N: "#3050F8",
+  Na: "#AB5CF2",
+  Nb: "#4DB376",
+  Nd: "#C7FFC7",
+  Ne: "#B3E3F5",
+  Nh: "#B37D82",
+  Ni: "#50D050",
+  No: "#C78033",
+  Np: "#D49EEB",
+  O: "#FF0D0D",
+  Og: "#666666",
+  Os: "#266696",
+  P: "#FF8000",
+  Pa: "#CCE0FA",
+  Pb: "#575961",
+  Pd: "#006985",
+  Pm: "#A3FFC7",
+  Po: "#AB5C00",
+  Pr: "#D9FFC7",
+  Pt: "#E6D9AD",
+  Pu: "#D1ADC7",
+  Ra: "#007DAB",
+  Rb: "#702EB0",
+  Re: "#267DAB",
+  Rf: "#CC9933",
+  Rg: "#D14D52",
+  Rh: "#0A7D8C",
+  Rn: "#428296",
+  Ru: "#248F8F",
+  S: "#B3B300",
+  Sb: "#9E63B5",
+  Sc: "#E6E6E6",
+  Se: "#FFA100",
+  Sg: "#D9784F",
+  Si: "#F0C8A0",
+  Sm: "#8FFFC7",
+  Sn: "#668080",
+  Sr: "#00FF27",
+  Ta: "#4DA6FF",
+  Tb: "#30FFC7",
+  Tc: "#3B9E9E",
+  Te: "#D47A00",
+  Th: "#BAC7DE",
+  Ti: "#BFC2C7",
+  Tl: "#A6544D",
+  Tm: "#00D452",
+  Ts: "#758FAB",
+  U: "#1F94D4",
+  V: "#A6A6AB",
+  W: "#2194D6",
+  Xe: "#429EB0",
+  Y: "#67998F",
+  Yb: "#00BF38",
+  Zn: "#7D80B0",
+  Zr: "#00FF00",
+} as const;
+
+const GLASBEY_VIVID_COLORS = [
+  "#d70000",
+  "#8a3dff",
+  "#008a00",
+  "#00aeca",
+  "#eba600",
+  "#ff7dd2",
+  "#04ff35",
+  "#75045d",
+  "#004971",
+  "#714900",
+  "#b6aeff",
+  "#0cf7d2",
+  "#c208c6",
+  "#86ba71",
+  "#d27969",
+  "#005120",
+  "#0079e7",
+  "#7d0808",
+  "#ef007d",
+  "#008a71",
+  "#552d86",
+  "#928200",
+  "#3900fb",
+  "#96d7ff",
+  "#d2df00",
+  "#9e495d",
+  "#b282ca",
+  "#b25508",
+  "#14758e",
+  "#ff5d00",
+  "#00c200",
+  "#00be9e",
+  "#61a6ff",
+  "#595d9e",
+  "#ffaa79",
+  "#55650c",
+  "#864d8e",
+  "#f3b6ff",
+  "#e755ff",
+  "#8aef9a",
+  "#c26d92",
+  "#8e82fb",
+  "#aaae00",
+  "#ae0079",
+  "#ff4d59",
+  "#ff00ce",
+  "#ff9aaa",
+  "#c28639",
+  "#ae0035",
+  "#efd265",
+  "#14a65d",
+  "#8a00c6",
+  "#8a4128",
+  "#ba35ff",
+  "#00d7df",
+  "#08753d",
+  "#6d9e28",
+  "#558eba",
+  "#8ad745",
+  "#ca5549",
+  "#6504df",
+  "#752839",
+  "#00d27d",
+  "#ce8eff",
+  "#5551ff",
+  "#0059b6",
+  "#710086",
+  "#353992",
+  "#ff5d9a",
+  "#b21c00",
+  "#ff8a35",
+  "#926510",
+  "#7965aa",
+  "#45c6ff",
+  "#ce399e",
+  "#9a009a",
+  "#9ac2ff",
+  "#df0045",
+  "#00868a",
+  "#b6d77d",
+  "#bea64d",
+  "#598641",
+  "#6979c2",
+  "#d28ece",
+  "#75d7ae",
+  "#ae59a6",
+  "#6d2d00",
+  "#ff7d59",
+  "#92004d",
+  "#863969",
+  "#ae71f3",
+  "#c20c59",
+  "#ffca00",
+  "#186500",
+  "#d76d2d",
+  "#6d499e",
+  "#db61c2",
+  "#8e9adb",
+  "#f786ff",
+  "#394d00",
+  "#ffa6db",
+  "#fb3118",
+  "#4171a6",
+  "#eb5175",
+  "#d74904",
+  "#5d86ff",
+  "#9e45ba",
+  "#929a45",
+  "#00a620",
+  "#82e7e3",
+  "#ff7582",
+  "#d2c218",
+  "#00e355",
+  "#e7b261",
+  "#a2ef00",
+  "#df86ae",
+  "#6daad2",
+  "#39a282",
+  "#693979",
+  "#00618e",
+  "#7db600",
+  "#aa92db",
+  "#4149ba",
+  "#b66549",
+  "#14aeae",
+  "#00efa6",
+  "#49ba55",
+  "#a64582",
+  "#be5dd7",
+  "#df8e5d",
+  "#697d00",
+  "#e708e7",
+  "#a63935",
+  "#b68e04",
+  "#0096eb",
+  "#59b682",
+  "#eb5939",
+  "#6d5dce",
+  "#8e4d04",
+  "#715d00",
+  "#ba6169",
+  "#39518a",
+  "#008e55",
+  "#0049ff",
+  "#aaba59",
+  "#6da25d",
+  "#ff59eb",
+  "#b66d00",
+  "#9e14f3",
+  "#20d7be",
+  "#8e1c2d",
+  "#4900ca",
+  "#65bed2",
+  "#82f369",
+  "#ff1461",
+  "#4565c6",
+  "#6d18ba",
+  "#00aef3",
+  "#8e86ce",
+  "#b6e75d",
+  "#00fb86",
+  "#d2aaf7",
+  "#51458e",
+  "#00f3ff",
+  "#ef8e82",
+  "#ef41a2",
+  "#652461",
+  "#9265f3",
+  "#7169ff",
+  "#417500",
+  "#75d775",
+  "#c2242d",
+  "#aeca00",
+  "#0039b6",
+  "#a27d2d",
+  "#db758a",
+  "#be75b2",
+  "#8a2d00",
+  "#db8e04",
+  "#9e5531",
+  "#752d20",
+  "#8210e7",
+  "#9661aa",
+  "#a22d5d",
+  "#188aaa",
+  "#ce79e3",
+  "#ba411c",
+  "#28dbff",
+  "#59c2be",
+  "#ba5179",
+  "#d720ff",
+  "#59e300",
+  "#920075",
+  "#a6399e",
+  "#823da2",
+  "#c6a600",
+  "#d20082",
+  "#a25dd2",
+  "#929a00",
+  "#e33939",
+  "#6992db",
+  "#ffbe45",
+  "#591cff",
+  "#9e0014",
+  "#ffa63d",
+  "#797520",
+  "#3d963d",
+  "#8aae45",
+  "#8a393d",
+  "#be089e",
+  "#8649c2",
+  "#ff59c2",
+  "#7d2d79",
+  "#0082c2",
+  "#ff82aa",
+  "#457131",
+  "#286128",
+  "#009ece",
+  "#96aeff",
+  "#a696ff",
+  "#d2db61",
+  "#ca65ff",
+  "#aa514d",
+  "#d79a4d",
+  "#7d96ff",
+  "#798a35",
+  "#79ca8e",
+  "#00d29e",
+  "#ba10e3",
+  "#ca45be",
+  "#6d3def",
+  "#558e00",
+  "#79c24d",
+  "#ba7139",
+  "#d74182",
+  "#f79eef",
+  "#5510ae",
+  "#496dff",
+  "#7defbe",
+  "#82bee7",
+  "#e779db",
+  "#2d8231",
+  "#df7900",
+  "#e36565",
+  "#9e00be",
+  "#1c9a8e",
+  "#6145b6",
+  "#7d2451",
+  "#79d7e7",
+  "#d2be61",
+  "#a23d00",
+  "#e369aa",
+  "#7d0431",
+  "#9a75ca",
+  "#ce3d55",
+  "#6d2496",
+] as const;
+
+const warnedCategoricalWrapPalettes = new Set<string>();
+
+function stableStringHash(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function compareTextTokens(a: string, b: string): number {
+  const lowerA = a.toLowerCase();
+  const lowerB = b.toLowerCase();
+  if (lowerA < lowerB) return -1;
+  if (lowerA > lowerB) return 1;
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+function normalizeNumericToken(token: string): string {
+  const normalized = token.replace(/^0+/, "");
+  return normalized.length > 0 ? normalized : "0";
+}
+
+function compareNaturalKeys(a: string, b: string): number {
+  const partsA = a.match(/\d+|\D+/g) ?? [a];
+  const partsB = b.match(/\d+|\D+/g) ?? [b];
+  const limit = Math.min(partsA.length, partsB.length);
+
+  for (let i = 0; i < limit; i++) {
+    const partA = partsA[i];
+    const partB = partsB[i];
+    const digitsA = /^\d+$/.test(partA);
+    const digitsB = /^\d+$/.test(partB);
+
+    if (digitsA && digitsB) {
+      const normA = normalizeNumericToken(partA);
+      const normB = normalizeNumericToken(partB);
+      if (normA.length !== normB.length) {
+        return normA.length - normB.length;
+      }
+      if (normA !== normB) {
+        return normA < normB ? -1 : 1;
+      }
+      if (partA.length !== partB.length) {
+        return partA.length - partB.length;
+      }
+      continue;
+    }
+
+    if (digitsA !== digitsB) {
+      return digitsA ? -1 : 1;
+    }
+
+    const textCmp = compareTextTokens(partA, partB);
+    if (textCmp !== 0) return textCmp;
+  }
+
+  if (partsA.length !== partsB.length) {
+    return partsA.length - partsB.length;
+  }
+  return compareTextTokens(a, b);
+}
 
 function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -29,32 +614,52 @@ export function hexToLinearRgb(hex: string): LinearRGB {
   return [srgbToLinear(r), srgbToLinear(g), srgbToLinear(b)];
 }
 
-// ---------------------------------------------------------------------------
-// ColorMap class
-// ---------------------------------------------------------------------------
+function linearToSrgb(c: number): number {
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+}
+
+function linearRgbToHex(rgb: LinearRGB): string {
+  const [r, g, b] = rgb;
+  const toHex = (v: number) => {
+    const clamped = Math.min(1, Math.max(0, v));
+    const srgb = linearToSrgb(clamped);
+    const byte = Math.round(srgb * 255);
+    return byte.toString(16).padStart(2, "0");
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
 
 export class ColorMap {
   readonly name: string;
+  readonly kind: ColorMapKind;
 
   private readonly _palette: LinearRGB[];
   private readonly _lookup: Map<string, LinearRGB>;
-  private readonly _qualitative: boolean;
-  private readonly _keyIndex: Map<string, number> = new Map();
+  private readonly _fallback: LinearRGB | null;
 
   private constructor(
     name: string,
     palette: LinearRGB[],
-    qualitative: boolean,
+    kind: ColorMapKind,
     lookup?: Map<string, LinearRGB>,
+    fallback?: LinearRGB | null,
   ) {
     this.name = name;
     this._palette = palette;
-    this._qualitative = qualitative;
+    this.kind = kind;
     this._lookup = lookup ?? new Map();
+    this._fallback = fallback ?? null;
   }
 
-  /** Continuous: interpolate at t ∈ [0, 1] → linear RGB. */
+  get colors(): readonly LinearRGB[] {
+    return this._palette;
+  }
+
   sample(t: number): LinearRGB {
+    if (this.kind !== "continuous") {
+      throw new Error(`Colormap '${this.name}' does not support sampling`);
+    }
+
     const n = this._palette.length;
     if (n === 0) return [0, 0, 0];
     if (n === 1) return this._palette[0];
@@ -75,38 +680,33 @@ export class ColorMap {
     ];
   }
 
-  /**
-   * Discrete: get color for a categorical key.
-   * - If the key exists in a predefined lookup, return it.
-   * - Otherwise assign by insertion order from the palette.
-   */
   colorForKey(key: string): LinearRGB {
     const looked = this._lookup.get(key);
     if (looked) return looked;
 
-    let idx = this._keyIndex.get(key);
-    if (idx === undefined) {
-      idx = this._keyIndex.size;
-      this._keyIndex.set(key, idx);
+    if (this.kind === "lookup") {
+      return this._fallback ?? [1, 0, 1];
     }
 
-    if (this._qualitative) {
+    if (this._palette.length === 0) {
+      return [0, 0, 0];
+    }
+
+    if (this.kind === "categorical") {
+      const idx = stableStringHash(key) % this._palette.length;
       return this._palette[idx % this._palette.length];
     }
-    // Sequential/diverging: golden-ratio spacing, avoid dark extremes
-    const raw = (idx * 0.618033988749895) % 1.0;
-    const t = 0.1 + raw * 0.8; // map to [0.1, 0.9]
+
+    const raw = stableStringHash(key) / 0xffffffff;
+    const t = 0.1 + raw * 0.8;
     return this.sample(t);
   }
 
-  /** Reset insertion-order tracking (call between frames). */
   resetKeys(): void {
-    this._keyIndex.clear();
+    // Compatibility no-op. Dataset-level categorical assignment now happens
+    // before rendering rather than incrementally at lookup time.
   }
 
-  // -- Factory methods -----------------------------------------------------
-
-  /** From predefined key→hex lookup (CPK, etc.). */
   static fromLookup(
     name: string,
     record: Record<string, string>,
@@ -119,99 +719,310 @@ export class ColorMap {
       lookup.set(key, rgb);
       palette.push(rgb);
     }
-    lookup.set("__fallback__", hexToLinearRgb(fallback));
-    return new ColorMap(name, palette, true, lookup);
+    return new ColorMap(
+      name,
+      palette,
+      "lookup",
+      lookup,
+      hexToLinearRgb(fallback),
+    );
   }
 
-  /** From an ordered palette of hex colors (qualitative). */
   static fromPalette(name: string, hexColors: readonly string[]): ColorMap {
     const palette = hexColors.map(hexToLinearRgb);
-    return new ColorMap(name, palette, true);
+    return new ColorMap(name, palette, "categorical");
   }
 
-  /** From a flat Float32Array LUT (sequential/diverging). */
   static fromLUT(name: string, lut: Float32Array): ColorMap {
     const n = lut.length / 3;
     const palette: LinearRGB[] = new Array(n);
     for (let i = 0; i < n; i++) {
       palette[i] = [lut[i * 3], lut[i * 3 + 1], lut[i * 3 + 2]];
     }
-    return new ColorMap(name, palette, false);
+    return new ColorMap(name, palette, "continuous");
   }
 }
 
-// ---------------------------------------------------------------------------
-// Preset registry
-// ---------------------------------------------------------------------------
-
 const REGISTRY = new Map<string, ColorMap>();
+const PUBLIC_COLOR_MAPS = new Set<string>();
+const PUBLIC_PALETTE_DEFINITIONS = new Map<string, PaletteDefinition>();
+
+function register(cm: ColorMap, options?: { public?: boolean }): void {
+  REGISTRY.set(cm.name, cm);
+  if (options?.public ?? cm.kind !== "continuous") {
+    PUBLIC_COLOR_MAPS.add(cm.name);
+  }
+
+  // Rebuild palette definition from ColorMap
+  if (cm.kind === "lookup") {
+    // For lookup ColorMaps, we need the original record to get labels and preserve order
+    // This is handled separately when registering cpk and ovito
+  } else if (cm.kind === "categorical") {
+    // For categorical ColorMaps, labels are "1"…"N"
+    const entries: PaletteEntry[] = cm.colors.map((rgb, i) => ({
+      label: String(i + 1),
+      color: linearRgbToHex(rgb),
+    }));
+    PUBLIC_PALETTE_DEFINITIONS.set(cm.name, {
+      name: cm.name,
+      kind: "categorical",
+      size: entries.length,
+      entries,
+    });
+  }
+}
 
 export function getColorMap(name: string): ColorMap {
   const cm = REGISTRY.get(name);
   if (!cm) {
-    throw new Error(
-      `Unknown colormap '${name}'. Available: ${listColorMaps().join(", ")}`,
-    );
+    const available = Array.from(REGISTRY.keys()).sort().join(", ");
+    throw new Error(`Unknown colormap '${name}'. Available: ${available}`);
   }
   return cm;
 }
 
 export function listColorMaps(): string[] {
-  return Array.from(REGISTRY.keys()).sort();
+  return Array.from(PUBLIC_COLOR_MAPS).sort();
 }
 
-function register(cm: ColorMap): void {
-  REGISTRY.set(cm.name, cm);
+export function listPaletteDefinitions(): PaletteSummary[] {
+  return Array.from(PUBLIC_PALETTE_DEFINITIONS.values())
+    .map(({ entries, ...summary }) => ({
+      ...summary,
+      size: entries.length,
+    }))
+    .sort((a, b) => compareTextTokens(a.name, b.name));
 }
 
-// ---------------------------------------------------------------------------
-// Qualitative presets
-// ---------------------------------------------------------------------------
+export function getPaletteDefinition(name: string): PaletteDefinition {
+  const definition = PUBLIC_PALETTE_DEFINITIONS.get(name);
+  if (!definition) {
+    const available = Array.from(PUBLIC_PALETTE_DEFINITIONS.keys())
+      .sort()
+      .join(", ");
+    throw new Error(`Unknown palette '${name}'. Available: ${available}`);
+  }
+  return {
+    ...definition,
+    entries: definition.entries.map((entry) => ({ ...entry })),
+  };
+}
 
-// Paul Tol bright (7 colors, colorblind-safe)
-register(
-  ColorMap.fromPalette("tol-bright", [
-    "#4477AA",
-    "#EE6677",
-    "#228833",
-    "#CCBB44",
-    "#66CCEE",
-    "#AA3377",
-    "#BBBBBB",
-  ]),
-);
+export function listContinuousColorMaps(): string[] {
+  const names: string[] = [];
+  for (const cm of REGISTRY.values()) {
+    if (cm.kind === "continuous") names.push(cm.name);
+  }
+  return names.sort();
+}
 
-// Tableau 10
-register(
-  ColorMap.fromPalette("tableau10", [
-    "#4E79A7",
-    "#F28E2B",
-    "#E15759",
-    "#76B7B2",
-    "#59A14F",
-    "#EDC948",
-    "#B07AA1",
-    "#FF9DA7",
-    "#9C755F",
-    "#BAB0AC",
-  ]),
-);
+export function getCategoricalPalette(
+  name = DEFAULT_CATEGORICAL_COLOR_MAP,
+): readonly LinearRGB[] {
+  const cm = getColorMap(name);
+  if (cm.kind !== "categorical") {
+    throw new Error(`Colormap '${name}' is not categorical`);
+  }
+  return cm.colors;
+}
 
-// ---------------------------------------------------------------------------
-// Sequential / diverging / cyclical presets (LUT-based, 32 control points)
-//
-// Extracted from matplotlib, cmocean, and cmcrameri via Python.
-// All values in linear RGB (sRGB gamma removed).
-// ---------------------------------------------------------------------------
+export function buildCategoricalColorLookup(
+  keys: Iterable<string>,
+  paletteName = DEFAULT_CATEGORICAL_COLOR_MAP,
+): Map<string, LinearRGB> {
+  const uniqueKeys = Array.from(new Set(keys));
+  uniqueKeys.sort(compareNaturalKeys);
+
+  const palette = getCategoricalPalette(paletteName);
+  if (uniqueKeys.length > palette.length) {
+    const warnKey = `${paletteName}:${palette.length}`;
+    if (!warnedCategoricalWrapPalettes.has(warnKey)) {
+      logger.warn(
+        `[palette] categorical palette '${paletteName}' has ${palette.length} colors, but received ${uniqueKeys.length} unique categories; colors will wrap.`,
+      );
+      warnedCategoricalWrapPalettes.add(warnKey);
+    }
+  }
+
+  const lookup = new Map<string, LinearRGB>();
+  for (let i = 0; i < uniqueKeys.length; i++) {
+    lookup.set(uniqueKeys[i], palette[i % palette.length]);
+  }
+  return lookup;
+}
 
 function lut(data: number[]): Float32Array {
   return Float32Array.from(data);
 }
 
-// --- Perceptually uniform sequential (matplotlib) ---
+function registerLookup(
+  name: string,
+  record: Record<string, string>,
+  fallback?: string,
+  orderedKeys?: string[],
+): void {
+  const cm = ColorMap.fromLookup(name, record, fallback);
+  register(cm, { public: true });
+
+  // Store palette definition for public lookup
+  // Use provided order or fall back to alphabetical (Object.entries preserves insertion order in modern JS)
+  const keys = orderedKeys ?? Object.keys(record).sort();
+  const entries: PaletteEntry[] = keys.map((label) => ({
+    label,
+    color: record[label],
+  }));
+  PUBLIC_PALETTE_DEFINITIONS.set(name, {
+    name,
+    kind: "element",
+    size: entries.length,
+    entries,
+  });
+}
+
+// ============================================================================
+// Initialization: register all palettes
+// ============================================================================
+
+// Ordered element symbols (H first, then periodic table order)
+const ELEMENT_ORDER = [
+  "H",
+  "He",
+  "Li",
+  "Be",
+  "B",
+  "C",
+  "N",
+  "O",
+  "F",
+  "Ne",
+  "Na",
+  "Mg",
+  "Al",
+  "Si",
+  "P",
+  "S",
+  "Cl",
+  "Ar",
+  "K",
+  "Ca",
+  "Sc",
+  "Ti",
+  "V",
+  "Cr",
+  "Mn",
+  "Fe",
+  "Co",
+  "Ni",
+  "Cu",
+  "Zn",
+  "Ga",
+  "Ge",
+  "As",
+  "Se",
+  "Br",
+  "Kr",
+  "Rb",
+  "Sr",
+  "Y",
+  "Zr",
+  "Nb",
+  "Mo",
+  "Tc",
+  "Ru",
+  "Rh",
+  "Pd",
+  "Ag",
+  "Cd",
+  "In",
+  "Sn",
+  "Sb",
+  "Te",
+  "I",
+  "Xe",
+  "Cs",
+  "Ba",
+  "La",
+  "Ce",
+  "Pr",
+  "Nd",
+  "Pm",
+  "Sm",
+  "Eu",
+  "Gd",
+  "Tb",
+  "Dy",
+  "Ho",
+  "Er",
+  "Tm",
+  "Yb",
+  "Lu",
+  "Hf",
+  "Ta",
+  "W",
+  "Re",
+  "Os",
+  "Ir",
+  "Pt",
+  "Au",
+  "Hg",
+  "Tl",
+  "Pb",
+  "Bi",
+  "Po",
+  "At",
+  "Rn",
+  "Fr",
+  "Ra",
+  "Ac",
+  "Th",
+  "Pa",
+  "U",
+  "Np",
+  "Pu",
+  "Am",
+  "Cm",
+  "Bk",
+  "Cf",
+  "Es",
+  "Fm",
+  "Md",
+  "No",
+  "Lr",
+  "Rf",
+  "Db",
+  "Sg",
+  "Bh",
+  "Hs",
+  "Mt",
+  "Ds",
+  "Rg",
+  "Cn",
+  "Nh",
+  "Fl",
+  "Mc",
+  "Lv",
+  "Ts",
+  "Og",
+];
+
+// Register cpk (118 elements)
+registerLookup("cpk", CPK_RECORD, undefined, ELEMENT_ORDER);
+
+// Register ovito (118 elements)
+registerLookup("ovito", OVITO_RECORD, "#CCCCCC", ELEMENT_ORDER);
+
+// Register glasbey-vivid (256 categorical colors)
+register(
+  ColorMap.fromPalette(
+    DEFAULT_CATEGORICAL_COLOR_MAP,
+    Array.from(GLASBEY_VIVID_COLORS),
+  ),
+);
+
+// Register viridis (internal, continuous, not public)
 register(
   ColorMap.fromLUT(
-    "viridis",
+    INTERNAL_NUMERIC_COLOR_MAP,
     lut([
       0.058, 0.0, 0.089, 0.062, 0.004, 0.116, 0.065, 0.009, 0.145, 0.065, 0.017,
       0.173, 0.063, 0.027, 0.202, 0.059, 0.039, 0.223, 0.054, 0.053, 0.239,
@@ -225,1099 +1036,5 @@ register(
       0.018,
     ]),
   ),
-);
-register(
-  ColorMap.fromLUT(
-    "plasma",
-    lut([
-      0.004, 0.002, 0.241, 0.016, 0.002, 0.277, 0.031, 0.001, 0.307, 0.05,
-      0.001, 0.334, 0.076, 0.001, 0.359, 0.104, 0.0, 0.377, 0.137, 0.0, 0.389,
-      0.174, 0.0, 0.394, 0.22, 0.001, 0.388, 0.265, 0.003, 0.374, 0.313, 0.007,
-      0.352, 0.362, 0.012, 0.325, 0.419, 0.02, 0.29, 0.469, 0.029, 0.259, 0.52,
-      0.041, 0.23, 0.57, 0.054, 0.203, 0.625, 0.072, 0.175, 0.674, 0.091, 0.153,
-      0.722, 0.113, 0.133, 0.768, 0.137, 0.115, 0.818, 0.17, 0.096, 0.86, 0.203,
-      0.081, 0.897, 0.241, 0.068, 0.93, 0.284, 0.056, 0.959, 0.341, 0.044,
-      0.977, 0.398, 0.035, 0.987, 0.463, 0.027, 0.986, 0.537, 0.022, 0.972,
-      0.631, 0.018, 0.947, 0.726, 0.018, 0.91, 0.83, 0.02, 0.869, 0.944, 0.016,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "inferno",
-    lut([
-      0.0, 0.0, 0.001, 0.001, 0.001, 0.006, 0.003, 0.002, 0.018, 0.007, 0.003,
-      0.038, 0.016, 0.004, 0.073, 0.03, 0.003, 0.107, 0.049, 0.003, 0.133,
-      0.072, 0.004, 0.148, 0.103, 0.006, 0.156, 0.136, 0.008, 0.157, 0.174,
-      0.011, 0.155, 0.217, 0.014, 0.15, 0.273, 0.018, 0.14, 0.33, 0.022, 0.128,
-      0.391, 0.027, 0.115, 0.457, 0.033, 0.099, 0.536, 0.043, 0.081, 0.607,
-      0.054, 0.065, 0.677, 0.07, 0.05, 0.745, 0.09, 0.037, 0.813, 0.12, 0.024,
-      0.866, 0.155, 0.015, 0.909, 0.198, 0.008, 0.942, 0.25, 0.004, 0.965, 0.32,
-      0.002, 0.973, 0.393, 0.004, 0.967, 0.478, 0.012, 0.95, 0.574, 0.029,
-      0.917, 0.695, 0.066, 0.887, 0.808, 0.13, 0.894, 0.913, 0.237, 0.974,
-      0.996, 0.374,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "magma",
-    lut([
-      0.0,
-      0.0,
-      0.001,
-      0.001,
-      0.001,
-      0.006,
-      0.003,
-      0.002,
-      0.016,
-      0.006,
-      0.004,
-      0.034,
-      0.013,
-      0.006,
-      0.067,
-      0.023,
-      0.006,
-      0.108,
-      0.039,
-      0.005,
-      0.151,
-      0.06,
-      0.005,
-      0.184,
-      0.088,
-      0.007,
-      0.204,
-      0.118,
-      0.009,
-      0.214,
-      0.152,
-      0.013,
-      0.219,
-      0.192,
-      0.016,
-      0.221,
-      0.244,
-      0.021,
-      0.22,
-      0.298,
-      0.025,
-      0.217,
-      0.358,
-      0.029,
-      0.21,
-      0.426,
-      0.034,
-      0.2,
-      0.51,
-      0.041,
-      0.185,
-      0.591,
-      0.049,
-      0.169,
-      0.675,
-      0.059,
-      0.151,
-      0.757,
-      0.074,
-      0.133,
-      0.84,
-      0.099,
-      0.116,
-      0.897,
-      0.131,
-      0.107,
-      0.937,
-      0.174,
-      0.107,
-      0.963,
-      0.227,
-      0.115,
-      0.981,
-      0.296,
-      0.135,
-      0.99,
-      0.366,
-      0.16,
-      0.994,
-      0.444,
-      0.194,
-      0.994,
-      0.531,
-      0.236,
-      0.99,
-      0.638,
-      0.295,
-      0.984,
-      0.743,
-      0.359,
-      0.977,
-      0.857,
-      Math.LOG10E,
-      0.971,
-      0.981,
-      0.522,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "cividis",
-    lut([
-      0.0, 0.016, 0.076, 0.0, 0.021, 0.105, 0.0, 0.027, 0.143, 0.001, 0.033,
-      0.164, 0.012, 0.041, 0.159, 0.022, 0.049, 0.155, 0.033, 0.058, 0.151,
-      0.045, 0.068, 0.15, 0.06, 0.08, 0.149, 0.074, 0.092, 0.15, 0.09, 0.105,
-      0.153, 0.106, 0.118, 0.156, 0.127, 0.135, 0.161, 0.146, 0.152, 0.167,
-      0.167, 0.169, 0.175, 0.189, 0.188, 0.184, 0.217, 0.211, 0.189, 0.246,
-      0.233, 0.189, 0.277, 0.257, 0.188, 0.311, 0.282, 0.184, 0.353, 0.313,
-      0.179, 0.393, 0.342, 0.172, 0.437, 0.374, 0.164, 0.483, 0.408, 0.154,
-      0.54, 0.449, 0.142, 0.594, 0.488, 0.129, 0.652, 0.53, 0.116, 0.714, 0.575,
-      0.1, 0.79, 0.629, 0.082, 0.862, 0.681, 0.064, 0.94, 0.736, 0.045, 0.99,
-      0.806, 0.039,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "turbo",
-    lut([
-      0.03, 0.006, 0.044, 0.041, 0.023, 0.171, 0.051, 0.052, 0.359, 0.058,
-      0.094, 0.571, 0.062, 0.156, 0.792, 0.061, 0.224, 0.939, 0.053, 0.306,
-      0.998, 0.035, 0.405, 0.942, 0.019, 0.528, 0.797, 0.011, 0.641, 0.646,
-      0.009, 0.745, 0.511, 0.016, 0.832, 0.4, 0.045, 0.913, 0.27, 0.101, 0.966,
-      0.171, 0.191, 0.994, 0.1, 0.303, 0.994, 0.059, 0.427, 0.954, 0.038, 0.548,
-      0.882, 0.034, 0.676, 0.787, 0.036, 0.799, 0.68, 0.04, 0.912, 0.557, 0.043,
-      0.972, 0.453, 0.037, 0.993, 0.344, 0.028, 0.977, 0.241, 0.018, 0.923,
-      0.149, 0.01, 0.851, 0.092, 0.005, 0.762, 0.056, 0.003, 0.659, 0.033,
-      0.002, 0.531, 0.017, 0.001, 0.414, 0.009, 0.0, 0.299, 0.004, 0.0, 0.196,
-      0.001, 0.001,
-    ]),
-  ),
-);
-
-// --- Diverging ---
-register(
-  ColorMap.fromLUT(
-    "coolwarm",
-    lut([
-      0.043, 0.073, 0.528, 0.058, 0.102, 0.607, 0.075, 0.138, 0.683, 0.097,
-      0.178, 0.756, 0.125, 0.229, 0.83, 0.155, 0.279, 0.888, 0.19, 0.332, 0.934,
-      0.229, 0.386, 0.969, 0.279, 0.447, 0.992, 0.329, 0.501, 0.999, 0.382,
-      0.551, 0.991, 0.439, 0.598, 0.969, 0.505, 0.643, 0.929, 0.566, 0.676,
-      0.882, 0.627, 0.7, 0.824, 0.687, 0.715, 0.759, 0.756, 0.703, 0.674, 0.813,
-      0.668, 0.595, 0.86, 0.625, 0.518, 0.896, 0.575, 0.446, 0.922, 0.514,
-      0.371, 0.931, 0.456, 0.311, 0.928, 0.397, 0.257, 0.912, 0.338, 0.21,
-      0.881, 0.273, 0.164, 0.842, 0.219, 0.129, 0.793, 0.169, 0.1, 0.736, 0.124,
-      0.076, 0.665, 0.08, 0.055, 0.597, 0.048, 0.04, 0.527, 0.021, 0.028, 0.456,
-      0.001, 0.02,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "berlin",
-    lut([
-      0.344,
-      Math.LOG10E,
-      0.999,
-      0.262,
-      0.423,
-      0.924,
-      0.19,
-      0.409,
-      0.848,
-      0.129,
-      0.386,
-      0.76,
-      0.078,
-      0.342,
-      0.638,
-      0.05,
-      0.287,
-      0.517,
-      0.035,
-      0.229,
-      0.405,
-      0.026,
-      0.176,
-      0.308,
-      0.02,
-      0.127,
-      0.22,
-      0.015,
-      0.092,
-      0.157,
-      0.011,
-      0.064,
-      0.108,
-      0.008,
-      0.042,
-      0.07,
-      0.006,
-      0.025,
-      0.039,
-      0.005,
-      0.014,
-      0.022,
-      0.006,
-      0.008,
-      0.011,
-      0.007,
-      0.005,
-      0.005,
-      0.013,
-      0.003,
-      0.001,
-      0.019,
-      0.004,
-      0.0,
-      0.03,
-      0.005,
-      0.0,
-      0.044,
-      0.006,
-      0.0,
-      0.065,
-      0.007,
-      0.0,
-      0.092,
-      0.01,
-      0.002,
-      0.131,
-      0.016,
-      0.004,
-      0.184,
-      0.028,
-      0.01,
-      0.254,
-      0.049,
-      0.023,
-      0.324,
-      0.075,
-      0.043,
-      0.402,
-      0.108,
-      0.073,
-      0.49,
-      0.148,
-      0.113,
-      0.606,
-      0.205,
-      0.173,
-      0.722,
-      0.265,
-      0.24,
-      0.854,
-      0.337,
-      0.322,
-      1.0,
-      0.42,
-      0.42,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "vik",
-    lut([
-      0.0, 0.006, 0.119, 0.001, 0.014, 0.141, 0.001, 0.024, 0.165, 0.001, 0.039,
-      0.19, 0.001, 0.06, 0.222, 0.002, 0.085, 0.255, 0.004, 0.117, 0.292, 0.013,
-      0.159, 0.337, 0.037, 0.22, 0.398, 0.076, 0.286, 0.459, 0.136, 0.361,
-      0.524, 0.217, 0.445, 0.594, 0.337, 0.549, 0.676, 0.47, 0.649, 0.75, 0.626,
-      0.746, 0.809, 0.78, 0.798, 0.803, 0.858, 0.744, 0.683, 0.835, 0.641,
-      0.543, 0.786, 0.536, 0.417, 0.735, 0.443, 0.313, 0.682, 0.354, 0.219,
-      0.637, 0.286, 0.153, 0.596, 0.229, 0.103, 0.557, 0.179, 0.064, 0.512,
-      0.131, 0.034, 0.461, 0.092, 0.015, 0.387, 0.056, 0.005, 0.304, 0.03,
-      0.002, 0.228, 0.015, 0.002, 0.176, 0.008, 0.002, 0.134, 0.003, 0.002,
-      0.101, 0.0, 0.002,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "balance",
-    lut([
-      0.009, 0.012, 0.056, 0.014, 0.021, 0.106, 0.019, 0.032, 0.182, 0.022,
-      0.046, 0.292, 0.017, 0.069, 0.45, 0.004, 0.106, 0.516, 0.006, 0.151,
-      0.505, 0.019, 0.2, 0.493, 0.048, 0.259, 0.489, 0.087, 0.316, 0.494, 0.147,
-      0.377, 0.505, 0.233, 0.439, 0.529, 0.355, 0.515, 0.576, 0.484, 0.591,
-      0.634, 0.629, 0.679, 0.704, 0.792, 0.783, 0.788, 0.843, 0.767, 0.749,
-      0.787, 0.63, 0.588, 0.74, 0.51, 0.448, 0.698, 0.406, 0.329, 0.655, 0.306,
-      0.221, 0.617, 0.231, 0.147, 0.578, 0.167, 0.091, 0.538, 0.113, 0.053,
-      0.49, 0.065, 0.027, 0.437, 0.033, 0.018, 0.368, 0.014, 0.019, 0.288,
-      0.006, 0.022, 0.198, 0.004, 0.022, 0.131, 0.005, 0.017, 0.081, 0.004,
-      0.011, 0.045, 0.003, 0.006,
-    ]),
-  ),
-);
-
-// --- Crameri scientific (colorblind-safe, vibrant) ---
-register(
-  ColorMap.fromLUT(
-    "batlow",
-    lut([
-      0.0, 0.01, 0.1, 0.002, 0.019, 0.105, 0.004, 0.03, 0.11, 0.005, 0.043,
-      0.114, 0.006, 0.058, 0.118, 0.007, 0.072, 0.121, 0.009, 0.087, 0.123,
-      0.012, 0.102, 0.122, 0.018, 0.12, 0.117, 0.027, 0.135, 0.109, 0.04, 0.149,
-      0.097, 0.058, 0.162, 0.084, 0.084, 0.176, 0.068, 0.113, 0.188, 0.056,
-      0.149, 0.201, 0.045, 0.193, 0.215, 0.036, 0.253, 0.232, 0.028, 0.319,
-      0.246, 0.025, 0.397, 0.261, 0.026, 0.483, 0.273, 0.032, 0.588, 0.286,
-      0.046, 0.684, 0.298, 0.065, 0.779, 0.311, 0.093, 0.864, 0.33, 0.135,
-      0.935, 0.358, 0.199, 0.969, 0.387, 0.271, 0.983, 0.419, 0.353, 0.984,
-      0.451, 0.442, 0.98, 0.488, 0.555, 0.975, 0.524, 0.67, 0.968, 0.563, 0.804,
-      0.958, 0.605, 0.958,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "hawaii",
-    lut([
-      0.264, 0.001, 0.172, 0.271, 0.006, 0.148, 0.278, 0.012, 0.126, 0.283,
-      0.019, 0.107, 0.289, 0.029, 0.09, 0.294, 0.038, 0.077, 0.299, 0.05, 0.065,
-      0.304, 0.063, 0.055, 0.309, 0.079, 0.046, 0.313, 0.096, 0.038, 0.318,
-      0.116, 0.031, 0.323, 0.138, 0.025, 0.329, 0.168, 0.02, 0.333, 0.199,
-      0.016, 0.336, 0.235, 0.013, 0.335, 0.278, 0.011, 0.327, 0.332, 0.013,
-      0.313, 0.384, 0.02, 0.291, 0.435, 0.034, 0.264, 0.484, 0.055, 0.232,
-      0.533, 0.09, 0.204, 0.573, 0.131, 0.178, 0.61, 0.182, 0.155, 0.647, 0.245,
-      0.133, 0.69, 0.331, 0.119, 0.729, 0.421, 0.115, 0.768, 0.525, 0.128,
-      0.806, 0.636, 0.173, 0.842, 0.759, 0.243, 0.866, 0.853, 0.338, 0.88,
-      0.928, 0.453, 0.888, 0.986,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "roma",
-    lut([
-      0.207, 0.009, 0.0, 0.24, 0.025, 0.002, 0.273, 0.046, 0.004, 0.305, 0.07,
-      0.006, 0.34, 0.102, 0.01, 0.371, 0.135, 0.013, 0.403, 0.173, 0.018, 0.437,
-      0.218, 0.024, 0.479, 0.279, 0.035, 0.52, 0.345, 0.051, 0.563, 0.425,
-      0.077, 0.605, 0.517, 0.121, 0.639, 0.625, 0.198, 0.646, 0.713, 0.291,
-      0.623, 0.78, 0.394, 0.572, 0.817, 0.493, 0.486, 0.823, 0.585, 0.395,
-      0.797, 0.642, 0.303, 0.746, 0.673, 0.218, 0.676, 0.681, 0.142, 0.584,
-      0.668, 0.095, 0.501, 0.643, 0.064, 0.424, 0.611, 0.045, 0.355, 0.577,
-      0.032, 0.287, 0.539, 0.025, 0.236, 0.507, 0.02, 0.191, 0.475, 0.017, 0.15,
-      0.444, 0.013, 0.11, 0.409, 0.009, 0.078, 0.378, 0.005, 0.052, 0.346,
-      0.001, 0.031, 0.315,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "tokyo",
-    lut([
-      0.011, 0.004, 0.034, 0.023, 0.006, 0.04, 0.038, 0.008, 0.046, 0.058,
-      0.012, 0.054, 0.084, 0.019, 0.062, 0.107, 0.028, 0.068, 0.126, 0.039,
-      0.073, 0.14, 0.052, 0.077, 0.151, 0.066, 0.08, 0.156, 0.079, 0.081, 0.16,
-      0.091, 0.083, 0.163, 0.102, 0.083, 0.165, 0.114, 0.084, 0.167, 0.125,
-      0.085, 0.169, 0.138, 0.086, 0.172, 0.151, 0.087, 0.175, 0.17, 0.088,
-      0.179, 0.191, 0.089, 0.183, 0.216, 0.091, 0.188, 0.247, 0.093, 0.195,
-      0.289, 0.097, 0.204, 0.334, 0.102, 0.216, 0.388, 0.111, 0.234, 0.451,
-      0.127, 0.267, 0.536, 0.156, 0.312, 0.621, 0.199, 0.379, 0.713, 0.261,
-      0.467, 0.8, 0.346, 0.584, 0.881, 0.458, 0.688, 0.929, 0.558, 0.782, 0.957,
-      0.647, 0.863, 0.973, 0.722,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "lapaz",
-    lut([
-      0.011, 0.004, 0.128, 0.012, 0.008, 0.147, 0.014, 0.015, 0.166, 0.016,
-      0.022, 0.187, 0.018, 0.033, 0.211, 0.019, 0.044, 0.232, 0.021, 0.057,
-      0.254, 0.023, 0.072, 0.274, 0.027, 0.09, 0.296, 0.03, 0.108, 0.314, 0.035,
-      0.128, 0.33, 0.041, 0.15, 0.344, 0.05, 0.175, 0.357, 0.061, 0.199, 0.364,
-      0.075, 0.223, 0.369, 0.093, 0.248, 0.369, 0.119, 0.275, 0.365, 0.147,
-      0.297, 0.358, 0.18, 0.318, 0.347, 0.218, 0.336, 0.335, 0.266, 0.354,
-      0.321, 0.314, 0.369, 0.309, 0.37, 0.386, 0.302, 0.435, 0.407, 0.302,
-      0.524, 0.441, 0.317, 0.617, 0.484, 0.349, 0.716, 0.54, 0.401, 0.81, 0.607,
-      0.474, 0.893, 0.686, 0.575, 0.943, 0.755, 0.674, 0.975, 0.822, 0.78,
-      0.993, 0.89, 0.893,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "bamako",
-    lut([
-      0.0, 0.043, 0.064, 0.001, 0.047, 0.06, 0.002, 0.05, 0.056, 0.004, 0.054,
-      0.052, 0.005, 0.06, 0.047, 0.008, 0.065, 0.043, 0.01, 0.071, 0.039, 0.014,
-      0.078, 0.034, 0.02, 0.087, 0.029, 0.026, 0.096, 0.025, 0.034, 0.107,
-      0.021, 0.044, 0.118, 0.017, 0.057, 0.133, 0.013, 0.072, 0.148, 0.009,
-      0.089, 0.165, 0.007, 0.109, 0.183, 0.004, 0.136, 0.205, 0.002, 0.163,
-      0.224, 0.001, 0.197, 0.238, 0.0, 0.236, 0.248, 0.0, 0.285, 0.258, 0.0,
-      0.332, 0.275, 0.002, 0.383, 0.306, 0.006, 0.44, 0.343, 0.013, 0.513, 0.39,
-      0.027, 0.583, 0.436, 0.047, 0.65, 0.487, 0.078, 0.715, 0.542, 0.122,
-      0.791, 0.606, 0.186, 0.859, 0.665, 0.254, 0.929, 0.726, 0.332, 1.0, 0.787,
-      0.42,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "bilbao",
-    lut([
-      0.073, 0.0, 0.0, 0.098, 0.003, 0.005, 0.127, 0.008, 0.01, 0.157, 0.014,
-      0.018, 0.193, 0.023, 0.029, 0.227, 0.033, 0.042, 0.262, 0.046, 0.057,
-      0.295, 0.061, 0.071, 0.323, 0.08, 0.084, 0.338, 0.098, 0.09, 0.349, 0.115,
-      0.095, 0.358, 0.132, 0.098, 0.367, 0.152, 0.102, 0.375, 0.171, 0.105,
-      0.383, 0.19, 0.108, 0.391, 0.21, 0.111, 0.4, 0.235, 0.114, 0.409, 0.258,
-      0.118, 0.418, 0.285, 0.122, 0.43, 0.315, 0.129, 0.448, 0.358, 0.148, 0.47,
-      0.4, 0.184, 0.494, 0.439, 0.236, 0.516, 0.472, 0.294, 0.539, 0.505, 0.364,
-      0.558, 0.534, 0.427, 0.581, 0.564, 0.492, 0.615, 0.606, 0.564, 0.682,
-      0.678, 0.662, 0.769, 0.768, 0.763, 0.876, 0.876, 0.875, 1.0, 1.0, 1.0,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "davos",
-    lut([
-      0.0, 0.002, 0.069, 0.001, 0.006, 0.092, 0.002, 0.012, 0.12, 0.005, 0.02,
-      0.15, 0.008, 0.033, 0.188, 0.011, 0.048, 0.222, 0.016, 0.065, 0.254,
-      0.022, 0.084, 0.284, 0.031, 0.108, 0.31, 0.04, 0.13, 0.327, 0.052, 0.153,
-      0.336, 0.065, 0.174, 0.338, 0.082, 0.198, 0.333, 0.098, 0.218, 0.324,
-      0.117, 0.238, 0.313, 0.137, 0.257, 0.299, 0.161, 0.28, 0.283, 0.186,
-      0.301, 0.27, 0.213, 0.325, 0.258, 0.245, 0.353, 0.249, 0.288, 0.391,
-      0.244, 0.337, 0.433, 0.246, 0.399, 0.487, 0.259, 0.477, 0.554, 0.286,
-      0.583, 0.644, 0.34, 0.685, 0.728, 0.408, 0.779, 0.804, 0.493, 0.855,
-      0.867, 0.586, 0.917, 0.919, 0.695, 0.953, 0.951, 0.793, 0.978, 0.975,
-      0.893, 0.994, 0.995, 0.995,
-    ]),
-  ),
-);
-
-// --- Cmocean (vibrant, colorblind-friendly) ---
-register(
-  ColorMap.fromLUT(
-    "thermal",
-    lut([
-      0.001, 0.017, 0.034, 0.002, 0.022, 0.056, 0.002, 0.027, 0.089, 0.005,
-      0.031, 0.136, 0.01, 0.034, 0.212, 0.023, 0.034, 0.293, 0.045, 0.033,
-      0.345, 0.07, 0.038, 0.347, 0.1, 0.046, 0.328, 0.129, 0.054, 0.31, 0.161,
-      0.063, 0.294, 0.196, 0.072, 0.282, 0.241, 0.083, 0.269, 0.286, 0.092,
-      0.259, 0.338, 0.101, 0.247, 0.397, 0.109, 0.233, 0.471, 0.12, 0.213,
-      0.543, 0.129, 0.191, 0.62, 0.141, 0.167, 0.699, 0.154, 0.141, 0.784,
-      0.175, 0.112, 0.851, 0.2, 0.089, 0.904, 0.233, 0.07, 0.941, 0.275, 0.057,
-      0.964, 0.334, 0.048, 0.971, 0.396, 0.046, 0.966, 0.466, 0.047, 0.953,
-      0.544, 0.052, 0.927, 0.642, 0.061, 0.895, 0.739, 0.073, 0.855, 0.844,
-      0.087, 0.805, 0.96, 0.104,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "haline",
-    lut([
-      0.023, 0.009, 0.149, 0.026, 0.011, 0.213, 0.028, 0.012, 0.292, 0.023,
-      0.019, 0.358, 0.013, 0.036, 0.358, 0.007, 0.054, 0.334, 0.004, 0.071,
-      0.311, 0.004, 0.089, 0.293, 0.005, 0.11, 0.277, 0.008, 0.128, 0.266,
-      0.013, 0.148, 0.259, 0.018, 0.169, 0.254, 0.024, 0.194, 0.251, 0.03,
-      0.219, 0.249, 0.035, 0.245, 0.247, 0.041, 0.273, 0.245, 0.048, 0.308,
-      0.24, 0.055, 0.342, 0.234, 0.063, 0.378, 0.226, 0.073, 0.416, 0.215,
-      0.089, 0.461, 0.198, 0.109, 0.502, 0.181, 0.138, 0.544, 0.162, 0.177,
-      0.585, 0.142, 0.24, 0.628, 0.121, 0.318, 0.662, 0.108, 0.416, 0.69, 0.108,
-      0.523, 0.718, 0.124, 0.646, 0.751, 0.158, 0.757, 0.785, 0.201, 0.87,
-      0.822, 0.256, 0.987, 0.862, 0.322,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "solar",
-    lut([
-      0.034, 0.007, 0.009, 0.047, 0.009, 0.011, 0.063, 0.011, 0.014, 0.083,
-      0.012, 0.016, 0.108, 0.015, 0.017, 0.134, 0.017, 0.018, 0.163, 0.019,
-      0.018, 0.195, 0.022, 0.017, 0.232, 0.027, 0.016, 0.265, 0.033, 0.014,
-      0.298, 0.041, 0.012, 0.329, 0.05, 0.011, 0.364, 0.064, 0.009, 0.394,
-      0.079, 0.008, 0.423, 0.096, 0.007, 0.451, 0.115, 0.007, 0.482, 0.14,
-      0.006, 0.509, 0.165, 0.007, 0.534, 0.193, 0.007, 0.559, 0.225, 0.008,
-      0.586, 0.264, 0.009, 0.609, 0.303, 0.011, 0.63, 0.346, 0.013, 0.65, 0.393,
-      0.016, 0.672, 0.451, 0.02, 0.689, 0.508, 0.024, 0.704, 0.57, 0.03, 0.718,
-      0.637, 0.036, 0.731, 0.721, 0.043, 0.74, 0.802, 0.051, 0.746, 0.89, 0.06,
-      0.749, 0.986, 0.07,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "ice",
-    lut([
-      0.001, 0.002, 0.006, 0.003, 0.004, 0.013, 0.006, 0.007, 0.023, 0.01, 0.01,
-      0.036, 0.016, 0.015, 0.056, 0.022, 0.02, 0.078, 0.028, 0.026, 0.107,
-      0.034, 0.033, 0.142, 0.041, 0.043, 0.188, 0.046, 0.053, 0.236, 0.049,
-      0.066, 0.286, 0.05, 0.082, 0.336, 0.049, 0.103, 0.383, 0.048, 0.126,
-      0.417, 0.049, 0.151, 0.443, 0.052, 0.179, 0.464, 0.058, 0.213, 0.485,
-      0.066, 0.246, 0.503, 0.077, 0.28, 0.521, 0.09, 0.318, 0.539, 0.109, 0.363,
-      0.561, 0.129, 0.406, 0.582, 0.153, 0.452, 0.603, 0.183, 0.501, 0.625,
-      0.227, 0.558, 0.652, 0.278, 0.61, 0.677, 0.343, 0.663, 0.709, 0.419,
-      0.716, 0.748, 0.516, 0.78, 0.803, 0.612, 0.841, 0.859, 0.715, 0.908,
-      0.921, 0.824, 0.981, 0.984,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "deep",
-    lut([
-      0.984, 0.987, 0.604, 0.847, 0.934, 0.543, 0.721, 0.884, 0.491, 0.604,
-      0.837, 0.448, 0.484, 0.786, 0.411, 0.389, 0.742, 0.387, 0.305, 0.699,
-      0.372, 0.235, 0.655, 0.366, 0.176, 0.603, 0.367, 0.14, 0.555, 0.369,
-      0.116, 0.506, 0.371, 0.1, 0.459, 0.37, 0.087, 0.409, 0.367, 0.08, 0.367,
-      0.361, 0.073, 0.328, 0.354, 0.068, 0.291, 0.346, 0.063, 0.254, 0.336,
-      0.058, 0.223, 0.328, 0.054, 0.195, 0.32, 0.051, 0.169, 0.312, 0.048,
-      0.141, 0.304, 0.048, 0.119, 0.296, 0.048, 0.098, 0.286, 0.051, 0.079,
-      0.268, 0.053, 0.061, 0.231, 0.053, 0.049, 0.188, 0.05, 0.04, 0.146, 0.045,
-      0.032, 0.11, 0.038, 0.025, 0.078, 0.032, 0.019, 0.056, 0.026, 0.015,
-      0.038, 0.021, 0.01, 0.025,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "dense",
-    lut([
-      0.792,
-      0.878,
-      0.877,
-      0.689,
-      0.824,
-      0.836,
-      0.595,
-      0.773,
-      0.806,
-      0.512,
-      0.723,
-      0.785,
-      0.43,
-      0.668,
-      0.77,
-      0.368,
-      0.62,
-      0.763,
-      0.315,
-      0.573,
-      0.761,
-      0.27,
-      0.526,
-      0.763,
-      0.231,
-      0.475,
-      0.768,
-      0.205,
-      0.43,
-      0.774,
-      0.187,
-      0.386,
-      0.779,
-      0.176,
-      0.342,
-      0.78,
-      0.172,
-      0.295,
-      0.773,
-      0.174,
-      0.255,
-      0.757,
-      0.178,
-      0.218,
-      0.73,
-      0.183,
-      0.185,
-      Math.LN2,
-      0.188,
-      0.151,
-      0.642,
-      0.191,
-      0.125,
-      0.589,
-      0.192,
-      0.102,
-      0.533,
-      0.19,
-      0.083,
-      0.475,
-      0.186,
-      0.064,
-      0.409,
-      0.18,
-      0.05,
-      0.353,
-      0.172,
-      0.039,
-      0.299,
-      0.161,
-      0.03,
-      0.248,
-      0.148,
-      0.022,
-      0.196,
-      0.134,
-      0.016,
-      0.154,
-      0.119,
-      0.012,
-      0.117,
-      0.103,
-      0.009,
-      0.086,
-      0.084,
-      0.007,
-      0.058,
-      0.067,
-      0.006,
-      0.04,
-      0.051,
-      0.005,
-      0.027,
-      0.037,
-      0.004,
-      0.018,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "matter",
-    lut([
-      0.987,
-      0.849,
-      0.435,
-      0.978,
-      0.761,
-      0.378,
-      0.969,
-      0.678,
-      0.327,
-      0.959,
-      0.602,
-      0.282,
-      0.946,
-      0.523,
-      0.239,
-      0.934,
-      0.458,
-      0.206,
-      0.919,
-      0.399,
-      0.177,
-      0.903,
-      0.344,
-      0.153,
-      0.882,
-      0.288,
-      0.13,
-      0.862,
-      0.244,
-      0.114,
-      0.838,
-      0.203,
-      0.102,
-      0.811,
-      0.167,
-      0.093,
-      0.776,
-      0.132,
-      0.087,
-      0.739,
-      0.105,
-      0.086,
-      0.697,
-      0.083,
-      0.087,
-      0.65,
-      0.066,
-      0.091,
-      0.592,
-      0.05,
-      0.097,
-      0.539,
-      0.04,
-      0.103,
-      0.486,
-      0.032,
-      0.11,
-      Math.LOG10E,
-      0.025,
-      0.115,
-      0.377,
-      0.02,
-      0.121,
-      0.328,
-      0.016,
-      0.124,
-      0.282,
-      0.014,
-      0.126,
-      0.24,
-      0.012,
-      0.125,
-      0.196,
-      0.011,
-      0.121,
-      0.161,
-      0.01,
-      0.115,
-      0.129,
-      0.009,
-      0.106,
-      0.102,
-      0.009,
-      0.096,
-      0.076,
-      0.008,
-      0.083,
-      0.057,
-      0.007,
-      0.071,
-      0.041,
-      0.006,
-      0.059,
-      0.029,
-      0.005,
-      0.048,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "speed",
-    lut([
-      0.999, 0.98, 0.611, 0.952, 0.897, 0.504, 0.906, 0.82, 0.407, 0.861, 0.75,
-      0.322, 0.808, 0.678, 0.24, 0.758, 0.62, 0.178, 0.704, 0.57, 0.126, 0.644,
-      0.526, 0.086, 0.569, 0.483, 0.052, 0.499, 0.451, 0.032, 0.429, 0.422,
-      0.018, 0.362, 0.396, 0.01, 0.291, 0.368, 0.004, 0.234, 0.345, 0.002,
-      0.184, 0.322, 0.002, 0.139, 0.3, 0.003, 0.097, 0.275, 0.005, 0.067, 0.253,
-      0.008, 0.044, 0.231, 0.011, 0.027, 0.208, 0.015, 0.014, 0.184, 0.019,
-      0.007, 0.162, 0.022, 0.004, 0.141, 0.024, 0.003, 0.121, 0.026, 0.004, 0.1,
-      0.026, 0.006, 0.084, 0.025, 0.007, 0.068, 0.023, 0.009, 0.055, 0.02, 0.01,
-      0.042, 0.017, 0.01, 0.032, 0.013, 0.01, 0.024, 0.01, 0.009, 0.017, 0.006,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "amp",
-    lut([
-      0.882, 0.846, 0.839, 0.845, 0.772, 0.754, 0.815, 0.701, 0.672, 0.788,
-      0.634, 0.593, 0.761, 0.565, 0.512, 0.739, 0.507, 0.445, 0.718, 0.454,
-      0.383, 0.697, 0.404, 0.327, 0.675, 0.352, 0.27, 0.656, 0.31, 0.224, 0.637,
-      0.27, 0.185, 0.618, 0.234, 0.149, 0.597, 0.196, 0.116, 0.578, 0.166, 0.09,
-      0.558, 0.138, 0.069, 0.538, 0.113, 0.052, 0.514, 0.087, 0.038, 0.492,
-      0.067, 0.028, 0.468, 0.049, 0.022, 0.44, 0.034, 0.019, 0.404, 0.022,
-      0.018, 0.368, 0.014, 0.019, 0.328, 0.009, 0.02, 0.287, 0.006, 0.022,
-      0.241, 0.005, 0.023, 0.202, 0.004, 0.022, 0.166, 0.005, 0.02, 0.135,
-      0.005, 0.018, 0.104, 0.004, 0.014, 0.081, 0.004, 0.011, 0.062, 0.003,
-      0.008, 0.045, 0.003, 0.006,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "tempo",
-    lut([
-      0.997, 0.919, 0.907, 0.903, 0.856, 0.807, 0.812, 0.798, 0.72, 0.727,
-      0.745, 0.64, 0.635, 0.69, 0.56, 0.558, 0.645, 0.497, 0.484, 0.604, 0.442,
-      0.415, 0.566, 0.395, 0.342, 0.526, 0.349, 0.282, 0.492, 0.315, 0.226,
-      0.461, 0.287, 0.176, 0.431, 0.264, 0.125, 0.398, 0.245, 0.088, 0.369,
-      0.232, 0.057, 0.341, 0.223, 0.034, 0.312, 0.217, 0.017, 0.279, 0.211,
-      0.009, 0.25, 0.205, 0.006, 0.222, 0.198, 0.006, 0.195, 0.189, 0.007,
-      0.167, 0.177, 0.008, 0.145, 0.166, 0.009, 0.124, 0.154, 0.011, 0.105,
-      0.141, 0.011, 0.086, 0.128, 0.012, 0.071, 0.116, 0.012, 0.058, 0.104,
-      0.011, 0.047, 0.093, 0.01, 0.035, 0.082, 0.009, 0.026, 0.073, 0.008,
-      0.019, 0.065, 0.007, 0.012, 0.057,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "delta",
-    lut([
-      0.006, 0.014, 0.051, 0.011, 0.024, 0.101, 0.017, 0.035, 0.182, 0.019,
-      0.051, 0.297, 0.011, 0.088, 0.337, 0.011, 0.129, 0.349, 0.015, 0.175,
-      0.363, 0.023, 0.229, 0.381, 0.038, 0.299, 0.404, 0.063, 0.369, 0.423,
-      0.119, 0.44, 0.442, 0.218, 0.508, 0.475, 0.361, 0.59, 0.538, 0.51, 0.675,
-      0.61, 0.678, 0.775, 0.691, 0.871, 0.894, 0.765, 0.949, 0.892, 0.497,
-      0.858, 0.745, 0.317, 0.761, 0.623, 0.181, 0.647, 0.528, 0.087, 0.493,
-      0.449, 0.031, 0.356, 0.394, 0.009, 0.236, 0.346, 0.002, 0.141, 0.301,
-      0.003, 0.065, 0.251, 0.008, 0.025, 0.206, 0.015, 0.007, 0.162, 0.022,
-      0.003, 0.121, 0.026, 0.006, 0.082, 0.025, 0.009, 0.054, 0.02, 0.01, 0.032,
-      0.013, 0.009, 0.017, 0.006,
-    ]),
-  ),
-);
-register(
-  ColorMap.fromLUT(
-    "curl",
-    lut([
-      0.007,
-      0.012,
-      0.057,
-      0.009,
-      0.026,
-      0.073,
-      0.011,
-      0.045,
-      0.092,
-      0.012,
-      0.07,
-      0.114,
-      0.011,
-      0.105,
-      0.142,
-      0.008,
-      0.145,
-      0.166,
-      0.006,
-      0.193,
-      0.188,
-      0.009,
-      0.248,
-      0.204,
-      0.035,
-      0.313,
-      0.217,
-      0.089,
-      0.37,
-      0.232,
-      0.172,
-      0.428,
-      0.263,
-      0.277,
-      0.49,
-      0.313,
-      0.418,
-      0.567,
-      0.397,
-      0.562,
-      0.648,
-      0.501,
-      0.721,
-      0.741,
-      0.635,
-      0.897,
-      0.852,
-      0.801,
-      0.942,
-      0.835,
-      0.794,
-      0.874,
-      0.685,
-      0.601,
-      0.822,
-      0.552,
-      0.443,
-      0.779,
-      Math.LOG10E,
-      0.321,
-      0.735,
-      0.32,
-      0.223,
-      0.692,
-      0.235,
-      0.168,
-      0.638,
-      0.167,
-      0.137,
-      0.572,
-      0.114,
-      0.122,
-      0.485,
-      0.071,
-      0.117,
-      0.404,
-      0.045,
-      0.117,
-      0.324,
-      0.027,
-      0.118,
-      0.247,
-      0.016,
-      0.117,
-      0.169,
-      0.009,
-      0.108,
-      0.11,
-      0.007,
-      0.088,
-      0.065,
-      0.006,
-      0.062,
-      0.034,
-      0.004,
-      0.036,
-    ]),
-  ),
-);
-
-// --- Cyclical ---
-register(
-  ColorMap.fromLUT(
-    "twilight",
-    lut([
-      0.76, 0.692, 0.764, 0.674, 0.678, 0.72, 0.541, 0.616, 0.656, 0.395, 0.532,
-      0.599, 0.288, 0.452, 0.566, 0.209, 0.369, 0.544, 0.162, 0.296, 0.529,
-      0.133, 0.226, 0.51, 0.12, 0.166, 0.486, 0.114, 0.111, 0.449, 0.112, 0.07,
-      0.399, 0.107, 0.038, 0.332, 0.095, 0.018, 0.242, 0.074, 0.009, 0.153,
-      0.05, 0.006, 0.082, 0.034, 0.006, 0.048, 0.035, 0.006, 0.039, 0.055,
-      0.006, 0.048, 0.095, 0.008, 0.063, 0.15, 0.011, 0.075, 0.221, 0.018,
-      0.081, 0.293, 0.03, 0.08, 0.362, 0.051, 0.079, 0.43, 0.084, 0.083, 0.487,
-      0.128, 0.093, 0.535, 0.19, 0.118, 0.57, 0.263, 0.16, 0.601, 0.357, 0.238,
-      0.635, 0.455, 0.35, 0.687, 0.564, 0.507, 0.733, 0.653, 0.661, 0.759,
-      0.692, 0.759,
-    ]),
-  ),
-);
-
-// --- Utility ---
-register(ColorMap.fromLUT("grayscale", lut([0, 0, 0, 1, 1, 1])));
-
-// ---------------------------------------------------------------------------
-// CPK / Jmol element colors
-// ---------------------------------------------------------------------------
-
-register(
-  ColorMap.fromLookup("cpk", {
-    H: "#FFFFFF",
-    He: "#D9FFFF",
-    Li: "#CC80FF",
-    Be: "#C2FF00",
-    B: "#FFB5B5",
-    C: "#909090",
-    N: "#3050F8",
-    O: "#FF0D0D",
-    F: "#90E050",
-    Ne: "#B3E3F5",
-    Na: "#AB5CF2",
-    Mg: "#8AFF00",
-    Al: "#BFA6A6",
-    Si: "#F0C8A0",
-    P: "#FF8000",
-    S: "#FFFF30",
-    Cl: "#1FF01F",
-    Ar: "#80D1E3",
-    K: "#8F40D4",
-    Ca: "#3DFF00",
-    Sc: "#E6E6E6",
-    Ti: "#BFC2C7",
-    V: "#A6A6AB",
-    Cr: "#8A99C7",
-    Mn: "#9C7AC7",
-    Fe: "#E06633",
-    Co: "#F090A0",
-    Ni: "#50D050",
-    Cu: "#C88033",
-    Zn: "#7D80B0",
-    Ga: "#C28F8F",
-    Ge: "#668F8F",
-    As: "#BD80E3",
-    Se: "#FFA100",
-    Br: "#A62929",
-    Kr: "#5CB8D1",
-    Rb: "#702EB0",
-    Sr: "#00FF00",
-    Y: "#94FFFF",
-    Zr: "#94E0E0",
-    Nb: "#73C2C9",
-    Mo: "#54B5B5",
-    Tc: "#3B9E9E",
-    Ru: "#248F8F",
-    Rh: "#0A7D8C",
-    Pd: "#006985",
-    Ag: "#C0C0C0",
-    Cd: "#FFD98F",
-    In: "#A67573",
-    Sn: "#668080",
-    Sb: "#9E63B5",
-    Te: "#D47A00",
-    I: "#940094",
-    Xe: "#429EB0",
-    Cs: "#57178F",
-    Ba: "#00C900",
-    La: "#70D4FF",
-    Ce: "#FFFFC7",
-    Pr: "#D9FFC7",
-    Nd: "#C7FFC7",
-    Pm: "#A3FFC7",
-    Sm: "#8FFFC7",
-    Eu: "#61FFC7",
-    Gd: "#45FFC7",
-    Tb: "#30FFC7",
-    Dy: "#1FFFC7",
-    Ho: "#00FF9C",
-    Er: "#00E675",
-    Tm: "#00D452",
-    Yb: "#00BF38",
-    Lu: "#00AB24",
-    Hf: "#4DC2FF",
-    Ta: "#4DA6FF",
-    W: "#2194D6",
-    Re: "#267DAB",
-    Os: "#266696",
-    Ir: "#175487",
-    Pt: "#D0D0E0",
-    Au: "#FFD123",
-    Hg: "#B8B8D0",
-    Tl: "#A6544D",
-    Pb: "#575961",
-    Bi: "#9E4FB5",
-    Po: "#AB5C00",
-    At: "#754F45",
-    Rn: "#428296",
-    Fr: "#420066",
-    Ra: "#007D00",
-    Ac: "#70ABFA",
-    Th: "#00BAFF",
-    Pa: "#00A1FF",
-    U: "#008FFF",
-    Np: "#0080FF",
-    Pu: "#006BFF",
-    Am: "#545CF2",
-    Cm: "#785CE3",
-    Bk: "#8A4FE3",
-    Cf: "#A136D4",
-    Es: "#B31FD4",
-    Fm: "#B31FBA",
-    Md: "#B30DA6",
-    No: "#BD0D87",
-    Lr: "#C70066",
-    Rf: "#CC0059",
-    Db: "#D1004F",
-    Sg: "#D90045",
-    Bh: "#E00038",
-    Hs: "#E6002E",
-    Mt: "#EB0026",
-    Ds: "#FF1493",
-    Rg: "#FF1493",
-    Cn: "#FF1493",
-    Nh: "#FF1493",
-    Fl: "#FF1493",
-    Mc: "#FF1493",
-    Lv: "#FF1493",
-    Ts: "#FF1493",
-    Og: "#FF1493",
-  }),
-);
-
-// Modern element subset
-register(
-  ColorMap.fromLookup(
-    "modern",
-    {
-      H: "#FFFFFF",
-      C: "#333333",
-      N: "#2980B9",
-      O: "#C0392B",
-      S: "#F39C12",
-      P: "#E67E22",
-      F: "#27AE60",
-      Cl: "#16A085",
-      Br: "#8E44AD",
-      I: "#8E44AD",
-    },
-    "#95A5A6",
-  ),
+  { public: false },
 );

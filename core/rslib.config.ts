@@ -4,8 +4,10 @@ export default defineConfig({
   lib: [
     {
       format: "esm",
+      bundle: false,
       dts: true,
       source: {
+        entry: { index: "./src/**" },
         define: {
           __WASM_INLINE__: JSON.stringify(false),
         },

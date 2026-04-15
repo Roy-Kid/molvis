@@ -8,7 +8,6 @@ import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { HitResult, MenuItem } from "./types";
-import "../shaders/impostor";
 
 /**
  * =============================

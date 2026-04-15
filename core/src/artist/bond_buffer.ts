@@ -245,9 +245,9 @@ export function buildBondBuffers(
  */
 export function refreshBondPositions(
   bondsBlock: Block,
-  x: Float32Array,
-  y: Float32Array,
-  z: Float32Array,
+  x: Float64Array,
+  y: Float64Array,
+  z: Float64Array,
   bondState: {
     count: number;
     uploadBuffer(name: string): void;

@@ -61,10 +61,10 @@ export class DeleteSelectedModifier extends BaseModifier {
           }
           newAtoms.setColStr(key, dst);
         }
-      } else if (dtype === "f32") {
+      } else if (dtype === "f64") {
         const src = atoms.viewColF(key);
         if (src) {
-          const dst = new Float32Array(newCount);
+          const dst = new Float64Array(newCount);
           let ptr = 0;
           for (let i = 0; i < nrows; i++) {
             if (indexMap[i] !== -1) dst[ptr++] = src[i];

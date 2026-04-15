@@ -8,7 +8,7 @@ import {
   type Vector3,
   VertexData,
 } from "@babylonjs/core";
-import type { Block, Box, Frame, UniformGridField } from "@molcrafts/molrs";
+import type { Block, Box, Frame, Grid } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 
 import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
@@ -32,7 +32,7 @@ import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
 import { createWarmupMesh } from "./artist/warmup";
 import type { AtomMeta, BondMeta } from "./entity_source";
 import type { ImpostorState } from "./scene_index";
-import "./shaders/impostor";
+import { registerImpostorShaders } from "./shaders/impostor";
 
 /**
  * Artist options for initialization
@@ -192,6 +192,7 @@ export class Artist {
   }
 
   constructor(options: ArtistOptions) {
+    registerImpostorShaders();
     this.app = options.app;
     const scene = this.app.world.scene;
 
@@ -376,7 +377,7 @@ export class Artist {
   }
 
   public drawCloud(
-    field: UniformGridField,
+    grid: Grid,
     options?: {
       stride?: number;
       threshold?: number;
@@ -387,8 +388,10 @@ export class Artist {
     this.cloudMesh?.dispose();
     this.cloudMesh = null;
 
-    const valuesArray = field.values().toCopy();
-    if (valuesArray.length === 0) return;
+    const arrayNames = grid.arrayNames();
+    if (arrayNames.length === 0) return;
+    const valuesArray = grid.getArray(arrayNames[0] as string);
+    if (!valuesArray || valuesArray.length === 0) return;
 
     let maxAbs = 0;
     for (let i = 0; i < valuesArray.length; i++) {
@@ -397,14 +400,14 @@ export class Artist {
     }
     if (maxAbs <= 0) return;
 
-    const shape = Array.from(field.shape());
+    const shape = Array.from(grid.dim()) as number[];
     const stride =
       options?.stride ?? Math.max(1, Math.floor(Math.max(...shape) / 48));
     const threshold = options?.threshold ?? maxAbs * 0.08;
     const alpha = options?.alpha ?? 0.18;
 
-    const origin = Array.from(field.origin().toCopy()) as number[];
-    const cellFlat = Array.from(field.cell().toCopy()) as number[];
+    const origin = Array.from(grid.origin().toCopy()) as number[];
+    const cellFlat = Array.from(grid.cell().toCopy()) as number[];
     const cell: number[][] = [
       [cellFlat[0], cellFlat[1], cellFlat[2]],
       [cellFlat[3], cellFlat[4], cellFlat[5]],
@@ -745,20 +748,18 @@ export class Artist {
   }
 
   private drawDefaultField(frame: Frame): void {
-    const selected =
-      frame.getUniformGridField("electron_density") ??
-      this.firstUniformGridField(frame);
+    const selected = frame.getGrid("electron_density") ?? this.firstGrid(frame);
     if (!selected) return;
     this.drawCloud(selected);
   }
 
-  private firstUniformGridField(frame: Frame): UniformGridField | null {
-    const names = frame.fieldNames();
+  private firstGrid(frame: Frame): Grid | null {
+    const names = frame.gridNames();
     for (let i = 0; i < names.length; i++) {
       const name = names[i];
       if (typeof name !== "string") continue;
-      const field = frame.getUniformGridField(name);
-      if (field) return field;
+      const grid = frame.getGrid(name);
+      if (grid) return grid;
     }
     return null;
   }

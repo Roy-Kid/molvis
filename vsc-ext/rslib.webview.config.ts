@@ -8,7 +8,7 @@ const sharedDefine = {
 };
 
 const vendorModulesPattern = /[\\/]node_modules[\\/]/;
-const coreSourcePattern = /[\\/]core[\\/]src[\\/]/;
+const coreSourcePattern = /[\\/]core[\\/](src|dist)[\\/]/;
 
 export default defineConfig({
   lib: [
@@ -41,15 +41,24 @@ export default defineConfig({
 
   plugins: [pluginReact()],
 
-  source: {
+  resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "../page/src"),
       "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+      "@": path.resolve(import.meta.dirname, "../page/src"),
     },
   },
 
   tools: {
     rspack(config, { addRules }) {
+      config.node = {
+        ...(config.node || {}),
+        __dirname: "mock",
+      };
+      config.ignoreWarnings = [
+        ...(config.ignoreWarnings || []),
+        /Critical dependency/,
+        /__dirname/,
+      ];
       config.optimization = {
         ...config.optimization,
         minimize: true,
@@ -68,6 +77,13 @@ export default defineConfig({
               name: "chunks/vendor",
               test: vendorModulesPattern,
               priority: 40,
+              enforce: true,
+              chunks: "all",
+            },
+            molrs: {
+              name: "chunks/molrs",
+              test: /[\\/]node_modules[\\/]@molcrafts[\\/]molrs[\\/]/,
+              priority: 35,
               enforce: true,
               chunks: "all",
             },

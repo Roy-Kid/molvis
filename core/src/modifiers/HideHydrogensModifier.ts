@@ -54,7 +54,7 @@ export class HideHydrogensModifier extends BaseModifier {
     const newAtoms = new Block();
     for (const col of atoms.keys()) {
       const dtype = atoms.dtype(col);
-      if (dtype === "f32") {
+      if (dtype === "f64") {
         copyFilteredF32(atoms, newAtoms, col, indexMap, nrows, newCount);
       } else if (dtype === "string") {
         copyFilteredStr(atoms, newAtoms, col, indexMap, nrows);
@@ -130,9 +130,9 @@ function copyFilteredF32(
   nrows: number,
   newCount: number,
 ): void {
-  const col = src.dtype(name) === "f32" ? src.viewColF(name) : undefined;
+  const col = src.dtype(name) === "f64" ? src.viewColF(name) : undefined;
   if (!col) return;
-  const out = new Float32Array(newCount);
+  const out = new Float64Array(newCount);
   let ptr = 0;
   for (let i = 0; i < nrows; i++) {
     if (indexMap[i] !== -1) out[ptr++] = col[i];

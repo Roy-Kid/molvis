@@ -1,6 +1,6 @@
 ---
 name: molvis-optimizer
-description: Performance optimization agent for MolVis. Handles rendering hot paths, WASM boundary crossings, GPU buffer management, and React performance.
+description: Performance optimization agent for MolVis. Implements fixes for identified hot paths, WASM boundary crossings, GPU buffer management, and React performance issues. Use when you have a specific performance problem to fix (not for analysis/diagnosis — use molvis-perf skill for that).
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---

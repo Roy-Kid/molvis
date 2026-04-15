@@ -396,10 +396,10 @@ function interpEdge(
  * @param gridType - "general" or "periodic" (wraps boundary cells).
  */
 export function marchingCubes(
-  data: Float32Array,
+  data: Float32Array | Float64Array,
   shape: [number, number, number],
-  cell: Float32Array,
-  origin: Float32Array,
+  cell: Float32Array | Float64Array,
+  origin: Float32Array | Float64Array,
   isovalue: number,
   gridType: "general" | "periodic" = "general",
 ): MCMesh {

@@ -1,9 +1,9 @@
 import { PeriodicTable } from "../../system/elements";
-import { getColorMap } from "../palette";
+import { DEFAULT_CATEGORICAL_COLOR_MAP, getColorMap } from "../palette";
 import type { AtomStyle, BondStyle, Theme } from "../theme";
 
 const cpk = getColorMap("cpk");
-const qualitative = getColorMap("tol-bright");
+const categorical = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
 
 export class ClassicTheme implements Theme {
   public readonly name = "Classic";
@@ -25,7 +25,7 @@ export class ClassicTheme implements Theme {
   }
 
   public getTypeStyle(type: string): AtomStyle {
-    const [r, g, b] = qualitative.colorForKey(type);
+    const [r, g, b] = categorical.colorForKey(type);
     const toHex = (v: number) => {
       const s = Math.round(Math.min(1, Math.max(0, v)) ** (1 / 2.2) * 255);
       return s.toString(16).padStart(2, "0");

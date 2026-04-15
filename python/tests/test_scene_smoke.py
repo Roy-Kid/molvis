@@ -91,22 +91,22 @@ def test_named_scene_registry_round_trip():
     assert "registry-test" not in molvis.Molvis.list_scenes()
 
 
-def test_get_frontend_instance_count_waits_for_rpc_response():
+def test_scene_count_waits_for_rpc_response():
     molvis = import_molvis_module()
     scene = molvis.Molvis(name="rpc-test")
     captured: dict[str, object] = {}
 
-    def fake_send_cmd(method, params, buffers=None, wait_for_response=False, timeout=5.0):
+    def fake_send_cmd(method, params, buffers=None, wait_for_response=False, timeout=10.0):
         captured["method"] = method
         captured["params"] = params
         captured["buffers"] = buffers
         captured["wait_for_response"] = wait_for_response
         captured["timeout"] = timeout
-        return {"result": 7}
+        return 7
 
     scene.send_cmd = fake_send_cmd
 
-    assert molvis.Molvis.get_frontend_instance_count() == 7
+    assert molvis.Molvis.scene_count() == 7
     assert captured["method"] == "session.get_session_count"
     assert captured["wait_for_response"] is True
 

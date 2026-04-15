@@ -1,8 +1,13 @@
 import { type Block, Frame } from "@molcrafts/molrs";
-import { type ColorMap, getColorMap } from "../artist/palette";
+import {
+  DEFAULT_CATEGORICAL_COLOR_MAP,
+  buildCategoricalColorLookup,
+  getColorMap,
+} from "../artist/palette";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { probeColumnDtype } from "../utils/block_helpers";
+import { logger } from "../utils/logger";
 
 // Columns injected into the atoms Block to override default element coloring.
 // buildAtomBuffers detects these and uses them for per-atom colors.
@@ -13,7 +18,7 @@ export const COLOR_OVERRIDE_B = "__color_b";
 export interface ColorByPropertyConfig {
   /** Column name in atoms Block. Empty string = disabled. */
   columnName: string;
-  /** Colormap name (any registered ColorMap). */
+  /** Deprecated user-facing choice; numeric columns now use a fixed viridis ramp. */
   colormap: string;
   /** Manual range override. null = auto-detect. */
   range: { min: number; max: number } | null;
@@ -24,10 +29,10 @@ export interface ColorByPropertyConfig {
 /**
  * ColorByPropertyModifier — colors atoms by any per-atom column.
  *
- * Numeric columns → continuous colormap via `ColorMap.sample(t)`
- * String columns → categorical coloring via `ColorMap.colorForKey(key)`
+ * Numeric columns → fixed viridis ramp via `ColorMap.sample(t)`
+ * String columns → categorical coloring via dataset-level Glasbey assignment
  *
- * Injects __color_r/g/b Float32Array columns into the output Frame.
+ * Injects __color_r/g/b Float64Array columns into the output Frame.
  */
 export class ColorByPropertyModifier extends BaseModifier {
   private _config: ColorByPropertyConfig = {
@@ -36,6 +41,8 @@ export class ColorByPropertyModifier extends BaseModifier {
     range: null,
     clampOutOfRange: true,
   };
+  private _warnedStringColormapIgnored = false;
+  private _warnedNumericColormapFallback = false;
 
   /** Detected min/max — populated by inspect(), exposed for UI display. */
   public detectedRange: { min: number; max: number } | null = null;
@@ -59,6 +66,8 @@ export class ColorByPropertyModifier extends BaseModifier {
   }
   set colormap(v: string) {
     this._config.colormap = v;
+    this._warnedStringColormapIgnored = false;
+    this._warnedNumericColormapFallback = false;
   }
 
   get range(): { min: number; max: number } | null {
@@ -78,7 +87,7 @@ export class ColorByPropertyModifier extends BaseModifier {
   getCacheKey(): string {
     const r = this._config.range;
     const rangeStr = r ? `${r.min}:${r.max}` : "auto";
-    return `${super.getCacheKey()}:${this._config.columnName}:${this._config.colormap}:${rangeStr}:${this._config.clampOutOfRange}`;
+    return `${super.getCacheKey()}:${this._config.columnName}:${rangeStr}:${this._config.clampOutOfRange}`;
   }
 
   inspect(frame: Frame): void {
@@ -96,7 +105,7 @@ export class ColorByPropertyModifier extends BaseModifier {
     }
 
     const dtype = probeColumnDtype(atoms, this._config.columnName);
-    if (dtype === "f32") {
+    if (dtype === "f64") {
       const data = atoms.viewColF(this._config.columnName);
       if (data) {
         this.detectedRange = detectRange(data, atoms.nrows());
@@ -105,14 +114,14 @@ export class ColorByPropertyModifier extends BaseModifier {
     }
     if (dtype === "u32") {
       const u32 = atoms.viewColU32(this._config.columnName);
-      const f32 = new Float32Array(u32.length);
+      const f32 = new Float64Array(u32.length);
       for (let i = 0; i < u32.length; i++) f32[i] = u32[i];
       this.detectedRange = detectRange(f32, atoms.nrows());
       return;
     }
     if (dtype === "i32") {
       const i32 = atoms.viewColI32(this._config.columnName);
-      const f32 = new Float32Array(i32.length);
+      const f32 = new Float64Array(i32.length);
       for (let i = 0; i < i32.length; i++) f32[i] = i32[i];
       this.detectedRange = detectRange(f32, atoms.nrows());
       return;
@@ -131,41 +140,68 @@ export class ColorByPropertyModifier extends BaseModifier {
     const dtype = probeColumnDtype(atoms, this._config.columnName);
     if (!dtype) return input;
 
-    let cm: ColorMap;
-    try {
-      cm = getColorMap(this._config.colormap);
-    } catch {
-      return input;
-    }
-
-    const colorR = new Float32Array(atomCount);
-    const colorG = new Float32Array(atomCount);
-    const colorB = new Float32Array(atomCount);
+    const colorR = new Float64Array(atomCount);
+    const colorG = new Float64Array(atomCount);
+    const colorB = new Float64Array(atomCount);
 
     if (dtype === "str") {
-      cm.resetKeys();
       const data = atoms.copyColStr(this._config.columnName) as
         | string[]
         | undefined;
       if (!data) return input;
+      const normalized = data.map((value) => value ?? "UNK");
+
+      if (
+        this._config.colormap !== DEFAULT_CATEGORICAL_COLOR_MAP &&
+        !this._warnedStringColormapIgnored
+      ) {
+        logger.warn(
+          `[ColorByPropertyModifier] String column '${this._config.columnName}' ignores continuous colormap '${this._config.colormap}' and uses '${DEFAULT_CATEGORICAL_COLOR_MAP}'.`,
+        );
+        this._warnedStringColormapIgnored = true;
+      }
+
+      const lookup = buildCategoricalColorLookup(normalized);
       for (let i = 0; i < atomCount; i++) {
-        const [r, g, b] = cm.colorForKey(data[i] ?? "UNK");
+        const [r, g, b] = lookup.get(normalized[i])!;
         colorR[i] = r;
         colorG[i] = g;
         colorB[i] = b;
       }
     } else {
+      if (
+        this._config.colormap &&
+        this._config.colormap !== "viridis" &&
+        !this._warnedNumericColormapFallback
+      ) {
+        logger.warn(
+          `[ColorByPropertyModifier] Numeric column '${this._config.columnName}' uses the fixed 'viridis' ramp; ignoring '${this._config.colormap}'.`,
+        );
+        this._warnedNumericColormapFallback = true;
+      }
+
+      const cm = getColorMap("viridis");
+      if (cm.kind !== "continuous") {
+        if (!this._warnedNumericColormapFallback) {
+          logger.warn(
+            `[ColorByPropertyModifier] Internal numeric colormap 'viridis' is unavailable; numeric coloring cannot proceed.`,
+          );
+          this._warnedNumericColormapFallback = true;
+        }
+        return input;
+      }
+
       // Numeric: read as f32 and use sample()
-      let numData: Float32Array | null = null;
-      if (dtype === "f32") {
+      let numData: Float64Array | null = null;
+      if (dtype === "f64") {
         numData = atoms.viewColF(this._config.columnName);
       } else if (dtype === "u32") {
         const u32 = atoms.viewColU32(this._config.columnName);
-        numData = new Float32Array(u32.length);
+        numData = new Float64Array(u32.length);
         for (let j = 0; j < u32.length; j++) numData[j] = u32[j];
       } else if (dtype === "i32") {
         const i32 = atoms.viewColI32(this._config.columnName);
-        numData = new Float32Array(i32.length);
+        numData = new Float64Array(i32.length);
         for (let j = 0; j < i32.length; j++) numData[j] = i32[j];
       }
       if (!numData) return input;
@@ -214,7 +250,7 @@ export class ColorByPropertyModifier extends BaseModifier {
 }
 
 function detectRange(
-  data: Float32Array,
+  data: Float64Array,
   count: number,
 ): { min: number; max: number } {
   let min = Number.POSITIVE_INFINITY;

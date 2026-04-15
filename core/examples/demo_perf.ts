@@ -156,9 +156,9 @@ function generateWaterBox(numMolecules: number, boxSize: number): Frame {
   const totalAtoms = numMolecules * 3; // Each water has 3 atoms (O, H, H)
   const totalBonds = numMolecules * 2; // Each water has 2 bonds (O-H, O-H)
 
-  const x = new Float32Array(totalAtoms);
-  const y = new Float32Array(totalAtoms);
-  const z = new Float32Array(totalAtoms);
+  const x = new Float64Array(totalAtoms);
+  const y = new Float64Array(totalAtoms);
+  const z = new Float64Array(totalAtoms);
   const elements: string[] = new Array(totalAtoms);
 
   const bond_i = new Uint32Array(totalBonds);
@@ -213,9 +213,9 @@ function generateWaterBox(numMolecules: number, boxSize: number): Frame {
   }
 
   // Set block columns
-  atomsBlock.setColF32("x", x);
-  atomsBlock.setColF32("y", y);
-  atomsBlock.setColF32("z", z);
+  atomsBlock.setColF("x", x);
+  atomsBlock.setColF("y", y);
+  atomsBlock.setColF("z", z);
   atomsBlock.setColStr("element", elements);
 
   bondsBlock.setColU32("i", bond_i);

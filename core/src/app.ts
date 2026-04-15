@@ -3,7 +3,11 @@ import { Artist } from "./artist";
 import { findRepresentation } from "./artist/representation";
 import { StyleManager } from "./artist/style_manager";
 import type { Theme } from "./artist/theme";
-import { type CommandRegistry, commands } from "./commands";
+import {
+  type CommandRegistry,
+  commands,
+  registerDefaultCommands,
+} from "./commands";
 import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
 import { UpdateFrameCommand } from "./commands/frame";
 import { CommandManager } from "./commands/manager";
@@ -15,6 +19,7 @@ import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
+import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import type { FrameSource } from "./pipeline/pipeline";
 import type { PipelineContext, SelectionMask } from "./pipeline/types";
 import { readPDBFrame } from "./reader";
@@ -28,6 +33,7 @@ import {
 } from "./system/frame_diff";
 import type { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
+import { cropToContent, reencodeImage } from "./utils/image_crop";
 import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
@@ -106,6 +112,11 @@ export class MolvisApp {
     this._config = defaultMolvisConfig(config);
     this._container = container;
     logger.info(`Molvis initializing (v${MOLVIS_VERSION})`);
+
+    // Ensure default command/modifier registries are populated. Both are
+    // idempotent; subsequent calls are no-ops.
+    registerDefaultCommands();
+    registerDefaultModifiers();
 
     // Register Web Components & create DOM
     registerWebComponents();
@@ -347,19 +358,30 @@ export class MolvisApp {
   }
 
   /**
-   * Capture the current viewport as a PNG data URL.
+   * Capture the current viewport as a data URL.
    * Uses BabylonJS render-target screenshot for consistent quality.
+   *
+   * `autoCrop` trims the output to the tight bounding box of non-transparent
+   * pixels and implies `transparentBackground: true` (the alpha channel is the
+   * scan source).
    */
   public async screenshot(options?: {
     width?: number;
     height?: number;
     transparentBackground?: boolean;
+    format?: "png" | "webp";
+    autoCrop?: boolean;
+    cropPadding?: number;
+    quality?: number;
   }): Promise<string> {
     const width = options?.width ?? this._canvas.width;
     const height = options?.height ?? this._canvas.height;
+    const format = options?.format ?? "png";
+    const autoCrop = options?.autoCrop ?? false;
+    const transparent = autoCrop || (options?.transparentBackground ?? false);
     const savedAlpha = this._world.scene.clearColor.a;
 
-    if (options?.transparentBackground) {
+    if (transparent) {
       this._world.scene.clearColor.a = 0;
     }
 
@@ -368,14 +390,25 @@ export class MolvisApp {
       if (!activeCamera) {
         throw new Error("Cannot capture screenshot without an active camera");
       }
-      const data = await Tools.CreateScreenshotUsingRenderTargetAsync(
+      const raw = await Tools.CreateScreenshotUsingRenderTargetAsync(
         this._engine,
         activeCamera,
         { width, height },
       );
-      return data;
+      const needsPostProcess = autoCrop || format !== "png";
+      if (!needsPostProcess) return raw;
+
+      const mimeType = format === "webp" ? "image/webp" : "image/png";
+      if (autoCrop) {
+        return await cropToContent(raw, {
+          padding: options?.cropPadding ?? 8,
+          mimeType,
+          quality: options?.quality ?? 0.92,
+        });
+      }
+      return await reencodeImage(raw, mimeType, options?.quality ?? 0.92);
     } finally {
-      if (options?.transparentBackground) {
+      if (transparent) {
         this._world.scene.clearColor.a = savedAlpha;
       }
     }
@@ -384,9 +417,9 @@ export class MolvisApp {
   private _syncTextLabelAnchors(frame: Frame): void {
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
-    const x = atoms.dtype("x") === "f32" ? atoms.viewColF("x") : undefined;
-    const y = atoms.dtype("y") === "f32" ? atoms.viewColF("y") : undefined;
-    const z = atoms.dtype("z") === "f32" ? atoms.viewColF("z") : undefined;
+    const x = atoms.dtype("x") === "f64" ? atoms.viewColF("x") : undefined;
+    const y = atoms.dtype("y") === "f64" ? atoms.viewColF("y") : undefined;
+    const z = atoms.dtype("z") === "f64" ? atoms.viewColF("z") : undefined;
     if (!x || !y || !z) return;
 
     for (const overlay of this.overlayManager.list()) {

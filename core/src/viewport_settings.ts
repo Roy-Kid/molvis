@@ -1,6 +1,5 @@
 import { ArcRotateCamera, Color4 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
-import { logger } from "./utils/logger";
 
 /**
  * Viewport configuration settings
@@ -63,24 +62,6 @@ export class ViewportSettings {
     // Clipping planes
     this.camera.minZ = this.config.nearClipPlane;
     this.camera.maxZ = this.config.farClipPlane;
-  }
-
-  /**
-   * Set background color
-   * @deprecated Use Babylon.js default background instead
-   */
-  public setBackgroundColor(_color: Color4): void {
-    // Deprecated: No longer setting background color
-    logger.warn(
-      "setBackgroundColor is deprecated. Using Babylon.js default background.",
-    );
-  }
-
-  /**
-   * Set background color from RGB values (0-255)
-   */
-  setBackgroundColorRGB(r: number, g: number, b: number, a = 255): void {
-    this.setBackgroundColor(new Color4(r / 255, g / 255, b / 255, a / 255));
   }
 
   /**

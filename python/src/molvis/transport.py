@@ -6,7 +6,7 @@ import logging
 import sys
 import threading
 from dataclasses import asdict
-from queue import Queue
+from queue import Empty, Queue
 from typing import Any
 
 import numpy as np
@@ -169,21 +169,31 @@ class RpcTransport:
 
         try:
             return response_queue.get(timeout=timeout)
+        except Empty:
+            raise TimeoutError(
+                f"No response from frontend for '{method}' after {timeout}s. "
+                "Ensure the widget is displayed and the frontend session is ready."
+            ) from None
         finally:
             with self._response_lock:
                 self._responses.pop(request_id, None)
 
-    def handle_response(self, content: Any, buffers: list[Any] | None = None) -> None:
+    def handle_response(self, content: Any, buffers: list[Any] | None = None) -> bool:
+        """Process a frontend response.
+
+        Returns True if the response was delivered to a waiting caller,
+        False otherwise (fire-and-forget command or no matching waiter).
+        """
         try:
             response = self._decoder.decode(content, buffers or [])
             if not isinstance(response, dict):
                 logger.warning("Unexpected RPC response type: %s", type(response))
-                return
+                return False
 
             request_id = response.get("id")
             if request_id is None:
                 logger.debug("Ignoring RPC message without request id")
-                return
+                return False
 
             queue: Queue[dict[str, Any]] | None = None
             with self._response_lock:
@@ -191,8 +201,10 @@ class RpcTransport:
 
             if queue is None:
                 logger.debug("No waiter registered for request id %s", request_id)
-                return
+                return False
 
             queue.put_nowait(response)
+            return True
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to handle frontend response: %s", exc)
+            return False

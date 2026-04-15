@@ -14,8 +14,8 @@ import { marchingCubes } from "../src/algo/marching_cubes";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Identity cell (unit cube), origin at (0,0,0). */
-const UNIT_CELL = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
-const ZERO_ORIGIN = new Float32Array([0, 0, 0]);
+const UNIT_CELL = new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+const ZERO_ORIGIN = new Float64Array([0, 0, 0]);
 
 /**
  * Create a flat Float32Array of size nx*ny*nz.
@@ -27,7 +27,7 @@ function makeField(
   nz: number,
   fn: (i: number, j: number, k: number) => number,
 ): Float32Array {
-  const data = new Float32Array(nx * ny * nz);
+  const data = new Float64Array(nx * ny * nz);
   for (let i = 0; i < nx; i++)
     for (let j = 0; j < ny; j++)
       for (let k = 0; k < nz; k++) data[i * ny * nz + j * nz + k] = fn(i, j, k);
@@ -65,17 +65,16 @@ function hasNoInvalid(arr: Float32Array): boolean {
 describe("Grid → Float32Array extraction", () => {
   test("getArray returns data matching inserted values", () => {
     const grid = new Grid(4, 4, 4, ZERO_ORIGIN, UNIT_CELL, false, false, false);
-    const input = new Float32Array(64).fill(0);
+    const input = new Float64Array(64).fill(0);
     for (let i = 0; i < 64; i++) input[i] = i * 0.1;
     grid.insertArray("rho", input);
 
-    const wasmArr = grid.getArray("rho");
-    expect(wasmArr).not.toBeUndefined();
+    const output = grid.getArray("rho");
+    expect(output).not.toBeUndefined();
 
-    const output = wasmArr?.toCopy();
-    expect(output.length).toBe(64);
+    expect(output!.length).toBe(64);
     for (let i = 0; i < 64; i++) {
-      expect(output[i]).toBeCloseTo(i * 0.1, 5);
+      expect(output![i]).toBeCloseTo(i * 0.1, 5);
     }
   });
 
@@ -94,7 +93,7 @@ describe("Grid → Float32Array extraction", () => {
 
   test("insertArray throws when data length is wrong", () => {
     const grid = new Grid(2, 2, 2, ZERO_ORIGIN, UNIT_CELL, false, false, false);
-    expect(() => grid.insertArray("bad", new Float32Array(7))).toThrow();
+    expect(() => grid.insertArray("bad", new Float64Array(7))).toThrow();
   });
 });
 
@@ -102,14 +101,14 @@ describe("Grid → Float32Array extraction", () => {
 
 describe("marchingCubes — degenerate cases", () => {
   test("all-inside field produces empty mesh", () => {
-    const data = new Float32Array(8).fill(-1); // all values < isovalue=0
+    const data = new Float64Array(8).fill(-1); // all values < isovalue=0
     const mesh = marchingCubes(data, [2, 2, 2], UNIT_CELL, ZERO_ORIGIN, 0);
     expect(mesh.positions.length).toBe(0);
     expect(mesh.indices.length).toBe(0);
   });
 
   test("all-outside field produces empty mesh", () => {
-    const data = new Float32Array(8).fill(1); // all values > isovalue=0
+    const data = new Float64Array(8).fill(1); // all values > isovalue=0
     const mesh = marchingCubes(data, [2, 2, 2], UNIT_CELL, ZERO_ORIGIN, 0);
     expect(mesh.positions.length).toBe(0);
     expect(mesh.indices.length).toBe(0);
@@ -117,7 +116,7 @@ describe("marchingCubes — degenerate cases", () => {
 
   test("single voxel half-inside produces non-empty mesh", () => {
     // 2×2×2 grid: corner 0 inside, rest outside
-    const data = new Float32Array(8).fill(1);
+    const data = new Float64Array(8).fill(1);
     data[0] = -1; // vertex (0,0,0) inside
     const mesh = marchingCubes(data, [2, 2, 2], UNIT_CELL, ZERO_ORIGIN, 0);
     expect(mesh.positions.length).toBeGreaterThan(0);
@@ -209,7 +208,7 @@ describe("marchingCubes — coordinate transform", () => {
     const ny = 4;
     const nz = 4;
     const data = makeField(nx, ny, nz, (i) => i as number);
-    const cell = new Float32Array([2, 0, 0, 0, 2, 0, 0, 0, 2]);
+    const cell = new Float64Array([2, 0, 0, 0, 2, 0, 0, 0, 2]);
     const mesh = marchingCubes(data, [nx, ny, nz], cell, ZERO_ORIGIN, 2.0);
 
     expect(mesh.positions.length).toBeGreaterThan(0);
@@ -225,7 +224,7 @@ describe("marchingCubes — coordinate transform", () => {
     const ny = 4;
     const nz = 4;
     const data = makeField(nx, ny, nz, (i) => i as number);
-    const origin = new Float32Array([10, 20, 30]);
+    const origin = new Float64Array([10, 20, 30]);
     const mesh0 = marchingCubes(
       data,
       [nx, ny, nz],
@@ -273,9 +272,8 @@ describe("Grid → marchingCubes end-to-end", () => {
     );
     grid.insertArray("sdf", raw);
 
-    // Extract from WASM
-    const wasmArr = grid.getArray("sdf")!;
-    const data = wasmArr.toCopy();
+    // Extract from WASM (getArray returns Float64Array directly)
+    const data = grid.getArray("sdf")!;
 
     // Read cell and origin from Grid
     const cellWasm = grid.cell().toCopy();

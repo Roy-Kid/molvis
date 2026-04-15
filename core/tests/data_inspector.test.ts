@@ -13,9 +13,9 @@ function makeAtomBlock(
 ): Block {
   const block = new Block();
   block.setColStr("element", elements);
-  block.setColF("x", new Float32Array(positions.map((p) => p[0])));
-  block.setColF("y", new Float32Array(positions.map((p) => p[1])));
-  block.setColF("z", new Float32Array(positions.map((p) => p[2])));
+  block.setColF("x", new Float64Array(positions.map((p) => p[0])));
+  block.setColF("y", new Float64Array(positions.map((p) => p[1])));
+  block.setColF("z", new Float64Array(positions.map((p) => p[2])));
   return block;
 }
 
@@ -47,7 +47,7 @@ describe("discoverAtomColumns", () => {
 
   it("should skip internal __ columns", () => {
     const block = makeAtomBlock(["C"], [[0, 0, 0]]);
-    block.setColF("__color_r", new Float32Array([1.0]));
+    block.setColF("__color_r", new Float64Array([1.0]));
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).not.toContain("__color_r");
@@ -55,7 +55,7 @@ describe("discoverAtomColumns", () => {
 
   it("should include additional columns", () => {
     const block = makeAtomBlock(["C"], [[0, 0, 0]]);
-    block.setColF("charge", new Float32Array([0.5]));
+    block.setColF("charge", new Float64Array([0.5]));
     const cols = discoverAtomColumns(block);
     const names = cols.map((c) => c.name);
     expect(names).toContain("charge");

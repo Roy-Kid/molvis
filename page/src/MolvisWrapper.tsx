@@ -131,11 +131,13 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       },
     };
 
-    molvisRef.current = mountMolvis(containerRef.current, config, settings);
-    molvisRef.current.start();
-    if (onMount) {
-      onMount(molvisRef.current);
-    }
+    const app = mountMolvis(containerRef.current, config, settings);
+    molvisRef.current = app;
+    app.start().then(() => {
+      if (onMount) {
+        onMount(app);
+      }
+    });
 
     const resizeObserver = new ResizeObserver(() => {
       molvisRef.current?.resize();

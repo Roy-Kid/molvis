@@ -1,3 +1,4 @@
+import { SidebarSection } from "@/ui/layout/SidebarSection";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
 
@@ -9,16 +10,13 @@ export const ManipulatePanel: React.FC<ManipulatePanelProps> = ({
   app: _app,
 }) => {
   return (
-    <div className="h-full p-2.5 space-y-2 text-xs">
-      <div className="text-xs font-semibold tracking-wide uppercase">
-        Manipulate
-      </div>
-      <div className="rounded border bg-muted/10 p-2 text-muted-foreground space-y-1">
-        <div>Drag selected atoms in viewport to move.</div>
-        <div>
-          Use Ctrl/Cmd + Click in Select mode to build multi-selection first.
+    <div className="h-full flex flex-col">
+      <SidebarSection title="Manipulate" subtitle="Transform selected atoms">
+        <div className="rounded border bg-muted/10 px-2 py-1 text-[10px] text-muted-foreground leading-4 space-y-0.5">
+          <div>Drag in viewport to move selection</div>
+          <div>Ctrl/Cmd + Click in Select mode first to multi-select</div>
         </div>
-      </div>
+      </SidebarSection>
     </div>
   );
 };

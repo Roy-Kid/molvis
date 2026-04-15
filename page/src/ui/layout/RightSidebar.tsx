@@ -15,8 +15,13 @@ interface RightSidebarProps {
   onModeChange: (mode: string) => void;
 }
 
-/** Prevent pointer events from leaking to the BabylonJS canvas. */
+/** Prevent pointer events from leaking to the BabylonJS canvas.
+ *  Skip elements inside Kekule's composer — its widget/event system listens at
+ *  document level, so stopping propagation here kills every button & canvas
+ *  click inside the sketch editor. */
 const stopPointerPropagation = (e: React.PointerEvent) => {
+  const target = e.target as HTMLElement | null;
+  if (target?.closest(".kekule-container")) return;
   e.stopPropagation();
 };
 

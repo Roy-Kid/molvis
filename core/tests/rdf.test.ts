@@ -6,9 +6,9 @@ import { computeRdf } from "../src/analysis/rdf";
 function makeFrame(positions: [number, number, number][]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColF("x", new Float32Array(positions.map((p) => p[0])));
-  atoms.setColF("y", new Float32Array(positions.map((p) => p[1])));
-  atoms.setColF("z", new Float32Array(positions.map((p) => p[2])));
+  atoms.setColF("x", new Float64Array(positions.map((p) => p[0])));
+  atoms.setColF("y", new Float64Array(positions.map((p) => p[1])));
+  atoms.setColF("z", new Float64Array(positions.map((p) => p[2])));
   atoms.setColStr(
     "element",
     positions.map(() => "Ar"),
@@ -22,7 +22,7 @@ function makePeriodicFrame(
   boxSize: number,
 ): Frame {
   const frame = makeFrame(positions);
-  const box = Box.cube(boxSize, new Float32Array([0, 0, 0]), true, true, true);
+  const box = Box.cube(boxSize, new Float64Array([0, 0, 0]), true, true, true);
   frame.simbox = box;
   return frame;
 }

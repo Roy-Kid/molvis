@@ -90,7 +90,7 @@ export class AtomSource {
     if (this.frameBlock && id < this.frameBlock.nrows()) {
       if (key === "x" || key === "y" || key === "z") {
         const col =
-          this.frameBlock.dtype(key) === "f32"
+          this.frameBlock.dtype(key) === "f64"
             ? this.frameBlock.viewColF(key)
             : undefined;
         if (col) return col[id];
@@ -100,7 +100,7 @@ export class AtomSource {
         if (col) return col[id];
       }
       const col =
-        this.frameBlock.dtype(key) === "f32"
+        this.frameBlock.dtype(key) === "f64"
           ? this.frameBlock.viewColF(key)
           : undefined;
       if (col) return col[id];
@@ -214,7 +214,7 @@ export class BondSource {
         if (col) return col[id];
       }
       const col =
-        this.frameBlock.dtype(key) === "f32"
+        this.frameBlock.dtype(key) === "f64"
           ? this.frameBlock.viewColF(key)
           : undefined;
       if (col) return col[id];

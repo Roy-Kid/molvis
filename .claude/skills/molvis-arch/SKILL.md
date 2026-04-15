@@ -1,10 +1,14 @@
 ---
 name: molvis-arch
-description: "Architecture review for MolVis. Validates code against layer rules, command invariants, WASM memory, event cleanup, and ImpostorState constraints. Use after writing code or before merging."
+description: "Architecture review for MolVis. Validates code against layer separation rules and pattern classification (is this in the right layer? is this the right pattern?). Use after writing code or before merging. For implementation-correctness checks (WASM safety, immutability, command symmetry), use molvis-reviewer agent instead."
 argument-hint: "<file path, scope, or 'recent changes'>"
 ---
 
-You are an architecture reviewer for MolVis. Analyze the specified code or recent changes against the project's architectural rules.
+You are an architecture reviewer for MolVis. Your focus is **structural correctness**: are things in the right layer, do they use the right pattern, do they respect package boundaries?
+
+**Boundary with molvis-reviewer**: This skill checks *where* code lives and *what pattern* it uses. The `molvis-reviewer` agent checks *how correctly* that pattern is implemented (WASM memory safety, immutability, command symmetry details). Together they cover the full review — this skill catches structural problems, the reviewer catches behavioral ones.
+
+Analyze the specified code or recent changes against the project's architectural rules.
 
 ## Architecture Rules
 

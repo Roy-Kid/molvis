@@ -38,7 +38,7 @@ export class WrapPBCModifier extends BaseModifier {
     }
 
     // Build interleaved coords for WASM wrap operation.
-    const interleaved = new Float32Array(atomCount * 3);
+    const interleaved = new Float64Array(atomCount * 3);
     for (let i = 0; i < atomCount; i++) {
       const i3 = i * 3;
       interleaved[i3] = x[i];
@@ -68,9 +68,9 @@ export class WrapPBCModifier extends BaseModifier {
       }
 
       // Deinterleave the wrapped [x0,y0,z0,...] back into separate columns.
-      const wrappedX = new Float32Array(atomCount);
-      const wrappedY = new Float32Array(atomCount);
-      const wrappedZ = new Float32Array(atomCount);
+      const wrappedX = new Float64Array(atomCount);
+      const wrappedY = new Float64Array(atomCount);
+      const wrappedZ = new Float64Array(atomCount);
       for (let i = 0; i < atomCount; i++) {
         const i3 = i * 3;
         wrappedX[i] = wrapped[i3];

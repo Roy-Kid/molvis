@@ -180,7 +180,7 @@ export class SliceModifier extends BaseModifier {
   /**
    * Compute visibility logic.
    */
-  private updateVisibility(x: Float32Array, y: Float32Array, z: Float32Array) {
+  private updateVisibility(x: Float64Array, y: Float64Array, z: Float64Array) {
     const count = x.length;
     this.visibilityMask = new Array(count);
 

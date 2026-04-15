@@ -13,9 +13,9 @@ function makeFrame(
   const n = elements.length;
   const pos =
     positions ?? elements.map((_, i) => [i, 0, 0] as [number, number, number]);
-  atoms.setColF("x", new Float32Array(pos.map((p) => p[0])));
-  atoms.setColF("y", new Float32Array(pos.map((p) => p[1])));
-  atoms.setColF("z", new Float32Array(pos.map((p) => p[2])));
+  atoms.setColF("x", new Float64Array(pos.map((p) => p[0])));
+  atoms.setColF("y", new Float64Array(pos.map((p) => p[1])));
+  atoms.setColF("z", new Float64Array(pos.map((p) => p[2])));
   atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;
@@ -156,7 +156,7 @@ describe("HideHydrogensModifier", () => {
     mod.hideHydrogens = true;
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF("x", new Float32Array([1, 2]));
+    atoms.setColF("x", new Float64Array([1, 2]));
     frame.insertBlock("atoms", atoms);
     const ctx = createDefaultContext(frame);
     const result = mod.apply(frame, ctx);

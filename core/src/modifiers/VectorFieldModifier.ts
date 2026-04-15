@@ -89,12 +89,12 @@ export class VectorFieldModifier extends BaseModifier {
       shaftRadius,
     } = this._cfg;
 
-    const x = atoms.dtype(xCol) === "f32" ? atoms.viewColF(xCol) : undefined;
-    const y = atoms.dtype(yCol) === "f32" ? atoms.viewColF(yCol) : undefined;
-    const z = atoms.dtype(zCol) === "f32" ? atoms.viewColF(zCol) : undefined;
-    const vx = atoms.dtype(vxCol) === "f32" ? atoms.viewColF(vxCol) : undefined;
-    const vy = atoms.dtype(vyCol) === "f32" ? atoms.viewColF(vyCol) : undefined;
-    const vz = atoms.dtype(vzCol) === "f32" ? atoms.viewColF(vzCol) : undefined;
+    const x = atoms.dtype(xCol) === "f64" ? atoms.viewColF(xCol) : undefined;
+    const y = atoms.dtype(yCol) === "f64" ? atoms.viewColF(yCol) : undefined;
+    const z = atoms.dtype(zCol) === "f64" ? atoms.viewColF(zCol) : undefined;
+    const vx = atoms.dtype(vxCol) === "f64" ? atoms.viewColF(vxCol) : undefined;
+    const vy = atoms.dtype(vyCol) === "f64" ? atoms.viewColF(vyCol) : undefined;
+    const vz = atoms.dtype(vzCol) === "f64" ? atoms.viewColF(vzCol) : undefined;
 
     if (!x || !y || !z || !vx || !vy || !vz) return input;
 

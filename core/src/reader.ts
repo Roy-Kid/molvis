@@ -89,7 +89,7 @@ function normalizeFrame(frame: Frame): void {
   const orderDtype = bonds.dtype("order");
   if (orderDtype && orderDtype !== "u32") {
     const nrows = bonds.nrows();
-    if (orderDtype === "f32") {
+    if (orderDtype === "f64") {
       const f32 = bonds.viewColF("order");
       if (f32) {
         const u32 = new Uint32Array(nrows);
@@ -146,12 +146,12 @@ function parseCryst1(content: string): Box | null {
   if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(c)) return null;
   if (a <= 0 || b <= 0 || c <= 0) return null;
 
-  const origin = new Float32Array([0, 0, 0]);
+  const origin = new Float64Array([0, 0, 0]);
 
   if (a === b && b === c) {
     return Box.cube(a, origin, true, true, true);
   }
-  return Box.ortho(new Float32Array([a, b, c]), origin, true, true, true);
+  return Box.ortho(new Float64Array([a, b, c]), origin, true, true, true);
 }
 
 function processXYZFrame(frame: Frame): void {

@@ -3,9 +3,7 @@
  * Simplified to core essentials for anywidget integration.
  */
 
-import {
-  defaultMolvisConfig,
-} from "@molvis/core-internal/config";
+import { defaultMolvisConfig } from "@molvis/core";
 
 // Default widget configuration (passed to core)
 export const DEFAULT_CONFIG = defaultMolvisConfig({

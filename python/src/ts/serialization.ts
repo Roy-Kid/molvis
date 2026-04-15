@@ -1,5 +1,9 @@
 import { Box, Frame } from "@molcrafts/molrs";
-import type { BinaryBufferRef, SerializedBoxData, SerializedFrameData } from "./types";
+import type {
+  BinaryBufferRef,
+  SerializedBoxData,
+  SerializedFrameData,
+} from "./types";
 
 type BinaryTypedArray = (
   | Float32Array
@@ -17,7 +21,13 @@ type BinaryTypedArray = (
   __molvisDtype?: string;
 };
 
-type JsonLike = null | boolean | number | string | JsonLike[] | { [key: string]: JsonLike };
+type JsonLike =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonLike[]
+  | { [key: string]: JsonLike };
 
 const BUFFER_REF_MARKER = "__molvis_buffer__";
 
@@ -63,7 +73,14 @@ function createTypedArray(
 
   const factories: Record<
     string,
-    { itemSize: number; build: (source: ArrayBufferLike, offset: number, length: number) => BinaryTypedArray }
+    {
+      itemSize: number;
+      build: (
+        source: ArrayBufferLike,
+        offset: number,
+        length: number,
+      ) => BinaryTypedArray;
+    }
   > = {
     f4: {
       itemSize: 4,
@@ -127,7 +144,8 @@ function createTypedArray(
     throw new Error(`Unsupported numpy dtype '${ref.dtype}'`);
   }
 
-  const totalItems = shape.length > 0 ? product(shape) : buffer.byteLength / factory.itemSize;
+  const totalItems =
+    shape.length > 0 ? product(shape) : buffer.byteLength / factory.itemSize;
   const source = toArrayBuffer(buffer, factory.itemSize);
   const offset = source === buffer.buffer ? buffer.byteOffset : 0;
   return attachArrayMetadata(
@@ -173,29 +191,35 @@ function isBooleanArray(value: unknown[]): value is boolean[] {
 }
 
 function isNumberArray(value: unknown[]): value is number[] {
-  return value.every((item) => typeof item === "number" && Number.isFinite(item));
+  return value.every(
+    (item) => typeof item === "number" && Number.isFinite(item),
+  );
 }
 
 function isIntegerArray(value: number[]): boolean {
   return value.every((item) => Number.isInteger(item));
 }
 
-function assignColumn(block: ReturnType<Frame["createBlock"]>, key: string, value: unknown): void {
+function assignColumn(
+  block: ReturnType<Frame["createBlock"]>,
+  key: string,
+  value: unknown,
+): void {
   if (value == null) {
     return;
   }
 
   if (ArrayBuffer.isView(value)) {
     if (value instanceof Float32Array) {
-      block.setColumnF32(key, value);
+      block.setColF(key, Float64Array.from(value));
       return;
     }
     if (value instanceof Float64Array) {
-      block.setColumnF32(key, Float32Array.from(value));
+      block.setColF(key, value);
       return;
     }
     if (value instanceof Uint32Array) {
-      block.setColumnU32(key, value);
+      block.setColU32(key, value);
       return;
     }
     if (
@@ -205,49 +229,49 @@ function assignColumn(block: ReturnType<Frame["createBlock"]>, key: string, valu
       value instanceof Uint16Array ||
       value instanceof Int32Array
     ) {
-      block.setColumnU32(key, Uint32Array.from(value, Number));
+      block.setColU32(key, Uint32Array.from(value, Number));
       return;
     }
     if (value instanceof BigInt64Array || value instanceof BigUint64Array) {
-      block.setColumnU32(key, Uint32Array.from(Array.from(value, Number)));
+      block.setColU32(key, Uint32Array.from(Array.from(value, Number)));
       return;
     }
 
-    throw new Error(`Column '${key}' uses an unsupported typed-array payload`);
+    return;
   }
 
   if (!Array.isArray(value)) {
-    throw new Error(`Column '${key}' must be an array or typed array`);
+    return;
   }
 
   if (value.length === 0) {
-    block.setColumnF32(key, new Float32Array());
+    block.setColF(key, new Float64Array());
     return;
   }
 
   if (isStringArray(value)) {
-    block.setColumnStrings(key, value);
+    block.setColStr(key, value);
     return;
   }
 
   if (isBooleanArray(value)) {
-    block.setColumnU8(
+    block.setColU32(
       key,
-      Uint8Array.from(value, (item) => (item ? 1 : 0)),
+      Uint32Array.from(value, (item) => (item ? 1 : 0)),
     );
     return;
   }
 
   if (isNumberArray(value)) {
     if (isIntegerArray(value) && value.every((item) => item >= 0)) {
-      block.setColumnU32(key, Uint32Array.from(value));
+      block.setColU32(key, Uint32Array.from(value));
       return;
     }
-    block.setColumnF32(key, Float32Array.from(value));
+    block.setColF(key, Float64Array.from(value));
     return;
   }
 
-  throw new Error(`Column '${key}' contains unsupported values`);
+  // Unsupported column type (e.g. mixed/null values from molpy metadata) — skip silently.
 }
 
 function getColumnLength(key: string, value: unknown): number {
@@ -263,7 +287,10 @@ function getColumnLength(key: string, value: unknown): number {
   throw new Error(`Column '${key}' must be an array or typed array`);
 }
 
-function validateBlock(blockName: string, columns: Record<string, unknown>): void {
+function validateBlock(
+  blockName: string,
+  columns: Record<string, unknown>,
+): void {
   const lengths = new Set<number>();
   for (const [columnName, value] of Object.entries(columns)) {
     if (value == null) {
@@ -279,18 +306,90 @@ function validateBlock(blockName: string, columns: Record<string, unknown>): voi
   if (blockName === "atoms") {
     for (const columnName of ["x", "y", "z"]) {
       if (!(columnName in columns)) {
-        throw new Error(`Atoms block is missing required '${columnName}' column`);
+        throw new Error(
+          `Atoms block is missing required '${columnName}' column`,
+        );
+      }
+    }
+
+    // Normalize common aliases to the canonical "element" column
+    for (const alias of ["symbol", "species"]) {
+      if (alias in columns && !("element" in columns)) {
+        columns.element = columns[alias];
+        delete columns[alias];
+        break;
       }
     }
     if (!("element" in columns) && !("type" in columns)) {
       throw new Error("Atoms block must include either 'element' or 'type'");
     }
+
+    // Coerce integer "type" column to string array (renderer uses string accessor)
+    if ("type" in columns) {
+      const typeVal = columns.type;
+      if (ArrayBuffer.isView(typeVal)) {
+        columns.type = Array.from(typeVal as ArrayLike<number>, (v) =>
+          String(v),
+        );
+      } else if (
+        Array.isArray(typeVal) &&
+        typeVal.length > 0 &&
+        typeof typeVal[0] === "number"
+      ) {
+        columns.type = (typeVal as number[]).map(String);
+      }
+    }
   }
 
   if (blockName === "bonds" && Object.keys(columns).length > 0) {
-    for (const columnName of ["i", "j"]) {
+    // Normalize bond index aliases to canonical names
+    const bondAliases: Record<string, string> = {
+      i: "atomi",
+      j: "atomj",
+      k: "atomk",
+      l: "atoml",
+      atom_i: "atomi",
+      atom_j: "atomj",
+      atom_k: "atomk",
+      atom_l: "atoml",
+    };
+    for (const [alias, canonical] of Object.entries(bondAliases)) {
+      if (alias in columns && !(canonical in columns)) {
+        columns[canonical] = columns[alias];
+        delete columns[alias];
+      }
+    }
+    for (const columnName of ["atomi", "atomj"]) {
       if (!(columnName in columns)) {
-        throw new Error(`Bonds block is missing required '${columnName}' column`);
+        throw new Error(
+          `Bonds block is missing required '${columnName}' column`,
+        );
+      }
+    }
+    // Ensure order column is stored as u32 with values >= 1
+    if ("order" in columns) {
+      const orderVal = columns.order;
+      if (ArrayBuffer.isView(orderVal)) {
+        if (!(orderVal instanceof Uint32Array)) {
+          columns.order = Uint32Array.from(orderVal as ArrayLike<number>, (v) =>
+            Math.max(1, Math.round(Number(v))),
+          );
+        } else {
+          // Replace 0s with 1s
+          for (let i = 0; i < orderVal.length; i++) {
+            if (orderVal[i] === 0) orderVal[i] = 1;
+          }
+        }
+      } else if (Array.isArray(orderVal) && isNumberArray(orderVal)) {
+        columns.order = Uint32Array.from(orderVal, (v) =>
+          Math.max(1, Math.round(v)),
+        );
+      }
+    } else if ("atomi" in columns) {
+      // Add default all-1s order column when bonds exist but order is missing
+      const atomiLen = getColumnLength("atomi", columns.atomi);
+      if (atomiLen > 0) {
+        columns.order = new Uint32Array(atomiLen).fill(1);
       }
     }
   }
@@ -345,18 +444,24 @@ export function buildBox(boxData: SerializedBoxData): Box {
     throw new Error("Box payload must be an object");
   }
 
-  const matrix = Float32Array.from(flattenNumbers(boxData.matrix));
-  const origin = Float32Array.from(flattenNumbers(boxData.origin));
+  const matrix = Float64Array.from(flattenNumbers(boxData.matrix));
+  const origin = Float64Array.from(flattenNumbers(boxData.origin));
   const pbc = Array.isArray(boxData.pbc) ? boxData.pbc : [true, true, true];
 
   if (matrix.length !== 9) {
-    throw new Error(`Expected a 3x3 box matrix, received ${matrix.length} values`);
+    throw new Error(
+      `Expected a 3x3 box matrix, received ${matrix.length} values`,
+    );
   }
   if (origin.length !== 3) {
-    throw new Error(`Expected a box origin with 3 values, received ${origin.length}`);
+    throw new Error(
+      `Expected a box origin with 3 values, received ${origin.length}`,
+    );
   }
   if (pbc.length !== 3) {
-    throw new Error(`Expected box pbc to contain 3 booleans, received ${pbc.length}`);
+    throw new Error(
+      `Expected box pbc to contain 3 booleans, received ${pbc.length}`,
+    );
   }
 
   return new Box(
@@ -368,4 +473,7 @@ export function buildBox(boxData: SerializedBoxData): Box {
   );
 }
 
-export type DecodedJsonLike = BinaryTypedArray | JsonLike | Record<string, unknown>;
+export type DecodedJsonLike =
+  | BinaryTypedArray
+  | JsonLike
+  | Record<string, unknown>;

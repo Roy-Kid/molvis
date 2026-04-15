@@ -10,11 +10,10 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import type {
-  ColormapName,
   ColorByPropertyModifier as CoreModifier,
   Molvis,
 } from "@molvis/core";
-import { COLORMAP_NAMES } from "@molvis/core";
+import { DEFAULT_CATEGORICAL_COLOR_MAP } from "@molvis/core";
 import type React from "react";
 
 interface Props {
@@ -47,6 +46,7 @@ export const ColorByPropertyModifier: React.FC<Props> = ({
         c.name === modifier.columnName &&
         (c.dtype === "f32" ||
           c.dtype === "f64" ||
+          c.dtype === "i32" ||
           c.dtype === "u32" ||
           c.dtype === "u8"),
     );
@@ -86,30 +86,15 @@ export const ColorByPropertyModifier: React.FC<Props> = ({
         </Select>
       </div>
 
-      {/* Colormap selector — only for numeric columns */}
       {modifier.columnName && isNumeric && (
         <>
           <Separator />
           <div className="space-y-1">
-            <Label className="text-xs font-semibold">Colormap</Label>
-            <Select
-              value={modifier.colormap}
-              onValueChange={(v) => {
-                modifier.colormap = v as ColormapName;
-                triggerUpdate();
-              }}
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {COLORMAP_NAMES.map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="text-[10px] text-muted-foreground">
+              Numeric column — colors use a fixed
+              <span className="mx-1 font-mono">viridis</span>
+              ramp.
+            </div>
           </div>
 
           {/* Range controls */}
@@ -202,7 +187,9 @@ export const ColorByPropertyModifier: React.FC<Props> = ({
         <>
           <Separator />
           <div className="text-[10px] text-muted-foreground">
-            Categorical column — colors assigned automatically per unique value.
+            Categorical column — colors assigned automatically per unique value
+            using{" "}
+            <span className="font-mono">{DEFAULT_CATEGORICAL_COLOR_MAP}</span>.
           </div>
         </>
       )}

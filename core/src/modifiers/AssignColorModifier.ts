@@ -65,14 +65,14 @@ export class AssignColorModifier extends BaseModifier {
       : undefined;
 
     const colorR = existingR
-      ? new Float32Array(existingR)
-      : new Float32Array(atomCount).fill(Number.NaN);
+      ? new Float64Array(existingR)
+      : new Float64Array(atomCount).fill(Number.NaN);
     const colorG = existingG
-      ? new Float32Array(existingG)
-      : new Float32Array(atomCount).fill(Number.NaN);
+      ? new Float64Array(existingG)
+      : new Float64Array(atomCount).fill(Number.NaN);
     const colorB = existingB
-      ? new Float32Array(existingB)
-      : new Float32Array(atomCount).fill(Number.NaN);
+      ? new Float64Array(existingB)
+      : new Float64Array(atomCount).fill(Number.NaN);
 
     let hasOverride = existingR !== undefined;
 

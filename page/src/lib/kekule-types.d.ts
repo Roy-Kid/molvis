@@ -29,6 +29,7 @@ declare namespace Kekule {
       setDimension(width: string, height: string): void;
       setChemObj(obj: unknown): void;
       getChemObj(): unknown;
+      newDoc(): void;
       exportObjs(type: typeof Molecule): Molecule[];
       finalize(): void;
     }

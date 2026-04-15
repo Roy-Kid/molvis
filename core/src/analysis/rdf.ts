@@ -20,11 +20,11 @@ export interface RdfParams {
 
 export interface RdfResult {
   /** Bin center distances */
-  r: Float32Array;
+  r: Float64Array;
   /** g(r) values */
-  gr: Float32Array;
+  gr: Float64Array;
   /** Raw pair counts per bin */
-  counts: Float32Array;
+  counts: Float64Array;
   /** Number of bins */
   nBins: number;
   /** Bin width */
@@ -187,9 +187,9 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   if (!x || !y || !z) return null;
 
   const n = indices.length;
-  const sx = new Float32Array(n);
-  const sy = new Float32Array(n);
-  const sz = new Float32Array(n);
+  const sx = new Float64Array(n);
+  const sy = new Float64Array(n);
+  const sz = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     sx[i] = x[indices[i]];
     sy[i] = y[indices[i]];

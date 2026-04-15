@@ -35,6 +35,7 @@ export function nextModifierId(prefix: string): string {
 // biome-ignore lint/complexity/noStaticOnlyClass: ModifierRegistry is a singleton registry pattern used across the app
 export class ModifierRegistry {
   private static entries: RegistryEntry[] = [];
+  private static _defaultsRegistered = false;
 
   static register(name: string, category: string, factory: ModifierFactory) {
     ModifierRegistry.entries.push({ name, category, factory });
@@ -44,8 +45,9 @@ export class ModifierRegistry {
     return ModifierRegistry.entries;
   }
 
-  // Pre-register core modifiers
   static initialize() {
+    if (ModifierRegistry._defaultsRegistered) return;
+    ModifierRegistry._defaultsRegistered = true;
     ModifierRegistry.register(
       "Data Source",
       "Data",
@@ -99,5 +101,6 @@ export class ModifierRegistry {
   }
 }
 
-// Initialize immediately
-ModifierRegistry.initialize();
+export function registerDefaultModifiers(): void {
+  ModifierRegistry.initialize();
+}

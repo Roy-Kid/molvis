@@ -72,7 +72,7 @@ export function extractAtomRows(
     string,
     {
       dtype: string;
-      f32?: Float32Array;
+      f64?: Float64Array;
       u32?: Uint32Array;
       i32?: Int32Array;
       str?: string[];
@@ -85,10 +85,10 @@ export function extractAtomRows(
         dtype: "str",
         str: block.copyColStr(col.name) as string[],
       });
-    } else if (dt === "f32") {
+    } else if (dt === "f64") {
       columnData.set(col.name, {
-        dtype: "f32",
-        f32: block.viewColF(col.name),
+        dtype: "f64",
+        f64: block.viewColF(col.name),
       });
     } else if (dt === "u32") {
       columnData.set(col.name, {
@@ -111,8 +111,8 @@ export function extractAtomRows(
         values.set(col.name, "—");
         continue;
       }
-      if (data.dtype === "f32" && data.f32) {
-        values.set(col.name, formatNumber(data.f32[i]));
+      if (data.dtype === "f64" && data.f64) {
+        values.set(col.name, formatNumber(data.f64[i]));
       } else if (data.dtype === "u32" && data.u32) {
         values.set(col.name, String(data.u32[i]));
       } else if (data.dtype === "i32" && data.i32) {

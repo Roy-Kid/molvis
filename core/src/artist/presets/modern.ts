@@ -1,9 +1,9 @@
 import { PeriodicTable } from "../../system/elements";
-import { getColorMap } from "../palette";
+import { DEFAULT_CATEGORICAL_COLOR_MAP, getColorMap } from "../palette";
 import type { AtomStyle, BondStyle, Theme } from "../theme";
 
-const modern = getColorMap("modern");
-const qualitative = getColorMap("tol-bright");
+const ovito = getColorMap("ovito");
+const categorical = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
 
 export class ModernTheme implements Theme {
   public readonly name = "Modern";
@@ -14,7 +14,7 @@ export class ModernTheme implements Theme {
   public readonly defaultSpecular = "#888888";
 
   public getAtomStyle(element: string): AtomStyle {
-    const [r, g, b] = modern.colorForKey(element);
+    const [r, g, b] = ovito.colorForKey(element);
     const toHex = (v: number) => {
       const s = Math.round(Math.min(1, Math.max(0, v)) ** (1 / 2.2) * 255);
       return s.toString(16).padStart(2, "0");
@@ -30,7 +30,7 @@ export class ModernTheme implements Theme {
   }
 
   public getTypeStyle(type: string): AtomStyle {
-    const [r, g, b] = qualitative.colorForKey(type);
+    const [r, g, b] = categorical.colorForKey(type);
     const toHex = (v: number) => {
       const s = Math.round(Math.min(1, Math.max(0, v)) ** (1 / 2.2) * 255);
       return s.toString(16).padStart(2, "0");
