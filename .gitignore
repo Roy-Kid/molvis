@@ -145,3 +145,9 @@ dist
 
 # rspack
 .rspack*/
+
+# macOS
+.DS_Store
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock

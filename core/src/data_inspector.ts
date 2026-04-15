@@ -4,7 +4,6 @@
  */
 
 import type { Block, Frame } from "@molcrafts/molrs";
-import { probeColumnDtype } from "./utils/block_helpers";
 
 export interface ColumnDescriptor {
   name: string;
@@ -32,7 +31,7 @@ export function discoverAtomColumns(block: Block): ColumnDescriptor[] {
   const columns: ColumnDescriptor[] = [];
   for (const key of keys) {
     if (key.startsWith("__")) continue; // skip internal columns
-    const dtype = probeColumnDtype(block, key);
+    const dtype = block.dtype(key);
     if (dtype) columns.push({ name: key, dtype });
   }
 
@@ -71,7 +70,7 @@ export function extractAtomRows(
   const columnData = new Map<
     string,
     {
-      dtype: string;
+      dtype: "f64" | "u32" | "i32" | "string";
       f64?: Float64Array;
       u32?: Uint32Array;
       i32?: Int32Array;
@@ -80,9 +79,9 @@ export function extractAtomRows(
   >();
   for (const col of columns) {
     const dt = col.dtype;
-    if (dt === "str" || dt === "string") {
+    if (dt === "string") {
       columnData.set(col.name, {
-        dtype: "str",
+        dtype: "string",
         str: block.copyColStr(col.name) as string[],
       });
     } else if (dt === "f64") {
@@ -117,7 +116,7 @@ export function extractAtomRows(
         values.set(col.name, String(data.u32[i]));
       } else if (data.dtype === "i32" && data.i32) {
         values.set(col.name, String(data.i32[i]));
-      } else if (data.dtype === "str" && data.str) {
+      } else if (data.dtype === "string" && data.str) {
         values.set(col.name, data.str[i] ?? "—");
       }
     }
@@ -134,9 +133,11 @@ export function extractBondRows(frame: Frame): BondRow[] {
   const bonds = frame.getBlock("bonds");
   if (!bonds) return [];
 
-  const iCol = readBondIndexColumn(bonds, "atomi", "i", "atom_i");
-  const jCol = readBondIndexColumn(bonds, "atomj", "j", "atom_j");
-  if (!iCol || !jCol) return [];
+  if (bonds.dtype("atomi") !== "u32" || bonds.dtype("atomj") !== "u32") {
+    return [];
+  }
+  const iCol = bonds.viewColU32("atomi");
+  const jCol = bonds.viewColU32("atomj");
 
   const orderCol =
     bonds.dtype("order") === "u32" ? bonds.viewColU32("order") : undefined;
@@ -152,24 +153,6 @@ export function extractBondRows(frame: Frame): BondRow[] {
   }
 
   return rows;
-}
-
-function readBondIndexColumn(
-  bonds: Block,
-  canonical: string,
-  shortAlias: string,
-  longAlias: string,
-): Uint32Array | undefined {
-  if (bonds.dtype(canonical) === "u32") {
-    return bonds.viewColU32(canonical);
-  }
-  if (bonds.dtype(shortAlias) === "u32") {
-    return bonds.viewColU32(shortAlias);
-  }
-  if (bonds.dtype(longAlias) === "u32") {
-    return bonds.viewColU32(longAlias);
-  }
-  return undefined;
 }
 
 function formatNumber(value: number): string {

@@ -4,7 +4,7 @@
  * Coordinate convention (matches molrs Grid.voxel_position):
  *   world = origin + (i/nx)*col0 + (j/ny)*col1 + (k/nz)*col2
  *
- * Cell matrix layout: Float32Array[9], column-major.
+ * Cell matrix layout: Float64Array[9], column-major.
  *   cell[0..3] = col0 (a-vector)
  *   cell[3..6] = col1 (b-vector)
  *   cell[6..9] = col2 (c-vector)
@@ -343,8 +343,8 @@ function fracToWorld(
   fi: number,
   fj: number,
   fk: number,
-  cell: Float32Array,
-  origin: Float32Array,
+  cell: Float64Array,
+  origin: Float64Array,
 ): [number, number, number] {
   return [
     origin[0] + fi * cell[0] + fj * cell[3] + fk * cell[6],
@@ -370,8 +370,8 @@ function interpEdge(
   nx: number,
   ny: number,
   nz: number,
-  cell: Float32Array,
-  origin: Float32Array,
+  cell: Float64Array,
+  origin: Float64Array,
 ): [number, number, number] {
   const t = Math.abs(va - vb) < 1e-9 ? 0.5 : (isovalue - va) / (vb - va);
   return fracToWorld(
@@ -390,16 +390,16 @@ function interpEdge(
  *
  * @param data - Flat scalar array, row-major (ix outermost): data[ix*ny*nz + iy*nz + iz]
  * @param shape - Grid dimensions [nx, ny, nz].
- * @param cell - 3×3 lattice matrix, column-major Float32Array[9].
- * @param origin - World-space origin of voxel (0,0,0), Float32Array[3].
+ * @param cell - 3×3 lattice matrix, column-major Float64Array[9].
+ * @param origin - World-space origin of voxel (0,0,0), Float64Array[3].
  * @param isovalue - Scalar threshold: vertices with value < isovalue are "inside".
  * @param gridType - "general" or "periodic" (wraps boundary cells).
  */
 export function marchingCubes(
-  data: Float32Array | Float64Array,
+  data: Float64Array,
   shape: [number, number, number],
-  cell: Float32Array | Float64Array,
-  origin: Float32Array | Float64Array,
+  cell: Float64Array,
+  origin: Float64Array,
   isovalue: number,
   gridType: "general" | "periodic" = "general",
 ): MCMesh {

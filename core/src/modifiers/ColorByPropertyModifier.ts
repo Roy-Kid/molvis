@@ -6,7 +6,6 @@ import {
 } from "../artist/palette";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
-import { probeColumnDtype } from "../utils/block_helpers";
 import { logger } from "../utils/logger";
 
 // Columns injected into the atoms Block to override default element coloring.
@@ -104,7 +103,7 @@ export class ColorByPropertyModifier extends BaseModifier {
       return;
     }
 
-    const dtype = probeColumnDtype(atoms, this._config.columnName);
+    const dtype = atoms.dtype(this._config.columnName);
     if (dtype === "f64") {
       const data = atoms.viewColF(this._config.columnName);
       if (data) {
@@ -137,14 +136,14 @@ export class ColorByPropertyModifier extends BaseModifier {
     const atomCount = atoms.nrows();
     if (atomCount === 0) return input;
 
-    const dtype = probeColumnDtype(atoms, this._config.columnName);
+    const dtype = atoms.dtype(this._config.columnName);
     if (!dtype) return input;
 
     const colorR = new Float64Array(atomCount);
     const colorG = new Float64Array(atomCount);
     const colorB = new Float64Array(atomCount);
 
-    if (dtype === "str") {
+    if (dtype === "string") {
       const data = atoms.copyColStr(this._config.columnName) as
         | string[]
         | undefined;
@@ -272,7 +271,7 @@ function discoverColorableColumns(
   for (const key of block.keys()) {
     if (SKIP_COLUMNS.has(key)) continue;
     if (key.startsWith("__")) continue;
-    const dtype = probeColumnDtype(block, key);
+    const dtype = block.dtype(key);
     if (dtype) {
       result.push({ name: key, dtype });
     }

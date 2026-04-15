@@ -1,7 +1,6 @@
 import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
-import { probeColumnDtype } from "../utils/block_helpers";
 
 /**
  * Modifier that removes atoms based on the current pipeline selection.
@@ -51,8 +50,8 @@ export class DeleteSelectedModifier extends BaseModifier {
     // Filter atoms — handle all column dtypes
     const newAtoms = new Block();
     for (const key of atoms.keys()) {
-      const dtype = probeColumnDtype(atoms, key);
-      if (dtype === "str") {
+      const dtype = atoms.dtype(key);
+      if (dtype === "string") {
         const src = atoms.copyColStr(key) as string[] | undefined;
         if (src) {
           const dst: string[] = [];
