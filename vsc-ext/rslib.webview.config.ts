@@ -54,10 +54,21 @@ export default defineConfig({
         ...(config.node || {}),
         __dirname: "mock",
       };
+      config.resolve = {
+        ...(config.resolve || {}),
+        fallback: {
+          ...(config.resolve?.fallback || {}),
+          vm: false,
+          fs: false,
+          path: false,
+        },
+      };
       config.ignoreWarnings = [
         ...(config.ignoreWarnings || []),
         /Critical dependency/,
         /__dirname/,
+        /Can't resolve 'vm'/,
+        /Can't resolve 'fs'/,
       ];
       config.optimization = {
         ...config.optimization,

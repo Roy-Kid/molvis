@@ -9,6 +9,6 @@
       "@/*": ["../page/src/*"]
     }
   },
-  "include": ["src/**/*", "../core/src/types/**/*"],
+  "include": ["src/**/*", "../core/src/types/**/*", "../page/src/**/*.d.ts"],
   "exclude": ["rslib.*.config.ts"]
 }

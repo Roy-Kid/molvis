@@ -96,7 +96,7 @@ export function bootstrapWebview(container: HTMLElement): void {
             setTrajectory: (trajectory: Trajectory) =>
               app.setTrajectory(trajectory),
             setViewMode: () => app.setMode("view"),
-            resetCamera: () => app.world.resetCamera(),
+            resetCamera: () => app.resetCamera(),
             loadPdb: (pdbText: string) => app.loadPdb(pdbText),
           },
           resources,
@@ -152,7 +152,7 @@ export function bootstrapWebview(container: HTMLElement): void {
           setTrajectory: (trajectory: Trajectory) =>
             app.setTrajectory(trajectory),
           setViewMode: () => app.setMode("view"),
-          resetCamera: () => app.world.resetCamera(),
+          resetCamera: () => app.resetCamera(),
           loadPdb: (pdbText: string) => app.loadPdb(pdbText),
         },
         resources,

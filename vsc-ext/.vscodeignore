@@ -4,6 +4,7 @@
 # Development files
 .vscode/**
 .vscode-test/**
+.claude/**
 src/**
 node_modules/**
 out-test/**

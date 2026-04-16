@@ -5,6 +5,9 @@ static/
 build/
 site/
 
+# VSCode extension package
+*.vsix
+
 # python
 __pycache__/
 
