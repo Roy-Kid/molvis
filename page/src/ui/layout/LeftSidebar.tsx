@@ -14,7 +14,7 @@ import {
   type SelectionMask,
   computeRdf,
 } from "@molvis/core";
-import { Download, Play } from "lucide-react";
+import { AlertCircle, Download, Info, Play } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClusterPanel } from "./ClusterPanel";
@@ -25,16 +25,42 @@ interface LeftSidebarProps {
 
 type AnalysisType = "rdf" | "cluster";
 
+const ANALYSIS_OPTIONS: { value: AnalysisType; label: string }[] = [
+  { value: "rdf", label: "Radial distribution g(r)" },
+  { value: "cluster", label: "Cluster analysis" },
+];
+
 /** Prevent pointer events from leaking to the BabylonJS canvas. */
 const stopPointerPropagation = (e: React.PointerEvent) => {
   e.stopPropagation();
 };
 
 // ---------------------------------------------------------------------------
-// Interactive RDF Chart with pan & zoom
+// Interactive RDF Chart with pan, zoom, and hover crosshair
 // ---------------------------------------------------------------------------
 
 const CHART_PAD = { top: 14, right: 14, bottom: 30, left: 40 };
+const CHART_W = 400;
+const CHART_H = 220;
+const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right;
+const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom;
+const CHART_GRADIENT_ID = "rdf-area-grad";
+
+const niceStep = (range: number, targetTicks: number) => {
+  const raw = range / targetTicks;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  return (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
+};
+
+const fmtAxis = (v: number) =>
+  Math.abs(v) < 1e-10
+    ? "0"
+    : Math.abs(v) >= 100
+      ? v.toFixed(0)
+      : Math.abs(v) >= 1
+        ? v.toFixed(1)
+        : v.toFixed(2);
 
 function RdfChart({ result }: { result: RdfResult }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -44,6 +70,7 @@ function RdfChart({ result }: { result: RdfResult }) {
     yMin: number;
     yMax: number;
   } | null>(null);
+  const [hover, setHover] = useState<{ idx: number } | null>(null);
   const dragRef = useRef<{
     startX: number;
     startY: number;
@@ -62,8 +89,12 @@ function RdfChart({ result }: { result: RdfResult }) {
   const dataXMin = Math.max(0, r[firstNonZero] - result.dr);
 
   let dataYMax = 0;
+  let peakIdx = -1;
   for (let i = firstNonZero; i < nBins; i++) {
-    if (gr[i] > dataYMax) dataYMax = gr[i];
+    if (gr[i] > dataYMax) {
+      dataYMax = gr[i];
+      peakIdx = i;
+    }
   }
   dataYMax = Math.max(dataYMax * 1.15, 1.5);
 
@@ -71,21 +102,10 @@ function RdfChart({ result }: { result: RdfResult }) {
   const xRange = vb.xMax - vb.xMin;
   const yRange = vb.yMax - vb.yMin;
 
-  const getSize = () => {
-    const el = svgRef.current;
-    if (!el) return { w: 300, h: 180 };
-    const rect = el.getBoundingClientRect();
-    return { w: rect.width, h: rect.height };
-  };
-
-  const svgW = 400;
-  const svgH = 220;
-  const pw = svgW - CHART_PAD.left - CHART_PAD.right;
-  const ph = svgH - CHART_PAD.top - CHART_PAD.bottom;
-
-  const toX = (rv: number) => CHART_PAD.left + ((rv - vb.xMin) / xRange) * pw;
+  const toX = (rv: number) =>
+    CHART_PAD.left + ((rv - vb.xMin) / xRange) * PLOT_W;
   const toY = (gv: number) =>
-    CHART_PAD.top + ph - ((gv - vb.yMin) / yRange) * ph;
+    CHART_PAD.top + PLOT_H - ((gv - vb.yMin) / yRange) * PLOT_H;
 
   const points: string[] = [];
   for (let i = 0; i < nBins; i++) {
@@ -94,14 +114,7 @@ function RdfChart({ result }: { result: RdfResult }) {
   }
 
   const refY = toY(1);
-  const showRef = refY >= CHART_PAD.top && refY <= CHART_PAD.top + ph;
-
-  const niceStep = (range: number, targetTicks: number) => {
-    const raw = range / targetTicks;
-    const mag = 10 ** Math.floor(Math.log10(raw));
-    const norm = raw / mag;
-    return (norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10) * mag;
-  };
+  const showRef = refY >= CHART_PAD.top && refY <= CHART_PAD.top + PLOT_H;
 
   const xStep = niceStep(xRange, 5);
   const yStep = niceStep(yRange, 4);
@@ -112,27 +125,79 @@ function RdfChart({ result }: { result: RdfResult }) {
   for (let v = Math.ceil(vb.yMin / yStep) * yStep; v <= vb.yMax; v += yStep)
     yTicks.push(v);
 
+  // ---- Hover snapping ----
+  const eventToSvg = (e: React.MouseEvent) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return {
+      sx: ((e.clientX - rect.left) / rect.width) * CHART_W,
+      sy: ((e.clientY - rect.top) / rect.height) * CHART_H,
+      rect,
+    };
+  };
+
+  const snapHover = (sx: number) => {
+    const dataR = vb.xMin + ((sx - CHART_PAD.left) / PLOT_W) * xRange;
+    let closest = -1;
+    let closestDist = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < nBins; i++) {
+      if (r[i] < vb.xMin || r[i] > vb.xMax) continue;
+      const d = Math.abs(r[i] - dataR);
+      if (d < closestDist) {
+        closestDist = d;
+        closest = i;
+      }
+    }
+    return closest;
+  };
+
+  // ---- Pan / zoom handlers ----
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    dragRef.current = { startX: e.clientX, startY: e.clientY, vb: { ...vb } };
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      vb: { ...vb },
+    };
+    setHover(null);
   };
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    const size = getSize();
-    const xShift = (-dx / (size.w - CHART_PAD.left - CHART_PAD.right)) * xRange;
-    const yShift = (dy / (size.h - CHART_PAD.top - CHART_PAD.bottom)) * yRange;
-    const prev = dragRef.current.vb;
-    setViewBox({
-      xMin: prev.xMin + xShift,
-      xMax: prev.xMax + xShift,
-      yMin: prev.yMin + yShift,
-      yMax: prev.yMax + yShift,
-    });
+    const pos = eventToSvg(e);
+    if (!pos) return;
+    if (dragRef.current) {
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+      const xShift =
+        (-dx / (pos.rect.width - CHART_PAD.left - CHART_PAD.right)) * xRange;
+      const yShift =
+        (dy / (pos.rect.height - CHART_PAD.top - CHART_PAD.bottom)) * yRange;
+      const prev = dragRef.current.vb;
+      setViewBox({
+        xMin: prev.xMin + xShift,
+        xMax: prev.xMax + xShift,
+        yMin: prev.yMin + yShift,
+        yMax: prev.yMax + yShift,
+      });
+      return;
+    }
+    if (
+      pos.sx < CHART_PAD.left ||
+      pos.sx > CHART_PAD.left + PLOT_W ||
+      pos.sy < CHART_PAD.top ||
+      pos.sy > CHART_PAD.top + PLOT_H
+    ) {
+      if (hover) setHover(null);
+      return;
+    }
+    const idx = snapHover(pos.sx);
+    if (idx >= 0 && (!hover || hover.idx !== idx)) setHover({ idx });
   };
   const handleMouseUp = () => {
     dragRef.current = null;
+  };
+  const handleMouseLeave = () => {
+    dragRef.current = null;
+    setHover(null);
   };
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -157,63 +222,110 @@ function RdfChart({ result }: { result: RdfResult }) {
   };
   const handleDoubleClick = () => setViewBox(null);
 
-  const fmt = (v: number) =>
-    Math.abs(v) < 1e-10
-      ? "0"
-      : Math.abs(v) >= 100
-        ? v.toFixed(0)
-        : Math.abs(v) >= 1
-          ? v.toFixed(1)
-          : v.toFixed(2);
+  // ---- Annotations ----
+  const peakInView =
+    peakIdx >= 0 && r[peakIdx] >= vb.xMin && r[peakIdx] <= vb.xMax;
+  const peakSx = peakInView ? toX(r[peakIdx]) : 0;
+  const peakSy = peakInView ? toY(gr[peakIdx]) : 0;
+
+  const hoverPoint =
+    hover && r[hover.idx] >= vb.xMin && r[hover.idx] <= vb.xMax
+      ? {
+          sx: toX(r[hover.idx]),
+          sy: toY(gr[hover.idx]),
+          r: r[hover.idx],
+          gr: gr[hover.idx],
+        }
+      : null;
+
+  // ---- Tooltip box (clamped to plot bounds) ----
+  const TIP_W = 96;
+  const TIP_H = 30;
+  let tipX = 0;
+  let tipY = 0;
+  if (hoverPoint) {
+    tipX = hoverPoint.sx + 8;
+    if (tipX + TIP_W > CHART_PAD.left + PLOT_W)
+      tipX = hoverPoint.sx - TIP_W - 8;
+    tipY = hoverPoint.sy - TIP_H - 6;
+    if (tipY < CHART_PAD.top) tipY = hoverPoint.sy + 8;
+  }
 
   return (
     <svg
       ref={svgRef}
-      viewBox={`0 0 ${svgW} ${svgH}`}
+      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
       preserveAspectRatio="xMidYMid meet"
-      className="w-full border rounded bg-muted/10 cursor-grab active:cursor-grabbing select-none"
+      className="w-full border rounded bg-muted/10 cursor-crosshair active:cursor-grabbing select-none text-foreground"
       role="img"
       aria-label="RDF g(r) chart"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
       onWheel={handleWheel}
       onDoubleClick={handleDoubleClick}
     >
       <defs>
         <clipPath id="plot-clip">
-          <rect x={CHART_PAD.left} y={CHART_PAD.top} width={pw} height={ph} />
+          <rect
+            x={CHART_PAD.left}
+            y={CHART_PAD.top}
+            width={PLOT_W}
+            height={PLOT_H}
+          />
         </clipPath>
+        <linearGradient id={CHART_GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity={0.32} />
+          <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+        </linearGradient>
       </defs>
+
+      {/* Horizontal grid lines (subtle, behind everything) */}
+      <g clipPath="url(#plot-clip)">
+        {yTicks.map((v) => (
+          <line
+            key={`yg-${v}`}
+            x1={CHART_PAD.left}
+            y1={toY(v)}
+            x2={CHART_PAD.left + PLOT_W}
+            y2={toY(v)}
+            stroke="currentColor"
+            strokeOpacity={0.06}
+          />
+        ))}
+        {showRef && (
+          <line
+            x1={CHART_PAD.left}
+            y1={refY}
+            x2={CHART_PAD.left + PLOT_W}
+            y2={refY}
+            stroke="currentColor"
+            strokeOpacity={0.18}
+            strokeDasharray="4 3"
+          />
+        )}
+      </g>
+
+      {/* Axes */}
       <line
         x1={CHART_PAD.left}
         y1={CHART_PAD.top}
         x2={CHART_PAD.left}
-        y2={CHART_PAD.top + ph}
+        y2={CHART_PAD.top + PLOT_H}
         stroke="currentColor"
-        strokeOpacity={0.3}
+        strokeOpacity={0.35}
       />
       <line
         x1={CHART_PAD.left}
-        y1={CHART_PAD.top + ph}
-        x2={CHART_PAD.left + pw}
-        y2={CHART_PAD.top + ph}
+        y1={CHART_PAD.top + PLOT_H}
+        x2={CHART_PAD.left + PLOT_W}
+        y2={CHART_PAD.top + PLOT_H}
         stroke="currentColor"
-        strokeOpacity={0.3}
+        strokeOpacity={0.35}
       />
-      {showRef && (
-        <line
-          x1={CHART_PAD.left}
-          y1={refY}
-          x2={CHART_PAD.left + pw}
-          y2={refY}
-          stroke="currentColor"
-          strokeOpacity={0.12}
-          strokeDasharray="4 3"
-          clipPath="url(#plot-clip)"
-        />
-      )}
+
+      {/* Tick marks + labels */}
       {yTicks.map((v) => (
         <g key={`yt-${v}`}>
           <line
@@ -222,7 +334,7 @@ function RdfChart({ result }: { result: RdfResult }) {
             x2={CHART_PAD.left}
             y2={toY(v)}
             stroke="currentColor"
-            strokeOpacity={0.3}
+            strokeOpacity={0.4}
           />
           <text
             x={CHART_PAD.left - 4}
@@ -230,9 +342,9 @@ function RdfChart({ result }: { result: RdfResult }) {
             textAnchor="end"
             fontSize={8}
             fill="currentColor"
-            opacity={0.4}
+            opacity={0.5}
           >
-            {fmt(v)}
+            {fmtAxis(v)}
           </text>
         </g>
       ))}
@@ -240,69 +352,204 @@ function RdfChart({ result }: { result: RdfResult }) {
         <g key={`xt-${v}`}>
           <line
             x1={toX(v)}
-            y1={CHART_PAD.top + ph}
+            y1={CHART_PAD.top + PLOT_H}
             x2={toX(v)}
-            y2={CHART_PAD.top + ph + 3}
+            y2={CHART_PAD.top + PLOT_H + 3}
             stroke="currentColor"
-            strokeOpacity={0.3}
+            strokeOpacity={0.4}
           />
           <text
             x={toX(v)}
-            y={CHART_PAD.top + ph + 14}
+            y={CHART_PAD.top + PLOT_H + 14}
             textAnchor="middle"
             fontSize={8}
             fill="currentColor"
-            opacity={0.4}
+            opacity={0.5}
           >
-            {fmt(v)}
+            {fmtAxis(v)}
           </text>
         </g>
       ))}
+
+      {/* Axis titles */}
       <text
-        x={CHART_PAD.left + pw / 2}
-        y={svgH - 2}
+        x={CHART_PAD.left + PLOT_W / 2}
+        y={CHART_H - 2}
         textAnchor="middle"
         fontSize={9}
         fill="currentColor"
-        opacity={0.5}
+        opacity={0.55}
       >
         r ({"\u00C5"})
       </text>
       <text
         x={5}
-        y={CHART_PAD.top + ph / 2}
+        y={CHART_PAD.top + PLOT_H / 2}
         textAnchor="middle"
         fontSize={9}
         fill="currentColor"
-        opacity={0.5}
-        transform={`rotate(-90 5 ${CHART_PAD.top + ph / 2})`}
+        opacity={0.55}
+        transform={`rotate(-90 5 ${CHART_PAD.top + PLOT_H / 2})`}
       >
         g(r)
       </text>
-      <g clipPath="url(#plot-clip)">
+
+      {/* g(r) curve + filled area — accent color via wrapper text-* */}
+      <g clipPath="url(#plot-clip)" className="text-sky-600 dark:text-sky-400">
         {points.length > 1 && (
           <polygon
-            fill="#3b82f6"
-            fillOpacity={0.08}
+            fill={`url(#${CHART_GRADIENT_ID})`}
             points={`${toX(vb.xMin).toFixed(1)},${toY(0).toFixed(1)} ${points.join(" ")} ${toX(vb.xMax).toFixed(1)},${toY(0).toFixed(1)}`}
           />
         )}
         <polyline
           fill="none"
-          stroke="#3b82f6"
-          strokeWidth={1.5}
+          stroke="currentColor"
+          strokeWidth={1.6}
+          strokeLinejoin="round"
+          strokeLinecap="round"
           points={points.join(" ")}
         />
+        {peakInView && !hoverPoint && (
+          <g>
+            <circle
+              cx={peakSx}
+              cy={peakSy}
+              r={2.5}
+              fill="currentColor"
+              fillOpacity={0.9}
+            />
+            <text
+              x={peakSx}
+              y={peakSy - 6}
+              textAnchor="middle"
+              fontSize={8}
+              fill="currentColor"
+              opacity={0.85}
+            >
+              {`r₁ = ${r[peakIdx].toFixed(2)} Å`}
+            </text>
+          </g>
+        )}
       </g>
+
+      {/* Hover crosshair + snap dot + tooltip */}
+      {hoverPoint && (
+        <g>
+          <line
+            x1={hoverPoint.sx}
+            y1={CHART_PAD.top}
+            x2={hoverPoint.sx}
+            y2={CHART_PAD.top + PLOT_H}
+            stroke="currentColor"
+            strokeOpacity={0.35}
+            strokeDasharray="3 3"
+          />
+          <line
+            x1={CHART_PAD.left}
+            y1={hoverPoint.sy}
+            x2={CHART_PAD.left + PLOT_W}
+            y2={hoverPoint.sy}
+            stroke="currentColor"
+            strokeOpacity={0.18}
+            strokeDasharray="3 3"
+          />
+          <g className="text-sky-600 dark:text-sky-400">
+            <circle
+              cx={hoverPoint.sx}
+              cy={hoverPoint.sy}
+              r={4}
+              fill="currentColor"
+              stroke="hsl(var(--background))"
+              strokeWidth={1.5}
+            />
+          </g>
+          {/* X-axis value badge */}
+          <g>
+            <rect
+              x={hoverPoint.sx - 18}
+              y={CHART_PAD.top + PLOT_H + 1}
+              width={36}
+              height={12}
+              rx={2}
+              fill="hsl(var(--popover))"
+              stroke="currentColor"
+              strokeOpacity={0.3}
+            />
+            <text
+              x={hoverPoint.sx}
+              y={CHART_PAD.top + PLOT_H + 9}
+              textAnchor="middle"
+              fontSize={8}
+              fill="currentColor"
+              opacity={0.85}
+            >
+              {hoverPoint.r.toFixed(2)}
+            </text>
+          </g>
+          {/* Tooltip box */}
+          <g>
+            <rect
+              x={tipX}
+              y={tipY}
+              width={TIP_W}
+              height={TIP_H}
+              rx={3}
+              fill="hsl(var(--popover))"
+              stroke="currentColor"
+              strokeOpacity={0.35}
+            />
+            <text
+              x={tipX + 6}
+              y={tipY + 12}
+              fontSize={9}
+              fill="currentColor"
+              opacity={0.7}
+            >
+              r
+            </text>
+            <text
+              x={tipX + TIP_W - 6}
+              y={tipY + 12}
+              textAnchor="end"
+              fontSize={9}
+              fontFamily="ui-monospace, SFMono-Regular, monospace"
+              fill="currentColor"
+            >
+              {`${hoverPoint.r.toFixed(3)} Å`}
+            </text>
+            <text
+              x={tipX + 6}
+              y={tipY + 24}
+              fontSize={9}
+              fill="currentColor"
+              opacity={0.7}
+            >
+              g(r)
+            </text>
+            <text
+              x={tipX + TIP_W - 6}
+              y={tipY + 24}
+              textAnchor="end"
+              fontSize={9}
+              fontFamily="ui-monospace, SFMono-Regular, monospace"
+              fill="currentColor"
+            >
+              {hoverPoint.gr.toFixed(3)}
+            </text>
+          </g>
+        </g>
+      )}
+
       <text
-        x={CHART_PAD.left + pw - 2}
+        x={CHART_PAD.left + PLOT_W - 2}
         y={CHART_PAD.top + 10}
         textAnchor="end"
         fontSize={7}
         fill="currentColor"
-        opacity={0.2}
+        opacity={0.3}
       >
-        drag · scroll zoom · dblclick reset
+        hover · drag pan · scroll zoom · dblclick reset
       </text>
     </svg>
   );
@@ -407,10 +654,10 @@ function RdfTable({ result }: { result: RdfResult }) {
       <Button
         size="sm"
         variant="outline"
-        className="h-6 w-full text-[10px] gap-1 mt-1"
+        className="h-7 w-full text-xs gap-1.5 mt-1"
         onClick={() => downloadCsv(result)}
       >
-        <Download className="h-3 w-3" />
+        <Download className="h-3.5 w-3.5" />
         Export CSV
       </Button>
     </div>
@@ -521,93 +768,113 @@ function RdfPanel({ app }: { app: Molvis | null }) {
   }, [app, groupA, groupB, nBins, rMax]);
 
   const isSelf = groupA === groupB;
+  const noModifiers = modifiers.length === 0;
 
   return (
     <>
       <SidebarSection
         title="RDF"
-        subtitle={isSelf ? "Self g(r)" : "Cross g(r)"}
+        subtitle={noModifiers ? undefined : isSelf ? "Self g(r)" : "Cross g(r)"}
         defaultOpen={true}
       >
-        <div className="space-y-2">
-          <div className="grid grid-cols-[52px_1fr] gap-1.5 items-center">
-            <span className="text-[10px] text-muted-foreground">Group A</span>
-            <Select value={groupA} onValueChange={handleGroupAChange}>
-              <SelectTrigger className="h-6 text-[11px]" size="sm">
-                <SelectValue
-                  placeholder={
-                    modifiers.length === 0
-                      ? "No modifier yet"
-                      : "Choose modifier..."
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {modifiers.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-[11px]">
-                    {m.label} ({m.count})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <span className="text-[10px] text-muted-foreground">Group B</span>
-            <Select value={groupB} onValueChange={setGroupB}>
-              <SelectTrigger className="h-6 text-[11px]" size="sm">
-                <SelectValue
-                  placeholder={
-                    modifiers.length === 0
-                      ? "No modifier yet"
-                      : "Choose modifier..."
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {modifiers.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-[11px]">
-                    {m.label} ({m.count})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <span className="text-[10px] text-muted-foreground">Bins</span>
-            <Input
-              className="h-6 text-[11px] font-mono"
-              value={nBins}
-              onChange={(e) => setNBins(e.target.value)}
-              placeholder="100"
-            />
-
-            <span className="text-[10px] text-muted-foreground">r_max</span>
-            <Input
-              className="h-6 text-[11px] font-mono"
-              value={rMax}
-              onChange={(e) => setRMax(e.target.value)}
-              placeholder="auto"
-            />
-          </div>
-
-          <Button
-            size="sm"
-            className="h-7 w-full text-[11px] gap-1"
-            onClick={handleCompute}
-            disabled={computing || !groupA}
-          >
-            <Play className="h-3 w-3" />
-            {computing
-              ? "Computing..."
-              : isSelf
-                ? "Compute self-RDF"
-                : "Compute cross-RDF"}
-          </Button>
-
-          {error && (
-            <div className="text-[10px] text-red-400 bg-red-500/10 rounded px-2 py-1">
-              {error}
+        {noModifiers ? (
+          <p className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight px-0.5">
+            <Info className="h-3 w-3 shrink-0 mt-px" />
+            <span>Add a selection modifier to choose groups</span>
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+                Group A
+              </span>
+              <Select value={groupA} onValueChange={handleGroupAChange}>
+                <SelectTrigger className="h-7 flex-1 min-w-0 px-2 text-xs">
+                  <SelectValue placeholder="Choose modifier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {modifiers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="text-xs">
+                        {m.label}
+                        <span className="ml-1 text-muted-foreground">
+                          ({m.count})
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+                Group B
+              </span>
+              <Select value={groupB} onValueChange={setGroupB}>
+                <SelectTrigger className="h-7 flex-1 min-w-0 px-2 text-xs">
+                  <SelectValue placeholder="Choose modifier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {modifiers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      <span className="text-xs">
+                        {m.label}
+                        <span className="ml-1 text-muted-foreground">
+                          ({m.count})
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+                Bins
+              </span>
+              <Input
+                className="h-7 flex-1 min-w-0 text-xs font-mono"
+                value={nBins}
+                onChange={(e) => setNBins(e.target.value)}
+                placeholder="100"
+                aria-label="Number of bins"
+              />
+              <span className="w-10 shrink-0 text-[10px] text-muted-foreground pl-1">
+                r_max
+              </span>
+              <Input
+                className="h-7 flex-1 min-w-0 text-xs font-mono"
+                value={rMax}
+                onChange={(e) => setRMax(e.target.value)}
+                placeholder="auto"
+                aria-label="r_max"
+              />
+            </div>
+
+            <Button
+              size="sm"
+              className="h-7 w-full text-xs gap-1.5"
+              onClick={handleCompute}
+              disabled={computing || !groupA}
+            >
+              <Play className="h-3.5 w-3.5" />
+              {computing
+                ? "Computing…"
+                : isSelf
+                  ? "Compute self-RDF"
+                  : "Compute cross-RDF"}
+            </Button>
+
+            {error && (
+              <p className="flex items-start gap-1 text-[10px] text-destructive leading-tight px-0.5">
+                <AlertCircle className="h-3 w-3 shrink-0 mt-px" />
+                <span className="truncate">{error}</span>
+              </p>
+            )}
+          </>
+        )}
       </SidebarSection>
 
       {result && (
@@ -645,7 +912,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
       className="h-full w-full bg-background flex flex-col border-r"
       onPointerDown={stopPointerPropagation}
     >
-      <div className="h-7 px-2 border-b bg-muted/10 shrink-0 flex items-center gap-2">
+      <div className="border-b bg-muted/15 shrink-0 flex items-center gap-1.5 px-2 py-1">
         <span className="text-[10px] font-semibold tracking-wide uppercase shrink-0">
           Analysis
         </span>
@@ -653,16 +920,18 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
           value={analysisType}
           onValueChange={(v) => setAnalysisType(v as AnalysisType)}
         >
-          <SelectTrigger className="h-5 text-[10px] flex-1 min-w-0" size="sm">
+          <SelectTrigger
+            className="h-7 flex-1 min-w-0 px-2 text-xs"
+            aria-label="Analysis type"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="rdf" className="text-[11px]">
-              Radial Distribution Function
-            </SelectItem>
-            <SelectItem value="cluster" className="text-[11px]">
-              Cluster Analysis
-            </SelectItem>
+            {ANALYSIS_OPTIONS.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>
+                <span className="text-xs">{label}</span>
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

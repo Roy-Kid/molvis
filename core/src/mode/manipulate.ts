@@ -1,6 +1,7 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
 import { type Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
+import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
 import { DrawFrameCommand } from "../commands/draw";
 import { syncSceneToFrame } from "../scene_sync";
 import { ContextMenuController } from "../ui/menus/controller";
@@ -227,41 +228,32 @@ class ManipulateMode extends BaseMode {
         meta2.position.z,
       );
 
-      // Compute new bond geometry
-      const center = p1.add(p2).scaleInPlace(0.5);
-      const dir = p2.subtract(p1);
-      const distance = dir.length();
-      if (distance > 1e-8) {
-        dir.scaleInPlace(1 / distance);
-      } else {
-        dir.set(0, 1, 0);
-      }
-
       const bondMeta = this.findBondMeta(bondId);
+      const order = bondMeta?.order ?? 1;
       const bondRadius = bondMeta
-        ? this.app.styleManager.getBondStyle(bondMeta.order).radius
+        ? this.app.styleManager.getBondStyle(order).radius
         : 0.1;
-      const bondScale = distance + bondRadius * 2;
 
-      const matrix = new Float32Array(16);
-      matrix[0] = bondScale;
-      matrix[5] = bondScale;
-      matrix[10] = bondScale;
-      matrix[15] = 1;
-      matrix[12] = center.x;
-      matrix[13] = center.y;
-      matrix[14] = center.z;
+      // Reuse the same sub-instance layout the edit path used when creating
+      // the bond so multi-order bonds stay properly offset under manipulation.
+      const placeholderColor = new Float32Array(4);
+      const { buffers: subBuffers } = buildSubBondInstanceBuffers(
+        p1,
+        p2,
+        order,
+        bondRadius,
+        placeholderColor,
+        placeholderColor,
+        0,
+      );
 
       const updates = new Map<string, Float32Array>();
-      updates.set("matrix", matrix);
-      updates.set(
-        "instanceData0",
-        new Float32Array([center.x, center.y, center.z, bondRadius]),
-      );
-      updates.set(
-        "instanceData1",
-        new Float32Array([dir.x, dir.y, dir.z, distance]),
-      );
+      const matrix = subBuffers.get("matrix");
+      const data0 = subBuffers.get("instanceData0");
+      const data1 = subBuffers.get("instanceData1");
+      if (matrix) updates.set("matrix", matrix);
+      if (data0) updates.set("instanceData0", data0);
+      if (data1) updates.set("instanceData1", data1);
 
       // Update bond using SceneIndex
       this.world.sceneIndex.updateBond(

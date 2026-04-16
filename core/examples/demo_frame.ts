@@ -31,7 +31,7 @@ async function main() {
   bondsBlock.setColU32("j", new Uint32Array([1, 2]));
   bondsBlock.setColU32("order", new Uint32Array([1, 1]));
 
-  const box = Box.cube(1, new Float32Array([0, 0, 0]), false, false, false);
+  const box = Box.cube(1, new Float64Array([0, 0, 0]), false, false, false);
 
   const frame = new Frame();
   frame.insertBlock("atoms", atomsBlock);

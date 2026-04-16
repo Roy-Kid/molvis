@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { type Frame, SDFReader } from "@molvis/core";
 import { Download, Loader2 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -84,33 +85,45 @@ const SOURCES: SourceOption[] = [
 ];
 
 /**
- * Fetch canonical/isomeric SMILES for a PubChem compound.
- * Accepts a CID (all-digits) or a compound name/synonym.
+ * Fetch the experimentally/PubChem-computed 3D SDF for a compound and
+ * parse it into a {@link Frame}. Coordinates come from PubChem — no
+ * additional 3D generation or optimization is performed.
+ *
+ * Accepts a CID (all-digits) or a compound name/synonym. Throws with a
+ * distinct message when PubChem has no 3D record for the compound, so
+ * callers can choose to fall back to SMILES + `generate3D`.
  */
-async function fetchPubChemSmiles(query: string): Promise<string> {
+async function fetchPubChem3DFrame(query: string): Promise<Frame> {
   const trimmed = query.trim();
   if (!trimmed) throw new Error("Enter a PubChem name or CID");
 
   const ns = /^\d+$/.test(trimmed) ? "cid" : "name";
   const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/${ns}/${encodeURIComponent(
     trimmed,
-  )}/property/IsomericSMILES/TXT`;
+  )}/record/SDF?record_type=3d`;
 
-  const res = await fetch(url, { headers: { Accept: "text/plain" } });
+  const res = await fetch(url, {
+    headers: { Accept: "chemical/x-mdl-sdfile" },
+  });
   if (!res.ok) {
     if (res.status === 404) throw new Error(`PubChem: "${trimmed}" not found`);
     throw new Error(`PubChem error ${res.status}`);
   }
-  const text = (await res.text()).trim();
-  const smiles = text.split(/\r?\n/)[0]?.trim();
-  if (!smiles) throw new Error("PubChem returned empty SMILES");
-  return smiles;
+  const sdf = await res.text();
+  if (!sdf.trim()) throw new Error("PubChem returned empty SDF");
+
+  const reader = new SDFReader(sdf);
+  const frame = reader.read(0);
+  if (!frame) throw new Error("PubChem SDF contained no records");
+  return frame;
 }
 
 interface DownloadStructureSectionProps {
-  /** Called with SMILES once a source has produced one. */
-  onSmilesFetched: (smiles: string) => void;
-  /** Disable controls while the parent is generating 3D / placing. */
+  /** Called with a 3D {@link Frame} when the source already provides
+   * coordinates (e.g. PubChem 3D SDF). The parent places it as-is
+   * without running any 3D generator. Takes ownership of the frame. */
+  onFrameFetched: (frame: Frame) => void;
+  /** Disable controls while the parent is placing. */
   disabled?: boolean;
   /** Report a human-readable error back to the parent. */
   onError: (message: string) => void;
@@ -118,7 +131,7 @@ interface DownloadStructureSectionProps {
 
 export const DownloadStructureSection: React.FC<
   DownloadStructureSectionProps
-> = ({ onSmilesFetched, onError, disabled = false }) => {
+> = ({ onFrameFetched, onError, disabled = false }) => {
   const [source, setSource] = useState<Source>("pubchem");
   const [query, setQuery] = useState<string>("");
   const [fetching, setFetching] = useState(false);
@@ -134,8 +147,8 @@ export const DownloadStructureSection: React.FC<
     setFetching(true);
     try {
       if (source === "pubchem") {
-        const smiles = await fetchPubChemSmiles(query);
-        onSmilesFetched(smiles);
+        const frame = await fetchPubChem3DFrame(query);
+        onFrameFetched(frame);
       } else {
         onError(`${current.label} is not implemented yet`);
       }

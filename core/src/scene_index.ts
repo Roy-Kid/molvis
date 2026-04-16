@@ -168,30 +168,59 @@ export class ImpostorState {
     return editIndex + this.frameOffset;
   }
 
-  append(id: number, values: Map<string, Float32Array | number[]>): number {
+  /**
+   * Append one logical entity occupying `subCount` contiguous render slots.
+   * Caller-provided `values` must be sized `stride * subCount` per buffer.
+   * For subCount > 1 the entity is registered in `logicalToAllIndices` so
+   * picking, removal, and selection treat the N slots as one logical id —
+   * mirroring how frame-mode multi-order bonds are laid out.
+   */
+  append(
+    id: number,
+    values: Map<string, Float32Array | number[]>,
+    subCount = 1,
+  ): number {
     if (this.idToIndex.has(id)) throw new Error(`Duplicate ID ${id}`);
-    // Check total capacity (Frame + Edits)
-    const totalNeeded = this.frameOffset + this.count + 1;
-    if (totalNeeded > this.capacity) this.grow();
+    while (this.frameOffset + this.count + subCount > this.capacity) {
+      this.grow();
+    }
 
-    const editIndex = this.count;
-    const absIndex = this.frameOffset + editIndex;
+    const firstEditIndex = this.count;
+    const firstAbsIndex = this.frameOffset + firstEditIndex;
 
     for (const [name, desc] of this.buffers) {
       const vals = values.get(name);
       if (vals) {
         const arr =
           vals instanceof Float32Array ? vals : new Float32Array(vals);
-        desc.data.set(arr, absIndex * desc.stride);
+        desc.data.set(arr, firstAbsIndex * desc.stride);
       }
     }
 
-    this.writePickingColor(editIndex, absIndex);
-    this.idToIndex.set(id, editIndex);
-    this.indexToId.set(editIndex, id);
-    this.count++;
+    for (let s = 0; s < subCount; s++) {
+      this.writePickingColor(firstEditIndex + s, firstAbsIndex + s);
+      this.indexToId.set(firstEditIndex + s, id);
+    }
+    this.idToIndex.set(id, firstEditIndex);
+
+    if (subCount > 1) {
+      const all: number[] = [];
+      for (let s = 0; s < subCount; s++) all.push(firstAbsIndex + s);
+      this.logicalToAllIndices.set(id, all);
+    }
+
+    this.count += subCount;
     this.needsUpload = true;
-    return absIndex;
+    return firstAbsIndex;
+  }
+
+  /**
+   * Number of contiguous render slots an edit-space id occupies.
+   * 1 for single-order bonds / atoms; N for multi-order bonds.
+   */
+  private editSubCount(id: number): number {
+    const all = this.logicalToAllIndices.get(id);
+    return all ? all.length : 1;
   }
 
   read(id: number, bufferName: string): Float32Array | null {
@@ -216,35 +245,104 @@ export class ImpostorState {
     return desc.data.subarray(start, start + desc.stride);
   }
 
-  remove(id: number): void {
+  /**
+   * Like `read` but returns all N contiguous slots belonging to this
+   * logical id (1 for single-instance entities, >1 for multi-order bonds).
+   * Used by DeleteBondCommand to snapshot every sub-instance before removal.
+   */
+  readAll(id: number, bufferName: string): Float32Array | null {
+    let firstAbs = -1;
+    let subCount = 1;
     const editIndex = this.idToIndex.get(id);
-    if (editIndex === undefined) return;
+    if (editIndex !== undefined) {
+      firstAbs = this.frameOffset + editIndex;
+      subCount = this.editSubCount(id);
+    } else if (id < this.frameOffset) {
+      firstAbs = id;
+      const all = this.logicalToAllIndices.get(id);
+      if (all) subCount = all.length;
+    }
+    if (firstAbs === -1) return null;
 
-    const lastEditIndex = this.count - 1;
-    if (editIndex !== lastEditIndex) {
-      const lastId = this.indexToId.get(lastEditIndex);
-      if (lastId === undefined) throw new Error("Last edit index not found");
+    const desc = this.buffers.get(bufferName);
+    if (!desc) return null;
+    const start = firstAbs * desc.stride;
+    const end = start + subCount * desc.stride;
+    if (end > desc.data.length) return null;
+    return desc.data.subarray(start, end);
+  }
 
-      const srcAbs = this.frameOffset + lastEditIndex;
-      const dstAbs = this.frameOffset + editIndex;
+  /**
+   * Remove a logical id, freeing all its contiguous render slots.
+   * For single-slot ids this degenerates to the old swap-with-last behavior
+   * via the same shift-down pass; for multi-slot ids (order > 1 bonds) the
+   * whole block is evicted and tail entries shift to fill the gap.
+   */
+  remove(id: number): void {
+    const firstEditIndex = this.idToIndex.get(id);
+    if (firstEditIndex === undefined) return;
 
+    const subCount = this.editSubCount(id);
+    const firstAbsIndex = this.frameOffset + firstEditIndex;
+    const tailSrcAbs = firstAbsIndex + subCount;
+    const totalAbs = this.frameOffset + this.count;
+    const tailRenderSlots = totalAbs - tailSrcAbs;
+
+    if (tailRenderSlots > 0) {
       for (const [, desc] of this.buffers) {
-        const src = srcAbs * desc.stride;
-        const dst = dstAbs * desc.stride;
-        for (let i = 0; i < desc.stride; i++) {
-          desc.data[dst + i] = desc.data[src + i];
-        }
+        const dstStart = firstAbsIndex * desc.stride;
+        const srcStart = tailSrcAbs * desc.stride;
+        const byteLen = tailRenderSlots * desc.stride;
+        desc.data.copyWithin(dstStart, srcStart, srcStart + byteLen);
       }
-
-      this.writePickingColor(editIndex, dstAbs);
-
-      this.idToIndex.set(lastId, editIndex);
-      this.indexToId.set(editIndex, lastId);
     }
 
     this.idToIndex.delete(id);
-    this.indexToId.delete(lastEditIndex);
-    this.count--;
+    this.logicalToAllIndices.delete(id);
+    for (let s = 0; s < subCount; s++) {
+      this.indexToId.delete(firstEditIndex + s);
+    }
+
+    // Shift every displaced id/block down by subCount.
+    const affectedIds: number[] = [];
+    for (const [otherId, otherEditIdx] of this.idToIndex) {
+      if (otherEditIdx > firstEditIndex) affectedIds.push(otherId);
+    }
+    // Process in ascending order so indexToId cleanup never clobbers a slot
+    // that still belongs to an unshifted entry.
+    affectedIds.sort(
+      (a, b) => (this.idToIndex.get(a) ?? 0) - (this.idToIndex.get(b) ?? 0),
+    );
+    for (const otherId of affectedIds) {
+      const oldEditIdx = this.idToIndex.get(otherId);
+      if (oldEditIdx === undefined) continue;
+      const newEditIdx = oldEditIdx - subCount;
+      const otherSubCount = this.editSubCount(otherId);
+
+      for (let s = 0; s < otherSubCount; s++) {
+        this.indexToId.delete(oldEditIdx + s);
+      }
+      this.idToIndex.set(otherId, newEditIdx);
+      for (let s = 0; s < otherSubCount; s++) {
+        this.indexToId.set(newEditIdx + s, otherId);
+      }
+
+      const oldAbs = this.logicalToAllIndices.get(otherId);
+      if (oldAbs) {
+        this.logicalToAllIndices.set(
+          otherId,
+          oldAbs.map((a) => a - subCount),
+        );
+      }
+
+      // Picking colors encode absIndex — rewrite for the moved block.
+      const newAbsBase = this.frameOffset + newEditIdx;
+      for (let s = 0; s < otherSubCount; s++) {
+        this.writePickingColor(newEditIdx + s, newAbsBase + s);
+      }
+    }
+
+    this.count -= subCount;
     this.needsUpload = true;
   }
 
@@ -383,9 +481,13 @@ export class MeshRegistry {
     return this.atoms.append(id, data);
   }
 
-  allocateBond(id: number, data: Map<string, Float32Array | number[]>): number {
+  allocateBond(
+    id: number,
+    data: Map<string, Float32Array | number[]>,
+    subCount = 1,
+  ): number {
     if (!this.bonds) throw new Error("No bond layer registered");
-    return this.bonds.append(id, data);
+    return this.bonds.append(id, data, subCount);
   }
 
   updateAtom(id: number, data: Map<string, Float32Array | number[]>): void {
@@ -598,8 +700,9 @@ export class SceneIndex {
   createBond(
     meta: Omit<BondMeta, "type">,
     buffers: Map<string, Float32Array | number[]>,
+    subCount = 1,
   ): void {
-    this.meshRegistry.allocateBond(meta.bondId, buffers);
+    this.meshRegistry.allocateBond(meta.bondId, buffers, subCount);
     this.metaRegistry.bonds.setEdit(meta.bondId, { type: "bond", ...meta });
     this.topology.addBond(meta.bondId, meta.atomId1, meta.atomId2);
     this.markAllUnsaved();

@@ -353,7 +353,7 @@ export class DeleteAtomCommand extends Command<void> {
           "instanceSplit",
           "instancePickingColor",
         ]) {
-          const data = bondState.read(bondId, bufName);
+          const data = bondState.readAll(bondId, bufName);
           if (data) bondData[bufName] = new Float32Array(data);
         }
         const bondMeta =
@@ -497,7 +497,8 @@ export class DeleteBondCommand extends Command<void> {
       "instanceSplit",
       "instancePickingColor",
     ]) {
-      const data = bondState.read(this.bondId, bufName);
+      // readAll captures every sub-instance for multi-order bonds.
+      const data = bondState.readAll(this.bondId, bufName);
       if (data) this.savedData[bufName] = new Float32Array(data);
     }
     const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(

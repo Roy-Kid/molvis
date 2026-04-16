@@ -31,6 +31,24 @@ function isEditMode(mode: unknown): mode is EditModeWithPending {
   return (mode as { type?: unknown }).type === ModeType.Edit;
 }
 
+function placeFrame(
+  app: Molvis,
+  frame3d: Frame,
+  setStatus: (s: Status) => void,
+  setError: (e: string | null) => void,
+) {
+  const mode = app.mode;
+  if (isEditMode(mode)) {
+    mode.pendingMolecule = frame3d;
+    setStatus("ready");
+    setError(null);
+  } else {
+    frame3d.free();
+    setError("Switch to Edit mode first");
+    setStatus("error");
+  }
+}
+
 function generateAndPlace(
   app: Molvis,
   frame2d: Frame,
@@ -40,17 +58,7 @@ function generateAndPlace(
   try {
     const frame3d = generate3D(frame2d, "fast");
     frame2d.free();
-
-    const mode = app.mode;
-    if (isEditMode(mode)) {
-      mode.pendingMolecule = frame3d;
-      setStatus("ready");
-      setError(null);
-    } else {
-      frame3d.free();
-      setError("Switch to Edit mode first");
-      setStatus("error");
-    }
+    placeFrame(app, frame3d, setStatus, setError);
   } catch (err) {
     console.error("[BuilderTab] generate3D error:", err);
     setError(String(err));
@@ -151,7 +159,13 @@ export const BuilderTab: React.FC<BuilderTabProps> = ({ app }) => {
       </SidebarSection>
 
       <DownloadStructureSection
-        onSmilesFetched={handleSmiles}
+        onFrameFetched={(frame) => {
+          if (!app) {
+            frame.free();
+            return;
+          }
+          placeFrame(app, frame, setStatus, setErrorMsg);
+        }}
         onError={(msg) => {
           setErrorMsg(msg);
           setStatus("error");

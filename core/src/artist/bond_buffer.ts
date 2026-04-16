@@ -68,6 +68,109 @@ function computePerpFrame(dir: Vector3): void {
 }
 
 /**
+ * Clamp a raw order value into the set of rendered orders (1..3).
+ */
+export function clampBondOrder(order: number): number {
+  return Math.max(1, Math.min(Math.round(order), 3));
+}
+
+/**
+ * Number of render instances an order-N bond expands to (1, 2, or 3).
+ */
+export function subBondCount(order: number): number {
+  return ORDER_CONFIG[clampBondOrder(order)].offsets.length;
+}
+
+/**
+ * Build the per-instance GPU buffers for a single bond with the given order.
+ * Returns a map of stride-sized-by-subCount buffers ready to hand to
+ * `ImpostorState.append`, matching the layout emitted by `buildBondBuffers`
+ * so edit-mode bonds and frame-mode bonds render identically.
+ *
+ * Color0/color1 are the endpoint atom colors (length-4 RGBA Float32Array).
+ * splitOffset is the same per-instance split value used in single-bond draws.
+ */
+export function buildSubBondInstanceBuffers(
+  start: Vector3,
+  end: Vector3,
+  order: number,
+  baseRadius: number,
+  color0: Float32Array,
+  color1: Float32Array,
+  splitOffset: number,
+): { buffers: Map<string, Float32Array>; subCount: number } {
+  const clamped = clampBondOrder(order);
+  const config = ORDER_CONFIG[clamped];
+  const subCount = config.offsets.length;
+
+  TMP_P1.copyFrom(start);
+  TMP_P2.copyFrom(end);
+  TMP_CENTER.copyFrom(TMP_P1).addInPlace(TMP_P2).scaleInPlace(0.5);
+  TMP_DIR.copyFrom(TMP_P2).subtractInPlace(TMP_P1);
+  const distance = TMP_DIR.length();
+  if (distance > 1e-8) TMP_DIR.scaleInPlace(1 / distance);
+  else TMP_DIR.set(0, 1, 0);
+
+  if (clamped > 1) computePerpFrame(TMP_DIR);
+
+  const subRadius = baseRadius * config.radiusScale;
+  const scale = distance + subRadius * 2;
+  const offsetDist = MULTI_BOND_SPACING * clamped;
+
+  const matrix = new Float32Array(16 * subCount);
+  const data0 = new Float32Array(4 * subCount);
+  const data1 = new Float32Array(4 * subCount);
+  const col0 = new Float32Array(4 * subCount);
+  const col1 = new Float32Array(4 * subCount);
+  const split = new Float32Array(4 * subCount);
+
+  for (let s = 0; s < subCount; s++) {
+    const [ox, oy] = config.offsets[s];
+    let cx = TMP_CENTER.x;
+    let cy = TMP_CENTER.y;
+    let cz = TMP_CENTER.z;
+    if (clamped > 1) {
+      cx += (TMP_PERP1.x * ox + TMP_PERP2.x * oy) * offsetDist;
+      cy += (TMP_PERP1.y * ox + TMP_PERP2.y * oy) * offsetDist;
+      cz += (TMP_PERP1.z * ox + TMP_PERP2.z * oy) * offsetDist;
+    }
+
+    const mOff = s * 16;
+    const idx4 = s * 4;
+    matrix[mOff + 0] = scale;
+    matrix[mOff + 5] = scale;
+    matrix[mOff + 10] = scale;
+    matrix[mOff + 15] = 1;
+    matrix[mOff + 12] = cx;
+    matrix[mOff + 13] = cy;
+    matrix[mOff + 14] = cz;
+
+    data0[idx4 + 0] = cx;
+    data0[idx4 + 1] = cy;
+    data0[idx4 + 2] = cz;
+    data0[idx4 + 3] = subRadius;
+
+    data1[idx4 + 0] = TMP_DIR.x;
+    data1[idx4 + 1] = TMP_DIR.y;
+    data1[idx4 + 2] = TMP_DIR.z;
+    data1[idx4 + 3] = distance;
+
+    col0.set(color0, idx4);
+    col1.set(color1, idx4);
+    split[idx4] = splitOffset;
+  }
+
+  const buffers = new Map<string, Float32Array>();
+  buffers.set("matrix", matrix);
+  buffers.set("instanceData0", data0);
+  buffers.set("instanceData1", data1);
+  buffers.set("instanceColor0", col0);
+  buffers.set("instanceColor1", col1);
+  buffers.set("instanceSplit", split);
+  return { buffers, subCount };
+}
+
+/**
  * Count total render instances needed for all bonds.
  */
 export function countBondInstances(bondsBlock: Block): number {
