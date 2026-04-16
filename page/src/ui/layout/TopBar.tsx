@@ -6,6 +6,7 @@ import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
 import { SettingsDialog } from "./SettingsDialog";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface TopBarProps {
   app: Molvis | null;
@@ -125,6 +126,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
 
         <Separator orientation="vertical" className="h-4 mx-0.5" />
 
+        <ThemeToggle />
         <SettingsDialog app={app} />
       </div>
     </div>

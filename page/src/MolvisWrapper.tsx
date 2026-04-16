@@ -133,6 +133,20 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
 
     const app = mountMolvis(containerRef.current, config, settings);
     molvisRef.current = app;
+
+    const syncCanvasToTheme = (isDark: boolean) => {
+      if (!molvisRef.current) return;
+      const c = isDark ? 0 : 1;
+      molvisRef.current.scene.clearColor.set(c, c, c, 1);
+    };
+    syncCanvasToTheme(document.documentElement.classList.contains("dark"));
+
+    const handleThemeChange = (e: Event) => {
+      const detail = (e as CustomEvent<"light" | "dark">).detail;
+      syncCanvasToTheme(detail === "dark");
+    };
+    window.addEventListener("molvis:theme-change", handleThemeChange);
+
     app.start().then(() => {
       if (onMount) {
         onMount(app);
@@ -220,6 +234,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       container.removeEventListener("drop", handleDrop);
       resizeObserver.disconnect();
       window.removeEventListener("message", handleHostMessage);
+      window.removeEventListener("molvis:theme-change", handleThemeChange);
       if (molvisRef.current) {
         molvisRef.current.destroy();
         molvisRef.current = null;
@@ -230,7 +245,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
   return (
     <div
       ref={containerRef}
-      className="molvis-container"
+      className="molvis-container bg-background"
       style={{
         position: "absolute",
         top: 0,
@@ -238,7 +253,6 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: "#000",
         border: "none",
         zIndex: 0,
         pointerEvents: "auto",
