@@ -18,7 +18,7 @@ import {
   computeClusters,
   getCategoricalPalette,
 } from "@molvis/core";
-import { Download, Play } from "lucide-react";
+import { AlertCircle, Download, Play } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -41,9 +41,15 @@ interface ModifierOption {
 // ---------------------------------------------------------------------------
 
 const CHART_PAD = { top: 10, right: 10, bottom: 28, left: 36 };
+const CHART_W = 400;
+const CHART_H = 160;
+const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right;
+const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom;
+const BAR_GRADIENT_ID = "cluster-bar-grad";
 
 function ClusterSizeChart({ result }: { result: ClusterResult }) {
   const { clusterSizes, numClusters } = result;
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const sizeHistogram = new Map<number, number>();
   for (let c = 0; c < numClusters; c++) {
@@ -57,16 +63,12 @@ function ClusterSizeChart({ result }: { result: ClusterResult }) {
   if (entries.length === 0) return null;
 
   const maxCount = Math.max(...entries.map(([, c]) => c));
+  const totalClusters = numClusters;
 
-  const svgW = 400;
-  const svgH = 160;
-  const pw = svgW - CHART_PAD.left - CHART_PAD.right;
-  const ph = svgH - CHART_PAD.top - CHART_PAD.bottom;
-
-  const barWidth = Math.max(4, Math.min(24, pw / entries.length - 2));
+  const barWidth = Math.max(4, Math.min(24, PLOT_W / entries.length - 2));
   const totalBarsW = entries.length * (barWidth + 2);
-  const barsOffset = CHART_PAD.left + Math.max(0, (pw - totalBarsW) / 2);
-  const yScale = maxCount > 0 ? ph / (maxCount * 1.1) : 1;
+  const barsOffset = CHART_PAD.left + Math.max(0, (PLOT_W - totalBarsW) / 2);
+  const yScale = maxCount > 0 ? PLOT_H / (maxCount * 1.1) : 1;
 
   const niceStep = (range: number, ticks: number) => {
     const raw = range / ticks;
@@ -78,31 +80,71 @@ function ClusterSizeChart({ result }: { result: ClusterResult }) {
   const yTicks: number[] = [];
   for (let v = 0; v <= maxCount * 1.1; v += yStep) yTicks.push(Math.round(v));
 
-  const toY = (count: number) => CHART_PAD.top + ph - count * yScale;
+  const toY = (count: number) => CHART_PAD.top + PLOT_H - count * yScale;
+
+  const hovered = hoverIdx != null ? entries[hoverIdx] : null;
+  const hoverBarX =
+    hoverIdx != null ? barsOffset + hoverIdx * (barWidth + 2) : 0;
+  const hoverBarH = hovered ? hovered[1] * yScale : 0;
+
+  // Tooltip box
+  const TIP_W = 110;
+  const TIP_H = 30;
+  let tipX = 0;
+  let tipY = 0;
+  if (hovered) {
+    tipX = hoverBarX + barWidth / 2 + 8;
+    if (tipX + TIP_W > CHART_PAD.left + PLOT_W)
+      tipX = hoverBarX + barWidth / 2 - TIP_W - 8;
+    tipY = CHART_PAD.top + PLOT_H - hoverBarH - TIP_H - 6;
+    if (tipY < CHART_PAD.top) tipY = CHART_PAD.top + 2;
+  }
 
   return (
     <svg
-      viewBox={`0 0 ${svgW} ${svgH}`}
+      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
       preserveAspectRatio="xMidYMid meet"
-      className="w-full border rounded bg-muted/10 select-none"
+      className="w-full border rounded bg-muted/10 select-none text-foreground"
       role="img"
       aria-label="Cluster size distribution"
+      onMouseLeave={() => setHoverIdx(null)}
     >
+      <defs>
+        <linearGradient id={BAR_GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="currentColor" stopOpacity={0.85} />
+          <stop offset="100%" stopColor="currentColor" stopOpacity={0.45} />
+        </linearGradient>
+      </defs>
+
+      {/* Subtle horizontal gridlines */}
+      {yTicks.map((v) => (
+        <line
+          key={`yg-${v}`}
+          x1={CHART_PAD.left}
+          y1={toY(v)}
+          x2={CHART_PAD.left + PLOT_W}
+          y2={toY(v)}
+          stroke="currentColor"
+          strokeOpacity={0.06}
+        />
+      ))}
+
+      {/* Axes */}
       <line
         x1={CHART_PAD.left}
         y1={CHART_PAD.top}
         x2={CHART_PAD.left}
-        y2={CHART_PAD.top + ph}
+        y2={CHART_PAD.top + PLOT_H}
         stroke="currentColor"
-        strokeOpacity={0.3}
+        strokeOpacity={0.35}
       />
       <line
         x1={CHART_PAD.left}
-        y1={CHART_PAD.top + ph}
-        x2={CHART_PAD.left + pw}
-        y2={CHART_PAD.top + ph}
+        y1={CHART_PAD.top + PLOT_H}
+        x2={CHART_PAD.left + PLOT_W}
+        y2={CHART_PAD.top + PLOT_H}
         stroke="currentColor"
-        strokeOpacity={0.3}
+        strokeOpacity={0.35}
       />
       {yTicks.map((v) => (
         <g key={`yt-${v}`}>
@@ -112,7 +154,7 @@ function ClusterSizeChart({ result }: { result: ClusterResult }) {
             x2={CHART_PAD.left}
             y2={toY(v)}
             stroke="currentColor"
-            strokeOpacity={0.3}
+            strokeOpacity={0.4}
           />
           <text
             x={CHART_PAD.left - 4}
@@ -120,63 +162,135 @@ function ClusterSizeChart({ result }: { result: ClusterResult }) {
             textAnchor="end"
             fontSize={8}
             fill="currentColor"
-            opacity={0.4}
+            opacity={0.5}
           >
             {v}
           </text>
         </g>
       ))}
-      {entries.map(([size, count], idx) => {
-        const x = barsOffset + idx * (barWidth + 2);
-        const barH = count * yScale;
-        return (
-          <g key={size}>
-            <rect
-              x={x}
-              y={CHART_PAD.top + ph - barH}
-              width={barWidth}
-              height={barH}
-              fill="#3b82f6"
-              fillOpacity={0.6}
-              rx={1}
-            />
-            {(entries.length <= 20 ||
-              idx % Math.ceil(entries.length / 20) === 0) && (
-              <text
-                x={x + barWidth / 2}
-                y={CHART_PAD.top + ph + 12}
-                textAnchor="middle"
-                fontSize={7}
-                fill="currentColor"
-                opacity={0.4}
-              >
-                {size}
-              </text>
-            )}
-          </g>
-        );
-      })}
+
+      {/* Bars (accent color via wrapper) */}
+      <g className="text-sky-600 dark:text-sky-400">
+        {entries.map(([size, count], idx) => {
+          const x = barsOffset + idx * (barWidth + 2);
+          const barH = count * yScale;
+          const isHovered = hoverIdx === idx;
+          return (
+            <g key={size}>
+              {/* invisible hit area covers full column for easy hover */}
+              <rect
+                x={x - 1}
+                y={CHART_PAD.top}
+                width={barWidth + 2}
+                height={PLOT_H}
+                fill="transparent"
+                onMouseEnter={() => setHoverIdx(idx)}
+              />
+              <rect
+                x={x}
+                y={CHART_PAD.top + PLOT_H - barH}
+                width={barWidth}
+                height={barH}
+                fill={`url(#${BAR_GRADIENT_ID})`}
+                rx={1.5}
+                opacity={hoverIdx == null || isHovered ? 1 : 0.4}
+                style={{ pointerEvents: "none" }}
+              />
+              {(entries.length <= 20 ||
+                idx % Math.ceil(entries.length / 20) === 0) && (
+                <text
+                  x={x + barWidth / 2}
+                  y={CHART_PAD.top + PLOT_H + 12}
+                  textAnchor="middle"
+                  fontSize={7}
+                  fill="currentColor"
+                  opacity={isHovered ? 0.95 : 0.45}
+                  style={{ pointerEvents: "none" }}
+                >
+                  {size}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </g>
+
+      {/* Axis titles */}
       <text
-        x={CHART_PAD.left + pw / 2}
-        y={svgH - 2}
+        x={CHART_PAD.left + PLOT_W / 2}
+        y={CHART_H - 2}
         textAnchor="middle"
         fontSize={9}
         fill="currentColor"
-        opacity={0.5}
+        opacity={0.55}
       >
         cluster size
       </text>
       <text
         x={5}
-        y={CHART_PAD.top + ph / 2}
+        y={CHART_PAD.top + PLOT_H / 2}
         textAnchor="middle"
         fontSize={9}
         fill="currentColor"
-        opacity={0.5}
-        transform={`rotate(-90 5 ${CHART_PAD.top + ph / 2})`}
+        opacity={0.55}
+        transform={`rotate(-90 5 ${CHART_PAD.top + PLOT_H / 2})`}
       >
         count
       </text>
+
+      {/* Hover tooltip */}
+      {hovered && (
+        <g style={{ pointerEvents: "none" }}>
+          <rect
+            x={tipX}
+            y={tipY}
+            width={TIP_W}
+            height={TIP_H}
+            rx={3}
+            fill="hsl(var(--popover))"
+            stroke="currentColor"
+            strokeOpacity={0.35}
+          />
+          <text
+            x={tipX + 6}
+            y={tipY + 12}
+            fontSize={9}
+            fill="currentColor"
+            opacity={0.7}
+          >
+            size
+          </text>
+          <text
+            x={tipX + TIP_W - 6}
+            y={tipY + 12}
+            textAnchor="end"
+            fontSize={9}
+            fontFamily="ui-monospace, SFMono-Regular, monospace"
+            fill="currentColor"
+          >
+            {hovered[0]}
+          </text>
+          <text
+            x={tipX + 6}
+            y={tipY + 24}
+            fontSize={9}
+            fill="currentColor"
+            opacity={0.7}
+          >
+            count
+          </text>
+          <text
+            x={tipX + TIP_W - 6}
+            y={tipY + 24}
+            textAnchor="end"
+            fontSize={9}
+            fontFamily="ui-monospace, SFMono-Regular, monospace"
+            fill="currentColor"
+          >
+            {`${hovered[1]} (${((hovered[1] / totalClusters) * 100).toFixed(1)}%)`}
+          </text>
+        </g>
+      )}
     </svg>
   );
 }
@@ -463,161 +577,175 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({ app }) => {
   }
 
   return (
-    <SidebarSection title="Cluster analysis" defaultOpen={true}>
-      <div className="space-y-2.5">
-        {/* Connectivity criterion */}
-        <div className="space-y-1">
-          <span className="text-[10px] text-muted-foreground font-medium">
-            Connectivity criterion:
-          </span>
-
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name="cluster-mode"
-              checked={mode === "cutoff"}
-              onChange={() => setMode("cutoff")}
-              className="h-3 w-3 accent-primary"
-            />
-            <span className="text-[10px]">Cutoff distance</span>
-            {mode === "cutoff" && (
-              <Input
-                className="h-5 text-[10px] font-mono w-16 ml-auto"
-                value={rMax}
-                onChange={(e) => setRMax(e.target.value)}
-                placeholder="auto"
-              />
-            )}
-          </label>
-
-          <label
-            className={`flex items-center gap-1.5 ${hasBonds ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
+    <SidebarSection
+      title="Cluster"
+      subtitle={
+        mode === "bonds" ? "By bonds" : `Cutoff r = ${rMax || "auto"} Å`
+      }
+      defaultOpen={true}
+    >
+      {/* Connectivity mode — segmented toggle */}
+      <div className="flex items-center gap-1.5">
+        <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+          Mode
+        </span>
+        <div className="flex-1 min-w-0 grid grid-cols-2 gap-0.5 rounded-md bg-muted/40 p-0.5">
+          <Button
+            size="sm"
+            variant={mode === "cutoff" ? "secondary" : "ghost"}
+            className={`h-6 text-[10px] px-1 ${mode === "cutoff" ? "ring-1 ring-ring" : ""}`}
+            onClick={() => setMode("cutoff")}
+            title="Connect atoms within a cutoff distance"
           >
-            <input
-              type="radio"
-              name="cluster-mode"
-              checked={mode === "bonds"}
-              onChange={() => setMode("bonds")}
-              disabled={!hasBonds}
-              className="h-3 w-3 accent-primary"
-            />
-            <span className="text-[10px]">Bonds</span>
-          </label>
+            Cutoff
+          </Button>
+          <Button
+            size="sm"
+            variant={mode === "bonds" ? "secondary" : "ghost"}
+            className={`h-6 text-[10px] px-1 ${mode === "bonds" ? "ring-1 ring-ring" : ""}`}
+            onClick={() => setMode("bonds")}
+            disabled={!hasBonds}
+            title={hasBonds ? "Use bond topology" : "Frame has no bonds"}
+          >
+            Bonds
+          </Button>
         </div>
+      </div>
 
-        {/* Min cluster size */}
-        <div className="grid grid-cols-[72px_1fr] gap-1.5 items-center">
-          <span className="text-[10px] text-muted-foreground">Min size</span>
+      {mode === "cutoff" && (
+        <div className="flex items-center gap-1.5">
+          <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+            r_max
+          </span>
           <Input
-            className="h-5 text-[10px] font-mono"
-            value={minSize}
-            onChange={(e) => setMinSize(e.target.value)}
-            placeholder="1"
+            className="h-7 flex-1 min-w-0 text-xs font-mono"
+            value={rMax}
+            onChange={(e) => setRMax(e.target.value)}
+            placeholder="auto"
+            aria-label="Cutoff distance"
           />
         </div>
+      )}
 
-        {/* Options */}
-        <div className="space-y-1">
-          <CheckboxRow
-            id="cl-sort"
-            checked={sortBySize}
-            onCheckedChange={setSortBySize}
-            label="Sort clusters by size"
-          />
-          <CheckboxRow
-            id="cl-color"
-            checked={colorByCluster}
-            onCheckedChange={setColorByCluster}
-            label="Color particles by cluster"
-          />
-          <CheckboxRow
-            id="cl-sel"
-            checked={useSelection}
-            onCheckedChange={setUseSelection}
-            label="Use only selected particles"
-          />
+      <div className="flex items-center gap-1.5">
+        <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+          Min size
+        </span>
+        <Input
+          className="h-7 flex-1 min-w-0 text-xs font-mono"
+          value={minSize}
+          onChange={(e) => setMinSize(e.target.value)}
+          placeholder="1"
+          aria-label="Minimum cluster size"
+        />
+      </div>
 
-          {/* Modifier selector — shown when "use selection" is checked */}
-          {useSelection && (
-            <div className="pl-5">
-              <Select value={selectionModId} onValueChange={setSelectionModId}>
-                <SelectTrigger className="h-5 text-[10px]" size="sm">
-                  <SelectValue
-                    placeholder={
-                      modifiers.length === 0 ? "No modifier yet" : "Choose..."
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {modifiers.map((m) => (
-                    <SelectItem key={m.id} value={m.id} className="text-[11px]">
-                      {m.label} ({m.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
+      {/* Options */}
+      <div className="space-y-1 pt-0.5">
+        <CheckboxRow
+          id="cl-sort"
+          checked={sortBySize}
+          onCheckedChange={setSortBySize}
+          label="Sort by size"
+        />
+        <CheckboxRow
+          id="cl-color"
+          checked={colorByCluster}
+          onCheckedChange={setColorByCluster}
+          label="Color particles by cluster"
+        />
+        <CheckboxRow
+          id="cl-sel"
+          checked={useSelection}
+          onCheckedChange={setUseSelection}
+          label="Limit to selected particles"
+        />
 
-        {/* Compute */}
-        <Button
-          size="sm"
-          className="h-7 w-full text-[11px] gap-1"
-          onClick={handleCompute}
-          disabled={computing}
-        >
-          <Play className="h-3 w-3" />
-          {computing ? "Computing..." : "Compute"}
-        </Button>
-
-        {error && (
-          <div className="text-[10px] text-red-400 bg-red-500/10 rounded px-2 py-1">
-            {error}
+        {useSelection && (
+          <div className="flex items-center gap-1.5 pl-5">
+            <Select value={selectionModId} onValueChange={setSelectionModId}>
+              <SelectTrigger className="h-7 flex-1 min-w-0 px-2 text-xs">
+                <SelectValue
+                  placeholder={
+                    modifiers.length === 0
+                      ? "No modifier yet"
+                      : "Choose modifier"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {modifiers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    <span className="text-xs">
+                      {m.label}
+                      <span className="ml-1 text-muted-foreground">
+                        ({m.count})
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
-
-        {/* Result */}
-        {result && (
-          <div className="text-[10px] text-muted-foreground bg-muted/20 rounded px-2 py-1">
-            Found{" "}
-            <span className="text-foreground font-medium">
-              {result.numClusters}
-            </span>{" "}
-            cluster(s).
-          </div>
-        )}
-
-        {result && result.numClusters > 0 && (
-          <>
-            <ClusterSizeChart result={result} />
-
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 w-full text-[10px]"
-              onClick={() => setShowList((v) => !v)}
-            >
-              {showList ? "Hide list of clusters" : "Show list of clusters"}
-            </Button>
-
-            {showList && (
-              <div className="space-y-1">
-                <ClusterTable rows={clusterRows} />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 w-full text-[10px] gap-1"
-                  onClick={() => downloadClusterCsv(result)}
-                >
-                  <Download className="h-3 w-3" />
-                  Export CSV
-                </Button>
-              </div>
-            )}
-          </>
         )}
       </div>
+
+      <Button
+        size="sm"
+        className="h-7 w-full text-xs gap-1.5"
+        onClick={handleCompute}
+        disabled={computing}
+      >
+        <Play className="h-3.5 w-3.5" />
+        {computing ? "Computing…" : "Compute clusters"}
+      </Button>
+
+      {error && (
+        <p className="flex items-start gap-1 text-[10px] text-destructive leading-tight px-0.5">
+          <AlertCircle className="h-3 w-3 shrink-0 mt-px" />
+          <span className="truncate">{error}</span>
+        </p>
+      )}
+
+      {result && (
+        <div className="text-[10px] text-muted-foreground px-0.5">
+          Found{" "}
+          <span className="text-foreground font-medium">
+            {result.numClusters}
+          </span>{" "}
+          cluster{result.numClusters === 1 ? "" : "s"}
+        </div>
+      )}
+
+      {result && result.numClusters > 0 && (
+        <>
+          <ClusterSizeChart result={result} />
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 w-full text-xs"
+            onClick={() => setShowList((v) => !v)}
+          >
+            {showList ? "Hide cluster list" : "Show cluster list"}
+          </Button>
+
+          {showList && (
+            <div className="space-y-1">
+              <ClusterTable rows={clusterRows} />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 w-full text-xs gap-1.5"
+                onClick={() => downloadClusterCsv(result)}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </Button>
+            </div>
+          )}
+        </>
+      )}
     </SidebarSection>
   );
 };

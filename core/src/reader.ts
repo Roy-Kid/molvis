@@ -86,16 +86,16 @@ function normalizeFrame(frame: Frame): void {
     }
   }
 
-  // Ensure bond order column is u32 (readers may produce f32 or i32)
+  // Ensure bond order column is u32 (readers may produce f64 or i32)
   const orderDtype = bonds.dtype("order");
   if (orderDtype && orderDtype !== "u32") {
     const nrows = bonds.nrows();
     if (orderDtype === DType.F64) {
-      const f32 = bonds.viewColF("order");
-      if (f32) {
+      const f64 = bonds.viewColF("order");
+      if (f64) {
         const u32 = new Uint32Array(nrows);
         for (let i = 0; i < nrows; i++) {
-          u32[i] = Math.max(1, Math.round(f32[i]));
+          u32[i] = Math.max(1, Math.round(f64[i]));
         }
         bonds.setColU32("order", u32);
       }

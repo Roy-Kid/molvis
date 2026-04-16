@@ -1,7 +1,7 @@
 /**
  * Marching Cubes tests.
  *
- * Pipeline tested: WASM Grid → Float32Array → marchingCubes() → MCMesh
+ * Pipeline tested: WASM Grid → Float64Array → marchingCubes() → MCMesh
  *
  * No BabylonJS dependency — all tests run purely in the rstest environment.
  */
@@ -18,7 +18,7 @@ const UNIT_CELL = new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 const ZERO_ORIGIN = new Float64Array([0, 0, 0]);
 
 /**
- * Create a flat Float32Array of size nx*ny*nz.
+ * Create a flat Float64Array of size nx*ny*nz.
  * fill(fn) calls fn(i, j, k) for each voxel.
  */
 function makeField(
@@ -26,7 +26,7 @@ function makeField(
   ny: number,
   nz: number,
   fn: (i: number, j: number, k: number) => number,
-): Float32Array {
+): Float64Array {
   const data = new Float64Array(nx * ny * nz);
   for (let i = 0; i < nx; i++)
     for (let j = 0; j < ny; j++)
@@ -40,7 +40,7 @@ function sphereField(
   ny: number,
   nz: number,
   r: number,
-): Float32Array {
+): Float64Array {
   const cx = nx / 2;
   const cy = ny / 2;
   const cz = nz / 2;
@@ -52,8 +52,8 @@ function sphereField(
   );
 }
 
-/** Check that no value in a Float32Array is NaN or Infinity. */
-function hasNoInvalid(arr: Float32Array): boolean {
+/** Check that no value in a typed float array is NaN or Infinity. */
+function hasNoInvalid(arr: Float32Array | Float64Array): boolean {
   for (let i = 0; i < arr.length; i++) {
     if (!Number.isFinite(arr[i])) return false;
   }
@@ -62,7 +62,7 @@ function hasNoInvalid(arr: Float32Array): boolean {
 
 // ── WASM Grid integration ─────────────────────────────────────────────────────
 
-describe("Grid → Float32Array extraction", () => {
+describe("Grid → Float64Array extraction", () => {
   test("getArray returns data matching inserted values", () => {
     const grid = new Grid(4, 4, 4, ZERO_ORIGIN, UNIT_CELL, false, false, false);
     const input = new Float64Array(64).fill(0);

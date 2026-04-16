@@ -86,7 +86,7 @@ const App: React.FC = () => {
         <ResizablePanelGroup
           orientation="horizontal"
           className="flex-1"
-          defaultLayout={{ left: 0, canvas: 74, right: 26 }}
+          defaultLayout={{ left: 0, canvas: 79, right: 21 }}
           resizeTargetMinimumSize={{ fine: 20, coarse: 36 }}
         >
           <ResizablePanel
@@ -105,7 +105,7 @@ const App: React.FC = () => {
 
           <ResizablePanel
             id="canvas"
-            defaultSize="74%"
+            defaultSize="79%"
             minSize="35%"
             className="flex flex-col min-w-[360px]"
           >
@@ -124,8 +124,8 @@ const App: React.FC = () => {
 
           <ResizablePanel
             id="right"
-            defaultSize="26%"
-            minSize="15%"
+            defaultSize="21%"
+            minSize="14%"
             maxSize="40%"
             collapsible={true}
             collapsedSize="0%"

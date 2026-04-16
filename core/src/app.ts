@@ -351,6 +351,10 @@ export class MolvisApp {
     this.resize();
   }
 
+  public resetCamera(): void {
+    this._world.resetCamera();
+  }
+
   public save(): void {
     const frame = this._system.frame;
     if (frame) {

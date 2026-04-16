@@ -8,6 +8,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   type CropBounds,
@@ -21,6 +28,33 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CropMode = "none" | "auto" | "manual";
+type SaveFormat = "png" | "jpg" | "webp";
+
+const FORMAT_TO_EXT: Record<SaveFormat, string> = {
+  png: "png",
+  jpg: "jpg",
+  webp: "webp",
+};
+
+const FORMAT_TO_MIME: Record<SaveFormat, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  webp: "image/webp",
+};
+
+const formatFromExt = (ext: string): SaveFormat | null => {
+  const e = ext.toLowerCase();
+  if (e === "png") return "png";
+  if (e === "jpg" || e === "jpeg") return "jpg";
+  if (e === "webp") return "webp";
+  return null;
+};
+
+const swapExtension = (name: string, newExt: string): string => {
+  const m = name.match(/^(.*?)(\.[^./\\]+)?$/);
+  const stem = m?.[1] ?? name;
+  return `${stem || "molvis-screenshot"}.${newExt}`;
+};
 
 interface ScreenshotDialogProps {
   app: Molvis | null;
@@ -216,6 +250,9 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
   const [dpiStr, setDpiStr] = useState("96");
   const [transparent, setTransparent] = useState(true);
 
+  const [format, setFormat] = useState<SaveFormat>("png");
+  const [filename, setFilename] = useState("molvis-screenshot.png");
+
   const [cropMode, setCropMode] = useState<CropMode>("none");
   const [manualCrop, setManualCrop] = useState<CropBounds | null>(null);
   const [autoBounds, setAutoBounds] = useState<CropBounds | null>(null);
@@ -302,8 +339,24 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
     setDraftRect(null);
     setAutoBounds(null);
     setRawUrl(null);
+    setFormat("png");
+    setFilename("molvis-screenshot.png");
     captureRef.current({ transparent: true });
   }, [open, app]);
+
+  const onFormatChange = (value: string) => {
+    const next = value as SaveFormat;
+    setFormat(next);
+    setFilename((current) => swapExtension(current, FORMAT_TO_EXT[next]));
+  };
+
+  const onFilenameChange = (value: string) => {
+    setFilename(value);
+    const ext = value.match(/\.([a-z0-9]+)$/i)?.[1];
+    if (!ext) return;
+    const matched = formatFromExt(ext);
+    if (matched && matched !== format) setFormat(matched);
+  };
 
   const transparentPrev = useRef(transparent);
   useEffect(() => {
@@ -389,21 +442,24 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
       }>;
     };
 
+    const mime = FORMAT_TO_MIME[format];
+    const ext = FORMAT_TO_EXT[format];
+    const suggestedName = filename.trim() || `molvis-screenshot.${ext}`;
+
     if (typeof anyWin.showSaveFilePicker === "function") {
       try {
         const handle = await anyWin.showSaveFilePicker({
-          suggestedName: "molvis-screenshot.png",
+          suggestedName,
           types: [
-            { description: "PNG image", accept: { "image/png": [".png"] } },
-            { description: "WebP image", accept: { "image/webp": [".webp"] } },
             {
-              description: "JPEG image",
-              accept: { "image/jpeg": [".jpg", ".jpeg"] },
+              description: `${format.toUpperCase()} image`,
+              accept: { [mime]: [`.${ext}`] },
             },
           ],
         });
-        const ext = handle.name.match(/\.([a-z0-9]+)$/i)?.[1] ?? "png";
-        const blob = await encodeForSave(mimeForExt(ext));
+        const savedExt = handle.name.match(/\.([a-z0-9]+)$/i)?.[1];
+        const savedMime = savedExt ? mimeForExt(savedExt) : mime;
+        const blob = await encodeForSave(savedMime);
         const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
@@ -415,11 +471,11 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
       return;
     }
 
-    const blob = await encodeForSave("image/png");
+    const blob = await encodeForSave(mime);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "molvis-screenshot.png";
+    a.download = suggestedName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -806,6 +862,35 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
                 Drag on the preview to define a custom crop region. Width and
                 height update to match.
               </p>
+            </Section>
+
+            <Section title="Save">
+              <div className="flex items-center gap-1.5">
+                <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+                  Format
+                </span>
+                <Select value={format} onValueChange={onFormatChange}>
+                  <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="png">PNG</SelectItem>
+                    <SelectItem value="jpg">JPEG</SelectItem>
+                    <SelectItem value="webp">WebP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
+                  Name
+                </span>
+                <Input
+                  value={filename}
+                  onChange={(e) => onFilenameChange(e.target.value)}
+                  className="h-7 text-xs font-mono flex-1 min-w-0"
+                  spellCheck={false}
+                />
+              </div>
             </Section>
 
             {errorMsg && (

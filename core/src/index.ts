@@ -33,6 +33,7 @@ export {
   Box,
   WasmArray,
   MolRecReader,
+  SDFReader,
   Trajectory,
   type FrameProvider,
   parseSMILES,

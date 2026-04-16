@@ -15,6 +15,8 @@ import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
 import {
   type BondBufferResult,
   buildBondBuffers,
+  buildSubBondInstanceBuffers,
+  clampBondOrder,
   refreshBondPositions,
 } from "./artist/bond_buffer";
 import { LabelRenderer } from "./artist/label_renderer";
@@ -347,7 +349,9 @@ export class Artist {
         atomColor,
         this.bondMesh.uniqueId,
         {
-          radius: options?.bonds?.radii,
+          radius:
+            options?.bonds?.radii ??
+            this.app.styleManager.getBondStyle(1).radius,
           visible: visibleArr ? (i: number) => visibleArr[i] : undefined,
         },
       );
@@ -605,32 +609,9 @@ export class Artist {
     options: DrawBondOptions = {},
   ): Promise<{ bondId: number; meshId: number }> {
     const bondId = options.bondId ?? this.app.world.sceneIndex.getNextBondId();
-    const order = options.order ?? 1;
+    const order = clampBondOrder(options.order ?? 1);
     const bondRadius =
       options.radius || this.app.styleManager.getBondStyle(order).radius;
-
-    const center = start.add(end).scaleInPlace(0.5);
-    const dir = end.subtract(start);
-    const distance = dir.length();
-    if (distance > 1e-8) {
-      dir.scaleInPlace(1 / distance);
-    } else {
-      dir.set(0, 1, 0);
-    }
-
-    const scale = distance + bondRadius * 2;
-
-    const matrix = new Float32Array(16);
-    matrix[0] = scale;
-    matrix[5] = scale;
-    matrix[10] = scale;
-    matrix[15] = 1;
-    matrix[12] = center.x;
-    matrix[13] = center.y;
-    matrix[14] = center.z;
-
-    const data0 = new Float32Array([center.x, center.y, center.z, bondRadius]);
-    const data1 = new Float32Array([dir.x, dir.y, dir.z, distance]);
 
     const atomId1 = options.atomId1 ?? 0;
     const atomId2 = options.atomId2 ?? 0;
@@ -641,14 +622,19 @@ export class Artist {
     const r1 = this.getAtomRadius(atomId2);
     const splitOffset = (r0 - r1) * 0.5;
 
-    const values = new Map<string, Float32Array>();
-    values.set("matrix", matrix);
-    values.set("instanceData0", data0);
-    values.set("instanceData1", data1);
-    values.set("instanceColor0", c0);
-    values.set("instanceColor1", c1);
-    values.set("instanceSplit", new Float32Array([splitOffset, 0, 0, 0]));
-    values.set("instancePickingColor", new Float32Array(4));
+    const { buffers: subBuffers, subCount } = buildSubBondInstanceBuffers(
+      start,
+      end,
+      order,
+      bondRadius,
+      c0,
+      c1,
+      splitOffset,
+    );
+
+    const values = new Map<string, Float32Array>(subBuffers);
+    // Picking color is filled by ImpostorState.writePickingColor per sub-slot.
+    values.set("instancePickingColor", new Float32Array(4 * subCount));
 
     await this.ensureShadersForVisibleGeometry(
       this.collectVisibleTargets({
@@ -667,6 +653,7 @@ export class Artist {
         end: { x: end.x, y: end.y, z: end.z },
       },
       values,
+      subCount,
     );
     this.applySceneIndexToMeshes();
 
@@ -713,7 +700,11 @@ export class Artist {
         bondCount: 1,
       }),
     );
-    this.app.world.sceneIndex.createBond(meta, buffers);
+    // Infer subCount from matrix buffer length (16 floats per render instance).
+    const matrix = buffers.get("matrix");
+    const matrixLen = Array.isArray(matrix) ? matrix.length : matrix?.length;
+    const subCount = Math.max(1, Math.floor((matrixLen ?? 16) / 16));
+    this.app.world.sceneIndex.createBond(meta, buffers, subCount);
     this.applySceneIndexToMeshes();
   }
 

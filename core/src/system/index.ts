@@ -4,6 +4,7 @@ export {
   Box,
   WasmArray,
   MolRecReader,
+  SDFReader,
   parseSMILES,
   generate3D,
 } from "@molcrafts/molrs";
