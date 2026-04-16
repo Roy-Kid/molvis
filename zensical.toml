@@ -10,14 +10,19 @@ site_dir = "site"
 copyright = "Copyright &copy; 2026 MolCrafts Team"
 nav = [
   { "Home" = "index.md" },
-  { "Getting Started" = "getting-started.md" },
-  { "Architecture" = "architecture.md" },
+  { "Getting Started" = [
+    "getting-started/index.md",
+    "getting-started/web.md",
+    "getting-started/vscode.md",
+  ]},
+  { "Development" = [
+    "development/index.md",
+    "development/setup.md",
+    "development/extending.md",
+  ]},
   { "API Reference" = [
-    "api/core.md",
-    "api/pipeline.md",
+    "api/typescript.md",
     "api/python.md",
-    "api/page.md",
-    "api/vsc-ext.md",
   ]},
 ]
 
