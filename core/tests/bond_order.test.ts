@@ -11,24 +11,24 @@ function makeBlocks(
   bonds: { i: number; j: number; order: number }[],
 ): { atoms: Block; bonds: Block } {
   const atoms = new Block();
-  atoms.setColF32(
+  atoms.setColF(
     "x",
-    new Float32Array(atomCount).fill(0).map((_, i) => i),
+    new Float64Array(atomCount).fill(0).map((_, i) => i),
   );
-  atoms.setColF32("y", new Float32Array(atomCount).fill(0));
-  atoms.setColF32("z", new Float32Array(atomCount).fill(0));
+  atoms.setColF("y", new Float64Array(atomCount).fill(0));
+  atoms.setColF("z", new Float64Array(atomCount).fill(0));
   atoms.setColStr("element", Array(atomCount).fill("C"));
 
   const bondsBlock = new Block();
-  bondsBlock.setColU32("i", new Uint32Array(bonds.map((b) => b.i)));
-  bondsBlock.setColU32("j", new Uint32Array(bonds.map((b) => b.j)));
+  bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b.i)));
+  bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b.j)));
   bondsBlock.setColU32("order", new Uint32Array(bonds.map((b) => b.order)));
 
   return { atoms, bonds: bondsBlock };
 }
 
 function makeAtomColor(count: number): Float32Array {
-  const color = new Float32Array(count * 4);
+  const color = new Float64Array(count * 4);
   for (let i = 0; i < count; i++) {
     color[i * 4 + 0] = 0.5;
     color[i * 4 + 1] = 0.5;
@@ -147,7 +147,7 @@ describe("buildBondBuffers with bond order", () => {
     const { atoms, bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 2 }]);
     // Place atoms far apart along X to get a clear bond direction
     const atomBlock = atoms;
-    atomBlock.setColF32("x", new Float32Array([0, 10]));
+    atomBlock.setColF("x", new Float64Array([0, 10]));
     const atomColor = makeAtomColor(2);
     const result = buildBondBuffers(bonds, atomBlock, atomColor, 42);
     const data0 = result?.buffers.get("instanceData0")!;
@@ -180,12 +180,12 @@ describe("buildBondBuffers with bond order", () => {
 
   it("should handle bonds without order column (default to 1)", () => {
     const atoms = new Block();
-    atoms.setColF32("x", new Float32Array([0, 1]));
-    atoms.setColF32("y", new Float32Array([0, 0]));
-    atoms.setColF32("z", new Float32Array([0, 0]));
+    atoms.setColF("x", new Float64Array([0, 1]));
+    atoms.setColF("y", new Float64Array([0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("i", new Uint32Array([0]));
-    bondsBlock.setColU32("j", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", new Uint32Array([0]));
+    bondsBlock.setColU32("atomj", new Uint32Array([1]));
     // No order column
     const atomColor = makeAtomColor(2);
     const result = buildBondBuffers(bondsBlock, atoms, atomColor, 42);

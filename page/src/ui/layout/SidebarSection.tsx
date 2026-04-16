@@ -10,6 +10,8 @@ interface SidebarSectionProps {
   defaultOpen?: boolean;
   children: React.ReactNode;
   className?: string;
+  /** Extra classes on the inner content wrapper (e.g. to make it flex-1). */
+  contentClassName?: string;
 }
 
 export const SidebarSection: React.FC<SidebarSectionProps> = ({
@@ -19,6 +21,7 @@ export const SidebarSection: React.FC<SidebarSectionProps> = ({
   defaultOpen = true,
   children,
   className,
+  contentClassName,
 }) => {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -55,7 +58,11 @@ export const SidebarSection: React.FC<SidebarSectionProps> = ({
         </div>
       </button>
 
-      {open && <div className="px-2 pb-1.5 space-y-1.5">{children}</div>}
+      {open && (
+        <div className={cn("px-2 pb-1.5 space-y-1.5", contentClassName)}>
+          {children}
+        </div>
+      )}
     </section>
   );
 };

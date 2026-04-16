@@ -11,6 +11,8 @@ import logging
 
 import molpy as mp
 
+from .catalog import FrontendCommands
+
 logger = logging.getLogger("molvis")
 
 __all__ = ["SelectionCommandsMixin"]
@@ -37,6 +39,7 @@ class SelectionCommandsMixin:
             
         Raises:
             TimeoutError: If the frontend does not respond within the timeout
+            molvis.MolvisRpcError: If the frontend rejects the query
             
         Example:
             >>> scene = Molvis()
@@ -46,13 +49,12 @@ class SelectionCommandsMixin:
             >>> print(selected.blocks['atoms']['element'])
             ['C', 'N', 'O', ...]
         """
-        response = self.send_cmd("get_selected", {}, wait_for_response=True, timeout=timeout)
-        
-        # Extract result from JSON-RPC response
-        if isinstance(response, dict) and "result" in response:
-            data = response["result"]
-        else:
-            data = response
+        data = self.send_cmd(
+            FrontendCommands.GET_SELECTED.method,
+            {},
+            wait_for_response=True,
+            timeout=timeout,
+        )
         
         # Construct molpy.Frame from the response
         blocks = {}
@@ -76,10 +78,15 @@ class SelectionCommandsMixin:
             
         Returns:
             Self for method chaining
+
+        Raises:
+            molvis.MolvisRpcError: If the frontend rejects the selection request.
         """
         if isinstance(atom_ids, int):
             atom_ids = [atom_ids]
             
-        self.send_cmd("select_atoms", {"ids": atom_ids}, [])
+        self.send_cmd(
+            FrontendCommands.SELECT_ATOMS.method,
+            {"ids": atom_ids},
+        )
         return self
-

@@ -32,13 +32,14 @@ export {
   Block,
   Box,
   WasmArray,
-  SimulationReader,
+  MolRecReader,
   Trajectory,
   type FrameProvider,
   parseSMILES,
   generate3D,
-  type SmilesIR,
+  Grid,
 } from "./system/index";
+export type { SmilesIR } from "./system/index";
 export { Topology } from "./system/topology";
 export { System } from "./system";
 export { World } from "./world";
@@ -98,8 +99,21 @@ export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
 export { SelectModifier } from "./modifiers/SelectModifier";
-export type { ColormapName } from "./artist/colormaps";
-export { COLORMAP_NAMES, sampleColormap } from "./artist/colormaps";
+export {
+  ColorMap,
+  DEFAULT_CATEGORICAL_COLOR_MAP,
+  buildCategoricalColorLookup,
+  getCategoricalPalette,
+  getColorMap,
+  getPaletteDefinition,
+  listColorMaps,
+  listContinuousColorMaps,
+  listPaletteDefinitions,
+  type LinearRGB,
+  type PaletteDefinition,
+  type PaletteEntry,
+  type PaletteSummary,
+} from "./artist/palette";
 
 export {
   computeRdf,
@@ -155,6 +169,8 @@ export {
   type LabelMode,
   DEFAULT_LABEL_CONFIG,
 } from "./artist/label_renderer";
+export { ClassicTheme } from "./artist/presets/classic";
+export { ModernTheme } from "./artist/presets/modern";
 export type { RepresentationStyle } from "./artist/representation";
 export {
   REPRESENTATIONS,
@@ -164,5 +180,35 @@ export {
   findRepresentation,
 } from "./artist/representation";
 
-// Register default commands
-import "./commands";
+// Overlay system
+export { OverlayManager } from "./overlays/overlay_manager";
+export { Arrow3DOverlay } from "./overlays/arrow3d";
+export { Arrow2DOverlay } from "./overlays/arrow2d";
+export { TextLabelOverlay } from "./overlays/text_label";
+export { VectorFieldOverlay } from "./overlays/vector_field";
+export type {
+  Overlay,
+  Arrow3DProps,
+  Arrow2DProps,
+  TextLabelProps,
+  VectorFieldProps,
+} from "./overlays/types";
+export { VectorFieldModifier } from "./modifiers/VectorFieldModifier";
+export type { VectorFieldModifierConfig } from "./modifiers/VectorFieldModifier";
+export {
+  AddOverlayCommand,
+  RemoveOverlayCommand,
+  UpdateOverlayCommand,
+} from "./commands/overlays";
+
+export { registerDefaultCommands } from "./commands";
+export { registerDefaultModifiers } from "./pipeline/modifier_registry";
+
+export {
+  cropToContent,
+  cropToRect,
+  reencodeImage,
+  findAlphaBounds,
+  type CropBounds,
+  type CropOptions,
+} from "./utils/image_crop";

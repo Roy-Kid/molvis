@@ -16,7 +16,7 @@ import {
   type Molvis,
   type SelectionMask,
   computeClusters,
-  sampleColormap,
+  getCategoricalPalette,
 } from "@molvis/core";
 import { Download, Play } from "lucide-react";
 import type React from "react";
@@ -288,13 +288,11 @@ function colorAtomsByCluster(app: Molvis, result: ClusterResult) {
   const { clusterIdx, numClusters, nParticles } = result;
   const total = atomState.frameOffset + atomState.count;
 
-  // Pre-compute one color per cluster using rainbow colormap
+  // Pre-compute one color per cluster
+  const palette = getCategoricalPalette();
   const clusterColors = new Array<[number, number, number]>(numClusters);
   for (let c = 0; c < numClusters; c++) {
-    clusterColors[c] = sampleColormap(
-      "rainbow",
-      numClusters <= 1 ? 0.5 : c / (numClusters - 1),
-    );
+    clusterColors[c] = palette[c % palette.length];
   }
 
   // Unassigned atoms (cluster -1) get a dim gray

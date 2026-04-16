@@ -11,7 +11,7 @@ import {
 
 export interface ClusterPropertiesParams {
   /** Per-particle masses. If omitted, uniform mass (1.0) is used. */
-  masses?: Float32Array;
+  masses?: Float64Array;
   /** Which properties to compute. Default: all. */
   compute?: {
     centers?: boolean;
@@ -24,17 +24,17 @@ export interface ClusterPropertiesParams {
 
 export interface ClusterPropertiesResult {
   /** Geometric centers [x0,y0,z0, x1,y1,z1, ...] (MIC-aware). */
-  centers?: Float32Array;
+  centers?: Float64Array;
   /** Mass-weighted centers of mass [x0,y0,z0, ...]. */
-  centersOfMass?: Float32Array;
+  centersOfMass?: Float64Array;
   /** Total mass per cluster. */
-  clusterMasses?: Float32Array;
+  clusterMasses?: Float64Array;
   /** Radius of gyration per cluster. */
-  radiiOfGyration?: Float32Array;
+  radiiOfGyration?: Float64Array;
   /** Gyration tensors [g00,g01,...g22, ...] (9 floats per cluster). */
-  gyrationTensors?: Float32Array;
+  gyrationTensors?: Float64Array;
   /** Inertia tensors [I00,I01,...I22, ...] (9 floats per cluster). */
-  inertiaTensors?: Float32Array;
+  inertiaTensors?: Float64Array;
   /** Number of clusters analyzed. */
   numClusters: number;
 }
@@ -66,7 +66,7 @@ export function computeClusterProperties(
     let calc: WasmClusterCenters | null = null;
     try {
       calc = new WasmClusterCenters();
-      result.centers = new Float32Array(calc.compute(frame, clusterResult));
+      result.centers = new Float64Array(calc.compute(frame, clusterResult));
     } finally {
       calc?.free();
     }
@@ -78,8 +78,8 @@ export function computeClusterProperties(
     try {
       calc = new WasmCenterOfMass(params.masses ?? null);
       comResult = calc.compute(frame, clusterResult);
-      result.centersOfMass = new Float32Array(comResult.centersOfMass());
-      result.clusterMasses = new Float32Array(comResult.clusterMasses());
+      result.centersOfMass = new Float64Array(comResult.centersOfMass());
+      result.clusterMasses = new Float64Array(comResult.clusterMasses());
     } finally {
       comResult?.free();
       calc?.free();
@@ -90,7 +90,7 @@ export function computeClusterProperties(
     let calc: WasmRadiusOfGyration | null = null;
     try {
       calc = new WasmRadiusOfGyration(params.masses ?? null);
-      result.radiiOfGyration = new Float32Array(
+      result.radiiOfGyration = new Float64Array(
         calc.compute(frame, clusterResult),
       );
     } finally {
@@ -102,7 +102,7 @@ export function computeClusterProperties(
     let calc: WasmGyrationTensor | null = null;
     try {
       calc = new WasmGyrationTensor();
-      result.gyrationTensors = new Float32Array(
+      result.gyrationTensors = new Float64Array(
         calc.compute(frame, clusterResult),
       );
     } finally {
@@ -114,7 +114,7 @@ export function computeClusterProperties(
     let calc: WasmInertiaTensor | null = null;
     try {
       calc = new WasmInertiaTensor(params.masses ?? null);
-      result.inertiaTensors = new Float32Array(
+      result.inertiaTensors = new Float64Array(
         calc.compute(frame, clusterResult),
       );
     } finally {

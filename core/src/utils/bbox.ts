@@ -19,9 +19,9 @@ export function calculateBoundingBox(
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.viewColF32("x");
-  const y = atoms.viewColF32("y");
-  const z = atoms.viewColF32("z");
+  const x = atoms.viewColF("x");
+  const y = atoms.viewColF("y");
+  const z = atoms.viewColF("z");
 
   if (!x || !y || !z || x.length === 0) return null;
 

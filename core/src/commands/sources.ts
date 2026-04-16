@@ -2,7 +2,7 @@ import type { Frame } from "@molcrafts/molrs";
 import type { FrameSource } from "../pipeline/pipeline";
 
 /**
- * Interface matching the SimulationReader WASM class for Zarr trajectory reading.
+ * Interface matching the MolRecReader WASM class for MolRec Zarr v3 reading.
  * The concrete implementation is provided by molrs-wasm.
  */
 export interface ZarrReaderLike {

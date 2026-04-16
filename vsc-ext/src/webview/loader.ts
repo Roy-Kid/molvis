@@ -2,7 +2,7 @@ import {
   type Box,
   type Frame,
   type FrameProvider,
-  SimulationReader,
+  MolRecReader,
   Trajectory,
   TrajectoryReader,
   type ZarrReader,
@@ -22,8 +22,10 @@ export interface RuntimeLoadContext {
 
 export interface RuntimeResources {
   trajectoryReader: TrajectoryReader | null;
-  zarrReader: ZarrReader | null;
+  zarrReader: ZarrReader | MolRecReader | null;
   boxes: Array<Box | undefined>;
+  frameCache: Map<number, Frame>;
+  ownedFrames: Frame[];
 }
 
 export function createRuntimeResources(): RuntimeResources {
@@ -31,6 +33,8 @@ export function createRuntimeResources(): RuntimeResources {
     trajectoryReader: null,
     zarrReader: null,
     boxes: [],
+    frameCache: new Map(),
+    ownedFrames: [],
   };
 }
 
@@ -56,6 +60,16 @@ function decodeBase64ToBytes(value: string): Uint8Array {
 }
 
 export function freeRuntimeResources(resources: RuntimeResources): void {
+  for (const frame of resources.frameCache.values()) {
+    frame.free();
+  }
+  resources.frameCache.clear();
+
+  for (const frame of resources.ownedFrames) {
+    frame.free();
+  }
+  resources.ownedFrames = [];
+
   if (resources.zarrReader) {
     resources.zarrReader.free();
     resources.zarrReader = null;
@@ -74,6 +88,8 @@ const FRAME_CACHE_SIZE = 16;
 
 /**
  * Evict the oldest entry from a frame cache, freeing the WASM Frame.
+ * Assumes the Artist has already consumed any previously-returned frame
+ * synchronously — there is no pinning for the frame currently on-screen.
  */
 function evictOldest(cache: Map<number, Frame>): void {
   const oldest = cache.keys().next().value as number | undefined;
@@ -95,7 +111,7 @@ function loadTrajectory(
   resources.trajectoryReader = new TrajectoryReader(content, format);
   const frameCount = resources.trajectoryReader.getFrameCount();
   const reader = resources.trajectoryReader;
-  const cache = new Map<number, Frame>();
+  const cache = resources.frameCache;
 
   const provider: FrameProvider = {
     length: frameCount,
@@ -129,10 +145,10 @@ function loadZarr(
     fileMap.set(filePath, decodeBase64ToBytes(contentB64));
   }
 
-  const reader = new SimulationReader(fileMap);
-  resources.zarrReader = reader as unknown as ZarrReader;
+  const reader = new MolRecReader(fileMap);
+  resources.zarrReader = reader;
   const frameCount = reader.countFrames();
-  const cache = new Map<number, Frame>();
+  const cache = resources.frameCache;
 
   const provider: FrameProvider = {
     length: frameCount,
@@ -189,8 +205,9 @@ export function loadMolecularPayload(
   freeRuntimeResources(resources);
   const frame = readFrame(payload, filename);
   const box = frame.simbox;
-  context.setTrajectory(new Trajectory([frame], [box]));
+  resources.ownedFrames.push(frame);
   resources.boxes = box ? [box] : [];
+  context.setTrajectory(new Trajectory([frame], [box]));
   context.setViewMode();
   context.resetCamera();
 }

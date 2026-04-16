@@ -1,6 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molrs";
 import { encodePickingColorInto } from "../picker";
+import { DType } from "../utils/dtype";
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
 const TMP_P1 = new Vector3();
@@ -70,9 +71,10 @@ function computePerpFrame(dir: Vector3): void {
  * Count total render instances needed for all bonds.
  */
 export function countBondInstances(bondsBlock: Block): number {
-  const orderCol = bondsBlock.dtype("order")
-    ? bondsBlock.viewColU32("order")
-    : undefined;
+  const orderCol =
+    bondsBlock.dtype("order") === DType.U32
+      ? bondsBlock.viewColU32("order")
+      : undefined;
   if (!orderCol) return bondsBlock.nrows();
   let total = 0;
   for (let b = 0; b < bondsBlock.nrows(); b++) {
@@ -95,18 +97,19 @@ export function buildBondBuffers(
   if (!bondsBlock || bondsBlock.nrows() === 0) return undefined;
 
   const logicalCount = bondsBlock.nrows();
-  const iAtoms = bondsBlock.viewColU32("i");
-  const jAtoms = bondsBlock.viewColU32("j");
+  const iAtoms = bondsBlock.viewColU32("atomi");
+  const jAtoms = bondsBlock.viewColU32("atomj");
   if (!iAtoms || !jAtoms) return undefined;
 
-  const xCoords = atomsBlock.viewColF32("x");
-  const yCoords = atomsBlock.viewColF32("y");
-  const zCoords = atomsBlock.viewColF32("z");
+  const xCoords = atomsBlock.viewColF("x");
+  const yCoords = atomsBlock.viewColF("y");
+  const zCoords = atomsBlock.viewColF("z");
   if (!xCoords || !yCoords || !zCoords) return undefined;
 
-  const orderCol = bondsBlock.dtype("order")
-    ? bondsBlock.viewColU32("order")
-    : undefined;
+  const orderCol =
+    bondsBlock.dtype("order") === DType.U32
+      ? bondsBlock.viewColU32("order")
+      : undefined;
 
   // Pre-allocate with upper bound (3x for all-triple), trim unused at end
   const maxInstances = orderCol ? logicalCount * 3 : logicalCount;
@@ -243,20 +246,21 @@ export function buildBondBuffers(
  */
 export function refreshBondPositions(
   bondsBlock: Block,
-  x: Float32Array,
-  y: Float32Array,
-  z: Float32Array,
+  x: Float64Array,
+  y: Float64Array,
+  z: Float64Array,
   bondState: {
     count: number;
     uploadBuffer(name: string): void;
     buffers: Map<string, { data: Float32Array }>;
   },
 ): void {
-  const iAtoms = bondsBlock.viewColU32("i");
-  const jAtoms = bondsBlock.viewColU32("j");
-  const orderCol = bondsBlock.dtype("order")
-    ? bondsBlock.viewColU32("order")
-    : undefined;
+  const iAtoms = bondsBlock.viewColU32("atomi");
+  const jAtoms = bondsBlock.viewColU32("atomj");
+  const orderCol =
+    bondsBlock.dtype("order") === DType.U32
+      ? bondsBlock.viewColU32("order")
+      : undefined;
   if (!iAtoms || !jAtoms) return;
 
   const logicalCount = bondsBlock.nrows();

@@ -6,6 +6,7 @@ import {
   COLOR_OVERRIDE_R,
 } from "../modifiers/ColorByPropertyModifier";
 import { encodePickingColorInto } from "../picker";
+import { type LinearRGB, buildCategoricalColorLookup } from "./palette";
 import type { StyleManager } from "./style_manager";
 
 export interface AtomBufferOptions {
@@ -36,9 +37,9 @@ export function buildAtomBuffers(
   options?: AtomBufferOptions,
 ): Map<string, Float32Array> {
   const atomCount = atomsBlock.nrows();
-  const xCoords = atomsBlock.viewColF32("x");
-  const yCoords = atomsBlock.viewColF32("y");
-  const zCoords = atomsBlock.viewColF32("z");
+  const xCoords = atomsBlock.viewColF("x");
+  const yCoords = atomsBlock.viewColF("y");
+  const zCoords = atomsBlock.viewColF("z");
   const elementsColumn = atomsBlock.dtype("element")
     ? (atomsBlock.copyColStr("element") as string[])
     : undefined;
@@ -53,13 +54,13 @@ export function buildAtomBuffers(
 
   // Check for color override columns from ColorByPropertyModifier
   const overrideR = atomsBlock.dtype(COLOR_OVERRIDE_R)
-    ? atomsBlock.viewColF32(COLOR_OVERRIDE_R)
+    ? atomsBlock.viewColF(COLOR_OVERRIDE_R)
     : undefined;
   const overrideG = atomsBlock.dtype(COLOR_OVERRIDE_G)
-    ? atomsBlock.viewColF32(COLOR_OVERRIDE_G)
+    ? atomsBlock.viewColF(COLOR_OVERRIDE_G)
     : undefined;
   const overrideB = atomsBlock.dtype(COLOR_OVERRIDE_B)
-    ? atomsBlock.viewColF32(COLOR_OVERRIDE_B)
+    ? atomsBlock.viewColF(COLOR_OVERRIDE_B)
     : undefined;
   const hasColorOverride = overrideR && overrideG && overrideB;
 
@@ -69,6 +70,10 @@ export function buildAtomBuffers(
   const atomPick = new Float32Array(atomCount * 4);
 
   const styleCache = new Map<string, CachedAtomStyle>();
+  const typeColorLookup =
+    !elementsColumn && typesColumn
+      ? buildCategoricalColorLookup(typesColumn.map((type) => type ?? "UNK"))
+      : null;
   const customRadii = options?.radii;
   const visibleArr = options?.visible;
 
@@ -78,6 +83,7 @@ export function buildAtomBuffers(
       i,
       elementsColumn,
       typesColumn,
+      typeColorLookup,
       styleManager,
       styleCache,
     );
@@ -133,6 +139,7 @@ function resolveAtomStyle(
   index: number,
   elementsColumn: string[] | undefined,
   typesColumn: string[] | undefined,
+  typeColorLookup: Map<string, LinearRGB> | null,
   styleManager: StyleManager,
   cache: Map<string, CachedAtomStyle>,
 ): CachedAtomStyle {
@@ -153,8 +160,15 @@ function resolveAtomStyle(
   let cached = cache.get(key);
   if (!cached) {
     const s = styleManager.getTypeStyle(type);
-    const c = Color3.FromHexString(s.color).toLinearSpace();
-    cached = { r: c.r, g: c.g, b: c.b, a: 1.0, radius: s.radius };
+    const datasetColor = typeColorLookup?.get(type);
+    const fallback = Color3.FromHexString(s.color).toLinearSpace();
+    cached = {
+      r: datasetColor?.[0] ?? fallback.r,
+      g: datasetColor?.[1] ?? fallback.g,
+      b: datasetColor?.[2] ?? fallback.b,
+      a: s.alpha ?? 1.0,
+      radius: s.radius,
+    };
     cache.set(key, cached);
   }
   return cached;

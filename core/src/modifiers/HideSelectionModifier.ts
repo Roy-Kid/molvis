@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molrs";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { DType } from "../utils/dtype";
 
 /**
  * Modifier that hides atoms based on the current pipeline selection.
@@ -57,20 +58,20 @@ export class HideSelectionModifier extends BaseModifier {
     // Helper to copy generic column
     const copyColF32 = (name: string) => {
       const src =
-        atoms.dtype(name) === "f32" ? atoms.viewColF32(name) : undefined;
+        atoms.dtype(name) === DType.F64 ? atoms.viewColF(name) : undefined;
       if (src) {
-        const dst = new Float32Array(newCount);
+        const dst = new Float64Array(newCount);
         let ptr = 0;
         for (let i = 0; i < nrows; i++) {
           if (indexMap[i] !== -1) dst[ptr++] = src[i];
         }
-        newAtoms.setColF32(name, dst);
+        newAtoms.setColF(name, dst);
       }
     };
 
     const copyColStr = (name: string) => {
       const src =
-        atoms.dtype(name) === "string" ? atoms.copyColStr(name) : undefined;
+        atoms.dtype(name) === DType.String ? atoms.copyColStr(name) : undefined;
       if (src) {
         const dst: string[] = [];
         for (let i = 0; i < nrows; i++) {
@@ -98,11 +99,12 @@ export class HideSelectionModifier extends BaseModifier {
     let newBonds: Block | undefined;
 
     if (bonds) {
-      const iCol = bonds.viewColU32("i");
-      const jCol = bonds.viewColU32("j");
-      const orderCol = bonds.dtype("order")
-        ? bonds.viewColU32("order")
-        : undefined;
+      const iCol = bonds.viewColU32("atomi");
+      const jCol = bonds.viewColU32("atomj");
+      const orderCol =
+        bonds.dtype("order") === DType.U32
+          ? bonds.viewColU32("order")
+          : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -131,8 +133,8 @@ export class HideSelectionModifier extends BaseModifier {
             else newOrder[k] = 1;
           }
 
-          newBonds.setColU32("i", newI);
-          newBonds.setColU32("j", newJ);
+          newBonds.setColU32("atomi", newI);
+          newBonds.setColU32("atomj", newJ);
           if (orderCol) newBonds.setColU32("order", newOrder);
         }
       }

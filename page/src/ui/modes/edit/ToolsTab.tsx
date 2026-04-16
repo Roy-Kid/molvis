@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -9,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ModeType, type Molvis } from "@molvis/core";
+import { Atom, Link2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 
@@ -60,12 +60,17 @@ const COMMON_ELEMENTS = [
   "I",
 ];
 
+const BOND_ORDERS: Array<{ value: number; glyph: string; label: string }> = [
+  { value: 1, glyph: "—", label: "Single bond" },
+  { value: 2, glyph: "=", label: "Double bond" },
+  { value: 3, glyph: "≡", label: "Triple bond" },
+];
+
 export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
   const [activeElement, setActiveElement] = useState<string>("C");
   const [activeBondOrder, setActiveBondOrder] = useState<number>(1);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
 
-  // Sync state with EditMode
   useEffect(() => {
     if (!app) return;
 
@@ -117,50 +122,65 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
   if (!app || !isEditMode) return null;
 
   return (
-    <div className="flex flex-col gap-6 p-4 h-full pointer-events-auto">
-      {/* Element Selection */}
-      <div className="space-y-3">
-        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Draw Element
-        </Label>
+    <div className="flex flex-col gap-2 p-2 pointer-events-auto">
+      {/* Element */}
+      <div className="flex items-center gap-1.5">
+        <div
+          className="flex h-7 w-7 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground shrink-0"
+          title="Active element"
+        >
+          <Atom className="h-3.5 w-3.5" />
+        </div>
         <Select
           value={activeElement}
           onValueChange={(val) => updateEditMode({ element: val })}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select element" />
+          <SelectTrigger
+            className="h-7 flex-1 min-w-0 px-2 text-xs"
+            title="Active element"
+            aria-label="Active element"
+          >
+            <SelectValue placeholder="C" />
           </SelectTrigger>
           <SelectContent>
             {COMMON_ELEMENTS.map((el) => (
               <SelectItem key={el} value={el}>
-                <span className="font-mono font-medium">{el}</span>
+                <span className="font-mono font-medium tabular-nums">{el}</span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Bond Order Selection */}
-      <div className="space-y-3">
-        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Bond Order
-        </Label>
-        <div className="grid grid-cols-3 gap-2">
-          {[1, 2, 3].map((order) => (
-            <Button
-              key={order}
-              variant={activeBondOrder === order ? "default" : "outline"}
-              size="sm"
-              className={cn(
-                "h-9 font-bold transition-all",
-                activeBondOrder === order &&
-                  "ring-2 ring-primary ring-offset-2 ring-offset-background",
-              )}
-              onClick={() => updateEditMode({ bondOrder: order })}
-            >
-              {order === 1 ? "Single" : order === 2 ? "Double" : "Triple"}
-            </Button>
-          ))}
+      {/* Bond order */}
+      <div className="flex items-center gap-1.5">
+        <div
+          className="flex h-7 w-7 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground shrink-0"
+          title="Bond order"
+        >
+          <Link2 className="h-3.5 w-3.5" />
+        </div>
+        <div className="grid grid-cols-3 gap-1 flex-1">
+          {BOND_ORDERS.map(({ value, glyph, label }) => {
+            const active = activeBondOrder === value;
+            return (
+              <Button
+                key={value}
+                variant={active ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "h-7 px-0 font-mono text-base leading-none",
+                  active && "ring-1 ring-ring",
+                )}
+                onClick={() => updateEditMode({ bondOrder: value })}
+                title={label}
+                aria-label={label}
+                aria-pressed={active}
+              >
+                {glyph}
+              </Button>
+            );
+          })}
         </div>
       </div>
     </div>

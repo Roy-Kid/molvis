@@ -21,9 +21,9 @@ async function main() {
 
   // Create a simple H2O molecule using Frame
   const atomsBlock = new Block();
-  atomsBlock.setColF32("x", new Float32Array([0.0, 0.757, -0.757]));
-  atomsBlock.setColF32("y", new Float32Array([0.0, 0.586, 0.586]));
-  atomsBlock.setColF32("z", new Float32Array([0.0, 0.0, 0.0]));
+  atomsBlock.setColF("x", new Float64Array([0.0, 0.757, -0.757]));
+  atomsBlock.setColF("y", new Float64Array([0.0, 0.586, 0.586]));
+  atomsBlock.setColF("z", new Float64Array([0.0, 0.0, 0.0]));
   atomsBlock.setColStr("element", ["O", "H", "H"]);
 
   const bondsBlock = new Block();

@@ -13,9 +13,9 @@ function makeFrame(
   const n = elements.length;
   const pos =
     positions ?? elements.map((_, i) => [i, 0, 0] as [number, number, number]);
-  atoms.setColF32("x", new Float32Array(pos.map((p) => p[0])));
-  atoms.setColF32("y", new Float32Array(pos.map((p) => p[1])));
-  atoms.setColF32("z", new Float32Array(pos.map((p) => p[2])));
+  atoms.setColF("x", new Float64Array(pos.map((p) => p[0])));
+  atoms.setColF("y", new Float64Array(pos.map((p) => p[1])));
+  atoms.setColF("z", new Float64Array(pos.map((p) => p[2])));
   atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
   return frame;
@@ -27,8 +27,8 @@ function makeFrameWithBonds(
 ): Frame {
   const frame = makeFrame(elements);
   const bondsBlock = new Block();
-  bondsBlock.setColU32("i", new Uint32Array(bonds.map((b) => b[0])));
-  bondsBlock.setColU32("j", new Uint32Array(bonds.map((b) => b[1])));
+  bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b[0])));
+  bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b[1])));
   frame.insertBlock("bonds", bondsBlock);
   return frame;
 }
@@ -80,8 +80,8 @@ describe("HideHydrogensModifier", () => {
     expect(bonds).not.toBeNull();
     expect(bonds?.nrows()).toBe(1); // Only C-O survives
 
-    const iCol = bonds?.viewColU32("i");
-    const jCol = bonds?.viewColU32("j");
+    const iCol = bonds?.viewColU32("atomi");
+    const jCol = bonds?.viewColU32("atomj");
     expect(iCol?.[0]).toBe(0); // C remapped to 0
     expect(jCol?.[0]).toBe(1); // O remapped to 1
   });
@@ -122,9 +122,9 @@ describe("HideHydrogensModifier", () => {
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const x = atoms.viewColF32("x")!;
-    const y = atoms.viewColF32("y")!;
-    const z = atoms.viewColF32("z")!;
+    const x = atoms.viewColF("x")!;
+    const y = atoms.viewColF("y")!;
+    const z = atoms.viewColF("z")!;
     expect(x[0]).toBeCloseTo(1, 5); // C
     expect(y[0]).toBeCloseTo(2, 5);
     expect(z[0]).toBeCloseTo(3, 5);
@@ -156,7 +156,7 @@ describe("HideHydrogensModifier", () => {
     mod.hideHydrogens = true;
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF32("x", new Float32Array([1, 2]));
+    atoms.setColF("x", new Float64Array([1, 2]));
     frame.insertBlock("atoms", atoms);
     const ctx = createDefaultContext(frame);
     const result = mod.apply(frame, ctx);

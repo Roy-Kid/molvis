@@ -1,53 +1,112 @@
 import { describe, expect, it } from "@rstest/core";
-import { hexToLinearRgb, hslColorFromString } from "../src/artist/palette";
+import {
+  DEFAULT_CATEGORICAL_COLOR_MAP,
+  buildCategoricalColorLookup,
+  getCategoricalPalette,
+  getColorMap,
+  getPaletteDefinition,
+  hexToLinearRgb,
+  listColorMaps,
+  listContinuousColorMaps,
+  listPaletteDefinitions,
+} from "../src/artist/palette";
 
-describe("hslColorFromString", () => {
-  it("should return a hex color string", () => {
-    const color = hslColorFromString("C");
-    expect(color).toMatch(/^#[0-9A-F]{6}$/);
+describe("categorical palettes", () => {
+  it("registers glasbey-vivid as the default categorical palette", () => {
+    const palette = getCategoricalPalette();
+    expect(getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP).kind).toBe("categorical");
+    expect(palette.length).toBe(256);
+    expect(DEFAULT_CATEGORICAL_COLOR_MAP).toBe("glasbey-vivid");
   });
 
-  it("should be deterministic", () => {
-    const a = hslColorFromString("Oxygen");
-    const b = hslColorFromString("Oxygen");
-    expect(a).toBe(b);
+  it("keeps the first 32 Glasbey colors unique", () => {
+    const palette = getCategoricalPalette().slice(0, 32);
+    const serialized = palette.map((rgb) => rgb.join(","));
+    expect(new Set(serialized).size).toBe(32);
   });
 
-  it("should produce different colors for different labels", () => {
-    const a = hslColorFromString("C");
-    const b = hslColorFromString("N");
-    const c = hslColorFromString("O");
-    // At least two should differ
-    expect(a === b && b === c).toBe(false);
+  it("returns values in [0,1] for categorical colors", () => {
+    const cm = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
+    const [r, g, b] = cm.colorForKey("opls_145");
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
   });
 
-  it("should handle single-character strings", () => {
-    const color = hslColorFromString("H");
-    expect(color).toMatch(/^#[0-9A-F]{6}$/);
+  it("keeps colorForKey deterministic for the same key", () => {
+    const cm = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
+    const a = cm.colorForKey("opls_145");
+    const b = cm.colorForKey("opls_145");
+    expect(a[0]).toBeCloseTo(b[0], 10);
+    expect(a[1]).toBeCloseTo(b[1], 10);
+    expect(a[2]).toBeCloseTo(b[2], 10);
   });
 
-  it("should handle empty string", () => {
-    const color = hslColorFromString("");
-    expect(color).toMatch(/^#[0-9A-F]{6}$/);
+  it("assigns dataset-level categorical colors independently of row order", () => {
+    const a = buildCategoricalColorLookup(["opls_146", "opls_145", "opls_147"]);
+    const b = buildCategoricalColorLookup(["opls_147", "opls_145", "opls_146"]);
+
+    for (const key of ["opls_145", "opls_146", "opls_147"]) {
+      expect(a.get(key)).toEqual(b.get(key));
+    }
+  });
+
+  it("uses natural ordering when assigning Glasbey colors", () => {
+    const palette = getCategoricalPalette();
+    const lookup = buildCategoricalColorLookup(["opls_10", "opls_2", "opls_1"]);
+    expect(lookup.get("opls_1")).toEqual(palette[0]);
+    expect(lookup.get("opls_2")).toEqual(palette[1]);
+    expect(lookup.get("opls_10")).toEqual(palette[2]);
+  });
+
+  it("only exposes the element palettes and the default categorical palette", () => {
+    expect(() => getColorMap("tol-bright")).toThrow();
+    expect(() => getColorMap("tableau10")).toThrow();
+    expect(listColorMaps()).toEqual([
+      "cpk",
+      DEFAULT_CATEGORICAL_COLOR_MAP,
+      "ovito",
+    ]);
+  });
+
+  it("keeps a single internal continuous ramp for numeric data", () => {
+    expect(listContinuousColorMaps()).toEqual(["viridis"]);
+  });
+
+  it("returns palette summaries and definitions for public palettes", () => {
+    expect(listPaletteDefinitions()).toEqual([
+      { name: "cpk", kind: "element", size: 118 },
+      { name: DEFAULT_CATEGORICAL_COLOR_MAP, kind: "categorical", size: 256 },
+      { name: "ovito", kind: "element", size: 118 },
+    ]);
+
+    const cpk = getPaletteDefinition("cpk");
+    expect(cpk.entries[0]).toEqual({ label: "H", color: "#FFFFFF" });
+
+    const vivid = getPaletteDefinition(DEFAULT_CATEGORICAL_COLOR_MAP);
+    expect(vivid.entries[0]).toEqual({ label: "1", color: "#D70000" });
   });
 });
 
 describe("hexToLinearRgb", () => {
-  it("should convert black correctly", () => {
+  it("converts black correctly", () => {
     const [r, g, b] = hexToLinearRgb("#000000");
     expect(r).toBeCloseTo(0, 5);
     expect(g).toBeCloseTo(0, 5);
     expect(b).toBeCloseTo(0, 5);
   });
 
-  it("should convert white correctly", () => {
+  it("converts white correctly", () => {
     const [r, g, b] = hexToLinearRgb("#FFFFFF");
     expect(r).toBeCloseTo(1, 3);
     expect(g).toBeCloseTo(1, 3);
     expect(b).toBeCloseTo(1, 3);
   });
 
-  it("should return values in [0, 1]", () => {
+  it("returns values in [0, 1]", () => {
     const [r, g, b] = hexToLinearRgb("#8844CC");
     expect(r).toBeGreaterThanOrEqual(0);
     expect(r).toBeLessThanOrEqual(1);
@@ -57,14 +116,13 @@ describe("hexToLinearRgb", () => {
     expect(b).toBeLessThanOrEqual(1);
   });
 
-  it("should apply sRGB-to-linear conversion (not just divide by 255)", () => {
-    // sRGB mid-gray (128/255 ≈ 0.502) → linear ≈ 0.216
+  it("applies sRGB-to-linear conversion (not just divide by 255)", () => {
     const [r] = hexToLinearRgb("#808080");
     expect(r).toBeLessThan(0.3);
     expect(r).toBeGreaterThan(0.15);
   });
 
-  it("should handle hex without # prefix", () => {
+  it("handles hex without # prefix", () => {
     const [r1, g1, b1] = hexToLinearRgb("#FF0000");
     const [r2, g2, b2] = hexToLinearRgb("FF0000");
     expect(r1).toBeCloseTo(r2, 5);

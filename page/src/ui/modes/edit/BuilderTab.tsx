@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import {
   Block,
   Frame,
@@ -6,9 +7,11 @@ import {
   generate3D,
   parseSMILES,
 } from "@molvis/core";
+import { AlertCircle, Loader2, MousePointerClick, Wand2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SidebarSection } from "../../layout/SidebarSection";
+import { DownloadStructureSection } from "./DownloadStructureSection";
 import { KekuleComposer, type KekuleComposerRef } from "./KekuleComposer";
 import { SmilesInput } from "./SmilesInput";
 
@@ -105,7 +108,7 @@ export const BuilderTab: React.FC<BuilderTabProps> = ({ app }) => {
     try {
       const atomBlock = new Block();
       atomBlock.setColStr(
-        "symbol",
+        "element",
         data.atoms.map((a) => a.element),
       );
 
@@ -114,8 +117,14 @@ export const BuilderTab: React.FC<BuilderTabProps> = ({ app }) => {
 
       if (data.bonds.length > 0) {
         const bondBlock = new Block();
-        bondBlock.setColU32("i", new Uint32Array(data.bonds.map((b) => b.i)));
-        bondBlock.setColU32("j", new Uint32Array(data.bonds.map((b) => b.j)));
+        bondBlock.setColU32(
+          "atomi",
+          new Uint32Array(data.bonds.map((b) => b.i)),
+        );
+        bondBlock.setColU32(
+          "atomj",
+          new Uint32Array(data.bonds.map((b) => b.j)),
+        );
         bondBlock.setColU32(
           "order",
           new Uint32Array(data.bonds.map((b) => b.order)),
@@ -133,35 +142,56 @@ export const BuilderTab: React.FC<BuilderTabProps> = ({ app }) => {
 
   if (!app || !isEdit) return null;
 
+  const busy = status === "generating";
+
   return (
     <div className="flex flex-col h-full pointer-events-auto">
       <SidebarSection title="SMILES">
-        <SmilesInput
-          onParsed={handleSmiles}
-          disabled={status === "generating"}
-        />
+        <SmilesInput onParsed={handleSmiles} disabled={busy} />
       </SidebarSection>
 
-      <SidebarSection title="2D Drawing">
-        <KekuleComposer ref={composerRef} height={260} />
-        <button
-          type="button"
-          className="w-full h-7 mt-1 rounded border text-[10px] font-medium transition-colors hover:bg-muted/30 disabled:opacity-50"
+      <DownloadStructureSection
+        onSmilesFetched={handleSmiles}
+        onError={(msg) => {
+          setErrorMsg(msg);
+          setStatus("error");
+        }}
+        disabled={busy}
+      />
+
+      <SidebarSection
+        title="2D Sketch"
+        className="flex-1 min-h-0 flex flex-col"
+        contentClassName="flex-1 min-h-0 flex flex-col"
+      >
+        <KekuleComposer ref={composerRef} />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-full mt-1 gap-1.5"
           onClick={handleDrawing}
-          disabled={status === "generating"}
+          disabled={busy}
+          title="Generate 3D from sketch & place"
+          aria-label="Generate 3D from sketch & place"
         >
-          Place
-        </button>
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Wand2 className="h-3.5 w-3.5" />
+          )}
+        </Button>
       </SidebarSection>
 
       {status === "error" && errorMsg && (
-        <p className="px-2 text-[10px] text-destructive leading-tight mt-1">
-          {errorMsg}
+        <p className="flex items-start gap-1 px-2 py-1 text-[10px] text-destructive leading-tight">
+          <AlertCircle className="h-3 w-3 shrink-0 mt-px" />
+          <span className="truncate">{errorMsg}</span>
         </p>
       )}
       {status === "ready" && (
-        <p className="px-2 text-[10px] text-emerald-500 leading-tight mt-1">
-          Click on the 3D canvas to place
+        <p className="flex items-center gap-1 px-2 py-1 text-[10px] text-emerald-500 leading-tight">
+          <MousePointerClick className="h-3 w-3 shrink-0" />
+          <span>Click the 3D canvas to place</span>
         </p>
       )}
     </div>

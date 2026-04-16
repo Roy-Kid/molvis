@@ -1,9 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "experimentalDecorators": true,
     "paths": {
-      "@molvis/core": ["../core/src/index.ts"]
+      "@molvis/core": ["../core/src/index.ts"],
+      "@molvis/core-internal/*": ["../core/src/*"]
     }
   },
   "include": ["src/ts/**/*.ts"]

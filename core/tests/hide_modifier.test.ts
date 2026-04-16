@@ -12,9 +12,9 @@ describe("HideSelectionModifier", () => {
   test("Should pass through when selection is empty", () => {
     const frame = new Frame();
     const atoms = new Block();
-    atoms.setColF32("x", new Float32Array([0, 1, 2, 3, 4]));
-    atoms.setColF32("y", new Float32Array(5));
-    atoms.setColF32("z", new Float32Array(5));
+    atoms.setColF("x", new Float64Array([0, 1, 2, 3, 4]));
+    atoms.setColF("y", new Float64Array(5));
+    atoms.setColF("z", new Float64Array(5));
     atoms.setColStr("element", ["C", "C", "H", "H", "O"]);
     frame.insertBlock("atoms", atoms);
 
@@ -31,9 +31,9 @@ describe("HideSelectionModifier", () => {
     const frame = new Frame();
     const atoms = new Block();
     const count = 5;
-    const xs = new Float32Array(count);
-    const ys = new Float32Array(count);
-    const zs = new Float32Array(count);
+    const xs = new Float64Array(count);
+    const ys = new Float64Array(count);
+    const zs = new Float64Array(count);
     const elements = ["C", "C", "H", "H", "O"];
 
     for (let i = 0; i < count; i++) {
@@ -42,9 +42,9 @@ describe("HideSelectionModifier", () => {
       zs[i] = 0;
     }
 
-    atoms.setColF32("x", xs);
-    atoms.setColF32("y", ys);
-    atoms.setColF32("z", zs);
+    atoms.setColF("x", xs);
+    atoms.setColF("y", ys);
+    atoms.setColF("z", zs);
     atoms.setColStr("element", elements);
     frame.insertBlock("atoms", atoms);
 
@@ -62,7 +62,7 @@ describe("HideSelectionModifier", () => {
     expect(outEls).toEqual(["C", "H", "O"]);
 
     // Check xs: 0, 2, 4
-    const outXs = outAtoms.viewColF32("x");
+    const outXs = outAtoms.viewColF("x");
     expect(outXs?.[0]).toBe(0);
     expect(outXs?.[1]).toBe(2);
     expect(outXs?.[2]).toBe(4);
@@ -72,16 +72,16 @@ describe("HideSelectionModifier", () => {
     const frame = new Frame();
     const atoms = new Block();
     // 0-1-2 chain
-    atoms.setColF32("x", new Float32Array([0, 1, 2]));
-    atoms.setColF32("y", new Float32Array([0, 0, 0]));
-    atoms.setColF32("z", new Float32Array([0, 0, 0]));
+    atoms.setColF("x", new Float64Array([0, 1, 2]));
+    atoms.setColF("y", new Float64Array([0, 0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0, 0]));
     atoms.setColStr("element", ["C", "C", "C"]);
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
     // Bonds: 0-1, 1-2
-    bonds.setColU32("i", new Uint32Array([0, 1]));
-    bonds.setColU32("j", new Uint32Array([1, 2]));
+    bonds.setColU32("atomi", new Uint32Array([0, 1]));
+    bonds.setColU32("atomj", new Uint32Array([1, 2]));
     bonds.setColU32("order", new Uint32Array([1, 1]));
     frame.insertBlock("bonds", bonds);
 
@@ -108,15 +108,15 @@ describe("HideSelectionModifier", () => {
     const frame = new Frame();
     const atoms = new Block();
     // 0-1, 2 (isolated)
-    atoms.setColF32("x", new Float32Array([0, 1, 10]));
-    atoms.setColF32("y", new Float32Array([0, 0, 0]));
-    atoms.setColF32("z", new Float32Array([0, 0, 0]));
+    atoms.setColF("x", new Float64Array([0, 1, 10]));
+    atoms.setColF("y", new Float64Array([0, 0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0, 0]));
     atoms.setColStr("element", ["C", "C", "C"]);
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColU32("i", new Uint32Array([0]));
-    bonds.setColU32("j", new Uint32Array([1]));
+    bonds.setColU32("atomi", new Uint32Array([0]));
+    bonds.setColU32("atomj", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
 
     const context = createDefaultContext(frame, mockApp);
@@ -133,8 +133,8 @@ describe("HideSelectionModifier", () => {
     expect(outBonds?.nrows()).toBe(1);
 
     // Bond 0-1 should refer to new indices 0 and 1 (since 0->0, 1->1, 2->hidden)
-    const is = outBonds?.viewColU32("i")!;
-    const js = outBonds?.viewColU32("j")!;
+    const is = outBonds?.viewColU32("atomi")!;
+    const js = outBonds?.viewColU32("atomj")!;
     expect(is[0]).toBe(0);
     expect(js[0]).toBe(1);
   });

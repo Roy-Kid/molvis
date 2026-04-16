@@ -29,6 +29,12 @@ export {
 } from "./frame";
 export { TakeSnapshotCommand } from "./snapshot";
 export { SetRepresentationCommand } from "./representation";
+export {
+  AddOverlayCommand,
+  RemoveOverlayCommand,
+  UpdateOverlayCommand,
+  AddOverlaySnapshotCommand,
+} from "./overlays";
 
 export type { GetSelectedResponse } from "../selection_manager";
 
@@ -50,3 +56,15 @@ import "./frame";
 import "./snapshot";
 import "./attributes";
 import "./representation";
+import "./overlays";
+
+/**
+ * Ensure the default command set is registered with the global `commands`
+ * registry. Idempotent — all command modules register via `@command`
+ * decorators at load time, so merely importing this module is enough. The
+ * explicit function exists so `MolvisApp` and external consumers can state
+ * intent at the call site.
+ */
+export function registerDefaultCommands(): void {
+  // no-op; side-effect imports above have already run
+}

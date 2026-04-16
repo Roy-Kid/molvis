@@ -4,7 +4,7 @@
  */
 
 import type { Block, Frame } from "@molcrafts/molrs";
-import { probeColumnDtype } from "./utils/block_helpers";
+import { type ColumnDType, DType } from "./utils/dtype";
 
 export interface ColumnDescriptor {
   name: string;
@@ -32,7 +32,7 @@ export function discoverAtomColumns(block: Block): ColumnDescriptor[] {
   const columns: ColumnDescriptor[] = [];
   for (const key of keys) {
     if (key.startsWith("__")) continue; // skip internal columns
-    const dtype = probeColumnDtype(block, key);
+    const dtype = block.dtype(key);
     if (dtype) columns.push({ name: key, dtype });
   }
 
@@ -71,33 +71,33 @@ export function extractAtomRows(
   const columnData = new Map<
     string,
     {
-      dtype: string;
-      f32?: Float32Array;
+      dtype: ColumnDType;
+      f64?: Float64Array;
       u32?: Uint32Array;
       i32?: Int32Array;
-      str?: string[];
+      string?: string[];
     }
   >();
   for (const col of columns) {
     const dt = col.dtype;
-    if (dt === "str" || dt === "string") {
+    if (dt === DType.String) {
       columnData.set(col.name, {
-        dtype: "str",
-        str: block.copyColStr(col.name) as string[],
+        dtype: DType.String,
+        string: block.copyColStr(col.name) as string[],
       });
-    } else if (dt === "f32") {
+    } else if (dt === DType.F64) {
       columnData.set(col.name, {
-        dtype: "f32",
-        f32: block.viewColF32(col.name),
+        dtype: DType.F64,
+        f64: block.viewColF(col.name),
       });
-    } else if (dt === "u32") {
+    } else if (dt === DType.U32) {
       columnData.set(col.name, {
-        dtype: "u32",
+        dtype: DType.U32,
         u32: block.viewColU32(col.name),
       });
-    } else if (dt === "i32") {
+    } else if (dt === DType.I32) {
       columnData.set(col.name, {
-        dtype: "i32",
+        dtype: DType.I32,
         i32: block.viewColI32(col.name),
       });
     }
@@ -111,14 +111,14 @@ export function extractAtomRows(
         values.set(col.name, "—");
         continue;
       }
-      if (data.dtype === "f32" && data.f32) {
-        values.set(col.name, formatNumber(data.f32[i]));
-      } else if (data.dtype === "u32" && data.u32) {
+      if (data.dtype === DType.F64 && data.f64) {
+        values.set(col.name, formatNumber(data.f64[i]));
+      } else if (data.dtype === DType.U32 && data.u32) {
         values.set(col.name, String(data.u32[i]));
-      } else if (data.dtype === "i32" && data.i32) {
+      } else if (data.dtype === DType.I32 && data.i32) {
         values.set(col.name, String(data.i32[i]));
-      } else if (data.dtype === "str" && data.str) {
-        values.set(col.name, data.str[i] ?? "—");
+      } else if (data.dtype === DType.String && data.string) {
+        values.set(col.name, data.string[i] ?? "—");
       }
     }
     rows.push({ index: i, values });
@@ -134,11 +134,17 @@ export function extractBondRows(frame: Frame): BondRow[] {
   const bonds = frame.getBlock("bonds");
   if (!bonds) return [];
 
-  const iCol = bonds.viewColU32("i");
-  const jCol = bonds.viewColU32("j");
-  if (!iCol || !jCol) return [];
+  if (
+    bonds.dtype("atomi") !== DType.U32 ||
+    bonds.dtype("atomj") !== DType.U32
+  ) {
+    return [];
+  }
+  const iCol = bonds.viewColU32("atomi");
+  const jCol = bonds.viewColU32("atomj");
 
-  const orderCol = bonds.dtype("order") ? bonds.viewColU32("order") : undefined;
+  const orderCol =
+    bonds.dtype("order") === DType.U32 ? bonds.viewColU32("order") : undefined;
   const rows: BondRow[] = [];
 
   for (let b = 0; b < bonds.nrows(); b++) {

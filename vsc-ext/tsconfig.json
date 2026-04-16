@@ -5,9 +5,10 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@molvis/core": ["../core/src/index.ts"]
+      "@molvis/core": ["../core/src/index.ts"],
+      "@/*": ["../page/src/*"]
     }
   },
-  "include": ["src/**/*", "../core/src/types/**/*"],
+  "include": ["src/**/*", "../core/src/types/**/*", "../page/src/**/*.d.ts"],
   "exclude": ["rslib.*.config.ts"]
 }

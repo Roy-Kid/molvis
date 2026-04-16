@@ -1,4 +1,5 @@
 import type { Block } from "@molcrafts/molrs";
+import { DType } from "./utils/dtype";
 
 // ============ Entity Types ============
 
@@ -90,8 +91,8 @@ export class AtomSource {
     if (this.frameBlock && id < this.frameBlock.nrows()) {
       if (key === "x" || key === "y" || key === "z") {
         const col =
-          this.frameBlock.dtype(key) === "f32"
-            ? this.frameBlock.viewColF32(key)
+          this.frameBlock.dtype(key) === DType.F64
+            ? this.frameBlock.viewColF(key)
             : undefined;
         if (col) return col[id];
       }
@@ -100,12 +101,12 @@ export class AtomSource {
         if (col) return col[id];
       }
       const col =
-        this.frameBlock.dtype(key) === "f32"
-          ? this.frameBlock.viewColF32(key)
+        this.frameBlock.dtype(key) === DType.F64
+          ? this.frameBlock.viewColF(key)
           : undefined;
       if (col) return col[id];
       const strCol =
-        this.frameBlock.dtype(key) === "string"
+        this.frameBlock.dtype(key) === DType.String
           ? this.frameBlock.copyColStr(key)
           : undefined;
       if (strCol) return strCol[id];
@@ -126,9 +127,9 @@ export class AtomSource {
   private getFromFrame(index: number): AtomMeta | null {
     if (!this.frameBlock) return null;
 
-    const x = this.frameBlock.viewColF32("x");
-    const y = this.frameBlock.viewColF32("y");
-    const z = this.frameBlock.viewColF32("z");
+    const x = this.frameBlock.viewColF("x");
+    const y = this.frameBlock.viewColF("y");
+    const z = this.frameBlock.viewColF("z");
     const elements = this.frameBlock.copyColStr("element");
 
     if (!x || !y || !z || !elements) return null;
@@ -208,18 +209,18 @@ export class BondSource {
     if (this.frameBlock && id < this.frameBlock.nrows()) {
       if (key === "order") {
         const col =
-          this.frameBlock.dtype(key) === "u32"
+          this.frameBlock.dtype(key) === DType.U32
             ? this.frameBlock.viewColU32(key)
             : undefined;
         if (col) return col[id];
       }
       const col =
-        this.frameBlock.dtype(key) === "f32"
-          ? this.frameBlock.viewColF32(key)
+        this.frameBlock.dtype(key) === DType.F64
+          ? this.frameBlock.viewColF(key)
           : undefined;
       if (col) return col[id];
       const strCol =
-        this.frameBlock.dtype(key) === "string"
+        this.frameBlock.dtype(key) === DType.String
           ? this.frameBlock.copyColStr(key)
           : undefined;
       if (strCol) return strCol[id];
@@ -240,15 +241,16 @@ export class BondSource {
   private getFromFrame(index: number): BondMeta | null {
     if (!this.frameBlock || !this.atomBlock) return null;
 
-    const iAtoms = this.frameBlock.viewColU32("i");
-    const jAtoms = this.frameBlock.viewColU32("j");
-    const orders = this.frameBlock.dtype("order")
-      ? this.frameBlock.viewColU32("order")
-      : undefined;
+    const iAtoms = this.frameBlock.viewColU32("atomi");
+    const jAtoms = this.frameBlock.viewColU32("atomj");
+    const orders =
+      this.frameBlock.dtype("order") === DType.U32
+        ? this.frameBlock.viewColU32("order")
+        : undefined;
 
-    const ax = this.atomBlock.viewColF32("x");
-    const ay = this.atomBlock.viewColF32("y");
-    const az = this.atomBlock.viewColF32("z");
+    const ax = this.atomBlock.viewColF("x");
+    const ay = this.atomBlock.viewColF("y");
+    const az = this.atomBlock.viewColF("z");
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 

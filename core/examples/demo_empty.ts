@@ -22,9 +22,9 @@ async function main() {
   // Build an explicit empty frame: blocks exist but contain zero rows.
   // This is the scenario that previously exposed edit snapping issues.
   const emptyAtoms = new Block();
-  emptyAtoms.setColF32("x", new Float32Array(0));
-  emptyAtoms.setColF32("y", new Float32Array(0));
-  emptyAtoms.setColF32("z", new Float32Array(0));
+  emptyAtoms.setColF("x", new Float64Array(0));
+  emptyAtoms.setColF("y", new Float64Array(0));
+  emptyAtoms.setColF("z", new Float64Array(0));
   emptyAtoms.setColStr("element", []);
 
   const emptyBonds = new Block();

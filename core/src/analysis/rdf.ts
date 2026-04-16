@@ -20,11 +20,11 @@ export interface RdfParams {
 
 export interface RdfResult {
   /** Bin center distances */
-  r: Float32Array;
+  r: Float64Array;
   /** g(r) values */
-  gr: Float32Array;
+  gr: Float64Array;
   /** Raw pair counts per bin */
-  counts: Float32Array;
+  counts: Float64Array;
   /** Number of bins */
   nBins: number;
   /** Bin width */
@@ -181,15 +181,15 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.copyColF32("x");
-  const y = atoms.copyColF32("y");
-  const z = atoms.copyColF32("z");
+  const x = atoms.copyColF("x");
+  const y = atoms.copyColF("y");
+  const z = atoms.copyColF("z");
   if (!x || !y || !z) return null;
 
   const n = indices.length;
-  const sx = new Float32Array(n);
-  const sy = new Float32Array(n);
-  const sz = new Float32Array(n);
+  const sx = new Float64Array(n);
+  const sy = new Float64Array(n);
+  const sz = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     sx[i] = x[indices[i]];
     sy[i] = y[indices[i]];
@@ -197,9 +197,9 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   }
 
   const subBlock = new Block();
-  subBlock.setColF32("x", sx);
-  subBlock.setColF32("y", sy);
-  subBlock.setColF32("z", sz);
+  subBlock.setColF("x", sx);
+  subBlock.setColF("y", sy);
+  subBlock.setColF("z", sz);
 
   const elems = atoms.copyColStr("element");
   if (elems) {

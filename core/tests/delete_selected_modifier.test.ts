@@ -7,16 +7,16 @@ import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
 function makeFrame(elements: string[], bonds?: [number, number][]): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColF32("x", new Float32Array(elements.map((_, i) => i)));
-  atoms.setColF32("y", new Float32Array(elements.length));
-  atoms.setColF32("z", new Float32Array(elements.length));
+  atoms.setColF("x", new Float64Array(elements.map((_, i) => i)));
+  atoms.setColF("y", new Float64Array(elements.length));
+  atoms.setColF("z", new Float64Array(elements.length));
   atoms.setColStr("element", elements);
   frame.insertBlock("atoms", atoms);
 
   if (bonds) {
     const bondsBlock = new Block();
-    bondsBlock.setColU32("i", new Uint32Array(bonds.map((b) => b[0])));
-    bondsBlock.setColU32("j", new Uint32Array(bonds.map((b) => b[1])));
+    bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b[0])));
+    bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b[1])));
     frame.insertBlock("bonds", bondsBlock);
   }
 
@@ -62,8 +62,8 @@ describe("DeleteSelectedModifier", () => {
 
     const bonds = result.getBlock("bonds")!;
     expect(bonds.nrows()).toBe(1);
-    const iCol = bonds.viewColU32("i")!;
-    const jCol = bonds.viewColU32("j")!;
+    const iCol = bonds.viewColU32("atomi")!;
+    const jCol = bonds.viewColU32("atomj")!;
     expect(iCol[0]).toBe(0); // C stays at 0
     expect(jCol[0]).toBe(1); // O remapped from 2 to 1
   });
@@ -86,7 +86,7 @@ describe("DeleteSelectedModifier", () => {
     const result = mod.apply(frame, ctx);
 
     const atoms = result.getBlock("atoms")!;
-    const x = atoms.viewColF32("x")!;
+    const x = atoms.viewColF("x")!;
     expect(x[0]).toBeCloseTo(1, 5); // C was at x=1
     expect(x[1]).toBeCloseTo(2, 5); // O was at x=2
   });

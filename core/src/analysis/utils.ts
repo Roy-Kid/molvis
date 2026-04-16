@@ -21,9 +21,9 @@ export function estimateRMax(frame: Frame): number {
   if (!atoms) return 0;
 
   const n = atoms.nrows();
-  const x = atoms.copyColF32("x");
-  const y = atoms.copyColF32("y");
-  const z = atoms.copyColF32("z");
+  const x = atoms.copyColF("x");
+  const y = atoms.copyColF("y");
+  const z = atoms.copyColF("z");
   if (!x || !y || !z) return 0;
 
   const step = Math.max(1, Math.floor(n / 100));

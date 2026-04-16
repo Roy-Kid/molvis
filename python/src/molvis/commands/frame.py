@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 import molpy as mp
 
+from .catalog import FrontendCommands
+
 if TYPE_CHECKING:
     from ..scene import Molvis
 
@@ -35,20 +37,20 @@ class FrameCommandsMixin:
             
         Raises:
             TimeoutError: If the frontend does not respond within the timeout
+            molvis.MolvisRpcError: If the frontend rejects the export request
         """
-        response = self.send_cmd("export_frame", {}, wait_for_response=True, timeout=timeout)
-        
-        # Extract result from JSON-RPC response
-        if isinstance(response, dict) and "result" in response:
-            data = response["result"]
-        else:
-            data = response
-            
-        if not isinstance(data, dict) or "frameData" not in data:
+        data = self.send_cmd(
+            FrontendCommands.EXPORT_FRAME.method,
+            {},
+            wait_for_response=True,
+            timeout=timeout,
+        )
+
+        if not isinstance(data, dict) or "frame" not in data:
              logger.warning(f"Unexpected response format from export_frame: {data}")
              return mp.Frame()
 
-        frame_data = data["frameData"]
+        frame_data = data["frame"]
         blocks = frame_data.get("blocks", {})
         metadata = frame_data.get("metadata", {})
         

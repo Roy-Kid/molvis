@@ -38,7 +38,7 @@ export class DrawBoxCommand extends Command<void> {
 
   do(): void {
     const scene = this.app.world.scene;
-    const copyAndFree = (wa: { toCopy(): Float32Array; free(): void }) => {
+    const copyAndFree = (wa: { toCopy(): Float64Array; free(): void }) => {
       try {
         return wa.toCopy();
       } finally {

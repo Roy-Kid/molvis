@@ -18,7 +18,8 @@ Interactive 3D molecular viewer directly inside VSCode. Open PDB, XYZ, or LAMMPS
 |--------|-----------|-------|
 | PDB | `.pdb` | Protein Data Bank, CRYST1 box support |
 | XYZ | `.xyz` | ExtXYZ, multi-frame trajectory |
-| LAMMPS | `.data`, `.lmp` | LAMMPS data format |
+| LAMMPS data | `.data` | LAMMPS data format |
+| LAMMPS dump | `.dump`, `.lammpstrj` | LAMMPS trajectory dump |
 | Zarr | `.zarr` | Directory-based binary trajectory |
 
 ## Getting Started

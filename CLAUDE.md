@@ -4,41 +4,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Development Commands
 
+Monorepo uses plain **npm workspaces** for orchestration — no turborepo/nx.
+Workspace refs use `workspace:*`; rspack-family versions pinned in root
+`overrides`. Each sub-package owns `build` / `dev` / `typecheck` / `test`
+scripts; root scripts chain them in dependency order.
+
 ```bash
 # Install all workspace dependencies
 npm install
 
-# Development servers
-npm run dev:page       # Web app at localhost:3000
-npm run dev:core       # Core library demo
+# Development (one dev server at a time)
+npm run dev:page       # page dev server at localhost:3000 (bundles core from source)
+npm run dev:core       # core's own demo at localhost:3000 (rsbuild dev)
+npm run dev:python     # python widget watch
 
-# Build
-npm run build:core     # Build core library (rslib)
-npm run build:page     # Build web app (rsbuild)
-npm run build:all      # Build all packages
+# Build (core → python → page → vsc-ext)
+npm run build                  # all
+npm run build:core             # just core (library dist/ for npm publish)
+npm run build:page             # page (bundles core from source, no pre-build needed)
+npm run build:vsc-ext          # VSCode extension (bundles core from source)
 
-# Test (rstest framework)
-npm test               # Run core tests
-npm run test:watch     # Watch mode
+# Test
+npm test                       # runs each package's test in declaration order
+npm run test:core              # rstest for core (unit + browser)
+npm run test:watch             # core watch
+
+# Typecheck (tsc --noEmit per package)
+npm run typecheck
 
 # Lint & Format (Biome)
-npx biome check --write
-
-# Publishing preflight
-npm run release:core:check
+npm run lint
 ```
+
+**Core consumption**: `page/`, `vsc-ext/`, and `python/` resolve `@molvis/core`
+via rsbuild/rslib source alias + tsconfig `paths` → `core/src/index.ts`. They
+bundle core from source and do not depend on `core/dist/`. Core's `dist/` is
+only produced by `build:core` for npm publishing.
 
 ## Monorepo Structure
 
 | Package | Path | Purpose |
 |---------|------|---------|
 | `@molvis/core` | `core/` | Rendering engine, commands, modes, pipeline |
-| `page/` | `page/` | React 19 web app (standalone + VSCode webview) |
-| `vsc-ext/` | `vsc-ext/` | VSCode extension (custom editor for .pdb/.xyz/.data) |
-| `python/` | `python/` | Jupyter widget |
-| `electron/` | `electron/` | Desktop app (WIP) |
+| `page` | `page/` | React 19 web app (standalone + VSCode webview) |
+| `molvis` (extension) | `vsc-ext/` | VSCode extension (custom editor for .pdb/.xyz/.data) |
+| `@molvis/python` | `python/` | Jupyter widget (anywidget) |
 
-Dependencies flow: `page/` and `vsc-ext/` depend on `@molvis/core`. Core depends on `@babylonjs/*` and `@molcrafts/molrs` (local WASM package at `../../molrs/molrs-wasm/pkg`).
+Dependencies flow: `page/`, `vsc-ext/`, and `python/` reference `@molvis/core` via source alias (not a workspace dependency). Core depends on `@babylonjs/*` and `@molcrafts/molrs` (local WASM package linked via `link:../../molrs/molrs-wasm/pkg`). The link is a symlink — rebuild wasm with `wasm-pack build --release --target bundler --scope molcrafts` in `molrs/molrs-wasm/` and rslib/rsbuild picks up the new `pkg/` automatically, no reinstall needed. WASM is a single full-subsystem build; no subpath variants.
 
 ## Core Architecture
 
@@ -90,19 +102,32 @@ Frame and Box come from WASM. Key APIs:
 // Frame data access
 const block = frame.getBlock("atoms");  // column-based data
 block.nrows();
-block.getColumnStrings("element");
+block.copyColStr("element");
 
-// Box - direct property on Frame
-const box = frame.simbox;  // Box | undefined
+// Block columns (typed). All floating columns are Float64Array.
+block.setColF("x", new Float64Array([...]));
+block.setColU32("i", new Uint32Array([...]));
+block.setColI32("type_id", new Int32Array([...]));
+block.setColStr("element", ["C", "O", "H"]);
+const x = block.viewColF("x");       // Float64Array — wasm-memory view
+const xOwned = block.copyColF("x");  // Float64Array — owned copy
 
-// Box creation
+// Box — direct property on Frame
+const box = frame.simbox;            // Box | undefined
+
+// Box creation (all numeric inputs are Float64Array)
 Box.cube(size, origin, pbc_x, pbc_y, pbc_z);
 Box.ortho(lengths, origin, pbc_x, pbc_y, pbc_z);
 new Box(h_matrix, origin, pbc_x, pbc_y, pbc_z);
 
-// WASM memory: must manually free Box objects
+// WASM memory: manually free Box / Grid / Frame objects you own
 box.free();
 ```
+
+Volumetric data lives on `Frame.getGrid(name)` / `Frame.gridNames()` /
+`Frame.insertGrid(name, grid)`. A `Grid` holds any number of named
+`Float64Array` scalar fields accessed via `grid.arrayNames()` and
+`grid.getArray(name)`.
 
 ## Rendering: Thin Instances
 
@@ -111,6 +136,55 @@ Atoms and bonds use BabylonJS thin instances for GPU-efficient rendering. `Impos
 ## Page (React Web App)
 
 Three-panel layout with `react-resizable-panels`: LeftSidebar (analysis/RDF), center canvas (MolVis), RightSidebar (mode-specific panels). Uses Radix UI primitives + TailwindCSS. State from core events via `useMolvisUiState` and `useSelectionSnapshot` hooks.
+
+### Sidebar UI Design Language
+
+The Edit tab (`page/src/ui/modes/edit/`) sets the visual contract for all
+sidebar panels. Reuse it everywhere — same heights, same type scale, same
+voice. Anything in a sidebar panel should feel interchangeable with
+`BuilderTab` / `DownloadStructureSection` / `ToolsTab`.
+
+**Typography scale** (sidebars run denser than main content):
+- `text-[10px]` — section headers (`uppercase tracking-wide font-semibold`), prefix labels ("Source", "Name/CID"), status/hint lines
+- `text-[9px]` — subtitles, badges
+- `text-xs` (12px) — inputs, buttons with visible text, `SelectItem`s
+- `font-mono` on inputs that carry structural text (SMILES, identifiers, paths)
+
+**Control sizing** (don't mix these with generic shadcn defaults):
+- `h-7` — primary interactive controls (Input, SelectTrigger, Button)
+- `h-6` — `TabsTrigger` inside `TabsList h-7 p-0.5` (nested, denser)
+- `h-4` — status bar rows
+- Icons: `h-3.5 w-3.5` inside buttons, `h-3 w-3` inline in status lines
+
+**Spacing:**
+- Section header: `px-2 py-1`, content wrapper: `px-2 pb-1.5 space-y-1.5`
+- Control rows: `flex items-center gap-1.5` with `Input` / `Select` as `flex-1 min-w-0` and a right-aligned icon button (`h-7 px-2`)
+- Status lines: `flex items-center gap-1 px-2 py-1` with a leading icon + short imperative text
+
+**Color semantics:**
+- `text-muted-foreground` — every non-active label, placeholder, hint
+- `text-destructive` + `AlertCircle` — errors
+- `text-emerald-500` + `MousePointerClick` — success/next-step prompts
+- Active tab / pressed toggle: `variant="secondary"` + optional `ring-1 ring-ring`
+
+**Patterns:**
+- Wrap each logical group in `<SidebarSection>` (collapsible). Secondary/less-used sections start with `defaultOpen={false}` (e.g. `DownloadStructureSection`).
+- For a section that should fill remaining vertical space, pass `className="flex-1 min-h-0 flex flex-col"` **and** `contentClassName="flex-1 min-h-0 flex flex-col"` — both are required because `SidebarSection` renders a `<section>` → content `<div>` wrapper.
+- Icon-only tabs/buttons: `aria-label` + `title`, never visible text underneath. Use `grid grid-cols-N gap-0.5` for tab bars and toggle groups.
+- Prefix labels sit left of their control, `w-10 shrink-0 text-[10px] text-muted-foreground`, so inputs align across rows.
+- Disabled dropdown items keep the choice visible with a `(soon)` suffix instead of being hidden.
+
+**Writing style:**
+- Section titles: 1–3 words, rendered uppercase via CSS. Prefer nouns ("SMILES", "2D Sketch", "Download Structure"). Never add "Settings" / "Options" / "Panel" suffixes.
+- Placeholders/examples: show a real value, not an instruction (`"CCO"`, `"aspirin or 2244"`, `"1tqn"` — not "Enter a SMILES…").
+- Status copy: short imperative, ≤6 words ("Click the 3D canvas to place", "Draw a molecule first"). No trailing period in inline hints.
+- Error messages: ≤10 words and specific ("PubChem: \"foo\" not found", "Switch to Edit mode first").
+- Icon-only controls carry matching `title` and `aria-label`; do not duplicate that text in the DOM.
+
+When adding a new panel or moving an old one, compare it against the Edit
+tab first and match these conventions before reaching for stock shadcn
+sizes — the generic defaults (`h-9`, `text-sm`) are too loose for the
+sidebar.
 
 ## VSCode Extension
 
@@ -132,26 +206,36 @@ This project includes specialized skills (`.claude/skills/`) and agents (`.claud
 
 | Skill | Purpose |
 |-------|---------|
-| `/molvis-spec <description>` | Convert natural language requirements into formal specs with design docs |
-| `/molvis-impl <feature/spec>` | Orchestrate multi-agent implementation of a feature/spec |
-| `/molvis-arch <scope>` | Architecture review specific to MolVis patterns |
-| `/molvis-test <feature>` | Design test strategy for MolVis features |
-| `/molvis-perf <scope>` | Performance analysis for rendering/WASM code |
-| `/molvis-doc <scope>` | Documentation and docstring generation |
-| `/molvis-review <scope>` | Comprehensive review: architecture + performance in parallel |
+| `/molvis-spec <description>` | Map user request to MolVis patterns (Command/Modifier/Mode/WASM); produce architecture-adapted spec |
+| `/molvis-impl <spec path>` | Orchestrate multi-agent implementation of an approved spec |
+| `/molvis-arch <scope>` | Structural review: layer separation, pattern classification, package boundaries |
+| `/molvis-test <feature>` | Design and write tests for MolVis features (TDD workflow) |
+| `/molvis-perf <scope>` | Diagnose performance issues: hot paths, WASM boundary, GPU buffers |
+| `/molvis-doc <scope>` | Generate JSDoc/TSDoc for commands, modifiers, and public APIs |
+| `/molvis-review <scope>` | Aggregate review: arch + perf + doc + rendering safety in parallel |
+| `/molvis-iterate` | Product iteration cycle: lead agent proposes next improvement, waits for approval |
 
 ### Agents (subagents)
 
-| Agent | Purpose |
-|-------|---------|
-| `molvis-reviewer` | Code review against MolVis-specific invariants (auto-invoked after writing code) |
-| `molvis-explorer` | Codebase exploration with architecture-aware navigation |
-| `molvis-planner` | Implementation planning with phased task breakdown |
+| Agent | Responsibility (single) |
+|-------|------------------------|
+| `molvis-explorer` | Find files, trace data flow, answer "how does X work?" |
+| `molvis-architect` | Validate design decisions against layer rules and patterns (not exploration, not task breakdown) |
+| `molvis-planner` | Break an approved design into phased, dependency-ordered tasks |
+| `molvis-reviewer` | Behavioral correctness: WASM safety, immutability, command symmetry, buffer invariants |
+| `molvis-tester` | Write tests in rstest; enforce TDD (RED → GREEN → REFACTOR) |
+| `molvis-documenter` | Write TSDoc/JSDoc for public symbols, commands, and modifiers |
+| `molvis-optimizer` | Implement performance fixes for identified hot paths |
+| `molvis-lead` | Product strategy: propose one iteration at a time, never implement without approval |
+
+**arch vs reviewer**: `molvis-arch` = "is this in the right layer using the right pattern?" / `molvis-reviewer` = "is the implementation of that pattern correct?"
+**perf vs optimizer**: `molvis-perf` = diagnose (identify issues) / `molvis-optimizer` = fix (implement optimizations)
+**architect vs explorer vs planner**: `architect` = design decisions / `explorer` = find existing code / `planner` = task breakdown
 
 ### Typical Workflow
 ```
 /molvis-spec "add angle measurement between 3 atoms"
 → review and approve the spec
 /molvis-impl docs/specs/angle-measurement.md
-→ parallel agents implement core + UI + tests → verify → review
+→ parallel agents (planner → tester + core + ui) → verify → review
 ```

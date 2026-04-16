@@ -1,9 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { bootstrapTheme } from "./hooks/useTheme";
 import "./styles/tailwind.css";
 
-document.documentElement.classList.add("dark");
+bootstrapTheme();
 
 const container = document.getElementById("root");
 if (container) {

@@ -1,9 +1,13 @@
-import { Engine, Tools } from "@babylonjs/core";
+import { Color4, Engine, Tools } from "@babylonjs/core";
 import { Artist } from "./artist";
 import { findRepresentation } from "./artist/representation";
 import { StyleManager } from "./artist/style_manager";
 import type { Theme } from "./artist/theme";
-import { type CommandRegistry, commands } from "./commands";
+import {
+  type CommandRegistry,
+  commands,
+  registerDefaultCommands,
+} from "./commands";
 import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
 import { UpdateFrameCommand } from "./commands/frame";
 import { CommandManager } from "./commands/manager";
@@ -15,6 +19,7 @@ import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
+import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import type { FrameSource } from "./pipeline/pipeline";
 import type { PipelineContext, SelectionMask } from "./pipeline/types";
 import { readPDBFrame } from "./reader";
@@ -28,13 +33,17 @@ import {
 } from "./system/frame_diff";
 import type { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
+import { cropToContent, reencodeImage } from "./utils/image_crop";
 import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
 
 import { type Box, Frame } from "@molcrafts/molrs";
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
+import { OverlayManager } from "./overlays/overlay_manager";
+import { TextLabelOverlay } from "./overlays/text_label";
 import { defaultSaveFile } from "./save_file";
+import { DType } from "./utils/dtype";
 
 interface StructuralSelectionSnapshot {
   atomIds: number[];
@@ -82,6 +91,9 @@ export class MolvisApp {
   // Events
   public readonly events = new EventEmitter<MolvisEventMap>();
 
+  // Overlay system
+  public readonly overlayManager: OverlayManager;
+
   // User settings (public API)
   public readonly settings: Settings;
 
@@ -101,6 +113,11 @@ export class MolvisApp {
     this._config = defaultMolvisConfig(config);
     this._container = container;
     logger.info(`Molvis initializing (v${MOLVIS_VERSION})`);
+
+    // Ensure default command/modifier registries are populated. Both are
+    // idempotent; subsequent calls are no-ops.
+    registerDefaultCommands();
+    registerDefaultModifiers();
 
     // Register Web Components & create DOM
     registerWebComponents();
@@ -127,6 +144,9 @@ export class MolvisApp {
 
     // Initialize Style Manager (before ModeManager)
     this._styleManager = new StyleManager(this._world.scene);
+
+    // Initialize Overlay Manager
+    this.overlayManager = new OverlayManager(this._world.scene);
 
     // Initialize settings
     this.settings = new Settings(this, setting);
@@ -164,6 +184,11 @@ export class MolvisApp {
     // Selection-to-scene sync is handled exclusively in applyPipeline().
     this._modifierPipeline.on(PipelineEvents.COMPUTED, ({ context }) => {
       this._lastSelectionSet = new Map(context.selectionSet);
+    });
+
+    // Sync text label anchors to atom positions on each frame render.
+    this.events.on("frame-rendered", ({ frame }) => {
+      this._syncTextLabelAnchors(frame);
     });
   }
 
@@ -334,38 +359,81 @@ export class MolvisApp {
   }
 
   /**
-   * Capture the current viewport as a PNG data URL.
+   * Capture the current viewport as a data URL.
    * Uses BabylonJS render-target screenshot for consistent quality.
+   *
+   * `autoCrop` trims the output to the tight bounding box of non-transparent
+   * pixels and implies `transparentBackground: true` (the alpha channel is the
+   * scan source).
    */
   public async screenshot(options?: {
     width?: number;
     height?: number;
     transparentBackground?: boolean;
+    format?: "png" | "webp";
+    autoCrop?: boolean;
+    cropPadding?: number;
+    quality?: number;
   }): Promise<string> {
     const width = options?.width ?? this._canvas.width;
     const height = options?.height ?? this._canvas.height;
+    const format = options?.format ?? "png";
+    const autoCrop = options?.autoCrop ?? false;
+    const transparent = autoCrop || (options?.transparentBackground ?? false);
     const savedAlpha = this._world.scene.clearColor.a;
 
-    if (options?.transparentBackground) {
+    if (transparent) {
       this._world.scene.clearColor.a = 0;
     }
 
     try {
-      const data = await Tools.CreateScreenshotUsingRenderTargetAsync(
+      const activeCamera = this._world.scene.activeCamera;
+      if (!activeCamera) {
+        throw new Error("Cannot capture screenshot without an active camera");
+      }
+      const raw = await Tools.CreateScreenshotUsingRenderTargetAsync(
         this._engine,
-        this._world.scene.activeCamera!,
+        activeCamera,
         { width, height },
       );
-      return data;
+      const needsPostProcess = autoCrop || format !== "png";
+      if (!needsPostProcess) return raw;
+
+      const mimeType = format === "webp" ? "image/webp" : "image/png";
+      if (autoCrop) {
+        return await cropToContent(raw, {
+          padding: options?.cropPadding ?? 8,
+          mimeType,
+          quality: options?.quality ?? 0.92,
+        });
+      }
+      return await reencodeImage(raw, mimeType, options?.quality ?? 0.92);
     } finally {
-      if (options?.transparentBackground) {
+      if (transparent) {
         this._world.scene.clearColor.a = savedAlpha;
       }
     }
   }
 
+  private _syncTextLabelAnchors(frame: Frame): void {
+    const atoms = frame.getBlock("atoms");
+    if (!atoms) return;
+    const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
+    const y = atoms.dtype("y") === DType.F64 ? atoms.viewColF("y") : undefined;
+    const z = atoms.dtype("z") === DType.F64 ? atoms.viewColF("z") : undefined;
+    if (!x || !y || !z) return;
+
+    for (const overlay of this.overlayManager.list()) {
+      if (!(overlay instanceof TextLabelOverlay)) continue;
+      const atomId = overlay.props.anchorAtomId;
+      if (atomId < 0 || atomId >= x.length) continue;
+      overlay.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
+    }
+  }
+
   public destroy(): void {
     this.stop();
+    this.overlayManager.dispose();
     this._guiManager.unmount();
     this._lastRenderedFrame = null;
     this._pendingFrameRender = null;
@@ -449,6 +517,16 @@ export class MolvisApp {
     if (this._system.frame) {
       this.renderFrame(this._system.frame);
     }
+  }
+
+  public setBackgroundColor(color: string): void {
+    const hex = color.replace(/^#/, "");
+    const r = Number.parseInt(hex.substring(0, 2), 16) / 255;
+    const g = Number.parseInt(hex.substring(2, 4), 16) / 255;
+    const b = Number.parseInt(hex.substring(4, 6), 16) / 255;
+    const a =
+      hex.length >= 8 ? Number.parseInt(hex.substring(6, 8), 16) / 255 : 1;
+    this._world.scene.clearColor = new Color4(r, g, b, a);
   }
 
   public setRepresentation(name: string): void {
@@ -643,14 +721,14 @@ export class MolvisApp {
    * Load a new frame into the system, clearing the existing scene.
    * Consolidates scene clearing, history reset, and initial rendering.
    */
-  public loadFrame(frame: Frame, box?: Box): void {
+  public async loadFrame(frame: Frame, box?: Box): Promise<void> {
     this.artist.clear();
     this.artist.ribbonRenderer.dispose();
     this.commandManager.clearHistory();
     this._lastRenderedFrame = null;
     this._sourceFrame = frame;
     this._system.setFrame(frame, box);
-    this.renderFrame(frame, box);
+    await this.renderFrameInternal(frame, box);
   }
 
   /**

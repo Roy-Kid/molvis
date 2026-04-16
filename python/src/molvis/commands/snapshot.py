@@ -9,6 +9,8 @@ import base64
 import logging
 from typing import TYPE_CHECKING
 
+from .catalog import FrontendCommands
+
 if TYPE_CHECKING:
     from ..scene import Molvis
 
@@ -35,15 +37,15 @@ class SnapshotCommandsMixin:
             
         Raises:
             TimeoutError: If the frontend does not respond within the timeout
+            molvis.MolvisRpcError: If the frontend rejects the snapshot request
         """
-        response = self.send_cmd("take_snapshot", {}, wait_for_response=True, timeout=timeout)
-        
-        # Extract result from JSON-RPC response
-        if isinstance(response, dict) and "result" in response:
-            data = response["result"]
-        else:
-            data = response
-            
+        data = self.send_cmd(
+            FrontendCommands.SNAPSHOT.method,
+            {},
+            wait_for_response=True,
+            timeout=timeout,
+        )
+
         if not isinstance(data, dict) or "data" not in data:
             raise ValueError(f"Unexpected response format from take_snapshot: {data}")
 

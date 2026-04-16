@@ -1,12 +1,12 @@
 import {
   Box,
   type Frame,
-  LAMMPSDumpReader,
   LAMMPSReader,
   PDBReader,
   XYZReader,
 } from "@molcrafts/molrs";
 import { PeriodicTable } from "./system/elements";
+import { DType } from "./utils/dtype";
 import { logger } from "./utils/logger";
 
 /**
@@ -22,21 +22,13 @@ export function readPDBFrame(content: string): Frame {
     throw new Error("PDB reader returned null frame");
   }
 
+  // Normalize column names (type_symbol→element, i/j→atomi/atomj, i32→u32)
+  normalizeFrame(frame);
+
   const atomBlock = frame.getBlock("atoms");
   if (!atomBlock) {
     throw new Error("PDB frame has no atoms block");
   }
-
-  if (!atomBlock.dtype("element")) {
-    const typeSymbol = atomBlock.copyColStr("type_symbol");
-    if (!typeSymbol) {
-      throw new Error("PDB atoms block missing 'type_symbol' column");
-    }
-    atomBlock.setColStr("element", typeSymbol);
-  }
-
-  // Normalize bond columns: WASM PDBReader may store i/j as i32, convert to u32
-  normalizeBondColumns(frame);
 
   // Parse CRYST1 record for box if WASM reader didn't populate simbox
   if (!frame.simbox) {
@@ -51,25 +43,91 @@ export function readPDBFrame(content: string): Frame {
 }
 
 /**
- * Convert bond i/j columns from i32 to u32 if needed.
- * The WASM PDBReader may store CONECT indices as i32 — the rendering
- * pipeline expects u32.
+ * Canonical column name aliases produced by molrs WASM readers.
+ * Maps non-canonical names to the molpy canonical equivalents.
  */
-function normalizeBondColumns(frame: Frame): void {
+const BOND_COLUMN_ALIASES: Record<string, string> = {
+  i: "atomi",
+  j: "atomj",
+  k: "atomk",
+  l: "atoml",
+  atom_i: "atomi",
+  atom_j: "atomj",
+  atom_k: "atomk",
+  atom_l: "atoml",
+};
+
+const ATOM_COLUMN_ALIASES: Record<string, string> = {
+  symbol: "element",
+  species: "element",
+  type_symbol: "element",
+};
+
+/**
+ * Normalize a Frame's column names to molpy canonical form.
+ *
+ * - Renames bond index columns (``i``/``j`` or ``atom_i``/``atom_j`` → ``atomi``/``atomj``)
+ * - Renames atom identity columns (``symbol``/``species`` → ``element``)
+ * - Converts bond column dtype from i32 → u32 when needed
+ */
+function normalizeFrame(frame: Frame): void {
+  normalizeBlockColumns(frame, "atoms", ATOM_COLUMN_ALIASES);
+  normalizeBlockColumns(frame, "bonds", BOND_COLUMN_ALIASES);
+  normalizeBlockColumns(frame, "angles", BOND_COLUMN_ALIASES);
+  normalizeBlockColumns(frame, "dihedrals", BOND_COLUMN_ALIASES);
+
+  // Ensure bond index columns are stored as u32 (WASM PDBReader may use i32)
   const bonds = frame.getBlock("bonds");
   if (!bonds || bonds.nrows() === 0) return;
-
-  for (const col of ["i", "j"]) {
-    if (!bonds.keys().includes(col)) continue;
-
-    const dtype = bonds.dtype(col);
-    if (dtype === "u32") continue; // already u32
-
-    if (dtype === "i32") {
+  for (const col of ["atomi", "atomj"]) {
+    if (bonds.dtype(col) === DType.I32) {
       const i32 = bonds.viewColI32(col);
-      if (i32) {
-        bonds.setColU32(col, new Uint32Array(i32));
+      if (i32) bonds.setColU32(col, new Uint32Array(i32));
+    }
+  }
+
+  // Ensure bond order column is u32 (readers may produce f32 or i32)
+  const orderDtype = bonds.dtype("order");
+  if (orderDtype && orderDtype !== "u32") {
+    const nrows = bonds.nrows();
+    if (orderDtype === DType.F64) {
+      const f32 = bonds.viewColF("order");
+      if (f32) {
+        const u32 = new Uint32Array(nrows);
+        for (let i = 0; i < nrows; i++) {
+          u32[i] = Math.max(1, Math.round(f32[i]));
+        }
+        bonds.setColU32("order", u32);
       }
+    } else if (orderDtype === DType.I32) {
+      const i32 = bonds.viewColI32("order");
+      if (i32) {
+        const u32 = new Uint32Array(nrows);
+        for (let i = 0; i < nrows; i++) {
+          u32[i] = Math.max(1, i32[i]);
+        }
+        bonds.setColU32("order", u32);
+      }
+    }
+  }
+}
+
+/**
+ * Rename non-canonical columns in a single block using an alias map.
+ * Skips renaming if the canonical column already exists.
+ */
+function normalizeBlockColumns(
+  frame: Frame,
+  blockName: string,
+  aliases: Record<string, string>,
+): void {
+  const block = frame.getBlock(blockName);
+  if (!block) return;
+
+  const keys = block.keys();
+  for (const [alias, canonical] of Object.entries(aliases)) {
+    if (keys.includes(alias) && !keys.includes(canonical)) {
+      block.renameColumn(alias, canonical);
     }
   }
 }
@@ -89,26 +147,30 @@ function parseCryst1(content: string): Box | null {
   if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(c)) return null;
   if (a <= 0 || b <= 0 || c <= 0) return null;
 
-  const origin = new Float32Array([0, 0, 0]);
+  const origin = new Float64Array([0, 0, 0]);
 
   if (a === b && b === c) {
     return Box.cube(a, origin, true, true, true);
   }
-  return Box.ortho(new Float32Array([a, b, c]), origin, true, true, true);
+  return Box.ortho(new Float64Array([a, b, c]), origin, true, true, true);
 }
 
 function processXYZFrame(frame: Frame): void {
+  normalizeFrame(frame);
+
   const atomBlock = frame.getBlock("atoms");
   if (!atomBlock) {
     throw new Error("XYZ frame has no atoms block");
   }
 
+  // After normalizeFrame, "species" is already renamed to "element".
+  // If still missing, derive from "type".
   if (!atomBlock.dtype("element")) {
-    const symbol = atomBlock.copyColStr("species");
-    if (!symbol) {
-      throw new Error("XYZ atoms block missing 'species' column");
+    const types = atomBlock.copyColStr("type");
+    if (types) {
+      const derived = types.map(deriveElementFromType);
+      atomBlock.setColStr("element", derived);
     }
-    atomBlock.setColStr("element", symbol);
   }
 }
 
@@ -141,21 +203,22 @@ export function readLAMMPSData(content: string): Frame {
     throw new Error("LAMMPS reader returned null frame");
   }
 
+  normalizeFrame(frame);
+
   const atomBlock = frame.getBlock("atoms");
   if (!atomBlock) {
     throw new Error("LAMMPS frame has no atoms block");
   }
 
-  // LAMMPS format: element/type is in 'species' column
+  // After normalizeFrame, "species" is already renamed to "element".
+  // If still missing, derive from "type".
   if (!atomBlock.dtype("element")) {
-    const species = atomBlock.copyColStr("species");
-    if (!species) {
-      throw new Error("LAMMPS atoms block missing 'species' column");
+    const types = atomBlock.copyColStr("type");
+    if (types) {
+      const derived = types.map(deriveElementFromType);
+      atomBlock.setColStr("element", derived);
     }
-    atomBlock.setColStr("element", species);
   }
-
-  // LAMMPS bonds: already uses 'i' and 'j', no mapping needed
 
   logger.info("[reader] Successfully read LAMMPS data frame");
   return frame;
@@ -165,17 +228,9 @@ export function readLAMMPSData(content: string): Frame {
  * Parse a LAMMPS dump payload into a normalized frame (first timestep).
  */
 export function readLAMMPSDump(content: string): Frame {
-  const reader = new LAMMPSDumpReader(content);
-  const frame = reader.read(0);
-  reader.free();
-
-  if (!frame) {
-    throw new Error("LAMMPS dump reader returned null frame");
-  }
-
-  processLAMMPSDumpFrame(frame);
-  logger.info("[reader] Successfully read LAMMPS dump frame");
-  return frame;
+  throw new Error(
+    "LAMMPS dump reading is not available in the current @molcrafts/molrs build.",
+  );
 }
 
 /**
@@ -184,22 +239,20 @@ export function readLAMMPSDump(content: string): Frame {
  * We derive element from `type` if `element` is missing.
  */
 function processLAMMPSDumpFrame(frame: Frame): void {
+  normalizeFrame(frame);
+
   const atoms = frame.getBlock("atoms");
   if (!atoms) {
     throw new Error("LAMMPS dump frame has no atoms block");
   }
 
+  // After normalizeFrame, "species" is already renamed to "element".
+  // If still missing, derive from "type".
   if (!atoms.dtype("element")) {
-    // Try 'type' column (integer type IDs) or 'species' (string names)
-    const species = atoms.copyColStr("species");
-    if (species) {
-      atoms.setColStr("element", species);
-    } else {
-      const types = atoms.copyColStr("type");
-      if (types) {
-        const derived = types.map(deriveElementFromType);
-        atoms.setColStr("element", derived);
-      }
+    const types = atoms.copyColStr("type");
+    if (types) {
+      const derived = types.map(deriveElementFromType);
+      atoms.setColStr("element", derived);
     }
   }
 }
@@ -266,6 +319,7 @@ export function deriveElementFromType(typeName: string): string {
  * If missing, derives it from the `type` column using periodic table lookup.
  */
 export function processZarrFrame(frame: Frame): Frame {
+  normalizeFrame(frame);
   const atoms = frame.getBlock("atoms");
   if (!atoms) return frame;
   if (atoms.dtype("element")) return frame;
@@ -295,12 +349,12 @@ export class TrajectoryReader {
   constructor(content: string, format?: string) {
     const fmt = format ?? "xyz";
     if (fmt === "lammps-dump") {
-      this.reader = new LAMMPSDumpReader(content);
-      this.postProcess = processLAMMPSDumpFrame;
-    } else {
-      this.reader = new XYZReader(content);
-      this.postProcess = processXYZFrame;
+      throw new Error(
+        "LAMMPS dump trajectories are not available in the current @molcrafts/molrs build.",
+      );
     }
+    this.reader = new XYZReader(content);
+    this.postProcess = processXYZFrame;
     this.frameCount = this.reader.len();
   }
 

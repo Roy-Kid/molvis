@@ -1,6 +1,7 @@
 import type { Box, Frame } from "@molcrafts/molrs";
 import type { RepresentationStyle } from "./artist/representation";
 import type { ModeType } from "./mode/base";
+import type { Overlay } from "./overlays/types";
 import type { Trajectory } from "./system/trajectory";
 
 /**
@@ -20,6 +21,9 @@ export interface MolvisEventMap {
   "representation-change": RepresentationStyle;
   "fence-select-change": boolean;
   "pending-selection-change": { atomKeys: string[]; bondKeys: string[] };
+  "overlay-added": { overlay: Overlay };
+  "overlay-removed": { id: string };
+  "overlay-changed": { overlay: Overlay };
 }
 
 export type Listener<T = unknown> = (data: T) => void;

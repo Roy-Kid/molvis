@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "molvis"
-version = "0.0.2"
+version = "0.0.1"
 description = "Jupyter widget for molecular visualization"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -29,6 +29,7 @@ dependencies = [
     "anywidget>=0.9.0",
     "molcrafts-molpy",
     "numpy",
+    "websockets>=13.0",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,13 @@ dev = [
 [project.urls]
 Homepage = "https://github.com/molcrafts/molvis"
 Repository = "https://github.com/molcrafts/molvis"
+
+[tool.hatch.build]
+# Include the bundled JS frontend in the wheel (hatch honors .gitignore by
+# default, which excludes dist/).
+artifacts = [
+    "src/molvis/dist/**",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/molvis"]

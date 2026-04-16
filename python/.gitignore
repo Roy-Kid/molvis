@@ -8,6 +8,10 @@ node_modules
 dist/
 storybook-static
 
+# Built page app for standalone mode (populated by `npm run build:standalone`)
+src/molvis/page_dist/*
+!src/molvis/page_dist/.gitkeep
+
 # IDE
 .vscode/*
 !.vscode/extensions.json

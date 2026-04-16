@@ -1,11 +1,6 @@
 import { Effect } from "@babylonjs/core";
 
-/**
- * Shader source registration is intentionally module-scoped side effect.
- * Artist imports this file once and compiles visible geometry on demand.
- * Do not move this into webview/extension code paths.
- */
-Effect.ShadersStore.sphereImpostorVertexShader = `
+const SPHERE_VERTEX = `
     precision highp float;
 
     // Attributes
@@ -57,7 +52,7 @@ Effect.ShadersStore.sphereImpostorVertexShader = `
     }
 `;
 
-Effect.ShadersStore.sphereImpostorFragmentShader = `
+const SPHERE_FRAGMENT = `
 precision highp float;
 #ifdef GL_EXT_frag_depth
 #extension GL_EXT_frag_depth : enable
@@ -140,7 +135,7 @@ void main() {
 }
 `;
 
-Effect.ShadersStore.bondImpostorVertexShader = `
+const BOND_VERTEX = `
     precision highp float;
 
     // Attributes
@@ -206,7 +201,7 @@ Effect.ShadersStore.bondImpostorVertexShader = `
     }
 `;
 
-Effect.ShadersStore.bondImpostorFragmentShader = `
+const BOND_FRAGMENT = `
 precision highp float;
 #ifdef GL_EXT_frag_depth
 #extension GL_EXT_frag_depth : enable
@@ -302,3 +297,14 @@ void main() {
 }
 
 `;
+
+let registered = false;
+
+export function registerImpostorShaders(): void {
+  if (registered) return;
+  Effect.ShadersStore.sphereImpostorVertexShader = SPHERE_VERTEX;
+  Effect.ShadersStore.sphereImpostorFragmentShader = SPHERE_FRAGMENT;
+  Effect.ShadersStore.bondImpostorVertexShader = BOND_VERTEX;
+  Effect.ShadersStore.bondImpostorFragmentShader = BOND_FRAGMENT;
+  registered = true;
+}

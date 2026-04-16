@@ -66,9 +66,9 @@ export function syncSceneToFrame(
   const atomCount = atoms.length;
   if (atomCount > 0) {
     const atomBlock = new Block();
-    const x = new Float32Array(atomCount);
-    const y = new Float32Array(atomCount);
-    const z = new Float32Array(atomCount);
+    const x = new Float64Array(atomCount);
+    const y = new Float64Array(atomCount);
+    const z = new Float64Array(atomCount);
     const elements: string[] = [];
 
     for (let i = 0; i < atoms.length; i++) {
@@ -79,9 +79,9 @@ export function syncSceneToFrame(
       elements.push(atom.element);
     }
 
-    atomBlock.setColF32("x", x);
-    atomBlock.setColF32("y", y);
-    atomBlock.setColF32("z", z);
+    atomBlock.setColF("x", x);
+    atomBlock.setColF("y", y);
+    atomBlock.setColF("z", z);
     atomBlock.setColStr("element", elements);
 
     frame.insertBlock("atoms", atomBlock);
@@ -101,8 +101,8 @@ export function syncSceneToFrame(
       orderArr[idx] = bond.order;
     }
 
-    bondBlock.setColU32("i", iArr);
-    bondBlock.setColU32("j", jArr);
+    bondBlock.setColU32("atomi", iArr);
+    bondBlock.setColU32("atomj", jArr);
     bondBlock.setColU32("order", orderArr);
 
     frame.insertBlock("bonds", bondBlock);

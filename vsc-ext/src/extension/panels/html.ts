@@ -33,11 +33,11 @@ function getViewerCssUri(
 // --- HTML generation (was webview/htmlFactory.ts) ---
 
 function getNonce(): string {
-  const charset =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
   let nonce = "";
-  for (let i = 0; i < 32; i++) {
-    nonce += charset.charAt(Math.floor(Math.random() * charset.length));
+  for (const byte of bytes) {
+    nonce += byte.toString(16).padStart(2, "0");
   }
   return nonce;
 }

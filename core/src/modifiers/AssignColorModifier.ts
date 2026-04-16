@@ -55,24 +55,24 @@ export class AssignColorModifier extends BaseModifier {
 
     // Start from existing overrides or default (NaN = no override)
     const existingR = atoms.dtype(COLOR_OVERRIDE_R)
-      ? atoms.viewColF32(COLOR_OVERRIDE_R)
+      ? atoms.viewColF(COLOR_OVERRIDE_R)
       : undefined;
     const existingG = atoms.dtype(COLOR_OVERRIDE_G)
-      ? atoms.viewColF32(COLOR_OVERRIDE_G)
+      ? atoms.viewColF(COLOR_OVERRIDE_G)
       : undefined;
     const existingB = atoms.dtype(COLOR_OVERRIDE_B)
-      ? atoms.viewColF32(COLOR_OVERRIDE_B)
+      ? atoms.viewColF(COLOR_OVERRIDE_B)
       : undefined;
 
     const colorR = existingR
-      ? new Float32Array(existingR)
-      : new Float32Array(atomCount).fill(Number.NaN);
+      ? new Float64Array(existingR)
+      : new Float64Array(atomCount).fill(Number.NaN);
     const colorG = existingG
-      ? new Float32Array(existingG)
-      : new Float32Array(atomCount).fill(Number.NaN);
+      ? new Float64Array(existingG)
+      : new Float64Array(atomCount).fill(Number.NaN);
     const colorB = existingB
-      ? new Float32Array(existingB)
-      : new Float32Array(atomCount).fill(Number.NaN);
+      ? new Float64Array(existingB)
+      : new Float64Array(atomCount).fill(Number.NaN);
 
     let hasOverride = existingR !== undefined;
 
@@ -95,9 +95,9 @@ export class AssignColorModifier extends BaseModifier {
     const resultAtoms = result.getBlock("atoms");
     if (!resultAtoms) return input;
 
-    resultAtoms.setColF32(COLOR_OVERRIDE_R, colorR);
-    resultAtoms.setColF32(COLOR_OVERRIDE_G, colorG);
-    resultAtoms.setColF32(COLOR_OVERRIDE_B, colorB);
+    resultAtoms.setColF(COLOR_OVERRIDE_R, colorR);
+    resultAtoms.setColF(COLOR_OVERRIDE_G, colorG);
+    resultAtoms.setColF(COLOR_OVERRIDE_B, colorB);
 
     // Copy bonds block if present
     const bonds = input.getBlock("bonds");

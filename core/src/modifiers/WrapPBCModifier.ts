@@ -24,9 +24,9 @@ export class WrapPBCModifier extends BaseModifier {
       return input;
     }
 
-    const x = atoms.viewColF32("x");
-    const y = atoms.viewColF32("y");
-    const z = atoms.viewColF32("z");
+    const x = atoms.viewColF("x");
+    const y = atoms.viewColF("y");
+    const z = atoms.viewColF("z");
     if (!x || !y || !z) {
       logger.warn("WrapPBC: missing x/y/z columns, skipping");
       return input;
@@ -38,7 +38,7 @@ export class WrapPBCModifier extends BaseModifier {
     }
 
     // Build interleaved coords for WASM wrap operation.
-    const interleaved = new Float32Array(atomCount * 3);
+    const interleaved = new Float64Array(atomCount * 3);
     for (let i = 0; i < atomCount; i++) {
       const i3 = i * 3;
       interleaved[i3] = x[i];
@@ -62,24 +62,24 @@ export class WrapPBCModifier extends BaseModifier {
       // wrapToBlock writes wrapped xyz directly into a Block column,
       // avoiding an intermediate WasmArray copy + JS-side deinterleave.
       box.wrapToBlock(coordsArr, resultAtoms, "pos");
-      const wrapped = resultAtoms.viewColF32("pos");
+      const wrapped = resultAtoms.viewColF("pos");
       if (!wrapped) {
         throw new Error("WrapPBC: wrapToBlock did not produce pos column");
       }
 
       // Deinterleave the wrapped [x0,y0,z0,...] back into separate columns.
-      const wrappedX = new Float32Array(atomCount);
-      const wrappedY = new Float32Array(atomCount);
-      const wrappedZ = new Float32Array(atomCount);
+      const wrappedX = new Float64Array(atomCount);
+      const wrappedY = new Float64Array(atomCount);
+      const wrappedZ = new Float64Array(atomCount);
       for (let i = 0; i < atomCount; i++) {
         const i3 = i * 3;
         wrappedX[i] = wrapped[i3];
         wrappedY[i] = wrapped[i3 + 1];
         wrappedZ[i] = wrapped[i3 + 2];
       }
-      resultAtoms.setColF32("x", wrappedX);
-      resultAtoms.setColF32("y", wrappedY);
-      resultAtoms.setColF32("z", wrappedZ);
+      resultAtoms.setColF("x", wrappedX);
+      resultAtoms.setColF("y", wrappedY);
+      resultAtoms.setColF("z", wrappedZ);
 
       const bonds = input.getBlock("bonds");
       if (bonds) {

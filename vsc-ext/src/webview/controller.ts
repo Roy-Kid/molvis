@@ -96,7 +96,7 @@ export function bootstrapWebview(container: HTMLElement): void {
             setTrajectory: (trajectory: Trajectory) =>
               app.setTrajectory(trajectory),
             setViewMode: () => app.setMode("view"),
-            resetCamera: () => app.world.resetCamera(),
+            resetCamera: () => app.resetCamera(),
             loadPdb: (pdbText: string) => app.loadPdb(pdbText),
           },
           resources,
@@ -152,13 +152,17 @@ export function bootstrapWebview(container: HTMLElement): void {
           setTrajectory: (trajectory: Trajectory) =>
             app.setTrajectory(trajectory),
           setViewMode: () => app.setMode("view"),
-          resetCamera: () => app.world.resetCamera(),
+          resetCamera: () => app.resetCamera(),
           loadPdb: (pdbText: string) => app.loadPdb(pdbText),
         },
         resources,
       );
     } catch (e) {
-      console.error("Failed to load dropped file:", e);
+      const message = e instanceof Error ? e.message : String(e);
+      vscode.postMessage({
+        type: "error",
+        message: `Failed to load dropped file: ${message}`,
+      });
     }
   });
 

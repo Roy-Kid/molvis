@@ -55,9 +55,9 @@ export class ExpressionSelector {
     if (!atomsBlock) return [];
 
     const count = atomsBlock.nrows();
-    const xCol = atomsBlock.viewColF32("x");
-    const yCol = atomsBlock.viewColF32("y");
-    const zCol = atomsBlock.viewColF32("z");
+    const xCol = atomsBlock.viewColF("x");
+    const yCol = atomsBlock.viewColF("y");
+    const zCol = atomsBlock.viewColF("z");
     const elCol = atomsBlock.dtype("element")
       ? (atomsBlock.copyColStr("element") as string[])
       : undefined;

@@ -28,7 +28,8 @@ export interface KekuleComposerRef {
 }
 
 interface KekuleComposerProps {
-  height?: number;
+  /** Minimum height so the composer never collapses below a usable size. */
+  minHeight?: number;
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -36,7 +37,7 @@ type LoadState = "loading" | "ready" | "error";
 export const KekuleComposer = forwardRef<
   KekuleComposerRef,
   KekuleComposerProps
->(({ height = 280 }, ref) => {
+>(({ minHeight = 220 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<Kekule.Editor.Composer | null>(null);
   const kekuleRef = useRef<typeof Kekule | null>(null);
@@ -101,8 +102,14 @@ export const KekuleComposer = forwardRef<
         kekuleRef.current = K;
 
         const composer = new K.Editor.Composer(document);
-        composer.setDimension("100%", `${Math.round(height / 0.75)}px`);
+        // Fill the container and let Composer's built-in ResizeObserver
+        // (setObserveElemResize in composers.js) relayout toolbars + canvas
+        // when the sidebar resizes. Container owns the explicit pixel height.
+        composer.setDimension("100%", "100%");
         composer.appendToElem(containerRef.current);
+        // Editor starts without a ChemObj and silently drops clicks; create
+        // an empty Molecule so atom/bond tools have something to draw into.
+        composer.newDoc();
         composerRef.current = composer;
         setState("ready");
       } catch (err) {
@@ -122,7 +129,7 @@ export const KekuleComposer = forwardRef<
       composerRef.current = null;
       kekuleRef.current = null;
     };
-  }, [height, retryKey]);
+  }, [retryKey]);
 
   if (state === "error") {
     return (
@@ -143,30 +150,17 @@ export const KekuleComposer = forwardRef<
     );
   }
 
-  // Composer renders at full size, CSS scale(0.75) shrinks it.
-  // Container clips to the scaled height.
-  const scale = 0.75;
-  const innerHeight = Math.round(height / scale);
-  const innerWidth = `${Math.round(100 / scale)}%`;
-
   return (
-    <div style={{ height, overflow: "hidden" }}>
+    <div className="flex-1 min-h-0 flex flex-col w-full" style={{ minHeight }}>
       {state === "loading" && (
-        <div
-          className="flex items-center justify-center text-xs text-muted-foreground"
-          style={{ height }}
-        >
+        <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
           Loading 2D editor...
         </div>
       )}
       <div
         ref={containerRef}
-        className="kekule-container"
-        style={{
-          width: innerWidth,
-          height: innerHeight,
-          display: state === "loading" ? "none" : "block",
-        }}
+        className="kekule-container flex-1 min-h-0 w-full"
+        style={{ display: state === "loading" ? "none" : "block" }}
       />
     </div>
   );

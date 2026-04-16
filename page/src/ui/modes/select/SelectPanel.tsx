@@ -97,8 +97,8 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
           </div>
           <Button
             size="sm"
-            variant={fenceActive ? "default" : "outline"}
-            className="h-7 w-full px-2 text-[11px] gap-1"
+            variant={fenceActive ? "secondary" : "outline"}
+            className="h-7 w-full px-2 text-xs gap-1.5"
             onClick={() => {
               if (fenceActive) {
                 app?.exitFenceSelect();
@@ -107,7 +107,7 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
               }
             }}
           >
-            <Lasso className="h-3 w-3" />
+            <Lasso className="h-3.5 w-3.5" />
             {fenceActive ? "Cancel Fence" : "Fence"}
           </Button>
         </div>
