@@ -49,30 +49,6 @@ export {
   type SelectionState,
   parseSelectionKey,
 } from "./selection_manager";
-export {
-  exportFrame,
-  writeFrame,
-  writePDBFrame,
-  writeXYZFrame,
-  writeLAMMPSData,
-  type ExportFormat,
-  type ExportPayload,
-  type WriteFrameOptions,
-  defaultExtensionForFormat,
-  mimeForFormat,
-} from "./writer";
-export {
-  readFrame,
-  readPDBFrame,
-  readXYZFrame,
-  readLAMMPSData,
-  readLAMMPSDump,
-  inferFormatFromFilename,
-  TrajectoryReader,
-  deriveElementFromType,
-  processZarrFrame,
-} from "./reader";
-
 export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";

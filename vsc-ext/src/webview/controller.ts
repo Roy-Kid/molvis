@@ -5,6 +5,11 @@ import {
   type Trajectory,
   mountMolvis,
 } from "@molvis/core";
+import {
+  exportFrame,
+  inferFormatFromFilename,
+  readPDBFrame,
+} from "@molvis/core/io";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
@@ -14,6 +19,20 @@ import {
   freeRuntimeResources,
   loadMolecularPayload,
 } from "./loader";
+
+/**
+ * PDB loader for the vsc-ext webview. Mirrors the page's loadFile.ts PDB
+ * branch — reads the frame, loads it, then builds ribbon geometry from
+ * HELIX/SHEET records. Lives here (not in core) because file IO must stay
+ * out of @molvis/core.
+ */
+async function loadPdbWithRibbon(app: Molvis, pdbText: string): Promise<void> {
+  const frame = readPDBFrame(pdbText);
+  await app.loadFrame(frame, frame.simbox);
+  app.artist.ribbonRenderer.buildFromPdb(pdbText);
+  const repr = app.styleManager.getRepresentation();
+  app.artist.ribbonRenderer.setVisible(repr.showRibbon);
+}
 
 declare const acquireVsCodeApi: () => {
   postMessage: (message: WebviewToHostMessage) => void;
@@ -97,7 +116,9 @@ export function bootstrapWebview(container: HTMLElement): void {
               app.setTrajectory(trajectory),
             setViewMode: () => app.setMode("view"),
             resetCamera: () => app.resetCamera(),
-            loadPdb: (pdbText: string) => app.loadPdb(pdbText),
+            loadPdb: (pdbText: string) => {
+              void loadPdbWithRibbon(app, pdbText);
+            },
           },
           resources,
         );
@@ -114,6 +135,20 @@ export function bootstrapWebview(container: HTMLElement): void {
 
   app.events.on("dirty-change", (isDirty: boolean) => {
     vscode.postMessage({ type: "dirtyStateChanged", isDirty });
+  });
+
+  // Right-click "Export" in the canvas context menu emits export-requested.
+  // Build a payload from the current scene and round-trip through saveFile,
+  // which the host turns into a Save dialog.
+  app.events.on("export-requested", () => {
+    const suggestedName = "molvis.pdb";
+    const format = inferFormatFromFilename(suggestedName, "pdb");
+    const payload = exportFrame(app.world.sceneIndex, {
+      format,
+      filename: suggestedName,
+    });
+    const blob = new Blob([payload.content], { type: payload.mime });
+    void app.saveFile(blob, payload.suggestedName);
   });
 
   container.addEventListener("dragover", (event) => {
@@ -153,7 +188,9 @@ export function bootstrapWebview(container: HTMLElement): void {
             app.setTrajectory(trajectory),
           setViewMode: () => app.setMode("view"),
           resetCamera: () => app.resetCamera(),
-          loadPdb: (pdbText: string) => app.loadPdb(pdbText),
+          loadPdb: (pdbText: string) => {
+            void loadPdbWithRibbon(app, pdbText);
+          },
         },
         resources,
       );

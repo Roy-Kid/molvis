@@ -1,43 +1,58 @@
 # MolVis
 
-**Interactive molecular visualization toolkit built with modern web technologies.**
+**Interactive 3D molecular visualization for the web, VSCode, and Jupyter.**
 
-MolVis is a high-performance molecular visualization toolkit that brings interactive 3D molecular graphics to the web, desktop, and Jupyter notebooks. Built on [Babylon.js](https://www.babylonjs.com/) and powered by WebAssembly, it delivers smooth, real-time rendering of large molecular systems.
+MolVis renders molecules, simulation boxes, and trajectories straight in
+the browser. It understands the common chemistry file formats (PDB, XYZ,
+LAMMPS, Zarr), plays back molecular dynamics frame-by-frame, and lets you
+build, analyze, and annotate structures without leaving your editor or
+notebook.
 
-## Features
+![MolVis showing a solvated protein with the simulation box outlined](assets/hero.png)
 
-- **High Performance** -- WebAssembly-powered molecular data processing with GPU-accelerated rendering
-- **Multiple Rendering Modes** -- View, select, edit, manipulate, and measure molecular structures
-- **Trajectory Support** -- Smooth playback and analysis of molecular dynamics trajectories
-- **Extensible Pipeline** -- Modular modifier system for custom data transformations
-- **Modern Stack** -- TypeScript, React, Babylon.js, and Rsbuild
-- **Multiple Interfaces** -- Web app, Jupyter widget, and VSCode extension
-- **Notebook Engineering** -- Binary anywidget transport, shared Jupyter sessions, and Python-visible JSON-RPC errors
+## What you can do
 
-## Packages
+- **Open a molecule** — drag a `.pdb`, `.xyz`, `.data`, or `.dump` onto
+  the viewport; MolVis figures out the format from the extension.
+- **Fly the camera** — orbit, pan, and zoom with depth cues and a
+  configurable grid.
+- **Work in modes** — switch between *View*, *Select*, *Edit*,
+  *Manipulate*, and *Measure* without losing your place.
+- **Apply a pipeline** — chain modifiers (slice, expression-select,
+  color by property, wrap PBC, …) and re-order them at any time.
+- **Play a trajectory** — scrub through thousands of frames smoothly.
+- **Export** — screenshots at arbitrary DPI, structures back to XYZ.
 
-| Package | Description |
-|---------|-------------|
-| `@molvis/core` | Core TypeScript library with rendering engine, command system, and pipeline |
-| `page/` | React web application with responsive UI |
-| `python/` | Jupyter notebook widget for inline visualization |
-| `vsc-ext/` | VSCode extension for molecular file editing |
+## Where to start
 
-## Supported File Formats
+- [**Getting Started**](getting-started/index.md) — pick the web viewer
+  or the VSCode extension and load your first structure.
+- [**Development**](development/index.md) — embed MolVis in your own
+  application or extend it with custom modifiers and commands.
+- [**API Reference**](api/typescript.md) — the TypeScript library and
+  the Python package.
 
-- **PDB** -- Protein Data Bank format
-- **XYZ** -- Standard Cartesian coordinates
-- **LAMMPS Data** -- LAMMPS data files with topology
+## How to run MolVis
 
-## Quick Links
+| | Where it runs | Install |
+|---|---|---|
+| **Web viewer** | [molvis.molcrafts.org](https://molvis.molcrafts.org) | nothing — just open the page |
+| **VSCode extension** | any VSCode workspace (local, WSL, or SSH remote) | install from the Marketplace |
+| **Jupyter widget** | any Jupyter notebook | `pip install molvis` |
+| **Embedded library** | your own web app | `npm install @molcrafts/molvis-core` |
 
-- [Getting Started](getting-started.md) -- Installation and basic usage
-- [Architecture](architecture.md) -- System design and key concepts
-- [Core API Reference](api/core.md) -- TypeScript API documentation
-- [Python Widget API Reference](api/python.md) -- Jupyter widget API and packaging notes
-- [Page Runtime Reference](api/page.md) -- Web app runtime surface and engineering commands
-- [VS Code Extension Reference](api/vsc-ext.md) -- Commands, settings, and test entry points
-- [0.0.2 Release Checklist](release/0.0.2-release-checklist.md) -- Multi-package release runbook
-- [Core Release Checklist](release/core-release-checklist.md) -- Manual release runbook
-- [0.0.2 Pre-Release Fix List](release/0.0.2-pre-release-fix-list.md) -- Release blockers and verification gates
-- [Source Code](https://github.com/molcrafts/molvis) -- GitHub repository
+## Supported file formats
+
+| Format | Extensions | Multi-frame | Box |
+|--------|-----------|-------------|-----|
+| Protein Data Bank | `.pdb` | yes (MODEL records) | CRYST1 |
+| Extended XYZ | `.xyz` | yes | via lattice comment |
+| LAMMPS data | `.data` | no | yes |
+| LAMMPS dump | `.dump`, `.lammpstrj` | yes | yes |
+| Zarr trajectory | `.zarr/` | yes | yes |
+
+## Source
+
+Source, issues, and releases live at
+[github.com/molcrafts/molvis](https://github.com/molcrafts/molvis).
+Released under BSD-3-Clause.

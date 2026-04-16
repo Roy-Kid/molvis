@@ -5,7 +5,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@molvis/core": ["../core/src/index.ts"]
+      "@molvis/core": ["../core/src/index.ts"],
+      "@molvis/core/io": ["../core/src/io/index.ts"]
     }
   },
   "include": ["src"]

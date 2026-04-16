@@ -1,14 +1,10 @@
+import { loadFileIntoApp } from "@/lib/loadFile";
 import {
-  type Frame,
   type Molvis,
   type MolvisConfig,
   type MolvisSetting,
-  Trajectory,
-  TrajectoryReader,
   defaultMolvisConfig,
-  inferFormatFromFilename,
   mountMolvis,
-  readFrame,
 } from "@molvis/core";
 import type React from "react";
 import { useEffect, useRef } from "react";
@@ -231,29 +227,13 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       const file = e.dataTransfer?.files?.[0];
       if (!file || !molvisRef.current) return;
       try {
-        const content = await file.text();
-        const app = molvisRef.current;
-        const format = inferFormatFromFilename(file.name);
-        const trajectoryFormats = new Set(["xyz", "lammps-dump"]);
-        if (trajectoryFormats.has(format)) {
-          const reader = new TrajectoryReader(content, format);
-          const frames: Frame[] = [];
-          for (let i = 0; i < reader.getFrameCount(); i++) {
-            frames.push(reader.readFrame(i));
-          }
-          app.setTrajectory(new Trajectory(frames));
-          reader.free();
-        } else if (format === "pdb") {
-          // PDB: use loadPdb to also build ribbon geometry
-          app.loadPdb(content);
-        } else {
-          const frame = readFrame(content, file.name);
-          app.setTrajectory(new Trajectory([frame]));
-        }
-        app.setMode("view");
-        app.world.resetCamera();
+        await loadFileIntoApp(molvisRef.current, file);
       } catch (err) {
-        console.error("Failed to load dropped file:", err);
+        const message = err instanceof Error ? err.message : String(err);
+        molvisRef.current.events.emit("status-message", {
+          text: `Failed to load ${file.name}: ${message}`,
+          type: "error",
+        });
       }
     };
     container.addEventListener("dragover", handleDragOver);

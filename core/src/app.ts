@@ -22,7 +22,6 @@ import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import type { FrameSource } from "./pipeline/pipeline";
 import type { PipelineContext, SelectionMask } from "./pipeline/types";
-import { readPDBFrame } from "./reader";
 import { syncSceneToFrame } from "./scene_sync";
 import { type MolvisSetting, Settings } from "./settings";
 import { System } from "./system";
@@ -746,20 +745,6 @@ export class MolvisApp {
     this._modeManager.switch_mode(ModeType.View);
     this.loadFrame(new Frame());
     this._lastSelectionSet = new Map();
-  }
-
-  /**
-   * Load a PDB file. Reads the frame AND builds ribbon geometry from
-   * backbone/secondary structure data (HELIX/SHEET records) if present.
-   */
-  public loadPdb(pdbText: string): void {
-    const frame = readPDBFrame(pdbText);
-    const box = frame.simbox;
-    this.loadFrame(frame, box);
-    // Build ribbon AFTER loadFrame (which clears old ribbon)
-    this.artist.ribbonRenderer.buildFromPdb(pdbText);
-    const repr = this._styleManager.getRepresentation();
-    this.artist.ribbonRenderer.setVisible(repr.showRibbon);
   }
 
   /**

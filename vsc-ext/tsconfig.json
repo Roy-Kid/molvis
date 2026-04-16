@@ -6,6 +6,7 @@
     "baseUrl": ".",
     "paths": {
       "@molvis/core": ["../core/src/index.ts"],
+      "@molvis/core/io": ["../core/src/io/index.ts"],
       "@/*": ["../page/src/*"]
     }
   },

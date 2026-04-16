@@ -1,11 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { loadFileIntoApp } from "@/lib/loadFile";
 import {
   type DataSourceModifier as CoreDataSourceModifier,
   Frame,
   type Molvis,
-  inferFormatFromFilename,
-  readFrame,
 } from "@molvis/core";
 import { FileUp, Trash2 } from "lucide-react";
 import type React from "react";
@@ -26,21 +25,12 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     if (!file || !app) return;
 
     try {
-      const text = await file.text();
-
       modifier.sourceType = "file";
       modifier.filename = file.name;
 
-      if (inferFormatFromFilename(file.name) === "pdb") {
-        app.loadPdb(text);
-        const frame = app.system.frame;
-        if (frame) modifier.setFrame(frame);
-      } else {
-        const frame = readFrame(text, file.name);
-        modifier.setFrame(frame);
-        app.loadFrame(frame, frame.simbox);
-      }
-      app.setMode("view");
+      await loadFileIntoApp(app, file, {
+        onFirstFrame: (frame) => modifier.setFrame(frame),
+      });
       await app.applyPipeline({ fullRebuild: true });
       onUpdate();
     } catch (err) {

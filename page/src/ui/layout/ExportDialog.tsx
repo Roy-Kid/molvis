@@ -9,14 +9,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  type Molvis,
-  exportFrame,
-  inferFormatFromFilename,
-} from "@molvis/core";
+import type { Molvis } from "@molvis/core";
+import { exportFrame, inferFormatFromFilename } from "@molvis/core/io";
 import { Download, Loader2 } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface ExportDialogProps {
   app: Molvis | null;
@@ -26,6 +23,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
   const [open, setOpen] = useState(false);
   const [filename, setFilename] = useState("structure.pdb");
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (!app) return;
+    const openDialog = () => setOpen(true);
+    app.events.on("export-requested", openDialog);
+    return () => app.events.off("export-requested", openDialog);
+  }, [app]);
 
   const handleExport = async () => {
     if (!app) return;

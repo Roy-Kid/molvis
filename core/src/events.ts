@@ -24,6 +24,7 @@ export interface MolvisEventMap {
   "overlay-added": { overlay: Overlay };
   "overlay-removed": { id: string };
   "overlay-changed": { overlay: Overlay };
+  "export-requested": undefined;
 }
 
 export type Listener<T = unknown> = (data: T) => void;

@@ -9,6 +9,10 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
       "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+      "@molvis/core/io": path.resolve(
+        import.meta.dirname,
+        "../core/src/io/index.ts",
+      ),
     },
   },
   source: {

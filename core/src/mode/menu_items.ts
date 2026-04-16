@@ -1,7 +1,4 @@
 import type { MolvisApp } from "../app";
-import { inferFormatFromFilename } from "../reader";
-import { logger } from "../utils/logger";
-import { exportFrame } from "../writer";
 import type { MenuItem } from "./types";
 
 /**
@@ -23,32 +20,16 @@ export class CommonMenuItems {
   }
 
   /**
-   * Export menu item - prompts for filename, syncs, writes, downloads
+   * Export menu item - emits `export-requested`. The host UI registers a
+   * handler (page or vsc-ext) and owns the actual file-write. Core never
+   * touches the writer.
    */
   static export(app: MolvisApp): MenuItem {
     return {
       type: "button",
       title: "Export",
-      action: async () => {
-        const frame = app.system.frame;
-        if (!frame) {
-          logger.warn("[CommonMenuItems] No Frame loaded, cannot export");
-          return;
-        }
-
-        try {
-          const suggestedName = "molvis.pdb";
-          const format = inferFormatFromFilename(suggestedName, "pdb");
-          const payload = exportFrame(app.world.sceneIndex, {
-            format,
-            filename: suggestedName,
-          });
-          const blob = new Blob([payload.content], { type: payload.mime });
-          await app.saveFile(blob, payload.suggestedName);
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          throw err;
-        }
+      action: () => {
+        app.events.emit("export-requested", undefined);
       },
     };
   }

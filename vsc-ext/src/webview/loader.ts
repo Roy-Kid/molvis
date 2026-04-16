@@ -4,19 +4,26 @@ import {
   type FrameProvider,
   MolRecReader,
   Trajectory,
-  TrajectoryReader,
   type ZarrReader,
+} from "@molvis/core";
+import {
+  TrajectoryReader,
   inferFormatFromFilename,
   processZarrFrame,
   readFrame,
-} from "@molvis/core";
+} from "@molvis/core/io";
 import type { MolecularFilePayload } from "../extension/types";
 
 export interface RuntimeLoadContext {
   setTrajectory: (trajectory: Trajectory) => void;
   setViewMode: () => void;
   resetCamera: () => void;
-  /** Load a PDB file using MolvisApp.loadPdb (builds ribbon geometry). */
+  /**
+   * Optional handler for PDB files that needs to build ribbon geometry
+   * after loading. The host wires this to readPDBFrame + loadFrame +
+   * artist.ribbonRenderer.buildFromPdb. If absent, PDB falls through to
+   * the generic single-frame path.
+   */
   loadPdb?: (pdbText: string) => void;
 }
 

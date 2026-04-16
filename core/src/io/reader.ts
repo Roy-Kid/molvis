@@ -5,9 +5,9 @@ import {
   PDBReader,
   XYZReader,
 } from "@molcrafts/molrs";
-import { PeriodicTable } from "./system/elements";
-import { DType } from "./utils/dtype";
-import { logger } from "./utils/logger";
+import { PeriodicTable } from "../system/elements";
+import { DType } from "../utils/dtype";
+import { logger } from "../utils/logger";
 
 /**
  * Parse a PDB payload into a normalized frame.
