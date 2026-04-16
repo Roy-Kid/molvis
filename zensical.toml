@@ -1,6 +1,6 @@
 [project]
 site_name = "MolVis Documentation"
-site_url = "https://molcrafts.github.io/molvis/"
+site_url = "https://molvis.molcrafts.org/"
 site_description = "Interactive molecular visualization toolkit built with modern web technologies."
 site_author = "MolCrafts Team"
 repo_url = "https://github.com/molcrafts/molvis"

@@ -1,109 +1,103 @@
-# Web app
+# Web viewer
 
-The web app (`page`) is a React 19 single-page application that wraps the
-`@molcrafts/molvis-core` engine in a three-panel layout:
+The MolVis web viewer lives at
+[**molvis.molcrafts.org**](https://molvis.molcrafts.org). No install is
+needed — open the URL in any modern browser (Chrome, Firefox, Safari,
+Edge) and the viewer is ready.
 
-- **Left sidebar** — analysis tools (cluster, RDF, data inspector) and
-  toggles.
-- **Center canvas** — the Babylon.js viewport plus a bottom timeline when
-  a trajectory is loaded.
-- **Right sidebar** — controls for the active mode (*View*, *Select*,
-  *Edit*, *Manipulate*, *Measure*).
+![The viewer: left sidebar with analysis tools, the canvas in the center, the right sidebar with mode controls](../assets/viewport.png)
 
-## Opening the app
+The window has three panels:
 
-### Hosted
+- **Left sidebar** — analysis tools (clusters, radial distribution,
+  data inspector) and layer toggles.
+- **Center** — the 3D viewport, with a trajectory timeline underneath
+  when a multi-frame file is loaded.
+- **Right sidebar** — controls for the active mode.
 
-Open [molcrafts.github.io/molvis](https://molcrafts.github.io/molvis/).
-The landing state shows an empty canvas with a demo structure available
-from the "Load demo" button.
+The side panels are collapsible: drag the dividers or double-click
+them to hide a side and maximize the viewport.
 
-### Self-hosting
+## Loading a structure
 
-```bash
-git clone https://github.com/molcrafts/molvis.git
-cd molvis
-npm install
-npm run dev:page    # http://localhost:3000
-```
+Three ways to load a file:
 
-The dev server bundles `@molcrafts/molvis-core` from source, so changes
-in `core/src` hot-reload into the viewer without a rebuild.
-
-### Minimal mode
-
-Append `?minimal` to the URL to hide every piece of UI chrome and leave
-only the canvas. This is the mode the Python widget uses when embedding
-the page as an iframe.
-
-## Loading a molecule
-
-Three ways:
-
-1. **Drag & drop** a file onto the canvas. Supported extensions: `.pdb`,
-   `.xyz`, `.data`, `.dump`, `.lammpstrj`. `.zarr` directories work when
-   dragged from the OS file manager (the browser unpacks the directory).
+1. **Drag and drop** a file anywhere on the page. Supported
+   extensions: `.pdb`, `.xyz`, `.data`, `.dump`, `.lammpstrj`, and
+   `.zarr` directories (drag the whole directory from your OS file
+   manager).
 2. Click **Load** in the top bar and pick a file.
-3. Pass a URL via `?file=<url>`. The app fetches the content and infers
-   the format from the filename.
+3. Pass a URL via `?file=<url>`. MolVis fetches the content and
+   infers the format from the filename. This is the easy way to share
+   a structure: send the collaborator a prepared link.
 
-If the file is a trajectory, the **Timeline** appears under the canvas.
-Scrub through frames or press `Space` to toggle playback.
+Examples:
+
+- `molvis.molcrafts.org/?file=https://files.rcsb.org/download/1TQN.pdb`
+  opens a cytochrome directly from the PDB.
+- `molvis.molcrafts.org/?minimal=1` hides every piece of UI chrome and
+  leaves only the canvas — useful when embedding MolVis as an iframe.
+
+If the file is a trajectory, the **Timeline** appears below the
+viewport. Scrub through frames or press `Space` to toggle playback.
 
 ## Modes
 
-MolVis separates user interaction into five modes. Only one is active at
-a time. The right sidebar updates to show controls for the current mode.
+MolVis separates interaction into five modes. Exactly one is active at
+a time; the right sidebar shows controls for whichever mode is
+current.
 
 ### View (`1`)
 
-The default. The canvas orbits, pans, and zooms; no clicks on atoms do
-anything. The View sidebar has three tabs:
+The default. The viewport orbits, pans, and zooms; clicks don't do
+anything to the atoms. The View sidebar has three tabs:
 
-- **Render** — representation (ball-and-stick, spacefill, stick), atom
-  and bond diameters, simulation box wireframe color and thickness.
+- **Render** — representation (ball-and-stick, spacefill, stick),
+  atom and bond diameters, simulation box wireframe color and
+  thickness. All changes are immediate — no *Apply* button.
 - **Pipeline** — the modifier pipeline (see below).
 - **Inspect** — per-atom data for the atom under the cursor.
 
-Changes in the Render tab are immediate; there is no *Apply* button.
-
 ### Select (`2`)
 
-Click atoms or bonds to add them to the selection. Hold `Shift` to
-extend, `Ctrl/Cmd` to toggle, `Alt` to deselect. Drag a box to select by
-region.
+Click atoms or bonds to add them to the selection. Hold **Shift** to
+extend, **Ctrl/Cmd** to toggle, **Alt** to deselect. Drag a rectangle
+to select by region.
 
-The Select sidebar additionally offers:
+The Select sidebar adds:
 
-- An **expression** selection field. The syntax mirrors VMD:
+- An **expression** field. The syntax mirrors VMD:
   `element C and x > 10` picks every carbon with `x` above 10 Å.
-- **Invert**, **Clear**, **Select all**.
+- **Invert**, **Clear**, **Select all** shortcuts.
 - A live count of selected atoms and bonds at the bottom.
 
 ### Edit (`3`)
 
-Edit mode is a **staging** session: any add/delete/move you make writes
-to an *edit pool* layered on top of the current frame. The pool is only
-committed back to the frame when you leave the mode, so you can
-experiment without destroying the trajectory.
+Edit mode is a **staging** session: any add / delete / move you make
+writes to an *edit pool* layered on top of the current frame. The
+pool is only committed back to the frame when you leave the mode, so
+you can experiment without destroying the trajectory.
+
+![Edit mode → Builder tab: SMILES input with a 2D preview](../assets/edit-builder.png)
 
 Controls:
 
-- **Builder** tab — type a SMILES string or a PubChem CID/name and press
-  *Place*, then click on the canvas to drop the molecule.
-- **Tools** tab — add/delete atoms, add bonds, delete bonds.
-- **Download Structure** — fetch a PDB entry by accession code.
+- **Builder** tab — type a SMILES string or a PubChem CID/name and
+  press *Place*, then click on the canvas to drop the molecule.
+- **Tools** tab — add atoms, delete atoms, add bonds, delete bonds.
+- **Download Structure** — fetch a PDB entry by accession code
+  (e.g. `1TQN`).
 
-Right-clicking an atom or bond in Edit mode deletes it from the staged
-pool. Pressing `Ctrl/Cmd+S` syncs the staged changes into the frame
-immediately. Leaving Edit mode with uncommitted changes prompts you to
-*Keep* or *Discard* them.
+Right-clicking an atom or bond deletes it from the staged pool.
+Pressing **Ctrl/Cmd+S** flushes the pool into the frame immediately.
+Leaving Edit mode with uncommitted changes prompts you to *Keep* or
+*Discard*.
 
 ### Manipulate (`4`)
 
 With atoms selected, Manipulate mode shows translate / rotate / scale
-gizmos pinned to the selection centroid. The selection moves as a rigid
-group; neighboring atoms are untouched.
+gizmos pinned to the selection centroid. The selection moves as a
+rigid group; neighboring atoms stay put.
 
 ### Measure (`5`)
 
@@ -113,49 +107,55 @@ Click atoms to place measurement anchors:
 - 3 atoms → **angle**, rendered as an arc.
 - 4 atoms → **dihedral**, rendered as a ribbon.
 
-Each measurement is a pipeline item you can delete later from the
-Measure sidebar.
+![Measure mode with distance, angle, and dihedral annotations on a small molecule](../assets/measure.png)
 
-## The modifier pipeline
+Each measurement is a first-class pipeline entry; you can delete it
+later from the Measure sidebar.
+
+## The pipeline
 
 The **Pipeline** tab (View mode, right sidebar) is the single place
 where frame data is transformed before rendering. Each entry is a
-**modifier** that reads the output of the previous one and produces a
-new frame:
+**modifier** that reads the output of the previous one and produces
+a new frame:
 
 ```
-raw frame → DataSource → Slice → ExpressionSelect → ColorByProperty → canvas
+raw frame → DataSource → Slice → ExpressionSelect → ColorByProperty → rendered
 ```
 
-Modifiers you can add:
+![The pipeline panel with a DataSource, Slice, ExpressionSelect, and ColorByProperty stacked](../assets/pipeline.png)
+
+Available modifiers:
 
 | Modifier | Purpose |
 |---|---|
-| Data source | Switch which trajectory slice feeds the pipeline |
-| Slice | Keep atoms inside a user-defined plane |
-| Expression select | VMD-style predicate to mark atoms for downstream modifiers |
-| Hide selection | Drop selected atoms from the render |
-| Transparent selection | Render selection with alpha |
-| Color by property | Map a column (`charge`, `mass`, …) to a color ramp |
-| Assign color | Force a fixed color on selected atoms |
-| Wrap PBC | Wrap atoms into the primary cell |
+| Data source | Switch which trajectory slice feeds the pipeline. |
+| Slice | Keep atoms inside a user-defined plane. |
+| Expression select | VMD-style predicate to mark atoms for downstream modifiers. |
+| Hide selection | Drop selected atoms from the render. |
+| Transparent selection | Render the selection with alpha. |
+| Color by property | Map a column (`charge`, `mass`, …) to a color ramp. |
+| Assign color | Force a fixed color on selected atoms. |
+| Wrap PBC | Wrap atoms into the primary cell. |
 
-Drag items to re-order, click the eye icon to mute a modifier without
-deleting it, and click the trash icon to delete. All pipeline changes
-are commands: `Ctrl+Z` undoes them.
+Drag entries to re-order, click the eye icon to mute without
+deleting, and click the trash icon to delete. All pipeline changes
+are commands — **Ctrl/Cmd+Z** undoes them.
 
 ## Rendering and export
 
 From the **top bar**:
 
-- **Screenshot** — opens the OVITO-style dialog. Choose resolution, DPI,
-  optional frame border, and crop. Preview updates live. Press *Save*
-  to download a PNG.
+- **Screenshot** — opens the dialog. Choose resolution, DPI, optional
+  frame border, and crop. The preview updates live.
+
+  ![Screenshot dialog: live preview on the left, controls on the right](../assets/screenshot-dialog.png)
+
 - **Export** — dumps the current pipeline output to XYZ.
 - **Settings** — camera speeds, graphics toggles (FXAA, hardware
   scaling), grid options.
-- **Theme** — light / dark toggle. The canvas background and grid
-  colors follow the theme.
+- **Theme** — light / dark toggle. Canvas background and grid colors
+  follow the theme.
 
 ## Keyboard cheatsheet
 
@@ -168,5 +168,5 @@ From the **top bar**:
 | `G` | Toggle grid |
 | `B` | Toggle simulation box |
 | `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` | Undo / redo |
-| `Ctrl/Cmd+S` | Save (export or flush edit pool, depending on mode) |
-| `?` | Keyboard shortcuts dialog |
+| `Ctrl/Cmd+S` | Save (export or flush the edit pool, depending on mode) |
+| `?` | Show this cheatsheet |

@@ -197,9 +197,8 @@ every `frame-rendered` event.
 2. If it needs history / undo, wrap the behavior in a **command**.
 3. If it needs its own click / drag semantics, introduce a **mode**.
 4. If it needs new geometry on the canvas, register an **overlay**.
-5. Add a **test** under the relevant package's `tests/`. Mock
-   `SceneIndex` for modifier tests; the command test harness lives in
-   `core/tests/`.
-6. If it has user-visible controls, add them to the appropriate panel
-   under `page/src/ui/modes/` and match the
-   [sidebar design language](../getting-started/web.md#modes).
+5. Add a **test**. Mock `SceneIndex` for modifier tests; the command
+   test harness is part of `@molcrafts/molvis-core` and runs with
+   `rstest`.
+6. If it has user-visible controls, add them to the host application
+   (the web viewer, the VSCode extension, or your own frontend).

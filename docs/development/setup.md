@@ -1,119 +1,164 @@
-# Setup
+# Embedding
 
-## Prerequisites
+`@molcrafts/molvis-core` is the TypeScript engine behind every MolVis
+frontend. Mounting it in your own app takes a container element and
+two calls.
 
-- **Node.js 22 or newer** (the CI runner uses 22; older versions may
-  work but are not tested).
-- **npm 10+**. Publishing `@molcrafts/molvis-core` through the
-  Trusted Publisher workflow additionally requires npm 11.5.1, which
-  the release job installs on the fly.
-- **Python 3.11+** and `pip` if you intend to work on the Jupyter
-  widget in `python/`.
-- **Rust toolchain + wasm-pack** if you want to rebuild the WASM
-  kernels shipped by `@molcrafts/molrs` from source. Pre-built bindings
-  are on npm; you only need Rust for kernel work.
-
-## Clone and install
+## Install
 
 ```bash
-git clone https://github.com/molcrafts/molvis.git
-cd molvis
-npm install
+npm install @molcrafts/molvis-core
 ```
 
-`npm install` wires up the workspaces, resolves
-`@molcrafts/molvis-core` from `core/src` into `page/`, `vsc-ext/`, and
-`python/` via TS path aliases, and fetches `@molcrafts/molrs` from the
-npm registry.
+The published package is ESM-only, targets ES2022, and vendors its
+own copy of Babylon.js and the WebAssembly kernels. You do not need
+a separate peer dependency for either.
 
-## Monorepo layout
+## Minimal example
 
-| Directory | What it is |
-|---|---|
-| `core/` | `@molcrafts/molvis-core` — rendering, commands, modes, pipeline |
-| `page/` | React 19 web application (`npm run dev:page`) |
-| `vsc-ext/` | VSCode extension (custom editor) |
-| `python/` | Jupyter widget (`anywidget`) |
-| `docs/` | This site (Zensical) |
-| `.github/workflows/` | CI and release automation |
-
-`page/`, `vsc-ext/`, and `python/` all consume `core/` from source via
-`@molvis/core` (an internal alias; the published name is
-`@molcrafts/molvis-core`). You do **not** need to run `npm run build:core`
-before starting any of the frontends in dev mode.
-
-## Daily loop
-
-One dev server at a time (they all want port 3000):
-
-```bash
-npm run dev:page       # web app
-npm run dev:core       # core demo (core/examples/*)
-npm run dev:python     # Python widget watcher
+```html
+<div id="viewer" style="width: 100vw; height: 100vh;"></div>
 ```
 
-Linting:
+```typescript
+import { mountMolvis } from "@molcrafts/molvis-core";
 
-```bash
-npx biome check --write
+const container = document.getElementById("viewer");
+if (!container) throw new Error("viewer container not found");
+
+const app = mountMolvis(container);
+await app.start();
 ```
 
-Type checking across the monorepo:
+`mountMolvis` returns a `MolvisApp` instance. The canvas is created
+and appended to the container, but the render loop is not running
+yet — `start()` boots the loop and initializes the WASM kernels.
 
-```bash
-npm run typecheck
+## Loading a structure
+
+```typescript
+import { readFrame } from "@molcrafts/molvis-core";
+
+const text  = await fetch("/structure.pdb").then(r => r.text());
+const frame = readFrame(text, "structure.pdb");
+
+app.loadFrame(frame);
 ```
 
-Tests:
+For multi-frame files:
 
-```bash
-npm run test:core        # rstest (unit + browser via Playwright)
-npm run test:vsc-ext     # mocha unit tests
-npm test                 # everything, in workspace-declaration order
+```typescript
+import { TrajectoryReader, Trajectory } from "@molcrafts/molvis-core";
+
+const dump   = await fetch("/traj.dump").then(r => r.text());
+const reader = new TrajectoryReader(dump, "lammps-dump");
+const traj   = Trajectory.fromProvider({
+  length: reader.getFrameCount(),
+  get(index) { return reader.readFrame(index); },
+});
+
+app.setTrajectory(traj);
 ```
 
-## Building
+See the [TypeScript API reference](../api/typescript.md) for every
+supported reader and writer.
 
-```bash
-# everything, in dependency order (core → python → page → vsc-ext)
-npm run build:all
+## Configuration
 
-# just one package
-npm run build:core
-npm run build:page
-npm run build:vsc-ext
+Two optional arguments customize the app:
+
+```typescript
+import type { MolvisConfig, MolvisSetting } from "@molcrafts/molvis-core";
+
+const config: MolvisConfig = {
+  showUI: false,             // hide every overlay UI element
+  canvas: { antialias: true, alpha: false },
+};
+
+const settings: Partial<MolvisSetting> = {
+  cameraZoomSpeed: 1.5,
+  grid: { enabled: true, opacity: 0.3 },
+};
+
+const app = mountMolvis(container, config, settings);
 ```
 
-`build:core` emits the `core/dist/` tarball for npm publishing.
-`build:page` and `build:vsc-ext` bundle `core` from source, so they do
-not require `dist/` to exist.
+`MolvisConfig` is applied once at mount time (`showUI`, coordinate
+system, canvas creation options). `MolvisSetting` is runtime state
+(camera speeds, grid colors, post-processing toggles). Both are
+documented in full in the
+[TypeScript API reference](../api/typescript.md#configuration-types).
 
-## WASM kernels (advanced)
+## Reacting to events
 
-`@molcrafts/molrs` lives in a sibling repo
-([molcrafts/molrs](https://github.com/molcrafts/molrs)). When iterating
-on the kernels, clone it next to `molvis/` and link locally:
-
-```bash
-# in molrs/molrs-wasm
-wasm-pack build --release --target bundler --scope molcrafts
-# then, in molvis/
-npm install ../molrs/molrs-wasm/pkg
+```typescript
+app.events.on("frame-change",    ({ index }) => updateStatusBar(index));
+app.events.on("selection-change", ({ atoms }) => updateInspector(atoms));
 ```
 
-The rslib/rsbuild toolchain picks up the new `pkg/` without a reinstall
-because the link is a symlink. Remember to revert to the published
-version before pushing — CI cannot resolve `link:` specifiers.
+See the [Events table](../api/typescript.md#events) for the full list.
 
-## Publishing
+## Tearing down
 
-Both `@molcrafts/molvis-core` and the VSCode extension publish from
-tags.
+When your component unmounts, call `destroy()`:
 
-- **Core to npm**: push a `v*` tag; the `Release Core` workflow runs
-  under the `release-core` environment and publishes via npm's
-  Trusted Publisher (OIDC, no `NPM_TOKEN`).
-- **Extension to Marketplace**: run `cd vsc-ext && npx @vscode/vsce publish --no-dependencies`
-  and `npx ovsx publish --no-dependencies` locally. A tag-triggered
-  workflow is deliberately not wired up; the release engineer smoke-tests
-  the VSIX before publishing.
+```typescript
+app.destroy();
+```
+
+This disposes the Babylon.js engine, frees WASM-backed frames, and
+detaches every event listener. `mountMolvis` can be called again on
+a fresh container afterwards.
+
+## Resizing
+
+The viewport does not auto-resize; notify it whenever the container
+changes size:
+
+```typescript
+const observer = new ResizeObserver(() => app.resize());
+observer.observe(container);
+```
+
+## React integration
+
+A minimal React wrapper:
+
+```tsx
+import { useEffect, useRef, useState } from "react";
+import { mountMolvis, type Molvis } from "@molcrafts/molvis-core";
+
+export function MolVisView({ pdb }: { pdb: string }) {
+  const ref        = useRef<HTMLDivElement>(null);
+  const [app, setApp] = useState<Molvis | null>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const instance = mountMolvis(ref.current);
+    setApp(instance);
+    void instance.start();
+
+    const observer = new ResizeObserver(() => instance.resize());
+    observer.observe(ref.current);
+
+    return () => {
+      observer.disconnect();
+      instance.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!app) return;
+    import("@molcrafts/molvis-core").then(({ readFrame }) => {
+      app.loadFrame(readFrame(pdb, "structure.pdb"));
+    });
+  }, [app, pdb]);
+
+  return <div ref={ref} style={{ width: "100%", height: "100%" }} />;
+}
+```
+
+## Next step
+
+See [Extending](extending.md) for how to add custom modifiers,
+commands, modes, and overlays.

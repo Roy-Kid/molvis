@@ -1,34 +1,24 @@
 # Development
 
-This section is for developers who want to **embed** MolVis in their own
-frontend or **extend** it with new commands, modifiers, or modes. End
-users landing here by accident should read
-[Getting Started](../getting-started/index.md) instead.
-
-The engine that powers the web app, the VSCode extension, and the
-Python widget is `@molcrafts/molvis-core`. It is published to npm and
-can be consumed like any other library:
-
-```bash
-npm install @molcrafts/molvis-core
-```
-
-Or, if you are working inside this monorepo, every workspace already
-resolves it from source via a TypeScript path alias — no rebuild of
-`core/dist` is needed when iterating on `core/src/`.
+The MolVis engine is published as the npm package
+[`@molcrafts/molvis-core`](../api/typescript.md). This section is for
+developers who want to **embed** MolVis in their own application or
+**extend** it with custom behavior. If you're a user trying to visualize
+molecules, head to [Getting Started](../getting-started/index.md)
+instead.
 
 ## What you will find here
 
-- **[Setup](setup.md)** — clone the monorepo, install dependencies,
-  understand the workspace layout, start dev servers.
-- **[Extending](extending.md)** — write a custom `Modifier`, register a
-  new `Command`, add a `Mode`, plug a renderer into the `Artist`.
+- [**Embedding**](setup.md) — add MolVis to your own web app, wire up
+  the viewport, load a frame.
+- [**Extending**](extending.md) — write a custom modifier, register a
+  new command, add a mode, plug a renderer into the scene.
 
 ## The 30-second mental model
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ MolvisApp (app.ts)                                              │
+│ MolvisApp                                                       │
 │                                                                 │
 │   ┌──────────────┐   ┌────────────────┐   ┌──────────────┐      │
 │   │ World        │   │ System         │   │ Artist       │      │
@@ -44,8 +34,8 @@ resolves it from source via a TypeScript path alias — no rebuild of
 │          ▲                                                      │
 │          │                                                      │
 │   ┌──────┴──────────────────────────────────────────────┐       │
-│   │ CommandManager — undo/redo, command registry         │       │
-│   └──────────────────────────────────────────────────────┘       │
+│   │ CommandManager — undo/redo, command registry        │       │
+│   └──────────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -63,4 +53,7 @@ layer cheatsheet.
 
 - [TypeScript API Reference](../api/typescript.md) — every public
   export of `@molcrafts/molvis-core`.
-- [Python widget API](../api/python.md) — the anywidget surface.
+- [Python API Reference](../api/python.md) — the Jupyter widget
+  surface.
+- [MolVis on GitHub](https://github.com/molcrafts/molvis) — source,
+  issues, and release history.
