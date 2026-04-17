@@ -210,10 +210,9 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
     setTickedDescriptors(new Set(frameLabels ? frameLabels.keys() : []));
   }, [frameLabels]);
 
-  // Clear error when the user changes compute-affecting inputs.
-  useEffect(() => {
-    setComputeError(null);
-  }, []);
+  // Compute-time clears the error; stale errors otherwise linger until the
+  // user clicks Compute again, which is acceptable and avoids a redundant
+  // effect.
 
   // --- Compute -------------------------------------------------------------
 
@@ -426,6 +425,23 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
 
     return () => {
       cancelled = true;
+      // Remove the click handler and purge the plot. Both must happen here
+      // (not in a mount-only effect) because the plot div is conditionally
+      // rendered: toggling `exploration` null → non-null unmounts the div
+      // without firing any unmount-scoped cleanup.
+      const divToClean = div as unknown as {
+        removeAllListeners?: (ev: string) => void;
+      };
+      divToClean.removeAllListeners?.("plotly_click");
+      loadPlotly()
+        .then((Plotly) => {
+          (Plotly as unknown as { purge: (div: HTMLElement) => void }).purge(
+            div,
+          );
+        })
+        .catch(() => {
+          // swallow: component is unmounting or Plotly never loaded
+        });
     };
   }, [app, exploration, colorBy, frameLabels]);
 
@@ -435,16 +451,19 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
     if (!app || !exploration) return;
     let rafId: number | null = null;
     let pending: number | null = null;
+    let cancelled = false;
 
     const run = () => {
       rafId = null;
       const i = pending;
       pending = null;
+      if (cancelled) return;
       const div = plotRef.current;
       if (i === null || !div) return;
       const { coords } = exploration.embedding;
       if (i < 0 || i >= exploration.descriptors.nFrames) return;
       loadPlotly().then((Plotly) => {
+        if (cancelled) return;
         const currentDiv = plotRef.current;
         if (!currentDiv) return;
         (
@@ -472,28 +491,11 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
     });
 
     return () => {
+      cancelled = true;
       unsub();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [app, exploration]);
-
-  // --- Cleanup Plotly instance on unmount ---------------------------------
-
-  useEffect(() => {
-    return () => {
-      const div = plotRef.current;
-      if (!div) return;
-      loadPlotly()
-        .then((Plotly) => {
-          (Plotly as unknown as { purge: (div: HTMLElement) => void }).purge(
-            div,
-          );
-        })
-        .catch(() => {
-          // swallow: component is already unmounting
-        });
-    };
-  }, []);
 
   // --- Render --------------------------------------------------------------
 
