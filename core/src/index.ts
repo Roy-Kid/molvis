@@ -98,6 +98,12 @@ export {
   type RdfResult,
 } from "./analysis/rdf";
 export {
+  aggregateFrameLabels,
+  runExploration,
+  type DatasetExploration,
+  type ExplorationConfig,
+} from "./analysis/exploration";
+export {
   computeClusters,
   type ClusterParams,
   type ClusterResult,

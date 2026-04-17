@@ -18,16 +18,18 @@ import { AlertCircle, Download, Info, Play } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClusterPanel } from "./ClusterPanel";
+import { PcaTool } from "./PcaTool";
 
 interface LeftSidebarProps {
   app: Molvis | null;
 }
 
-type AnalysisType = "rdf" | "cluster";
+type AnalysisType = "rdf" | "cluster" | "pca";
 
 const ANALYSIS_OPTIONS: { value: AnalysisType; label: string }[] = [
   { value: "rdf", label: "Radial distribution g(r)" },
   { value: "cluster", label: "Cluster analysis" },
+  { value: "pca", label: "PCA" },
 ];
 
 /** Prevent pointer events from leaking to the BabylonJS canvas. */
@@ -1032,9 +1034,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
         </Select>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
         {analysisType === "rdf" && <RdfPanel app={app} />}
         {analysisType === "cluster" && <ClusterPanel app={app} />}
+        {analysisType === "pca" && <PcaTool app={app} />}
       </div>
     </div>
   );

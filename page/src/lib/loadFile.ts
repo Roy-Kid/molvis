@@ -1,5 +1,5 @@
 import type { Frame, Molvis } from "@molvis/core";
-import { Trajectory } from "@molvis/core";
+import { Trajectory, aggregateFrameLabels } from "@molvis/core";
 import {
   TrajectoryReader,
   inferFormatFromFilename,
@@ -52,6 +52,7 @@ export async function loadFileIntoApp(
           frames.push(reader.readFrame(i));
         }
         app.setTrajectory(new Trajectory(frames));
+        app.system.setFrameLabels(aggregateFrameLabels(frames));
         options?.onFirstFrame?.(frames[0], file.name);
       } else {
         const frame = reader.readFrame(0);
