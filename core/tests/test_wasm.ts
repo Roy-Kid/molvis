@@ -418,6 +418,7 @@ describe("WASM Analysis", () => {
     expect(result.binCenters().length).toBe(20);
     expect(result.pairCounts().length).toBe(20);
     expect(result.volume).toBeCloseTo(1000, 6);
+    expect(result.rMin).toBe(0);
 
     result.free();
     rdf.free();

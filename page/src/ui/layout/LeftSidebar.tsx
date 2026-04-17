@@ -674,12 +674,23 @@ interface ModifierOption {
   count: number;
 }
 
+function formatVolume(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return "";
+  return v >= 100 ? v.toFixed(2) : v.toFixed(4);
+}
+
+// Threshold below which a user-typed volume is treated as "unchanged from box".
+const VOLUME_OVERRIDE_EPSILON = 1e-6;
+
 function RdfPanel({ app }: { app: Molvis | null }) {
   const [modifiers, setModifiers] = useState<ModifierOption[]>([]);
   const [groupA, setGroupA] = useState("");
   const [groupB, setGroupB] = useState("");
   const [nBins, setNBins] = useState("100");
+  const [rMin, setRMin] = useState("0");
   const [rMax, setRMax] = useState("");
+  const [volume, setVolume] = useState("");
+  const [hasBox, setHasBox] = useState(false);
   const [result, setResult] = useState<RdfResult | null>(null);
   const [computing, setComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -715,6 +726,29 @@ function RdfPanel({ app }: { app: Molvis | null }) {
     };
   }, [app, groupA]);
 
+  useEffect(() => {
+    if (!app) return;
+    // `frame.simbox` yields a fresh Box wrapper on every access, so compare by
+    // the numeric volume (stable across ticks) and free the transient wrapper.
+    let lastVolume: number | null = Number.NaN;
+    const syncBoxVolume = () => {
+      const box = app.system.frame?.simbox;
+      const v = box ? box.volume() : null;
+      box?.free();
+      if (v === lastVolume) return;
+      lastVolume = v;
+      if (v !== null) {
+        setHasBox(true);
+        setVolume(formatVolume(v));
+      } else {
+        setHasBox(false);
+        setVolume("");
+      }
+    };
+    syncBoxVolume();
+    return app.events.on("frame-change", syncBoxVolume);
+  }, [app]);
+
   const handleGroupAChange = (val: string) => {
     setGroupA(val);
     if (!groupB || groupB === groupA) setGroupB(val);
@@ -744,13 +778,42 @@ function RdfPanel({ app }: { app: Molvis | null }) {
       setError("Group B is empty.");
       return;
     }
+
+    const parsedVolume =
+      volume.trim() === "" ? Number.NaN : Number.parseFloat(volume);
+    let volumeParam: number | undefined;
+    if (hasBox) {
+      const box = frame.simbox;
+      const boxVol = box ? box.volume() : Number.NaN;
+      box?.free();
+      if (
+        Number.isFinite(parsedVolume) &&
+        parsedVolume > 0 &&
+        Math.abs(parsedVolume - boxVol) > VOLUME_OVERRIDE_EPSILON
+      ) {
+        volumeParam = parsedVolume;
+      }
+    } else {
+      if (!Number.isFinite(parsedVolume) || parsedVolume <= 0) {
+        setError("Non-periodic frame — enter a positive volume (Å³).");
+        return;
+      }
+      volumeParam = parsedVolume;
+    }
+
+    const parsedRMin = Number.parseFloat(rMin);
+    const rMinParam =
+      Number.isFinite(parsedRMin) && parsedRMin >= 0 ? parsedRMin : 0;
+
     setComputing(true);
     setError(null);
     requestAnimationFrame(() => {
       try {
         const r = computeRdf(frame, {
           nBins: Math.max(10, Math.min(500, Number.parseInt(nBins, 10) || 100)),
+          rMin: rMinParam,
           rMax: rMax ? Number.parseFloat(rMax) : undefined,
+          volume: volumeParam,
           groupA: indicesA,
           groupB: indicesB,
         });
@@ -765,10 +828,13 @@ function RdfPanel({ app }: { app: Molvis | null }) {
         setComputing(false);
       }
     });
-  }, [app, groupA, groupB, nBins, rMax]);
+  }, [app, groupA, groupB, nBins, rMin, rMax, volume, hasBox]);
 
   const isSelf = groupA === groupB;
   const noModifiers = modifiers.length === 0;
+  const volumeBlank = volume.trim() === "";
+  const volumeMissing = !hasBox && volumeBlank;
+  const computeDisabled = computing || !groupA || volumeMissing;
 
   return (
     <>
@@ -842,6 +908,19 @@ function RdfPanel({ app }: { app: Molvis | null }) {
                 aria-label="Number of bins"
               />
               <span className="w-10 shrink-0 text-[10px] text-muted-foreground pl-1">
+                r_min
+              </span>
+              <Input
+                className="h-7 flex-1 min-w-0 text-xs font-mono"
+                value={rMin}
+                onChange={(e) => setRMin(e.target.value)}
+                placeholder="0"
+                aria-label="r_min"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
                 r_max
               </span>
               <Input
@@ -851,13 +930,30 @@ function RdfPanel({ app }: { app: Molvis | null }) {
                 placeholder="auto"
                 aria-label="r_max"
               />
+              <span className="w-10 shrink-0 text-[10px] text-muted-foreground pl-1">
+                Volume
+              </span>
+              <Input
+                className="h-7 flex-1 min-w-0 text-xs font-mono"
+                value={volume}
+                onChange={(e) => setVolume(e.target.value)}
+                placeholder={hasBox ? "from box" : "required (Å³)"}
+                aria-label="Normalization volume in cubic angstrom"
+              />
             </div>
+
+            {volumeMissing && (
+              <p className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight px-0.5">
+                <Info className="h-3 w-3 shrink-0 mt-px" />
+                <span>Non-periodic frame — enter a volume in Å³</span>
+              </p>
+            )}
 
             <Button
               size="sm"
               className="h-7 w-full text-xs gap-1.5"
               onClick={handleCompute}
-              disabled={computing || !groupA}
+              disabled={computeDisabled}
             >
               <Play className="h-3.5 w-3.5" />
               {computing

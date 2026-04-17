@@ -10,12 +10,22 @@ import { estimateRMax } from "./utils";
 export interface RdfParams {
   /** Maximum distance cutoff. Auto-detected from box or bounding box if not set. */
   rMax?: number;
+  /**
+   * Lower radial cutoff. Defaults to 0 (freud convention). Pairs with
+   * `d < rMin` and pairs at exactly `d == 0` are excluded.
+   */
+  rMin?: number;
   /** Number of bins (default 100) */
   nBins?: number;
   /** Indices of atoms to include (default: all atoms). When only groupA is set, computes self-RDF. */
   groupA?: number[];
   /** Indices for cross-RDF second group. If omitted, uses groupA (self-RDF). */
   groupB?: number[];
+  /**
+   * Normalization volume in Å³. Required for non-periodic frames (no simbox).
+   * For periodic frames, overrides the box volume if provided.
+   */
+  volume?: number;
 }
 
 export interface RdfResult {
@@ -29,20 +39,26 @@ export interface RdfResult {
   nBins: number;
   /** Bin width */
   dr: number;
-  /** Cutoff used */
+  /** Upper cutoff used */
   rMax: number;
-  /** Number of particles used */
+  /** Lower cutoff used */
+  rMin: number;
+  /** Number of reference particles used */
   nParticles: number;
-  /** Box volume (Å³). Uses bounding box for non-periodic systems. */
+  /** Normalization volume used (Å³). */
   volume: number;
 }
+
+const DEFAULT_N_BINS = 100;
+const DEFAULT_R_MIN = 0;
 
 /**
  * Compute the radial distribution function g(r) from a single frame.
  *
- * Uses WASM LinkedCell (cell-list neighbor search) for all systems:
- * - Periodic (simbox present): uses periodic boundary conditions.
- * - Non-periodic (no simbox): auto-generates bounding box from coordinates.
+ * Follows freud defaults: `nBins = 100`, `rMin = 0`, normalize by the
+ * system density `N/V`. Periodic frames take their volume from `frame.simbox`.
+ * Non-periodic frames (no simbox) require the caller to pass `volume`
+ * explicitly — no bounding box is fabricated.
  *
  * Group selection:
  * - groupA only → self-RDF within groupA
@@ -56,16 +72,26 @@ export function computeRdf(
   if (!atoms) return null;
   if (atoms.nrows() < 2) return null;
 
-  const nBins = params.nBins ?? 100;
+  const nBins = params.nBins ?? DEFAULT_N_BINS;
+  const rMin = params.rMin ?? DEFAULT_R_MIN;
   const rMax = params.rMax ?? estimateRMax(frame);
-  if (rMax <= 0) return null;
+  if (!(rMax > rMin)) {
+    throw new Error(`RDF: rMax (${rMax}) must be > rMin (${rMin})`);
+  }
+
+  const opts: RdfRunOpts = {
+    nBins,
+    rMax,
+    rMin,
+    volumeOverride: resolveVolume(frame, params.volume),
+  };
 
   const groupA = params.groupA;
   const groupB = params.groupB;
   const hasGroups = groupA && groupA.length > 0;
 
   if (!hasGroups) {
-    return computeFullRdf(frame, nBins, rMax);
+    return computeFullRdf(frame, opts);
   }
 
   const effectiveB = groupB ?? groupA;
@@ -75,30 +101,84 @@ export function computeRdf(
       groupA.every((v, i) => v === effectiveB[i]));
 
   if (isSelf) {
-    return computeSelfGroupRdf(frame, groupA, nBins, rMax);
+    return computeSelfGroupRdf(frame, groupA, opts);
   }
-  return computeCrossGroupRdf(frame, groupA, effectiveB, nBins, rMax);
+  return computeCrossGroupRdf(frame, groupA, effectiveB, opts);
+}
+
+interface RdfRunOpts {
+  nBins: number;
+  rMax: number;
+  rMin: number;
+  volumeOverride: number | null;
+}
+
+/** Returns the explicit volume, or null to defer to `frame.simbox`. Throws if neither is available or the explicit value is invalid. */
+function resolveVolume(
+  frame: Frame,
+  paramVolume: number | undefined,
+): number | null {
+  if (paramVolume !== undefined) {
+    if (!Number.isFinite(paramVolume) || paramVolume <= 0) {
+      throw new Error(
+        `RDF: volume must be a finite positive number, got ${paramVolume}`,
+      );
+    }
+    return paramVolume;
+  }
+  if (!frame.simbox) {
+    throw new Error(
+      "RDF: frame has no simulation box — pass an explicit `volume` (Å³)",
+    );
+  }
+  return null;
+}
+
+/** `volumeFrame` is only consulted when `opts.volumeOverride` is null. */
+function runWasmRdf(
+  volumeFrame: Frame,
+  nlist: ReturnType<LinkedCell["build"]>,
+  opts: RdfRunOpts,
+): RdfResult {
+  let rdfObj: WasmRDF | null = null;
+  try {
+    rdfObj = new WasmRDF(opts.nBins, opts.rMax, opts.rMin);
+    const wasmResult =
+      opts.volumeOverride !== null
+        ? rdfObj.computeWithVolume(nlist, opts.volumeOverride)
+        : rdfObj.compute(volumeFrame, nlist);
+    const r = wasmResult.binCenters();
+    const gr = wasmResult.rdf();
+    const counts = wasmResult.pairCounts();
+    const nParticles = wasmResult.numPoints;
+    const volume = wasmResult.volume;
+    const dr = (opts.rMax - opts.rMin) / opts.nBins;
+    wasmResult.free();
+    return {
+      r,
+      gr,
+      counts,
+      nBins: opts.nBins,
+      dr,
+      rMax: opts.rMax,
+      rMin: opts.rMin,
+      nParticles,
+      volume,
+    };
+  } finally {
+    rdfObj?.free();
+  }
 }
 
 /** Full-frame RDF via LinkedCell.build (self-query, unique pairs). */
-function computeFullRdf(
-  frame: Frame,
-  nBins: number,
-  rMax: number,
-): RdfResult | null {
-  let lc: LinkedCell | null = null;
-  let nlist: ReturnType<LinkedCell["build"]> | null = null;
-  let rdfObj: WasmRDF | null = null;
-
+function computeFullRdf(frame: Frame, opts: RdfRunOpts): RdfResult {
+  const lc = new LinkedCell(opts.rMax);
+  const nlist = lc.build(frame);
   try {
-    lc = new LinkedCell(rMax);
-    nlist = lc.build(frame);
-    rdfObj = new WasmRDF(nBins, rMax);
-    return extractResult(rdfObj.compute(frame, nlist), nBins, rMax);
+    return runWasmRdf(frame, nlist, opts);
   } finally {
-    lc?.free();
-    nlist?.free();
-    rdfObj?.free();
+    nlist.free();
+    lc.free();
   }
 }
 
@@ -106,15 +186,13 @@ function computeFullRdf(
 function computeSelfGroupRdf(
   frame: Frame,
   group: number[],
-  nBins: number,
-  rMax: number,
+  opts: RdfRunOpts,
 ): RdfResult | null {
   if (group.length < 2) return null;
   const subFrame = buildSubFrame(frame, group);
   if (!subFrame) return null;
-
   try {
-    return computeFullRdf(subFrame, nBins, rMax);
+    return computeFullRdf(subFrame, opts);
   } finally {
     subFrame.free();
   }
@@ -125,8 +203,7 @@ function computeCrossGroupRdf(
   frame: Frame,
   groupA: number[],
   groupB: number[],
-  nBins: number,
-  rMax: number,
+  opts: RdfRunOpts,
 ): RdfResult | null {
   if (groupA.length < 1 || groupB.length < 1) return null;
 
@@ -138,39 +215,16 @@ function computeCrossGroupRdf(
     return null;
   }
 
-  let lc: LinkedCell | null = null;
-  let nlist: ReturnType<LinkedCell["query"]> | null = null;
-  let rdfObj: WasmRDF | null = null;
-
+  const lc = new LinkedCell(opts.rMax);
+  const nlist = lc.query(refFrame, queryFrame);
   try {
-    lc = new LinkedCell(rMax);
-    nlist = lc.query(refFrame, queryFrame);
-    rdfObj = new WasmRDF(nBins, rMax);
-    return extractResult(rdfObj.compute(refFrame, nlist), nBins, rMax);
+    return runWasmRdf(refFrame, nlist, opts);
   } finally {
-    lc?.free();
-    nlist?.free();
-    rdfObj?.free();
+    nlist.free();
+    lc.free();
     refFrame.free();
     queryFrame.free();
   }
-}
-
-/** Extract RdfResult from WASM RdfOutput, then free it. */
-function extractResult(
-  wasmResult: ReturnType<WasmRDF["compute"]>,
-  nBins: number,
-  rMax: number,
-): RdfResult {
-  const r = wasmResult.binCenters();
-  const gr = wasmResult.rdf();
-  const counts = wasmResult.pairCounts();
-  const nParticles = wasmResult.numPoints;
-  const volume = wasmResult.volume;
-  const dr = rMax / nBins;
-
-  wasmResult.free();
-  return { r, gr, counts, nBins, dr, rMax, nParticles, volume };
 }
 
 /**
@@ -212,8 +266,7 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   const subFrame = new FrameClass();
   subFrame.insertBlock("atoms", subBlock);
 
-  // Copy simbox so LinkedCell uses periodic boundaries for periodic systems.
-  // For non-periodic frames (no simbox), LinkedCell auto-generates a bounding box.
+  // Copy simbox so LinkedCell uses periodic boundaries when present.
   const simbox = frame.simbox;
   if (simbox) {
     subFrame.simbox = simbox;

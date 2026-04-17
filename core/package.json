@@ -37,7 +37,7 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
-    "@molcrafts/molrs": "^0.0.8",
+    "@molcrafts/molrs": "^0.0.9",
     "tslog": "^4.9.3"
   },
   "directories": {
