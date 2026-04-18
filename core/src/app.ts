@@ -754,9 +754,9 @@ export class MolvisApp {
    */
   public async applyPipeline(options?: {
     fullRebuild?: boolean;
-  }): Promise<void> {
+  }): Promise<Frame | null> {
     const sourceFrame = this._sourceFrame ?? this._system.frame;
-    if (!sourceFrame) return;
+    if (!sourceFrame) return null;
 
     const source = new ArrayFrameSource([sourceFrame]);
 
@@ -822,6 +822,8 @@ export class MolvisApp {
         effect();
       }
     }
+
+    return computed;
   }
 
   /**

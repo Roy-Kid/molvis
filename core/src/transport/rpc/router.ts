@@ -172,8 +172,8 @@ function applyStyle(
  * style / theme RPCs that mutate render-time state (radii, theme) without
  * changing the underlying data source.
  */
-function rebuildCurrentFrame(app: MolvisApp): Promise<void> {
-  if (!app.frame) return Promise.resolve();
+function rebuildCurrentFrame(app: MolvisApp): Promise<Frame | null> {
+  if (!app.frame) return Promise.resolve(null);
   return app.applyPipeline({ fullRebuild: true });
 }
 
@@ -236,15 +236,15 @@ export async function ingestFramesIntoPipeline(
     app.setTrajectory(new Trajectory(frames, boxes));
   }
 
-  await app.applyPipeline({ fullRebuild: true });
+  const computed = await app.applyPipeline({ fullRebuild: true });
 
   if (options?.manualAtomRadii && options.manualAtomRadii.length > 0) {
-    // Per-atom radius override has no pipeline equivalent yet — fall back to
-    // draw_frame for the radii. Pipeline state is preserved.
+    // Per-atom radius override has no pipeline equivalent yet — use the
+    // pipeline-computed frame so modifier effects (Hide, Color) are preserved.
     const radii = options.manualAtomRadii;
     await Promise.resolve(
       app.execute("draw_frame", {
-        frame: app.frame,
+        frame: computed ?? app.frame,
         box: app.system.box,
         options: { atoms: { radii } },
       }) as void | Promise<void>,
@@ -756,11 +756,11 @@ export class RPCRouter {
       );
     }
 
-    await rebuildCurrentFrame(this.app);
+    const computed = await rebuildCurrentFrame(this.app);
     if (manualAtomRadii && manualAtomRadii.length > 0) {
       await Promise.resolve(
         this.app.execute("draw_frame", {
-          frame: this.app.frame,
+          frame: computed ?? this.app.frame,
           box: this.app.system.box,
           options: { atoms: { radii: manualAtomRadii } },
         }) as void | Promise<void>,
