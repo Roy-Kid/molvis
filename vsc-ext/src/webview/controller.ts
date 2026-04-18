@@ -1,4 +1,5 @@
 import {
+  type LightingSettings,
   type Molvis,
   type MolvisConfig,
   type MolvisSetting,
@@ -116,6 +117,7 @@ export function bootstrapWebview(container: HTMLElement): void {
               app.setTrajectory(trajectory),
             setViewMode: () => app.setMode("view"),
             resetCamera: () => app.resetCamera(),
+            clearFrameLabels: () => app.system.setFrameLabels(null),
             loadPdb: (pdbText: string) => {
               void loadPdbWithRibbon(app, pdbText);
             },
@@ -188,6 +190,7 @@ export function bootstrapWebview(container: HTMLElement): void {
             app.setTrajectory(trajectory),
           setViewMode: () => app.setMode("view"),
           resetCamera: () => app.resetCamera(),
+          clearFrameLabels: () => app.system.setFrameLabels(null),
           loadPdb: (pdbText: string) => {
             void loadPdbWithRibbon(app, pdbText);
           },
@@ -259,5 +262,8 @@ function applyMolvisSettings(
     app.settings.setGraphics(
       settings.graphics as Parameters<typeof app.settings.setGraphics>[0],
     );
+  }
+  if (settings.lighting && typeof settings.lighting === "object") {
+    app.settings.setLighting(settings.lighting as Partial<LightingSettings>);
   }
 }

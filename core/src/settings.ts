@@ -227,6 +227,11 @@ export class Settings {
     return this.values.cameraMaxRadius;
   }
 
+  setLighting(config: Partial<LightingSettings>): void {
+    this.values.lighting = { ...this.values.lighting, ...config };
+    // Materials read getLighting() per-frame via onBind callbacks — no push needed.
+  }
+
   /**
    * Get lighting settings
    */
@@ -277,8 +282,7 @@ export class Settings {
     this.setCameraPanInertia(this.defaults.cameraPanInertia);
     this.setCameraMinRadius(this.defaults.cameraMinRadius);
     this.setCameraMaxRadius(this.defaults.cameraMaxRadius);
-    // Reset lighting to default
-    this.values.lighting = { ...this.defaults.lighting };
+    this.setLighting(this.defaults.lighting);
     this.setGrid(this.defaults.grid);
     this.setGraphics(this.defaults.graphics);
   }
@@ -291,9 +295,7 @@ export class Settings {
     this.setCameraPanInertia(this.values.cameraPanInertia);
     this.setCameraMinRadius(this.values.cameraMinRadius);
     this.setCameraMaxRadius(this.values.cameraMaxRadius);
-    // Lighting is applied by World reading settings, no direct setter on World for now?
-    // Actually lighting is likely set once or needs update method.
-    // For Grid and Graphics we call the setters to trigger updates.
+    this.setLighting(this.values.lighting);
     this.setGrid(this.values.grid);
     this.setGraphics(this.values.graphics);
   }

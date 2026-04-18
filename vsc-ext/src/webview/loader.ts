@@ -19,6 +19,11 @@ export interface RuntimeLoadContext {
   setViewMode: () => void;
   resetCamera: () => void;
   /**
+   * Called before setting a new trajectory so that stale frame labels from
+   * the previous file do not persist (System does not auto-clear them).
+   */
+  clearFrameLabels?: () => void;
+  /**
    * Optional handler for PDB files that needs to build ribbon geometry
    * after loading. The host wires this to readPDBFrame + loadFrame +
    * artist.ribbonRenderer.buildFromPdb. If absent, PDB falls through to
@@ -135,6 +140,7 @@ function loadTrajectory(
     },
   };
 
+  context.clearFrameLabels?.();
   context.setTrajectory(Trajectory.fromProvider(provider));
   context.setViewMode();
   context.resetCamera();
@@ -179,6 +185,7 @@ function loadZarr(
     },
   };
 
+  context.clearFrameLabels?.();
   context.setTrajectory(Trajectory.fromProvider(provider));
   context.setViewMode();
   context.resetCamera();

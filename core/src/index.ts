@@ -26,6 +26,7 @@ export {
   DEFAULT_SETTING,
   defaultMolvisSettings,
   type MolvisSetting,
+  type LightingSettings,
 } from "./settings";
 export {
   Frame,
