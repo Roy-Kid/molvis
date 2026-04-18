@@ -58,9 +58,12 @@
   }
 }
 
-/* Base Variables (warm neutral — VSCode-inspired) */
+/* Base Variables (warm neutral — VSCode-inspired).
+ * `:host` selectors mirror `:root` so the same stylesheet applies inside
+ * a Shadow DOM root used by the notebook embed. `:where()` keeps
+ * specificity at zero, matching Tailwind's reset behaviour. */
 @layer base {
-  :root {
+  :where(:root, :host) {
     --background: 40 14% 96%;
     --foreground: 30 8% 15%;
     --card: 40 14% 96%;
@@ -84,7 +87,7 @@
     --radius: 0.5rem;
   }
 
-  .dark {
+  :where(.dark, :host(.dark)) {
     --background: 30 4% 14%;
     --foreground: 36 8% 90%;
     --card: 30 4% 14%;
@@ -113,7 +116,7 @@
     @apply border-border;
   }
 
-  body {
+  :where(body, :host) {
     @apply bg-background text-foreground;
   }
 }

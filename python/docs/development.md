@@ -10,64 +10,48 @@ npm install
 
 ## Build
 
-### Jupyter widget bundle
+There is **no** separate Python-side JS build anymore. The single
+frontend lives in `page/` and is built once; the Python package ships
+the bundle as static assets.
 
 ``` bash
-cd python
-npm run build       # production build
-npm run dev         # watch mode
+npm run build:page          # page bundle → python/src/molvis/page_dist/
+npm run build:all           # core + page + vsc-ext
 ```
 
-### Standalone viewer assets
+## Live reload during development
 
-``` bash
-npm run build:standalone   # builds page app + copies to python/src/molvis/page_dist/
-```
+Two terminals:
 
-### Full build
-
-``` bash
-npm run build:all
-```
-
-## Development workflow
-
-### Live reload for standalone viewer
-
-Use two terminals:
-
-=== "Terminal 1 -- page dev server"
+=== "Terminal 1 — page dev server"
 
     ``` bash
     npm run dev:page
     ```
 
-=== "Terminal 2 -- Python with dev assets"
+=== "Terminal 2 — Python pointed at the live bundle"
 
     ``` bash
     MOLVIS_PAGE_DIST=page/dist python test_molvis.py
     ```
 
-The `MOLVIS_PAGE_DIST` environment variable overrides the bundled page assets, pointing to the dev server's output for live reload.
+The `MOLVIS_PAGE_DIST` environment variable overrides the bundled
+static assets, pointing to the dev server's output for live reload.
 
 ## Testing
 
 ``` bash
-# Core tests (rstest)
-npm test
-
-# Python tests (pytest)
-cd python
-pytest
+npm test                         # all workspaces (core, page, vsc-ext, python)
+npm run test:python              # pytest only
+npm run test:core                # core rstest
 ```
 
 ## Packaging
 
 ``` bash
-npm run build:standalone
+npm run build:page               # ships page bundle into python/src/molvis/page_dist/
 cd python
-npm run build
-python3 -m build --no-isolation
+python3 -m build --wheel
 ```
 
 ## Project structure
@@ -75,14 +59,14 @@ python3 -m build --no-isolation
 ``` text
 python/
   src/molvis/
-    __init__.py          # Public API: Molvis, StandaloneMolvis, show
-    scene.py             # Molvis (anywidget) class
-    standalone.py        # StandaloneMolvis + show()
-    server.py            # HTTP + WebSocket server
-    ws_transport.py      # WebSocket transport (binary framing)
-    transport.py         # anywidget transport (binary buffers)
-    transport_base.py    # Transport protocol definition
-    commands/            # Command mixins (drawing, selection, snapshot, frame)
-    dist/                # Built anywidget ESM bundle
-    page_dist/           # Built standalone page app (gitignored)
+    __init__.py            # Public API: Molvis, WebSocketTransport, Selection, …
+    scene.py               # Molvis class — transport-agnostic
+    events.py              # EventBus, ViewerState, Selection
+    transport_base.py      # Transport Protocol
+    transport/
+      __init__.py          # Package entry
+      _codec.py            # BinaryPayloadEncoder/Decoder + binary frame codec
+      websocket.py         # WebSocketTransport (server + handshake + dispatch)
+    commands/              # Command mixins (drawing, selection, snapshot, frame, …)
+    page_dist/             # Built page bundle (gitignored, populated by build:page)
 ```

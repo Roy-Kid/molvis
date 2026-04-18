@@ -9,6 +9,7 @@ import { useBootstrapDemo } from "@/hooks/useBootstrapDemo";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
 import { useWebSocketBridge } from "@/hooks/useWebSocketBridge";
+import { useMountOpts } from "@/lib/mount-opts";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -18,15 +19,16 @@ import { LeftSidebar } from "./ui/layout/LeftSidebar";
 import { RightSidebar } from "./ui/layout/RightSidebar";
 import { TopBar } from "./ui/layout/TopBar";
 
-const MINIMAL_MODE = new URLSearchParams(window.location.search).has("minimal");
-
 /**
- * Main page application shell for the standalone MolVis viewer.
+ * Main page application shell for the MolVis viewer.
  *
- * When `?minimal=1` is in the URL (set by `mv.show(mode="core")`),
- * all chrome is hidden and only the 3D canvas is rendered.
+ * When mounted with `opts.minimal`, all chrome is hidden and only the
+ * 3D canvas is rendered (useful for embeds that supply their own UI).
  */
 const App: React.FC = () => {
+  const opts = useMountOpts();
+  const minimalMode = Boolean(opts.minimal);
+
   const [app, setApp] = useState<Molvis | null>(null);
   const { currentMode, setCurrentMode, trajectoryLength } =
     useMolvisUiState(app);
@@ -34,8 +36,8 @@ const App: React.FC = () => {
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
-  useBootstrapDemo(app, setCurrentMode);
-  useWebSocketBridge(app);
+  useBootstrapDemo(app, setCurrentMode, opts);
+  useWebSocketBridge(app, opts);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,12 +63,11 @@ const App: React.FC = () => {
     setCurrentMode(mode);
   };
 
-  // Minimal mode: canvas only, no UI chrome
-  if (MINIMAL_MODE) {
+  if (minimalMode) {
     return (
       <ErrorBoundary>
         <div
-          className="h-screen w-screen bg-background overflow-hidden"
+          className="h-full w-full bg-background overflow-hidden"
           onContextMenu={(e) => e.preventDefault()}
         >
           <MolvisWrapper onMount={setApp} />
@@ -78,7 +79,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div
-        className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden"
+        className="h-full w-full flex flex-col bg-background text-foreground overflow-hidden"
         onContextMenu={(e) => e.preventDefault()}
       >
         <TopBar app={app} currentMode={currentMode} />

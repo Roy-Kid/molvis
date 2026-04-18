@@ -1,10 +1,11 @@
 # Quick Start
 
-## Standalone viewer
+## One class, two hosts
 
-The fastest path from data to 3D visualization.
-
-### Blocking mode (default)
+`mv.Molvis()` starts a local WebSocket server and drives the shared
+frontend. In plain scripts it opens the default browser. In Jupyter it
+mounts the same page bundle inline in the cell output (Shadow DOM
+keeps the page's CSS isolated — no iframe).
 
 ``` python
 import molvis as mv
@@ -24,66 +25,42 @@ frame = mp.Frame(blocks={
     },
 })
 
-mv.show(frame)
+viewer = mv.Molvis()
+viewer.draw_frame(frame, style="ball_and_stick")
 ```
 
-The call blocks until you close the browser tab -- just like `matplotlib.pyplot.show()`.
-
-### Non-blocking mode
+In Jupyter, end the cell with `viewer` (or `scene`) to embed the viewer:
 
 ``` python
-viewer = mv.show(frame, block=False)
-
-viewer.set_style(style="spacefill")
-viewer.set_theme("modern")
-snap = viewer.snapshot()  # PNG bytes
-
-viewer.close()
-```
-
-### Viewer modes
-
-| Mode | URL param | What you see |
-|------|-----------|--------------|
-| `"core"` (default) | `?ws=1&minimal=1` | Canvas only -- fast, clean |
-| `"page"` | `?ws=1` | Full UI: sidebars, timeline, analysis tools |
-
-``` python
-mv.show(frame)                    # canvas only
-mv.show(frame, mode="page")       # full UI
-```
-
-### Context manager
-
-``` python
-with mv.StandaloneMolvis(mode="core") as viewer:
-    viewer.show(block=False)
-    viewer.draw_frame(frame)
-    viewer.set_style(style="spacefill")
-    # server stops automatically on exit
-```
-
-## Jupyter widget
-
-``` python
-import molvis as mv
-import molpy as mp
-
 scene = mv.Molvis(name="protein_view", width=800, height=600)
-scene.draw_frame(frame, style="ball_and_stick")
-scene  # display inline
+scene.draw_frame(frame)
+scene
 ```
 
-### Shared sessions
+## Canvas only (no UI chrome)
 
-Multiple cells sharing one 3D engine:
+Pass `gui=False` to hide the TopBar, sidebars, and timeline — the page
+bundle renders just the 3D canvas:
 
 ``` python
-main = mv.Molvis(name="main", session="shared")
-mirror = mv.Molvis(name="mirror", session="shared")
+canvas = mv.Molvis(name="bare", gui=False, width=640, height=480)
+canvas.draw_frame(frame)
+canvas
+```
 
-# draw in one cell, view in another
-main.draw_frame(frame)
+Useful when you drive the viewer entirely from Python or embed it
+inside your own UI.
+
+## Bidirectional state
+
+Canvas selection is observable from Python without polling.
+
+``` python
+viewer.on("selection_changed",
+          lambda ev: print("atoms:", ev["atom_ids"]))
+
+ev = viewer.wait_for("selection_changed", timeout=30)
+print(viewer.selection)       # cached, updates live
 ```
 
 ## Drawing a simulation box
@@ -97,6 +74,26 @@ box = mp.Box.ortho(
     pbc_x=True, pbc_y=True, pbc_z=True,
 )
 
-viewer = mv.show(frame, block=False)
 viewer.draw_box(box)
+```
+
+## Snapshot + close
+
+``` python
+png = viewer.snapshot()            # PNG bytes
+viewer.set_style(style="spacefill")
+viewer.set_theme("modern")
+viewer.close()                      # stops transport
+```
+
+## CDN-hosted page
+
+Point the browser at an externally-hosted bundle instead of the one
+shipped with the Python package:
+
+``` python
+viewer = mv.Molvis(transport=mv.WebSocketTransport(
+    page_base_url="https://molvis.dev/app",
+    port=8765,
+))
 ```

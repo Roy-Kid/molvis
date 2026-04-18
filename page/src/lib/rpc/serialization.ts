@@ -1,9 +1,7 @@
 /**
- * Binary payload decoding and Frame/Box construction for the standalone
- * WebSocket bridge.
- *
- * This is an adapted copy of `python/src/ts/serialization.ts` that
- * works without anywidget dependencies.
+ * Binary payload decoding and Frame/Box construction for the
+ * WebSocket bridge. Counterpart of the Python-side codec in
+ * `molvis.transport._codec`.
  */
 
 import { Box, Frame } from "@molcrafts/molrs";

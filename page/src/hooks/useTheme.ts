@@ -28,13 +28,6 @@ export function bootstrapTheme(): void {
   applyTheme(readStoredTheme());
 }
 
-/** Emits a `molvis:theme-change` CustomEvent so non-React code (canvas) can react. */
-function emitThemeChange(theme: Theme): void {
-  window.dispatchEvent(
-    new CustomEvent<Theme>("molvis:theme-change", { detail: theme }),
-  );
-}
-
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => readStoredTheme());
 
@@ -43,7 +36,6 @@ export function useTheme() {
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {}
-    emitThemeChange(next);
     setThemeState(next);
   }, []);
 

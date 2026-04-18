@@ -1,8 +1,21 @@
 /**
- * WebSocket bridge connecting the page app to a Python MolVis server.
+ * WebSocket bridge connecting the page to a Python (or other language) MolVis
+ * controller.
  *
- * Handles the binary wire format for transporting JSON-RPC messages
- * with binary buffer attachments (numpy arrays) over WebSocket.
+ * The page is a generic receiver: it dials out to the `ws_url` provided in
+ * the query string, authenticates with a token, and then drives the shared
+ * `MolvisApp`. Communication is JSON-RPC 2.0 with binary-buffer framing.
+ *
+ * Handshake:
+ *   client → server  {type:"hello", token, session}
+ *   server → client  {type:"ready"}              (success)
+ *                    ws.close(1008, "auth")       (token mismatch)
+ *
+ * Inbound: JSON-RPC requests are routed to `StandaloneRpcRouter`. Responses
+ * (including those carrying binary buffers) flow back over the same socket.
+ *
+ * Outbound events: core events (selection-change, mode-change, …) are
+ * pushed as JSON-RPC notifications (no `id`) via `sendEvent`.
  */
 
 import type { Molvis } from "@molvis/core";
@@ -99,39 +112,92 @@ function encodeBinaryFrame(
   return out;
 }
 
+export interface BridgeConnectResult {
+  readonly session: string;
+}
+
 export class WebSocketBridge {
   private ws: WebSocket | null = null;
+  private pendingWs: WebSocket | null = null;
   private router: StandaloneRpcRouter;
   private cleanupBeforeUnload: (() => void) | null = null;
+  private ready = false;
 
   constructor(private readonly app: Molvis) {
     this.router = new StandaloneRpcRouter(app);
   }
 
-  connect(url: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+  /**
+   * Dial the given `ws_url` and perform the token handshake.
+   *
+   * Resolves once the server has sent `{type:"ready"}`; rejects if the
+   * socket closes or errors before ready arrives.
+   */
+  connect(
+    url: string,
+    token: string,
+    session: string,
+  ): Promise<BridgeConnectResult> {
+    return new Promise<BridgeConnectResult>((resolve, reject) => {
+      let settled = false;
+      const settle = (fn: () => void) => {
+        if (!settled) {
+          settled = true;
+          fn();
+        }
+      };
+
       const ws = new WebSocket(url);
       ws.binaryType = "arraybuffer";
+      // Track the in-flight socket so disconnect() can close it before
+      // ready arrives (e.g. React StrictMode unmount during dev).
+      this.pendingWs = ws;
 
-      // Attach message and close listeners before open fires
-      ws.addEventListener("message", (event: MessageEvent) => {
-        void this.handleMessage(event);
-      });
+      const preReadyHandler = (event: MessageEvent) => {
+        if (typeof event.data !== "string") {
+          return;
+        }
+        let msg: Record<string, unknown>;
+        try {
+          msg = JSON.parse(event.data) as Record<string, unknown>;
+        } catch {
+          return;
+        }
+        if (msg.type === "ready") {
+          ws.removeEventListener("message", preReadyHandler);
+          ws.addEventListener("message", (e) => {
+            void this.handleMessage(e);
+          });
+          this.ws = ws;
+          this.pendingWs = null;
+          this.ready = true;
+          settle(() => resolve({ session }));
+        }
+      };
+      ws.addEventListener("message", preReadyHandler);
 
-      ws.addEventListener("close", () => {
-        this.ws = null;
+      ws.addEventListener("close", (event) => {
+        if (this.pendingWs === ws) this.pendingWs = null;
+        if (this.ws === ws) this.ws = null;
+        this.ready = false;
         this.cleanupBeforeUnload?.();
         this.cleanupBeforeUnload = null;
+        settle(() =>
+          reject(
+            new Error(
+              `WebSocket closed before ready (code ${event.code}${
+                event.reason ? `, ${event.reason}` : ""
+              })`,
+            ),
+          ),
+        );
       });
 
       ws.addEventListener("error", () => {
-        reject(new Error(`WebSocket connection failed: ${url}`));
+        settle(() => reject(new Error(`WebSocket connection failed: ${url}`)));
       });
 
       ws.addEventListener("open", () => {
-        this.ws = ws;
-
-        // Clean disconnect on tab close
         const onBeforeUnload = () => {
           ws.close(1000, "tab_closed");
         };
@@ -140,10 +206,7 @@ export class WebSocketBridge {
           window.removeEventListener("beforeunload", onBeforeUnload);
         };
 
-        // Signal readiness to the Python server
-        ws.send(JSON.stringify({ type: "ready", session: "standalone" }));
-
-        resolve();
+        ws.send(JSON.stringify({ type: "hello", token, session }));
       });
     });
   }
@@ -152,10 +215,43 @@ export class WebSocketBridge {
     this.cleanupBeforeUnload?.();
     this.cleanupBeforeUnload = null;
 
+    // Close any in-flight pre-ready socket too — otherwise React
+    // StrictMode (or a re-rendered cell) can leak a dangling WebSocket
+    // that races the new bridge into the server's "session already bound"
+    // path, surfacing as a BrokenPipe during handshake.
+    if (this.pendingWs && this.pendingWs !== this.ws) {
+      try {
+        this.pendingWs.close(1000, "client_disconnect");
+      } catch {
+        /* socket already closed */
+      }
+      this.pendingWs = null;
+    }
+
     if (this.ws) {
       this.ws.close(1000, "client_disconnect");
       this.ws = null;
     }
+    this.ready = false;
+  }
+
+  /**
+   * Send a JSON-RPC notification (no `id`, no response expected).
+   *
+   * Used by `EventForwarder` to push frontend events to the controller.
+   * Silently no-ops if the socket is not ready.
+   */
+  sendEvent(method: string, params: Record<string, unknown>): void {
+    if (!this.ws || !this.ready || this.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    this.ws.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method,
+        params,
+      }),
+    );
   }
 
   private async handleMessage(event: MessageEvent): Promise<void> {
@@ -173,7 +269,7 @@ export class WebSocketBridge {
       return;
     }
 
-    // Ignore non-RPC messages (e.g. ready ack from server)
+    // Ignore non-RPC control messages (e.g. future server-initiated pings).
     if (request.type !== undefined && request.jsonrpc === undefined) {
       return;
     }

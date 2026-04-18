@@ -1,9 +1,11 @@
 # Python API Reference
 
-The `molvis` Python package bundles the same MolVis engine as an
-[anywidget](https://anywidget.dev/) that works in Jupyter, VSCode's
-Jupyter extension, and JupyterLab, plus a standalone window mode for
-scripts.
+The `molvis` Python package drives the same page bundle that powers the
+standalone web app. A single `mv.Molvis()` class works from both plain
+scripts and Jupyter notebooks — in the former it opens a browser tab,
+in the latter it mounts the same page bundle inline in the cell output
+(via a Shadow DOM root for style isolation, no iframe). In both cases
+communication is JSON-RPC 2.0 over a local WebSocket with token auth.
 
 ## Install
 
@@ -15,175 +17,117 @@ pip install molvis
 import molvis as mv
 ```
 
-Requires Python 3.11+. The JS bundle is shipped inside the wheel; no
+Requires Python 3.10+. The page bundle ships inside the wheel; no
 separate frontend installation is needed.
 
-## Two usage modes
-
-### Jupyter widget — `mv.Molvis`
-
-In a notebook cell, the widget is the last expression:
-
-```python
-import molvis as mv
-import molpy as mp
-
-scene = mv.Molvis(name="demo", session="shared-demo")
-scene.draw_frame(mp.Frame(...))
-scene
-```
-
-Numeric arrays round-trip as binary buffers, not JSON, so you can push
-million-atom frames without blowing up the kernel ↔ frontend message
-size.
-
-### Standalone window — `mv.show`
-
-Outside a notebook — for example in a Python script or a REPL — call
-`mv.show()`. It serves the same React app from a local HTTP server and
-opens your default browser.
-
-```python
-import molvis as mv
-
-scene = mv.show(mode="app")   # full UI
-scene.draw_frame(frame)
-scene.close()
-```
-
-`mode="core"` drops the React chrome and shows only the 3D canvas.
-
-## `Molvis` (widget)
+## `Molvis`
 
 ### Constructor
 
 ```python
 mv.Molvis(
-    name: str = "<generated>",
-    session: str | None = None,
-    width: int = 800,
-    height: int = 600,
-    **anywidget_kwargs,
+    name: str = "default",
+    *,
+    transport: Transport | None = None,
+    width: int = 1200,
+    height: int = 800,
 )
 ```
 
-- **`name`** — registry key for `Molvis.get_scene(name)`. Defaults to a
-  NATO-alphabet string (`alpha`, `bravo`, …).
-- **`session`** — shared frontend session. Two widgets with the same
-  `session` share one Babylon.js engine and scene state, so selections
-  and view changes are mirrored between notebook cells.
-- **`width`, `height`** — iframe size in pixels.
+- **`name`** — registry key for `Molvis.get_scene(name)`. Duplicate
+  names return the cached instance (no second transport started).
+- **`transport`** — override the default `WebSocketTransport`. Pass a
+  custom transport to host the page on a CDN, pin a port, or plug in a
+  fake for tests.
+- **`width`, `height`** — cell mount size in CSS pixels (Jupyter host
+  only; standalone uses the browser viewport).
 
 ### Drawing
 
 ```python
 scene.draw_frame(frame)                 # render a single frame
-scene.draw_trajectory(frames)           # render a list of frames
-scene.set_frame(index)                  # jump to a frame in a trajectory
+scene.draw_box(box)                     # add a simulation box
+scene.set_style(style="spacefill")      # change style without re-rendering
+scene.snapshot()                         # → PNG bytes
 ```
 
-`frame` is a `molpy.Frame`. MolVis converts it to a `molrs` frame
-internally.
+`frame` is a `molpy.Frame`. Dense numeric arrays are shipped as binary
+buffers, so million-atom frames don't balloon the JSON message.
 
-### Commands
+### Events & cached state
 
-Every MolVis command is callable from Python:
+Canvas interactions flow back to Python as JSON-RPC notifications.
+Registered callbacks fire immediately; cached state properties stay
+current without polling.
 
 ```python
-scene.send_cmd("draw_frame", frame=frame)
-scene.send_cmd("set_mode", mode="select")
-scene.send_cmd("undo")
-scene.send_cmd("apply_pipeline", pipeline=[...])
+handle = scene.on("selection_changed",
+                  lambda ev: print(ev["atom_ids"]))
+handle.remove()
+
+ev = scene.wait_for("selection_changed", timeout=30)
+
+scene.selection         # Selection(atom_ids=(...), bond_ids=(...))
+scene.current_mode      # "view" | "select" | "edit" | "measure" | "manipulate"
+scene.current_frame     # int
 ```
 
-Responses come back as normal Python values. If the command fails in
-the frontend, a `mv.MolvisRpcError` is raised with the frontend stack
-trace.
+Callbacks run on the transport's asyncio thread; `wait_for` is
+main-thread-safe and is preferred for synchronous workflows.
 
 ### Registry
 
 ```python
-mv.Molvis.list_scenes()          # -> ['demo', 'alpha', ...]
-mv.Molvis.get_scene("demo")      # -> existing Molvis
-mv.Molvis.clear_all()            # dispose every registered widget
+mv.Molvis.list_scenes()          # -> ['default', 'protein', ...]
+mv.Molvis.get_scene("protein")   # -> existing Molvis
+scene.close()                     # stop transport + drop from registry
 ```
-
-`list_scenes` returns the names registered in **this kernel**;
-`clear_all` disposes every widget and clears the registry.
-
-### Closing
-
-```python
-scene.close()
-```
-
-Tears down the frontend session and removes the widget from the registry.
-Sessions survive individual widget closes — as long as one widget with a
-given `session` is alive, the shared scene persists.
 
 ### Error handling
 
-Frontend exceptions surface as `mv.MolvisRpcError`:
+Fire-and-forget commands log errors asynchronously. Query commands
+surface frontend exceptions as `mv.MolvisRpcError`:
 
 ```python
 from molvis import MolvisRpcError
 
 try:
-    scene.send_cmd("add_modifier", kind="nope")
+    scene.export_frame()
 except MolvisRpcError as exc:
-    print(exc.code, exc.message)
+    print(exc.code, exc)
 ```
 
-### Shared sessions
+## `WebSocketTransport`
+
+The sole transport implementation. By default, serves the bundled
+`page_dist/` on an OS-assigned port, generates a random token, and
+opens the browser (outside Jupyter).
 
 ```python
-primary   = mv.Molvis(name="primary",   session="protein")
-secondary = mv.Molvis(name="secondary", session="protein")
-
-# primary.draw_frame(frame) updates both cells
-```
-
-The first widget to attach to a session creates the engine; subsequent
-widgets attach as additional views. When the last widget closes, the
-engine is torn down.
-
-## `show()` and `StandaloneMolvis`
-
-```python
-mv.show(
-    frame=None,          # optional initial frame
-    mode="app",          # "app" or "core"
-    host="127.0.0.1",
-    port=0,              # 0 = pick a free port
+mv.WebSocketTransport(
+    page_base_url=None,    # external base URL where the page is hosted
+    host="localhost",
+    port=0,                # 0 = pick a free port
+    token=None,            # auto-generated if None
     open_browser=True,
 )
 ```
 
-Returns a `StandaloneMolvis` that implements the same `send_cmd` and
-`draw_frame` surface as `Molvis`, plus:
+- `page_base_url=None` → the transport serves `page_dist/` itself on
+  the same port as the WebSocket.
+- `page_base_url="https://cdn.example/app"` → the transport serves
+  only the WebSocket endpoint; the page bundle is fetched from the
+  CDN. The Jupyter cell loader resolves all `<script>` and `<link>`
+  asset URLs relative to this base.
 
-```python
-standalone = mv.show()
-standalone.show(block=False)       # returns immediately
-standalone.close()
+The handshake is:
 
-with mv.show() as scene:           # context manager form
-    scene.draw_frame(frame)
-```
+    client → server   {"type":"hello", "token":"…", "session":"…"}
+    server → client   {"type":"ready"}                   (✓)
+                      ws.close(1008, "auth")              (✗ token mismatch)
 
-`block=True` (the default for `show()` without the context manager)
-keeps the Python process alive until the browser tab closes.
-
-## Transport internals
-
-Python ↔ frontend communication is JSON-RPC 2.0 over either
-`anywidget`'s custom message channel or a WebSocket (for standalone
-mode). Dense numeric arrays travel as binary buffers attached to the
-RPC message, not as JSON arrays.
-
-If you need a custom transport (e.g. to drive MolVis from a remote
-process), subclass `molvis.transport_base.Transport` and pass an
-instance to `Molvis(transport=...)`.
+After `ready`, JSON-RPC 2.0 flows in both directions (requests with
+`id`, notifications without).
 
 ## Worked example
 
@@ -191,7 +135,6 @@ instance to `Molvis(transport=...)`.
 import molpy as mp
 import molvis as mv
 
-# build a simple water molecule
 frame = mp.Frame(
     elements=["O", "H", "H"],
     positions=[(0, 0, 0), (0.9572, 0, 0), (-0.2399, 0.9266, 0)],
@@ -199,14 +142,13 @@ frame = mp.Frame(
 
 scene = mv.Molvis(name="water", width=600, height=400)
 scene.draw_frame(frame)
-scene.send_cmd("set_mode", mode="select")
+scene.set_view_mode("select")
 scene
 ```
 
-Run the cell, switch the viewport to Select mode, click the oxygen,
-then back in Python:
+Click on the oxygen atom in the canvas, then:
 
 ```python
-scene.send_cmd("get_selection")
-# -> {"atoms": [0], "bonds": []}
+print(scene.selection.atom_ids)
+# -> (0,)
 ```

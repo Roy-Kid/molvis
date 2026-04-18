@@ -1,24 +1,32 @@
+"""
+Binary-payload codecs shared by all transports.
+
+* :class:`BinaryPayloadEncoder` / :class:`BinaryPayloadDecoder` lift
+  :class:`numpy.ndarray` out of a nested payload into separate binary
+  buffers (referenced in JSON via the ``__molvis_buffer__`` marker) so
+  dense numeric data does not have to round-trip through JSON.
+* :func:`encode_binary_frame` / :func:`decode_binary_frame` pack those
+  buffers together with the JSON envelope into a single WebSocket frame.
+"""
+
 from __future__ import annotations
 
 import dataclasses
 import json
-import logging
+import struct
 import sys
-import threading
 from dataclasses import asdict
-from queue import Empty, Queue
 from typing import Any
 
 import numpy as np
 
-from .types import BinaryBufferRef, JsonRPCRequest
-
-logger = logging.getLogger("molvis")
+from ..types import BinaryBufferRef
 
 __all__ = [
     "BinaryPayloadDecoder",
     "BinaryPayloadEncoder",
-    "RpcTransport",
+    "decode_binary_frame",
+    "encode_binary_frame",
 ]
 
 
@@ -78,7 +86,7 @@ class BinaryPayloadEncoder:
 
 
 class BinaryPayloadDecoder:
-    """Decode nested payloads and reconstruct ndarrays from widget buffers."""
+    """Decode nested payloads and reconstruct ndarrays from transport buffers."""
 
     def decode(self, value: Any, buffers: list[Any] | None = None) -> Any:
         if buffers is None:
@@ -124,87 +132,82 @@ class BinaryPayloadDecoder:
         return array
 
 
-class RpcTransport:
-    """JSON-RPC transport over anywidget custom messages."""
+def encode_binary_frame(
+    json_payload: dict[str, Any],
+    buffers: list[memoryview | bytes],
+) -> bytes:
+    """Pack a JSON-RPC envelope + binary buffers into one WebSocket frame.
 
-    def __init__(self, widget: Any) -> None:
-        self._widget = widget
-        self._decoder = BinaryPayloadDecoder()
-        self._response_lock = threading.Lock()
-        self._request_counter = 0
-        self._responses: dict[int, Queue[dict[str, Any]]] = {}
+    Wire format (little-endian throughout):
+        [4 bytes]    uint32  buffer_count (N)
+        [N*8 bytes]  N pairs of (uint32 offset, uint32 length)
+        [variable]   JSON payload as UTF-8
+        [variable]   concatenated buffer bytes
 
-    def send_request(
-        self,
-        method: str,
-        params: dict[str, Any],
-        *,
-        buffers: list[Any] | None = None,
-        wait_for_response: bool = False,
-        timeout: float = 5.0,
-    ) -> dict[str, Any] | None:
-        encoder = BinaryPayloadEncoder()
-        encoded_params = encoder.encode(params)
+    Offsets are relative to the start of the buffer data section
+    (immediately after the JSON section).
+    """
+    json_bytes = json.dumps(json_payload).encode("utf-8")
+    buffer_count = len(buffers)
 
-        with self._response_lock:
-            self._request_counter += 1
-            request_id = self._request_counter
-            response_queue: Queue[dict[str, Any]] | None = None
-            if wait_for_response:
-                response_queue = Queue(maxsize=1)
-                self._responses[request_id] = response_queue
+    byte_offset = 0
+    offset_table: list[tuple[int, int]] = []
+    for buf in buffers:
+        nbytes = buf.nbytes if hasattr(buf, "nbytes") else len(buf)
+        offset_table.append((byte_offset, nbytes))
+        byte_offset += nbytes
 
-        request = JsonRPCRequest(
-            jsonrpc="2.0",
-            method=method,
-            params=encoded_params,
-            id=request_id,
-        )
+    header_size = 4 + buffer_count * 8
+    total_size = header_size + len(json_bytes) + byte_offset
 
-        payload_buffers = [*encoder.buffers, *(buffers or [])]
-        self._widget.send(asdict(request), buffers=payload_buffers)
+    out = bytearray(total_size)
+    pos = 0
 
-        if not wait_for_response or response_queue is None:
-            return None
+    struct.pack_into("<I", out, pos, buffer_count)
+    pos += 4
 
-        try:
-            return response_queue.get(timeout=timeout)
-        except Empty:
-            raise TimeoutError(
-                f"No response from frontend for '{method}' after {timeout}s. "
-                "Ensure the widget is displayed and the frontend session is ready."
-            ) from None
-        finally:
-            with self._response_lock:
-                self._responses.pop(request_id, None)
+    for buf_offset, buf_length in offset_table:
+        struct.pack_into("<I", out, pos, buf_offset)
+        pos += 4
+        struct.pack_into("<I", out, pos, buf_length)
+        pos += 4
 
-    def handle_response(self, content: Any, buffers: list[Any] | None = None) -> bool:
-        """Process a frontend response.
+    out[pos : pos + len(json_bytes)] = json_bytes
+    pos += len(json_bytes)
 
-        Returns True if the response was delivered to a waiting caller,
-        False otherwise (fire-and-forget command or no matching waiter).
-        """
-        try:
-            response = self._decoder.decode(content, buffers or [])
-            if not isinstance(response, dict):
-                logger.warning("Unexpected RPC response type: %s", type(response))
-                return False
+    for buf in buffers:
+        buf_bytes = bytes(buf)
+        out[pos : pos + len(buf_bytes)] = buf_bytes
+        pos += len(buf_bytes)
 
-            request_id = response.get("id")
-            if request_id is None:
-                logger.debug("Ignoring RPC message without request id")
-                return False
+    return bytes(out)
 
-            queue: Queue[dict[str, Any]] | None = None
-            with self._response_lock:
-                queue = self._responses.get(int(request_id))
 
-            if queue is None:
-                logger.debug("No waiter registered for request id %s", request_id)
-                return False
+def decode_binary_frame(data: bytes) -> tuple[dict[str, Any], list[bytes]]:
+    """Decode a binary frame into ``(json_dict, [buffer_bytes])``."""
+    pos = 0
 
-            queue.put_nowait(response)
-            return True
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Failed to handle frontend response: %s", exc)
-            return False
+    buffer_count = struct.unpack_from("<I", data, pos)[0]
+    pos += 4
+
+    offset_table: list[tuple[int, int]] = []
+    for _ in range(buffer_count):
+        buf_offset = struct.unpack_from("<I", data, pos)[0]
+        pos += 4
+        buf_length = struct.unpack_from("<I", data, pos)[0]
+        pos += 4
+        offset_table.append((buf_offset, buf_length))
+
+    header_size = 4 + buffer_count * 8
+    total_buffer_size = sum(length for _, length in offset_table)
+    json_end = len(data) - total_buffer_size
+    json_bytes = data[header_size:json_end]
+    json_payload = json.loads(json_bytes.decode("utf-8"))
+
+    buffer_data_start = json_end
+    buffers: list[bytes] = []
+    for buf_offset, buf_length in offset_table:
+        start = buffer_data_start + buf_offset
+        buffers.append(data[start : start + buf_length])
+
+    return json_payload, buffers

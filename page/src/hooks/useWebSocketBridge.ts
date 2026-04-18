@@ -1,40 +1,46 @@
+import { EventForwarder } from "@/lib/event-forwarder";
+import type { MountOpts } from "@/lib/mount-opts";
 import { WebSocketBridge } from "@/lib/ws-bridge";
 import type { Molvis } from "@molvis/core";
 import { useEffect } from "react";
 
 /**
- * Connects the page app to a Python MolVis server via WebSocket
- * when the `?ws=1` query parameter is present.
+ * Connect the page app to a controller (Python / other language) via
+ * WebSocket when the mount opts include a `wsUrl`.
+ *
+ * If `wsUrl` is missing, the hook is a no-op — the page runs its local
+ * demo via {@link useBootstrapDemo}.
  */
-export function useWebSocketBridge(app: Molvis | null): void {
+export function useWebSocketBridge(app: Molvis | null, opts: MountOpts): void {
+  const { wsUrl, token, session } = opts;
+
   useEffect(() => {
-    if (!app) {
+    if (!app || !wsUrl) {
       return;
     }
 
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has("ws")) {
-      return;
-    }
-
-    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${wsProto}//${window.location.host}/ws`;
     const bridge = new WebSocketBridge(app);
+    const forwarder = new EventForwarder(bridge, app);
 
-    bridge.connect(wsUrl).catch((err) => {
-      console.error("Failed to connect WebSocket bridge:", err);
-    });
+    let cancelled = false;
+
+    bridge
+      .connect(wsUrl, token ?? "", session ?? "default")
+      .then(() => {
+        if (cancelled) {
+          bridge.disconnect();
+          return;
+        }
+        forwarder.start();
+      })
+      .catch((err) => {
+        console.error("Failed to connect WebSocket bridge:", err);
+      });
 
     return () => {
+      cancelled = true;
+      forwarder.stop();
       bridge.disconnect();
     };
-  }, [app]);
-}
-
-/**
- * Returns true when the page is running in WebSocket-controlled mode
- * (launched from Python's `show()`).
- */
-export function isWebSocketMode(): boolean {
-  return new URLSearchParams(window.location.search).has("ws");
+  }, [app, wsUrl, token, session]);
 }

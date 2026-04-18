@@ -1,9 +1,9 @@
 # MolVis
 
-MolVis is a Python package for interactive 3D molecular visualization. It works in two modes:
-
-- **Standalone** -- one function call opens a browser viewer, like `matplotlib.pyplot.show()`
-- **Jupyter** -- inline interactive widget in notebooks
+MolVis is a Python package for interactive 3D molecular visualization.
+One class — `mv.Molvis()` — works from both plain Python scripts and
+Jupyter notebooks. The same page bundle is driven over a local
+WebSocket regardless of host.
 
 ## Installation
 
@@ -31,28 +31,43 @@ frame = mp.Frame(blocks={
     },
 })
 
-mv.show(frame)  # (1)!
+viewer = mv.Molvis()
+viewer.draw_frame(frame)
 ```
 
-1. Opens your default browser and renders the molecule. Blocks until the tab is closed.
+In a plain script the call opens the default browser; in a Jupyter
+cell, ending the cell with `viewer` (or `scene`) mounts the same
+viewer inline in the cell output (Shadow DOM keeps the page's CSS
+isolated — no iframe).
 
-## Two modes at a glance
+## Two hosts at a glance
 
-=== "Standalone (script / CLI)"
+=== "Script / CLI"
 
     ``` python
-    import molvis as mv
-
-    mv.show(frame)                    # canvas only
-    mv.show(frame, mode="page")       # full UI
+    viewer = mv.Molvis()
+    viewer.draw_frame(frame)
+    viewer.snapshot()                     # PNG bytes
     ```
 
 === "Jupyter notebook"
 
     ``` python
-    import molvis as mv
-
     scene = mv.Molvis(name="demo")
     scene.draw_frame(frame)
-    scene  # renders inline
+    scene                                  # renders inline
     ```
+
+## Bidirectional events
+
+Canvas interactions flow back to Python. Selection is a shared state.
+
+``` python
+viewer.on("selection_changed",
+          lambda ev: print("atoms:", ev["atom_ids"]))
+
+ev = viewer.wait_for("selection_changed", timeout=30)
+
+viewer.selection      # Selection(atom_ids=(...), bond_ids=(...))
+viewer.current_mode   # "view" | "select" | "edit" | ...
+```

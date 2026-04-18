@@ -1,34 +1,45 @@
-# Molvis (Jupyter Widget)
+# Molvis in Jupyter
 
-Interactive 3D molecular visualization inside Jupyter notebooks, powered by [anywidget](https://anywidget.dev/).
+The same `mv.Molvis()` class used in scripts also renders inline in
+Jupyter. Under the hood, a local WebSocket server is started and the
+cell mounts the shared page bundle directly into the cell output (a
+Shadow DOM root keeps the page's CSS from leaking into the notebook —
+no iframe involved).
 
 ## Constructor
 
 ``` python
 scene = mv.Molvis(
-    name: str = "",
-    session: str = "",
-    width: int = 800,
-    height: int = 600,
+    name: str = "default",
+    *,
+    transport: Transport | None = None,
+    width: int = 1200,
+    height: int = 800,
 )
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `name` | `str` | `""` | Scene name for retrieval via `Molvis.get_scene()` |
-| `session` | `str` | `""` | Session key. Multiple handles with the same session share one 3D engine. |
-| `width` | `int` | `800` | Widget width in pixels |
-| `height` | `int` | `600` | Widget height in pixels |
+| `name` | `str` | `"default"` | Scene name; identical names return the cached instance |
+| `transport` | `Transport \| None` | `None` | Override the default `WebSocketTransport` |
+| `width` | `int` | `1200` | Cell-host width in CSS pixels |
+| `height` | `int` | `800` | Cell-host height in CSS pixels |
 
 ## Display
 
-Return the widget object at the end of a cell to render it:
+Return the scene object at the end of a cell to render it:
 
 ``` python
 scene = mv.Molvis(name="demo")
 scene.draw_frame(frame)
-scene  # renders inline
+scene
 ```
+
+The cell loads the page bundle's hashed `<script>` chunks once per
+notebook (subsequent cells reuse the in-flight load promise) and then
+calls `window.MolvisApp.mount(cellDiv, opts)`. The mount creates a
+Shadow DOM root, attaches the page's stylesheet inside it, then
+renders the React app and dials back to the Python-hosted WebSocket.
 
 ## Scene management
 
@@ -42,32 +53,19 @@ scene = mv.Molvis.get_scene("protein_view")
 
 ### `Molvis.list_scenes()`
 
-List all named scenes.
+List all named scenes in the current Python process.
 
 ``` python
-names = mv.Molvis.list_scenes()  # ["structure1", "structure2"]
+names = mv.Molvis.list_scenes()  # ["default", "protein", "ligand"]
 ```
 
 ### `scene.close()`
 
-Close a scene and release its resources.
-
-## Shared sessions
-
-Multiple widget handles pointing at the same BabylonJS engine:
-
-``` python
-main = mv.Molvis(name="main", session="protein")
-mirror = mv.Molvis(name="mirror", session="protein")
-
-main.draw_frame(frame)   # both widgets update
-```
-
-Only one output cell is active at a time. Clicking "Activate session here" in another cell re-attaches the live canvas.
+Stop the transport and drop the scene from the registry.
 
 ## Drawing commands
 
-`Molvis` shares the same [drawing commands](commands.md) as `StandaloneMolvis`:
+Command mixins are unchanged:
 
 ``` python
 scene.draw_frame(frame, style="ball_and_stick")
@@ -81,6 +79,22 @@ scene.get_selected()
 scene.select_atom_by_id([0, 2])
 ```
 
+## Event channel
+
+``` python
+scene.on("selection_changed",
+         lambda ev: print(ev["atom_ids"]))
+scene.wait_for("frame_changed", timeout=10.0)
+
+scene.selection       # Selection(atom_ids=..., bond_ids=...)
+scene.current_mode    # cached string
+scene.current_frame   # cached int
+```
+
+Callbacks fire on the transport's asyncio thread — not the main
+kernel thread. For synchronous flows, prefer `wait_for`.
+
 ## Binary transport
 
-Numeric numpy arrays are automatically sent as binary buffer attachments via anywidget's comm channel, avoiding JSON expansion of large coordinate arrays.
+Numeric numpy arrays are lifted out of JSON into binary buffers on the
+WebSocket frame, avoiding JSON expansion of large coordinate arrays.

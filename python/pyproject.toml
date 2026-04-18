@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "molvis"
 version = "0.0.1"
-description = "Jupyter widget for molecular visualization"
+description = "Molecular visualization driven by a local WebSocket-hosted page"
 readme = "README.md"
 license = "BSD-3-Clause"
 requires-python = ">=3.10"
 authors = [
     { name = "MolCrafts Team" }
 ]
-keywords = ["molecular", "visualization", "jupyter", "widget", "chemistry"]
+keywords = ["molecular", "visualization", "jupyter", "chemistry"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -23,10 +23,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Visualization",
-    "Framework :: Jupyter",
 ]
 dependencies = [
-    "anywidget>=0.9.0",
     "molcrafts-molpy",
     "numpy",
     "websockets>=13.0",
@@ -45,10 +43,10 @@ Homepage = "https://github.com/molcrafts/molvis"
 Repository = "https://github.com/molcrafts/molvis"
 
 [tool.hatch.build]
-# Include the bundled JS frontend in the wheel (hatch honors .gitignore by
-# default, which excludes dist/).
+# Ship the built page bundle inside the wheel — it's hosted by
+# WebSocketTransport when no external `page_url` is given.
 artifacts = [
-    "src/molvis/dist/**",
+    "src/molvis/page_dist/**",
 ]
 
 [tool.hatch.build.targets.wheel]

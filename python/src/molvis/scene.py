@@ -1,109 +1,60 @@
-#!/usr/bin/env python3
 """
-Core Molvis scene class for Jupyter widget integration.
+:class:`Molvis` is the one user-facing viewer class.
+
+A :class:`Molvis` instance owns a :class:`~molvis.transport.Transport`
+and drives the shared frontend (page bundle) over JSON-RPC 2.0 + binary
+buffers. The same class works from three host contexts:
+
+* **Plain Python script** — ``mv.Molvis()`` starts a local WebSocket
+  server, opens the page in the default browser, and returns. Commands
+  block on the handshake the first time they fire.
+* **Jupyter cell** — ``scene = mv.Molvis(); scene`` displays the page
+  inline in the cell output by loading the page bundle's hashed
+  ``<script>`` tags into ``document.head``, then calling
+  ``window.MolvisApp.mount(cell_div, opts)`` against a fresh Shadow DOM
+  root so the page's Tailwind preflight does not leak into the
+  notebook. The script then dials back to the same Python-hosted
+  WebSocket. No iframe, no anywidget, no traitlets.
+* **Explicit CDN** — pass
+  ``transport=mv.WebSocketTransport(page_base_url="…")`` to point the
+  page at an externally-hosted bundle.
+
+All host logic lives in the transport; ``Molvis`` is transport-agnostic.
 """
 
 from __future__ import annotations
 
+import html
 import json
 import logging
-import os
-import pathlib
+import secrets
 import weakref
-from importlib.resources import files
-from typing import Any
-
-import anywidget
-import traitlets
+from typing import TYPE_CHECKING, Any, Iterable
 
 from .commands import (
     DrawingCommandsMixin,
     FrameCommandsMixin,
-    FrontendCommands,
     OverlayCommandsMixin,
     PaletteCommandsMixin,
     SelectionCommandsMixin,
     SnapshotCommandsMixin,
 )
 from .errors import MolvisRpcError
-from .transport import RpcTransport
+from .events import EventBus, EventHandle, Selection, ViewerState
+from .transport import Transport, WebSocketTransport
+from .transport._jupyter_env import in_jupyter_kernel as _in_jupyter_kernel
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from .transport import PageEndpoints
 
 logger = logging.getLogger("molvis")
 
 __all__ = ["Molvis"]
 
-NATO_ALPHABET = (
-    "Alpha",
-    "Bravo",
-    "Charlie",
-    "Delta",
-    "Echo",
-    "Foxtrot",
-    "Golf",
-    "Hotel",
-    "India",
-    "Juliet",
-    "Kilo",
-    "Lima",
-    "Mike",
-    "November",
-    "Oscar",
-    "Papa",
-    "Quebec",
-    "Romeo",
-    "Sierra",
-    "Tango",
-    "Uniform",
-    "Victor",
-    "Whiskey",
-    "X-ray",
-    "Yankee",
-    "Zulu",
-)
-
-_nato_counter = 0
-
-
-def _next_nato_name(registry: dict[str, object]) -> str:
-    """Return the next unused NATO phonetic name."""
-    global _nato_counter
-    suffix = ""
-    while True:
-        for name in NATO_ALPHABET:
-            candidate = f"{name}{suffix}"
-            if candidate not in registry:
-                _nato_counter += 1
-                return candidate
-        suffix = f"-{_nato_counter // len(NATO_ALPHABET) + 1}"
-
-
-def resolve_esm_path() -> pathlib.Path:
-    """
-    Resolve the bundled frontend module for the widget.
-
-    `MOLVIS_ESM_PATH` can be used to override the location for local development
-    or packaging diagnostics. Otherwise the path is resolved from the installed
-    `molvis` package resources.
-    """
-    override = os.environ.get("MOLVIS_ESM_PATH")
-    if override:
-        esm_path = pathlib.Path(override).expanduser().resolve()
-    else:
-        esm_resource = files("molvis").joinpath("dist").joinpath("index.js")
-        esm_path = pathlib.Path(str(esm_resource))
-
-    if not esm_path.exists():
-        logger.warning(
-            "Molvis frontend bundle not found at %s. "
-            "Build it with `npm run build -w python` before using the widget.",
-            esm_path,
-        )
-
-    return esm_path
-
 
 class Molvis(
-    anywidget.AnyWidget,
     DrawingCommandsMixin,
     SelectionCommandsMixin,
     FrameCommandsMixin,
@@ -111,67 +62,48 @@ class Molvis(
     OverlayCommandsMixin,
     PaletteCommandsMixin,
 ):
-    """
-    A widget for molecular visualization using molpy and anywidget.
+    """A MolVis viewer driven by JSON-RPC over WebSocket.
 
-    This widget provides an interactive 3D molecular visualization interface
-    that can display molecular structures, atoms, bonds, and frames.
+    Parameters
+    ----------
+    name
+        Human-readable session name. Instantiating twice with the same
+        name returns the cached instance.
+    transport
+        A :class:`~molvis.transport.Transport` implementation. When
+        ``None``, a :class:`~molvis.transport.WebSocketTransport` is
+        created with ``open_browser`` set to ``True`` outside Jupyter
+        and ``False`` inside a notebook kernel.
+    width, height
+        Cell-host viewport size in CSS pixels (notebook) and a default
+        sizing hint for the standalone host.
+    gui
+        When ``True`` (default), render the full page shell
+        (TopBar / LeftSidebar / RightSidebar / TimelineControl) on top
+        of the 3D canvas. Set to ``False`` to hide every overlay and
+        render only the canvas — useful for embedding the viewer as a
+        pure display surface driven entirely from Python.
 
-    The Python handle is decoupled from the frontend runtime:
-
-    - Dense numeric arrays are serialized through anywidget binary buffers.
-    - Multiple widget handles can share a frontend ``session`` across notebook cells.
-    - A shared session owns a single Babylon.js engine and live scene state.
-    - Frontend JSON-RPC errors are raised in Python as ``MolvisRpcError``.
-
-    Examples:
+    Example
+    -------
         >>> import molvis as mv
-        >>> import molpy as mp
-        >>>
-        >>> # Create a named scene
-        >>> scene = mv.Molvis(
-        ...     name="protein_view",
-        ...     session="protein_session",
-        ...     width=800,
-        ...     height=600,
-        ... )
-        >>>
-        >>> # Draw a frame
-        >>> frame = mp.Frame(...)
-        >>> scene.draw_frame(frame)
-        >>>
-        >>> # Retrieve scene by name
-        >>> scene = mv.Molvis.get_scene("protein_view")
-        >>>
-        >>> # Display the widget
-        >>> scene
+        >>> viewer = mv.Molvis()                  # full UI
+        >>> canvas = mv.Molvis(name="bare", gui=False)  # canvas only
+        >>> viewer.draw_frame(frame)
+        >>> viewer.on("selection_changed",
+        ...           lambda ev: print(ev["atom_ids"]))
+        >>> viewer.selection
+        Selection(atom_ids=(), bond_ids=())
     """
 
-    # Traitlets for anywidget sync
-    name: str = traitlets.Unicode("").tag(sync=True)
-    width: int = traitlets.Int(800).tag(sync=True)
-    height: int = traitlets.Int(600).tag(sync=True)
-    background: str = traitlets.Unicode("").tag(sync=True)
-    ready: bool = traitlets.Bool(False).tag(sync=True)
-    _last_error: str = traitlets.Unicode("").tag(sync=True)
-
-    # Class-level scene registry (by name)
     _scene_registry: dict[str, "Molvis"] = {}
-
-    # Class variable to track all widget instances
     _instances: weakref.WeakSet["Molvis"] = weakref.WeakSet()
-
-    _esm = resolve_esm_path()
-
     _DEFAULT_NAME = "default"
 
     def __new__(
         cls,
         name: str | None = None,
-        width: int = 800,
-        height: int = 600,
-        background: str = "",
-        **kwargs: Any,
+        **_kwargs: Any,
     ) -> "Molvis":
         scene_name = name or cls._DEFAULT_NAME
         existing = cls._scene_registry.get(scene_name)
@@ -182,96 +114,94 @@ class Molvis(
     def __init__(
         self,
         name: str | None = None,
-        width: int = 800,
-        height: int = 600,
-        background: str = "",
-        **kwargs: Any,
+        *,
+        transport: Transport | None = None,
+        width: int = 1200,
+        height: int = 800,
+        gui: bool = True,
     ) -> None:
-        # Already initialised (returned from __new__ via registry hit).
         if getattr(self, "_initialised", False):
             return
         self._initialised = True
 
-        scene_name = name or self._DEFAULT_NAME
+        self.name: str = name or self._DEFAULT_NAME
+        self.width: int = width
+        self.height: int = height
+        self.gui: bool = gui
 
-        super().__init__(
-            name=scene_name, width=width, height=height, background=background, **kwargs
-        )
+        self._state = ViewerState()
+        self._events = EventBus(self._state)
 
-        Molvis._scene_registry[scene_name] = self
+        if transport is None:
+            transport = WebSocketTransport(
+                open_browser=not _in_jupyter_kernel(),
+                event_bus=self._events,
+                minimal=not gui,
+            )
+        else:
+            attach = getattr(transport, "attach_event_bus", None)
+            if callable(attach):
+                attach(self._events)
+
+        self._transport: Transport = transport
+
+        Molvis._scene_registry[self.name] = self
         Molvis._instances.add(self)
-        self._transport = RpcTransport(self)
-
-        self.observe(self._on_ready_changed, names=["ready"])
-        self.observe(self._on_error_changed, names=["_last_error"])
-
-        logger.debug("Molvis scene '%s' created", scene_name)
+        logger.debug("Molvis '%s' created", self.name)
 
     def __repr__(self) -> str:
         return f"Molvis(name={self.name!r}, {self.width}x{self.height})"
 
-    # -------------------------------------------------------------------------
-    # Scene Registry Methods
-    # -------------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Registry
+    # ------------------------------------------------------------------
 
     @classmethod
     def get_scene(cls, name: str) -> "Molvis":
-        """
-        Retrieve a scene by name.
-
-        Args:
-            name: The name of the scene to retrieve
-
-        Returns:
-            The Molvis instance with the given name
-
-        Raises:
-            KeyError: If no scene with the given name exists
-        """
-        if name not in cls._scene_registry:
+        try:
+            return cls._scene_registry[name]
+        except KeyError as exc:
             available = list(cls._scene_registry.keys())
-            raise KeyError(f"Scene '{name}' not found. Available scenes: {available}")
-        return cls._scene_registry[name]
+            raise KeyError(
+                f"Scene '{name}' not found. Available scenes: {available}"
+            ) from exc
 
     @classmethod
     def list_scenes(cls) -> list[str]:
-        """
-        List all registered scene names.
-
-        Returns:
-            A list of scene names
-        """
         return list(cls._scene_registry.keys())
 
     @classmethod
     def get_instance_count(cls) -> int:
-        """Get the current number of Python widget instances."""
         return len(cls._instances)
 
     @classmethod
     def list_instances(cls) -> list["Molvis"]:
-        """Get a list of all current Python widget instances."""
         return list(cls._instances)
 
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
     def close(self) -> None:
-        """
-        Close this widget handle and remove it from the Python registry.
+        """Stop the transport and drop this instance from the registry."""
+        stop = getattr(self._transport, "stop", None)
+        if callable(stop):
+            try:
+                stop()
+            except Exception:
+                logger.exception("Transport.stop raised for '%s'", self.name)
+        Molvis._scene_registry.pop(self.name, None)
+        self._initialised = False
+        logger.debug("Molvis '%s' closed", self.name)
 
-        Closing a widget does not clear the shared frontend session because
-        other cells or widget handles may still be attached to it.
-        """
-        if self.name in Molvis._scene_registry:
-            del Molvis._scene_registry[self.name]
+    def _ensure_started(self) -> None:
+        start = getattr(self._transport, "start", None)
+        if callable(start):
+            start()
 
-        close_super = getattr(super(), "close", None)
-        if callable(close_super):
-            close_super()
-
-        logger.debug(f"Molvis scene '{self.name}' closed")
-
-    # -------------------------------------------------------------------------
-    # Communication Methods
-    # -------------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Command channel (used by every command mixin)
+    # ------------------------------------------------------------------
 
     def send_cmd(
         self,
@@ -281,28 +211,16 @@ class Molvis(
         wait_for_response: bool = False,
         timeout: float = 10.0,
     ) -> Any:
+        """Send a JSON-RPC request to the frontend.
+
+        Raises
+        ------
+        TimeoutError
+            The transport never received a response.
+        MolvisRpcError
+            The frontend returned an error envelope.
         """
-        Send a command to the frontend.
-
-        Args:
-            method: RPC method name
-            params: Method parameters
-            buffers: Optional binary buffers appended after automatically
-                encoded numeric ndarray payloads.
-            wait_for_response: If True, block until the response arrives and
-                raise on error.  Use True for queries that return data.
-                Fire-and-forget commands should leave this False -- errors
-                are logged asynchronously via :meth:`_handle_custom_msg`.
-            timeout: Maximum time to wait for response (seconds).
-
-        Returns:
-            ``self`` when *wait_for_response* is False (for chaining).
-            The ``result`` field of the JSON-RPC response otherwise.
-
-        Raises:
-            TimeoutError: If no response arrives within *timeout* seconds.
-            MolvisRpcError: If the frontend returns a JSON-RPC error response.
-        """
+        self._ensure_started()
         response = self._transport.send_request(
             method,
             params,
@@ -331,75 +249,228 @@ class Molvis(
             return response["result"]
         return response
 
-    def _handle_custom_msg(
-        self, content: bytes | dict[str, Any], buffers: list[Any]
-    ) -> None:
-        """Handle custom messages from frontend."""
-        delivered = self._transport.handle_response(content, buffers)
-        if delivered:
-            return
-        # Fire-and-forget response with no waiter.
-        # Decode bytes if needed to inspect for errors.
-        decoded: Any = content
-        if isinstance(content, (bytes, bytearray)):
-            try:
-                decoded = json.loads(content)
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                pass
-        if isinstance(decoded, dict) and "error" in decoded:
-            err = decoded.get("error") or {}
-            logger.error("Frontend error: %s", err.get("message", "Unknown error"))
+    # ------------------------------------------------------------------
+    # Events + cached state (see molvis.events)
+    # ------------------------------------------------------------------
 
-    def _on_ready_changed(self, change: dict[str, Any]) -> None:
-        """Handle ready state changes."""
-        if change.get("new"):
-            logger.debug(f"Scene '{self.name}' is ready")
+    def on(
+        self,
+        event: str,
+        callback: "Callable[[dict[str, Any]], None]",
+    ) -> EventHandle:
+        """Subscribe to a frontend event. See :class:`~molvis.events.EventBus`."""
+        return self._events.on(event, callback)
 
-    def _on_error_changed(self, change: dict[str, Any]) -> None:
-        """Surface frontend errors via logger."""
-        msg = change.get("new", "")
-        if msg:
-            logger.error("Frontend error: %s", msg)
-            self._last_error = ""
+    def wait_for(
+        self,
+        event: str,
+        *,
+        timeout: float = 30.0,
+        predicate: "Callable[[dict[str, Any]], bool] | None" = None,
+    ) -> dict[str, Any]:
+        """Block until an event matching *event* (and *predicate*) fires."""
+        return self._events.wait_for(
+            event, timeout=timeout, predicate=predicate
+        )
 
-    # -------------------------------------------------------------------------
-    # Frontend Scene Management
-    # -------------------------------------------------------------------------
+    def refresh_state(self, *, timeout: float = 10.0) -> ViewerState:
+        """Force a roundtrip to rebuild the local cache from the canvas."""
+        snapshot = self.send_cmd(
+            "state.get", {}, wait_for_response=True, timeout=timeout
+        )
+        if isinstance(snapshot, dict):
+            self._events.prime_state(snapshot)
+        return self._events.snapshot()
 
-    @classmethod
-    def scene_count(cls) -> int:
-        """Number of live scenes on the frontend."""
-        try:
-            instances = list(cls._instances)
-            if not instances:
-                return 0
-            result = instances[0].send_cmd(
-                FrontendCommands.SESSION_COUNT.method,
-                {},
-                wait_for_response=True,
-            )
-            return result if isinstance(result, int) else 0
-        except Exception:
-            return 0
+    @property
+    def selection(self) -> Selection:
+        return self._state.selection
 
-    @classmethod
-    def clear_all(cls) -> None:
-        """Dispose every live frontend scene."""
-        try:
-            instances = list(cls._instances)
-            if not instances:
-                return
-            instances[0].send_cmd(FrontendCommands.CLEAR_ALL_SESSIONS.method, {})
-        except Exception:
-            pass
+    @property
+    def current_mode(self) -> str:
+        return self._state.mode
 
-    @classmethod
-    def clear_all_content(cls) -> None:
-        """Clear 3D content from every live scene but keep the canvases."""
-        try:
-            instances = list(cls._instances)
-            if not instances:
-                return
-            instances[0].send_cmd(FrontendCommands.CLEAR_ALL_CONTENT.method, {})
-        except Exception:
-            pass
+    @property
+    def current_frame(self) -> int:
+        return self._state.frame_index
+
+    @property
+    def n_frames(self) -> int:
+        return self._state.total_frames
+
+    @property
+    def events(self) -> EventBus:
+        return self._events
+
+    # ------------------------------------------------------------------
+    # Jupyter rich display — inline mount via the page bundle's ESM
+    # ------------------------------------------------------------------
+
+    def _repr_mimebundle_(
+        self,
+        include: Iterable[str] | None = None,
+        exclude: Iterable[str] | None = None,
+        **_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Return a Jupyter mimebundle that mounts the viewer in-cell.
+
+        Returns a multi-MIME bundle that lets the notebook frontend pick
+        the richest representation it understands, mirroring Plotly's
+        approach:
+
+        - ``text/html`` — a ``<div>`` plus a ``<script>`` that loads the
+          page bundle and calls ``window.MolvisApp.mount(el, opts)``
+          against a Shadow DOM root for style isolation.
+        - ``text/plain`` — a short text fallback for nbviewer / GitHub.
+
+        Use ``include`` / ``exclude`` (matching ``IPython.display``
+        conventions) to filter which MIME types are returned.
+        """
+        bundle: dict[str, Any] = {"text/plain": repr(self)}
+
+        endpoints_fn = getattr(self._transport, "page_endpoints", None)
+        if callable(endpoints_fn):
+            self._ensure_started()
+            endpoints = endpoints_fn(session=self.name)
+            bundle["text/html"] = self._render_inline_mount(endpoints)
+
+        if include is not None:
+            keep = set(include)
+            bundle = {k: v for k, v in bundle.items() if k in keep}
+        if exclude is not None:
+            drop = set(exclude)
+            bundle = {k: v for k, v in bundle.items() if k not in drop}
+        return bundle
+
+    def _render_inline_mount(self, endpoints: "PageEndpoints") -> str:
+        """Build the cell HTML — a div + a loader script."""
+        nonce = secrets.token_hex(4)
+        cell_id = f"molvis-cell-{nonce}"
+        opts = {
+            "wsUrl": endpoints.ws_url,
+            "token": endpoints.token,
+            "session": endpoints.session,
+            "useShadowDOM": True,
+            "cssUrls": list(endpoints.css),
+            "theme": "dark",
+            "minimal": not self.gui,
+        }
+        loader = _BOOTSTRAP_LOADER.format(
+            cell_id=json.dumps(cell_id),
+            asset_base=json.dumps(endpoints.base_url),
+            scripts=json.dumps(list(endpoints.scripts)),
+            opts=json.dumps(opts),
+        )
+        cell_id_attr = html.escape(cell_id, quote=True)
+        return (
+            f'<div id="{cell_id_attr}" class="molvis-cell" '
+            f'style="width:{int(self.width)}px;height:{int(self.height)}px;'
+            f'display:block"></div>'
+            f"<script>{loader}</script>"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Inline embedding bootstrap (executes inside the notebook page)
+# ---------------------------------------------------------------------------
+
+# A self-contained IIFE that loads the page bundle's chunked scripts in
+# order, then calls ``window.MolvisApp.mount(el, opts)``. Multiple cells
+# share a global load promise so each chunk is fetched once per page.
+#
+# The entry chunk uses top-level await (the @molcrafts/molrs WASM module
+# is an async ESM), so ``<script>.onload`` fires before
+# ``window.MolvisApp`` is actually assigned. We therefore poll briefly
+# after the network load completes.
+_BOOTSTRAP_LOADER = """\
+(function() {{
+  var cellId = {cell_id};
+  var assetBase = {asset_base};
+  var scripts = {scripts};
+  var opts = {opts};
+  var APP_READY_TIMEOUT_MS = 15000;
+  // Tell the bundle's webpack runtime where to fetch async chunks + WASM.
+  // Without this, document-relative URLs resolve against the webview origin
+  // (e.g. vscode-webview://…) and the kernel's static routes return 401.
+  if (assetBase) {{ window.__MOLVIS_ASSET_BASE__ = assetBase; }}
+  function loadScript(src) {{
+    return new Promise(function(resolve, reject) {{
+      var existing = document.querySelector('script[data-molvis="' + src + '"]');
+      if (existing) {{
+        if (existing.dataset.molvisLoaded === "true") {{ resolve(); return; }}
+        existing.addEventListener("load", function() {{ resolve(); }});
+        existing.addEventListener("error", function() {{
+          reject(new Error("Failed to load " + src));
+        }});
+        return;
+      }}
+      var s = document.createElement("script");
+      s.src = src;
+      s.async = false;
+      s.dataset.molvis = src;
+      s.addEventListener("load", function() {{
+        s.dataset.molvisLoaded = "true";
+        resolve();
+      }});
+      s.addEventListener("error", function() {{
+        reject(new Error("Failed to load " + src));
+      }});
+      document.head.appendChild(s);
+    }});
+  }}
+  function ensureLoaded() {{
+    // Already mounted in this page (another cell got there first).
+    if (window.MolvisApp && typeof window.MolvisApp.mount === "function") {{
+      return Promise.resolve();
+    }}
+    // Cache per-script-set so a fresh build / fresh port does not reuse
+    // a stale (often failed) promise from a previous kernel.
+    var key = scripts.join("|");
+    var cache = window.__molvisLoadPromises || (window.__molvisLoadPromises = {{}});
+    if (cache[key]) return cache[key];
+    var p = Promise.resolve();
+    scripts.forEach(function(src) {{
+      p = p.then(function() {{ return loadScript(src); }});
+    }});
+    // Drop the entry on failure so the next mount attempt can retry.
+    cache[key] = p.catch(function(err) {{
+      delete cache[key];
+      throw err;
+    }});
+    return cache[key];
+  }}
+  function waitForApp(timeoutMs) {{
+    return new Promise(function(resolve, reject) {{
+      var deadline = Date.now() + timeoutMs;
+      (function check() {{
+        if (window.MolvisApp && typeof window.MolvisApp.mount === "function") {{
+          resolve();
+          return;
+        }}
+        if (Date.now() >= deadline) {{
+          reject(new Error(
+            "window.MolvisApp.mount not available within " + timeoutMs + "ms"
+          ));
+          return;
+        }}
+        setTimeout(check, 30);
+      }})();
+    }});
+  }}
+  function mount() {{
+    var el = document.getElementById(cellId);
+    if (!el) return;
+    try {{ window.MolvisApp.mount(el, opts); }}
+    catch (err) {{
+      el.textContent = "Failed to mount MolVis: " + (err && err.message ? err.message : err);
+    }}
+  }}
+  ensureLoaded()
+    .then(function() {{ return waitForApp(APP_READY_TIMEOUT_MS); }})
+    .then(mount)
+    .catch(function(err) {{
+      var el = document.getElementById(cellId);
+      if (el) el.textContent = "Failed to bootstrap MolVis: " + (err && err.message ? err.message : err);
+    }});
+}})();
+"""

@@ -1,120 +1,136 @@
+"""Smoke tests for the Molvis scene handle: registry, send_cmd routing,
+display bundle."""
+
 from __future__ import annotations
 
-import importlib
-import sys
-import types
-from pathlib import Path
+import pytest
+
+from molvis import Molvis
+from molvis.events import EventBus
+from molvis.transport import PageEndpoints
 
 
-def install_widget_stubs() -> None:
-    if "anywidget" not in sys.modules:
-        anywidget = types.ModuleType("anywidget")
+class FakeTransport:
+    def __init__(self) -> None:
+        self.event_bus: EventBus | None = None
+        self.started = False
+        self.stopped = False
+        self.sent: list[tuple[str, dict, dict]] = []
 
-        class AnyWidget:
-            def __init__(self, **kwargs):
-                for key, value in kwargs.items():
-                    setattr(self, key, value)
+    def attach_event_bus(self, bus: EventBus) -> None:
+        self.event_bus = bus
 
-            def observe(self, *_args, **_kwargs) -> None:
-                return None
+    def start(self) -> int:
+        self.started = True
+        return 0
 
-            def send(self, *_args, **_kwargs) -> None:
-                return None
+    def stop(self) -> None:
+        self.stopped = True
 
-        anywidget.AnyWidget = AnyWidget
-        sys.modules["anywidget"] = anywidget
+    def send_request(
+        self,
+        method: str,
+        params: dict,
+        *,
+        buffers=None,
+        wait_for_response: bool = False,
+        timeout: float = 10.0,
+    ):
+        self.sent.append(
+            (method, params, {"wait": wait_for_response, "timeout": timeout})
+        )
+        return {"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}
 
-    if "traitlets" not in sys.modules:
-        traitlets = types.ModuleType("traitlets")
-
-        class Trait:
-            def __init__(self, default=None):
-                self.default = default
-
-            def tag(self, **_kwargs):
-                return self
-
-        traitlets.Unicode = Trait
-        traitlets.Int = Trait
-        traitlets.Bool = Trait
-        sys.modules["traitlets"] = traitlets
-
-    if "molpy" not in sys.modules:
-        molpy = types.ModuleType("molpy")
-
-        class Frame:
-            def __init__(self, blocks=None, metadata=None):
-                self.blocks = blocks or {}
-                self.metadata = metadata or {}
-
-            def to_dict(self):
-                return {"blocks": self.blocks, "metadata": self.metadata}
-
-        class Box:
-            def __init__(self, matrix=None, pbc=None, origin=None):
-                self.matrix = matrix or []
-                self.pbc = pbc or []
-                self.origin = origin or []
-
-            def to_dict(self):
-                return {
-                    "matrix": self.matrix,
-                    "pbc": self.pbc,
-                    "origin": self.origin,
-                }
-
-        molpy.Frame = Frame
-        molpy.Box = Box
-        sys.modules["molpy"] = molpy
+    def page_endpoints(self, *, session: str) -> PageEndpoints:
+        base = "http://localhost:1234/"
+        return PageEndpoints(
+            base_url=base,
+            ws_url="ws://localhost:1234/ws",
+            session=session,
+            token="t0k",
+            scripts=(f"{base}static/js/lib.abc.js", f"{base}static/js/index.abc.js"),
+            css=(f"{base}static/css/index.abc.css",),
+            standalone_url=f"{base}?ws_url=ws&token=t0k&session={session}",
+        )
 
 
-def import_molvis_module():
-    install_widget_stubs()
-    src_root = Path(__file__).resolve().parents[1] / "src"
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
-    sys.modules.pop("molvis", None)
-    sys.modules.pop("molvis.scene", None)
-    return importlib.import_module("molvis")
+@pytest.fixture(autouse=True)
+def _reset_registry() -> None:
+    Molvis._scene_registry.clear()
+    yield
+    Molvis._scene_registry.clear()
 
 
-def test_named_scene_registry_round_trip():
-    molvis = import_molvis_module()
-
-    scene = molvis.Molvis(name="registry-test")
-
-    assert molvis.Molvis.get_scene("registry-test") is scene
-    assert "registry-test" in molvis.Molvis.list_scenes()
-
+def test_named_scene_registry_round_trip() -> None:
+    scene = Molvis(name="registry-test", transport=FakeTransport())
+    assert Molvis.get_scene("registry-test") is scene
+    assert "registry-test" in Molvis.list_scenes()
     scene.close()
-
-    assert "registry-test" not in molvis.Molvis.list_scenes()
-
-
-def test_scene_count_waits_for_rpc_response():
-    molvis = import_molvis_module()
-    scene = molvis.Molvis(name="rpc-test")
-    captured: dict[str, object] = {}
-
-    def fake_send_cmd(method, params, buffers=None, wait_for_response=False, timeout=10.0):
-        captured["method"] = method
-        captured["params"] = params
-        captured["buffers"] = buffers
-        captured["wait_for_response"] = wait_for_response
-        captured["timeout"] = timeout
-        return 7
-
-    scene.send_cmd = fake_send_cmd
-
-    assert molvis.Molvis.scene_count() == 7
-    assert captured["method"] == "session.get_session_count"
-    assert captured["wait_for_response"] is True
+    assert "registry-test" not in Molvis.list_scenes()
 
 
-def test_scene_uses_explicit_session_key():
-    molvis = import_molvis_module()
+def test_duplicate_name_returns_same_instance() -> None:
+    first = Molvis(name="dup", transport=FakeTransport())
+    second = Molvis(name="dup", transport=FakeTransport())
+    assert first is second
 
-    scene = molvis.Molvis(name="shared-view", session="shared-session")
 
-    assert scene.name == "shared-view"
-    assert scene.session == "shared-session"
+def test_send_cmd_routes_through_transport() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="route-test", transport=fake)
+
+    result = scene.send_cmd(
+        "scene.clear", {}, wait_for_response=True, timeout=3.5
+    )
+
+    assert fake.started is True
+    assert result == {"ok": True}
+    method, params, meta = fake.sent[0]
+    assert method == "scene.clear"
+    assert params == {}
+    assert meta["wait"] is True
+    assert meta["timeout"] == 3.5
+
+
+def test_fire_and_forget_returns_self_for_chaining() -> None:
+    scene = Molvis(name="fnf", transport=FakeTransport())
+    returned = scene.send_cmd("view.set_mode", {"mode": "view"})
+    assert returned is scene
+
+
+def test_repr_mimebundle_emits_inline_mount() -> None:
+    scene = Molvis(name="cell", transport=FakeTransport())
+    bundle = scene._repr_mimebundle_()
+
+    assert bundle["text/plain"].startswith("Molvis(name='cell',")
+
+    html_body = bundle["text/html"]
+    assert "<iframe" not in html_body
+    assert 'class="molvis-cell"' in html_body
+    assert 'width:1200px' in html_body
+    assert 'height:800px' in html_body
+    # Loader script ships the assets and the mount opts inline:
+    assert "MolvisApp.mount" in html_body
+    assert "useShadowDOM" in html_body
+    assert "lib.abc.js" in html_body
+    assert "index.abc.css" in html_body
+    assert '"session": "cell"' in html_body
+    assert '"wsUrl": "ws://localhost:1234/ws"' in html_body
+
+
+def test_repr_mimebundle_respects_include_exclude() -> None:
+    scene = Molvis(name="filtered", transport=FakeTransport())
+    only_text = scene._repr_mimebundle_(include={"text/plain"})
+    assert set(only_text.keys()) == {"text/plain"}
+
+    drop_html = scene._repr_mimebundle_(exclude={"text/html"})
+    assert "text/html" not in drop_html
+    assert "text/plain" in drop_html
+
+
+def test_close_stops_transport_and_drops_registry() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="close-test", transport=fake)
+    scene.close()
+    assert fake.stopped is True
+    assert "close-test" not in Molvis.list_scenes()

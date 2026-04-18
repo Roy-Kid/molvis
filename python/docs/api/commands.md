@@ -1,6 +1,7 @@
 # Drawing Commands
 
-These methods are available on both [`StandaloneMolvis`](standalone.md) and [`Molvis`](jupyter.md).
+These methods are available on every [`Molvis`](jupyter.md) instance,
+regardless of host (script, notebook, or CDN-hosted page).
 
 ## Scene
 

@@ -10,8 +10,9 @@ class Transport(Protocol):
     """
     Protocol for sending JSON-RPC commands to the MolVis frontend.
 
-    Implementations handle the actual wire format (anywidget comms,
-    WebSocket, etc.) while command mixins depend only on this interface.
+    The sole concrete implementation today is
+    :class:`~molvis.transport.WebSocketTransport`; command mixins depend
+    only on this Protocol so test fakes can be swapped in freely.
     """
 
     def send_request(

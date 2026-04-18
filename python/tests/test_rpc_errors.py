@@ -1,30 +1,58 @@
+"""Frontend-reported errors are translated into MolvisRpcError."""
+
 from __future__ import annotations
 
-from test_scene_smoke import import_molvis_module
+import pytest
+
+from molvis import Molvis, MolvisRpcError
+from molvis.events import EventBus
 
 
-def test_send_cmd_raises_python_exception_for_frontend_rpc_error():
-    molvis = import_molvis_module()
-    scene = molvis.Molvis(name="error-test")
+class _ErrorTransport:
+    def __init__(self, error: dict) -> None:
+        self.event_bus: EventBus | None = None
+        self._error = error
 
-    def fake_send_request(*_args, **_kwargs):
+    def attach_event_bus(self, bus: EventBus) -> None:
+        self.event_bus = bus
+
+    def start(self) -> int:
+        return 0
+
+    def stop(self) -> None:
+        return None
+
+    def send_request(self, method, params, **kwargs):
         return {
             "jsonrpc": "2.0",
             "id": 3,
-            "error": {
+            "error": self._error,
+        }
+
+
+@pytest.fixture(autouse=True)
+def _reset_registry() -> None:
+    Molvis._scene_registry.clear()
+    yield
+    Molvis._scene_registry.clear()
+
+
+def test_send_cmd_raises_on_frontend_error() -> None:
+    scene = Molvis(
+        name="error-test",
+        transport=_ErrorTransport(
+            {
                 "code": -32603,
                 "message": "frontend exploded",
                 "data": {"detail": "bad state"},
-            },
-        }
+            }
+        ),
+    )
 
-    scene._transport.send_request = fake_send_request
-
-    try:
+    with pytest.raises(MolvisRpcError) as excinfo:
         scene.send_cmd("scene.draw_frame", {}, wait_for_response=True)
-    except molvis.MolvisRpcError as exc:
-        assert exc.method == "scene.draw_frame"
-        assert exc.code == -32603
-        assert exc.data == {"detail": "bad state"}
-    else:  # pragma: no cover - explicit failure branch
-        raise AssertionError("MolvisRpcError was not raised")
+
+    err = excinfo.value
+    assert err.method == "scene.draw_frame"
+    assert err.code == -32603
+    assert err.data == {"detail": "bad state"}

@@ -1,9 +1,9 @@
 /**
- * RPC type definitions for the standalone WebSocket bridge.
+ * RPC type definitions for the WebSocket bridge.
  *
- * These are the same types used by the anywidget transport
- * (`python/src/ts/types.ts`) but without the `@anywidget/types`
- * dependency.
+ * JSON-RPC 2.0 with a binary-buffer extension: dense numeric arrays are
+ * lifted into separate buffers and referenced in JSON via
+ * `BinaryBufferRef`.
  */
 
 export interface JsonRPCRequest {

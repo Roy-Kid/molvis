@@ -31,37 +31,6 @@ function asObject(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
-function hslToRgb01(h: number, s: number, l: number): [number, number, number] {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const hp = (h % 360) / 60;
-  const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (hp < 1) [r, g, b] = [c, x, 0];
-  else if (hp < 2) [r, g, b] = [x, c, 0];
-  else if (hp < 3) [r, g, b] = [0, c, x];
-  else if (hp < 4) [r, g, b] = [0, x, c];
-  else if (hp < 5) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  const m = l - c / 2;
-  return [r + m, g + m, b + m];
-}
-
-function readCanvasColor(): [number, number, number] {
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--canvas")
-    .trim();
-  const match = raw.match(
-    /^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)%\s+(-?\d+(?:\.\d+)?)%$/,
-  );
-  if (!match) return [0, 0, 0];
-  const h = Number.parseFloat(match[1]);
-  const s = Number.parseFloat(match[2]) / 100;
-  const l = Number.parseFloat(match[3]) / 100;
-  return hslToRgb01(h, s, l);
-}
-
 function applyMolvisSettings(
   app: Molvis,
   settings: Partial<MolvisSetting>,
@@ -161,18 +130,6 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
     const app = mountMolvis(containerRef.current, config, settings);
     molvisRef.current = app;
 
-    const syncCanvasToTheme = () => {
-      if (!molvisRef.current) return;
-      const [r, g, b] = readCanvasColor();
-      molvisRef.current.scene.clearColor.set(r, g, b, 1);
-    };
-    syncCanvasToTheme();
-
-    const handleThemeChange = () => {
-      syncCanvasToTheme();
-    };
-    window.addEventListener("molvis:theme-change", handleThemeChange);
-
     app.start().then(() => {
       if (onMount) {
         onMount(app);
@@ -183,6 +140,22 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       molvisRef.current?.resize();
     });
     resizeObserver.observe(containerRef.current);
+
+    // Pause the render loop when the canvas is offscreen — critical for
+    // notebook embeds where multiple cells coexist on the page; each
+    // engine would otherwise render at 60fps even when scrolled away.
+    const visibilityObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const m = molvisRef.current;
+          if (!m) continue;
+          if (entry.isIntersecting) m.start();
+          else m.stop();
+        }
+      },
+      { threshold: 0 },
+    );
+    visibilityObserver.observe(containerRef.current);
 
     const handleHostMessage = (
       event: MessageEvent<{
@@ -243,8 +216,8 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       container.removeEventListener("dragover", handleDragOver);
       container.removeEventListener("drop", handleDrop);
       resizeObserver.disconnect();
+      visibilityObserver.disconnect();
       window.removeEventListener("message", handleHostMessage);
-      window.removeEventListener("molvis:theme-change", handleThemeChange);
       if (molvisRef.current) {
         molvisRef.current.destroy();
         molvisRef.current = null;
@@ -255,18 +228,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
   return (
     <div
       ref={containerRef}
-      className="molvis-container bg-background"
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: "100%",
-        height: "100%",
-        overflow: "hidden",
-        border: "none",
-        zIndex: 0,
-        pointerEvents: "auto",
-      }}
+      style={{ position: "absolute", inset: 0, overflow: "hidden" }}
     />
   );
 };

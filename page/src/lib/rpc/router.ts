@@ -1,8 +1,7 @@
 /**
- * JSON-RPC router for the standalone WebSocket bridge.
- *
- * Adapted from `python/src/ts/jsonrpc.ts` to work with a bare
- * `MolvisApp` instead of `MolvisSessionRuntime`.
+ * JSON-RPC router: dispatches inbound requests from the controller
+ * (Python / other language) into `MolvisApp` commands and property
+ * accessors. The single frontend router — no parallel anywidget copy.
  */
 
 import { type Box, Frame } from "@molcrafts/molrs";
@@ -227,10 +226,16 @@ export class StandaloneRpcRouter {
       ["scene.export_frame", this.handleExportFrame],
       ["selection.get", this.handleSelectionGet],
       ["selection.select_atoms", this.handleSelectionSelectAtoms],
+      ["selection.clear", this.handleSelectionClear],
+      [
+        "selection.select_by_expression",
+        this.handleSelectionSelectByExpression,
+      ],
       ["snapshot.take", this.handleSnapshotTake],
       ["view.set_style", this.handleSetStyle],
       ["view.set_theme", this.handleSetTheme],
       ["view.set_mode", this.handleSetMode],
+      ["state.get", this.handleStateGet],
     ]);
   }
 
@@ -444,6 +449,39 @@ export class StandaloneRpcRouter {
     const ids = toIntegerIdList(params.ids ?? [], "ids");
     this.app.execute("select_atoms", { ids });
     return { success: true };
+  };
+
+  private handleSelectionClear: RpcHandler = () => {
+    this.app.world.selectionManager.clearSelection();
+    return { success: true };
+  };
+
+  private handleSelectionSelectByExpression: RpcHandler = (params) => {
+    const expression =
+      typeof params.expression === "string" ? params.expression : "";
+    if (!expression) {
+      throw invalidParams("expression must be a non-empty string");
+    }
+    const op = params.op;
+    const mode: "replace" | "add" | "remove" | "toggle" =
+      op === "add" || op === "remove" || op === "toggle" || op === "replace"
+        ? op
+        : "replace";
+    this.app.world.selectionManager.selectByExpression(expression, mode);
+    return { success: true };
+  };
+
+  private handleStateGet: RpcHandler = () => {
+    const meta = this.app.world.selectionManager.getSelectedMeta();
+    return {
+      selection: {
+        atom_ids: meta.atoms.atomId,
+        bond_ids: meta.bonds.bondId,
+      },
+      mode: this.app.mode,
+      frame_index: this.app.currentFrame,
+      total_frames: this.app.system.trajectory?.length ?? 0,
+    };
   };
 
   private handleSnapshotTake: RpcHandler = () =>

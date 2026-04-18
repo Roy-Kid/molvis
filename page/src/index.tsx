@@ -1,17 +1,40 @@
-import React from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
+import "./public-path";
+import {
+  type MountHostOpts,
+  type MountedApp,
+  mountMolvisApp,
+} from "@/lib/mount";
+import { readMountOptsFromUrl } from "@/lib/mount-opts";
+import "@/styles/tailwind.css";
 import { bootstrapTheme } from "./hooks/useTheme";
-import "./styles/tailwind.css";
 
-bootstrapTheme();
+declare global {
+  interface Window {
+    /**
+     * Programmatic mount entry exposed for inline-embedded hosts (Jupyter
+     * notebook, marimo, etc.). The Python `_repr_mimebundle_` writes a
+     * `<script>` that calls `window.MolvisApp.mount(el, opts)` after
+     * loading this bundle.
+     */
+    MolvisApp?: {
+      mount(host: HTMLElement, opts?: MountHostOpts): MountedApp;
+    };
+  }
+}
 
-const container = document.getElementById("root");
-if (container) {
-  const root = createRoot(container);
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
+if (typeof window !== "undefined") {
+  window.MolvisApp = { mount: mountMolvisApp };
+}
+
+// Standalone bootstrap: when an HTML host page exposes `<div id="root">`
+// (i.e. our own `index.html`), mount automatically using URL params.
+if (typeof document !== "undefined") {
+  const rootEl = document.getElementById("root");
+  if (rootEl) {
+    bootstrapTheme();
+    mountMolvisApp(rootEl, {
+      ...readMountOptsFromUrl(),
+      useShadowDOM: false,
+    });
+  }
 }

@@ -1,20 +1,25 @@
+import type { MountOpts } from "@/lib/mount-opts";
 import type { Molvis } from "@molvis/core";
 import { useEffect } from "react";
 
 /**
- * Seeds a tiny demo frame when pipeline is empty.
+ * Seeds a tiny demo frame when the pipeline is empty and no controller
+ * is connected.
  */
 export function useBootstrapDemo(
   app: Molvis | null,
   setCurrentMode: (mode: string) => void,
+  opts: MountOpts,
 ): void {
+  const skipDemo = Boolean(opts.wsUrl);
+
   useEffect(() => {
     if (!app) {
       return;
     }
 
-    // Skip demo data when controlled by Python via WebSocket
-    if (new URLSearchParams(window.location.search).has("ws")) {
+    // Skip demo data when a controller will push frames.
+    if (skipDemo) {
       return;
     }
 
@@ -129,5 +134,5 @@ export function useBootstrapDemo(
         window.clearTimeout(cameraResetTimer);
       }
     };
-  }, [app, setCurrentMode]);
+  }, [app, setCurrentMode, skipDemo]);
 }

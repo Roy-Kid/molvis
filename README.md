@@ -107,34 +107,39 @@ A modern React-based interface featuring:
 - Export capabilities
 - Dark/light theme support
 
-### Python Widget (`molvis`)
+### Python package (`molvis`)
 
-Jupyter notebook integration:
+One `mv.Molvis()` class, works in both scripts and Jupyter:
 
 ```python
 import molvis as mv
 import molpy as mp
 
-# Create a widget handle and an explicit shared session
-scene = mv.Molvis(
-    name="protein_view",
-    session="protein_session",
-    width=800,
-    height=600,
-)
+viewer = mv.Molvis()              # script: opens a browser tab
+viewer.draw_frame(frame)
+viewer.snapshot()
 
-# Draw a frame and display the widget
-frame = mp.Frame(...)
+scene = mv.Molvis(name="demo")    # Jupyter: mounts the page bundle in the cell
 scene.draw_frame(frame)
 scene
 ```
 
-Widget-specific behavior:
+Bidirectional events: canvas interactions (selection, mode, frame)
+flow back to Python without polling.
 
-- Numeric NumPy payloads are transferred through anywidget binary buffers instead of JSON lists.
-- Multiple widget handles can share the same frontend `session` across notebook cells.
-- A shared session owns one Babylon.js engine and one live scene state.
-- Frontend JSON-RPC failures are raised back into Python as `molvis.MolvisRpcError`.
+```python
+viewer.on("selection_changed", lambda ev: print(ev["atom_ids"]))
+ev = viewer.wait_for("selection_changed", timeout=30)
+viewer.selection                 # Selection(atom_ids=(...), bond_ids=(...))
+```
+
+Implementation details:
+
+- One frontend app — the `page/` bundle — drives both hosts.
+- JSON-RPC 2.0 over a local WebSocket with a token handshake; numpy
+  arrays ride as binary buffers instead of JSON lists.
+- Frontend JSON-RPC failures are raised into Python as
+  `molvis.MolvisRpcError`.
 
 ### VSCode Extension
 
@@ -165,8 +170,7 @@ npm run build:all
 
 # Development mode for specific packages
 npm run dev:core    # Core library
-npm run dev:page    # Web application
-npm run dev:python  # Python widget
+npm run dev:page    # Web application (also the bundle mounted in Jupyter cells)
 ```
 
 ### Testing
@@ -204,11 +208,8 @@ npx biome check --write
 # Build core library
 npm run build:core
 
-# Build web application
+# Build web application (also copies into python/src/molvis/page_dist/)
 npm run build:page
-
-# Build Python widget
-npm run build:python
 ```
 
 ### Publishing
