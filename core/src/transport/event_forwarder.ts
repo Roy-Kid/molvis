@@ -13,8 +13,8 @@
  * Both calls are idempotent.
  */
 
-import type { Molvis } from "@molvis/core";
-import type { WebSocketBridge } from "./ws-bridge";
+import type { MolvisApp } from "../app";
+import type { WebSocketBridge } from "./ws_bridge";
 
 export class EventForwarder {
   private unsubscribers: Array<() => void> = [];
@@ -22,7 +22,7 @@ export class EventForwarder {
 
   constructor(
     private readonly bridge: WebSocketBridge,
-    private readonly app: Molvis,
+    private readonly app: MolvisApp,
   ) {}
 
   start(): void {
@@ -92,7 +92,7 @@ export class EventForwarder {
           atom_ids: meta.atoms.atomId,
           bond_ids: meta.bonds.bondId,
         },
-        mode: this.app.mode.name,
+        mode: this.app.mode?.name ?? null,
         frame_index: this.app.currentFrame,
         total_frames: this.app.system.trajectory?.length ?? 0,
       });

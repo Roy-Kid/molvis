@@ -195,3 +195,18 @@ export {
   type CropBounds,
   type CropOptions,
 } from "./utils/image_crop";
+
+export {
+  attachWebSocketBridge,
+  WebSocketBridge,
+  EventForwarder,
+  StandaloneRpcRouter,
+  type AttachWebSocketBridgeOpts,
+  type BridgeConnectResult,
+  type JsonRPCRequest,
+  type JsonRPCResponse,
+  type BinaryBufferRef,
+  type SerializedFrameData,
+  type SerializedBoxData,
+  type RpcResponseEnvelope,
+} from "./transport";

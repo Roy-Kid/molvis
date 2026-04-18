@@ -1,12 +1,13 @@
 /**
- * JSON-RPC router: dispatches inbound requests from the controller
+ * JSON-RPC router: dispatches inbound requests from a controller
  * (Python / other language) into `MolvisApp` commands and property
  * accessors. The single frontend router — no parallel anywidget copy.
  */
 
 import { type Box, Frame } from "@molcrafts/molrs";
-import type { Molvis } from "@molvis/core";
-import { ClassicTheme, ModernTheme } from "@molvis/core";
+import type { MolvisApp } from "../../app";
+import { ClassicTheme } from "../../artist/presets/classic";
+import { ModernTheme } from "../../artist/presets/modern";
 import { buildBox, buildFrame, decodeBinaryPayload } from "./serialization";
 import type {
   JsonRPCRequest,
@@ -121,7 +122,7 @@ function toIntegerIdList(value: unknown, label: string): number[] {
 }
 
 function applyStyle(
-  app: Molvis,
+  app: MolvisApp,
   params: Record<string, unknown>,
 ): { manualAtomRadii: number[] | null } {
   const styleName = toRepresentationName(params.style);
@@ -163,7 +164,7 @@ function applyStyle(
 }
 
 function rebuildCurrentFrame(
-  app: Molvis,
+  app: MolvisApp,
   manualAtomRadii: number[] | null,
 ): Promise<void> {
   const frame = app.frame;
@@ -188,7 +189,7 @@ function rebuildCurrentFrame(
 }
 
 async function replaceCurrentFrame(
-  app: Molvis,
+  app: MolvisApp,
   frame: Frame,
   box?: Box,
   manualAtomRadii: number[] | null = null,
@@ -213,10 +214,10 @@ async function replaceCurrentFrame(
 }
 
 export class StandaloneRpcRouter {
-  private readonly app: Molvis;
+  private readonly app: MolvisApp;
   private readonly handlers: Map<string, RpcHandler>;
 
-  constructor(app: Molvis) {
+  constructor(app: MolvisApp) {
     this.app = app;
     this.handlers = new Map<string, RpcHandler>([
       ["scene.new_frame", this.handleNewFrame],

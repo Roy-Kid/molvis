@@ -1,10 +1,10 @@
 /**
- * WebSocket bridge connecting the page to a Python (or other language) MolVis
- * controller.
+ * WebSocket bridge connecting a MolVis app to a controller (Python or
+ * any other language).
  *
- * The page is a generic receiver: it dials out to the `ws_url` provided in
- * the query string, authenticates with a token, and then drives the shared
- * `MolvisApp`. Communication is JSON-RPC 2.0 with binary-buffer framing.
+ * The app is a generic receiver: it dials the given `ws_url`, authenticates
+ * with a token, and then drives the shared `MolvisApp`. Communication is
+ * JSON-RPC 2.0 with binary-buffer framing.
  *
  * Handshake:
  *   client → server  {type:"hello", token, session}
@@ -18,7 +18,7 @@
  * pushed as JSON-RPC notifications (no `id`) via `sendEvent`.
  */
 
-import type { Molvis } from "@molvis/core";
+import type { MolvisApp } from "../app";
 import { StandaloneRpcRouter } from "./rpc/router";
 import type { RpcResponseEnvelope } from "./rpc/types";
 
@@ -123,7 +123,7 @@ export class WebSocketBridge {
   private cleanupBeforeUnload: (() => void) | null = null;
   private ready = false;
 
-  constructor(private readonly app: Molvis) {
+  constructor(private readonly app: MolvisApp) {
     this.router = new StandaloneRpcRouter(app);
   }
 
