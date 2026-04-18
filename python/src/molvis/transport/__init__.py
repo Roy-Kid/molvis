@@ -19,7 +19,7 @@ from ._codec import (
     encode_binary_frame,
 )
 from ._jupyter_env import detect_env, in_jupyter_kernel, resolve_endpoints
-from .websocket import PageEndpoints, WebSocketTransport, resolve_page_dist
+from .websocket import PageEndpoints, WebSocketTransport, resolve_dist
 
 __all__ = [
     "BinaryPayloadDecoder",
@@ -32,5 +32,5 @@ __all__ = [
     "encode_binary_frame",
     "in_jupyter_kernel",
     "resolve_endpoints",
-    "resolve_page_dist",
+    "resolve_dist",
 ]

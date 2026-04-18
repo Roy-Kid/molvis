@@ -208,7 +208,7 @@ npx biome check --write
 # Build core library
 npm run build:core
 
-# Build web application (also copies into python/src/molvis/page_dist/)
+# Build web application (also copies into python/src/molvis/dist/)
 npm run build:page
 ```
 

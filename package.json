@@ -9,7 +9,7 @@
     "dev:core": "npm run dev -w core",
     "dev:page": "npm run dev -w page",
     "build:core": "npm run build -w core",
-    "build:page": "npm run build -w page && rm -rf python/src/molvis/page_dist && mkdir -p python/src/molvis/page_dist && cp -r page/dist/. python/src/molvis/page_dist/",
+    "build:page": "npm run build -w page && rm -rf python/src/molvis/dist && mkdir -p python/src/molvis/dist && cp -r page/dist/. python/src/molvis/dist/",
     "build:vsc-ext": "npm run build -w vsc-ext",
     "build:all": "npm run build:core && npm run build:page && npm run build:vsc-ext",
     "build:python": "npm run build:page",

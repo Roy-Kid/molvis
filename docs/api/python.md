@@ -100,7 +100,7 @@ except MolvisRPCError as exc:
 ## `WebSocketTransport`
 
 The sole transport implementation. By default, serves the bundled
-`page_dist/` on an OS-assigned port, generates a random token, and
+`dist/` on an OS-assigned port, generates a random token, and
 opens the browser (outside Jupyter).
 
 ```python
@@ -113,7 +113,7 @@ mv.WebSocketTransport(
 )
 ```
 
-- `page_base_url=None` → the transport serves `page_dist/` itself on
+- `page_base_url=None` → the transport serves `dist/` itself on
   the same port as the WebSocket.
 - `page_base_url="https://cdn.example/app"` → the transport serves
   only the WebSocket endpoint; the page bundle is fetched from the

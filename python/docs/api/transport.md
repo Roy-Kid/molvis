@@ -25,7 +25,7 @@ mv.WebSocketTransport(
 )
 ```
 
-- `page_base_url=None` → the transport serves `page_dist/` from its
+- `page_base_url=None` → the transport serves `dist/` from its
   own HTTP port. In Jupyter the cell loader fetches the bundle's
   `<script>` and `<link>` URLs from this same port and mounts the
   app inline; in a script the browser opens the page URL.

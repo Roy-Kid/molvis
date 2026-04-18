@@ -149,7 +149,7 @@ except mv.MolvisRPCError as exc:
 ## Development
 
 ```bash
-npm run build:page                   # build page bundle + copy to page_dist/
+npm run build:page                   # build page bundle + copy to dist/
 cd python && python -m pytest tests/ -v
 ```
 

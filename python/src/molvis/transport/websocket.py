@@ -2,7 +2,7 @@
 The single transport for every MolVis host.
 
 :class:`WebSocketTransport` runs a local HTTP + WebSocket server inside a
-background asyncio loop. The bundled `page_dist/` is served on ``/`` and a
+background asyncio loop. The bundled `dist/` is served on ``/`` and a
 WebSocket endpoint lives at ``/ws``. A host (page tab, notebook cell host
 script, VSCode webview …) loads the page bundle and dials back via
 ``?ws_url=ws://…/ws&token=…&session=…`` (standalone) or the inline
@@ -52,7 +52,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("molvis")
 
-__all__ = ["PageEndpoints", "WebSocketTransport", "resolve_page_dist"]
+__all__ = ["PageEndpoints", "WebSocketTransport", "resolve_dist"]
 
 
 mimetypes.add_type("application/wasm", ".wasm")
@@ -100,16 +100,16 @@ def _extract_stylesheet_links(html_text: str) -> tuple[str, ...]:
     return tuple(out)
 
 
-def resolve_page_dist() -> pathlib.Path:
+def resolve_dist() -> pathlib.Path:
     """Resolve the directory containing the pre-built page app.
 
-    ``MOLVIS_PAGE_DIST`` overrides the default, useful when running
+    ``MOLVIS_DIST`` overrides the default, useful when running
     against a freshly-built local ``page/dist/`` during development.
     """
-    override = os.environ.get("MOLVIS_PAGE_DIST")
+    override = os.environ.get("MOLVIS_DIST")
     if override:
         return pathlib.Path(override).expanduser().resolve()
-    resource = files("molvis").joinpath("page_dist")
+    resource = files("molvis").joinpath("dist")
     return pathlib.Path(str(resource))
 
 
@@ -157,7 +157,7 @@ class WebSocketTransport:
     page_base_url
         External base URL the page is served from (e.g. a CDN). When
         ``None`` (default), the transport also serves the bundled
-        ``page_dist/`` on its own HTTP port. Trailing slash optional.
+        ``dist/`` on its own HTTP port. Trailing slash optional.
     host, port
         Host/port the WS server binds to. ``port=0`` (default) asks the
         OS to pick a free port.
@@ -168,7 +168,7 @@ class WebSocketTransport:
         If ``True`` (default), call :func:`webbrowser.open` on the
         standalone URL when ``start()`` is called. Notebook hosts pass
         ``False``.
-    page_dist
+    dist
         Override the local static asset directory. Ignored when
         ``page_base_url`` is given.
     event_bus
@@ -187,7 +187,7 @@ class WebSocketTransport:
         failure if the browser never shows up.
     serve_page
         When ``True`` (default), HTTP requests to paths other than
-        ``/ws`` serve the bundled ``page_dist/`` — useful for notebook
+        ``/ws`` serve the bundled ``dist/`` — useful for notebook
         hosts and the VSCode webview. Pass ``False`` for WS-only mode
         where the frontend is hosted elsewhere (e.g. an
         already-open ``npm run dev:page`` tab) and only the
@@ -202,7 +202,7 @@ class WebSocketTransport:
         port: int = 0,
         token: str | None = None,
         open_browser: bool = True,
-        page_dist: pathlib.Path | None = None,
+        dist: pathlib.Path | None = None,
         event_bus: EventBus | None = None,
         minimal: bool = False,
         handshake_timeout: float | None = None,
@@ -215,7 +215,7 @@ class WebSocketTransport:
         self._port = port
         self._token = token or secrets.token_urlsafe(24)
         self._open_browser = open_browser
-        self._page_dist = page_dist or resolve_page_dist()
+        self._dist = dist or resolve_dist()
         self._event_bus = event_bus
         self._minimal = minimal
         self._handshake_timeout = handshake_timeout
@@ -430,7 +430,7 @@ class WebSocketTransport:
         Falls back to empty lists if the file is missing or malformed —
         the standalone URL still works (it loads index.html directly).
         """
-        index_path = self._page_dist / "index.html"
+        index_path = self._dist / "index.html"
         if not index_path.is_file():
             logger.debug("index.html not found at %s", index_path)
             return
@@ -712,14 +712,14 @@ class WebSocketTransport:
             path = "/index.html"
 
         try:
-            requested = (self._page_dist / path.lstrip("/")).resolve()
-            if not str(requested).startswith(str(self._page_dist.resolve())):
+            requested = (self._dist / path.lstrip("/")).resolve()
+            if not requested.is_relative_to(self._dist.resolve()):
                 return response_cls(403, "Forbidden", _cors_headers())
         except (ValueError, OSError):
             return response_cls(400, "Bad Request", _cors_headers())
 
         if not requested.is_file():
-            index = self._page_dist / "index.html"
+            index = self._dist / "index.html"
             if index.is_file():
                 requested = index
             else:

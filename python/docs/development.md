@@ -15,7 +15,7 @@ frontend lives in `page/` and is built once; the Python package ships
 the bundle as static assets.
 
 ``` bash
-npm run build:page          # page bundle → python/src/molvis/page_dist/
+npm run build:page          # page bundle → python/src/molvis/dist/
 npm run build:all           # core + page + vsc-ext
 ```
 
@@ -49,7 +49,7 @@ npm run test:core                # core rstest
 ## Packaging
 
 ``` bash
-npm run build:page               # ships page bundle into python/src/molvis/page_dist/
+npm run build:page               # ships page bundle into python/src/molvis/dist/
 cd python
 python3 -m build --wheel
 ```
@@ -68,5 +68,5 @@ python/
       _codec.py            # BinaryPayloadEncoder/Decoder + binary frame codec
       websocket.py         # WebSocketTransport (server + handshake + dispatch)
     commands/              # Command mixins (drawing, selection, snapshot, frame, …)
-    page_dist/             # Built page bundle (gitignored, populated by build:page)
+    dist/             # Built page bundle (gitignored, populated by build:page)
 ```

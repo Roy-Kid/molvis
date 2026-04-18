@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "molvis"
-version = "0.0.1"
+version = "0.0.3"
 description = "Molecular visualization driven by a local WebSocket-hosted page"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -46,7 +46,7 @@ Repository = "https://github.com/molcrafts/molvis"
 # Ship the built page bundle inside the wheel — it's hosted by
 # WebSocketTransport when no external `page_url` is given.
 artifacts = [
-    "src/molvis/page_dist/**",
+    "src/molvis/dist/**",
 ]
 
 [tool.hatch.build.targets.wheel]

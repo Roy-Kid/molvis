@@ -19,9 +19,9 @@ npm run dev:core       # core's own demo at localhost:3000 (rsbuild dev)
 # For Python development: `MOLVIS_PAGE_DIST=page/dist` + a running dev:page.
 
 # Build (core → page → vsc-ext; Python ships the built page bundle)
-npm run build:all              # core + page (→ python/src/molvis/page_dist/) + vsc-ext
+npm run build:all              # core + page (→ python/src/molvis/dist/) + vsc-ext
 npm run build:core             # just core (library dist/ for npm publish)
-npm run build:page             # page bundle + copy to python/src/molvis/page_dist/
+npm run build:page             # page bundle + copy to python/src/molvis/dist/
 npm run build:vsc-ext          # VSCode extension (bundles core from source)
 
 # Test
@@ -52,7 +52,7 @@ only produced by `build:core` for npm publishing.
 
 The Python package is no longer an `npm` workspace — it has no JS
 build of its own. `npm run build:page` copies `page/dist/*` into
-`python/src/molvis/page_dist/` so the wheel ships the bundle.
+`python/src/molvis/dist/` so the wheel ships the bundle.
 
 Dependencies flow: `page/` and `vsc-ext/` reference `@molvis/core` via source alias (not a workspace dependency). The Python package ships and serves the built `page/dist/` via `WebSocketTransport`. Core depends on `@babylonjs/*` and `@molcrafts/molrs` (local WASM package linked via `link:../../molrs/molrs-wasm/pkg`). The link is a symlink — rebuild wasm with `wasm-pack build --release --target bundler --scope molcrafts` in `molrs/molrs-wasm/` and rslib/rsbuild picks up the new `pkg/` automatically, no reinstall needed. WASM is a single full-subsystem build; no subpath variants.
 
