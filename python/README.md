@@ -137,12 +137,12 @@ Image(data=png)
 ## Error handling
 
 Fire-and-forget commands (e.g. `draw_frame`) log errors asynchronously.
-Query commands raise `MolvisRpcError`:
+Query commands raise `MolvisRPCError`:
 
 ```python
 try:
     scene.export_frame()
-except mv.MolvisRpcError as exc:
+except mv.MolvisRPCError as exc:
     print(exc.code, exc)
 ```
 

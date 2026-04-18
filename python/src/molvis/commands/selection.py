@@ -39,7 +39,7 @@ class SelectionCommandsMixin:
             
         Raises:
             TimeoutError: If the frontend does not respond within the timeout
-            molvis.MolvisRpcError: If the frontend rejects the query
+            molvis.MolvisRPCError: If the frontend rejects the query
             
         Example:
             >>> scene = Molvis()
@@ -80,7 +80,7 @@ class SelectionCommandsMixin:
             Self for method chaining
 
         Raises:
-            molvis.MolvisRpcError: If the frontend rejects the selection request.
+            molvis.MolvisRPCError: If the frontend rejects the selection request.
         """
         if isinstance(atom_ids, int):
             atom_ids = [atom_ids]

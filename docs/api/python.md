@@ -86,14 +86,14 @@ scene.close()                     # stop transport + drop from registry
 ### Error handling
 
 Fire-and-forget commands log errors asynchronously. Query commands
-surface frontend exceptions as `mv.MolvisRpcError`:
+surface frontend exceptions as `mv.MolvisRPCError`:
 
 ```python
-from molvis import MolvisRpcError
+from molvis import MolvisRPCError
 
 try:
     scene.export_frame()
-except MolvisRpcError as exc:
+except MolvisRPCError as exc:
     print(exc.code, exc)
 ```
 

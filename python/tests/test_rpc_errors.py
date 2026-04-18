@@ -1,10 +1,10 @@
-"""Frontend-reported errors are translated into MolvisRpcError."""
+"""Frontend-reported errors are translated into MolvisRPCError."""
 
 from __future__ import annotations
 
 import pytest
 
-from molvis import Molvis, MolvisRpcError
+from molvis import Molvis, MolvisRPCError
 from molvis.events import EventBus
 
 
@@ -49,7 +49,7 @@ def test_send_cmd_raises_on_frontend_error() -> None:
         ),
     )
 
-    with pytest.raises(MolvisRpcError) as excinfo:
+    with pytest.raises(MolvisRPCError) as excinfo:
         scene.send_cmd("scene.draw_frame", {}, wait_for_response=True)
 
     err = excinfo.value

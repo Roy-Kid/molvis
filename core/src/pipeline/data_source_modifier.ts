@@ -6,10 +6,15 @@ import type { PipelineContext } from "./types";
  * DataSourceModifier acts as the visual entry point for the pipeline.
  * It technically just passes the input frame through (identity),
  * but controls the App's source state via its UI properties.
+ *
+ * ``sourceType`` reflects where the frame data entered the pipeline:
+ * - ``empty``   — no data loaded yet
+ * - ``file``    — loaded from a local file via the page UI or drag-drop
+ * - ``backend`` — pushed by a remote controller over the WebSocket RPC
  */
 export class DataSourceModifier extends BaseModifier {
   // Properties for UI binding
-  public sourceType: "file" | "empty" = "empty";
+  public sourceType: "file" | "empty" | "backend" = "empty";
   public filename = "";
 
   // Visibility

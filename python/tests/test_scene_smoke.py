@@ -11,21 +11,24 @@ from molvis.transport import PageEndpoints
 
 
 class FakeTransport:
-    def __init__(self) -> None:
+    def __init__(self, *, port: int = 0, connected: bool = False) -> None:
         self.event_bus: EventBus | None = None
         self.started = False
         self.stopped = False
         self.sent: list[tuple[str, dict, dict]] = []
+        self.port = port
+        self.connected = connected
 
     def attach_event_bus(self, bus: EventBus) -> None:
         self.event_bus = bus
 
     def start(self) -> int:
         self.started = True
-        return 0
+        return self.port
 
     def stop(self) -> None:
         self.stopped = True
+        self.connected = False
 
     def send_request(
         self,
@@ -70,9 +73,99 @@ def test_named_scene_registry_round_trip() -> None:
 
 
 def test_duplicate_name_returns_same_instance() -> None:
-    first = Molvis(name="dup", transport=FakeTransport())
-    second = Molvis(name="dup", transport=FakeTransport())
+    transport = FakeTransport()
+    first = Molvis(name="dup", transport=transport)
+    # No-arg recall returns the cached scene unchanged.
+    second = Molvis(name="dup")
+    # Passing the same transport instance is also fine.
+    third = Molvis(name="dup", transport=transport)
     assert first is second
+    assert first is third
+
+
+def test_param_mismatch_on_cached_name_raises() -> None:
+    Molvis(name="default", transport=FakeTransport(), gui=True)
+    with pytest.raises(ValueError, match="already exists with a different"):
+        Molvis(name="default", gui=False)
+
+
+def test_anonymous_call_then_conflicting_kwarg_raises() -> None:
+    # Reproduces the user-reported bug: Molvis() then Molvis(gui=False)
+    # both default to name="default" — the second call must NOT silently
+    # alias to the first.
+    Molvis(transport=FakeTransport())
+    with pytest.raises(ValueError) as exc:
+        Molvis(gui=False)
+    msg = str(exc.value)
+    assert "default" in msg
+    assert "gui" in msg
+    assert "Molvis.replace" in msg
+
+
+def test_conflicting_size_also_raises() -> None:
+    Molvis(name="ws", transport=FakeTransport(), width=1200)
+    with pytest.raises(ValueError, match="width"):
+        Molvis(name="ws", width=800)
+
+
+def test_replace_closes_old_and_creates_new() -> None:
+    old_transport = FakeTransport()
+    old = Molvis(name="default", transport=old_transport, gui=True)
+    new_transport = FakeTransport()
+    new = Molvis.replace("default", transport=new_transport, gui=False)
+
+    assert new is not old
+    assert old_transport.stopped is True
+    assert new.gui is False
+    assert Molvis.get_scene("default") is new
+
+
+def test_replace_without_existing_just_creates() -> None:
+    new = Molvis.replace("fresh", transport=FakeTransport(), gui=False)
+    assert Molvis.get_scene("fresh") is new
+    assert new.gui is False
+
+
+def test_close_all_empties_registry() -> None:
+    Molvis(name="a", transport=FakeTransport())
+    Molvis(name="b", transport=FakeTransport())
+    Molvis(name="c", transport=FakeTransport())
+    assert len(Molvis.list_scenes()) == 3
+    Molvis.close_all()
+    assert Molvis.list_scenes() == []
+
+
+def test_has_scene() -> None:
+    assert Molvis.has_scene("absent") is False
+    Molvis(name="present", transport=FakeTransport())
+    assert Molvis.has_scene("present") is True
+
+
+def test_session_info_and_summary() -> None:
+    transport = FakeTransport(port=4242, connected=True)
+    scene = Molvis(name="probe", transport=transport, gui=False, width=900, height=600)
+    info = scene.session_info
+    assert info["name"] == "probe"
+    assert info["gui"] is False
+    assert info["width"] == 900
+    assert info["height"] == 600
+    assert info["connected"] is True
+    assert info["port"] == 4242
+    assert isinstance(info["created_at"], float)
+
+    summary = Molvis.session_summary()
+    assert any(entry["name"] == "probe" for entry in summary)
+
+
+def test_repr_shows_status_and_gui() -> None:
+    scene = Molvis(name="r", transport=FakeTransport(connected=True), gui=False)
+    rendered = repr(scene)
+    assert "name='r'" in rendered
+    assert "gui=False" in rendered
+    assert "connected" in rendered
+
+    scene2 = Molvis(name="r2", transport=FakeTransport(), gui=True)
+    assert "idle" in repr(scene2)
 
 
 def test_send_cmd_routes_through_transport() -> None:

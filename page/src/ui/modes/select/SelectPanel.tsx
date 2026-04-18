@@ -98,7 +98,7 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
           <Button
             size="sm"
             variant={fenceActive ? "secondary" : "outline"}
-            className="h-7 w-full px-2 text-xs gap-1.5"
+            className={`h-7 w-full px-2${fenceActive ? " ring-1 ring-ring" : ""}`}
             onClick={() => {
               if (fenceActive) {
                 app?.exitFenceSelect();
@@ -106,9 +106,13 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
                 app?.enterFenceSelect();
               }
             }}
+            title={
+              fenceActive ? "Cancel fence selection" : "Start fence selection"
+            }
+            aria-label="Fence selection"
+            aria-pressed={fenceActive}
           >
             <Lasso className="h-3.5 w-3.5" />
-            {fenceActive ? "Cancel Fence" : "Fence"}
           </Button>
         </div>
       </SidebarSection>

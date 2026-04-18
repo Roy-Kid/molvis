@@ -28,6 +28,33 @@ export interface MolvisEventMap {
   "export-requested": undefined;
   "exploration-change": DatasetExploration | null;
   "frame-labels-change": Map<string, Float64Array> | null;
+  "backend-state-sync": BackendStateSync;
+}
+
+/**
+ * Payload for ``backend-state-sync`` events — what the Python controller
+ * claims the scene looked like the last time it drove the viewer, handed
+ * over on a fresh WS handshake. A UI layer decides whether to silently
+ * apply (local is empty) or prompt the user for a keep-local / apply-
+ * backend choice.
+ *
+ * Frames/boxes are already decoded into WASM objects. ``pipeline`` is the
+ * raw modifier metadata in execution order; the first entry is expected to
+ * be the DataSource and is usually rebuilt by `applyBackendState` rather
+ * than re-created directly.
+ */
+export interface BackendStateSyncPipelineEntry {
+  id: string;
+  name: string;
+  category: string;
+  enabled: boolean;
+  parent_id: string | null;
+}
+
+export interface BackendStateSync {
+  pipeline: BackendStateSyncPipelineEntry[];
+  frames: Frame[];
+  boxes: (Box | undefined)[];
 }
 
 export type Listener<T = unknown> = (data: T) => void;

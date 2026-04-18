@@ -5,6 +5,9 @@ import { pluginReact } from "@rsbuild/plugin-react";
 export default defineConfig({
   server: { port: 3000 },
   plugins: [pluginReact()],
+  html: {
+    template: "./public/index.html",
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),

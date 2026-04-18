@@ -95,7 +95,7 @@ wire format.
 ``` python
 transport = mv.WebSocketTransport()
 transport.start()                    # spawn background asyncio loop
-transport.wait_for_connection(30)    # block until browser handshakes
+transport.wait_for_connection()      # block until browser handshakes (no timeout)
 # ... normal operation ...
 transport.stop()                     # tear down cleanly
 ```

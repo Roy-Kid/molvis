@@ -40,7 +40,7 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
     !isSelectionProducer(modifier);
 
   let content: React.ReactNode = (
-    <div className="p-4 bg-muted/20 border-t text-sm text-muted-foreground text-center">
+    <div className="p-2 bg-muted/20 border-t text-[10px] text-muted-foreground text-center">
       No properties available for {modifier.name}.
     </div>
   );
@@ -96,12 +96,12 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   }
 
   return (
-    <div className="p-4 bg-muted/20 border-t">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {modifier.name} Parameters
+    <div className="p-2 bg-muted/20 border-t">
+      <div className="flex items-center justify-between gap-1.5 mb-1.5">
+        <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground truncate min-w-0">
+          {modifier.name}
         </h4>
-        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+        <span className="shrink-0 text-[9px] bg-muted px-1 py-0 rounded text-muted-foreground">
           {modifier.category}
         </span>
       </div>

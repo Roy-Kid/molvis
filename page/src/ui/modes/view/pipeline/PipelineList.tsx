@@ -64,11 +64,6 @@ export function PipelineList({
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="border-b bg-muted/40 p-2 text-xs font-semibold text-muted-foreground flex items-center gap-3">
-        <div className="w-4 ml-6" />
-        <span>Pipeline Elements</span>
-      </div>
-
       <ScrollArea className="flex-1 bg-background">
         <div className="flex flex-col">
           <DndContext
@@ -97,21 +92,27 @@ export function PipelineList({
             </SortableContext>
           </DndContext>
 
-          <div className="p-2">
+          <div className="p-1.5 border-t">
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full border border-dashed text-muted-foreground gap-2"
+                  className="h-7 w-full border border-dashed text-muted-foreground"
+                  title="Add modifier"
+                  aria-label="Add modifier"
                 >
-                  <Plus className="h-3 w-3" /> Add Modifier
+                  <Plus className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="center" className="w-[200px]">
+              <DropdownMenuContent
+                align="center"
+                className="min-w-[160px] max-w-[220px]"
+              >
                 {ModifierRegistry.getAvailableModifiers().map((entry) => (
                   <DropdownMenuItem
                     key={entry.name}
+                    className="text-xs"
                     onClick={() => onAddModifier(entry.factory)}
                   >
                     {entry.name}

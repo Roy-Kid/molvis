@@ -8,10 +8,14 @@ import { type Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../../app";
 import { ClassicTheme } from "../../artist/presets/classic";
 import { ModernTheme } from "../../artist/presets/modern";
+import { DataSourceModifier } from "../../pipeline/data_source_modifier";
+import type { Modifier } from "../../pipeline/modifier";
+import { ModifierRegistry } from "../../pipeline/modifier_registry";
+import { Trajectory } from "../../system/trajectory";
 import { buildBox, buildFrame, decodeBinaryPayload } from "./serialization";
 import type {
   JsonRPCRequest,
-  RpcResponseEnvelope,
+  RPCResponseEnvelope,
   SerializedBoxData,
   SerializedFrameData,
 } from "./types";
@@ -25,19 +29,19 @@ enum JsonRPCErrorCode {
   InternalError = -32603,
 }
 
-class RpcError extends Error {
+class RPCError extends Error {
   public readonly code: JsonRPCErrorCode;
   public readonly data?: unknown;
 
   constructor(code: JsonRPCErrorCode, message: string, data?: unknown) {
     super(message);
-    this.name = "RpcError";
+    this.name = "RPCError";
     this.code = code;
     this.data = data;
   }
 }
 
-type RpcHandler = (
+type RPCHandler = (
   params: Record<string, unknown>,
   buffers: DataView[],
 ) => Promise<unknown> | unknown;
@@ -63,16 +67,16 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function invalidParams(message: string, data?: unknown): RpcError {
-  return new RpcError(JsonRPCErrorCode.InvalidParams, message, data);
+function invalidParams(message: string, data?: unknown): RPCError {
+  return new RPCError(JsonRPCErrorCode.InvalidParams, message, data);
 }
 
-function invalidRequest(message: string, data?: unknown): RpcError {
-  return new RpcError(JsonRPCErrorCode.InvalidRequest, message, data);
+function invalidRequest(message: string, data?: unknown): RPCError {
+  return new RPCError(JsonRPCErrorCode.InvalidRequest, message, data);
 }
 
-function parseError(message: string, data?: unknown): RpcError {
-  return new RpcError(JsonRPCErrorCode.ParseError, message, data);
+function parseError(message: string, data?: unknown): RPCError {
+  return new RPCError(JsonRPCErrorCode.ParseError, message, data);
 }
 
 function ensureFiniteNumber(value: unknown, label: string): number {
@@ -163,68 +167,151 @@ function applyStyle(
   return { manualAtomRadii };
 }
 
-function rebuildCurrentFrame(
-  app: MolvisApp,
-  manualAtomRadii: number[] | null,
-): Promise<void> {
-  const frame = app.frame;
-  if (!frame) {
-    return Promise.resolve();
-  }
-
-  if (manualAtomRadii && manualAtomRadii.length > 0) {
-    const result = app.execute("draw_frame", {
-      frame,
-      box: app.system.box,
-      options: { atoms: { radii: manualAtomRadii } },
-    });
-    return Promise.resolve(result as void | Promise<void>);
-  }
-
-  const result = app.execute("draw_frame", {
-    frame,
-    box: app.system.box,
-  });
-  return Promise.resolve(result as void | Promise<void>);
+/**
+ * Reapply the current source frame through the modifier pipeline. Used by
+ * style / theme RPCs that mutate render-time state (radii, theme) without
+ * changing the underlying data source.
+ */
+function rebuildCurrentFrame(app: MolvisApp): Promise<void> {
+  if (!app.frame) return Promise.resolve();
+  return app.applyPipeline({ fullRebuild: true });
 }
 
-async function replaceCurrentFrame(
+/**
+ * Ensure the pipeline has a ``DataSourceModifier`` — the single point of
+ * ingress for both GUI ("Load File") and WS (``scene.draw_frame`` /
+ * ``scene.set_trajectory``) data pushes. If one already exists we reuse
+ * it so user-added downstream modifiers stay wired up; otherwise a fresh
+ * one is inserted at the head of the pipeline.
+ */
+export function ensureDataSource(
   app: MolvisApp,
-  frame: Frame,
-  box?: Box,
-  manualAtomRadii: number[] | null = null,
-): Promise<void> {
-  app.artist.ribbonRenderer.dispose();
-  app.commandManager.clearHistory();
-  app.system.setFrame(frame, box);
+  meta: { sourceType: DataSourceModifier["sourceType"]; filename: string },
+): DataSourceModifier {
+  const pipeline = app.modifierPipeline;
+  let dataSource = pipeline
+    .getModifiers()
+    .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
 
-  const options =
-    manualAtomRadii && manualAtomRadii.length > 0
-      ? { atoms: { radii: manualAtomRadii } }
-      : undefined;
-  const result = app.execute("draw_frame", {
-    frame,
-    box,
-    options,
-  });
-  await Promise.resolve(result as void | Promise<void>);
+  if (!dataSource) {
+    dataSource = new DataSourceModifier();
+    pipeline.addModifier(dataSource);
+    // Keep data source at the head — downstream modifiers read from its output.
+    const currentIndex = pipeline
+      .getModifiers()
+      .findIndex((m) => m.id === dataSource?.id);
+    if (currentIndex > 0) {
+      pipeline.reorderModifier(dataSource.id, 0);
+    }
+  }
 
-  // Auto-fit camera so the molecule is visible
-  app.world.resetCamera();
+  dataSource.sourceType = meta.sourceType;
+  dataSource.filename = meta.filename;
+  return dataSource;
 }
 
-export class StandaloneRpcRouter {
+/**
+ * Shared path for every "new data came in from the backend" flow — single
+ * frame ingress, trajectory ingress, and clear. Wires the incoming frames
+ * into the pipeline's DataSourceModifier so user-added downstream modifiers
+ * (selection, color, hide) run on the new data without extra RPCs.
+ */
+export async function ingestFramesIntoPipeline(
+  app: MolvisApp,
+  frames: Frame[],
+  boxes: (Box | undefined)[],
+  meta: { sourceType: DataSourceModifier["sourceType"]; filename: string },
+  options?: { manualAtomRadii?: number[] | null; resetCamera?: boolean },
+): Promise<void> {
+  if (frames.length === 0) {
+    throw invalidParams("ingest requires at least one frame");
+  }
+
+  const dataSource = ensureDataSource(app, meta);
+  dataSource.setFrame(frames[0]);
+
+  if (frames.length === 1) {
+    await app.loadFrame(frames[0], boxes[0]);
+  } else {
+    app.setTrajectory(new Trajectory(frames, boxes));
+  }
+
+  await app.applyPipeline({ fullRebuild: true });
+
+  if (options?.manualAtomRadii && options.manualAtomRadii.length > 0) {
+    // Per-atom radius override has no pipeline equivalent yet — fall back to
+    // draw_frame for the radii. Pipeline state is preserved.
+    const radii = options.manualAtomRadii;
+    await Promise.resolve(
+      app.execute("draw_frame", {
+        frame: app.frame,
+        box: app.system.box,
+        options: { atoms: { radii } },
+      }) as void | Promise<void>,
+    );
+  }
+
+  if (options?.resetCamera ?? true) {
+    app.world.resetCamera();
+  }
+}
+
+/** Serialize a modifier to the wire shape used by ``pipeline.*`` RPCs. */
+function serializeModifier(modifier: Modifier): Record<string, unknown> {
+  return {
+    id: modifier.id,
+    name: modifier.name,
+    category: modifier.category,
+    enabled: modifier.enabled,
+    parent_id: modifier.parentId,
+  };
+}
+
+function requireString(
+  value: unknown,
+  label: string,
+  options: { allowNull?: boolean } = {},
+): string | null {
+  if (value === null && options.allowNull) return null;
+  if (typeof value !== "string" || value.length === 0) {
+    throw invalidParams(
+      options.allowNull
+        ? `${label} must be a non-empty string or null`
+        : `${label} must be a non-empty string`,
+    );
+  }
+  return value;
+}
+
+function requireBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") {
+    throw invalidParams(`${label} must be a boolean`);
+  }
+  return value;
+}
+
+function requireInteger(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw invalidParams(`${label} must be an integer`);
+  }
+  return value;
+}
+
+export class RPCRouter {
   private readonly app: MolvisApp;
-  private readonly handlers: Map<string, RpcHandler>;
+  private readonly handlers: Map<string, RPCHandler>;
 
   constructor(app: MolvisApp) {
     this.app = app;
-    this.handlers = new Map<string, RpcHandler>([
+    this.handlers = new Map<string, RPCHandler>([
       ["scene.new_frame", this.handleNewFrame],
       ["scene.draw_frame", this.handleDrawFrame],
       ["scene.draw_box", this.handleDrawBox],
       ["scene.clear", this.handleClear],
       ["scene.export_frame", this.handleExportFrame],
+      ["scene.set_trajectory", this.handleSetTrajectory],
+      ["scene.set_frame_labels", this.handleSetFrameLabels],
+      ["scene.apply_state", this.handleApplyState],
       ["selection.get", this.handleSelectionGet],
       ["selection.select_atoms", this.handleSelectionSelectAtoms],
       ["selection.clear", this.handleSelectionClear],
@@ -232,6 +319,14 @@ export class StandaloneRpcRouter {
         "selection.select_by_expression",
         this.handleSelectionSelectByExpression,
       ],
+      ["pipeline.list", this.handlePipelineList],
+      ["pipeline.available_modifiers", this.handlePipelineAvailableModifiers],
+      ["pipeline.add_modifier", this.handlePipelineAddModifier],
+      ["pipeline.remove_modifier", this.handlePipelineRemoveModifier],
+      ["pipeline.reorder_modifier", this.handlePipelineReorderModifier],
+      ["pipeline.set_enabled", this.handlePipelineSetEnabled],
+      ["pipeline.set_parent", this.handlePipelineSetParent],
+      ["pipeline.clear", this.handlePipelineClear],
       ["snapshot.take", this.handleSnapshotTake],
       ["view.set_style", this.handleSetStyle],
       ["view.set_theme", this.handleSetTheme],
@@ -243,13 +338,13 @@ export class StandaloneRpcRouter {
   public async execute(
     request: unknown,
     buffers: DataView[] = [],
-  ): Promise<RpcResponseEnvelope> {
+  ): Promise<RPCResponseEnvelope> {
     let parsed: JsonRPCRequest;
     try {
       parsed = this.parseRequest(request);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (error instanceof RpcError) {
+      if (error instanceof RPCError) {
         return {
           content: createErrorResponse(
             null,
@@ -287,7 +382,7 @@ export class StandaloneRpcRouter {
         content: createSuccessResponse(parsed.id, result),
       };
     } catch (error) {
-      if (error instanceof RpcError) {
+      if (error instanceof RPCError) {
         return {
           content: createErrorResponse(
             parsed.id,
@@ -342,19 +437,22 @@ export class StandaloneRpcRouter {
     };
   }
 
-  private handleNewFrame: RpcHandler = (params) => {
+  private handleNewFrame: RPCHandler = async (params) => {
     if (params.clear === false) {
       return { success: true };
     }
-    return replaceCurrentFrame(this.app, new Frame()).then(() => ({
-      success: true,
-    }));
+    await ingestFramesIntoPipeline(this.app, [new Frame()], [undefined], {
+      sourceType: "empty",
+      filename: "",
+    });
+    return { success: true };
   };
 
-  private handleDrawFrame: RpcHandler = (params, buffers) => {
+  private handleDrawFrame: RPCHandler = async (params, buffers) => {
     let frame: Frame;
     let box: Box | undefined;
     let manualAtomRadii: number[] | null;
+    const sessionLabel = this.sessionLabel();
 
     try {
       const decoded = decodeBinaryPayload(params, buffers) as Record<
@@ -376,7 +474,7 @@ export class StandaloneRpcRouter {
       box = boxData ? buildBox(boxData) : undefined;
       ({ manualAtomRadii } = applyStyle(this.app, options));
     } catch (error) {
-      if (error instanceof RpcError) {
+      if (error instanceof RPCError) {
         throw error;
       }
       throw invalidParams(
@@ -384,12 +482,17 @@ export class StandaloneRpcRouter {
       );
     }
 
-    return replaceCurrentFrame(this.app, frame, box, manualAtomRadii).then(
-      () => ({ success: true }),
+    await ingestFramesIntoPipeline(
+      this.app,
+      [frame],
+      [box],
+      { sourceType: "backend", filename: sessionLabel },
+      { manualAtomRadii },
     );
+    return { success: true };
   };
 
-  private handleDrawBox: RpcHandler = (params, buffers) => {
+  private handleDrawBox: RPCHandler = (params, buffers) => {
     let box: Box;
     try {
       const decoded = decodeBinaryPayload(params, buffers) as Record<
@@ -402,7 +505,7 @@ export class StandaloneRpcRouter {
       }
       box = buildBox(asRecord(rawBox) as unknown as SerializedBoxData);
     } catch (error) {
-      if (error instanceof RpcError) {
+      if (error instanceof RPCError) {
         throw error;
       }
       throw invalidParams(
@@ -420,13 +523,161 @@ export class StandaloneRpcRouter {
     return { success: true };
   };
 
-  private handleClear: RpcHandler = () => {
-    return replaceCurrentFrame(this.app, new Frame()).then(() => ({
-      success: true,
-    }));
+  private handleClear: RPCHandler = async () => {
+    await ingestFramesIntoPipeline(this.app, [new Frame()], [undefined], {
+      sourceType: "empty",
+      filename: "",
+    });
+    return { success: true };
   };
 
-  private handleExportFrame: RpcHandler = () => {
+  private handleSetTrajectory: RPCHandler = async (params, buffers) => {
+    const decoded = decodeBinaryPayload(params, buffers) as Record<
+      string,
+      unknown
+    >;
+    const rawFrames = decoded.frames;
+    if (!Array.isArray(rawFrames) || rawFrames.length === 0) {
+      throw invalidParams(
+        "scene.set_trajectory requires a non-empty 'frames' array",
+      );
+    }
+    const rawBoxes = Array.isArray(decoded.boxes) ? decoded.boxes : [];
+
+    const frames: Frame[] = rawFrames.map((raw, i) => {
+      try {
+        return buildFrame(asRecord(raw) as unknown as SerializedFrameData);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw invalidParams(`frames[${i}]: ${message}`);
+      }
+    });
+
+    const boxes: (Box | undefined)[] = rawBoxes.map((raw, i) => {
+      if (raw == null) return undefined;
+      try {
+        return buildBox(asRecord(raw) as unknown as SerializedBoxData);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw invalidParams(`boxes[${i}]: ${message}`);
+      }
+    });
+
+    const sessionLabel = this.sessionLabel(frames.length);
+    await ingestFramesIntoPipeline(this.app, frames, boxes, {
+      sourceType: "backend",
+      filename: sessionLabel,
+    });
+    return { success: true, nFrames: frames.length };
+  };
+
+  /**
+   * Receive a state snapshot from the Python controller after a fresh
+   * WS handshake. The snapshot mirrors what Python last pushed (frames,
+   * boxes, pipeline) — we don't apply it here; instead we emit a
+   * ``backend-state-sync`` event so the React layer can compare against
+   * the local pipeline and either auto-apply (local is empty) or prompt
+   * the user to choose between the two.
+   */
+  private handleApplyState: RPCHandler = (params, buffers) => {
+    const decoded = decodeBinaryPayload(params, buffers) as Record<
+      string,
+      unknown
+    >;
+
+    const rawPipeline = Array.isArray(decoded.pipeline) ? decoded.pipeline : [];
+    const pipeline = rawPipeline.map((raw, i) => {
+      const entry = asRecord(raw);
+      const id = typeof entry.id === "string" ? entry.id : null;
+      const name = typeof entry.name === "string" ? entry.name : null;
+      const category =
+        typeof entry.category === "string" ? entry.category : null;
+      if (id === null || name === null || category === null) {
+        throw invalidParams(
+          `scene.apply_state pipeline[${i}] missing id/name/category`,
+        );
+      }
+      const enabled = typeof entry.enabled === "boolean" ? entry.enabled : true;
+      const parent_id =
+        typeof entry.parent_id === "string" ? entry.parent_id : null;
+      return { id, name, category, enabled, parent_id };
+    });
+
+    const rawFrames = Array.isArray(decoded.frames) ? decoded.frames : [];
+    const frames: Frame[] = rawFrames.map((raw, i) => {
+      try {
+        return buildFrame(asRecord(raw) as unknown as SerializedFrameData);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw invalidParams(`scene.apply_state frames[${i}]: ${message}`);
+      }
+    });
+
+    const rawBoxes = Array.isArray(decoded.boxes) ? decoded.boxes : [];
+    const boxes: (Box | undefined)[] = rawBoxes.map((raw, i) => {
+      if (raw == null) return undefined;
+      try {
+        return buildBox(asRecord(raw) as unknown as SerializedBoxData);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw invalidParams(`scene.apply_state boxes[${i}]: ${message}`);
+      }
+    });
+
+    this.app.events.emit("backend-state-sync", {
+      pipeline,
+      frames,
+      boxes,
+    });
+
+    return { success: true };
+  };
+
+  private handleSetFrameLabels: RPCHandler = (params, buffers) => {
+    const decoded = decodeBinaryPayload(params, buffers) as Record<
+      string,
+      unknown
+    >;
+    const rawLabels = decoded.labels;
+    if (rawLabels == null) {
+      this.app.system.setFrameLabels(null);
+      return { success: true, nLabels: 0 };
+    }
+    if (typeof rawLabels !== "object" || Array.isArray(rawLabels)) {
+      throw invalidParams(
+        "scene.set_frame_labels 'labels' must be an object of column arrays",
+      );
+    }
+
+    const nFrames = this.app.system.trajectory.length;
+    const map = new Map<string, Float64Array>();
+    for (const [name, value] of Object.entries(
+      rawLabels as Record<string, unknown>,
+    )) {
+      let column: Float64Array;
+      if (value instanceof Float64Array) {
+        column = value;
+      } else if (ArrayBuffer.isView(value)) {
+        column = Float64Array.from(value as unknown as ArrayLike<number>);
+      } else if (Array.isArray(value)) {
+        column = Float64Array.from(value, (v) =>
+          typeof v === "number" ? v : Number.NaN,
+        );
+      } else {
+        throw invalidParams(`labels['${name}'] must be an array of numbers`);
+      }
+      if (nFrames > 0 && column.length !== nFrames) {
+        throw invalidParams(
+          `labels['${name}'] has length ${column.length}, expected ${nFrames}`,
+        );
+      }
+      map.set(name, column);
+    }
+    this.app.system.setFrameLabels(map);
+    return { success: true, nLabels: map.size };
+  };
+
+  private handleExportFrame: RPCHandler = () => {
     const result = this.app.execute<
       Record<string, never>,
       {
@@ -443,21 +694,21 @@ export class StandaloneRpcRouter {
     }));
   };
 
-  private handleSelectionGet: RpcHandler = () =>
+  private handleSelectionGet: RPCHandler = () =>
     this.app.execute("get_selected", {});
 
-  private handleSelectionSelectAtoms: RpcHandler = (params) => {
+  private handleSelectionSelectAtoms: RPCHandler = (params) => {
     const ids = toIntegerIdList(params.ids ?? [], "ids");
     this.app.execute("select_atoms", { ids });
     return { success: true };
   };
 
-  private handleSelectionClear: RpcHandler = () => {
+  private handleSelectionClear: RPCHandler = () => {
     this.app.world.selectionManager.clearSelection();
     return { success: true };
   };
 
-  private handleSelectionSelectByExpression: RpcHandler = (params) => {
+  private handleSelectionSelectByExpression: RPCHandler = (params) => {
     const expression =
       typeof params.expression === "string" ? params.expression : "";
     if (!expression) {
@@ -472,7 +723,7 @@ export class StandaloneRpcRouter {
     return { success: true };
   };
 
-  private handleStateGet: RpcHandler = () => {
+  private handleStateGet: RPCHandler = () => {
     const meta = this.app.world.selectionManager.getSelectedMeta();
     return {
       selection: {
@@ -485,10 +736,10 @@ export class StandaloneRpcRouter {
     };
   };
 
-  private handleSnapshotTake: RpcHandler = () =>
+  private handleSnapshotTake: RPCHandler = () =>
     this.app.execute("take_snapshot", {});
 
-  private handleSetStyle: RpcHandler = (params, buffers) => {
+  private handleSetStyle: RPCHandler = async (params, buffers) => {
     let manualAtomRadii: number[] | null;
     try {
       const decoded = decodeBinaryPayload(params, buffers) as Record<
@@ -497,7 +748,7 @@ export class StandaloneRpcRouter {
       >;
       ({ manualAtomRadii } = applyStyle(this.app, decoded));
     } catch (error) {
-      if (error instanceof RpcError) {
+      if (error instanceof RPCError) {
         throw error;
       }
       throw invalidParams(
@@ -505,12 +756,20 @@ export class StandaloneRpcRouter {
       );
     }
 
-    return rebuildCurrentFrame(this.app, manualAtomRadii).then(() => ({
-      success: true,
-    }));
+    await rebuildCurrentFrame(this.app);
+    if (manualAtomRadii && manualAtomRadii.length > 0) {
+      await Promise.resolve(
+        this.app.execute("draw_frame", {
+          frame: this.app.frame,
+          box: this.app.system.box,
+          options: { atoms: { radii: manualAtomRadii } },
+        }) as void | Promise<void>,
+      );
+    }
+    return { success: true };
   };
 
-  private handleSetTheme: RpcHandler = (params) => {
+  private handleSetTheme: RPCHandler = async (params) => {
     const frame = this.app.frame;
     const theme = params.theme;
     switch (theme) {
@@ -528,12 +787,11 @@ export class StandaloneRpcRouter {
     if (!frame) {
       return { success: true };
     }
-    return rebuildCurrentFrame(this.app, null).then(() => ({
-      success: true,
-    }));
+    await rebuildCurrentFrame(this.app);
+    return { success: true };
   };
 
-  private handleSetMode: RpcHandler = (params) => {
+  private handleSetMode: RPCHandler = (params) => {
     const mode = String(params.mode ?? "");
     if (!["view", "select", "edit", "measure", "manipulate"].includes(mode)) {
       throw invalidParams(
@@ -543,4 +801,148 @@ export class StandaloneRpcRouter {
     this.app.setMode(mode);
     return { success: true };
   };
+
+  // ---------------------------------------------------------------------
+  // Pipeline (modifier CRUD) — mirrors the React sidebar so a controller
+  // can manage the pipeline without scraping the DOM.
+  // ---------------------------------------------------------------------
+
+  private handlePipelineList: RPCHandler = () => {
+    return {
+      modifiers: this.app.modifierPipeline
+        .getModifiers()
+        .map(serializeModifier),
+    };
+  };
+
+  private handlePipelineAvailableModifiers: RPCHandler = () => {
+    return {
+      modifiers: ModifierRegistry.getAvailableModifiers().map((entry) => ({
+        name: entry.name,
+        category: entry.category,
+      })),
+    };
+  };
+
+  private handlePipelineAddModifier: RPCHandler = async (params) => {
+    const name = requireString(params.name, "name");
+    if (!name) {
+      throw invalidParams("pipeline.add_modifier requires a 'name'");
+    }
+    const entry = ModifierRegistry.getAvailableModifiers().find(
+      (e) => e.name === name,
+    );
+    if (!entry) {
+      throw invalidParams(`Unknown modifier: '${name}'`);
+    }
+    const modifier = entry.factory();
+    this.app.modifierPipeline.addModifier(modifier);
+
+    const parentIdRaw = params.parent_id ?? params.parentId ?? null;
+    if (parentIdRaw !== null && parentIdRaw !== undefined) {
+      const parentId = requireString(parentIdRaw, "parent_id");
+      if (
+        parentId &&
+        !this.app.modifierPipeline.setParent(modifier.id, parentId)
+      ) {
+        throw invalidParams(
+          `Cannot set parent '${parentId}' on '${modifier.id}' — rejected by pipeline`,
+        );
+      }
+    }
+
+    if (params.enabled !== undefined) {
+      modifier.enabled = requireBoolean(params.enabled, "enabled");
+    }
+
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { id: modifier.id, modifier: serializeModifier(modifier) };
+  };
+
+  private handlePipelineRemoveModifier: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    if (!id) {
+      throw invalidParams("pipeline.remove_modifier requires an 'id'");
+    }
+    const removed = this.app.modifierPipeline.removeModifier(id);
+    if (removed.length === 0) {
+      throw invalidParams(`No modifier with id '${id}'`);
+    }
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { removed_ids: removed.map((m) => m.id) };
+  };
+
+  private handlePipelineReorderModifier: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    const newIndex = requireInteger(
+      params.new_index ?? params.newIndex,
+      "new_index",
+    );
+    if (!id) {
+      throw invalidParams("pipeline.reorder_modifier requires an 'id'");
+    }
+    if (!this.app.modifierPipeline.reorderModifier(id, newIndex)) {
+      throw invalidParams(
+        `Cannot reorder '${id}' to index ${newIndex} — out of range or unknown id`,
+      );
+    }
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
+  private handlePipelineSetEnabled: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    const enabled = requireBoolean(params.enabled, "enabled");
+    if (!id) {
+      throw invalidParams("pipeline.set_enabled requires an 'id'");
+    }
+    const modifier = this.app.modifierPipeline
+      .getModifiers()
+      .find((m) => m.id === id);
+    if (!modifier) {
+      throw invalidParams(`No modifier with id '${id}'`);
+    }
+    modifier.enabled = enabled;
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
+  private handlePipelineSetParent: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    const parentIdRaw = params.parent_id ?? params.parentId;
+    const parentId = requireString(parentIdRaw, "parent_id", {
+      allowNull: true,
+    });
+    if (!id) {
+      throw invalidParams("pipeline.set_parent requires an 'id'");
+    }
+    if (!this.app.modifierPipeline.setParent(id, parentId)) {
+      throw invalidParams(
+        `Cannot set parent '${parentId}' on '${id}' — rejected by pipeline`,
+      );
+    }
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
+  private handlePipelineClear: RPCHandler = async () => {
+    this.app.modifierPipeline.clear();
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
+  // ---------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------
+
+  /**
+   * Build a display label for the DataSourceModifier. Anchors it to the
+   * active trajectory's frame count (when > 1) so the sidebar surfaces a
+   * hint like ``backend · 250 frames`` after a push.
+   */
+  private sessionLabel(frameCount?: number): string {
+    const n = frameCount ?? this.app.system.trajectory?.length ?? 0;
+    if (n > 1) return `backend · ${n} frames`;
+    return "backend";
+  }
 }

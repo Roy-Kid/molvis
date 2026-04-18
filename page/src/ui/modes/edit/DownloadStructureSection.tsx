@@ -166,40 +166,33 @@ export const DownloadStructureSection: React.FC<
 
   return (
     <SidebarSection title="Download Structure" defaultOpen={false}>
-      <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-muted-foreground w-10 shrink-0">
-          Source
-        </span>
-        <Select
-          value={source}
-          onValueChange={(v) => setSource(v as Source)}
-          disabled={busy}
+      <Select
+        value={source}
+        onValueChange={(v) => setSource(v as Source)}
+        disabled={busy}
+      >
+        <SelectTrigger
+          className="h-7 w-full px-2 text-xs"
+          aria-label="Structure source"
+          title="Structure source"
         >
-          <SelectTrigger
-            className="h-7 flex-1 min-w-0 px-2 text-xs"
-            aria-label="Structure source"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SOURCES.map((s) => (
-              <SelectItem key={s.value} value={s.value} disabled={!s.enabled}>
-                <span className="text-xs">
-                  {s.label}
-                  {!s.enabled && (
-                    <span className="ml-1 text-muted-foreground">(soon)</span>
-                  )}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SOURCES.map((s) => (
+            <SelectItem key={s.value} value={s.value} disabled={!s.enabled}>
+              <span className="text-xs">
+                {s.label}
+                {!s.enabled && (
+                  <span className="ml-1 text-muted-foreground">(soon)</span>
+                )}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-muted-foreground w-10 shrink-0">
-          {current.idLabel}
-        </span>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -207,12 +200,13 @@ export const DownloadStructureSection: React.FC<
           placeholder={current.placeholder}
           className="h-7 flex-1 min-w-0 text-xs font-mono"
           aria-label={current.idLabel}
+          title={current.idLabel}
           disabled={busy}
         />
         <Button
           variant="outline"
           size="sm"
-          className="h-7 px-2"
+          className="h-7 px-2 shrink-0"
           onClick={handleDownload}
           disabled={busy || !query.trim()}
           title={`Fetch from ${current.label}`}

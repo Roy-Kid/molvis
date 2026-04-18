@@ -42,7 +42,7 @@ export interface SerializedBoxData {
   pbc?: boolean[];
 }
 
-export interface RpcResponseEnvelope {
+export interface RPCResponseEnvelope {
   content: JsonRPCResponse;
   buffers?: ArrayBuffer[];
 }

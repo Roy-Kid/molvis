@@ -11,14 +11,15 @@ import { WebSocketBridge } from "./ws_bridge";
 
 export { WebSocketBridge, type BridgeConnectResult } from "./ws_bridge";
 export { EventForwarder } from "./event_forwarder";
-export { StandaloneRpcRouter } from "./rpc/router";
+export { RPCRouter } from "./rpc/router";
+export { applyBackendState } from "./state_sync";
 export type {
   JsonRPCRequest,
   JsonRPCResponse,
   BinaryBufferRef,
   SerializedFrameData,
   SerializedBoxData,
-  RpcResponseEnvelope,
+  RPCResponseEnvelope,
 } from "./rpc/types";
 
 export interface AttachWebSocketBridgeOpts {
@@ -34,6 +35,12 @@ export interface AttachWebSocketBridgeOpts {
    * notebook cell output, …) instead.
    */
   onError?: (err: unknown) => void;
+  /**
+   * Called after the hello handshake completes successfully and the
+   * event forwarder has been started. Use this to flip UI state from
+   * "connecting" to "connected".
+   */
+  onConnected?: () => void;
 }
 
 /**
@@ -61,6 +68,11 @@ export function attachWebSocketBridge(
         return;
       }
       forwarder.start();
+      opts.onConnected?.();
+      // Ask the controller for whatever it last pushed — the reply
+      // arrives as a ``scene.apply_state`` RPC which the router turns
+      // into a ``backend-state-sync`` event on the app bus.
+      bridge.sendEvent("event.request_state_sync", {});
     })
     .catch((err) => {
       if (opts.onError) {

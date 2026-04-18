@@ -139,7 +139,7 @@ Implementation details:
 - JSON-RPC 2.0 over a local WebSocket with a token handshake; numpy
   arrays ride as binary buffers instead of JSON lists.
 - Frontend JSON-RPC failures are raised into Python as
-  `molvis.MolvisRpcError`.
+  `molvis.MolvisRPCError`.
 
 ### VSCode Extension
 

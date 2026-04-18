@@ -31,7 +31,7 @@ The primary principle: the map is a **navigation surface**. The scatter is the u
 - **Computed geometry descriptors** (Rg, COM magnitude, RMSD, end-to-end distance)
 - **Atom-column reducers** (mean/min/max/sum of a per-atom numeric column over a frame)
 - Descriptor source beyond `frame.meta` — no CSV/JSON upload path in MVP
-- Frame-label extraction for non-XYZ formats (LAMMPS, PDB, …). Their `frame.meta` stays empty; PcaTool shows empty state.
+- Frame-label extraction for non-XYZ formats (LAMMPS, PDB, …). Their `frame.meta` stays empty; PCATool shows empty state.
 - Categorical / string frame labels (MVP is numeric-only; strings are filtered out at loader time)
 - t-SNE, UMAP kernels (dropdown entries reserved; shape ready)
 - Standalone `"kmeans"` entry (MVP has k-means only as PCA color overlay)
@@ -54,7 +54,7 @@ The primary principle: the map is a **navigation surface**. The scatter is the u
 | Analysis (TS orchestrator) | New | `core/src/analysis/exploration.ts` |
 | Loader | Extend | `core/src/io/` (wherever the trajectory load path assembles frames) — iterate loaded frames, aggregate `frame.meta` into `system.frameLabels` |
 | Events | Extend | `core/src/events.ts` — `exploration-change`, `frame-labels-change` |
-| Page UI (React) | Extend | `page/src/ui/layout/LeftSidebar.tsx` + new `PcaTool.tsx`; `page/src/hooks/useMolvisUiState.ts`; `page/package.json` (Plotly) |
+| Page UI (React) | Extend | `page/src/ui/layout/LeftSidebar.tsx` + new `PCATool.tsx`; `page/src/hooks/useMolvisUiState.ts`; `page/package.json` (Plotly) |
 | VSCode extension | Verify CSP | confirm `script-src 'self' blob:` allows Plotly's dynamic chunk; no code change expected |
 
 ### Commands
@@ -64,13 +64,13 @@ The primary principle: the map is a **navigation surface**. The scatter is the u
 **No new modifiers.** Embedding is dataset-level; it lives in `core/src/analysis/`.
 
 ### Mode Changes
-**None.** PcaTool is a LeftSidebar analysis panel, not a canvas interaction context.
+**None.** PCATool is a LeftSidebar analysis panel, not a canvas interaction context.
 
 ### Events
 | Event | Emitter | Listeners | Payload type |
 |-------|---------|-----------|--------------|
-| `exploration-change` | `System.setExploration()` | `PcaTool` via `useMolvisUiState` | `DatasetExploration \| null` |
-| `frame-labels-change` | `System.setFrameLabels()` | `PcaTool` (re-renders descriptor picker) | `Map<string, Float64Array> \| null` |
+| `exploration-change` | `System.setExploration()` | `PCATool` via `useMolvisUiState` | `DatasetExploration \| null` |
+| `frame-labels-change` | `System.setFrameLabels()` | `PCATool` (re-renders descriptor picker) | `Map<string, Float64Array> \| null` |
 
 ### WASM Integration
 - **New molrs bindings**: **Yes**
@@ -84,7 +84,7 @@ The primary principle: the map is a **navigation surface**. The scatter is the u
   - Frame meta readers → no wrappers escape (they return primitives or owned strings).
 
 ### ImpostorState Impact
-**None.** PcaTool is a sibling React component; canvas buffers unchanged.
+**None.** PCATool is a sibling React component; canvas buffers unchanged.
 
 ---
 
@@ -260,11 +260,11 @@ function aggregateFrameLabels(frames: Frame[]): Map<string, Float64Array> {
 }
 ```
 
-The ExtXYZ reader in `molrs-io/src/xyz.rs` already parses comment-line `key=value` pairs (`parse_comment_line` → `XYZComment`); surfacing them through the new WASM bindings is all that's needed. **Non-XYZ formats (LAMMPS, PDB) stay out of scope**: their `frame.meta` remains empty; PcaTool shows empty state.
+The ExtXYZ reader in `molrs-io/src/xyz.rs` already parses comment-line `key=value` pairs (`parse_comment_line` → `XYZComment`); surfacing them through the new WASM bindings is all that's needed. **Non-XYZ formats (LAMMPS, PDB) stay out of scope**: their `frame.meta` remains empty; PCATool shows empty state.
 
 ### UI (molvis page)
 
-**`page/package.json`** — add dependency `plotly.js-dist-min`. Dynamically imported inside `PcaTool.tsx` to keep it out of the main bundle.
+**`page/package.json`** — add dependency `plotly.js-dist-min`. Dynamically imported inside `PCATool.tsx` to keep it out of the main bundle.
 
 **`page/src/ui/layout/LeftSidebar.tsx`** — extend the existing switcher:
 
@@ -277,9 +277,9 @@ const ANALYSIS_OPTIONS = [
 ];
 ```
 
-Render `<PcaTool app={app} />` when `selectedAnalysis === "pca"`.
+Render `<PCATool app={app} />` when `selectedAnalysis === "pca"`.
 
-**`page/src/ui/layout/PcaTool.tsx`** — new component. Each `SidebarSection` follows the Edit-tab design language (`text-[10px]` headers, `h-7` inputs).
+**`page/src/ui/layout/PCATool.tsx`** — new component. Each `SidebarSection` follows the Edit-tab design language (`text-[10px]` headers, `h-7` inputs).
 
 **Empty state** — when `system.frameLabels` is null or empty, the tool shows a single hint row (matching the sidebar's status-line pattern):
 
@@ -346,14 +346,14 @@ No hover-triggered seek in MVP (click-to-commit is unambiguous; hover-preview is
 2. Loader aggregates the numeric properties into `system.frameLabels` automatically. No user action needed.
 3. User expands LeftSidebar.
 4. Analysis dropdown shows: `Radial distribution g(r)` / `Cluster analysis` / **`PCA`**.
-5. User picks **PCA** → PcaTool renders with all numeric labels already ticked.
+5. User picks **PCA** → PCATool renders with all numeric labels already ticked.
 6. User clicks **Compute** (or first tweaks clustering/color). Synchronous WASM PCA + optional k-means finishes in <50ms for typical sizes; Plotly scatter appears.
 7. From here:
    - **Click a point** → canvas jumps to that frame; TimelineControl slider moves; current-frame highlight follows.
    - **Hover** → Plotly tooltip with frame index and coordinates.
    - **Timeline scrub** → current-frame highlight on the map moves in lock-step (`frame-change` feedback loop).
 8. Dropdown switches back to RDF / Cluster at any time; exploration is preserved until trajectory changes.
-9. **If the user loads a plain XYZ (no comment-line properties) or a LAMMPS/PDB file**: PcaTool shows the empty-state hint; no descriptors to pick.
+9. **If the user loads a plain XYZ (no comment-line properties) or a LAMMPS/PDB file**: PCATool shows the empty-state hint; no descriptors to pick.
 
 ---
 
@@ -375,8 +375,8 @@ No hover-triggered seek in MVP (click-to-commit is unambiguous; hover-preview is
 
 ### molvis page (React)
 11. [ ] **Add Plotly dep** — `page/package.json` — `plotly.js-dist-min`; verify main-bundle size with `rsbuild build --analyze` (or equivalent); verify it loads in the VSCode webview CSP (`script-src 'self' blob:` check).
-12. [ ] **PcaTool component** — `page/src/ui/layout/PcaTool.tsx` — empty state + four sections (descriptors / clustering / color / compute) + Plotly map; auto-tick all numeric labels on first mount; `plotly_click` → `seekFrame`; `frame-change` → rAF-coalesced `Plotly.restyle` of the current-frame trace.
-13. [ ] **Wire dropdown** — `page/src/ui/layout/LeftSidebar.tsx` — add `"pca"` to `AnalysisType`/`ANALYSIS_OPTIONS`; render `<PcaTool />`.
+12. [ ] **PCATool component** — `page/src/ui/layout/PCATool.tsx` — empty state + four sections (descriptors / clustering / color / compute) + Plotly map; auto-tick all numeric labels on first mount; `plotly_click` → `seekFrame`; `frame-change` → rAF-coalesced `Plotly.restyle` of the current-frame trace.
+13. [ ] **Wire dropdown** — `page/src/ui/layout/LeftSidebar.tsx` — add `"pca"` to `AnalysisType`/`ANALYSIS_OPTIONS`; render `<PCATool />`.
 14. [ ] **UI state hook** — `page/src/hooks/useMolvisUiState.ts` — expose `exploration` and `frameLabels`.
 
 ### Tests
@@ -392,7 +392,7 @@ No hover-triggered seek in MVP (click-to-commit is unambiguous; hover-preview is
    - Click Compute; assert Plotly `<div>` mounted with 10 points
    - Click the point at index 3; assert TimelineControl reads "4 / 10" and canvas structure advances
    - Scrub timeline to frame 7; assert current-frame highlight moves on the map
-   - Load a plain XYZ next (no properties); assert PcaTool shows the empty-state hint and no descriptor chips
+   - Load a plain XYZ next (no properties); assert PCATool shows the empty-state hint and no descriptor chips
 
 ### Docs
 22. [ ] **User doc** — `docs/development/pca-tool.md` — workflow tutorial; note the ExtXYZ-only scope for MVP.
@@ -440,7 +440,7 @@ No hover-triggered seek in MVP (click-to-commit is unambiguous; hover-preview is
 
 - **Decided — Plotly library**: raw `plotly.js-dist-min` (official dist, not a React wrapper), ref-mounted div + `Plotly.react` / `Plotly.restyle`. Lowest overhead; finest control over incremental updates.
 
-- **Decided — Frame-label loader scope (MVP)**: ExtXYZ only. Plain XYZ and non-XYZ formats intentionally produce empty `frameLabels`; PcaTool shows the empty-state hint.
+- **Decided — Frame-label loader scope (MVP)**: ExtXYZ only. Plain XYZ and non-XYZ formats intentionally produce empty `frameLabels`; PCATool shows the empty-state hint.
 
 - **Decided — Default descriptor selection**: all numeric labels pre-ticked on first mount. Driven by what the data source provides. No fabricated fallbacks (no Rg / COM / column reducers).
 

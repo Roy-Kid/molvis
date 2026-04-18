@@ -43,7 +43,7 @@ export function PipelinePropertiesPane({
             />
           </ScrollArea>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground bg-muted/10">
+          <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground bg-muted/10 px-2 text-center">
             Select an item to view properties
           </div>
         )}

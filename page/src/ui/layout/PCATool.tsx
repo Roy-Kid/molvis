@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -9,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import {
   type DatasetExploration,
@@ -18,9 +18,9 @@ import {
 } from "@molvis/core";
 import { AlertCircle, Info, Play } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-interface PcaToolProps {
+interface PCAToolProps {
   app: Molvis | null;
 }
 
@@ -148,10 +148,10 @@ function sortedKeys(frameLabels: Map<string, Float64Array> | null): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// PcaTool
+// PCATool
 // ---------------------------------------------------------------------------
 
-export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
+export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
   const [frameLabels, setFrameLabels] = useState<Map<
     string,
     Float64Array
@@ -174,9 +174,11 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
     () => app?.system.trajectory.length ?? 0,
   );
 
-  // Keep track of colorBy in a ref so the plot effect can read the latest
-  // value without becoming a dependency (we manually include it below).
-  const plotRef = useRef<HTMLDivElement | null>(null);
+  // Hold the plot div in state (via a ref callback) so the plot effects
+  // re-run when the Map section is collapsed and re-expanded — the
+  // SidebarSection unmounts/remounts the child subtree and a plain
+  // `useRef` would silently keep a stale reference.
+  const [plotDiv, setPlotDiv] = useState<HTMLDivElement | null>(null);
 
   // --- Subscribe to system events ------------------------------------------
 
@@ -276,6 +278,20 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
     });
   }, []);
 
+  const selectAllState: boolean | "indeterminate" = useMemo(() => {
+    if (descriptorKeys.length === 0) return false;
+    if (tickedDescriptors.size === 0) return false;
+    if (tickedDescriptors.size === descriptorKeys.length) return true;
+    return "indeterminate";
+  }, [descriptorKeys.length, tickedDescriptors.size]);
+
+  const toggleSelectAll = useCallback(() => {
+    setTickedDescriptors((prev) => {
+      if (prev.size === descriptorKeys.length) return new Set();
+      return new Set(descriptorKeys);
+    });
+  }, [descriptorKeys]);
+
   // --- Color-by options (derived) -----------------------------------------
 
   const colorByOptions: ColorByOption[] = useMemo(() => {
@@ -324,13 +340,13 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
   // --- Plotly: render + click bind -----------------------------------------
 
   useEffect(() => {
-    const div = plotRef.current;
+    const div = plotDiv;
     if (!div || !exploration) return;
     let cancelled = false;
 
     (async () => {
       const Plotly = await loadPlotly();
-      if (cancelled || !plotRef.current) return;
+      if (cancelled) return;
 
       const { coords, axes } = exploration.embedding;
       const nFrames = exploration.descriptors.nFrames;
@@ -427,8 +443,9 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
       cancelled = true;
       // Remove the click handler and purge the plot. Both must happen here
       // (not in a mount-only effect) because the plot div is conditionally
-      // rendered: toggling `exploration` null → non-null unmounts the div
-      // without firing any unmount-scoped cleanup.
+      // rendered: toggling `exploration` null → non-null or collapsing the
+      // Map section unmounts the div without firing any unmount-scoped
+      // cleanup.
       const divToClean = div as unknown as {
         removeAllListeners?: (ev: string) => void;
       };
@@ -443,7 +460,7 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
           // swallow: component is unmounting or Plotly never loaded
         });
     };
-  }, [app, exploration, colorBy, frameLabels]);
+  }, [app, plotDiv, exploration, colorBy, frameLabels]);
 
   // --- Plotly: frame-change restyle ---------------------------------------
 
@@ -458,14 +475,11 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
       const i = pending;
       pending = null;
       if (cancelled) return;
-      const div = plotRef.current;
-      if (i === null || !div) return;
+      if (i === null || !plotDiv) return;
       const { coords } = exploration.embedding;
       if (i < 0 || i >= exploration.descriptors.nFrames) return;
       loadPlotly().then((Plotly) => {
-        if (cancelled) return;
-        const currentDiv = plotRef.current;
-        if (!currentDiv) return;
+        if (cancelled || !plotDiv) return;
         (
           Plotly as unknown as {
             restyle: (
@@ -475,7 +489,7 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
             ) => Promise<unknown>;
           }
         ).restyle(
-          currentDiv,
+          plotDiv,
           {
             x: [[coords[2 * i]]],
             y: [[coords[2 * i + 1]]],
@@ -495,7 +509,39 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
       unsub();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [app, exploration]);
+  }, [app, plotDiv, exploration]);
+
+  // --- Plotly: keep layout synced to container size ------------------------
+  // `responsive: true` only listens for window resize; it misses the
+  // resizable-panel drag that changes the sidebar's width.
+  useEffect(() => {
+    if (!plotDiv || !exploration) return;
+    let rafId: number | null = null;
+    let disposed = false;
+    const observer = new ResizeObserver(() => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (disposed) return;
+        loadPlotly()
+          .then((Plotly) => {
+            if (disposed) return;
+            (
+              Plotly as unknown as {
+                Plots: { resize: (el: HTMLElement) => void };
+              }
+            ).Plots.resize(plotDiv);
+          })
+          .catch(() => {});
+      });
+    });
+    observer.observe(plotDiv);
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [plotDiv, exploration]);
 
   // --- Render --------------------------------------------------------------
 
@@ -523,41 +569,105 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
         subtitle={`${tickedDescriptors.size} / ${descriptorKeys.length} selected`}
         defaultOpen={true}
       >
-        <div className="space-y-0.5">
-          {descriptorKeys.map((name) => {
-            const id = `pca-desc-${name}`;
-            const checked = tickedDescriptors.has(name);
-            const column = frameLabels?.get(name);
-            const nFinite = column ? countFinite(column) : 0;
-            const total = column?.length ?? 0;
-            return (
-              <div
-                key={name}
-                className="flex items-center gap-1.5 px-0.5 py-0.5"
-              >
-                <Checkbox
-                  id={id}
-                  checked={checked}
-                  onCheckedChange={(v) => toggleDescriptor(name, v === true)}
-                  className="h-3.5 w-3.5"
-                />
-                <Label
-                  htmlFor={id}
-                  className="text-xs font-mono cursor-pointer leading-none flex-1 min-w-0 truncate"
-                  title={`${name} — ${nFinite}/${total} finite`}
-                >
-                  {name}
-                </Label>
-                <span className="text-[9px] text-muted-foreground shrink-0 tabular-nums">
-                  {nFinite}/{total}
-                </span>
-              </div>
-            );
-          })}
+        <div className="rounded-md border overflow-hidden">
+          <div className="max-h-[220px] overflow-y-auto">
+            <table className="w-full text-xs table-fixed border-collapse">
+              <colgroup>
+                <col className="w-7" />
+                <col />
+                <col className="w-14" />
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-muted/40 backdrop-blur border-b">
+                <tr>
+                  <th className="p-1 align-middle">
+                    <div className="flex items-center justify-center">
+                      <Checkbox
+                        checked={selectAllState}
+                        onCheckedChange={toggleSelectAll}
+                        className="h-3.5 w-3.5"
+                        aria-label="Toggle all descriptors"
+                      />
+                    </div>
+                  </th>
+                  <th className="text-left px-1.5 py-1 text-[9px] uppercase tracking-wide font-semibold text-muted-foreground">
+                    Name
+                  </th>
+                  <th className="text-right px-1.5 py-1 text-[9px] uppercase tracking-wide font-semibold text-muted-foreground">
+                    Finite
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {descriptorKeys.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-1.5 py-2 text-center text-[10px] text-muted-foreground"
+                    >
+                      No descriptors available
+                    </td>
+                  </tr>
+                ) : (
+                  descriptorKeys.map((name) => {
+                    const checked = tickedDescriptors.has(name);
+                    const column = frameLabels?.get(name);
+                    const nFinite = column ? countFinite(column) : 0;
+                    const total = column?.length ?? 0;
+                    return (
+                      <tr
+                        key={name}
+                        tabIndex={0}
+                        className={cn(
+                          "border-b last:border-b-0 cursor-pointer transition-colors outline-none focus-visible:bg-muted/40",
+                          checked
+                            ? "bg-primary/5 hover:bg-primary/10"
+                            : "hover:bg-muted/30",
+                        )}
+                        onClick={() => toggleDescriptor(name, !checked)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleDescriptor(name, !checked);
+                          }
+                        }}
+                      >
+                        <td className="p-1 align-middle">
+                          <div className="flex items-center justify-center">
+                            <Checkbox
+                              checked={checked}
+                              className="h-3.5 w-3.5 pointer-events-none"
+                              tabIndex={-1}
+                            />
+                          </div>
+                        </td>
+                        <td
+                          className="px-1.5 py-1 font-mono truncate"
+                          title={`${name} — ${nFinite}/${total} finite`}
+                        >
+                          {name}
+                        </td>
+                        <td className="px-1.5 py-1 text-right text-[10px] text-muted-foreground tabular-nums">
+                          {nFinite}/{total}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </SidebarSection>
 
-      <SidebarSection title="Clustering" defaultOpen={true}>
+      <SidebarSection
+        title="Clustering"
+        subtitle={
+          clusteringMethod === "kmeans"
+            ? `k-means · k=${parsedK}`
+            : "Off — PCA only"
+        }
+        defaultOpen={true}
+      >
         <div className="flex items-center gap-1.5">
           <span className="w-10 shrink-0 text-[10px] text-muted-foreground">
             Method
@@ -574,7 +684,7 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">
-                <span className="text-xs">None</span>
+                <span className="text-xs">Off (no clustering)</span>
               </SelectItem>
               <SelectItem value="kmeans">
                 <span className="text-xs">k-means</span>
@@ -634,6 +744,14 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
       </SidebarSection>
 
       <SidebarSection title="Compute" defaultOpen={true}>
+        <p className="text-[10px] text-muted-foreground px-0.5 leading-tight">
+          Will run:{" "}
+          <span className="text-foreground font-medium">
+            PCA
+            {clusteringMethod === "kmeans" ? ` + k-means (k=${parsedK})` : ""}
+          </span>
+        </p>
+
         <Button
           size="sm"
           className="h-7 w-full text-xs gap-1.5"
@@ -673,7 +791,7 @@ export function PcaTool({ app }: PcaToolProps): React.ReactElement | null {
         contentClassName="flex-1 min-h-0 flex flex-col"
       >
         {exploration ? (
-          <div ref={plotRef} className="flex-1 min-h-0" />
+          <div ref={setPlotDiv} className="flex-1 min-h-0" />
         ) : (
           <p className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight px-0.5">
             <Info className="h-3 w-3 shrink-0 mt-px" />

@@ -28,18 +28,24 @@ import html
 import json
 import logging
 import secrets
+import threading
+import time
 import weakref
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Final, Iterable
+
+import molpy as mp
 
 from .commands import (
     DrawingCommandsMixin,
     FrameCommandsMixin,
+    ModifierInfo,
     OverlayCommandsMixin,
     PaletteCommandsMixin,
+    PipelineCommandsMixin,
     SelectionCommandsMixin,
     SnapshotCommandsMixin,
 )
-from .errors import MolvisRpcError
+from .errors import MolvisRPCError
 from .events import EventBus, EventHandle, Selection, ViewerState
 from .transport import Transport, WebSocketTransport
 from .transport._jupyter_env import in_jupyter_kernel as _in_jupyter_kernel
@@ -54,6 +60,26 @@ logger = logging.getLogger("molvis")
 __all__ = ["Molvis"]
 
 
+class _Unset:
+    """Sentinel for parameters the caller did not pass."""
+
+    _singleton: "_Unset | None" = None
+
+    def __new__(cls) -> "_Unset":
+        if cls._singleton is None:
+            cls._singleton = super().__new__(cls)
+        return cls._singleton
+
+    def __repr__(self) -> str:
+        return "<unset>"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+_UNSET: Final[_Unset] = _Unset()
+
+
 class Molvis(
     DrawingCommandsMixin,
     SelectionCommandsMixin,
@@ -61,6 +87,7 @@ class Molvis(
     SnapshotCommandsMixin,
     OverlayCommandsMixin,
     PaletteCommandsMixin,
+    PipelineCommandsMixin,
 ):
     """A MolVis viewer driven by JSON-RPC over WebSocket.
 
@@ -68,7 +95,11 @@ class Molvis(
     ----------
     name
         Human-readable session name. Instantiating twice with the same
-        name returns the cached instance.
+        name returns the cached instance — but only when the requested
+        config is compatible. Passing a different ``gui``, ``width``,
+        ``height``, or ``transport`` than the cached scene raises
+        :class:`ValueError`. Use :meth:`replace` to swap the cached
+        scene for a new configuration, or pass a different ``name``.
     transport
         A :class:`~molvis.transport.Transport` implementation. When
         ``None``, a :class:`~molvis.transport.WebSocketTransport` is
@@ -87,13 +118,21 @@ class Molvis(
     Example
     -------
         >>> import molvis as mv
-        >>> viewer = mv.Molvis()                  # full UI
-        >>> canvas = mv.Molvis(name="bare", gui=False)  # canvas only
+        >>> viewer = mv.Molvis()                          # full UI
+        >>> canvas = mv.Molvis(name="bare", gui=False)    # canvas only
         >>> viewer.draw_frame(frame)
         >>> viewer.on("selection_changed",
         ...           lambda ev: print(ev["atom_ids"]))
         >>> viewer.selection
         Selection(atom_ids=(), bond_ids=())
+
+        # The two viewers above share the same Python process but each
+        # owns its own port, transport, and browser session — they are
+        # *not* aliased even though one used the implicit "default" name.
+        >>> mv.Molvis(gui=False)            # raises: cached gui=True
+        Traceback (most recent call last):
+        ValueError: Molvis(name='default') already exists ...
+        >>> mv.Molvis.replace(gui=False)    # close and recreate
     """
 
     _scene_registry: dict[str, "Molvis"] = {}
@@ -103,31 +142,40 @@ class Molvis(
     def __new__(
         cls,
         name: str | None = None,
-        **_kwargs: Any,
+        *,
+        transport: Transport | None = None,
+        width: int | _Unset = _UNSET,
+        height: int | _Unset = _UNSET,
+        gui: bool | _Unset = _UNSET,
     ) -> "Molvis":
         scene_name = name or cls._DEFAULT_NAME
         existing = cls._scene_registry.get(scene_name)
-        if existing is not None:
-            return existing
-        return super().__new__(cls)
+        if existing is None:
+            return super().__new__(cls)
+
+        existing._reject_param_conflict(
+            transport=transport, width=width, height=height, gui=gui
+        )
+        return existing
 
     def __init__(
         self,
         name: str | None = None,
         *,
         transport: Transport | None = None,
-        width: int = 1200,
-        height: int = 800,
-        gui: bool = True,
+        width: int | _Unset = _UNSET,
+        height: int | _Unset = _UNSET,
+        gui: bool | _Unset = _UNSET,
     ) -> None:
         if getattr(self, "_initialised", False):
             return
         self._initialised = True
 
         self.name: str = name or self._DEFAULT_NAME
-        self.width: int = width
-        self.height: int = height
-        self.gui: bool = gui
+        self.width: int = 1200 if isinstance(width, _Unset) else width
+        self.height: int = 800 if isinstance(height, _Unset) else height
+        self.gui: bool = True if isinstance(gui, _Unset) else gui
+        self._created_at: float = time.time()
 
         self._state = ViewerState()
         self._events = EventBus(self._state)
@@ -136,7 +184,7 @@ class Molvis(
             transport = WebSocketTransport(
                 open_browser=not _in_jupyter_kernel(),
                 event_bus=self._events,
-                minimal=not gui,
+                minimal=not self.gui,
             )
         else:
             attach = getattr(transport, "attach_event_bus", None)
@@ -145,12 +193,80 @@ class Molvis(
 
         self._transport: Transport = transport
 
+        # Mirror of what this scene has pushed to the frontend. On a new
+        # WS handshake the frontend sends `event.request_state_sync` and
+        # we reply with a `scene.apply_state` RPC carrying this snapshot
+        # so the reloaded page can rebuild the same pipeline/scene the
+        # old page had. Updated only from the pipeline + drawing mixins.
+        self._mirror_pipeline: list[ModifierInfo] = []
+        self._mirror_trajectory: list[mp.Frame] | None = None
+        self._mirror_boxes: list[mp.Box | None] | None = None
+        self._mirror_lock = threading.Lock()
+
+        self._events.on(
+            "request_state_sync", self._handle_state_sync_request
+        )
+
         Molvis._scene_registry[self.name] = self
         Molvis._instances.add(self)
-        logger.debug("Molvis '%s' created", self.name)
+        logger.debug(
+            "Molvis '%s' created (gui=%s, %dx%d)",
+            self.name,
+            self.gui,
+            self.width,
+            self.height,
+        )
 
     def __repr__(self) -> str:
-        return f"Molvis(name={self.name!r}, {self.width}x{self.height})"
+        status = "connected" if self.connected else "idle"
+        return (
+            f"Molvis(name={self.name!r}, {self.width}x{self.height}, "
+            f"gui={self.gui}, {status})"
+        )
+
+    def _reject_param_conflict(
+        self,
+        *,
+        transport: Transport | None,
+        width: int | _Unset,
+        height: int | _Unset,
+        gui: bool | _Unset,
+    ) -> None:
+        """Raise if the cached scene does not match the requested config.
+
+        We only validate parameters the caller passed explicitly — omitted
+        kwargs are treated as "give me whatever is cached".
+        """
+        if transport is not None and transport is not self._transport:
+            raise ValueError(
+                f"Molvis(name={self.name!r}) already exists with a "
+                "different transport; refusing to attach a new one. "
+                f"Use Molvis.replace({self.name!r}, transport=...) to "
+                f"swap, or Molvis.get_scene({self.name!r}) to fetch the "
+                "existing one."
+            )
+        mismatches: list[str] = []
+        if not isinstance(gui, _Unset) and gui != self.gui:
+            mismatches.append(f"gui: cached={self.gui!r}, requested={gui!r}")
+        if not isinstance(width, _Unset) and width != self.width:
+            mismatches.append(
+                f"width: cached={self.width!r}, requested={width!r}"
+            )
+        if not isinstance(height, _Unset) and height != self.height:
+            mismatches.append(
+                f"height: cached={self.height!r}, requested={height!r}"
+            )
+        if not mismatches:
+            return
+        details = "\n  ".join(mismatches)
+        raise ValueError(
+            f"Molvis(name={self.name!r}) already exists with a different "
+            f"configuration:\n  {details}\n"
+            "Choose one of:\n"
+            f"  - pass a different name=  to open a new viewer\n"
+            f"  - Molvis.replace({self.name!r}, ...)  to close & recreate\n"
+            f"  - Molvis.get_scene({self.name!r})     to fetch the existing one"
+        )
 
     # ------------------------------------------------------------------
     # Registry
@@ -178,6 +294,41 @@ class Molvis(
     def list_instances(cls) -> list["Molvis"]:
         return list(cls._instances)
 
+    @classmethod
+    def has_scene(cls, name: str) -> bool:
+        """Return ``True`` when a scene with this *name* is registered."""
+        return name in cls._scene_registry
+
+    @classmethod
+    def replace(cls, name: str | None = None, **kwargs: Any) -> "Molvis":
+        """Close any existing scene with this name and create a new one.
+
+        Use this when you want to change ``gui``, ``width``, ``height``,
+        or the ``transport`` of an already-running viewer — those cannot
+        be mutated in place because the transport URL and the page mount
+        opts are baked in at construction time.
+        """
+        scene_name = name or cls._DEFAULT_NAME
+        existing = cls._scene_registry.get(scene_name)
+        if existing is not None:
+            existing.close()
+        return cls(name=scene_name, **kwargs)
+
+    @classmethod
+    def close_all(cls) -> None:
+        """Close every registered scene and clear the registry."""
+        for scene in list(cls._scene_registry.values()):
+            try:
+                scene.close()
+            except Exception:
+                logger.exception("Failed to close scene '%s'", scene.name)
+        cls._scene_registry.clear()
+
+    @classmethod
+    def session_summary(cls) -> list[dict[str, Any]]:
+        """Return one dict per registered scene for debugging / display."""
+        return [scene.session_info for scene in cls._scene_registry.values()]
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -193,6 +344,25 @@ class Molvis(
         Molvis._scene_registry.pop(self.name, None)
         self._initialised = False
         logger.debug("Molvis '%s' closed", self.name)
+
+    @property
+    def connected(self) -> bool:
+        """Whether the transport currently holds a live browser session."""
+        return bool(getattr(self._transport, "connected", False))
+
+    @property
+    def session_info(self) -> dict[str, Any]:
+        """Snapshot of viewer identity and connection state."""
+        port = getattr(self._transport, "port", 0)
+        return {
+            "name": self.name,
+            "gui": self.gui,
+            "width": self.width,
+            "height": self.height,
+            "connected": self.connected,
+            "port": port,
+            "created_at": self._created_at,
+        }
 
     def _ensure_started(self) -> None:
         start = getattr(self._transport, "start", None)
@@ -217,7 +387,7 @@ class Molvis(
         ------
         TimeoutError
             The transport never received a response.
-        MolvisRpcError
+        MolvisRPCError
             The frontend returned an error envelope.
         """
         self._ensure_started()
@@ -238,7 +408,7 @@ class Molvis(
                 error.get("code", -32603),
                 error.get("message", "Unknown frontend error"),
             )
-            raise MolvisRpcError(
+            raise MolvisRPCError(
                 method=method,
                 code=int(error.get("code", -32603)),
                 message=str(error.get("message", "Unknown frontend error")),
@@ -301,6 +471,95 @@ class Molvis(
     @property
     def events(self) -> EventBus:
         return self._events
+
+    # ------------------------------------------------------------------
+    # Mirror state (for reconnect replay)
+    # ------------------------------------------------------------------
+
+    def _record_pipeline(self, entries: Iterable[ModifierInfo]) -> None:
+        """Replace the pipeline mirror with ``entries`` (frontend order)."""
+        with self._mirror_lock:
+            self._mirror_pipeline = list(entries)
+
+    def _record_trajectory(
+        self,
+        frames: Iterable[mp.Frame],
+        boxes: Iterable[mp.Box | None] | None,
+    ) -> None:
+        """Cache what we just handed to :meth:`draw_frame` / :meth:`set_trajectory`.
+
+        Keeps frames and boxes as live objects; ``_build_state_payload``
+        re-serializes on demand when the frontend asks for sync.
+        """
+        with self._mirror_lock:
+            self._mirror_trajectory = list(frames)
+            if boxes is None:
+                self._mirror_boxes = None
+            else:
+                self._mirror_boxes = list(boxes)
+
+    def _clear_mirror(self) -> None:
+        """Drop everything — called from ``clear()`` / ``clear_pipeline()``."""
+        with self._mirror_lock:
+            self._mirror_pipeline = []
+            self._mirror_trajectory = None
+            self._mirror_boxes = None
+
+    def _build_state_payload(self) -> dict[str, Any]:
+        """Serialize mirror state for a ``scene.apply_state`` RPC."""
+        with self._mirror_lock:
+            pipeline = [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "category": m.category,
+                    "enabled": m.enabled,
+                    "parent_id": m.parent_id,
+                }
+                for m in self._mirror_pipeline
+            ]
+            frames: list[dict[str, Any]] | None = None
+            if self._mirror_trajectory is not None:
+                frames = [
+                    {"blocks": f.to_dict().get("blocks", {})}
+                    for f in self._mirror_trajectory
+                ]
+            boxes: list[dict[str, Any] | None] | None = None
+            if self._mirror_boxes is not None:
+                boxes = [
+                    b.to_dict() if b is not None else None
+                    for b in self._mirror_boxes
+                ]
+        return {
+            "pipeline": pipeline,
+            "frames": frames,
+            "boxes": boxes,
+        }
+
+    def _handle_state_sync_request(self, params: dict[str, Any]) -> None:
+        """Fire-and-forget reply to ``event.request_state_sync``.
+
+        The EventBus dispatches on the transport's asyncio thread, so we
+        offload the actual send to a daemon thread — ``send_request``
+        uses ``future.result()`` which would deadlock if called from the
+        loop thread.
+        """
+        threading.Thread(
+            target=self._send_state_sync_snapshot,
+            name=f"molvis-state-sync-{self.name}",
+            daemon=True,
+        ).start()
+
+    def _send_state_sync_snapshot(self) -> None:
+        try:
+            payload = self._build_state_payload()
+            self._transport.send_request(
+                "scene.apply_state",
+                payload,
+                wait_for_response=False,
+            )
+        except Exception:
+            logger.exception("Failed to send state sync to frontend")
 
     # ------------------------------------------------------------------
     # Jupyter rich display — inline mount via the page bundle's ESM

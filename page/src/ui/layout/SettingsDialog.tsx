@@ -6,16 +6,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type { Molvis } from "@molvis/core";
 import { Settings } from "lucide-react";
 import type React from "react";
-import { RenderTab } from "../modes/view/RenderTab";
+import { BackendSection } from "./BackendSection";
 
-interface SettingsDialogProps {
-  app: Molvis | null;
-}
-
-export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
+export const SettingsDialog: React.FC = () => {
   return (
     <Dialog modal={false}>
       <DialogTrigger asChild>
@@ -23,13 +18,12 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
           <Settings className="h-5 w-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-[400px]">
+      <DialogContent className="max-w-[420px]">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        <div className="py-4">
-          {/* Reuse RenderTab content or creating specific settings content */}
-          <RenderTab app={app} />
+        <div className="py-2">
+          <BackendSection />
         </div>
       </DialogContent>
     </Dialog>

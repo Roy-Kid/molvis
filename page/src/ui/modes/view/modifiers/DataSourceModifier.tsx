@@ -58,28 +58,36 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     app?.applyPipeline({ fullRebuild: true });
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (!app) return;
     modifier.setFrame(null);
     modifier.sourceType = "empty";
     modifier.filename = "";
-    app.loadFrame(new Frame());
+    await app.loadFrame(new Frame());
+    await app.applyPipeline({ fullRebuild: true });
     onUpdate();
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <div className="relative flex-1 min-w-0">
           <input
             type="file"
             className="absolute inset-0 opacity-0 cursor-pointer"
             onChange={handleFileUpload}
             accept=".pdb,.xyz,.lmp,.lammps"
-            title="Load single file"
+            title="Load file"
+            aria-label="Load file"
           />
-          <Button variant="outline" size="sm" className="w-full gap-2">
-            <FileUp className="h-4 w-4" /> Load File
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-full px-2"
+            title="Load file"
+            aria-label="Load file"
+          >
+            <FileUp className="h-3.5 w-3.5" />
           </Button>
         </div>
 
@@ -87,69 +95,63 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
           variant="ghost"
           size="icon"
           onClick={handleClear}
-          title="Clear Scene"
-          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+          title="Clear scene"
+          aria-label="Clear scene"
+          className="h-7 w-7 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
       <div className="text-[10px] text-muted-foreground truncate px-1">
-        Src: <span className="font-mono text-foreground">{filename}</span>
+        <span className="font-mono text-foreground">{filename}</span>
       </div>
 
       <div className="border rounded-md overflow-hidden bg-background">
-        <table className="w-full text-xs">
-          <thead className="bg-muted text-muted-foreground font-medium">
-            <tr>
-              <th className="px-3 py-2 text-left w-8">Vis</th>
-              <th className="px-2 py-2 text-left">Element</th>
-              <th className="px-3 py-2 text-right">Count</th>
-            </tr>
-          </thead>
+        <table className="w-full text-[10px]">
           <tbody className="divide-y">
             <tr className="hover:bg-muted/50 transition-colors">
-              <td className="px-3 py-2">
+              <td className="px-1.5 py-1 w-6">
                 <Checkbox
                   checked={modifier.showAtoms}
                   onCheckedChange={(checked) =>
                     handleToggle("showAtoms", checked === true)
                   }
-                  className="h-3.5 w-3.5"
+                  className="h-3 w-3"
                 />
               </td>
-              <td className="px-2 py-2 font-medium">Atoms</td>
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+              <td className="px-1 py-1 font-medium">Atoms</td>
+              <td className="px-1.5 py-1 text-right font-mono text-muted-foreground tabular-nums">
                 {atomCount}
               </td>
             </tr>
             <tr className="hover:bg-muted/50 transition-colors">
-              <td className="px-3 py-2">
+              <td className="px-1.5 py-1 w-6">
                 <Checkbox
                   checked={modifier.showBonds}
                   onCheckedChange={(checked) =>
                     handleToggle("showBonds", checked === true)
                   }
-                  className="h-3.5 w-3.5"
+                  className="h-3 w-3"
                 />
               </td>
-              <td className="px-2 py-2 font-medium">Bonds</td>
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+              <td className="px-1 py-1 font-medium">Bonds</td>
+              <td className="px-1.5 py-1 text-right font-mono text-muted-foreground tabular-nums">
                 {bondCount}
               </td>
             </tr>
             <tr className="hover:bg-muted/50 transition-colors">
-              <td className="px-3 py-2">
+              <td className="px-1.5 py-1 w-6">
                 <Checkbox
                   checked={modifier.showBox}
                   onCheckedChange={(checked) =>
                     handleToggle("showBox", checked === true)
                   }
-                  className="h-3.5 w-3.5"
+                  className="h-3 w-3"
                 />
               </td>
-              <td className="px-2 py-2 font-medium">Box</td>
-              <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+              <td className="px-1 py-1 font-medium">Box</td>
+              <td className="px-1.5 py-1 text-right font-mono text-muted-foreground tabular-nums">
                 {hasBox ? 1 : 0}
               </td>
             </tr>

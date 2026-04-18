@@ -57,8 +57,6 @@ __all__ = ["PageEndpoints", "WebSocketTransport", "resolve_page_dist"]
 
 mimetypes.add_type("application/wasm", ".wasm")
 
-_HANDSHAKE_TIMEOUT = 30.0
-
 _SCRIPT_SRC_RE = re.compile(
     r"<script\b[^>]*\bsrc=[\"']([^\"']+)[\"']",
     re.IGNORECASE,
@@ -180,6 +178,20 @@ class WebSocketTransport:
         When ``True``, the standalone URL is built with ``&minimal=1``
         so the page bundle hides all chrome (TopBar, sidebars, timeline)
         and renders only the 3D canvas. Defaults to ``False``.
+    handshake_timeout
+        Seconds to wait for the browser to finish the hello handshake —
+        both on the server side (after a TCP accept, before a hello
+        frame arrives) and on the client side (``send_request`` blocking
+        until a browser is attached). ``None`` (default) waits
+        indefinitely; set a concrete number only when you want a hard
+        failure if the browser never shows up.
+    serve_page
+        When ``True`` (default), HTTP requests to paths other than
+        ``/ws`` serve the bundled ``page_dist/`` — useful for notebook
+        hosts and the VSCode webview. Pass ``False`` for WS-only mode
+        where the frontend is hosted elsewhere (e.g. an
+        already-open ``npm run dev:page`` tab) and only the
+        ``ws://…?token=…&session=…`` URL is shared.
     """
 
     def __init__(
@@ -193,6 +205,8 @@ class WebSocketTransport:
         page_dist: pathlib.Path | None = None,
         event_bus: EventBus | None = None,
         minimal: bool = False,
+        handshake_timeout: float | None = None,
+        serve_page: bool = True,
     ) -> None:
         self._page_base_url = (
             page_base_url.rstrip("/") + "/" if page_base_url else None
@@ -204,6 +218,8 @@ class WebSocketTransport:
         self._page_dist = page_dist or resolve_page_dist()
         self._event_bus = event_bus
         self._minimal = minimal
+        self._handshake_timeout = handshake_timeout
+        self._serve_page = serve_page
 
         self._decoder = BinaryPayloadDecoder()
         self._response_lock = threading.Lock()
@@ -297,6 +313,29 @@ class WebSocketTransport:
             standalone_url=standalone_url,
         )
 
+    def connection_url(self, *, session: str = "default") -> str:
+        """Return a single pasteable ``ws://…`` URL with token + session.
+
+        The user pastes this one string into the page's Settings → Backend
+        dialog; the frontend extracts ``token`` and ``session`` from the
+        query component before opening the socket. Prefer this over
+        :meth:`page_endpoints` when the frontend is already open in a
+        browser (e.g. a long-running ``npm run dev:page``).
+
+        Raises
+        ------
+        RuntimeError
+            ``start()`` has not been called yet.
+        """
+        if self._bound_port == 0:
+            raise RuntimeError(
+                "Call start() before requesting a connection URL"
+            )
+        query = urllib.parse.urlencode(
+            {"token": self._token, "session": session}
+        )
+        return f"ws://{self._host}:{self._bound_port}/ws?{query}"
+
     @staticmethod
     def _absolute(base: str, asset_path: str) -> str:
         """Join an asset path from ``index.html`` with the resolved base."""
@@ -358,7 +397,20 @@ class WebSocketTransport:
         self._ws = None
         self._started = False
 
-    def wait_for_connection(self, timeout: float = _HANDSHAKE_TIMEOUT) -> None:
+    def wait_for_connection(self, timeout: float | None = None) -> None:
+        """Block until a browser finishes the hello handshake.
+
+        Parameters
+        ----------
+        timeout
+            Maximum seconds to wait. ``None`` (default) waits
+            indefinitely — appropriate when the user may open the
+            browser tab at any time. Pass a concrete number to fail
+            fast when the browser is expected to be ready already.
+        """
+        if timeout is None:
+            self._connected_event.wait()
+            return
         if not self._connected_event.wait(timeout=timeout):
             raise TimeoutError(
                 f"No browser session within {timeout}s. "
@@ -409,9 +461,12 @@ class WebSocketTransport:
         timeout: float = 10.0,
     ) -> dict[str, Any] | None:
         if not self._connected_event.is_set():
-            if not self._connected_event.wait(timeout=_HANDSHAKE_TIMEOUT):
+            handshake_timeout = self._handshake_timeout
+            if handshake_timeout is None:
+                self._connected_event.wait()
+            elif not self._connected_event.wait(timeout=handshake_timeout):
                 raise TimeoutError(
-                    f"No browser handshake after {_HANDSHAKE_TIMEOUT}s — "
+                    f"No browser handshake after {handshake_timeout}s — "
                     "cannot send RPC."
                 )
 
@@ -575,6 +630,10 @@ class WebSocketTransport:
                 await ws.close(1013, "session already bound")
                 return
 
+            # Reset the disconnect event so a re-connect (e.g. React
+            # StrictMode's dev double-mount) does not leave stale state
+            # that would trip the next wait_for_disconnection().
+            self._disconnected_event.clear()
             self._ws = ws
             try:
                 await self._handshake(ws)
@@ -601,7 +660,7 @@ class WebSocketTransport:
             path = request.path.split("?", 1)[0]
             if path == "/ws":
                 return None
-            if self._page_base_url is not None:
+            if self._page_base_url is not None or not self._serve_page:
                 return Response(404, "Not Found", Headers())
             return self._serve_static(path, Response)
 
@@ -620,7 +679,12 @@ class WebSocketTransport:
     async def _handshake(self, ws: Any) -> None:
         """Wait for the client hello, validate the token, respond ready."""
         try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=_HANDSHAKE_TIMEOUT)
+            if self._handshake_timeout is None:
+                raw = await ws.recv()
+            else:
+                raw = await asyncio.wait_for(
+                    ws.recv(), timeout=self._handshake_timeout
+                )
         except asyncio.TimeoutError as exc:
             raise _HandshakeError(1008, "handshake timeout") from exc
         if not isinstance(raw, str):

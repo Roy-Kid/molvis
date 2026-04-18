@@ -101,6 +101,70 @@ scene.set_view_mode("select")
 | `"manipulate"` | Transform selected groups |
 | `"measure"` | Distance, angle, dihedral |
 
+## Pipeline
+
+The modifier pipeline is the single source of truth for scene content:
+every frame — whether loaded via the sidebar's **Load File** button or
+pushed from Python with `draw_frame` / `set_trajectory` — flows through
+a `DataSourceModifier` at the head, followed by user-added modifiers
+(selection, hide, color, …). The GUI sidebar and these Python commands
+manipulate the same pipeline, so toggling a modifier from Python is
+indistinguishable from clicking it in the sidebar.
+
+### `list_modifiers()`
+
+Snapshot the current pipeline, in execution order.
+
+``` python
+for m in scene.list_modifiers():
+    print(m.name, m.id, "enabled" if m.enabled else "off")
+```
+
+### `available_modifiers()`
+
+List every modifier type registered in the frontend's `ModifierRegistry`.
+Use the `name` field with `add_modifier`.
+
+``` python
+for entry in scene.available_modifiers():
+    print(entry.name, "—", entry.category)
+```
+
+### `add_modifier(name, *, parent_id=None, enabled=None)`
+
+Append a modifier to the pipeline.
+
+``` python
+scene.add_modifier("Hide Hydrogens")
+sel = scene.add_modifier("Expression Select")
+scene.add_modifier("Hide Selection", parent_id=sel.id)
+```
+
+Selection-sensitive modifiers must attach to a selection-producing
+parent (via `parent_id`) or to an existing `SelectModifier` in the
+pipeline.
+
+### `remove_modifier(id)` / `clear_pipeline()`
+
+``` python
+scene.remove_modifier(mod.id)   # cascade-removes descendants
+scene.clear_pipeline()          # drop every modifier
+```
+
+### `reorder_modifier(id, new_index)`
+
+``` python
+scene.reorder_modifier(mod.id, 0)   # move to head
+```
+
+### `set_modifier_enabled(id, enabled)` / `set_modifier_parent(id, parent_id)`
+
+``` python
+scene.set_modifier_enabled(mod.id, False)
+scene.set_modifier_parent(mod.id, None)          # detach
+scene.set_modifier_parent(mod.id, selector.id)   # reparent
+```
+
 ## Selection
 
 ### `get_selected()`
@@ -142,11 +206,11 @@ frame_data = scene.export_frame()
 
 ## Error handling
 
-All commands communicate with the frontend via JSON-RPC. If the frontend rejects a command, Python raises `MolvisRpcError`:
+All commands communicate with the frontend via JSON-RPC. If the frontend rejects a command, Python raises `MolvisRPCError`:
 
 ``` python
 try:
     scene.draw_frame(frame)
-except mv.MolvisRpcError as exc:
+except mv.MolvisRPCError as exc:
     print(f"Error {exc.code}: {exc}")
 ```

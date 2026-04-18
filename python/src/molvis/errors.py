@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["MolvisRpcError"]
+__all__ = ["MolvisRPCError"]
 
 
-class MolvisRpcError(RuntimeError):
+class MolvisRPCError(RuntimeError):
     """Frontend JSON-RPC error propagated back into Python."""
 
     def __init__(

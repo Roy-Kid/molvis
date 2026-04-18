@@ -56,44 +56,46 @@ export function SortableModifierItem({
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 10 : 0,
-    paddingLeft: `${depth * 20 + 8}px`,
+    paddingLeft: `${depth * 14 + 4}px`,
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-2 pr-2 border-b last:border-0 text-sm select-none ${selected ? "bg-accent/80" : "bg-background hover:bg-accent/30"} ${isDragging ? "opacity-50" : ""}`}
+      className={`flex items-center gap-1 py-1 pr-1 border-b last:border-0 text-xs select-none ${selected ? "bg-accent/80" : "bg-background hover:bg-accent/30"} ${isDragging ? "opacity-50" : ""}`}
       onClick={onSelect}
       {...attributes}
     >
       {hasChildren ? (
         <button
           type="button"
-          className="flex items-center justify-center w-4 h-4 text-muted-foreground hover:text-foreground shrink-0"
+          className="flex items-center justify-center w-3.5 h-3.5 text-muted-foreground hover:text-foreground shrink-0"
           onClick={(event) => {
             event.stopPropagation();
             onToggleExpand();
           }}
+          aria-label={isExpanded ? "Collapse" : "Expand"}
         >
           {isExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-3 w-3" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3 w-3" />
           )}
         </button>
       ) : (
-        <span className="w-4 shrink-0" />
+        <span className="w-3.5 shrink-0" />
       )}
 
       <div
         {...listeners}
-        className="cursor-grab text-muted-foreground hover:text-foreground"
+        className="cursor-grab text-muted-foreground hover:text-foreground shrink-0"
+        aria-label="Drag to reorder"
       >
-        <GripVertical className="h-4 w-4" />
+        <GripVertical className="h-3.5 w-3.5" />
       </div>
 
-      <div className="flex items-center justify-center">
+      <div className="flex items-center justify-center shrink-0">
         <Checkbox
           checked={modifier.enabled}
           onCheckedChange={() => onToggle()}
@@ -103,25 +105,23 @@ export function SortableModifierItem({
         />
       </div>
 
-      <span className="flex-1 font-medium truncate cursor-default">
+      <span className="flex-1 min-w-0 font-medium truncate cursor-default">
         {getDisplayName(modifier)}
       </span>
 
-      <div className="flex items-center gap-1">
-        {modifier.name !== "Data Source" && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRemove();
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
+        title="Remove modifier"
+        aria-label="Remove modifier"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }

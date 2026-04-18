@@ -139,7 +139,13 @@ export {
   type AtomRow,
   type BondRow,
 } from "./data_inspector";
-export { EventEmitter, type MolvisEventMap, type Listener } from "./events";
+export {
+  EventEmitter,
+  type BackendStateSync,
+  type BackendStateSyncPipelineEntry,
+  type Listener,
+  type MolvisEventMap,
+} from "./events";
 export {
   pointInPolygon,
   simplifyPolyline,
@@ -198,9 +204,10 @@ export {
 
 export {
   attachWebSocketBridge,
+  applyBackendState,
   WebSocketBridge,
   EventForwarder,
-  StandaloneRpcRouter,
+  RPCRouter,
   type AttachWebSocketBridgeOpts,
   type BridgeConnectResult,
   type JsonRPCRequest,
@@ -208,5 +215,5 @@ export {
   type BinaryBufferRef,
   type SerializedFrameData,
   type SerializedBoxData,
-  type RpcResponseEnvelope,
+  type RPCResponseEnvelope,
 } from "./transport";

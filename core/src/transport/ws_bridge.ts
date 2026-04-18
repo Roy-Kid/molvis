@@ -11,7 +11,7 @@
  *   server → client  {type:"ready"}              (success)
  *                    ws.close(1008, "auth")       (token mismatch)
  *
- * Inbound: JSON-RPC requests are routed to `StandaloneRpcRouter`. Responses
+ * Inbound: JSON-RPC requests are routed to `RPCRouter`. Responses
  * (including those carrying binary buffers) flow back over the same socket.
  *
  * Outbound events: core events (selection-change, mode-change, …) are
@@ -19,8 +19,8 @@
  */
 
 import type { MolvisApp } from "../app";
-import { StandaloneRpcRouter } from "./rpc/router";
-import type { RpcResponseEnvelope } from "./rpc/types";
+import { RPCRouter } from "./rpc/router";
+import type { RPCResponseEnvelope } from "./rpc/types";
 
 /**
  * Decode a binary WebSocket frame into a JSON object + DataView buffers.
@@ -119,12 +119,12 @@ export interface BridgeConnectResult {
 export class WebSocketBridge {
   private ws: WebSocket | null = null;
   private pendingWs: WebSocket | null = null;
-  private router: StandaloneRpcRouter;
+  private router: RPCRouter;
   private cleanupBeforeUnload: (() => void) | null = null;
   private ready = false;
 
   constructor(private readonly app: MolvisApp) {
-    this.router = new StandaloneRpcRouter(app);
+    this.router = new RPCRouter(app);
   }
 
   /**
@@ -274,7 +274,7 @@ export class WebSocketBridge {
       return;
     }
 
-    const response: RpcResponseEnvelope = await this.router.execute(
+    const response: RPCResponseEnvelope = await this.router.execute(
       request,
       buffers,
     );
@@ -282,7 +282,7 @@ export class WebSocketBridge {
     this.sendResponse(response);
   }
 
-  private sendResponse(response: RpcResponseEnvelope): void {
+  private sendResponse(response: RPCResponseEnvelope): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }

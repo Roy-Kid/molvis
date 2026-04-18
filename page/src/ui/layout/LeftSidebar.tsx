@@ -18,7 +18,7 @@ import { AlertCircle, Download, Info, Play } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClusterPanel } from "./ClusterPanel";
-import { PcaTool } from "./PcaTool";
+import { PCATool } from "./PCATool";
 
 interface LeftSidebarProps {
   app: Molvis | null;
@@ -1037,7 +1037,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
         {analysisType === "rdf" && <RdfPanel app={app} />}
         {analysisType === "cluster" && <ClusterPanel app={app} />}
-        {analysisType === "pca" && <PcaTool app={app} />}
+        {analysisType === "pca" && <PCATool app={app} />}
       </div>
     </div>
   );

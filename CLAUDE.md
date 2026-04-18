@@ -94,6 +94,17 @@ Edit mode uses a staging pattern: `promoteFrameToEditPool()` → edit → `syncS
 
 Stateless chain of `Modifier` objects that transform frames before rendering. Each modifier is a pure function: `apply(frame, context) → new Frame`. Categories: `SelectionSensitive`, `SelectionInsensitive`, `Data`.
 
+The pipeline is the **single ingress for scene data**. Both the sidebar's "Load File" button and the backend's `scene.draw_frame` / `scene.set_trajectory` RPCs funnel through a `DataSourceModifier` at the head of the pipeline — never bypass it when loading data, otherwise downstream modifiers (selection, hide, color) never see the new frame. See `ensureDataSource()` / `ingestFramesIntoPipeline()` in `core/src/transport/rpc/router.ts`.
+
+### RPC Router (`transport/rpc/router.ts`)
+
+`RPCRouter` dispatches inbound JSON-RPC requests from a controller (Python, other languages) into `MolvisApp`. Two command families:
+
+- **`scene.*` / `view.*` / `selection.*` / `snapshot.*`** — imperative, mirror the sidebar's primary actions.
+- **`pipeline.*`** — CRUD on the modifier pipeline (`list`, `available_modifiers`, `add_modifier`, `remove_modifier`, `reorder_modifier`, `set_enabled`, `set_parent`, `clear`). Same semantics as clicking sidebar buttons — both paths edit the same `ModifierPipeline` instance.
+
+Both GUI and WS commands are views onto pipeline state; neither is authoritative over the other.
+
 ### Event System
 
 Type-safe `EventEmitter` with key events: `frame-change`, `frame-rendered`, `trajectory-change`, `mode-change`, `selection-change`, `dirty-change`, `history-change`.

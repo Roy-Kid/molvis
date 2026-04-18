@@ -37,7 +37,7 @@ class SnapshotCommandsMixin:
             
         Raises:
             TimeoutError: If the frontend does not respond within the timeout
-            molvis.MolvisRpcError: If the frontend rejects the snapshot request
+            molvis.MolvisRPCError: If the frontend rejects the snapshot request
         """
         data = self.send_cmd(
             FrontendCommands.SNAPSHOT.method,

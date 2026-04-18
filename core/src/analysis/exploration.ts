@@ -9,7 +9,7 @@ import {
  * User-facing configuration for a dataset-exploration run.
  *
  * The shape intentionally mirrors the Plotly-tool UI state one-for-one:
- * every widget in PcaTool maps to exactly one field here. Future reducers
+ * every widget in PCATool maps to exactly one field here. Future reducers
  * (`tsne`, `umap`) extend the `reduction` union; `clustering` likewise
  * admits `"none"` to disable colouring-by-cluster without nulling the
  * whole sub-object.
@@ -38,7 +38,7 @@ export interface ExplorationConfig {
 /**
  * Result of a completed dataset-exploration run.
  *
- * Stored on `system.exploration` and consumed by `PcaTool` to render the
+ * Stored on `system.exploration` and consumed by `PCATool` to render the
  * Plotly map. `clusters` is `null` iff `config.clustering.method === "none"`.
  */
 export interface DatasetExploration {

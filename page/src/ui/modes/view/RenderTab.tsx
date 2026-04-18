@@ -7,8 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { type Molvis, REPRESENTATIONS } from "@molvis/core";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
@@ -77,7 +77,7 @@ function NumberField({
   return (
     <Input
       type="number"
-      className="h-6 w-20 px-1.5 text-xs tabular-nums"
+      className="h-6 w-16 px-1.5 text-xs tabular-nums shrink-0"
       value={draft}
       min={min}
       max={max}
@@ -88,6 +88,18 @@ function NumberField({
     />
   );
 }
+
+const Row = ({
+  label,
+  children,
+}: { label: string; children: React.ReactNode }) => (
+  <div className="flex items-center justify-between gap-1.5">
+    <Label className="text-[10px] text-muted-foreground truncate min-w-0">
+      {label}
+    </Label>
+    <div className="shrink-0">{children}</div>
+  </div>
+);
 
 export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
   const [state, setState] = useState<RenderState | null>(null);
@@ -123,8 +135,6 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
   if (!state || !app) return null;
 
-  // --- Immediate handlers ---
-
   const onRepresentation = (name: string) => {
     app.setRepresentation(name);
     const repr = app.styleManager.getRepresentation();
@@ -158,6 +168,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       const g = Number.parseInt(hex.slice(3, 5), 16) / 255;
       const b = Number.parseInt(hex.slice(5, 7), 16) / 255;
       for (const child of m.getChildren()) {
+        // biome-ignore lint/suspicious/noExplicitAny: BabylonJS child nodes don't expose .material in the Node base type
         const mat = (child as any).material;
         if (mat?.diffuseColor) mat.diffuseColor.set(r, g, b);
       }
@@ -167,6 +178,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
 
   const onBoxThickness = (v: number) => {
     const m = app.scene.getMeshByName("sim_box");
+    // biome-ignore lint/suspicious/noExplicitAny: _userThicknessScale is an internal BabylonJS mesh property
     if (m) (m as any)._userThicknessScale = v;
     set("boxThicknessScale", v);
   };
@@ -207,164 +219,144 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
     });
   };
 
-  // --- Row helper ---
-  const Row = ({
-    label,
-    children,
-  }: { label: string; children: React.ReactNode }) => (
-    <div className="flex items-center justify-between gap-2">
-      <Label className="text-[10px] shrink-0">{label}</Label>
-      {children}
-    </div>
-  );
-
   return (
-    <div className="flex flex-col gap-2 p-2.5 h-full overflow-y-auto text-xs">
-      {/* Representation */}
-      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Representation
-      </h4>
-      <Select value={state.representationName} onValueChange={onRepresentation}>
-        <SelectTrigger className="h-7 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {REPRESENTATIONS.map((r) => (
-            <SelectItem key={r.name} value={r.name}>
-              {r.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Row label="Atom Diameter">
-        <NumberField
-          value={state.atomDiameterScale}
-          min={0.1}
-          max={3}
-          step={0.05}
-          onChange={onAtomScale}
-        />
-      </Row>
-      <Row label="Bond Diameter">
-        <NumberField
-          value={state.bondDiameterScale}
-          min={0}
-          max={3}
-          step={0.05}
-          onChange={onBondScale}
-        />
-      </Row>
-      <Separator />
-
-      {/* Simulation Box */}
-      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Simulation Box
-      </h4>
-      <Row label="Show Box">
-        <Switch checked={state.boxVisible} onCheckedChange={onBoxVisible} />
-      </Row>
-      {state.boxVisible && (
-        <>
-          <Row label="Color">
-            <input
-              type="color"
-              value={state.boxColor}
-              onChange={(e) => onBoxColor(e.target.value)}
-              className="w-6 h-6 rounded cursor-pointer border-0 p-0"
-            />
-          </Row>
-          <Row label="Thickness">
-            <NumberField
-              value={state.boxThicknessScale}
-              min={0.5}
-              max={5}
-              step={0.1}
-              onChange={onBoxThickness}
-            />
-          </Row>
-        </>
-      )}
-
-      <Separator />
-
-      {/* Background */}
-      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Background
-      </h4>
-      <div className="flex items-center gap-1.5">
-        {BG_PRESETS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            className={`w-5 h-5 rounded border-2 ${
-              state.backgroundColor === p.value
-                ? "border-blue-500"
-                : "border-muted"
-            }`}
-            style={{ backgroundColor: p.value }}
-            title={p.label}
-            onClick={() => onBgColor(p.value)}
+    <div className="flex flex-col">
+      <SidebarSection title="Representation">
+        <Select
+          value={state.representationName}
+          onValueChange={onRepresentation}
+        >
+          <SelectTrigger
+            className="h-7 w-full text-xs"
+            aria-label="Representation"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REPRESENTATIONS.map((r) => (
+              <SelectItem key={r.name} value={r.name}>
+                <span className="text-xs">{r.name}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Row label="Atoms">
+          <NumberField
+            value={state.atomDiameterScale}
+            min={0.1}
+            max={3}
+            step={0.05}
+            onChange={onAtomScale}
           />
-        ))}
-        <input
-          type="color"
-          value={state.backgroundColor}
-          onChange={(e) => onBgColor(e.target.value)}
-          className="w-5 h-5 rounded cursor-pointer border-0 p-0"
-        />
-      </div>
+        </Row>
+        <Row label="Bonds">
+          <NumberField
+            value={state.bondDiameterScale}
+            min={0}
+            max={3}
+            step={0.05}
+            onChange={onBondScale}
+          />
+        </Row>
+      </SidebarSection>
 
-      <Separator />
+      <SidebarSection title="Simulation Box">
+        <Row label="Show">
+          <Switch checked={state.boxVisible} onCheckedChange={onBoxVisible} />
+        </Row>
+        {state.boxVisible && (
+          <>
+            <Row label="Color">
+              <input
+                type="color"
+                value={state.boxColor}
+                onChange={(e) => onBoxColor(e.target.value)}
+                className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+                aria-label="Box color"
+              />
+            </Row>
+            <Row label="Width">
+              <NumberField
+                value={state.boxThicknessScale}
+                min={0.5}
+                max={5}
+                step={0.1}
+                onChange={onBoxThickness}
+              />
+            </Row>
+          </>
+        )}
+      </SidebarSection>
 
-      {/* Grid */}
-      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Grid
-      </h4>
-      <Row label="Enabled">
-        <Switch checked={state.gridEnabled} onCheckedChange={onGridEnabled} />
-      </Row>
-      {state.gridEnabled && (
-        <>
-          <Row label="Opacity">
-            <NumberField
-              value={state.gridOpacity}
-              min={0}
-              max={1}
-              step={0.1}
-              onChange={onGridOpacity}
+      <SidebarSection title="Background">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {BG_PRESETS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              className={`w-5 h-5 rounded border-2 shrink-0 ${
+                state.backgroundColor === p.value
+                  ? "border-blue-500"
+                  : "border-muted"
+              }`}
+              style={{ backgroundColor: p.value }}
+              title={p.label}
+              aria-label={`Background ${p.label}`}
+              onClick={() => onBgColor(p.value)}
             />
-          </Row>
-          <Row label="Size">
-            <NumberField
-              value={state.gridSize}
-              min={10}
-              max={500}
-              step={10}
-              onChange={onGridSize}
-            />
-          </Row>
-        </>
-      )}
+          ))}
+          <input
+            type="color"
+            value={state.backgroundColor}
+            onChange={(e) => onBgColor(e.target.value)}
+            className="w-5 h-5 rounded cursor-pointer border-0 p-0 shrink-0"
+            aria-label="Custom background color"
+          />
+        </div>
+      </SidebarSection>
 
-      <Separator />
+      <SidebarSection title="Grid" defaultOpen={false}>
+        <Row label="Show">
+          <Switch checked={state.gridEnabled} onCheckedChange={onGridEnabled} />
+        </Row>
+        {state.gridEnabled && (
+          <>
+            <Row label="Opacity">
+              <NumberField
+                value={state.gridOpacity}
+                min={0}
+                max={1}
+                step={0.1}
+                onChange={onGridOpacity}
+              />
+            </Row>
+            <Row label="Size">
+              <NumberField
+                value={state.gridSize}
+                min={10}
+                max={500}
+                step={10}
+                onChange={onGridSize}
+              />
+            </Row>
+          </>
+        )}
+      </SidebarSection>
 
-      {/* Graphics */}
-      <h4 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Graphics
-      </h4>
-      <Row label="FXAA">
-        <Switch checked={state.fxaa} onCheckedChange={onFxaa} />
-      </Row>
-      <Row label="HW Scaling">
-        <NumberField
-          value={state.hardwareScaling}
-          min={0.5}
-          max={2}
-          step={0.1}
-          onChange={onHwScaling}
-        />
-      </Row>
+      <SidebarSection title="Graphics" defaultOpen={false}>
+        <Row label="FXAA">
+          <Switch checked={state.fxaa} onCheckedChange={onFxaa} />
+        </Row>
+        <Row label="HW Scale">
+          <NumberField
+            value={state.hardwareScaling}
+            min={0.5}
+            max={2}
+            step={0.1}
+            onChange={onHwScaling}
+          />
+        </Row>
+      </SidebarSection>
     </div>
   );
 };

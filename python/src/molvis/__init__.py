@@ -13,6 +13,18 @@ Single entry point
     scene = mv.Molvis(name="protein")     # Jupyter cell: displays as iframe
     scene
 
+Session management
+------------------
+
+    mv.Molvis(name="A")                  # cached under "A"
+    mv.Molvis(name="A")                  # → same instance
+    mv.Molvis(name="A", gui=False)       # → ValueError (cached as gui=True)
+
+    mv.Molvis.replace("A", gui=False)    # close existing & recreate
+    mv.Molvis.list_scenes()              # ["A"]
+    mv.Molvis.session_summary()          # [{name, gui, connected, port, ...}]
+    mv.Molvis.close_all()                # tear down every scene
+
 Both hosts drive the same page bundle over a local WebSocket. See
 :mod:`molvis.events` for the bidirectional event API
 (:meth:`Molvis.on`, :meth:`Molvis.wait_for`, :attr:`Molvis.selection`,
@@ -20,7 +32,7 @@ Both hosts drive the same page bundle over a local WebSocket. See
 configuring the transport explicitly (CDN-hosted page, custom port, …).
 """
 
-from .errors import MolvisRpcError
+from .errors import MolvisRPCError
 from .events import EventBus, EventHandle, Selection, ViewerState
 from .palettes import (
     PaletteDefinition,
@@ -37,7 +49,7 @@ __all__ = [
     "EventBus",
     "EventHandle",
     "Molvis",
-    "MolvisRpcError",
+    "MolvisRPCError",
     "NumpyEncoder",
     "PaletteDefinition",
     "PaletteEntry",

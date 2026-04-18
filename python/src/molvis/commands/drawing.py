@@ -27,7 +27,14 @@ class DrawingCommandsMixin:
         clear: bool = True,
     ) -> "Molvis":
         """Create a new frame and set it as current."""
-        self.send_cmd(FrontendCommands.NEW_FRAME.method, {"name": name, "clear": clear})
+        self.send_cmd(
+            FrontendCommands.NEW_FRAME.method,
+            {"name": name, "clear": clear},
+            wait_for_response=True,
+        )
+        if clear:
+            self._clear_mirror()
+        self.list_modifiers()
         return self
 
     def draw_frame(
@@ -78,7 +85,10 @@ class DrawingCommandsMixin:
         self.send_cmd(
             FrontendCommands.DRAW_FRAME.method,
             {"frame": draw_data, "options": options},
+            wait_for_response=True,
         )
+        self._record_trajectory([frame], None)
+        self.list_modifiers()
         return self
 
     def draw_atomistic(
@@ -190,7 +200,10 @@ class DrawingCommandsMixin:
 
     def clear(self: "Molvis") -> "Molvis":
         """Clear all content from canvas."""
-        self.send_cmd(FrontendCommands.CLEAR.method, {})
+        self.send_cmd(
+            FrontendCommands.CLEAR.method, {}, wait_for_response=True
+        )
+        self._clear_mirror()
         return self
 
     def set_style(

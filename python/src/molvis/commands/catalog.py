@@ -13,6 +13,7 @@ class FrontendCommandGroup(str, Enum):
     SNAPSHOT = "snapshot"
     SESSION = "session"
     OVERLAY = "overlay"
+    PIPELINE = "pipeline"
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,14 @@ class FrontendCommands:
         FrontendCommandGroup.SCENE,
         "export_frame",
         ("export_frame",),
+    )
+    SET_TRAJECTORY = FrontendCommand(
+        FrontendCommandGroup.SCENE,
+        "set_trajectory",
+    )
+    SET_FRAME_LABELS = FrontendCommand(
+        FrontendCommandGroup.SCENE,
+        "set_frame_labels",
     )
     GET_SELECTED = FrontendCommand(
         FrontendCommandGroup.SELECTION,
@@ -126,3 +135,23 @@ class FrontendCommands:
         FrontendCommandGroup.OVERLAY,
         "clear",
     )
+    PIPELINE_LIST = FrontendCommand(FrontendCommandGroup.PIPELINE, "list")
+    PIPELINE_AVAILABLE_MODIFIERS = FrontendCommand(
+        FrontendCommandGroup.PIPELINE, "available_modifiers"
+    )
+    PIPELINE_ADD_MODIFIER = FrontendCommand(
+        FrontendCommandGroup.PIPELINE, "add_modifier"
+    )
+    PIPELINE_REMOVE_MODIFIER = FrontendCommand(
+        FrontendCommandGroup.PIPELINE, "remove_modifier"
+    )
+    PIPELINE_REORDER_MODIFIER = FrontendCommand(
+        FrontendCommandGroup.PIPELINE, "reorder_modifier"
+    )
+    PIPELINE_SET_ENABLED = FrontendCommand(
+        FrontendCommandGroup.PIPELINE, "set_enabled"
+    )
+    PIPELINE_SET_PARENT = FrontendCommand(
+        FrontendCommandGroup.PIPELINE, "set_parent"
+    )
+    PIPELINE_CLEAR = FrontendCommand(FrontendCommandGroup.PIPELINE, "clear")
