@@ -5,9 +5,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { useDevDemo } from "@/dev/useDevDemo";
 import { BackendConnectionProvider } from "@/hooks/useBackendConnection";
 import { useBackendStateSync } from "@/hooks/useBackendStateSync";
-import { useBootstrapDemo } from "@/hooks/useBootstrapDemo";
+import { useHostFileBridge } from "@/hooks/useHostFileBridge";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
 import { useMountOpts } from "@/lib/mount-opts";
@@ -39,7 +40,8 @@ const App: React.FC = () => {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const stateSync = useBackendStateSync(app);
 
-  useBootstrapDemo(app, setCurrentMode, opts);
+  useHostFileBridge(app);
+  useDevDemo(app, setCurrentMode, opts);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
