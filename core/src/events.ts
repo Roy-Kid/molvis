@@ -1,5 +1,4 @@
 import type { Box, Frame } from "@molcrafts/molrs";
-import type { DatasetExploration } from "./analysis/exploration";
 import type { RepresentationStyle } from "./artist/representation";
 import type { ModeType } from "./mode/base";
 import type { Overlay } from "./overlays/types";
@@ -26,8 +25,6 @@ export interface MolvisEventMap {
   "overlay-removed": { id: string };
   "overlay-changed": { overlay: Overlay };
   "export-requested": undefined;
-  "exploration-change": DatasetExploration | null;
-  "frame-labels-change": Map<string, Float64Array> | null;
   "backend-state-sync": BackendStateSync;
 }
 

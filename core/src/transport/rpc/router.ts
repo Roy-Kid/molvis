@@ -210,52 +210,6 @@ export function ensureDataSource(
   return dataSource;
 }
 
-/**
- * Shared path for every "new data came in from the backend" flow — single
- * frame ingress, trajectory ingress, and clear. Wires the incoming frames
- * into the pipeline's DataSourceModifier so user-added downstream modifiers
- * (selection, color, hide) run on the new data without extra RPCs.
- */
-export async function ingestFramesIntoPipeline(
-  app: MolvisApp,
-  frames: Frame[],
-  boxes: (Box | undefined)[],
-  meta: { sourceType: DataSourceModifier["sourceType"]; filename: string },
-  options?: { manualAtomRadii?: number[] | null; resetCamera?: boolean },
-): Promise<void> {
-  if (frames.length === 0) {
-    throw invalidParams("ingest requires at least one frame");
-  }
-
-  const dataSource = ensureDataSource(app, meta);
-  dataSource.setFrame(frames[0]);
-
-  if (frames.length === 1) {
-    await app.loadFrame(frames[0], boxes[0]);
-  } else {
-    app.setTrajectory(new Trajectory(frames, boxes));
-  }
-
-  const computed = await app.applyPipeline({ fullRebuild: true });
-
-  if (options?.manualAtomRadii && options.manualAtomRadii.length > 0) {
-    // Per-atom radius override has no pipeline equivalent yet — use the
-    // pipeline-computed frame so modifier effects (Hide, Color) are preserved.
-    const radii = options.manualAtomRadii;
-    await Promise.resolve(
-      app.execute("draw_frame", {
-        frame: computed ?? app.frame,
-        box: app.system.box,
-        options: { atoms: { radii } },
-      }) as void | Promise<void>,
-    );
-  }
-
-  if (options?.resetCamera ?? true) {
-    app.world.resetCamera();
-  }
-}
-
 /** Serialize a modifier to the wire shape used by ``pipeline.*`` RPCs. */
 function serializeModifier(modifier: Modifier): Record<string, unknown> {
   return {
@@ -441,10 +395,15 @@ export class RPCRouter {
     if (params.clear === false) {
       return { success: true };
     }
-    await ingestFramesIntoPipeline(this.app, [new Frame()], [undefined], {
+    const frame = new Frame();
+    const ds = ensureDataSource(this.app, {
       sourceType: "empty",
       filename: "",
     });
+    ds.setFrame(frame);
+    await this.app.setTrajectory(new Trajectory([frame]));
+    await this.app.applyPipeline({ fullRebuild: true });
+    this.app.world.resetCamera();
     return { success: true };
   };
 
@@ -482,13 +441,26 @@ export class RPCRouter {
       );
     }
 
-    await ingestFramesIntoPipeline(
-      this.app,
-      [frame],
-      [box],
-      { sourceType: "backend", filename: sessionLabel },
-      { manualAtomRadii },
-    );
+    const ds = ensureDataSource(this.app, {
+      sourceType: "backend",
+      filename: sessionLabel,
+    });
+    ds.setFrame(frame);
+    await this.app.setTrajectory(new Trajectory([frame], [box]));
+    await this.app.applyPipeline({ fullRebuild: true });
+    this.app.world.resetCamera();
+
+    // Per-atom radius override runs as a follow-up draw_frame so modifier
+    // effects (Hide, Color) from applyPipeline are preserved.
+    if (manualAtomRadii && manualAtomRadii.length > 0) {
+      await Promise.resolve(
+        this.app.execute("draw_frame", {
+          frame: this.app.frame,
+          box: this.app.system.box,
+          options: { atoms: { radii: manualAtomRadii } },
+        }) as void | Promise<void>,
+      );
+    }
     return { success: true };
   };
 
@@ -524,10 +496,15 @@ export class RPCRouter {
   };
 
   private handleClear: RPCHandler = async () => {
-    await ingestFramesIntoPipeline(this.app, [new Frame()], [undefined], {
+    const frame = new Frame();
+    const ds = ensureDataSource(this.app, {
       sourceType: "empty",
       filename: "",
     });
+    ds.setFrame(frame);
+    await this.app.setTrajectory(new Trajectory([frame]));
+    await this.app.applyPipeline({ fullRebuild: true });
+    this.app.world.resetCamera();
     return { success: true };
   };
 
@@ -564,10 +541,14 @@ export class RPCRouter {
     });
 
     const sessionLabel = this.sessionLabel(frames.length);
-    await ingestFramesIntoPipeline(this.app, frames, boxes, {
+    const ds = ensureDataSource(this.app, {
       sourceType: "backend",
       filename: sessionLabel,
     });
+    ds.setFrame(frames[0]);
+    await this.app.setTrajectory(new Trajectory(frames, boxes));
+    await this.app.applyPipeline({ fullRebuild: true });
+    this.app.world.resetCamera();
     return { success: true, nFrames: frames.length };
   };
 
@@ -639,8 +620,14 @@ export class RPCRouter {
       unknown
     >;
     const rawLabels = decoded.labels;
+    const trajectory = this.app.system.trajectory;
+    const nFrames = trajectory.length;
+
+    // null → no-op. Python callers that want to clear should set empty
+    // strings on the keys they wrote, or delete keys — but molrs currently
+    // has no `deleteMeta`, so the convention is "just overwrite".
     if (rawLabels == null) {
-      this.app.system.setFrameLabels(null);
+      this.app.events.emit("trajectory-change", trajectory);
       return { success: true, nLabels: 0 };
     }
     if (typeof rawLabels !== "object" || Array.isArray(rawLabels)) {
@@ -649,8 +636,7 @@ export class RPCRouter {
       );
     }
 
-    const nFrames = this.app.system.trajectory.length;
-    const map = new Map<string, Float64Array>();
+    let nLabels = 0;
     for (const [name, value] of Object.entries(
       rawLabels as Record<string, unknown>,
     )) {
@@ -671,10 +657,17 @@ export class RPCRouter {
           `labels['${name}'] has length ${column.length}, expected ${nFrames}`,
         );
       }
-      map.set(name, column);
+      // Frame meta is the single source of truth — write per-frame via
+      // molrs's setMeta. PCATool (and other consumers) walk the trajectory
+      // at read time; no separate aggregation layer is stored.
+      for (let i = 0; i < column.length; i++) {
+        trajectory.get(i)?.setMeta(name, String(column[i]));
+      }
+      nLabels++;
     }
-    this.app.system.setFrameLabels(map);
-    return { success: true, nLabels: map.size };
+
+    this.app.events.emit("trajectory-change", trajectory);
+    return { success: true, nLabels };
   };
 
   private handleExportFrame: RPCHandler = () => {

@@ -10,6 +10,7 @@ export type EntityType = "atom" | "bond" | "box";
 export interface AtomMeta {
   type: "atom";
   atomId: number;
+  /** Element symbol from the frame's `element` column. `""` when absent. */
   element: string;
   position: { x: number; y: number; z: number };
 }
@@ -130,14 +131,19 @@ export class AtomSource {
     const x = this.frameBlock.viewColF("x");
     const y = this.frameBlock.viewColF("y");
     const z = this.frameBlock.viewColF("z");
-    const elements = this.frameBlock.copyColStr("element");
 
-    if (!x || !y || !z || !elements) return null;
+    if (!x || !y || !z) return null;
+
+    // Canonical convention: `element` is String when present, absent otherwise.
+    const elements =
+      this.frameBlock.dtype("element") === DType.String
+        ? this.frameBlock.copyColStr("element")
+        : undefined;
 
     return {
       type: "atom",
       atomId: index,
-      element: elements[index],
+      element: elements?.[index] ?? "",
       position: { x: x[index], y: y[index], z: z[index] },
     };
   }

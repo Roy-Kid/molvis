@@ -18,7 +18,8 @@ import {
   type ModifierFactory,
   ModifierRegistry,
 } from "../pipeline/modifier_registry";
-import { ingestFramesIntoPipeline } from "./rpc/router";
+import { Trajectory } from "../system/trajectory";
+import { ensureDataSource } from "./rpc/router";
 
 /**
  * Replace the current pipeline with ``state``. Safe to call repeatedly —
@@ -32,13 +33,16 @@ export async function applyBackendState(
   // Clear existing pipeline (frames + modifiers) before replay.
   app.modifierPipeline.clear();
 
-  // Replay frames via the shared ingestion path — this also rebuilds
-  // the head DataSourceModifier.
+  // Replay frames and install the head DataSourceModifier. Skip the
+  // per-ingest applyPipeline + resetCamera — we rebuild the rest of the
+  // pipeline below and apply once at the end.
   if (state.frames.length > 0) {
-    await ingestFramesIntoPipeline(app, state.frames, state.boxes, {
+    const ds = ensureDataSource(app, {
       sourceType: "backend",
       filename: "backend-sync",
     });
+    ds.setFrame(state.frames[0]);
+    await app.setTrajectory(new Trajectory(state.frames, state.boxes));
   }
 
   // Rebuild non-DataSource modifiers in the order given. Track

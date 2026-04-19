@@ -1,8 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
-import {
-  deriveElementFromType,
-  inferFormatFromFilename,
-} from "../src/io/reader";
+import { inferFormatFromFilename } from "../src/io/reader";
 
 describe("inferFormatFromFilename", () => {
   it("should detect PDB files", () => {
@@ -15,10 +12,15 @@ describe("inferFormatFromFilename", () => {
     expect(inferFormatFromFilename("trajectory.XYZ")).toBe("xyz");
   });
 
-  it("should detect LAMMPS files", () => {
+  it("should detect LAMMPS data files", () => {
     expect(inferFormatFromFilename("system.lammps")).toBe("lammps");
     expect(inferFormatFromFilename("system.lmp")).toBe("lammps");
     expect(inferFormatFromFilename("system.data")).toBe("lammps");
+  });
+
+  it("should detect LAMMPS dump files", () => {
+    expect(inferFormatFromFilename("traj.dump")).toBe("lammps-dump");
+    expect(inferFormatFromFilename("traj.lammpstrj")).toBe("lammps-dump");
   });
 
   it("should fallback to default for unknown extensions", () => {
@@ -37,37 +39,5 @@ describe("inferFormatFromFilename", () => {
 
   it("should handle empty string", () => {
     expect(inferFormatFromFilename("")).toBe("pdb");
-  });
-});
-
-describe("deriveElementFromType", () => {
-  it("should return known element symbols directly", () => {
-    expect(deriveElementFromType("C")).toBe("C");
-    expect(deriveElementFromType("N")).toBe("N");
-    expect(deriveElementFromType("O")).toBe("O");
-    expect(deriveElementFromType("H")).toBe("H");
-  });
-
-  it("should match two-letter elements", () => {
-    expect(deriveElementFromType("Ca")).toBe("Ca");
-    expect(deriveElementFromType("Fe")).toBe("Fe");
-    expect(deriveElementFromType("Na")).toBe("Na");
-  });
-
-  it("should extract element from longer type names", () => {
-    // "CA" -> first 2 chars "Ca" (calcium) matches in periodic table
-    expect(deriveElementFromType("CA")).toBe("Ca");
-    // "OW" -> "Ow" not an element, first char "O" is
-    expect(deriveElementFromType("OW")).toBe("O");
-  });
-
-  it("should try first two chars then first char", () => {
-    // "Hx" -> "Hx" is not an element, first char "H" is
-    expect(deriveElementFromType("Hx")).toBe("H");
-  });
-
-  it("should fallback to C for unknown types", () => {
-    expect(deriveElementFromType("XQ")).toBe("C");
-    expect(deriveElementFromType("???")).toBe("C");
   });
 });

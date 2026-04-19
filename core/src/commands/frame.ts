@@ -87,18 +87,19 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
 
     const sceneIndex = this.app.world.sceneIndex;
 
-    // 1. Get Existing Meshes from Artist (more reliable than scene lookup)
-    const atomMesh = this.app.artist.atomMesh;
-    const bondMesh = this.app.artist.bondMesh;
+    // sceneIndex is the source of truth for registered atom/bond state.
+    // artist.atomMesh can briefly diverge (e.g. after artist.clear() recreates
+    // the mesh but a pipeline path takes a non-registering redraw branch).
+    // Target the mesh owned by the registered ImpostorState directly.
+    const atomState = sceneIndex.meshRegistry.getAtomState();
+    const bondState = sceneIndex.meshRegistry.getBondState();
 
-    if (!atomMesh) {
-      return {
-        success: false,
-        reason: "No existing atom mesh found",
-      };
+    if (!atomState) {
+      return { success: false, reason: "No registered atom state" };
     }
+    const atomMesh = atomState.mesh;
+    const bondMesh = bondState?.mesh;
 
-    // 2. Check Compatibility (Topology)
     const frameAtoms = this.frame.getBlock("atoms");
     if (!frameAtoms) {
       return { success: false, reason: "Frame has no atoms" };
@@ -106,7 +107,6 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
 
     const currentAtomCount = atomMesh.thinInstanceCount;
     const newAtomCount = frameAtoms.nrows();
-
     if (currentAtomCount !== newAtomCount) {
       return {
         success: false,
@@ -115,12 +115,8 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     }
 
     const frameBonds = this.frame.getBlock("bonds");
-    let currentBondCount = 0;
-    if (bondMesh) {
-      currentBondCount = bondMesh.thinInstanceCount;
-    }
+    const currentBondCount = bondMesh?.thinInstanceCount ?? 0;
     const newBondCount = frameBonds ? frameBonds.nrows() : 0;
-
     if (currentBondCount !== newBondCount) {
       return {
         success: false,
@@ -128,21 +124,29 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       };
     }
 
-    // 3. Update Buffers (in-place, no mesh recreation)
-    this.updateAtomBuffer(atomMesh, frameAtoms);
+    // Internal buffer checks inside updateAtomBuffer / updateBondBuffer still
+    // throw on soft failures (buffer missing, frame offset mismatch). Translate
+    // those into `{success: false}` so the caller falls back to DrawFrameCommand.
+    try {
+      this.updateAtomBuffer(atomMesh, frameAtoms);
 
-    if (bondMesh && frameBonds) {
-      this.updateBondBuffer(bondMesh, frameAtoms, frameBonds);
+      if (bondMesh && frameBonds) {
+        this.updateBondBuffer(bondMesh, frameAtoms, frameBonds);
+      }
+
+      sceneIndex.metaRegistry.atoms.setFrame(frameAtoms);
+      if (frameBonds) {
+        sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
+      }
+
+      this.app.artist.redrawFromSceneIndex(this.frame);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
     }
-
-    // 4. Update Metadata only (don't call registerFrame - it recreates ImpostorState!)
-    sceneIndex.metaRegistry.atoms.setFrame(frameAtoms);
-    if (frameBonds) {
-      sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
-    }
-
-    this.app.artist.redrawFromSceneIndex(this.frame);
-    return { success: true };
   }
 
   private updateAtomBuffer(mesh: BABYLON.Mesh, atomsBlock: Block) {
@@ -154,11 +158,10 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
     if (!yCoords) throw new Error("Missing y coordinates");
     const zCoords = atomsBlock.viewColF("z");
     if (!zCoords) throw new Error("Missing z coordinates");
-    // Retrieve Metalayer/ImpostorState from SceneIndex
+    // `mesh` is already atomState.mesh (caller pulls from sceneIndex).
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
-    if (!atomState || atomState.mesh !== mesh) {
-      throw new Error("Atom state not found or mismatched mesh in SceneIndex");
-    }
+    if (!atomState) throw new Error("Atom state not registered");
+    void mesh;
 
     // Guard: frame atom count must match the frame segment [0..frameOffset)
     // to prevent writing into the edit segment.
@@ -357,14 +360,17 @@ export class ExportFrameCommand extends Command<{
       const x = atomsBlock.viewColF("x");
       const y = atomsBlock.viewColF("y");
       const z = atomsBlock.viewColF("z");
-      const elements = atomsBlock.copyColStr("element");
+      const elements =
+        atomsBlock.dtype("element") === DType.String
+          ? (atomsBlock.copyColStr("element") as string[])
+          : undefined;
 
       if (x && y && z) {
         blocks.atoms = {
           x: Array.from(x),
           y: Array.from(y),
           z: Array.from(z),
-          element: elements ? Array.from(elements) : undefined,
+          element: elements,
         };
       }
     }

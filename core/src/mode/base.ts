@@ -331,7 +331,9 @@ abstract class BaseMode {
     }
     if (hit.type === "atom") {
       const { element, position } = hit.metadata;
-      return `[Atom] element: ${element} | xyz: ${position.x.toFixed(4)}, ${position.y.toFixed(4)}, ${position.z.toFixed(4)} | `;
+      const xyz = `xyz: ${position.x.toFixed(4)}, ${position.y.toFixed(4)}, ${position.z.toFixed(4)}`;
+      if (!element) return `[Atom] ${xyz} | `;
+      return `[Atom] element: ${element} | ${xyz} | `;
     }
     const { start, end, atomId1, atomId2, order } = hit.metadata;
     const length = Vector3.Distance(

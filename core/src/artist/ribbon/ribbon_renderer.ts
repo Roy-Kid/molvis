@@ -1,19 +1,28 @@
 /**
- * RibbonRenderer — manages BabylonJS mesh creation from ribbon geometry data.
+ * RibbonRenderer — stateless (w.r.t. events) protein-backbone mesh holder.
+ *
+ * Follows the same pattern as Artist's `drawCloud(grid)` for volumetric
+ * fields: a data-driven builder that disposes the previous output and
+ * rebuilds from the given frame. A frame without a `residues` block
+ * (populated by molrs's PDB reader) produces no meshes.
+ *
+ * The Artist owns the orchestration (calls `syncFromFrame` inside
+ * `drawFrame`, calls `setVisible` from `redrawRepresentation`). This class
+ * does not subscribe to events.
  */
 
 import {
-  Color4,
   Mesh,
   type Scene,
   StandardMaterial,
   VertexBuffer,
   VertexData,
 } from "@babylonjs/core";
-import type { SecondaryStructureType } from "./pdb_backbone";
-import { type ChainTrace, parsePdbBackbone } from "./pdb_backbone";
+import type { Frame } from "@molcrafts/molrs";
+import { readBackboneBlock } from "./backbone_block";
+import type { ChainTrace, SecondaryStructureType } from "./pdb_backbone";
 import { buildRibbonGeometry } from "./ribbon_geometry";
-import { type SplinePoint, catmullRomSpline } from "./spline";
+import { catmullRomSpline } from "./spline";
 
 const RIBBON_SUBDIVISIONS = 6;
 
@@ -26,16 +35,16 @@ export class RibbonRenderer {
   }
 
   /**
-   * Build ribbon meshes from raw PDB text.
-   * Call this after loading a PDB file. Disposes any previous ribbon meshes.
+   * Rebuild ribbon meshes from `frame`. Safe to call repeatedly; stale
+   * meshes are torn down first. A frame without a `residues` block
+   * produces no meshes.
    */
-  public buildFromPdb(pdbText: string): void {
+  public syncFromFrame(frame: Frame): void {
+    const chains = readBackboneBlock(frame);
     this.dispose();
-    const chains = parsePdbBackbone(pdbText);
     if (chains.length === 0) return;
 
     const material = this.getOrCreateMaterial();
-
     for (const chain of chains) {
       const mesh = this.buildChainMesh(chain, material);
       if (mesh) {
@@ -44,18 +53,12 @@ export class RibbonRenderer {
     }
   }
 
-  /**
-   * Show or hide all ribbon meshes.
-   */
   public setVisible(visible: boolean): void {
     for (const mesh of this.meshes) {
       mesh.setEnabled(visible);
     }
   }
 
-  /**
-   * Whether ribbon data exists (i.e., a PDB with backbone was loaded).
-   */
   public get hasData(): boolean {
     return this.meshes.length > 0;
   }
@@ -75,7 +78,6 @@ export class RibbonRenderer {
     const n = residues.length;
     if (n < 2) return null;
 
-    // Build control point arrays
     const positions = new Float64Array(n * 3);
     const normals = new Float64Array(n * 3);
     const ssTypes: SecondaryStructureType[] = [];
@@ -89,7 +91,6 @@ export class RibbonRenderer {
       positions[i * 3 + 1] = ca.y;
       positions[i * 3 + 2] = ca.z;
 
-      // Normal from CA → O direction (peptide plane)
       if (r.o) {
         let nx = r.o.x - ca.x;
         let ny = r.o.y - ca.y;
@@ -104,7 +105,6 @@ export class RibbonRenderer {
         normals[i * 3 + 1] = ny;
         normals[i * 3 + 2] = nz;
       } else {
-        // Fallback: use up vector
         normals[i * 3 + 0] = 0;
         normals[i * 3 + 1] = 1;
         normals[i * 3 + 2] = 0;
@@ -113,7 +113,6 @@ export class RibbonRenderer {
       ssTypes.push(r.ss);
     }
 
-    // Generate spline
     const splinePoints = catmullRomSpline(
       positions,
       normals,
@@ -121,16 +120,13 @@ export class RibbonRenderer {
     );
     if (splinePoints.length < 2) return null;
 
-    // Map spline points back to secondary structure type
     const ssPerPoint: SecondaryStructureType[] = splinePoints.map((pt) => {
       const idx = Math.min(Math.floor(pt.t), n - 1);
       return ssTypes[idx];
     });
 
-    // Build geometry
     const geo = buildRibbonGeometry(splinePoints, ssPerPoint);
 
-    // Create BabylonJS mesh
     const mesh = new Mesh(`ribbon_${chain.chainId}`, this.scene);
     const vertexData = new VertexData();
     vertexData.positions = geo.positions;
@@ -138,7 +134,6 @@ export class RibbonRenderer {
     vertexData.indices = geo.indices;
     vertexData.applyToMesh(mesh);
 
-    // Apply vertex colors
     mesh.setVerticesBuffer(
       new VertexBuffer(
         this.scene.getEngine(),
@@ -165,8 +160,6 @@ export class RibbonRenderer {
 
     const mat = new StandardMaterial(name, this.scene);
     mat.backFaceCulling = false;
-    // Vertex colors are enabled automatically by BabylonJS when the mesh
-    // has a color vertex buffer — set diffuse to white so colors pass through.
     mat.diffuseColor.set(1, 1, 1);
     mat.specularColor.set(0.3, 0.3, 0.3);
     return mat;
