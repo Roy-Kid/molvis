@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { loadFileIntoApp } from "@/lib/loadFile";
 import {
   type DataSourceModifier as CoreDataSourceModifier,
   Frame,
   type Molvis,
+  Trajectory,
 } from "@molvis/core";
+import { loadFileContent } from "@molvis/core/io";
 import { FileUp, Trash2 } from "lucide-react";
 import type React from "react";
 
@@ -25,13 +26,8 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     if (!file || !app) return;
 
     try {
-      modifier.sourceType = "file";
-      modifier.filename = file.name;
-
-      await loadFileIntoApp(app, file, {
-        onFirstFrame: (frame) => modifier.setFrame(frame),
-      });
-      await app.applyPipeline({ fullRebuild: true });
+      const content = await file.text();
+      await loadFileContent(app, content, file.name);
       onUpdate();
     } catch (err) {
       app.events.emit("status-message", {
@@ -63,7 +59,7 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     modifier.setFrame(null);
     modifier.sourceType = "empty";
     modifier.filename = "";
-    await app.loadFrame(new Frame());
+    await app.setTrajectory(new Trajectory([new Frame()]));
     await app.applyPipeline({ fullRebuild: true });
     onUpdate();
   };

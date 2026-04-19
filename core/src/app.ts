@@ -30,7 +30,7 @@ import {
   type FrameUpdateKind,
   classifyFrameTransition,
 } from "./system/frame_diff";
-import type { Trajectory } from "./system/trajectory";
+import { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
 import { cropToContent, reencodeImage } from "./utils/image_crop";
 import { logger } from "./utils/logger";
@@ -274,10 +274,6 @@ export class MolvisApp {
 
   get frame(): Frame | null {
     return this._system.frame;
-  }
-
-  set frame(value: Frame | null) {
-    this._system.frame = value;
   }
 
   get system(): System {
@@ -654,13 +650,24 @@ export class MolvisApp {
 
     const atomCount = frame.getBlock("atoms")?.nrows() ?? 0;
     const bondCount = frame.getBlock("bonds")?.nrows() ?? 0;
-    let decision: FrameTransitionDecision = forceFull
-      ? {
-          kind: "full",
-          reasons: ["Forced full rebuild"],
-          stats: { atomCount, bondCount },
-        }
-      : classifyFrameTransition(this._lastRenderedFrame, frame);
+
+    // The data truth is `frame` itself. sceneIndex.atomState is just a GPU-side
+    // cache. The position fast path is only meaningful when that cache exists
+    // and matches topology; otherwise we rebuild from scratch. Treat "no GPU
+    // state" as a normal condition (first render, post-clear), not a fallback.
+    const hasGpuState =
+      this._world.sceneIndex.meshRegistry.getAtomState() !== null;
+
+    let decision: FrameTransitionDecision;
+    if (forceFull || !hasGpuState) {
+      decision = {
+        kind: "full",
+        reasons: [forceFull ? "Forced full rebuild" : "No GPU state yet"],
+        stats: { atomCount, bondCount },
+      };
+    } else {
+      decision = classifyFrameTransition(this._lastRenderedFrame, frame);
+    }
 
     if (decision.kind === "position") {
       const updateCmd = new UpdateFrameCommand(this, { frame });
@@ -672,6 +679,8 @@ export class MolvisApp {
         this._lastRenderedFrame = frame;
         return;
       }
+      // Position path failed despite passing the GPU-state + topology gates —
+      // this is a genuine inconsistency worth logging.
       logger.warn(
         `Position update failed (${result.reason ?? "unknown reason"}), falling back to full rebuild`,
       );
@@ -721,20 +730,6 @@ export class MolvisApp {
   }
 
   /**
-   * Load a new frame into the system, clearing the existing scene.
-   * Consolidates scene clearing, history reset, and initial rendering.
-   */
-  public async loadFrame(frame: Frame, box?: Box): Promise<void> {
-    this.artist.clear();
-    this.artist.ribbonRenderer.dispose();
-    this.commandManager.clearHistory();
-    this._lastRenderedFrame = null;
-    this._sourceFrame = frame;
-    this._system.setFrame(frame, box);
-    await this.renderFrameInternal(frame, box);
-  }
-
-  /**
    * Reset the app to its initial empty state.
    * Clears the scene, pipeline, selection, history, and switches to View mode.
    */
@@ -743,7 +738,7 @@ export class MolvisApp {
     this._world.selectionManager.clearSelection();
     this._world.highlighter.clearAll();
     this._modeManager.switch_mode(ModeType.View);
-    this.loadFrame(new Frame());
+    void this.setTrajectory(new Trajectory([new Frame()]));
     this._lastSelectionSet = new Map();
   }
 
@@ -767,11 +762,11 @@ export class MolvisApp {
     };
     this._modifierPipeline.on(PipelineEvents.COMPUTED, captureContext);
 
-    const computed = await this._modifierPipeline.compute(
-      source,
-      this._currentFrame,
-      this,
-    );
+    // The source wraps a single frame (the current trajectory frame), so its
+    // index space is [0, 1). `this._currentFrame` is a trajectory index and
+    // must not be passed here — after navigating past frame 0 it exceeds the
+    // source length and crashes `ArrayFrameSource.getFrame`.
+    const computed = await this._modifierPipeline.compute(source, 0, this);
 
     this._modifierPipeline.off(PipelineEvents.COMPUTED, captureContext);
 
@@ -781,7 +776,10 @@ export class MolvisApp {
       // data is about to be replaced, so restoring it would overwrite the
       // pipeline-computed colors (e.g. transparency alpha).
       this._world.highlighter.discardSavedOriginals();
-      await this.renderFrameInternal(computed);
+      // Forward the current simulation box: `renderFrameInternal` routes
+      // through `DrawFrameCommand`, which disposes `sim_box` inside
+      // `artist.drawFrame` and only rebuilds it when a box is provided.
+      await this.renderFrameInternal(computed, this._system.box);
     } else {
       this.artist.redrawFrame(computed);
     }
@@ -830,15 +828,16 @@ export class MolvisApp {
    * Set the current trajectory and update the system.
    * Emits 'trajectory-change' event.
    */
-  public setTrajectory(trajectory: Trajectory): void {
+  public async setTrajectory(trajectory: Trajectory): Promise<void> {
     this.artist.clear();
-    this.artist.ribbonRenderer.dispose();
     this.commandManager.clearHistory();
     this._system.trajectory = trajectory;
     this._currentFrame = this._system.trajectory.currentIndex;
     this._sourceFrame = this._system.frame;
     this._lastRenderedFrame = null;
-    this.queueTrajectoryFrameRender(true);
+    if (this._isRunning) {
+      await this.renderActiveTrajectoryFrame(true);
+    }
   }
 
   /**

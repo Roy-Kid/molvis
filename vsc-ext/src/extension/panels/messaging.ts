@@ -17,6 +17,24 @@ export function sendToWebview(
   webview.postMessage(message);
 }
 
+export async function sendLoadedFile(
+  webview: vscode.Webview,
+  uri: vscode.Uri,
+  fileLoader: MolecularFileLoader,
+  logger: Logger,
+): Promise<void> {
+  try {
+    const loaded = await fileLoader.load(uri);
+    sendToWebview(webview, {
+      type: "loadFile",
+      content: loaded.payload,
+      filename: loaded.filename,
+    });
+  } catch (error) {
+    logger.error(`MolVis: Failed to load file: ${error}`);
+  }
+}
+
 /**
  * Set up message listener for webview-to-host communication.
  */
@@ -70,24 +88,16 @@ export async function loadTextDocumentToWebview(
   });
 }
 
-/**
- * Handle dropUri message: read the file via remote-aware FS and send to webview.
- */
 export async function handleDropUri(
   uriString: string,
   webview: vscode.Webview,
   fileLoader: MolecularFileLoader,
   logger: Logger,
 ): Promise<void> {
-  try {
-    const uri = vscode.Uri.parse(uriString);
-    const loaded = await fileLoader.load(uri);
-    sendToWebview(webview, {
-      type: "loadFile",
-      content: loaded.payload,
-      filename: loaded.filename,
-    });
-  } catch (error) {
-    logger.error(`MolVis: Failed to load dropped file: ${error}`);
-  }
+  await sendLoadedFile(
+    webview,
+    vscode.Uri.parse(uriString),
+    fileLoader,
+    logger,
+  );
 }

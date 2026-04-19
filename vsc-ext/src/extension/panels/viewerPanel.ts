@@ -1,20 +1,28 @@
 import * as vscode from "vscode";
 import { createInitMessage, getMolvisWebviewOptions } from "../configuration";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
+import { getDisplayName } from "../loading/pathUtils";
 import type { Logger, PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
 import { getViewerHtml } from "./html";
-import { handleDropUri, onWebviewMessage, sendToWebview } from "./messaging";
+import {
+  handleDropUri,
+  onWebviewMessage,
+  sendLoadedFile,
+  sendToWebview,
+} from "./messaging";
 
 export function openEditorPanel(
   context: vscode.ExtensionContext,
   panelRegistry: PanelRegistry,
   logger: Logger,
   fileLoader: MolecularFileLoader,
+  uri?: vscode.Uri,
 ): void {
+  const title = uri ? `MolVis: ${getDisplayName(uri)}` : "MolVis Editor";
   const panel = vscode.window.createWebviewPanel(
     "molvis.workspace",
-    "MolVis Editor",
+    title,
     vscode.ViewColumn.Active,
     {
       enableScripts: true,
@@ -35,6 +43,9 @@ export function openEditorPanel(
       switch (message.type) {
         case "ready":
           sendToWebview(panel.webview, createInitMessage("app"));
+          if (uri) {
+            await sendLoadedFile(panel.webview, uri, fileLoader, logger);
+          }
           break;
         case "dropUri":
           await handleDropUri(message.uri, panel.webview, fileLoader, logger);

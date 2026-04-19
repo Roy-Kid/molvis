@@ -11,10 +11,10 @@ import {
 import { cn } from "@/lib/utils";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import {
-  type DatasetExploration,
-  type ExplorationConfig,
   type Molvis,
-  runExploration,
+  type Trajectory,
+  WasmKMeans,
+  WasmPca2,
 } from "@molvis/core";
 import { AlertCircle, Info, Play } from "lucide-react";
 import type React from "react";
@@ -23,10 +23,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 interface PCAToolProps {
   app: Molvis | null;
 }
-
-// ---------------------------------------------------------------------------
-// Plotly lazy loader
-// ---------------------------------------------------------------------------
 
 type PlotlyModule = typeof import("plotly.js-dist-min");
 let _plotlyModule: PlotlyModule | null = null;
@@ -37,14 +33,11 @@ async function loadPlotly(): Promise<PlotlyModule> {
   return _plotlyModule;
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const DEFAULT_K = 3;
 const K_MIN = 2;
 const K_MAX = 20;
 const DEFAULT_SEED = 42;
+const KMEANS_MAX_ITER = 100;
 
 /** 20-entry qualitative palette for cluster and categorical coloring. */
 const CATEGORICAL_PALETTE: readonly string[] = [
@@ -74,17 +67,33 @@ const SOLID_COLOR = "#60a5fa";
 
 type ClusteringMethod = "none" | "kmeans";
 
-/** Describe a `colorBy` choice for the UI select. */
+type ColorBy =
+  | { kind: "cluster" }
+  | { kind: "label"; name: string }
+  | { kind: "frame-index" }
+  | { kind: "solid" };
+
+interface PcaResult {
+  coords: Float64Array;
+  variance: [number, number];
+  clusters: Int32Array | null;
+}
+
+interface DescriptorInfo {
+  /** Descriptor name (a key found via `frame.metaNames()` across the trajectory). */
+  name: string;
+  /** Number of frames where the key parses to a finite number. */
+  finite: number;
+  /** Total frame count. */
+  total: number;
+}
+
 interface ColorByOption {
   value: string;
   label: string;
   disabled?: boolean;
-  config: ExplorationConfig["colorBy"];
+  config: ColorBy;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function clamp(v: number, lo: number, hi: number): number {
   if (v < lo) return lo;
@@ -92,23 +101,64 @@ function clamp(v: number, lo: number, hi: number): number {
   return v;
 }
 
+function formatAxis(v: number, total: number, i: number): string {
+  const label = `PC${i + 1}`;
+  if (!Number.isFinite(total) || total <= 0) return label;
+  return `${label} (${((v / total) * 100).toFixed(1)}%)`;
+}
+
 /**
- * Build the per-point color value passed to Plotly. Uses a discrete palette
- * for categorical (`cluster`) coloring and a continuous colorscale for
- * numeric (`label`, `frame-index`) coloring.
+ * Walk the trajectory once and bucket every numeric meta key's finite count.
+ * Keys that never produced a finite number are dropped (they are purely
+ * categorical). This is the only consumer of `frame.getMetaScalar` in the
+ * UI — there is no aggregated cache anywhere in core.
  */
+function scanDescriptors(trajectory: Trajectory): DescriptorInfo[] {
+  const nFrames = trajectory.length;
+  if (nFrames === 0) return [];
+
+  const finite = new Map<string, number>();
+  for (let i = 0; i < nFrames; i++) {
+    const frame = trajectory.get(i);
+    if (!frame) continue;
+    for (const name of frame.metaNames()) {
+      const v = frame.getMetaScalar(name);
+      if (v === undefined || !Number.isFinite(v)) {
+        if (!finite.has(name)) finite.set(name, 0);
+        continue;
+      }
+      finite.set(name, (finite.get(name) ?? 0) + 1);
+    }
+  }
+
+  const out: DescriptorInfo[] = [];
+  for (const [name, count] of finite) {
+    if (count > 0) out.push({ name, finite: count, total: nFrames });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+/** Build a per-frame column for `name` on demand (NaN where missing). */
+function buildLabelColumn(trajectory: Trajectory, name: string): Float64Array {
+  const col = new Float64Array(trajectory.length).fill(Number.NaN);
+  for (let i = 0; i < trajectory.length; i++) {
+    const v = trajectory.get(i)?.getMetaScalar(name);
+    if (v !== undefined && Number.isFinite(v)) col[i] = v;
+  }
+  return col;
+}
+
 function buildMarker(
-  colorBy: ExplorationConfig["colorBy"],
-  exploration: DatasetExploration,
-  frameLabels: Map<string, Float64Array> | null,
+  colorBy: ColorBy,
+  result: PcaResult,
+  trajectory: Trajectory,
 ): { color: unknown; colorscale?: unknown; showscale?: boolean } {
-  const { nFrames } = exploration.descriptors;
+  const nFrames = result.coords.length / 2;
 
   if (colorBy.kind === "cluster") {
-    const clusters = exploration.clusters;
-    if (!clusters) {
-      return { color: SOLID_COLOR };
-    }
+    const clusters = result.clusters;
+    if (!clusters) return { color: SOLID_COLOR };
     const colors = new Array<string>(nFrames);
     for (let i = 0; i < nFrames; i++) {
       const cid = clusters[i];
@@ -119,8 +169,7 @@ function buildMarker(
   }
 
   if (colorBy.kind === "label") {
-    const column = frameLabels?.get(colorBy.name);
-    if (!column) return { color: SOLID_COLOR };
+    const column = buildLabelColumn(trajectory, colorBy.name);
     return {
       color: Array.from(column),
       colorscale: "Viridis",
@@ -131,92 +180,69 @@ function buildMarker(
   if (colorBy.kind === "frame-index") {
     const arr = new Array<number>(nFrames);
     for (let i = 0; i < nFrames; i++) arr[i] = i;
-    return {
-      color: arr,
-      colorscale: "Viridis",
-      showscale: true,
-    };
+    return { color: arr, colorscale: "Viridis", showscale: true };
   }
 
   return { color: SOLID_COLOR };
 }
 
-/** Sorted descriptor key list for stable rendering. */
-function sortedKeys(frameLabels: Map<string, Float64Array> | null): string[] {
-  if (!frameLabels) return [];
-  return Array.from(frameLabels.keys()).sort();
-}
-
-// ---------------------------------------------------------------------------
-// PCATool
-// ---------------------------------------------------------------------------
-
 export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
-  const [frameLabels, setFrameLabels] = useState<Map<
-    string,
-    Float64Array
-  > | null>(() => app?.system.frameLabels ?? null);
-  const [exploration, setExploration] = useState<DatasetExploration | null>(
-    () => app?.system.exploration ?? null,
+  // We key the descriptor scan to `trajectoryRevision`: bumping it forces
+  // a re-walk of the (current) Trajectory. This is the only UI-side cache
+  // of frame meta; it lives for the component's lifetime, not on System.
+  const [trajectoryRevision, setTrajectoryRevision] = useState(0);
+  const [trajectoryLength, setTrajectoryLength] = useState<number>(
+    () => app?.system.trajectory.length ?? 0,
   );
+  const [pcaResult, setPcaResult] = useState<PcaResult | null>(null);
   const [tickedDescriptors, setTickedDescriptors] = useState<Set<string>>(
-    () => new Set(frameLabels ? frameLabels.keys() : []),
+    new Set(),
   );
   const [clusteringMethod, setClusteringMethod] =
     useState<ClusteringMethod>("none");
   const [kText, setKText] = useState<string>(String(DEFAULT_K));
-  const [colorBy, setColorBy] = useState<ExplorationConfig["colorBy"]>({
-    kind: "frame-index",
-  });
+  const [colorBy, setColorBy] = useState<ColorBy>({ kind: "frame-index" });
   const [computing, setComputing] = useState(false);
   const [computeError, setComputeError] = useState<string | null>(null);
-  const [trajectoryLength, setTrajectoryLength] = useState<number>(
-    () => app?.system.trajectory.length ?? 0,
-  );
 
-  // Hold the plot div in state (via a ref callback) so the plot effects
-  // re-run when the Map section is collapsed and re-expanded — the
-  // SidebarSection unmounts/remounts the child subtree and a plain
-  // `useRef` would silently keep a stale reference.
   const [plotDiv, setPlotDiv] = useState<HTMLDivElement | null>(null);
-
-  // --- Subscribe to system events ------------------------------------------
 
   useEffect(() => {
     if (!app) return;
-
-    // Seed from current state (handles late-mount).
-    setFrameLabels(app.system.frameLabels);
-    setExploration(app.system.exploration);
     setTrajectoryLength(app.system.trajectory.length);
+    setTrajectoryRevision((r) => r + 1);
 
-    const unsubLabels = app.events.on("frame-labels-change", (next) => {
-      setFrameLabels(next);
-    });
-    const unsubExpl = app.events.on("exploration-change", (next) => {
-      setExploration(next);
-    });
     const unsubTraj = app.events.on("trajectory-change", (traj) => {
       setTrajectoryLength(traj.length);
+      setTrajectoryRevision((r) => r + 1);
+      // Previous embedding was keyed to the old trajectory — dump it.
+      setPcaResult(null);
     });
 
     return () => {
-      unsubLabels();
-      unsubExpl();
       unsubTraj();
     };
   }, [app]);
 
-  // Auto-populate ticked descriptors whenever frameLabels changes.
+  // Walk the trajectory once per revision to enumerate descriptors + finite
+  // counts. All three are pure derivations of current frame meta.
+  const descriptors = useMemo<DescriptorInfo[]>(() => {
+    if (!app) return [];
+    // Read trajectoryRevision just to declare the dep — the actual source
+    // is app.system.trajectory.
+    void trajectoryRevision;
+    return scanDescriptors(app.system.trajectory);
+  }, [app, trajectoryRevision]);
+
+  const descriptorNames = useMemo(
+    () => descriptors.map((d) => d.name),
+    [descriptors],
+  );
+
+  // Auto-pick everything on new trajectories.
   useEffect(() => {
-    setTickedDescriptors(new Set(frameLabels ? frameLabels.keys() : []));
-  }, [frameLabels]);
-
-  // Compute-time clears the error; stale errors otherwise linger until the
-  // user clicks Compute again, which is acceptable and avoids a redundant
-  // effect.
-
-  // --- Compute -------------------------------------------------------------
+    setTickedDescriptors(new Set(descriptorNames));
+  }, [descriptorNames]);
 
   const parsedK = useMemo(() => {
     const n = Number.parseInt(kText, 10);
@@ -224,50 +250,84 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
     return clamp(n, K_MIN, K_MAX);
   }, [kText]);
 
-  const descriptorKeys = useMemo(() => sortedKeys(frameLabels), [frameLabels]);
-
   const computeDisabled =
     computing ||
-    !frameLabels ||
+    descriptors.length === 0 ||
     tickedDescriptors.size < 2 ||
     trajectoryLength < 3;
 
-  const buildConfig = useCallback((): ExplorationConfig => {
-    const names = descriptorKeys.filter((name) => tickedDescriptors.has(name));
-    const clustering: ExplorationConfig["clustering"] =
-      clusteringMethod === "kmeans"
-        ? { method: "kmeans", k: parsedK, seed: DEFAULT_SEED }
-        : { method: "none" };
-    const effectiveColorBy: ExplorationConfig["colorBy"] =
-      colorBy.kind === "cluster" && clustering.method === "none"
-        ? { kind: "frame-index" }
-        : colorBy;
-    return {
-      descriptorNames: names,
-      reduction: { method: "pca" },
-      clustering,
-      colorBy: effectiveColorBy,
-    };
-  }, [descriptorKeys, tickedDescriptors, clusteringMethod, parsedK, colorBy]);
-
-  const handleCompute = useCallback(async () => {
-    if (!app || !frameLabels) return;
+  const handleCompute = useCallback(() => {
+    if (!app) return;
     setComputing(true);
     setComputeError(null);
     try {
-      const cfg = buildConfig();
-      const result = await runExploration(frameLabels, cfg);
-      app.system.setExploration(result);
+      const trajectory = app.system.trajectory;
+      const names = descriptorNames.filter((n) => tickedDescriptors.has(n));
+      const nFrames = trajectory.length;
+      const nDescriptors = names.length;
+
+      // Walk the trajectory once, inline, to build the row-major matrix.
+      // Frames that are missing a value for a selected descriptor will
+      // leave NaN — molrs's PCA rejects non-finite input with a clear error.
+      const matrix = new Float64Array(nFrames * nDescriptors);
+      matrix.fill(Number.NaN);
+      for (let i = 0; i < nFrames; i++) {
+        const frame = trajectory.get(i);
+        if (!frame) continue;
+        for (let j = 0; j < nDescriptors; j++) {
+          const v = frame.getMetaScalar(names[j]);
+          if (v !== undefined && Number.isFinite(v)) {
+            matrix[i * nDescriptors + j] = v;
+          }
+        }
+      }
+
+      let coords: Float64Array;
+      let variance: [number, number];
+      const pca = new WasmPca2();
+      try {
+        const result = pca.fitTransform(matrix, nFrames, nDescriptors);
+        try {
+          coords = result.coords();
+          const v = result.variance();
+          variance = [v[0], v[1]];
+        } finally {
+          result.free();
+        }
+      } finally {
+        pca.free();
+      }
+
+      let clusters: Int32Array | null = null;
+      if (clusteringMethod === "kmeans") {
+        const km = new WasmKMeans(parsedK, KMEANS_MAX_ITER, DEFAULT_SEED);
+        try {
+          clusters = km.fit(coords, nFrames, 2);
+        } finally {
+          km.free();
+        }
+      }
+
+      if (colorBy.kind === "cluster" && !clusters) {
+        setColorBy({ kind: "frame-index" });
+      }
+
+      setPcaResult({ coords, variance, clusters });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "PCA computation failed";
-      setComputeError(message);
+      setComputeError(
+        err instanceof Error ? err.message : "PCA computation failed",
+      );
     } finally {
       setComputing(false);
     }
-  }, [app, frameLabels, buildConfig]);
-
-  // --- Descriptor toggle ---------------------------------------------------
+  }, [
+    app,
+    descriptorNames,
+    tickedDescriptors,
+    clusteringMethod,
+    parsedK,
+    colorBy.kind,
+  ]);
 
   const toggleDescriptor = useCallback((name: string, checked: boolean) => {
     setTickedDescriptors((prev) => {
@@ -279,20 +339,18 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
   }, []);
 
   const selectAllState: boolean | "indeterminate" = useMemo(() => {
-    if (descriptorKeys.length === 0) return false;
+    if (descriptorNames.length === 0) return false;
     if (tickedDescriptors.size === 0) return false;
-    if (tickedDescriptors.size === descriptorKeys.length) return true;
+    if (tickedDescriptors.size === descriptorNames.length) return true;
     return "indeterminate";
-  }, [descriptorKeys.length, tickedDescriptors.size]);
+  }, [descriptorNames.length, tickedDescriptors.size]);
 
   const toggleSelectAll = useCallback(() => {
     setTickedDescriptors((prev) => {
-      if (prev.size === descriptorKeys.length) return new Set();
-      return new Set(descriptorKeys);
+      if (prev.size === descriptorNames.length) return new Set();
+      return new Set(descriptorNames);
     });
-  }, [descriptorKeys]);
-
-  // --- Color-by options (derived) -----------------------------------------
+  }, [descriptorNames]);
 
   const colorByOptions: ColorByOption[] = useMemo(() => {
     const opts: ColorByOption[] = [];
@@ -307,7 +365,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       disabled: clusteringMethod === "none",
       config: { kind: "cluster" },
     });
-    for (const name of descriptorKeys) {
+    for (const name of descriptorNames) {
       opts.push({
         value: `label:${name}`,
         label: `Descriptor: ${name}`,
@@ -320,7 +378,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       config: { kind: "solid" },
     });
     return opts;
-  }, [descriptorKeys, clusteringMethod]);
+  }, [descriptorNames, clusteringMethod]);
 
   const currentColorByValue = useMemo(() => {
     if (colorBy.kind === "cluster") return "cluster";
@@ -337,19 +395,24 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
     [colorByOptions],
   );
 
-  // --- Plotly: render + click bind -----------------------------------------
+  const axes = useMemo((): [string, string] => {
+    if (!pcaResult) return ["PC1", "PC2"];
+    const [v0, v1] = pcaResult.variance;
+    const total = v0 + v1;
+    return [formatAxis(v0, total, 0), formatAxis(v1, total, 1)];
+  }, [pcaResult]);
 
   useEffect(() => {
     const div = plotDiv;
-    if (!div || !exploration) return;
+    if (!div || !pcaResult || !app) return;
     let cancelled = false;
 
     (async () => {
       const Plotly = await loadPlotly();
       if (cancelled) return;
 
-      const { coords, axes } = exploration.embedding;
-      const nFrames = exploration.descriptors.nFrames;
+      const { coords } = pcaResult;
+      const nFrames = coords.length / 2;
       const xs = new Array<number>(nFrames);
       const ys = new Array<number>(nFrames);
       for (let i = 0; i < nFrames; i++) {
@@ -358,9 +421,9 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       }
       const customdata = Array.from({ length: nFrames }, (_, i) => i);
 
-      const marker = buildMarker(colorBy, exploration, frameLabels);
+      const marker = buildMarker(colorBy, pcaResult, app.system.trajectory);
 
-      const currentIdx = app?.system.trajectory.currentIndex ?? 0;
+      const currentIdx = app.system.trajectory.currentIndex ?? 0;
       const curX = coords[2 * currentIdx] ?? 0;
       const curY = coords[2 * currentIdx + 1] ?? 0;
 
@@ -427,7 +490,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
         const e = ev as { points?: Array<{ customdata?: unknown }> };
         const pt = e.points?.[0];
         if (pt && typeof pt.customdata === "number") {
-          app?.seekFrame(pt.customdata);
+          app.seekFrame(pt.customdata);
         }
       };
 
@@ -441,11 +504,6 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
 
     return () => {
       cancelled = true;
-      // Remove the click handler and purge the plot. Both must happen here
-      // (not in a mount-only effect) because the plot div is conditionally
-      // rendered: toggling `exploration` null → non-null or collapsing the
-      // Map section unmounts the div without firing any unmount-scoped
-      // cleanup.
       const divToClean = div as unknown as {
         removeAllListeners?: (ev: string) => void;
       };
@@ -456,16 +514,12 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
             div,
           );
         })
-        .catch(() => {
-          // swallow: component is unmounting or Plotly never loaded
-        });
+        .catch(() => {});
     };
-  }, [app, plotDiv, exploration, colorBy, frameLabels]);
-
-  // --- Plotly: frame-change restyle ---------------------------------------
+  }, [app, plotDiv, pcaResult, colorBy, axes]);
 
   useEffect(() => {
-    if (!app || !exploration) return;
+    if (!app || !pcaResult) return;
     let rafId: number | null = null;
     let pending: number | null = null;
     let cancelled = false;
@@ -476,8 +530,9 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       pending = null;
       if (cancelled) return;
       if (i === null || !plotDiv) return;
-      const { coords } = exploration.embedding;
-      if (i < 0 || i >= exploration.descriptors.nFrames) return;
+      const { coords } = pcaResult;
+      const nFrames = coords.length / 2;
+      if (i < 0 || i >= nFrames) return;
       loadPlotly().then((Plotly) => {
         if (cancelled || !plotDiv) return;
         (
@@ -509,13 +564,10 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       unsub();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [app, plotDiv, exploration]);
+  }, [app, plotDiv, pcaResult]);
 
-  // --- Plotly: keep layout synced to container size ------------------------
-  // `responsive: true` only listens for window resize; it misses the
-  // resizable-panel drag that changes the sidebar's width.
   useEffect(() => {
-    if (!plotDiv || !exploration) return;
+    if (!plotDiv || !pcaResult) return;
     let rafId: number | null = null;
     let disposed = false;
     const observer = new ResizeObserver(() => {
@@ -541,13 +593,11 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       observer.disconnect();
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [plotDiv, exploration]);
+  }, [plotDiv, pcaResult]);
 
-  // --- Render --------------------------------------------------------------
+  const hasDescriptors = descriptors.length > 0;
 
-  const hasLabels = frameLabels !== null && frameLabels.size > 0;
-
-  if (!hasLabels) {
+  if (!hasDescriptors) {
     return (
       <div className="px-2 py-2">
         <p className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight">
@@ -566,7 +616,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
     <div className="flex-1 min-h-0 flex flex-col">
       <SidebarSection
         title="Descriptors"
-        subtitle={`${tickedDescriptors.size} / ${descriptorKeys.length} selected`}
+        subtitle={`${tickedDescriptors.size} / ${descriptors.length} selected`}
         defaultOpen={true}
       >
         <div className="rounded-md border overflow-hidden">
@@ -598,61 +648,47 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
                 </tr>
               </thead>
               <tbody>
-                {descriptorKeys.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={3}
-                      className="px-1.5 py-2 text-center text-[10px] text-muted-foreground"
+                {descriptors.map((d) => {
+                  const checked = tickedDescriptors.has(d.name);
+                  return (
+                    <tr
+                      key={d.name}
+                      tabIndex={0}
+                      className={cn(
+                        "border-b last:border-b-0 cursor-pointer transition-colors outline-none focus-visible:bg-muted/40",
+                        checked
+                          ? "bg-primary/5 hover:bg-primary/10"
+                          : "hover:bg-muted/30",
+                      )}
+                      onClick={() => toggleDescriptor(d.name, !checked)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleDescriptor(d.name, !checked);
+                        }
+                      }}
                     >
-                      No descriptors available
-                    </td>
-                  </tr>
-                ) : (
-                  descriptorKeys.map((name) => {
-                    const checked = tickedDescriptors.has(name);
-                    const column = frameLabels?.get(name);
-                    const nFinite = column ? countFinite(column) : 0;
-                    const total = column?.length ?? 0;
-                    return (
-                      <tr
-                        key={name}
-                        tabIndex={0}
-                        className={cn(
-                          "border-b last:border-b-0 cursor-pointer transition-colors outline-none focus-visible:bg-muted/40",
-                          checked
-                            ? "bg-primary/5 hover:bg-primary/10"
-                            : "hover:bg-muted/30",
-                        )}
-                        onClick={() => toggleDescriptor(name, !checked)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleDescriptor(name, !checked);
-                          }
-                        }}
+                      <td className="p-1 align-middle">
+                        <div className="flex items-center justify-center">
+                          <Checkbox
+                            checked={checked}
+                            className="h-3.5 w-3.5 pointer-events-none"
+                            tabIndex={-1}
+                          />
+                        </div>
+                      </td>
+                      <td
+                        className="px-1.5 py-1 font-mono truncate"
+                        title={`${d.name} — ${d.finite}/${d.total} finite`}
                       >
-                        <td className="p-1 align-middle">
-                          <div className="flex items-center justify-center">
-                            <Checkbox
-                              checked={checked}
-                              className="h-3.5 w-3.5 pointer-events-none"
-                              tabIndex={-1}
-                            />
-                          </div>
-                        </td>
-                        <td
-                          className="px-1.5 py-1 font-mono truncate"
-                          title={`${name} — ${nFinite}/${total} finite`}
-                        >
-                          {name}
-                        </td>
-                        <td className="px-1.5 py-1 text-right text-[10px] text-muted-foreground tabular-nums">
-                          {nFinite}/{total}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                        {d.name}
+                      </td>
+                      <td className="px-1.5 py-1 text-right text-[10px] text-muted-foreground tabular-nums">
+                        {d.finite}/{d.total}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -777,9 +813,9 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
           </p>
         )}
 
-        {exploration && !computeError && (
+        {pcaResult && !computeError && (
           <p className="text-[9px] text-muted-foreground px-0.5 truncate">
-            {exploration.embedding.axes[0]} · {exploration.embedding.axes[1]}
+            {axes[0]} · {axes[1]}
           </p>
         )}
       </SidebarSection>
@@ -790,7 +826,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
         className="flex-1 min-h-0 flex flex-col"
         contentClassName="flex-1 min-h-0 flex flex-col"
       >
-        {exploration ? (
+        {pcaResult ? (
           <div ref={setPlotDiv} className="flex-1 min-h-0" />
         ) : (
           <p className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight px-0.5">
@@ -801,13 +837,4 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
       </SidebarSection>
     </div>
   );
-}
-
-/** Count finite values in a column (used for the "n_finite/total" hint). */
-function countFinite(column: Float64Array): number {
-  let n = 0;
-  for (let i = 0; i < column.length; i++) {
-    if (Number.isFinite(column[i])) n++;
-  }
-  return n;
 }

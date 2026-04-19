@@ -14,6 +14,14 @@ export interface MountOpts {
   session?: string;
   /** When `true`, hide all chrome and render only the canvas. */
   minimal?: boolean;
+  /**
+   * Opt-in demo seed. `true` seeds a Dopamine molecule on start; `false`
+   * or undefined leaves the canvas empty. Defaults on in dev mode so
+   * `npm run dev:page` stays interactive; production embeds (VSCode,
+   * Python, third-party mounts) never see the demo unless they pass
+   * this flag explicitly (or the URL carries `?demo=1`).
+   */
+  demo?: boolean;
 }
 
 const MountOptsContext = createContext<MountOpts>({});
@@ -32,5 +40,6 @@ export function readMountOptsFromUrl(): MountOpts {
     token: params.get("token") ?? undefined,
     session: params.get("session") ?? undefined,
     minimal: params.has("minimal"),
+    demo: params.has("demo") ? true : undefined,
   };
 }

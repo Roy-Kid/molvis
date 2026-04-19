@@ -108,6 +108,16 @@ export class Trajectory {
   }
 
   /**
+   * Return the frame at `index`, or `undefined` if out of range.
+   * Consumers that need per-frame metadata walk the trajectory via
+   * this accessor — there is no separate aggregation layer.
+   */
+  get(index: number): Frame | undefined {
+    if (index < 0 || index >= this._length) return undefined;
+    return this._getFrame(index);
+  }
+
+  /**
    * Add a frame to the trajectory.
    */
   addFrame(frame: Frame, box?: Box): void {

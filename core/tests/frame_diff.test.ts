@@ -21,6 +21,9 @@ interface MockBlock {
   dtype(name: string): string | undefined;
   viewColU32(name: string): Uint32Array;
   copyColStr(name: string): string[];
+  copyColI32(name: string): Int32Array;
+  copyColU32(name: string): Uint32Array;
+  copyColF(name: string): Float64Array;
 }
 
 interface MockFrame {
@@ -54,6 +57,52 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
       const col = columnsStr.get(name);
       if (!col) throw new Error(`Column '${name}' not found`);
       return col;
+    },
+    copyColI32(name: string): Int32Array {
+      throw new Error(`Column '${name}' is not i32`);
+    },
+    copyColU32(name: string): Uint32Array {
+      throw new Error(`Column '${name}' is not u32`);
+    },
+    copyColF(name: string): Float64Array {
+      throw new Error(`Column '${name}' is not f64`);
+    },
+  };
+}
+
+interface LammpsAtomSpec {
+  x: number;
+  y: number;
+  z: number;
+  /** LAMMPS dump `type` column is i32 — no `element` at all. */
+  type: number;
+}
+
+function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
+  const typeCol = new Int32Array(atoms.map((atom) => atom.type));
+  return {
+    nrows() {
+      return atoms.length;
+    },
+    dtype(name: string) {
+      if (name === "type") return "i32";
+      return undefined;
+    },
+    viewColU32(_name: string): Uint32Array {
+      throw new Error("No u32 columns in atom block");
+    },
+    copyColStr(name: string): string[] {
+      throw new Error(`Column '${name}' not found or not string`);
+    },
+    copyColI32(name: string): Int32Array {
+      if (name !== "type") throw new Error(`Column '${name}' not found`);
+      return typeCol;
+    },
+    copyColU32(name: string): Uint32Array {
+      throw new Error(`Column '${name}' is not u32`);
+    },
+    copyColF(name: string): Float64Array {
+      throw new Error(`Column '${name}' is not f64`);
     },
   };
 }
@@ -91,6 +140,17 @@ function buildFrame(atoms: AtomSpec[], bonds?: BondSpec[]): Frame {
     getBlock(name: string) {
       if (name === "atoms") return atomBlock;
       if (name === "bonds") return bondBlock;
+      return null;
+    },
+  };
+  return frame as unknown as Frame;
+}
+
+function buildLammpsFrame(atoms: LammpsAtomSpec[]): Frame {
+  const atomBlock = buildLammpsAtomBlock(atoms);
+  const frame: MockFrame = {
+    getBlock(name: string) {
+      if (name === "atoms") return atomBlock;
       return null;
     },
   };
@@ -154,19 +214,6 @@ describe("classifyFrameTransition", () => {
     expect(decision.kind).toBe("bond");
   });
 
-  it("returns full when atom type column changes", () => {
-    const previous = buildFrame([
-      { x: 0, y: 0, z: 0, element: "C", type: "sp3" },
-      { x: 1, y: 0, z: 0, element: "H", type: "s" },
-    ]);
-    const next = buildFrame([
-      { x: 0, y: 0, z: 0, element: "C", type: "sp2" },
-      { x: 1, y: 0, z: 0, element: "H", type: "s" },
-    ]);
-    const decision = classifyFrameTransition(previous, next);
-    expect(decision.kind).toBe("full");
-  });
-
   it("returns full when bond count changes", () => {
     const previous = buildFrame(
       [
@@ -189,6 +236,21 @@ describe("classifyFrameTransition", () => {
     );
     const decision = classifyFrameTransition(previous, next);
     expect(decision.kind).toBe("full");
+  });
+
+  it("returns position on LAMMPS-style frames with no element column", () => {
+    // Per convention, `element` is optional. Frames that only have `type`
+    // still classify as `position` when atom count and coords structure match.
+    const previous = buildLammpsFrame([
+      { x: 0, y: 0, z: 0, type: 1 },
+      { x: 1, y: 0, z: 0, type: 2 },
+    ]);
+    const next = buildLammpsFrame([
+      { x: 0.1, y: 0, z: 0, type: 1 },
+      { x: 1.1, y: 0, z: 0, type: 2 },
+    ]);
+    const decision = classifyFrameTransition(previous, next);
+    expect(decision.kind).toBe("position");
   });
 
   it("returns position when only coordinates change", () => {

@@ -320,7 +320,7 @@ export class Artist {
     this.clear();
 
     if (!atomsBlock || atomsBlock.nrows() === 0) {
-      this.drawDefaultField(frame);
+      this.renderAuxiliaryLayers(frame);
       this.app.events.emit("frame-rendered", { frame, box: _box });
       updateVisualGuide(
         this.app.world.scene,
@@ -369,7 +369,7 @@ export class Artist {
     });
 
     this.applySceneIndexToMeshes();
-    this.drawDefaultField(frame);
+    this.renderAuxiliaryLayers(frame);
 
     // Apply slice visibility if a SliceModifier is in the pipeline
     const sliceMod = findSliceModifier(this.app.modifierPipeline);
@@ -500,7 +500,7 @@ export class Artist {
   public redrawFrame(frame: Frame): void {
     const atomsBlock = frame.getBlock("atoms");
     if (!atomsBlock || atomsBlock.nrows() === 0) {
-      this.drawDefaultField(frame);
+      this.renderAuxiliaryLayers(frame);
       return;
     }
 
@@ -539,7 +539,7 @@ export class Artist {
     // Update slice visibility
     const sliceMod = findSliceModifier(this.app.modifierPipeline);
     updateVisualGuide(this.app.world.scene, sliceMod);
-    this.drawDefaultField(frame);
+    this.renderAuxiliaryLayers(frame);
     if (!sliceMod?.visibilityMask) return;
 
     this.applySliceVisibility(sliceMod.visibilityMask, frame);
@@ -711,14 +711,11 @@ export class Artist {
   public async redrawRepresentation(frame?: Frame, box?: Box): Promise<void> {
     const repr = this.app.styleManager.getRepresentation();
     this.ribbonRenderer.setVisible(repr.showRibbon);
-
     if (!frame) {
       this.redrawFromSceneIndex();
       return;
     }
-
     await this.drawFrame(frame, box);
-    this.ribbonRenderer.setVisible(repr.showRibbon);
   }
 
   public redrawFromSceneIndex(frame?: Frame): void {
@@ -739,10 +736,24 @@ export class Artist {
     meshRegistry.registerBondLayer(this.bondMesh);
   }
 
-  private drawDefaultField(frame: Frame): void {
-    const selected = frame.getGrid("electron_density") ?? this.firstGrid(frame);
-    if (!selected) return;
-    this.drawCloud(selected);
+  /**
+   * Data-driven auxiliary rendering layers — everything that depends on
+   * frame data but isn't the primary atom/bond impostor pass (volumetric
+   * clouds, protein ribbons, future isosurfaces/SES). Each branch inspects
+   * the frame for the keys it cares about and renders or disposes. Adding
+   * another layer means adding a branch here — no loader or dispatcher
+   * changes required.
+   */
+  private renderAuxiliaryLayers(frame: Frame): void {
+    // Volumetric / grid-backed fields.
+    const grid = frame.getGrid("electron_density") ?? this.firstGrid(frame);
+    if (grid) this.drawCloud(grid);
+
+    // Protein backbone — populated by molrs's PDB reader.
+    this.ribbonRenderer.syncFromFrame(frame);
+    this.ribbonRenderer.setVisible(
+      this.app.styleManager.getRepresentation().showRibbon,
+    );
   }
 
   private firstGrid(frame: Frame): Grid | null {

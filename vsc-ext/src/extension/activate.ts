@@ -4,6 +4,7 @@ import {
   createApplySettingsMessage,
 } from "./configuration";
 import { MolecularFileLoader } from "./loading/molecularFileLoader";
+import { resolveActiveUri } from "./loading/pathUtils";
 import { MolvisEditorProvider } from "./panels/editorProvider";
 import { createHotReloadWatcher } from "./panels/hotReload";
 import { sendToWebview } from "./panels/messaging";
@@ -38,8 +39,14 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
-    vscode.commands.registerCommand("molvis.openEditor", () => {
-      openEditorPanel(context, panelRegistry, logger, fileLoader);
+    vscode.commands.registerCommand("molvis.openEditor", (uri?: vscode.Uri) => {
+      openEditorPanel(
+        context,
+        panelRegistry,
+        logger,
+        fileLoader,
+        resolveActiveUri(uri),
+      );
     }),
     vscode.commands.registerCommand("molvis.save", async () => {
       await panelRegistry.forEachVisible((panel) => {

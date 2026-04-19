@@ -1,4 +1,3 @@
-import { loadFileIntoApp } from "@/lib/loadFile";
 import {
   type Molvis,
   type MolvisConfig,
@@ -6,6 +5,7 @@ import {
   defaultMolvisConfig,
   mountMolvis,
 } from "@molvis/core";
+import { loadFileContent } from "@molvis/core/io";
 import type React from "react";
 import { useEffect, useRef } from "react";
 
@@ -243,7 +243,8 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       const file = e.dataTransfer?.files?.[0];
       if (!file || !molvisRef.current) return;
       try {
-        await loadFileIntoApp(molvisRef.current, file);
+        const content = await file.text();
+        await loadFileContent(molvisRef.current, content, file.name);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         molvisRef.current.events.emit("status-message", {

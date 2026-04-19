@@ -37,23 +37,23 @@ describe("System", () => {
     });
   });
 
-  describe("setFrame", () => {
-    it("should wrap frame in single-frame trajectory", () => {
+  describe("single-frame trajectory", () => {
+    it("wraps a frame as a one-element trajectory via the setter", () => {
       const events = new EventEmitter<MolvisEventMap>();
       const system = new System(events);
-      system.setFrame(new Frame());
+      system.trajectory = new Trajectory([new Frame()]);
       expect(system.trajectory.length).toBe(1);
       expect(system.trajectory.currentIndex).toBe(0);
     });
 
-    it("should emit frame-change event", () => {
+    it("emits frame-change when the trajectory is swapped", () => {
       const events = new EventEmitter<MolvisEventMap>();
       const system = new System(events);
       let frameIdx = -1;
       events.on("frame-change", (idx) => {
         frameIdx = idx;
       });
-      system.setFrame(new Frame());
+      system.trajectory = new Trajectory([new Frame()]);
       expect(frameIdx).toBe(0);
     });
   });

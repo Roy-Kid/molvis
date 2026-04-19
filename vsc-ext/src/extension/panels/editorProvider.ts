@@ -101,11 +101,15 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
       }, this.logger),
     );
 
+    let changeTimer: ReturnType<typeof setTimeout> | null = null;
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
       (event) => {
-        if (event.document.uri.toString() === document.uri.toString()) {
+        if (event.document.uri.toString() !== document.uri.toString()) return;
+        if (changeTimer) clearTimeout(changeTimer);
+        changeTimer = setTimeout(() => {
+          changeTimer = null;
           void loadTextDocumentToWebview(webviewPanel.webview, document);
-        }
+        }, 300);
       },
     );
 
@@ -118,6 +122,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
     });
 
     webviewPanel.onDidDispose(() => {
+      if (changeTimer) clearTimeout(changeTimer);
       this.panelRegistry.unregister(webviewPanel);
       messageDisposable.dispose();
       changeDocumentSubscription.dispose();

@@ -40,6 +40,9 @@ export {
   parseSMILES,
   generate3D,
   Grid,
+  WasmPca2,
+  WasmPcaResult,
+  WasmKMeans,
 } from "./system/index";
 export type { SmilesIR } from "./system/index";
 export { Topology } from "./system/topology";
@@ -98,12 +101,6 @@ export {
   type RdfParams,
   type RdfResult,
 } from "./analysis/rdf";
-export {
-  aggregateFrameLabels,
-  runExploration,
-  type DatasetExploration,
-  type ExplorationConfig,
-} from "./analysis/exploration";
 export {
   computeClusters,
   type ClusterParams,

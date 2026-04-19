@@ -44,23 +44,15 @@ function equalStringArray(left: string[], right: string[]): boolean {
   return true;
 }
 
-function compareOptionalStringColumns(
-  leftAtoms: Block,
-  rightAtoms: Block,
-  column: "element" | "type",
-): boolean {
-  const leftHas = leftAtoms.dtype(column) !== undefined;
-  const rightHas = rightAtoms.dtype(column) !== undefined;
-
+function compareOptionalElement(leftAtoms: Block, rightAtoms: Block): boolean {
+  // Canonical identity column is `element: String`. LAMMPS data/dump without
+  // element simply have no identity column — both sides missing is "equal".
+  const leftHas = leftAtoms.dtype("element") === DType.String;
+  const rightHas = rightAtoms.dtype("element") === DType.String;
   if (!leftHas && !rightHas) return true;
   if (!leftHas || !rightHas) return false;
-
-  // Fast path: if row counts already differ (checked by caller), skip the
-  // expensive WASM→JS string copy. Row-count equality is a prerequisite.
-  // We still need to compare content, but only cross the WASM boundary
-  // when the above structural checks pass.
-  const left = leftAtoms.copyColStr(column);
-  const right = rightAtoms.copyColStr(column);
+  const left = leftAtoms.copyColStr("element");
+  const right = rightAtoms.copyColStr("element");
   return equalStringArray(left, right);
 }
 
@@ -138,21 +130,12 @@ export function classifyFrameTransition(
     );
   }
 
-  if (!compareOptionalStringColumns(prevAtoms, nextAtoms, "element")) {
+  if (!compareOptionalElement(prevAtoms, nextAtoms)) {
     return decision(
       "full",
       nextAtomCount,
       nextBondCount,
       "Atom element column changed",
-    );
-  }
-
-  if (!compareOptionalStringColumns(prevAtoms, nextAtoms, "type")) {
-    return decision(
-      "full",
-      nextAtomCount,
-      nextBondCount,
-      "Atom type column changed",
     );
   }
 

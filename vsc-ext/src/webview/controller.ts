@@ -3,37 +3,22 @@ import {
   type Molvis,
   type MolvisConfig,
   type MolvisSetting,
-  type Trajectory,
   mountMolvis,
 } from "@molvis/core";
 import {
   exportFrame,
   inferFormatFromFilename,
-  readPDBFrame,
+  loadFileContent,
 } from "@molvis/core/io";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
 } from "../extension/types";
 import {
-  createRuntimeResources,
-  freeRuntimeResources,
-  loadMolecularPayload,
-} from "./loader";
-
-/**
- * PDB loader for the vsc-ext webview. Mirrors the page's loadFile.ts PDB
- * branch — reads the frame, loads it, then builds ribbon geometry from
- * HELIX/SHEET records. Lives here (not in core) because file IO must stay
- * out of @molvis/core.
- */
-async function loadPdbWithRibbon(app: Molvis, pdbText: string): Promise<void> {
-  const frame = readPDBFrame(pdbText);
-  await app.loadFrame(frame, frame.simbox);
-  app.artist.ribbonRenderer.buildFromPdb(pdbText);
-  const repr = app.styleManager.getRepresentation();
-  app.artist.ribbonRenderer.setVisible(repr.showRibbon);
-}
+  installGlobalErrorHandlers,
+  reportError,
+  runAsync,
+} from "./errorBoundary";
 
 declare const acquireVsCodeApi: () => {
   postMessage: (message: WebviewToHostMessage) => void;
@@ -67,6 +52,9 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 }
 
 export function bootstrapWebview(container: HTMLElement): void {
+  const vscode = acquireVsCodeApi();
+  installGlobalErrorHandlers(vscode);
+
   const app = mountMolvis(
     container,
     { showUI: true },
@@ -74,11 +62,8 @@ export function bootstrapWebview(container: HTMLElement): void {
       grid: { enabled: true },
     },
   );
-  const resources = createRuntimeResources();
   const resizeObserver = new ResizeObserver(() => app.resize());
   resizeObserver.observe(container);
-
-  const vscode = acquireVsCodeApi();
 
   const applyOptions = (config: unknown, settings: unknown): void => {
     if (config && typeof config === "object") {
@@ -103,30 +88,32 @@ export function bootstrapWebview(container: HTMLElement): void {
     const message = event.data;
     switch (message.type) {
       case "init":
-        applyOptions(message.config, message.settings);
+        try {
+          applyOptions(message.config, message.settings);
+        } catch (error) {
+          reportError(vscode, "Failed to apply init options", error);
+        }
         break;
       case "applySettings":
-        applyOptions(message.config, message.settings);
+        try {
+          applyOptions(message.config, message.settings);
+        } catch (error) {
+          reportError(vscode, "Failed to apply settings", error);
+        }
         break;
-      case "loadFile":
-        loadMolecularPayload(
-          message.content,
-          message.filename,
-          {
-            setTrajectory: (trajectory: Trajectory) =>
-              app.setTrajectory(trajectory),
-            setViewMode: () => app.setMode("view"),
-            resetCamera: () => app.resetCamera(),
-            clearFrameLabels: () => app.system.setFrameLabels(null),
-            loadPdb: (pdbText: string) => {
-              void loadPdbWithRibbon(app, pdbText);
-            },
-          },
-          resources,
+      case "loadFile": {
+        const { content, filename } = message;
+        runAsync(vscode, `Failed to load ${filename}`, () =>
+          loadFileContent(app, content, filename),
         );
         break;
+      }
       case "triggerSave":
-        app.save();
+        try {
+          app.save();
+        } catch (error) {
+          reportError(vscode, "Failed to save", error);
+        }
         break;
       case "error":
         break;
@@ -143,14 +130,16 @@ export function bootstrapWebview(container: HTMLElement): void {
   // Build a payload from the current scene and round-trip through saveFile,
   // which the host turns into a Save dialog.
   app.events.on("export-requested", () => {
-    const suggestedName = "molvis.pdb";
-    const format = inferFormatFromFilename(suggestedName, "pdb");
-    const payload = exportFrame(app.world.sceneIndex, {
-      format,
-      filename: suggestedName,
+    runAsync(vscode, "Failed to export scene", async () => {
+      const suggestedName = "molvis.pdb";
+      const format = inferFormatFromFilename(suggestedName, "pdb");
+      const payload = exportFrame(app.world.sceneIndex, {
+        format,
+        filename: suggestedName,
+      });
+      const blob = new Blob([payload.content], { type: payload.mime });
+      await app.saveFile(blob, payload.suggestedName);
     });
-    const blob = new Blob([payload.content], { type: payload.mime });
-    void app.saveFile(blob, payload.suggestedName);
   });
 
   container.addEventListener("dragover", (event) => {
@@ -182,32 +171,13 @@ export function bootstrapWebview(container: HTMLElement): void {
 
     try {
       const content = await file.text();
-      loadMolecularPayload(
-        content,
-        file.name,
-        {
-          setTrajectory: (trajectory: Trajectory) =>
-            app.setTrajectory(trajectory),
-          setViewMode: () => app.setMode("view"),
-          resetCamera: () => app.resetCamera(),
-          clearFrameLabels: () => app.system.setFrameLabels(null),
-          loadPdb: (pdbText: string) => {
-            void loadPdbWithRibbon(app, pdbText);
-          },
-        },
-        resources,
-      );
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      vscode.postMessage({
-        type: "error",
-        message: `Failed to load dropped file: ${message}`,
-      });
+      await loadFileContent(app, content, file.name);
+    } catch (error) {
+      reportError(vscode, `Failed to load dropped file ${file.name}`, error);
     }
   });
 
   window.addEventListener("beforeunload", () => {
-    freeRuntimeResources(resources);
     resizeObserver.disconnect();
     app.destroy();
   });
@@ -220,8 +190,7 @@ export function bootstrapWebview(container: HTMLElement): void {
       vscode.postMessage({ type: "ready" });
     })
     .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      vscode.postMessage({ type: "error", message });
+      reportError(vscode, "Failed to start MolVis", error);
     });
 }
 
