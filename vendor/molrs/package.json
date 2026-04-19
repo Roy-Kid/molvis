@@ -1,0 +1,27 @@
+{
+  "name": "@molcrafts/molrs",
+  "type": "module",
+  "collaborators": [
+    "MolCrafts"
+  ],
+  "description": "WASM bindings for molrs",
+  "version": "0.0.10",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MolCrafts/molrs"
+  },
+  "files": [
+    "molwasm_bg.wasm",
+    "molwasm.js",
+    "molwasm_bg.js",
+    "molwasm.d.ts"
+  ],
+  "main": "molwasm.js",
+  "homepage": "https://github.com/MolCrafts/molrs",
+  "types": "molwasm.d.ts",
+  "sideEffects": [
+    "./molwasm.js",
+    "./snippets/*"
+  ]
+}
