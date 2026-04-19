@@ -1,0 +1,35 @@
+name: Release VSCode Extension
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release-vsc-ext
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build vsc-ext
+        run: npm run build:vsc-ext
+
+      - name: Package VSIX
+        working-directory: vsc-ext
+        run: npx vsce package --no-dependencies -o molvis.vsix
+
+      - name: Publish to VS Marketplace
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.VSCE_PAT }}
+          registryUrl: https://marketplace.visualstudio.com
+          extensionFile: vsc-ext/molvis.vsix
