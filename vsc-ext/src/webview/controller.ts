@@ -102,9 +102,9 @@ export function bootstrapWebview(container: HTMLElement): void {
         }
         break;
       case "loadFile": {
-        const { content, filename } = message;
+        const { content, filename, format } = message;
         runAsync(vscode, `Failed to load ${filename}`, () =>
-          loadFileContent(app, content, filename),
+          loadFileContent(app, content, filename, format),
         );
         break;
       }
@@ -132,7 +132,7 @@ export function bootstrapWebview(container: HTMLElement): void {
   app.events.on("export-requested", () => {
     runAsync(vscode, "Failed to export scene", async () => {
       const suggestedName = "molvis.pdb";
-      const format = inferFormatFromFilename(suggestedName, "pdb");
+      const format = inferFormatFromFilename(suggestedName) ?? "pdb";
       const payload = exportFrame(app.world.sceneIndex, {
         format,
         filename: suggestedName,

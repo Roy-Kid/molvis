@@ -16,7 +16,7 @@ import {
   Rectangle,
   TextBlock,
 } from "@babylonjs/gui";
-import type { Overlay, TextLabelProps, Vec3 } from "./types";
+import type { AtomAnchored, Overlay, TextLabelProps, Vec3 } from "./types";
 
 const DEFAULT_COLOR = "white";
 const DEFAULT_FONT_SIZE = 14;
@@ -26,7 +26,7 @@ function nextId(): string {
   return `label_${++_counter}`;
 }
 
-export class TextLabelOverlay implements Overlay {
+export class TextLabelOverlay implements Overlay, AtomAnchored {
   readonly id: string;
   readonly type = "text_label" as const;
 
@@ -87,6 +87,10 @@ export class TextLabelOverlay implements Overlay {
     this._visible = v;
     if (this._container) this._container.isVisible = v;
     if (this._textBlock) this._textBlock.isVisible = v;
+  }
+
+  getAnchorAtomId(): number {
+    return this._props.anchorAtomId;
   }
 
   /**

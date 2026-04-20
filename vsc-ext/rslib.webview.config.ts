@@ -44,6 +44,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
+      "@molvis/core/io/formats": path.resolve(
+        import.meta.dirname,
+        "../core/src/io/formats.ts",
+      ),
       "@molvis/core/io": path.resolve(
         import.meta.dirname,
         "../core/src/io/index.ts",

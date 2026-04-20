@@ -43,6 +43,13 @@ export class VsCodeLogger implements Logger, vscode.Disposable {
 
 export type MolecularFilePayload = string | Record<string, string>;
 
+/**
+ * String identifier for a molecular file format. Mirrors `FileFormat`
+ * from `@molvis/core/io/formats`; we re-declare it here so the
+ * extension host doesn't depend on core's type exports transitively.
+ */
+export type MolecularFileFormat = "pdb" | "xyz" | "lammps" | "lammps-dump";
+
 export type HostToWebviewMessage =
   | {
       type: "init";
@@ -51,7 +58,12 @@ export type HostToWebviewMessage =
       settings?: unknown;
     }
   | { type: "applySettings"; config?: unknown; settings?: unknown }
-  | { type: "loadFile"; content: MolecularFilePayload; filename: string }
+  | {
+      type: "loadFile";
+      content: MolecularFilePayload;
+      filename: string;
+      format?: MolecularFileFormat;
+    }
   | { type: "triggerSave" }
   | { type: "error"; message: string };
 

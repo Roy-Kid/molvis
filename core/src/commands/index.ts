@@ -35,6 +35,11 @@ export {
   UpdateOverlayCommand,
   AddOverlaySnapshotCommand,
 } from "./overlays";
+export {
+  MarkAtomCommand,
+  UnmarkAtomCommand,
+  RemarkAtomCommand,
+} from "./mark_atom";
 
 export type { GetSelectedResponse } from "../selection_manager";
 
@@ -57,6 +62,7 @@ import "./snapshot";
 import "./attributes";
 import "./representation";
 import "./overlays";
+import "./mark_atom";
 
 /**
  * Ensure the default command set is registered with the global `commands`

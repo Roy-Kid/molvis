@@ -40,13 +40,21 @@ import { World } from "./world";
 import { type Box, Frame } from "@molcrafts/molrs";
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { OverlayManager } from "./overlays/overlay_manager";
-import { TextLabelOverlay } from "./overlays/text_label";
+import type { AtomAnchored, Overlay } from "./overlays/types";
 import { defaultSaveFile } from "./save_file";
 import { DType } from "./utils/dtype";
 
 interface StructuralSelectionSnapshot {
   atomIds: number[];
   hasExpressionSelection: boolean;
+}
+
+function asAtomAnchored(overlay: Overlay): AtomAnchored | null {
+  const a = overlay as Partial<AtomAnchored>;
+  return typeof a.getAnchorAtomId === "function" &&
+    typeof a.syncToAtomPosition === "function"
+    ? (a as AtomAnchored)
+    : null;
 }
 
 export class MolvisApp {
@@ -185,9 +193,10 @@ export class MolvisApp {
       this._lastSelectionSet = new Map(context.selectionSet);
     });
 
-    // Sync text label anchors to atom positions on each frame render.
+    // Sync atom-anchored overlays (text labels, highlight halos, ...) on each
+    // frame render so they follow their atom across the trajectory.
     this.events.on("frame-rendered", ({ frame }) => {
-      this._syncTextLabelAnchors(frame);
+      this._syncAnchoredOverlays(frame);
     });
   }
 
@@ -414,7 +423,7 @@ export class MolvisApp {
     }
   }
 
-  private _syncTextLabelAnchors(frame: Frame): void {
+  private _syncAnchoredOverlays(frame: Frame): void {
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
     const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
@@ -423,10 +432,11 @@ export class MolvisApp {
     if (!x || !y || !z) return;
 
     for (const overlay of this.overlayManager.list()) {
-      if (!(overlay instanceof TextLabelOverlay)) continue;
-      const atomId = overlay.props.anchorAtomId;
+      const anchored = asAtomAnchored(overlay);
+      if (!anchored) continue;
+      const atomId = anchored.getAnchorAtomId();
       if (atomId < 0 || atomId >= x.length) continue;
-      overlay.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
+      anchored.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
     }
   }
 

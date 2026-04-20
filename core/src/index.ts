@@ -173,12 +173,17 @@ export { Arrow3DOverlay } from "./overlays/arrow3d";
 export { Arrow2DOverlay } from "./overlays/arrow2d";
 export { TextLabelOverlay } from "./overlays/text_label";
 export { VectorFieldOverlay } from "./overlays/vector_field";
+export { MarkAtomOverlay } from "./overlays/mark_atom";
 export type {
   Overlay,
+  AtomAnchored,
   Arrow3DProps,
   Arrow2DProps,
   TextLabelProps,
   VectorFieldProps,
+  MarkAtomProps,
+  MarkShape,
+  MarkLabel,
 } from "./overlays/types";
 export { VectorFieldModifier } from "./modifiers/VectorFieldModifier";
 export type { VectorFieldModifierConfig } from "./modifiers/VectorFieldModifier";
@@ -187,6 +192,7 @@ export {
   RemoveOverlayCommand,
   UpdateOverlayCommand,
 } from "./commands/overlays";
+export { MarkAtomCommand, UnmarkAtomCommand } from "./commands/mark_atom";
 
 export { registerDefaultCommands } from "./commands";
 export { registerDefaultModifiers } from "./pipeline/modifier_registry";

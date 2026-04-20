@@ -2,10 +2,18 @@ import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import { Trajectory } from "../system/trajectory";
 import { ensureDataSource } from "../transport/rpc/router";
-import { readFrames } from "./reader";
+import { type FileFormat, readFrames } from "./reader";
 import { loadZarrFiles } from "./zarr";
 
-export { type FileFormat, inferFormatFromFilename, readFrames } from "./reader";
+export {
+  describeFormat,
+  type FileFormat,
+  type FileFormatDescriptor,
+  FILE_FORMAT_REGISTRY,
+  getAllAcceptExtensions,
+  inferFormatFromFilename,
+  readFrames,
+} from "./reader";
 export { loadZarrFiles, type ZarrLoadResult } from "./zarr";
 export {
   defaultExtensionForFormat,
@@ -44,6 +52,7 @@ export async function loadFileContent(
   app: Molvis,
   content: FileContent,
   filename: string,
+  format?: FileFormat,
 ): Promise<void> {
   appCleanups.get(app)?.();
   appCleanups.delete(app);
@@ -54,7 +63,7 @@ export async function loadFileContent(
   let firstFrame: Frame;
 
   if (typeof content === "string") {
-    const frames = readFrames(content, filename);
+    const frames = readFrames(content, filename, format);
     const boxes = frames.map((f) => f.simbox);
     trajectory = new Trajectory(frames, boxes);
     firstFrame = frames[0];

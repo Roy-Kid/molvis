@@ -7,37 +7,21 @@ import {
 } from "@molcrafts/molrs";
 import { writeBackboneBlock } from "../artist/ribbon/backbone_block";
 import { logger } from "../utils/logger";
+import {
+  type FileFormat,
+  getAllAcceptExtensions,
+  inferFormatFromFilename,
+} from "./formats";
 import { normalizeAtomCoords } from "./normalize_coords";
 
-export type FileFormat = "pdb" | "xyz" | "lammps" | "lammps-dump";
-
-/**
- * Infer a file format from the filename extension. Unknown extensions
- * fall through to `fallback` (default `"pdb"`).
- */
-export function inferFormatFromFilename(
-  filename: string,
-  fallback: FileFormat = "pdb",
-): FileFormat {
-  const trimmed = filename.trim();
-  const dot = trimmed.lastIndexOf(".");
-  const ext = dot >= 0 ? trimmed.slice(dot + 1).toLowerCase() : "";
-  switch (ext) {
-    case "pdb":
-      return "pdb";
-    case "xyz":
-      return "xyz";
-    case "lammps":
-    case "lmp":
-    case "data":
-      return "lammps";
-    case "dump":
-    case "lammpstrj":
-      return "lammps-dump";
-    default:
-      return fallback;
-  }
-}
+export {
+  describeFormat,
+  type FileFormat,
+  type FileFormatDescriptor,
+  FILE_FORMAT_REGISTRY,
+  getAllAcceptExtensions,
+  inferFormatFromFilename,
+} from "./formats";
 
 interface MultiFrameReader {
   len(): number;
@@ -63,6 +47,11 @@ function openReader(content: string, format: FileFormat): MultiFrameReader {
  * return a one-element array; multi-frame formats (XYZ, LAMMPS dump) return
  * one entry per step.
  *
+ * If `format` is omitted, the extension is used to dispatch. When the
+ * extension is unrecognized and no `format` is supplied we throw, since
+ * we would otherwise be picking a parser at random. Every UI-level
+ * ingress point should catch that case and prompt the user.
+ *
  * Column names, dtypes, and `simbox` come straight from molrs — the molpy
  * convention (`element`, `x`/`y`/`z`, `atomi`/`atomj` u32) is already what
  * each reader produces. Downstream code that needs a column and does not
@@ -71,18 +60,28 @@ function openReader(content: string, format: FileFormat): MultiFrameReader {
  * PDB gets a `residues` block attached when the file describes a backbone,
  * so the ribbon renderer can dispatch on data rather than format.
  */
-export function readFrames(content: string, filename: string): Frame[] {
-  const format = inferFormatFromFilename(filename);
-  const reader = openReader(content, format);
+export function readFrames(
+  content: string,
+  filename: string,
+  format?: FileFormat,
+): Frame[] {
+  const resolved = format ?? inferFormatFromFilename(filename);
+  if (!resolved) {
+    throw new Error(
+      `Unable to detect format from filename "${filename}". ` +
+        `Supported extensions: ${getAllAcceptExtensions()}.`,
+    );
+  }
+  const reader = openReader(content, resolved);
   const frames: Frame[] = [];
   try {
     const count = reader.len();
     for (let step = 0; step < count; step++) {
       const frame = reader.read(step);
       if (!frame) {
-        throw new Error(`${format} reader returned no frame at step ${step}`);
+        throw new Error(`${resolved} reader returned no frame at step ${step}`);
       }
-      if (format === "pdb") {
+      if (resolved === "pdb") {
         writeBackboneBlock(frame, content);
       }
       normalizeAtomCoords(frame);
@@ -91,6 +90,6 @@ export function readFrames(content: string, filename: string): Frame[] {
   } finally {
     reader.free();
   }
-  logger.info(`[reader] Read ${frames.length} ${format} frame(s)`);
+  logger.info(`[reader] Read ${frames.length} ${resolved} frame(s)`);
   return frames;
 }

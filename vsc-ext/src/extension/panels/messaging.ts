@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { resolveFileFormat } from "../loading/formatResolver";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
 import type {
@@ -25,10 +26,23 @@ export async function sendLoadedFile(
 ): Promise<void> {
   try {
     const loaded = await fileLoader.load(uri);
+    // Zarr directory payloads are typed — the `Record` variant never
+    // needs a format hint because the reader dispatches on payload shape.
+    const format =
+      typeof loaded.payload === "string"
+        ? await resolveFileFormat(loaded.filename)
+        : null;
+    if (typeof loaded.payload === "string" && !format) {
+      logger.info(
+        `MolVis: user cancelled format picker for ${loaded.filename}`,
+      );
+      return;
+    }
     sendToWebview(webview, {
       type: "loadFile",
       content: loaded.payload,
       filename: loaded.filename,
+      ...(format ? { format } : {}),
     });
   } catch (error) {
     logger.error(`MolVis: Failed to load file: ${error}`);
@@ -80,11 +94,19 @@ export async function handleSaveFile(
 export async function loadTextDocumentToWebview(
   webview: vscode.Webview,
   document: vscode.TextDocument,
+  logger?: Logger,
 ): Promise<void> {
+  const filename = getDisplayName(document.uri);
+  const format = await resolveFileFormat(filename);
+  if (!format) {
+    logger?.info(`MolVis: user cancelled format picker for ${filename}`);
+    return;
+  }
   sendToWebview(webview, {
     type: "loadFile",
     content: document.getText(),
-    filename: getDisplayName(document.uri),
+    filename,
+    format,
   });
 }
 

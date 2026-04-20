@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-core",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "exports": {
     ".": {
@@ -10,6 +10,10 @@
     "./io": {
       "types": "./dist/io/index.d.ts",
       "import": "./dist/io/index.js"
+    },
+    "./io/formats": {
+      "types": "./dist/io/formats.d.ts",
+      "import": "./dist/io/formats.js"
     }
   },
   "files": ["dist", "README.md", "LICENSE"],

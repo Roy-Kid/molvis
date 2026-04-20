@@ -20,6 +20,11 @@ import { VectorFieldOverlay } from "../overlays/vector_field";
 import { Command, command } from "./base";
 
 // ── Factory helper ────────────────────────────────────────────────────────────
+//
+// `add_overlay` handles the generic decoration overlays. Atom marks have their
+// own first-class commands — see commands/mark_atom.ts. Keeping those out of
+// this union means a caller who wants to mark an atom cannot accidentally
+// reach for `add_overlay({ type: "mark_atom" })`: there is one door per concept.
 
 type OverlaySpec =
   | ({ type: "arrow3d" } & Arrow3DProps)

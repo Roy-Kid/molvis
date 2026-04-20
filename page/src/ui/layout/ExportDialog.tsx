@@ -36,7 +36,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
     setIsExporting(true);
 
     try {
-      const format = inferFormatFromFilename(filename, "pdb");
+      const format = inferFormatFromFilename(filename) ?? "pdb";
       const payload = exportFrame(app.world.sceneIndex, { format, filename });
 
       if (!payload.content) {
