@@ -1,3 +1,7 @@
+import {
+  loadFileWithFormatPrompt,
+  useFormatPicker,
+} from "@/components/format-picker-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -6,7 +10,7 @@ import {
   type Molvis,
   Trajectory,
 } from "@molvis/core";
-import { loadFileContent } from "@molvis/core/io";
+import { getAllAcceptExtensions } from "@molvis/core/io";
 import { FileUp, Trash2 } from "lucide-react";
 import type React from "react";
 
@@ -21,14 +25,28 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   app,
   onUpdate,
 }) => {
+  const pickFormat = useFormatPicker();
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !app) return;
 
     try {
       const content = await file.text();
-      await loadFileContent(app, content, file.name);
-      onUpdate();
+      const started = await loadFileWithFormatPrompt(
+        app,
+        content,
+        file.name,
+        pickFormat,
+      );
+      if (started) {
+        onUpdate();
+      } else {
+        app.events.emit("status-message", {
+          text: `Cancelled loading ${file.name}`,
+          type: "info",
+        });
+      }
     } catch (err) {
       app.events.emit("status-message", {
         text: `Failed to load file: ${err instanceof Error ? err.message : String(err)}`,
@@ -72,7 +90,7 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
             type="file"
             className="absolute inset-0 opacity-0 cursor-pointer"
             onChange={handleFileUpload}
-            accept=".pdb,.xyz,.lmp,.lammps"
+            accept={getAllAcceptExtensions()}
             title="Load file"
             aria-label="Load file"
           />

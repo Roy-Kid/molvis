@@ -73,7 +73,7 @@ export function writeFrame(
   let filename = options.filename || "structure";
 
   if (!format && filename) {
-    format = inferFormatFromFilename(filename);
+    format = inferFormatFromFilename(filename) ?? undefined;
   }
 
   if (!format) {

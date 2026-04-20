@@ -1,11 +1,14 @@
 import {
+  loadFileWithFormatPrompt,
+  useFormatPicker,
+} from "@/components/format-picker-dialog";
+import {
   type Molvis,
   type MolvisConfig,
   type MolvisSetting,
   defaultMolvisConfig,
   mountMolvis,
 } from "@molvis/core";
-import { loadFileContent } from "@molvis/core/io";
 import type React from "react";
 import { useEffect, useRef } from "react";
 
@@ -108,6 +111,9 @@ function applyMolvisSettings(
 const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const molvisRef = useRef<Molvis | null>(null);
+  const pickFormat = useFormatPicker();
+  const pickFormatRef = useRef(pickFormat);
+  pickFormatRef.current = pickFormat;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -244,7 +250,18 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       if (!file || !molvisRef.current) return;
       try {
         const content = await file.text();
-        await loadFileContent(molvisRef.current, content, file.name);
+        const started = await loadFileWithFormatPrompt(
+          molvisRef.current,
+          content,
+          file.name,
+          pickFormatRef.current,
+        );
+        if (!started) {
+          molvisRef.current.events.emit("status-message", {
+            text: `Cancelled loading ${file.name}`,
+            type: "info",
+          });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         molvisRef.current.events.emit("status-message", {

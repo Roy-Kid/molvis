@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "@rslib/core";
 
 const sharedDefine = {
@@ -26,4 +27,13 @@ export default defineConfig({
       },
     },
   ],
+
+  resolve: {
+    alias: {
+      "@molvis/core/io/formats": path.resolve(
+        import.meta.dirname,
+        "../core/src/io/formats.ts",
+      ),
+    },
+  },
 });
