@@ -25,6 +25,20 @@ export interface Overlay {
   updateScreenPositions?(): void;
 }
 
+/**
+ * Optional protocol for overlays that follow an atom across frame updates.
+ *
+ * Implemented by TextLabelOverlay, MarkAtomOverlay, etc. The core
+ * dispatch loop (app.ts) duck-types on these two members — overlays that
+ * do not need atom tracking simply omit them.
+ */
+export interface AtomAnchored {
+  /** Atom index to follow. Return a negative value to disable anchoring. */
+  getAnchorAtomId(): number;
+  /** Called once per frame-rendered with the anchored atom's position. */
+  syncToAtomPosition(x: number, y: number, z: number): void;
+}
+
 /** Event map for OverlayManager. */
 export interface OverlayEventMap {
   "overlay-added": { overlay: Overlay };
@@ -101,6 +115,78 @@ export interface TextLabelProps {
   anchorAtomId?: number;
   /** Offset from anchor position in world units. Default: [0, 0, 0]. */
   offset?: Vec3;
+  /** Optional display name. */
+  name?: string;
+}
+
+// ── MarkAtom ──────────────────────────────────────────────────────────────────
+
+/**
+ * Visual shape component of a MarkAtom overlay.
+ *
+ * `kind` is reserved as an extension point — currently only `"sphere"`
+ * (translucent halo) is implemented; future kinds (ring, cube, crosshair)
+ * can be added without breaking the API.
+ */
+export interface MarkShape {
+  /** Shape kind. Default: "sphere". */
+  kind?: "sphere";
+  /** CSS hex color string. Default: "#ffd54a" (amber). */
+  color?: string;
+  /** Opacity 0–1. Default: 0.35. */
+  opacity?: number;
+  /** World-space radius. Default: 0.6. */
+  radius?: number;
+  /** Sphere tessellation segments. Default: 24. */
+  segments?: number;
+}
+
+/**
+ * Text label component of a MarkAtom overlay.
+ *
+ * Projected onto a BabylonJS GUI AdvancedDynamicTexture each frame, so the
+ * label always faces the camera and stays crisp at any zoom level.
+ */
+export interface MarkLabel {
+  /** Label text content (required when label is enabled). */
+  text: string;
+  /** CSS color. Default: "white". */
+  color?: string;
+  /** Font size in pixels. Default: 14. */
+  fontSize?: number;
+  /** Background color, or null for transparent. Default: null. */
+  background?: string | null;
+  /** World-space offset from the mark center. Default: [0, 0, 0]. */
+  offset?: Vec3;
+}
+
+/**
+ * MarkAtom — a composite overlay that marks an atom with an optional shape
+ * (e.g. a translucent halo) and/or an optional text label.
+ *
+ * Intended for annotating endpoints in pSMILES / bigSMILES, tagging reactive
+ * sites, or flagging atoms of interest from external analyses. One MarkAtom
+ * represents one marked atom, carries a single id, and can be undone as a
+ * unit — no need to keep a shape-overlay + label-overlay pair in sync.
+ *
+ * Exactly one of `position` or `anchorAtomId` should be set. If
+ * `anchorAtomId` is provided (>= 0), the mark follows that atom across
+ * frame updates and `position` is ignored; otherwise the mark is pinned
+ * to `position` in world space.
+ *
+ * `shape` and `label` are independently optional. Pass `null` to omit a
+ * component; omit the field entirely to accept the default (shape enabled
+ * with sphere defaults, label disabled).
+ */
+export interface MarkAtomProps {
+  /** World-space center. Ignored when anchorAtomId is set. */
+  position?: Vec3;
+  /** Atom index to follow across frames. Default: -1 (disabled). */
+  anchorAtomId?: number;
+  /** Shape component. Pass null to show no shape. Default: { kind: "sphere" }. */
+  shape?: MarkShape | null;
+  /** Label component. Pass null or omit to show no label. Default: null. */
+  label?: MarkLabel | null;
   /** Optional display name. */
   name?: string;
 }
