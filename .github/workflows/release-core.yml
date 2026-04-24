@@ -3,6 +3,9 @@ name: "Release: Core (npm)"
 on:
   push:
     tags: ["v*"]
+  # Manual trigger for republishing after workflow fixes or transient infra
+  # failures, without needing to delete/recreate the release tag.
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -14,14 +17,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 LTS ships with npm 11.5+ natively, which is the minimum
+      # version that supports OIDC Trusted Publishing's registry-side
+      # handshake. On Node 22 the bundled npm is 10.9.7; `npm publish`
+      # cannot complete the handshake and the registry treats the request
+      # as anonymous, returning a misleading `404 "is not in this registry"`
+      # on the PUT. Moving to Node 24 avoids both that and the separate
+      # hostedtoolcache regression on Node 22.22.2 (broken shipped npm
+      # missing `promise-retry`, which defeats any attempt to upgrade
+      # via `npm install -g npm@latest` or `corepack prepare --activate`).
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
-
-      # Trusted Publishing (OIDC) requires npm >= 11.5.1
-      - run: npm install -g npm@latest
 
       - run: npm ci
 
