@@ -1,8 +1,7 @@
-import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
-import { Trajectory } from "../system/trajectory";
+import type { Trajectory } from "../system/trajectory";
 import { ensureDataSource } from "../transport/rpc/router";
-import { type FileFormat, readFrames } from "./reader";
+import { type FileFormat, loadTextTrajectory, readFrames } from "./reader";
 import { loadZarrFiles } from "./zarr";
 
 export {
@@ -12,6 +11,7 @@ export {
   FILE_FORMAT_REGISTRY,
   getAllAcceptExtensions,
   inferFormatFromFilename,
+  loadTextTrajectory,
   readFrames,
 } from "./reader";
 export { loadZarrFiles, type ZarrLoadResult } from "./zarr";
@@ -35,8 +35,8 @@ export {
  */
 export type FileContent = string | Record<string, string>;
 
-// Tracks per-app cleanup for the active trajectory (e.g. a lazy zarr
-// reader) so that swapping in a new trajectory frees the previous
+// Tracks per-app cleanup for the active lazy trajectory reader so that
+// swapping in a new trajectory frees the previous
 // WASM-owned resources exactly once.
 const appCleanups = new WeakMap<Molvis, () => void>();
 
@@ -57,24 +57,20 @@ export async function loadFileContent(
   appCleanups.get(app)?.();
   appCleanups.delete(app);
 
-  const dataSource = ensureDataSource(app, { sourceType: "file", filename });
+  ensureDataSource(app, { sourceType: "file", filename });
 
   let trajectory: Trajectory;
-  let firstFrame: Frame;
 
   if (typeof content === "string") {
-    const frames = readFrames(content, filename, format);
-    const boxes = frames.map((f) => f.simbox);
-    trajectory = new Trajectory(frames, boxes);
-    firstFrame = frames[0];
+    const bundle = loadTextTrajectory(content, filename, format);
+    trajectory = bundle.trajectory;
+    appCleanups.set(app, bundle.dispose);
   } else {
     const bundle = loadZarrFiles(content);
     trajectory = bundle.trajectory;
-    firstFrame = bundle.firstFrame;
     appCleanups.set(app, bundle.dispose);
   }
 
-  dataSource.setFrame(firstFrame);
   await app.setTrajectory(trajectory);
   await app.applyPipeline({ fullRebuild: true });
   app.world.resetCamera();

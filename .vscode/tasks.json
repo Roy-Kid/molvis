@@ -21,21 +21,15 @@
       "type": "npm",
       "label": "vsc-ext: watch",
       "script": "watch",
-      "options": { "cwd": "${workspaceFolder}/vsc-ext" },
-      "group": { "kind": "build", "isDefault": true },
-      "presentation": { "reveal": "always" },
+      "options": {
+        "cwd": "${workspaceFolder}/vsc-ext"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always"
+      },
       "isBackground": true,
-      "problemMatcher": {
-        "owner": "rslib-watch",
-        "pattern": {
-          "regexp": "^\\b$"
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": "^.*start\\s+build started.*$",
-          "endsPattern": "^.*ready\\s+built in.*$"
-        }
-      }
+      "problemMatcher": ["$tsc-watch"]
     },
     {
       "type": "npm",

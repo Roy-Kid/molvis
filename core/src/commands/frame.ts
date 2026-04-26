@@ -1,6 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import { type Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
+import { viewAtomCoords } from "../io/atom_coords";
 import { syncSceneToFrame } from "../scene_sync";
 import { DType } from "../utils/dtype";
 import { Command, command } from "./base";
@@ -134,9 +135,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         this.updateBondBuffer(bondMesh, frameAtoms, frameBonds);
       }
 
-      sceneIndex.metaRegistry.atoms.setFrame(frameAtoms);
+      sceneIndex.metaRegistry.atoms.setFrame(this.frame);
       if (frameBonds) {
-        sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
+        sceneIndex.metaRegistry.bonds.setFrame(this.frame);
       }
 
       this.app.artist.redrawFromSceneIndex(this.frame);
@@ -152,11 +153,12 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
   private updateAtomBuffer(mesh: BABYLON.Mesh, atomsBlock: Block) {
     const count = atomsBlock.nrows();
     if (!count) throw new Error("Atoms block has no rows");
-    const xCoords = atomsBlock.viewColF("x");
+    const coords = viewAtomCoords(atomsBlock);
+    const xCoords = coords?.x;
     if (!xCoords) throw new Error("Missing x coordinates");
-    const yCoords = atomsBlock.viewColF("y");
+    const yCoords = coords?.y;
     if (!yCoords) throw new Error("Missing y coordinates");
-    const zCoords = atomsBlock.viewColF("z");
+    const zCoords = coords?.z;
     if (!zCoords) throw new Error("Missing z coordinates");
     // `mesh` is already atomState.mesh (caller pulls from sceneIndex).
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
@@ -228,11 +230,12 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
   ) {
     const count = bondsBlock.nrows();
     if (!count) throw new Error("Bonds block has no rows");
-    const xCoords = atomsBlock.viewColF("x");
+    const coords = viewAtomCoords(atomsBlock);
+    const xCoords = coords?.x;
     if (!xCoords) throw new Error("Missing x coordinates");
-    const yCoords = atomsBlock.viewColF("y");
+    const yCoords = coords?.y;
     if (!yCoords) throw new Error("Missing y coordinates");
-    const zCoords = atomsBlock.viewColF("z");
+    const zCoords = coords?.z;
     if (!zCoords) throw new Error("Missing z coordinates");
     const i_atoms = bondsBlock.viewColU32("atomi");
     if (!i_atoms) throw new Error("Missing bond atomi column");
@@ -357,9 +360,10 @@ export class ExportFrameCommand extends Command<{
 
     const atomsBlock = tempFrame.getBlock("atoms");
     if (atomsBlock) {
-      const x = atomsBlock.viewColF("x");
-      const y = atomsBlock.viewColF("y");
-      const z = atomsBlock.viewColF("z");
+      const coords = viewAtomCoords(atomsBlock);
+      const x = coords?.x;
+      const y = coords?.y;
+      const z = coords?.z;
       const elements =
         atomsBlock.dtype("element") === DType.String
           ? (atomsBlock.copyColStr("element") as string[])

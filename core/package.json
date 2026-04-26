@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-core",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "exports": {
     ".": {
@@ -17,7 +17,7 @@
     }
   },
   "files": ["dist", "README.md", "LICENSE"],
-  "sideEffects": ["./dist/commands/*.js"],
+  "sideEffects": ["./src/commands/*.ts"],
   "scripts": {
     "build": "rslib build",
     "build:demo": "rsbuild build",
@@ -41,7 +41,7 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
-    "@molcrafts/molrs": "^0.0.12",
+    "@molcrafts/molrs": "^0.0.14",
     "tslog": "^4.9.3"
   },
   "directories": {

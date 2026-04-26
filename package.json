@@ -1,6 +1,6 @@
 {
   "name": "molvis",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "interactive molecule visulization package",
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
@@ -37,7 +37,7 @@
     "wait-on": "^9.0.3"
   },
   "dependencies": {
-    "@molcrafts/molrs": "^0.0.12"
+    "@molcrafts/molrs": "^0.0.14"
   },
   "overrides": {
     "@rspack/core": "^1.6.0",
@@ -46,5 +46,6 @@
     "@rsbuild/plugin-react": "^1.4.0",
     "@rstest/core": "^0.9.0",
     "@rstest/browser": "^0.9.0"
-  }
+  },
+  "packageManager": "npm@11.11.0+sha512.f36811c4aae1fde639527368ae44c571d050006a608d67a191f195a801a52637a312d259186254aa3a3799b05335b7390539cf28656d18f0591a1125ba35f973"
 }

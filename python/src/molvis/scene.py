@@ -3,23 +3,36 @@
 
 A :class:`Molvis` instance owns a :class:`~molvis.transport.Transport`
 and drives the shared frontend (page bundle) over JSON-RPC 2.0 + binary
-buffers. The same class works from three host contexts:
+buffers. The same class works from every Python host context, detected
+automatically via :mod:`molvis.runtime`:
 
-* **Plain Python script** — ``mv.Molvis()`` starts a local WebSocket
-  server, opens the page in the default browser, and returns. Commands
-  block on the handshake the first time they fire.
-* **Jupyter cell** — ``scene = mv.Molvis(); scene`` displays the page
-  inline in the cell output by loading the page bundle's hashed
-  ``<script>`` tags into ``document.head``, then calling
-  ``window.MolvisApp.mount(cell_div, opts)`` against a fresh Shadow DOM
-  root so the page's Tailwind preflight does not leak into the
-  notebook. The script then dials back to the same Python-hosted
-  WebSocket. No iframe, no anywidget, no traitlets.
+* **Plain script / Python REPL / IPython terminal**
+  (:attr:`~molvis.runtime.DisplaySurface.BROWSER`) — ``mv.Molvis()``
+  starts a local WebSocket server, opens the page in the default
+  browser, and returns. Commands block on the handshake the first time
+  they fire.
+* **Jupyter notebook / JupyterLab / Colab / VSCode notebook**
+  (:attr:`~molvis.runtime.DisplaySurface.INLINE`) —
+  ``scene = mv.Molvis(); scene`` displays the page inline in the cell
+  output by loading the page bundle's hashed ``<script>`` tags into
+  ``document.head`` and calling ``window.MolvisApp.mount(cell_div,
+  opts)`` against a fresh Shadow DOM root. Subsequent chained calls
+  like ``scene.mark_atom(0)`` update the *already-mounted* viewer over
+  the WebSocket and print a lightweight status line in the cell —
+  nothing is re-mounted. Call :meth:`Molvis.show` to force a fresh
+  in-cell mount when you want to display the scene in a new cell.
 * **Explicit CDN** — pass
   ``transport=mv.WebSocketTransport(page_base_url="…")`` to point the
-  page at an externally-hosted bundle.
+  page at an externally-hosted bundle. Runtime detection still picks
+  the display surface.
+* **Headless**
+  (:attr:`~molvis.runtime.DisplaySurface.HEADLESS`) — set
+  ``MOLVIS_HEADLESS=1`` or call from a worker thread without a display.
+  No browser is opened; commands still run over the WebSocket if a
+  page has been connected manually via :attr:`connection_url`.
 
-All host logic lives in the transport; ``Molvis`` is transport-agnostic.
+All host logic lives in the transport and :mod:`molvis.runtime`;
+``Molvis`` itself is transport-agnostic.
 """
 
 from __future__ import annotations
@@ -47,8 +60,13 @@ from .commands import (
 )
 from .errors import MolvisRPCError
 from .events import EventBus, EventHandle, Selection, ViewerState
+from .runtime import (
+    DisplaySurface,
+    RuntimeEnv,
+    detect_runtime,
+    display_surface as _detect_display_surface,
+)
 from .transport import Transport, WebSocketTransport
-from .transport._jupyter_env import in_jupyter_kernel as _in_jupyter_kernel
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -147,6 +165,8 @@ class Molvis(
         width: int | _Unset = _UNSET,
         height: int | _Unset = _UNSET,
         gui: bool | _Unset = _UNSET,
+        serve_page: bool | _Unset = _UNSET,
+        display_surface: DisplaySurface | _Unset = _UNSET,
     ) -> "Molvis":
         scene_name = name or cls._DEFAULT_NAME
         existing = cls._scene_registry.get(scene_name)
@@ -154,7 +174,12 @@ class Molvis(
             return super().__new__(cls)
 
         existing._reject_param_conflict(
-            transport=transport, width=width, height=height, gui=gui
+            transport=transport,
+            width=width,
+            height=height,
+            gui=gui,
+            serve_page=serve_page,
+            display_surface=display_surface,
         )
         return existing
 
@@ -166,6 +191,8 @@ class Molvis(
         width: int | _Unset = _UNSET,
         height: int | _Unset = _UNSET,
         gui: bool | _Unset = _UNSET,
+        serve_page: bool | _Unset = _UNSET,
+        display_surface: DisplaySurface | _Unset = _UNSET,
     ) -> None:
         if getattr(self, "_initialised", False):
             return
@@ -175,14 +202,41 @@ class Molvis(
         self.width: int = 1200 if isinstance(width, _Unset) else width
         self.height: int = 800 if isinstance(height, _Unset) else height
         self.gui: bool = True if isinstance(gui, _Unset) else gui
+        self.serve_page: bool = (
+            True if isinstance(serve_page, _Unset) else serve_page
+        )
         self._created_at: float = time.time()
+
+        # Runtime context frozen at construction time. Tracking the
+        # surface lets the scene make the same UX decisions every time
+        # it's asked (``__init__``, ``_repr_mimebundle_``, ``show()``)
+        # without re-probing ``IPython.get_ipython()`` on every call.
+        # An explicit ``display_surface=`` wins over auto-detection —
+        # handy for tests, CI, and users in a notebook host who want
+        # the viewer to pop out into a browser tab instead of inline.
+        self._runtime: RuntimeEnv = detect_runtime()
+        self._display_surface: DisplaySurface = (
+            display_surface
+            if not isinstance(display_surface, _Unset)
+            else _detect_display_surface()
+        )
+        self._has_displayed_inline: bool = False
 
         self._state = ViewerState()
         self._events = EventBus(self._state)
 
         if transport is None:
+            # Browser pop-up is only appropriate when we (a) are serving
+            # the page and (b) are not already embedding inline. Inline
+            # hosts mount the bundle straight into the cell output; a
+            # second standalone tab would duplicate the display.
+            want_browser = (
+                self.serve_page
+                and self._display_surface is DisplaySurface.BROWSER
+            )
             transport = WebSocketTransport(
-                open_browser=not _in_jupyter_kernel(),
+                open_browser=want_browser,
+                serve_page=self.serve_page,
                 event_bus=self._events,
                 minimal=not self.gui,
             )
@@ -217,6 +271,20 @@ class Molvis(
             self.height,
         )
 
+        if not self.serve_page:
+            # Start now so `connection_url` is available, and emit it so
+            # the user can paste it into the page's Settings → Backend
+            # dialog before any RPC fires.
+            self._ensure_started()
+            url = self.connection_url
+            if url:
+                logger.info("")
+                logger.info(
+                    "  >>> Paste into MolVis Settings → Backend:"
+                )
+                logger.info("      %s", url)
+                logger.info("")
+
     def __repr__(self) -> str:
         status = "connected" if self.connected else "idle"
         return (
@@ -231,6 +299,8 @@ class Molvis(
         width: int | _Unset,
         height: int | _Unset,
         gui: bool | _Unset,
+        serve_page: bool | _Unset,
+        display_surface: DisplaySurface | _Unset,
     ) -> None:
         """Raise if the cached scene does not match the requested config.
 
@@ -255,6 +325,22 @@ class Molvis(
         if not isinstance(height, _Unset) and height != self.height:
             mismatches.append(
                 f"height: cached={self.height!r}, requested={height!r}"
+            )
+        if (
+            not isinstance(serve_page, _Unset)
+            and serve_page != self.serve_page
+        ):
+            mismatches.append(
+                f"serve_page: cached={self.serve_page!r}, "
+                f"requested={serve_page!r}"
+            )
+        if (
+            not isinstance(display_surface, _Unset)
+            and display_surface != self._display_surface
+        ):
+            mismatches.append(
+                f"display_surface: cached={self._display_surface!r}, "
+                f"requested={display_surface!r}"
             )
         if not mismatches:
             return
@@ -345,6 +431,35 @@ class Molvis(
         self._initialised = False
         logger.debug("Molvis '%s' closed", self.name)
 
+    def wait(self, timeout: float | None = None) -> None:
+        """Block the calling thread until the browser closes or Ctrl+C.
+
+        Scripts that push data and then want to keep the viewer alive for
+        interactive use can call ``scene.wait()`` as their last line —
+        it replaces the ``threading.Event().wait()`` + ``try/except
+        KeyboardInterrupt`` + ``finally: scene.close()`` pattern with a
+        single call. On either exit path the transport is torn down and
+        the scene is dropped from the registry.
+
+        Parameters
+        ----------
+        timeout
+            Maximum seconds to block. ``None`` (default) waits
+            indefinitely.
+        """
+        wait_for_disconnect = getattr(
+            self._transport, "wait_for_disconnection", None
+        )
+        try:
+            if callable(wait_for_disconnect):
+                wait_for_disconnect(timeout)
+            else:
+                threading.Event().wait(timeout=timeout)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.close()
+
     @property
     def connected(self) -> bool:
         """Whether the transport currently holds a live browser session."""
@@ -362,7 +477,33 @@ class Molvis(
             "connected": self.connected,
             "port": port,
             "created_at": self._created_at,
+            "runtime": self._runtime.value,
+            "display_surface": self._display_surface.value,
         }
+
+    @property
+    def runtime_env(self) -> RuntimeEnv:
+        """The Python runtime that hosted this scene at construction."""
+        return self._runtime
+
+    @property
+    def display_surface(self) -> DisplaySurface:
+        """Where this scene will render — inline, browser, or headless."""
+        return self._display_surface
+
+    @property
+    def connection_url(self) -> str:
+        """Pasteable ``ws://…?token=…&session=…`` URL for this scene.
+
+        Starts the transport if needed. Returns an empty string when the
+        attached transport does not expose a ``connection_url`` helper
+        (e.g. a custom test fake).
+        """
+        self._ensure_started()
+        fn = getattr(self._transport, "connection_url", None)
+        if not callable(fn):
+            return ""
+        return fn(session=self.name)
 
     def _ensure_started(self) -> None:
         start = getattr(self._transport, "start", None)
@@ -571,27 +712,40 @@ class Molvis(
         exclude: Iterable[str] | None = None,
         **_kwargs: Any,
     ) -> dict[str, Any]:
-        """Return a Jupyter mimebundle that mounts the viewer in-cell.
+        """Return a Jupyter mimebundle sized to the current host.
 
-        Returns a multi-MIME bundle that lets the notebook frontend pick
-        the richest representation it understands, mirroring Plotly's
-        approach:
+        Behaviour depends on :attr:`display_surface`:
 
-        - ``text/html`` — a ``<div>`` plus a ``<script>`` that loads the
-          page bundle and calls ``window.MolvisApp.mount(el, opts)``
-          against a Shadow DOM root for style isolation.
-        - ``text/plain`` — a short text fallback for nbviewer / GitHub.
+        - :attr:`~molvis.runtime.DisplaySurface.INLINE` — first call
+          emits a ``text/html`` bundle that mounts the viewer inline
+          (a ``<div>`` + a loader ``<script>`` that ``await``\\ s the
+          page bundle and calls ``window.MolvisApp.mount``). All
+          subsequent calls short-circuit to a compact status
+          ``<span>`` so chained commands don't clone the viewer across
+          cells — the real update has already flowed over the
+          WebSocket to the already-mounted viewer. Call
+          :meth:`show` to opt back into a fresh mount.
+        - :attr:`~molvis.runtime.DisplaySurface.BROWSER` /
+          :attr:`~molvis.runtime.DisplaySurface.HEADLESS` — only
+          ``text/plain`` is returned. The viewer lives in an external
+          browser tab or nowhere at all, so there is no HTML to inline.
 
         Use ``include`` / ``exclude`` (matching ``IPython.display``
-        conventions) to filter which MIME types are returned.
+        conventions) to filter which MIME types are returned — handy
+        for tests and for hosts that need to force ``text/plain``.
         """
         bundle: dict[str, Any] = {"text/plain": repr(self)}
 
-        endpoints_fn = getattr(self._transport, "page_endpoints", None)
-        if callable(endpoints_fn):
-            self._ensure_started()
-            endpoints = endpoints_fn(session=self.name)
-            bundle["text/html"] = self._render_inline_mount(endpoints)
+        if self._display_surface is DisplaySurface.INLINE:
+            endpoints_fn = getattr(self._transport, "page_endpoints", None)
+            if callable(endpoints_fn):
+                self._ensure_started()
+                endpoints = endpoints_fn(session=self.name)
+                if self._has_displayed_inline:
+                    bundle["text/html"] = self._render_inline_status()
+                else:
+                    bundle["text/html"] = self._render_inline_mount(endpoints)
+                    self._has_displayed_inline = True
 
         if include is not None:
             keep = set(include)
@@ -600,6 +754,25 @@ class Molvis(
             drop = set(exclude)
             bundle = {k: v for k, v in bundle.items() if k not in drop}
         return bundle
+
+    def show(self) -> "Molvis":
+        """Force a fresh in-cell mount next time the scene is displayed.
+
+        Only meaningful in inline hosts (Jupyter, Colab, VSCode
+        notebook). After the first ``scene._repr_mimebundle_`` call,
+        subsequent chained commands ``return self`` but render a
+        lightweight status line instead of re-mounting. Call
+        ``scene.show()`` to opt back into a full mount — typically at
+        the end of a cell where you want to see the viewer afresh:
+
+            >>> scene.draw_frame(new_frame)   # status line only
+            >>> scene.show()                   # re-mounts in this cell
+
+        On non-inline hosts this is a no-op that still returns ``self``
+        for method chaining.
+        """
+        self._has_displayed_inline = False
+        return self
 
     def _render_inline_mount(self, endpoints: "PageEndpoints") -> str:
         """Build the cell HTML — a div + a loader script."""
@@ -626,6 +799,30 @@ class Molvis(
             f'style="width:{int(self.width)}px;height:{int(self.height)}px;'
             f'display:block"></div>'
             f"<script>{loader}</script>"
+        )
+
+    def _render_inline_status(self) -> str:
+        """Return a compact status span for already-mounted inline scenes.
+
+        Rendered in place of a fresh mount when a chained call like
+        ``scene.mark_atom(0)`` returns ``self`` to the notebook host.
+        The real scene update has already flowed through the
+        WebSocket; this span just acknowledges the command without
+        duplicating the viewer. The visual treatment mirrors the
+        sidebar status lines (muted, monospace, trailing dot).
+        """
+        status = "connected" if self.connected else "idle"
+        label = html.escape(
+            f"MolVis '{self.name}' · {status} · viewer mounted above",
+            quote=True,
+        )
+        return (
+            '<span class="molvis-status" '
+            'style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
+            "font-size:10px;color:#6b7280;letter-spacing:0.02em;"
+            'display:inline-block;padding:2px 6px;">'
+            f"{label}"
+            "</span>"
         )
 
 

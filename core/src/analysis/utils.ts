@@ -1,4 +1,5 @@
 import type { Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 
 /**
  * Estimate a reasonable rMax cutoff from frame geometry.
@@ -21,9 +22,10 @@ export function estimateRMax(frame: Frame): number {
   if (!atoms) return 0;
 
   const n = atoms.nrows();
-  const x = atoms.copyColF("x");
-  const y = atoms.copyColF("y");
-  const z = atoms.copyColF("z");
+  const coords = viewAtomCoords(atoms);
+  const x = coords?.x;
+  const y = coords?.y;
+  const z = coords?.z;
   if (!x || !y || !z) return 0;
 
   const step = Math.max(1, Math.floor(n / 100));

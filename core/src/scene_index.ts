@@ -1,5 +1,5 @@
 import type { Mesh } from "@babylonjs/core";
-import type { Block, Box } from "@molcrafts/molrs";
+import type { Block, Box, Frame } from "@molcrafts/molrs";
 import { ATOM_IMPOSTOR_SPEC, BOND_IMPOSTOR_SPEC } from "./artist/material_spec";
 import {
   type AtomMeta,
@@ -16,6 +16,11 @@ import { Topology } from "./system/topology";
 // ============ Registration Options ============
 
 export interface RegisterFrameOptions {
+  /**
+   * The source Frame. Meta sources store this reference and re-fetch
+   * blocks lazily, so WASM handle version bumps don't produce stale reads.
+   */
+  frame: Frame;
   atomMesh: Mesh;
   bondMesh?: Mesh;
   atomBlock: Block;
@@ -621,6 +626,7 @@ export class SceneIndex {
 
   registerFrame(options: RegisterFrameOptions): void {
     const {
+      frame,
       atomMesh,
       bondMesh,
       atomBlock,
@@ -641,8 +647,9 @@ export class SceneIndex {
         ?.setFrameData(atomBuffers, atomBlock.nrows());
     }
 
-    // 2. Setup MetaRegistry
-    this.metaRegistry.atoms.setFrame(atomBlock);
+    // 2. Setup MetaRegistry — bind to Frame so blocks are re-fetched lazily
+    //    and survive with_frame_mut's conservative version bumps.
+    this.metaRegistry.atoms.setFrame(frame);
 
     // 3. Rebuild topology from frame
     this.topology.clear();
@@ -660,7 +667,7 @@ export class SceneIndex {
           ?.setFrameData(bondBuffers, renderCount, bondInstanceMap);
       }
 
-      this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
+      this.metaRegistry.bonds.setFrame(frame);
 
       const bondCount = bondBlock.nrows();
       const iAtoms = bondBlock.viewColU32("atomi");
@@ -794,7 +801,7 @@ export class SceneIndex {
         }
       }
       atomState.promoteFrameSegmentToEdits();
-      this.metaRegistry.atoms.frameBlock = null;
+      this.metaRegistry.atoms.setFrame(null);
     }
 
     const bondState = this.meshRegistry.getBondState();
@@ -808,8 +815,7 @@ export class SceneIndex {
         }
       }
       bondState.promoteFrameSegmentToEdits();
-      this.metaRegistry.bonds.frameBlock = null;
-      this.metaRegistry.bonds.atomBlock = null;
+      this.metaRegistry.bonds.setFrame(null);
     }
   }
 

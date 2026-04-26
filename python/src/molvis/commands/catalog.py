@@ -135,6 +135,14 @@ class FrontendCommands:
         FrontendCommandGroup.OVERLAY,
         "clear",
     )
+    MARK_ATOM = FrontendCommand(
+        FrontendCommandGroup.OVERLAY,
+        "mark_atom",
+    )
+    UNMARK_ATOM = FrontendCommand(
+        FrontendCommandGroup.OVERLAY,
+        "unmark_atom",
+    )
     PIPELINE_LIST = FrontendCommand(FrontendCommandGroup.PIPELINE, "list")
     PIPELINE_AVAILABLE_MODIFIERS = FrontendCommand(
         FrontendCommandGroup.PIPELINE, "available_modifiers"

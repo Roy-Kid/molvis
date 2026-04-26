@@ -1,6 +1,7 @@
 import { Matrix, type PointerInfo, Vector3 } from "@babylonjs/core";
 
 import type { MolvisApp as Molvis } from "../app";
+import { viewAtomCoords } from "../io/atom_coords";
 import { SelectModifier } from "../modifiers/SelectModifier";
 
 import {
@@ -319,9 +320,10 @@ class SelectMode extends BaseMode {
     const atoms = frame?.getBlock("atoms");
     if (!atoms) return [];
 
-    const xCoords = atoms.viewColF("x");
-    const yCoords = atoms.viewColF("y");
-    const zCoords = atoms.viewColF("z");
+    const coords = viewAtomCoords(atoms);
+    const xCoords = coords?.x;
+    const yCoords = coords?.y;
+    const zCoords = coords?.z;
     if (!xCoords || !yCoords || !zCoords) return [];
 
     const scene = this.app.world.scene;

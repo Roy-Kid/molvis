@@ -20,6 +20,7 @@ export class Trajectory {
   private _currentIndex: number;
   private _provider?: FrameProvider;
   private _length: number;
+  private _providerOverrides = new Map<number, Frame>();
 
   constructor(frames: Frame[] = [], boxes: (Box | undefined)[] = []) {
     this._frames = frames;
@@ -64,7 +65,15 @@ export class Trajectory {
 
   private _getFrame(index: number): Frame {
     if (this._provider) {
-      return this._provider.get(index);
+      const override = this._providerOverrides.get(index);
+      if (override) return override;
+
+      const providerLength = this._provider.length;
+      if (index < providerLength) {
+        return this._provider.get(index);
+      }
+
+      return this._frames[index - providerLength];
     }
     return this._frames[index];
   }
@@ -123,7 +132,7 @@ export class Trajectory {
   addFrame(frame: Frame, box?: Box): void {
     this._frames.push(frame);
     this._boxes.push(box);
-    this._length = this._frames.length;
+    this._length = this._provider ? this._length + 1 : this._frames.length;
   }
 
   /**
@@ -174,11 +183,23 @@ export class Trajectory {
    * relies on in-place mutation to avoid reconstructing the entire Trajectory.
    */
   replaceFrame(index: number, frame: Frame, box?: Box): boolean {
-    if (index >= 0 && index < this._length) {
-      this._frames[index] = frame;
+    if (index < 0 || index >= this._length) {
+      return false;
+    }
+
+    if (this._provider) {
+      const providerLength = this._provider.length;
+      if (index < providerLength) {
+        this._providerOverrides.set(index, frame);
+      } else {
+        this._frames[index - providerLength] = frame;
+      }
       this._boxes[index] = box;
       return true;
     }
-    return false;
+
+    this._frames[index] = frame;
+    this._boxes[index] = box;
+    return true;
   }
 }

@@ -37,11 +37,10 @@ export async function applyBackendState(
   // per-ingest applyPipeline + resetCamera — we rebuild the rest of the
   // pipeline below and apply once at the end.
   if (state.frames.length > 0) {
-    const ds = ensureDataSource(app, {
+    ensureDataSource(app, {
       sourceType: "backend",
       filename: "backend-sync",
     });
-    ds.setFrame(state.frames[0]);
     await app.setTrajectory(new Trajectory(state.frames, state.boxes));
   }
 

@@ -5,6 +5,7 @@ import {
   LinkedCell,
   RDF as WasmRDF,
 } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 import { estimateRMax } from "./utils";
 
 export interface RdfParams {
@@ -235,9 +236,10 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.copyColF("x");
-  const y = atoms.copyColF("y");
-  const z = atoms.copyColF("z");
+  const coords = viewAtomCoords(atoms);
+  const x = coords?.x;
+  const y = coords?.y;
+  const z = coords?.z;
   if (!x || !y || !z) return null;
 
   const n = indices.length;

@@ -286,6 +286,8 @@ export class RPCRouter {
       ["view.set_theme", this.handleSetTheme],
       ["view.set_mode", this.handleSetMode],
       ["state.get", this.handleStateGet],
+      ["overlay.mark_atom", this.handleMarkAtom],
+      ["overlay.unmark_atom", this.handleUnmarkAtom],
     ]);
   }
 
@@ -396,11 +398,10 @@ export class RPCRouter {
       return { success: true };
     }
     const frame = new Frame();
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "empty",
       filename: "",
     });
-    ds.setFrame(frame);
     await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -441,11 +442,10 @@ export class RPCRouter {
       );
     }
 
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    ds.setFrame(frame);
     await this.app.setTrajectory(new Trajectory([frame], [box]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -497,11 +497,10 @@ export class RPCRouter {
 
   private handleClear: RPCHandler = async () => {
     const frame = new Frame();
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "empty",
       filename: "",
     });
-    ds.setFrame(frame);
     await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -541,11 +540,10 @@ export class RPCRouter {
     });
 
     const sessionLabel = this.sessionLabel(frames.length);
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    ds.setFrame(frames[0]);
     await this.app.setTrajectory(new Trajectory(frames, boxes));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -921,6 +919,29 @@ export class RPCRouter {
   private handlePipelineClear: RPCHandler = async () => {
     this.app.modifierPipeline.clear();
     await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
+  // ---------------------------------------------------------------------
+  // Overlay / annotation commands
+  // ---------------------------------------------------------------------
+
+  private handleMarkAtom: RPCHandler = async (params) => {
+    const overlay = await Promise.resolve(
+      this.app.execute<Record<string, unknown>, { id: string }>(
+        "mark_atom",
+        params,
+      ),
+    );
+    return { id: overlay.id };
+  };
+
+  private handleUnmarkAtom: RPCHandler = (params) => {
+    const id = requireString(params.id, "id");
+    if (!id) {
+      throw invalidParams("unmark_atom requires an 'id'");
+    }
+    this.app.execute("unmark_atom", { id });
     return { success: true };
   };
 

@@ -1,4 +1,5 @@
-import type { Block } from "@molcrafts/molrs";
+import type { Block, Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "./io/atom_coords";
 import { DType } from "./utils/dtype";
 
 // ============ Entity Types ============
@@ -36,11 +37,22 @@ export type EntityMeta = AtomMeta | BondMeta | BoxMeta;
 // ============ Unified Source Classes ============
 
 export class AtomSource {
-  public frameBlock: Block | null = null;
+  private _frame: Frame | null = null;
   public edits = new Map<number, AtomMeta>();
 
-  setFrame(block: Block) {
-    this.frameBlock = block;
+  /**
+   * Bind this source to a Frame. Block handles are fetched lazily via the
+   * `frameBlock` getter so that any WASM-side version bumps (e.g. the
+   * conservative bump that `with_frame_mut` applies when meta/grids are
+   * mutated) never leave us holding a stale handle.
+   */
+  setFrame(frame: Frame | null) {
+    this._frame = frame;
+  }
+
+  /** Current atoms block for the bound frame, or null if no frame is bound. */
+  get frameBlock(): Block | null {
+    return this._frame?.getBlock("atoms") ?? null;
   }
 
   setEdit(id: number, meta: AtomMeta) {
@@ -91,10 +103,8 @@ export class AtomSource {
 
     if (this.frameBlock && id < this.frameBlock.nrows()) {
       if (key === "x" || key === "y" || key === "z") {
-        const col =
-          this.frameBlock.dtype(key) === DType.F64
-            ? this.frameBlock.viewColF(key)
-            : undefined;
+        const coords = viewAtomCoords(this.frameBlock);
+        const col = coords?.[key];
         if (col) return col[id];
       }
       if (key === "element") {
@@ -128,9 +138,10 @@ export class AtomSource {
   private getFromFrame(index: number): AtomMeta | null {
     if (!this.frameBlock) return null;
 
-    const x = this.frameBlock.viewColF("x");
-    const y = this.frameBlock.viewColF("y");
-    const z = this.frameBlock.viewColF("z");
+    const coords = viewAtomCoords(this.frameBlock);
+    const x = coords?.x;
+    const y = coords?.y;
+    const z = coords?.z;
 
     if (!x || !y || !z) return null;
 
@@ -178,13 +189,26 @@ export class AtomSource {
 }
 
 export class BondSource {
-  public frameBlock: Block | null = null;
-  public atomBlock: Block | null = null; // Needed for positions
+  private _frame: Frame | null = null;
   public edits = new Map<number, BondMeta>();
 
-  setFrame(bondBlock: Block, atomBlock: Block) {
-    this.frameBlock = bondBlock;
-    this.atomBlock = atomBlock;
+  /**
+   * Bind this source to a Frame. The bonds and atoms blocks are fetched
+   * lazily via getters so WASM-side handle-version bumps never leave us
+   * holding a stale reference.
+   */
+  setFrame(frame: Frame | null) {
+    this._frame = frame;
+  }
+
+  /** Current bonds block for the bound frame, or null if absent. */
+  get frameBlock(): Block | null {
+    return this._frame?.getBlock("bonds") ?? null;
+  }
+
+  /** Current atoms block (needed for bond endpoint positions). */
+  get atomBlock(): Block | null {
+    return this._frame?.getBlock("atoms") ?? null;
   }
 
   setEdit(id: number, meta: BondMeta) {
@@ -254,9 +278,10 @@ export class BondSource {
         ? this.frameBlock.viewColU32("order")
         : undefined;
 
-    const ax = this.atomBlock.viewColF("x");
-    const ay = this.atomBlock.viewColF("y");
-    const az = this.atomBlock.viewColF("z");
+    const coords = viewAtomCoords(this.atomBlock);
+    const ax = coords?.x;
+    const ay = coords?.y;
+    const az = coords?.z;
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 

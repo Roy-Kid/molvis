@@ -9,7 +9,7 @@
  * follows the atom position across frame updates automatically.
  */
 
-import { Vector3 } from "@babylonjs/core";
+import { Matrix, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import {
   type AdvancedDynamicTexture,
@@ -131,9 +131,11 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = this._scene.getTransformMatrix();
 
+    // `_worldPos` is already in world space; world matrix must be identity.
+    // Passing `transformMatrix` here would apply view*projection twice.
     const projected = Vector3.Project(
       this._worldPos,
-      transformMatrix,
+      Matrix.IdentityReadOnly,
       transformMatrix,
       viewportMatrix,
     );
@@ -167,6 +169,9 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
     tb.isHitTestVisible = false;
     tb.textHorizontalAlignment = TextBlock.HORIZONTAL_ALIGNMENT_CENTER;
     tb.textVerticalAlignment = TextBlock.VERTICAL_ALIGNMENT_CENTER;
+    // Size TextBlock to its text content, otherwise it fills its parent
+    // (the Rectangle w/ adaptWidthToChildren, or the fullscreen UI).
+    tb.resizeToFit = true;
 
     if (background) {
       const rect = new Rectangle(`${this.id}_bg`);

@@ -1,21 +1,22 @@
 /**
- * Roundtrip tests for page's WASM-facing serialization helpers.
+ * Roundtrip tests for the RPC serialization helpers.
  *
- * `buildFrame` and `buildBox` are the only direct WASM call sites in page;
- * every other React/UI layer goes through them. These tests check that
- * JSON payloads (the shape the RPC receives from Python/WebSocket peers)
- * land in molrs 0.0.8 with the expected column values and dtypes.
+ * `buildFrame` and `buildBox` are the only direct WASM call sites in the
+ * RPC bridge; every other transport layer goes through them. These tests
+ * check that JSON payloads (the shape the RPC receives from Python /
+ * WebSocket peers) land in molrs with the expected column values and
+ * dtypes.
  *
- * Runs under chromium headless (page/rstest.config.ts).
+ * Runs under chromium headless (core/rstest.config.ts).
  */
 
 import "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { buildBox, buildFrame } from "../src/lib/rpc/serialization";
+import { buildBox, buildFrame } from "../src/transport/rpc/serialization";
 import type {
   SerializedBoxData,
   SerializedFrameData,
-} from "../src/lib/rpc/types";
+} from "../src/transport/rpc/types";
 
 // ── buildFrame ─────────────────────────────────────────────────────────────
 

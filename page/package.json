@@ -1,6 +1,6 @@
 {
   "name": "page",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "main": "index.js",
   "type": "module",
   "keywords": [],
@@ -49,6 +49,6 @@
     "dev": "rsbuild dev",
     "build": "rsbuild build",
     "typecheck": "tsc --noEmit",
-    "test": "rstest run"
+    "test": "rstest run --passWithNoTests"
   }
 }

@@ -23,10 +23,15 @@ export class MolecularFileLoader {
       };
     }
 
-    const doc = await vscode.workspace.openTextDocument(uri);
+    // Read raw bytes via the fs provider instead of `openTextDocument`, which
+    // is capped at ~50MB by VSCode's TextDocument IPC. Trajectory files
+    // (.lammpstrj, .dump) routinely exceed that. BOM is consumed by the
+    // decoder to match `doc.getText()` behavior.
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const text = new TextDecoder("utf-8").decode(bytes);
     return {
       filename: getDisplayName(uri),
-      payload: doc.getText(),
+      payload: text,
     };
   }
 }
