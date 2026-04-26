@@ -16,6 +16,15 @@
       "import": "./dist/io/formats.js"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MolCrafts/molvis.git",
+    "directory": "core"
+  },
+  "homepage": "https://github.com/MolCrafts/molvis#readme",
+  "bugs": {
+    "url": "https://github.com/MolCrafts/molvis/issues"
+  },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": ["./src/commands/*.ts"],
   "scripts": {
