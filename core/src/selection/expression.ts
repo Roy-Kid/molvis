@@ -1,4 +1,5 @@
 import type { Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 import type { SceneIndex } from "../scene_index";
 
 /**
@@ -55,9 +56,10 @@ export class ExpressionSelector {
     if (!atomsBlock) return [];
 
     const count = atomsBlock.nrows();
-    const xCol = atomsBlock.viewColF("x");
-    const yCol = atomsBlock.viewColF("y");
-    const zCol = atomsBlock.viewColF("z");
+    const coords = viewAtomCoords(atomsBlock);
+    const xCol = coords?.x;
+    const yCol = coords?.y;
+    const zCol = coords?.z;
     const elCol = atomsBlock.dtype("element")
       ? (atomsBlock.copyColStr("element") as string[])
       : undefined;

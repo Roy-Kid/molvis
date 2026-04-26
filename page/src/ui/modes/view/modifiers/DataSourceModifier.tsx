@@ -74,7 +74,6 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
 
   const handleClear = async () => {
     if (!app) return;
-    modifier.setFrame(null);
     modifier.sourceType = "empty";
     modifier.filename = "";
     await app.setTrajectory(new Trajectory([new Frame()]));

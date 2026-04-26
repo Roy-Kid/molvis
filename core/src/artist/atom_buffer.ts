@@ -1,5 +1,6 @@
 import { Color3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 import {
   COLOR_OVERRIDE_B,
   COLOR_OVERRIDE_G,
@@ -38,9 +39,10 @@ export function buildAtomBuffers(
   options?: AtomBufferOptions,
 ): Map<string, Float32Array> {
   const atomCount = atomsBlock.nrows();
-  const xCoords = atomsBlock.viewColF("x");
-  const yCoords = atomsBlock.viewColF("y");
-  const zCoords = atomsBlock.viewColF("z");
+  const coords = viewAtomCoords(atomsBlock);
+  const xCoords = coords?.x;
+  const yCoords = coords?.y;
+  const zCoords = coords?.z;
 
   // Canonical: `element` is String. Secondary: `type` as stringified numeric
   // category for LAMMPS dumps/data that carry no element symbol. These are

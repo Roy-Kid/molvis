@@ -6,11 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from test_scene_smoke import install_widget_stubs
-
 
 def import_video_module():
-    install_widget_stubs()
     src_root = Path(__file__).resolve().parents[1] / "src"
     if str(src_root) not in sys.path:
         sys.path.insert(0, str(src_root))

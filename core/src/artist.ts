@@ -358,6 +358,7 @@ export class Artist {
     }
 
     this.app.world.sceneIndex.registerFrame({
+      frame,
       atomMesh: this.atomMesh,
       bondMesh: this.bondMesh,
       atomBlock: atomsBlock,

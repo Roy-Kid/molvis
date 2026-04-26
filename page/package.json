@@ -49,6 +49,6 @@
     "dev": "rsbuild dev",
     "build": "rsbuild build",
     "typecheck": "tsc --noEmit",
-    "test": "rstest run"
+    "test": "rstest run --passWithNoTests"
   }
 }

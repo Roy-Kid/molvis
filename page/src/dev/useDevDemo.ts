@@ -111,7 +111,6 @@ export function useDevDemo(
       frame.insertBlock("bonds", bondsBlock);
 
       const sourceMod = new DataSourceModifier();
-      sourceMod.setFrame(frame);
       sourceMod.sourceType = "empty";
       sourceMod.filename = "Dopamine";
 

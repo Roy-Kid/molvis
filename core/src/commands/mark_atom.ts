@@ -12,19 +12,52 @@
  */
 
 import type { MolvisApp } from "../app";
+import type { MarkAtomContext } from "../overlays/mark_atom";
 import { MarkAtomOverlay } from "../overlays/mark_atom";
 import type { MarkAtomProps } from "../overlays/types";
 import { Command, command } from "./base";
 
+/**
+ * Resolve the rendered atom radius and current world position from the
+ * scene's meta registry. The registry is kept in sync with the active
+ * frame by the artist, and its AtomSource re-fetches block handles
+ * lazily, so this call reads a consistent snapshot even after WASM-side
+ * handle-version bumps (e.g. from set_frame_labels → with_frame_mut).
+ *
+ * Throws when the anchor id cannot be resolved — mark_atom is an atom-
+ * anchored overlay, so an invalid id is a programming error, not a
+ * degradable condition.
+ */
+function resolveAnchorContext(
+  app: MolvisApp,
+  anchorAtomId: number,
+): MarkAtomContext {
+  const meta = app.world.sceneIndex.metaRegistry.atoms.getMeta(anchorAtomId);
+  if (!meta) {
+    throw new Error(
+      `mark_atom: no atom with id ${anchorAtomId} in the current scene`,
+    );
+  }
+  if (!meta.element) {
+    throw new Error(
+      `mark_atom: atom ${anchorAtomId} has no element; cannot resolve style`,
+    );
+  }
+  return {
+    atomRadius: app.styleManager.getAtomStyle(meta.element).radius,
+    initialPosition: [meta.position.x, meta.position.y, meta.position.z],
+  };
+}
+
 // ── mark_atom ────────────────────────────────────────────────────────────────
 
 /**
- * Mark an atom (or world position) with a halo and/or a text label.
+ * Mark an atom with a halo and/or a text label. The halo radius and label
+ * font size are auto-sized from the atom's rendered radius by default.
  *
  * Usage:
  *   app.execute("mark_atom", { anchorAtomId: 0 })
  *   app.execute("mark_atom", { anchorAtomId: 3, label: { text: "*" } })
- *   app.execute("mark_atom", { position: [1, 0, 0], shape: null, label: { text: "α" } })
  *
  * Returns the created MarkAtomOverlay (use `.id` for later unmark/update).
  */
@@ -39,10 +72,12 @@ export class MarkAtomCommand extends Command<MarkAtomOverlay> {
   }
 
   do(): MarkAtomOverlay {
+    const context = resolveAnchorContext(this.app, this._props.anchorAtomId);
     const overlay = MarkAtomOverlay.create(
       this.app.scene,
       this._props,
       this.app.overlayManager.labelTexture,
+      context,
     );
     this._added = overlay;
     this.app.overlayManager.add(overlay);

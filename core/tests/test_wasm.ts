@@ -15,8 +15,8 @@ import {
   Box,
   Frame,
   Grid,
-  LAMMPSDumpReader,
   LAMMPSReader,
+  LAMMPSTrajReader,
   LinkedCell,
   PDBReader,
   RDF,
@@ -355,8 +355,8 @@ describe("WASM Readers", () => {
     reader.free();
   });
 
-  it("LAMMPSDumpReader reads a trajectory snapshot", () => {
-    const reader = new LAMMPSDumpReader(LAMMPS_DUMP_FIXTURE);
+  it("LAMMPSTrajReader reads a trajectory snapshot", () => {
+    const reader = new LAMMPSTrajReader(LAMMPS_DUMP_FIXTURE);
     expect(reader.isEmpty()).toBe(false);
     expect(reader.len()).toBeGreaterThanOrEqual(1);
     const frame = reader.read(0);

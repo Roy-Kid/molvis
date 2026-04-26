@@ -135,7 +135,11 @@ export interface MarkShape {
   color?: string;
   /** Opacity 0–1. Default: 0.35. */
   opacity?: number;
-  /** World-space radius. Default: 0.6. */
+  /**
+   * World-space radius in Å. When omitted, auto-sized to 1.5× the marked
+   * atom's rendered radius so the halo always rings the atom regardless of
+   * element or representation.
+   */
   radius?: number;
   /** Sphere tessellation segments. Default: 24. */
   segments?: number;
@@ -152,7 +156,11 @@ export interface MarkLabel {
   text: string;
   /** CSS color. Default: "white". */
   color?: string;
-  /** Font size in pixels. Default: 14. */
+  /**
+   * Font size in pixels. When omitted, the label size tracks the marked
+   * atom's on-screen pixel radius each frame, so text stays legibly
+   * proportional as the user zooms.
+   */
   fontSize?: number;
   /** Background color, or null for transparent. Default: null. */
   background?: string | null;
@@ -169,20 +177,18 @@ export interface MarkLabel {
  * represents one marked atom, carries a single id, and can be undone as a
  * unit — no need to keep a shape-overlay + label-overlay pair in sync.
  *
- * Exactly one of `position` or `anchorAtomId` should be set. If
- * `anchorAtomId` is provided (>= 0), the mark follows that atom across
- * frame updates and `position` is ignored; otherwise the mark is pinned
- * to `position` in world space.
+ * A mark is always pinned to an atom by its `anchorAtomId`. The halo
+ * radius and label font size are auto-sized from the marked atom's
+ * rendered size, so they stay visually proportional across zoom and
+ * representation changes.
  *
  * `shape` and `label` are independently optional. Pass `null` to omit a
  * component; omit the field entirely to accept the default (shape enabled
  * with sphere defaults, label disabled).
  */
 export interface MarkAtomProps {
-  /** World-space center. Ignored when anchorAtomId is set. */
-  position?: Vec3;
-  /** Atom index to follow across frames. Default: -1 (disabled). */
-  anchorAtomId?: number;
+  /** Atom index to mark. The mark follows this atom across frame updates. */
+  anchorAtomId: number;
   /** Shape component. Pass null to show no shape. Default: { kind: "sphere" }. */
   shape?: MarkShape | null;
   /** Label component. Pass null or omit to show no label. Default: null. */

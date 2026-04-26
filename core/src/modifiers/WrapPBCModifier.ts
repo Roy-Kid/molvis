@@ -1,4 +1,5 @@
 import { Frame, WasmArray } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { logger } from "../utils/logger";
@@ -24,11 +25,12 @@ export class WrapPBCModifier extends BaseModifier {
       return input;
     }
 
-    const x = atoms.viewColF("x");
-    const y = atoms.viewColF("y");
-    const z = atoms.viewColF("z");
+    const coords = viewAtomCoords(atoms);
+    const x = coords?.x;
+    const y = coords?.y;
+    const z = coords?.z;
     if (!x || !y || !z) {
-      logger.warn("WrapPBC: missing x/y/z columns, skipping");
+      logger.warn("WrapPBC: missing x/y/z and xu/yu/zu columns, skipping");
       return input;
     }
 

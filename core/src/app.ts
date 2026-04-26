@@ -15,6 +15,7 @@ import { SetRepresentationCommand } from "./commands/representation";
 import { ArrayFrameSource } from "./commands/sources";
 import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { EventEmitter, type MolvisEventMap } from "./events";
+import { viewAtomCoords } from "./io/atom_coords";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
@@ -426,9 +427,10 @@ export class MolvisApp {
   private _syncAnchoredOverlays(frame: Frame): void {
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
-    const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
-    const y = atoms.dtype("y") === DType.F64 ? atoms.viewColF("y") : undefined;
-    const z = atoms.dtype("z") === DType.F64 ? atoms.viewColF("z") : undefined;
+    const coords = viewAtomCoords(atoms);
+    const x = coords?.x;
+    const y = coords?.y;
+    const z = coords?.z;
     if (!x || !y || !z) return;
 
     for (const overlay of this.overlayManager.list()) {

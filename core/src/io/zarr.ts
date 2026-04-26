@@ -6,7 +6,6 @@ const FRAME_CACHE_SIZE = 16;
 
 export interface ZarrLoadResult {
   trajectory: Trajectory;
-  firstFrame: Frame;
   dispose: () => void;
 }
 
@@ -57,7 +56,6 @@ export function loadZarrFiles(files: Record<string, string>): ZarrLoadResult {
   };
 
   const trajectory = Trajectory.fromProvider(provider);
-  const firstFrame = provider.get(0);
 
   const dispose = () => {
     for (const frame of cache.values()) frame.free();
@@ -66,5 +64,5 @@ export function loadZarrFiles(files: Record<string, string>): ZarrLoadResult {
   };
 
   logger.info(`[zarr] Loaded ${frameCount} frame(s)`);
-  return { trajectory, firstFrame, dispose };
+  return { trajectory, dispose };
 }
