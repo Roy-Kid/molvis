@@ -1,26 +1,36 @@
 import {
+  CHGCARReader,
+  CIFReader,
+  CubeReader,
+  DCDReader,
   type Frame,
   LAMMPSReader,
   LAMMPSTrajReader,
   PDBReader,
+  SDFReader,
   XYZReader,
 } from "@molcrafts/molrs";
-import { writeBackboneBlock } from "../artist/ribbon/backbone_block";
 import { type FrameProvider, Trajectory } from "../system/trajectory";
 import { logger } from "../utils/logger";
 import {
   type FileFormat,
+  describeFormat,
   getAllAcceptExtensions,
   inferFormatFromFilename,
 } from "./formats";
 
 export {
+  canStream,
   describeFormat,
   type FileFormat,
   type FileFormatDescriptor,
   FILE_FORMAT_REGISTRY,
+  type FormatPayload,
   getAllAcceptExtensions,
   inferFormatFromFilename,
+  isBinaryFormat,
+  isStreamingOnly,
+  type StreamingCapability,
 } from "./formats";
 
 interface MultiFrameReader {
@@ -36,16 +46,52 @@ export interface ReaderLoadResult {
   dispose: () => void;
 }
 
-function openReader(content: string, format: FileFormat): MultiFrameReader {
+function openTextReader(content: string, format: FileFormat): MultiFrameReader {
   switch (format) {
     case "pdb":
       return new PDBReader(content);
     case "xyz":
       return new XYZReader(content);
+    case "cif":
+      return new CIFReader(content);
     case "lammps":
       return new LAMMPSReader(content);
     case "lammps-dump":
       return new LAMMPSTrajReader(content);
+    case "sdf":
+      return new SDFReader(content);
+    case "cube":
+      return new CubeReader(content);
+    case "chgcar":
+      return new CHGCARReader(content);
+    default:
+      // Unreachable in practice: loadTextTrajectory rejects
+      // payload="binary" formats before reaching this dispatch. Kept
+      // explicit so adding a new text format and forgetting to wire its
+      // WASM reader fails loudly rather than mis-parsing or returning
+      // undefined.
+      throw new Error(
+        `Format "${format}" declares payload="text" but has no WASM reader wired up in openTextReader.`,
+      );
+  }
+}
+
+function openBinaryReader(
+  bytes: Uint8Array,
+  format: FileFormat,
+): MultiFrameReader {
+  switch (format) {
+    case "dcd":
+      return new DCDReader(bytes);
+    default:
+      // Unreachable in practice: loadBinaryTrajectory rejects non-binary
+      // formats via descriptor.payload before reaching this dispatch.
+      // Kept as an explicit guard so adding a new binary format and
+      // forgetting to wire its WASM reader fails loudly rather than
+      // silently mis-parsing.
+      throw new Error(
+        `Format "${format}" declares payload="binary" but has no WASM reader wired up in openBinaryReader.`,
+      );
   }
 }
 
@@ -54,17 +100,6 @@ function evictOldest(cache: Map<number, Frame>): void {
   if (oldest === undefined) return;
   cache.get(oldest)?.free();
   cache.delete(oldest);
-}
-
-function decorateFrame(
-  frame: Frame,
-  format: FileFormat,
-  content: string,
-): Frame {
-  if (format === "pdb") {
-    writeBackboneBlock(frame, content);
-  }
-  return frame;
 }
 
 function resolveFormat(filename: string, format?: FileFormat): FileFormat {
@@ -79,24 +114,23 @@ function resolveFormat(filename: string, format?: FileFormat): FileFormat {
 }
 
 /**
- * Open a text-format trajectory lazily.
+ * Wrap a `MultiFrameReader` (returned by either `openTextReader` or
+ * `openBinaryReader`) into a {@link Trajectory} backed by an
+ * LRU-cached lazy frame provider. The reader is kept alive for the
+ * lifetime of the trajectory and freed by `dispose()`.
  *
- * The returned Trajectory keeps the WASM reader alive and reads frames on
- * demand through a small LRU cache, rather than materializing `Frame[]`
- * upfront.
+ * Format-agnostic: anything that satisfies `MultiFrameReader` flows
+ * through this single packager.
  */
-export function loadTextTrajectory(
-  content: string,
-  filename: string,
-  format?: FileFormat,
+function buildLazyTrajectory(
+  reader: MultiFrameReader,
+  format: FileFormat,
 ): ReaderLoadResult {
-  const resolved = resolveFormat(filename, format);
-  const reader = openReader(content, resolved);
   const frameCount = reader.len();
 
   if (frameCount === 0) {
     reader.free();
-    throw new Error(`${resolved} reader returned no frames`);
+    throw new Error(`${format} reader returned no frames`);
   }
 
   const cache = new Map<number, Frame>();
@@ -112,12 +146,9 @@ export function loadTextTrajectory(
 
       const frame = reader.read(index);
       if (!frame) {
-        throw new Error(
-          `${resolved} reader returned no frame at step ${index}`,
-        );
+        throw new Error(`${format} reader returned no frame at step ${index}`);
       }
 
-      decorateFrame(frame, resolved, content);
       if (cache.size >= FRAME_CACHE_SIZE) evictOldest(cache);
       cache.set(index, frame);
       return frame;
@@ -134,9 +165,60 @@ export function loadTextTrajectory(
   };
 
   logger.info(
-    `[reader] Opened lazy ${resolved} trajectory with ${frameCount} frame(s)`,
+    `[reader] Opened lazy ${format} trajectory with ${frameCount} frame(s)`,
   );
   return { trajectory, dispose };
+}
+
+/**
+ * Open a text-format trajectory lazily.
+ *
+ * The returned Trajectory keeps the WASM reader alive and reads frames on
+ * demand through a small LRU cache, rather than materializing `Frame[]`
+ * upfront.
+ *
+ * Throws if the resolved format declares `payload: "binary"` — callers
+ * that have raw bytes must use {@link loadBinaryTrajectory} instead.
+ */
+export function loadTextTrajectory(
+  content: string,
+  filename: string,
+  format?: FileFormat,
+): ReaderLoadResult {
+  const resolved = resolveFormat(filename, format);
+  const desc = describeFormat(resolved);
+  if (desc.payload !== "text") {
+    throw new Error(
+      `Format "${resolved}" is binary; pass a Uint8Array to loadBinaryTrajectory instead of a string to loadTextTrajectory.`,
+    );
+  }
+  return buildLazyTrajectory(openTextReader(content, resolved), resolved);
+}
+
+/**
+ * Open a binary-format trajectory lazily.
+ *
+ * Mirror of {@link loadTextTrajectory} for formats whose descriptor
+ * declares `payload: "binary"`. The eager dispatch in
+ * {@link loadFileContent} routes `Uint8Array` payloads here once a
+ * binary reader has been registered (DCD is the first such format).
+ *
+ * Throws if no format with `payload: "binary"` is registered yet, or
+ * if the caller passed a binary buffer for a text format.
+ */
+export function loadBinaryTrajectory(
+  bytes: Uint8Array,
+  filename: string,
+  format?: FileFormat,
+): ReaderLoadResult {
+  const resolved = resolveFormat(filename, format);
+  const desc = describeFormat(resolved);
+  if (desc.payload !== "binary") {
+    throw new Error(
+      `Format "${resolved}" is text; pass a string to loadTextTrajectory instead of a Uint8Array to loadBinaryTrajectory.`,
+    );
+  }
+  return buildLazyTrajectory(openBinaryReader(bytes, resolved), resolved);
 }
 
 /**
@@ -154,8 +236,10 @@ export function loadTextTrajectory(
  * columns are preserved as-read; downstream code may prefer `x/y/z` and fall
  * back to `xu/yu/zu`, but this loader does not synthesize missing columns.
  *
- * PDB gets a `residues` block attached when the file describes a backbone,
- * so the ribbon renderer can dispatch on data rather than format.
+ * Format-specific frame decoration (PDB backbone ribbon, VASP volumetric
+ * fields, …) is no longer a side-effect of the loader. It is handled by
+ * auto-attaching pipeline modifiers — see
+ * `core/src/pipeline/auto_modifiers/`.
  */
 export function readFrames(
   content: string,
@@ -163,7 +247,13 @@ export function readFrames(
   format?: FileFormat,
 ): Frame[] {
   const resolved = resolveFormat(filename, format);
-  const reader = openReader(content, resolved);
+  const desc = describeFormat(resolved);
+  if (desc.payload !== "text") {
+    throw new Error(
+      `readFrames only supports text formats; "${resolved}" is binary.`,
+    );
+  }
+  const reader = openTextReader(content, resolved);
   const frames: Frame[] = [];
   try {
     const count = reader.len();
@@ -172,7 +262,7 @@ export function readFrames(
       if (!frame) {
         throw new Error(`${resolved} reader returned no frame at step ${step}`);
       }
-      frames.push(decorateFrame(frame, resolved, content));
+      frames.push(frame);
     }
   } finally {
     reader.free();

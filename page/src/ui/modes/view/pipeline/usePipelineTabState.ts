@@ -1,8 +1,9 @@
 import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
+  DataSourceModifier,
   type Modifier,
-  ModifierCategory,
+  ModifierCapability,
   type Molvis,
   PipelineEvents,
   SelectModifier,
@@ -147,8 +148,9 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
       const pipeline = app.modifierPipeline;
       const modifier = factory();
 
-      const isSelSensitive =
-        modifier.category === ModifierCategory.SelectionSensitive;
+      const isSelSensitive = modifier.capabilities.has(
+        ModifierCapability.ConsumesSelection,
+      );
       const isSelProducer = isSelectionProducer(modifier);
       const isTopChange = isTopologyChanging(modifier);
 
@@ -206,9 +208,15 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
         return;
       }
 
-      app.modifierPipeline.removeModifier(id);
+      // DataSources need the lifecycle path (dispose WASM, re-derive
+      // system trajectory). Plain modifiers go straight through pipeline.
+      if (mod instanceof DataSourceModifier) {
+        void app.removeDataSource(id);
+      } else {
+        app.modifierPipeline.removeModifier(id);
+        void app.applyPipeline({ fullRebuild: true });
+      }
       setSelectedId((prev) => (prev === id ? null : prev));
-      void app.applyPipeline({ fullRebuild: true });
     },
     [app, modifiers],
   );
@@ -217,10 +225,15 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     if (!app || !pendingDelete) {
       return;
     }
-    app.modifierPipeline.removeModifier(pendingDelete.modifier.id);
+    const target = pendingDelete.modifier;
+    if (target instanceof DataSourceModifier) {
+      void app.removeDataSource(target.id);
+    } else {
+      app.modifierPipeline.removeModifier(target.id);
+      void app.applyPipeline({ fullRebuild: true });
+    }
     setSelectedId(null);
     setPendingDelete(null);
-    void app.applyPipeline({ fullRebuild: true });
   }, [app, pendingDelete]);
 
   const handleCancelDelete = useCallback(() => {

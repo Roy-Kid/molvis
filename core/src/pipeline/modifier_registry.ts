@@ -7,7 +7,11 @@ import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
 import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
 import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
-import { DataSourceModifier } from "./data_source_modifier";
+import { DrawAtomModifier } from "./draw_atom";
+import { DrawBondModifier } from "./draw_bond";
+import { DrawBoxModifier } from "./draw_box";
+import { DrawIsosurfaceModifier } from "./draw_isosurface";
+import { DrawRibbonModifier } from "./draw_ribbon";
 import type { Modifier } from "./modifier";
 
 // Type for a modifier factory function
@@ -48,11 +52,11 @@ export class ModifierRegistry {
   static initialize() {
     if (ModifierRegistry._defaultsRegistered) return;
     ModifierRegistry._defaultsRegistered = true;
-    ModifierRegistry.register(
-      "Data Source",
-      "Data",
-      () => new DataSourceModifier(),
-    );
+    // Note: DataSourceModifier subclasses (TrajectoryDataSource /
+    // FrameDataSource) are intentionally NOT registered here. They are
+    // not user-addable from the modifier picker; they enter the
+    // pipeline only via file ingress (`io/loadFileContent`,
+    // `io/loadFileStream`) or RPC (`scene.add_data_source`).
     ModifierRegistry.register(
       "Slice",
       "Selection Insensitive",
@@ -97,6 +101,31 @@ export class ModifierRegistry {
       "Delete Selected",
       "Selection Sensitive",
       () => new DeleteSelectedModifier(),
+    );
+    ModifierRegistry.register(
+      DrawAtomModifier.NAME,
+      "Draw",
+      () => new DrawAtomModifier(),
+    );
+    ModifierRegistry.register(
+      DrawBondModifier.NAME,
+      "Draw",
+      () => new DrawBondModifier(),
+    );
+    ModifierRegistry.register(
+      DrawBoxModifier.NAME,
+      "Draw",
+      () => new DrawBoxModifier(),
+    );
+    ModifierRegistry.register(
+      DrawRibbonModifier.NAME,
+      "Draw",
+      () => new DrawRibbonModifier(),
+    );
+    ModifierRegistry.register(
+      DrawIsosurfaceModifier.NAME,
+      "Draw",
+      () => new DrawIsosurfaceModifier(),
     );
   }
 }
