@@ -20,6 +20,7 @@ export default defineConfig({
           "@babylonjs/inspector",
           "@babylonjs/materials",
           "@molcrafts/molrs",
+          "plotly.js-dist-min",
           "tslog",
         ],
       },

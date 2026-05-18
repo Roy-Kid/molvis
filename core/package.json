@@ -14,10 +14,14 @@
     "./io/formats": {
       "types": "./dist/io/formats.d.ts",
       "import": "./dist/io/formats.js"
+    },
+    "./charts": {
+      "types": "./dist/charts/index.d.ts",
+      "import": "./dist/charts/index.js"
     }
   },
   "files": ["dist", "README.md", "LICENSE"],
-  "sideEffects": ["./dist/commands/*.js"],
+  "sideEffects": ["./src/commands/*.ts", "./dist/commands/*.js"],
   "scripts": {
     "build": "rslib build",
     "build:demo": "rsbuild build",
@@ -33,6 +37,7 @@
     "@rslib/core": "^0.18.0",
     "@rstest/browser": "^0.9.4",
     "@rstest/core": "^0.9.4",
+    "@types/plotly.js-dist-min": "^2.3.4",
     "playwright": "^1.58.2",
     "typescript": "^5.9.3"
   },
@@ -42,6 +47,7 @@
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
     "@molcrafts/molrs": "^0.0.12",
+    "plotly.js-dist-min": "^3.5.0",
     "tslog": "^4.9.3"
   },
   "directories": {

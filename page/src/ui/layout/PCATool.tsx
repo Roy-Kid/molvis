@@ -16,6 +16,13 @@ import {
   WasmKMeans,
   WasmPca2,
 } from "@molvis/core";
+import {
+  CHART_DEFAULT_COLOR,
+  CHART_PALETTE,
+  ScatterChart,
+  type ScatterMarkerConfig,
+  type ScatterPoint,
+} from "@molvis/core/charts";
 import { AlertCircle, Info, Play } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,46 +31,14 @@ interface PCAToolProps {
   app: Molvis | null;
 }
 
-type PlotlyModule = typeof import("plotly.js-dist-min");
-let _plotlyModule: PlotlyModule | null = null;
-async function loadPlotly(): Promise<PlotlyModule> {
-  if (!_plotlyModule) {
-    _plotlyModule = await import("plotly.js-dist-min");
-  }
-  return _plotlyModule;
-}
-
 const DEFAULT_K = 3;
 const K_MIN = 2;
 const K_MAX = 20;
 const DEFAULT_SEED = 42;
 const KMEANS_MAX_ITER = 100;
 
-/** 20-entry qualitative palette for cluster and categorical coloring. */
-const CATEGORICAL_PALETTE: readonly string[] = [
-  "#1f77b4",
-  "#ff7f0e",
-  "#2ca02c",
-  "#d62728",
-  "#9467bd",
-  "#8c564b",
-  "#e377c2",
-  "#7f7f7f",
-  "#bcbd22",
-  "#17becf",
-  "#aec7e8",
-  "#ffbb78",
-  "#98df8a",
-  "#ff9896",
-  "#c5b0d5",
-  "#c49c94",
-  "#f7b6d2",
-  "#c7c7c7",
-  "#dbdb8d",
-  "#9edae5",
-];
-
-const SOLID_COLOR = "#60a5fa";
+const CATEGORICAL_PALETTE = CHART_PALETTE;
+const SOLID_COLOR = CHART_DEFAULT_COLOR;
 
 type ClusteringMethod = "none" | "kmeans";
 
@@ -153,7 +128,7 @@ function buildMarker(
   colorBy: ColorBy,
   result: PcaResult,
   trajectory: Trajectory,
-): { color: unknown; colorscale?: unknown; showscale?: boolean } {
+): ScatterMarkerConfig {
   const nFrames = result.coords.length / 2;
 
   if (colorBy.kind === "cluster") {
@@ -405,195 +380,52 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
   useEffect(() => {
     const div = plotDiv;
     if (!div || !pcaResult || !app) return;
-    let cancelled = false;
 
-    (async () => {
-      const Plotly = await loadPlotly();
-      if (cancelled) return;
+    const { coords } = pcaResult;
+    const nFrames = coords.length / 2;
+    const points: ScatterPoint[] = new Array(nFrames);
+    for (let i = 0; i < nFrames; i++) {
+      points[i] = { x: coords[2 * i], y: coords[2 * i + 1], customdata: i };
+    }
 
-      const { coords } = pcaResult;
-      const nFrames = coords.length / 2;
-      const xs = new Array<number>(nFrames);
-      const ys = new Array<number>(nFrames);
-      for (let i = 0; i < nFrames; i++) {
-        xs[i] = coords[2 * i];
-        ys[i] = coords[2 * i + 1];
-      }
-      const customdata = Array.from({ length: nFrames }, (_, i) => i);
+    const chart = new ScatterChart(div, {
+      points,
+      xAxis: { label: axes[0] },
+      yAxis: { label: axes[1] },
+      marker: {
+        size: 6,
+        ...buildMarker(colorBy, pcaResult, app.system.trajectory),
+      },
+      highlight: { index: app.system.trajectory.currentIndex ?? 0 },
+      hovertemplate:
+        "frame #%{customdata}<br>%{x:.3f}, %{y:.3f}<extra></extra>",
+    });
 
-      const marker = buildMarker(colorBy, pcaResult, app.system.trajectory);
+    const offClick = chart.onPointClick((e) => {
+      if (typeof e.customdata === "number") app.seekFrame(e.customdata);
+    });
 
-      const currentIdx = app.system.trajectory.currentIndex ?? 0;
-      const curX = coords[2 * currentIdx] ?? 0;
-      const curY = coords[2 * currentIdx + 1] ?? 0;
-
-      const traces: unknown[] = [
-        {
-          type: "scattergl",
-          mode: "markers",
-          x: xs,
-          y: ys,
-          customdata,
-          marker: { size: 6, ...marker },
-          hovertemplate:
-            "frame #%{customdata}<br>%{x:.3f}, %{y:.3f}<extra></extra>",
-          name: "frames",
-        },
-        {
-          type: "scattergl",
-          mode: "markers",
-          x: [curX],
-          y: [curY],
-          marker: {
-            size: 14,
-            line: { width: 2, color: "white" },
-            color: "rgba(0,0,0,0)",
-          },
-          hoverinfo: "skip",
-          showlegend: false,
-          name: "current",
-        },
-      ];
-
-      const layout: unknown = {
-        xaxis: { title: { text: axes[0] } },
-        yaxis: { title: { text: axes[1] } },
-        margin: { l: 40, r: 10, t: 10, b: 40 },
-        showlegend: false,
-        hovermode: "closest",
-        dragmode: "pan",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        paper_bgcolor: "rgba(0,0,0,0)",
-        font: { size: 10 },
-      };
-
-      const cfg: unknown = {
-        displayModeBar: false,
-        scrollZoom: true,
-        responsive: true,
-      };
-
-      await (
-        Plotly as unknown as {
-          react: (
-            div: HTMLElement,
-            traces: unknown,
-            layout: unknown,
-            cfg: unknown,
-          ) => Promise<unknown>;
-        }
-      ).react(div, traces, layout, cfg);
-
-      if (cancelled) return;
-
-      const clickHandler = (ev: unknown) => {
-        const e = ev as { points?: Array<{ customdata?: unknown }> };
-        const pt = e.points?.[0];
-        if (pt && typeof pt.customdata === "number") {
-          app.seekFrame(pt.customdata);
-        }
-      };
-
-      const divWithEvents = div as unknown as {
-        on: (ev: string, cb: (e: unknown) => void) => void;
-        removeAllListeners?: (ev: string) => void;
-      };
-      divWithEvents.removeAllListeners?.("plotly_click");
-      divWithEvents.on("plotly_click", clickHandler);
-    })();
-
-    return () => {
-      cancelled = true;
-      const divToClean = div as unknown as {
-        removeAllListeners?: (ev: string) => void;
-      };
-      divToClean.removeAllListeners?.("plotly_click");
-      loadPlotly()
-        .then((Plotly) => {
-          (Plotly as unknown as { purge: (div: HTMLElement) => void }).purge(
-            div,
-          );
-        })
-        .catch(() => {});
-    };
-  }, [app, plotDiv, pcaResult, colorBy, axes]);
-
-  useEffect(() => {
-    if (!app || !pcaResult) return;
     let rafId: number | null = null;
     let pending: number | null = null;
-    let cancelled = false;
-
-    const run = () => {
+    const flush = () => {
       rafId = null;
       const i = pending;
       pending = null;
-      if (cancelled) return;
-      if (i === null || !plotDiv) return;
-      const { coords } = pcaResult;
-      const nFrames = coords.length / 2;
-      if (i < 0 || i >= nFrames) return;
-      loadPlotly().then((Plotly) => {
-        if (cancelled || !plotDiv) return;
-        (
-          Plotly as unknown as {
-            restyle: (
-              div: HTMLElement,
-              update: unknown,
-              traces: number[],
-            ) => Promise<unknown>;
-          }
-        ).restyle(
-          plotDiv,
-          {
-            x: [[coords[2 * i]]],
-            y: [[coords[2 * i + 1]]],
-          },
-          [1],
-        );
-      });
+      if (i === null || i < 0 || i >= nFrames) return;
+      chart.setHighlight(i);
     };
-
-    const unsub = app.events.on("frame-change", (i) => {
+    const offFrame = app.events.on("frame-change", (i) => {
       pending = i;
-      if (rafId === null) rafId = requestAnimationFrame(run);
+      if (rafId === null) rafId = requestAnimationFrame(flush);
     });
 
     return () => {
-      cancelled = true;
-      unsub();
+      offClick();
+      offFrame();
       if (rafId !== null) cancelAnimationFrame(rafId);
+      chart.dispose();
     };
-  }, [app, plotDiv, pcaResult]);
-
-  useEffect(() => {
-    if (!plotDiv || !pcaResult) return;
-    let rafId: number | null = null;
-    let disposed = false;
-    const observer = new ResizeObserver(() => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (disposed) return;
-        loadPlotly()
-          .then((Plotly) => {
-            if (disposed) return;
-            (
-              Plotly as unknown as {
-                Plots: { resize: (el: HTMLElement) => void };
-              }
-            ).Plots.resize(plotDiv);
-          })
-          .catch(() => {});
-      });
-    });
-    observer.observe(plotDiv);
-    return () => {
-      disposed = true;
-      observer.disconnect();
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [plotDiv, pcaResult]);
+  }, [app, plotDiv, pcaResult, colorBy, axes]);
 
   const hasDescriptors = descriptors.length > 0;
 

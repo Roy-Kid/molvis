@@ -20,6 +20,10 @@ export default defineConfig({
         import.meta.dirname,
         "../core/src/io/index.ts",
       ),
+      "@molvis/core/charts": path.resolve(
+        import.meta.dirname,
+        "../core/src/charts/index.ts",
+      ),
     },
   },
   source: {
