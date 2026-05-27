@@ -96,6 +96,16 @@ function buildAxis(
   if (cfg?.label) axis.title = { text: cfg.label };
   if (cfg?.type) axis.type = cfg.type;
   if (cfg?.range) axis.range = cfg.range;
+  if (cfg?.tickformat) axis.tickformat = cfg.tickformat;
+  if (cfg?.nticks !== undefined) axis.nticks = cfg.nticks;
+  if (cfg?.rangemode) axis.rangemode = cfg.rangemode;
+  if (cfg?.automargin !== undefined) axis.automargin = cfg.automargin;
+  if (cfg?.tickfont) {
+    axis.tickfont = {
+      size: cfg.tickfont.size ?? theme.font.size,
+      color: cfg.tickfont.color ?? theme.font.color,
+    };
+  }
   return axis;
 }
 

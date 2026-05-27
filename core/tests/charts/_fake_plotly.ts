@@ -66,8 +66,9 @@ export function createFakePlotly(): FakePlotly {
       div: HTMLElement,
       traces: unknown,
       layout: Record<string, unknown>,
+      cfg?: Record<string, unknown>,
     ) => {
-      calls.push({ method: "newPlot", args: [div, traces, layout] });
+      calls.push({ method: "newPlot", args: [div, traces, layout, cfg] });
       wireDivMethods(div);
       traceCounts.set(div, Array.isArray(traces) ? traces.length : 0);
       layouts.set(div, layout);
@@ -77,8 +78,9 @@ export function createFakePlotly(): FakePlotly {
       div: HTMLElement,
       traces: unknown,
       layout: Record<string, unknown>,
+      cfg?: Record<string, unknown>,
     ) => {
-      calls.push({ method: "react", args: [div, traces, layout] });
+      calls.push({ method: "react", args: [div, traces, layout, cfg] });
       wireDivMethods(div);
       traceCounts.set(div, Array.isArray(traces) ? traces.length : 0);
       layouts.set(div, layout);

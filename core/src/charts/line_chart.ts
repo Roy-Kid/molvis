@@ -32,8 +32,13 @@ export class LineChart {
   private readonly seriesIds: string[];
   private readonly buffers: Map<string, { x: number[]; y: number[] }>;
   private readonly clickListeners = new Set<ClickListener>();
+  private readonly seriesConfigs: Map<string, LineSeriesConfig>;
   private windowSize: number | null;
   private modebar: boolean;
+  private modebarRemove: string[] | undefined;
+  private hovertemplate: string | undefined;
+  private hovermode: "closest" | "x" | "x unified" | undefined;
+  private showLegend: boolean;
   private themeMode: ThemeMode;
   private xAxis: AxisConfig | undefined;
   private yAxis: AxisConfig | undefined;
@@ -50,8 +55,13 @@ export class LineChart {
     this.seriesIds = config.series.map((s) => s.id);
     this.buffers = new Map();
     this.seriesColors = new Map();
+    this.seriesConfigs = new Map();
     this.windowSize = config.windowSize ?? null;
     this.modebar = config.modebar ?? false;
+    this.modebarRemove = config.modebarRemove;
+    this.hovertemplate = config.hovertemplate;
+    this.hovermode = config.hovermode;
+    this.showLegend = config.showLegend ?? false;
     this.themeMode = config.theme ?? "auto";
     this.xAxis = config.xAxis;
     this.yAxis = config.yAxis;
@@ -66,6 +76,7 @@ export class LineChart {
         s.id,
         s.color ?? CHART_PALETTE[i % CHART_PALETTE.length],
       );
+      this.seriesConfigs.set(s.id, s);
     });
 
     this.mountPromise = this.mount(config.series);
@@ -218,20 +229,31 @@ export class LineChart {
     const theme = resolveTheme(this.themeMode);
     const traces = series.map((s, i) => {
       const buf = this.buffers.get(s.id) ?? { x: [], y: [] };
-      return {
+      const trace: Record<string, unknown> = {
         type: "scattergl",
-        mode: "lines",
+        mode: s.mode ?? "lines",
         name: s.label ?? s.id,
         x: buf.x.slice(),
         y: buf.y.slice(),
         line: {
           color: this.seriesColors.get(s.id) ?? theme.palette[i],
-          width: 2,
+          width: s.width ?? 2,
         },
       };
+      const tpl = s.hovertemplate ?? this.hovertemplate;
+      if (tpl !== undefined) trace.hovertemplate = tpl;
+      return trace;
     });
-    const layout = buildLayout(theme, this.xAxis, this.yAxis);
-    const cfg = buildConfig(this.modebar);
+    const layout = buildLayout(theme, this.xAxis, this.yAxis) as Record<
+      string,
+      unknown
+    >;
+    layout.showlegend = this.showLegend;
+    if (this.hovermode) layout.hovermode = this.hovermode;
+    const cfg = buildConfig(this.modebar) as Record<string, unknown>;
+    if (this.modebarRemove && this.modebar) {
+      cfg.modeBarButtonsToRemove = this.modebarRemove;
+    }
     await this.plotly.newPlot(
       this.container,
       traces as unknown as Parameters<PlotlyModule["newPlot"]>[1],
