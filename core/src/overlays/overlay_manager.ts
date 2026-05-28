@@ -62,6 +62,11 @@ export class OverlayManager extends EventEmitter<OverlayEventMap> {
     return Array.from(this._overlays.values());
   }
 
+  /** Number of registered overlays. Cheap (no array allocation). */
+  get size(): number {
+    return this._overlays.size;
+  }
+
   // ── Batch ──────────────────────────────────────────────────────────────────
 
   addMany(overlays: Overlay[]): void {

@@ -448,6 +448,12 @@ abstract class BaseMode {
         return;
       }
       this.emitInfoTextIfChanged(this.formatHitInfo(hit));
+    } catch (err) {
+      // Hover-pick is fire-and-forget background work — never let it
+      // escape as an unhandled-promise-rejection. Most common cause is
+      // a transient WASM/molrs error mid-frame; the next frame will
+      // re-render and the next hover will retry.
+      console.warn("hover pick failed", err);
     } finally {
       this._hoverPickInFlight = false;
       if (epoch !== this._interactionEpoch) {

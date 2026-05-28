@@ -13,7 +13,8 @@ export function estimateRMax(frame: Frame): number {
     const lengths = box.lengths();
     const L = lengths.toCopy();
     lengths.free();
-    // Do NOT free box — it is owned by the Frame.
+    // Do NOT free box — freeing a simbox/getBlock handle corrupts the frame's
+    // shared data on subsequent reads (see memory: project_molrs_handle_ownership).
     return Math.min(L[0], L[1], L[2]) / 2;
   }
 

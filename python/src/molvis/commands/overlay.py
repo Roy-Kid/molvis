@@ -110,6 +110,108 @@ class OverlayCommandsMixin:
         )
         return self
 
+    def mark_atom(
+        self: "Molvis",
+        anchor_atom: int,
+        *,
+        shape_color: str | None = None,
+        shape_opacity: float | None = None,
+        shape_radius: float | None = None,
+        no_shape: bool = False,
+        label: str | None = None,
+        label_color: str | None = None,
+        label_font_size: int | None = None,
+        label_background: str | None = None,
+        label_offset: Vec3 | None = None,
+        name: str | None = None,
+    ) -> "Molvis":
+        """
+        Mark a specific atom with a halo and/or a text label.
+
+        A "mark" is a composite overlay: an optional translucent sphere
+        plus an optional billboarded text label, managed as a single unit
+        with a single id and pinned to its atom across trajectory frames.
+
+        Identity is **always** by atom id — never by world coordinates.
+        A mark anchored to a coordinate would float in space when the
+        trajectory advances, defeating the purpose of marking *an atom*.
+        Use :meth:`annotate` for free-floating coordinate-anchored text.
+
+        The shape defaults to an amber sphere — pass ``no_shape=True`` to
+        disable it (e.g. for a label-only mark). The label is disabled
+        unless ``label`` is set.
+
+        Args:
+            anchor_atom: Atom index to follow across frames. Required;
+                must be a non-negative integer.
+            shape_color: CSS hex (default ``"#ffd54a"``).
+            shape_opacity: 0–1 (default ``0.35``).
+            shape_radius: World units (default ``0.6``).
+            no_shape: Skip the halo entirely (label-only mark).
+            label: Label text. ``None`` → no label.
+            label_color: CSS color (default ``"white"``).
+            label_font_size: Pixels (default ``14``).
+            label_background: CSS color, or ``None`` for transparent.
+            label_offset: ``[dx, dy, dz]`` from the mark center.
+            name: Optional display name.
+
+        Returns:
+            Self for method chaining. Use ``send_cmd`` with
+            ``wait_for_response=True`` if you need the assigned id back.
+        """
+        if not isinstance(anchor_atom, (int, np.integer)) or int(anchor_atom) < 0:
+            raise ValueError(
+                f"mark_atom: anchor_atom must be a non-negative integer, "
+                f"got {anchor_atom!r}"
+            )
+
+        params: dict = {"anchorAtomId": int(anchor_atom)}
+
+        if no_shape:
+            params["shape"] = None
+        else:
+            shape: dict = {}
+            if shape_color is not None:
+                shape["color"] = shape_color
+            if shape_opacity is not None:
+                shape["opacity"] = shape_opacity
+            if shape_radius is not None:
+                shape["radius"] = shape_radius
+            if shape:
+                params["shape"] = shape
+
+        if label is not None:
+            label_spec: dict = {"text": label}
+            if label_color is not None:
+                label_spec["color"] = label_color
+            if label_font_size is not None:
+                label_spec["fontSize"] = label_font_size
+            if label_background is not None:
+                label_spec["background"] = label_background
+            if label_offset is not None:
+                label_spec["offset"] = list(label_offset)
+            params["label"] = label_spec
+
+        if name is not None:
+            params["name"] = name
+
+        self.send_cmd(FrontendCommands.MARK_ATOM.method, params)
+        return self
+
+    def unmark_atom(self: "Molvis", mark_id: str) -> "Molvis":
+        """
+        Remove a mark by id. No-ops if ``mark_id`` does not exist.
+
+        Args:
+            mark_id: The id returned when the mark was created (e.g.
+                ``"mark_atom_3"``).
+
+        Returns:
+            Self for method chaining.
+        """
+        self.send_cmd(FrontendCommands.UNMARK_ATOM.method, {"id": mark_id})
+        return self
+
     def annotate(
         self: "Molvis",
         position: Vec3,

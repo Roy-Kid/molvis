@@ -10,6 +10,20 @@ import { ManipulateMode } from "./manipulate";
 import { MeasureMode } from "./measure";
 import { SelectMode } from "./select";
 
+/**
+ * Single source of truth mapping digit keys → modes. Shared by keyboard
+ * dispatch here and {@link MolvisApp.setMode} so the two cannot drift
+ * (they previously disagreed: `4`/`5` were swapped between Measure and
+ * Manipulate). Order matches the documented table in `.claude/notes/core-arch.md`.
+ */
+export const KEY_TO_MODE: Readonly<Record<string, ModeType>> = {
+  "1": ModeType.View,
+  "2": ModeType.Select,
+  "3": ModeType.Edit,
+  "4": ModeType.Manipulate,
+  "5": ModeType.Measure,
+};
+
 class ModeManager {
   private _app: MolvisApp;
   private _mode: BaseMode | null = null;
@@ -26,29 +40,9 @@ class ModeManager {
 
   private _register_keyboard_events = () => {
     this._scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
-      switch (kbInfo.type) {
-        case KeyboardEventTypes.KEYDOWN:
-          switch (kbInfo.event.key) {
-            case "1":
-              this.switch_mode(ModeType.View);
-              break;
-            case "2":
-              this.switch_mode(ModeType.Select);
-              break;
-
-            case "3":
-              this.switch_mode(ModeType.Edit);
-              break;
-
-            case "4":
-              this.switch_mode(ModeType.Measure);
-              break;
-            case "5":
-              this.switch_mode(ModeType.Manipulate);
-              break;
-          }
-          break;
-      }
+      if (kbInfo.type !== KeyboardEventTypes.KEYDOWN) return;
+      const mode = KEY_TO_MODE[kbInfo.event.key];
+      if (mode) this.switch_mode(mode);
     });
   };
 

@@ -1,5 +1,5 @@
 import type { Mesh } from "@babylonjs/core";
-import type { Block, Box } from "@molcrafts/molrs";
+import type { Block, Box, Frame } from "@molcrafts/molrs";
 import { ATOM_IMPOSTOR_SPEC, BOND_IMPOSTOR_SPEC } from "./artist/material_spec";
 import {
   type AtomMeta,
@@ -18,6 +18,12 @@ import { Topology } from "./system/topology";
 export interface RegisterFrameOptions {
   atomMesh: Mesh;
   bondMesh?: Mesh;
+  /**
+   * Owning Frame for the registered atom/bond data. MetaRegistry stores
+   * this and re-derives Block handles on every read so they survive
+   * `frame.setMeta` invalidations (see entity_source.ts header).
+   */
+  frame: Frame;
   atomBlock: Block;
   bondBlock?: Block;
   box?: Box;
@@ -54,7 +60,14 @@ export class ImpostorState {
   public count = 0; // Number of EDIT atoms (added on top of frame)
   public capacity: number;
   public frameOffset = 0; // Number of FRAME atoms
-  public needsUpload = false;
+
+  // Per-buffer dirty tracking. `_allDirty` forces a full re-upload (first draw,
+  // topology/count change, color change). Otherwise only `_dirtyBuffers` are
+  // re-uploaded — the position-only playback path mutates just matrix +
+  // instanceData and must NOT re-upload the unchanged color/picking buffers
+  // (the per-frame GPU-bandwidth hog for large systems).
+  private _allDirty = false;
+  private _dirtyBuffers = new Set<string>();
   public frameIdToIndex = new Map<number, number>();
   /** All render instance indices per logical ID (for multi-order bonds). */
   public logicalToAllIndices = new Map<number, number[]>();
@@ -142,7 +155,7 @@ export class ImpostorState {
       }
     }
 
-    this.needsUpload = true;
+    this.markAllDirty();
   }
 
   getStride(name: string): number {
@@ -210,7 +223,7 @@ export class ImpostorState {
     }
 
     this.count += subCount;
-    this.needsUpload = true;
+    this.markAllDirty();
     return firstAbsIndex;
   }
 
@@ -343,7 +356,7 @@ export class ImpostorState {
     }
 
     this.count -= subCount;
-    this.needsUpload = true;
+    this.markAllDirty();
   }
 
   updateMulti(id: number, values: Map<string, Float32Array | number[]>): void {
@@ -365,15 +378,46 @@ export class ImpostorState {
       const arr = vals instanceof Float32Array ? vals : new Float32Array(vals);
       desc.data.set(arr, absIndex * desc.stride);
     }
-    this.needsUpload = true;
+    this.markAllDirty();
   }
 
   getTotalCount(): number {
     return this.frameOffset + this.count;
   }
 
+  /** True when any buffer needs re-upload. */
+  get needsUpload(): boolean {
+    return this._allDirty || this._dirtyBuffers.size > 0;
+  }
+
+  /** Mark every buffer dirty — a full re-upload (structural/color change). */
+  markAllDirty(): void {
+    this._allDirty = true;
+  }
+
+  /**
+   * Mark specific buffers dirty for a partial re-upload. Used by the
+   * position-only playback fast path so unchanged color/picking buffers are
+   * not re-sent to the GPU. A pending full re-upload (`_allDirty`) wins.
+   */
+  markDirty(...names: string[]): void {
+    if (this._allDirty) return;
+    for (const name of names) this._dirtyBuffers.add(name);
+  }
+
+  /** True when a full re-upload (all buffers) is pending. */
+  get isAllDirty(): boolean {
+    return this._allDirty;
+  }
+
+  /** Whether `name` must be re-uploaded this cycle. */
+  isBufferDirty(name: string): boolean {
+    return this._allDirty || this._dirtyBuffers.has(name);
+  }
+
   markUploaded(): void {
-    this.needsUpload = false;
+    this._allDirty = false;
+    this._dirtyBuffers.clear();
   }
 
   /**
@@ -623,6 +667,7 @@ export class SceneIndex {
     const {
       atomMesh,
       bondMesh,
+      frame,
       atomBlock,
       bondBlock,
       atomBuffers,
@@ -641,8 +686,9 @@ export class SceneIndex {
         ?.setFrameData(atomBuffers, atomBlock.nrows());
     }
 
-    // 2. Setup MetaRegistry
-    this.metaRegistry.atoms.setFrame(atomBlock);
+    // 2. Setup MetaRegistry — store the owning Frame, not borrowed Block
+    //    handles (which go stale on frame.setMeta).
+    this.metaRegistry.atoms.setFrame(frame);
 
     // 3. Rebuild topology from frame
     this.topology.clear();
@@ -660,7 +706,7 @@ export class SceneIndex {
           ?.setFrameData(bondBuffers, renderCount, bondInstanceMap);
       }
 
-      this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
+      this.metaRegistry.bonds.setFrame(frame);
 
       const bondCount = bondBlock.nrows();
       const iAtoms = bondBlock.viewColU32("atomi");
@@ -794,7 +840,7 @@ export class SceneIndex {
         }
       }
       atomState.promoteFrameSegmentToEdits();
-      this.metaRegistry.atoms.frameBlock = null;
+      this.metaRegistry.atoms.setFrame(null);
     }
 
     const bondState = this.meshRegistry.getBondState();
@@ -808,8 +854,7 @@ export class SceneIndex {
         }
       }
       bondState.promoteFrameSegmentToEdits();
-      this.metaRegistry.bonds.frameBlock = null;
-      this.metaRegistry.bonds.atomBlock = null;
+      this.metaRegistry.bonds.setFrame(null);
     }
   }
 

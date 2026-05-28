@@ -451,6 +451,7 @@ export class Artist {
     this.app.world.sceneIndex.registerFrame({
       atomMesh: this.atomMesh,
       bondMesh: this.bondMesh,
+      frame,
       atomBlock: atomsBlock,
       bondBlock: bondBlockObj,
       atomBuffers,
@@ -583,6 +584,11 @@ export class Artist {
     cloudMesh.material = material;
     cloudMesh.isPickable = false;
     cloudMesh.alwaysSelectAsActiveMesh = true;
+    // Cloud sorts FIRST among translucent meshes — points are additive
+    // and have no real "front face" to occlude atoms with. Pinning to
+    // 0 documents the alpha-pass ordering: cloud (0) → atoms/bonds (1)
+    // → translucent surfaces (MAX_VALUE).
+    cloudMesh.alphaIndex = 0;
     this.cloudMesh = cloudMesh;
   }
 
@@ -884,6 +890,27 @@ export class Artist {
     mesh.isVisible = false;
     mesh.setEnabled(false);
     mesh.thinInstanceCount = 0;
+    // Thin-instanced impostor host mesh — the host plane is 1×1 in
+    // model space; thin-instance bounding info should track all
+    // instances after `thinInstanceRefreshBoundingInfo`, but the
+    // combination of `freezeWorldMatrix()` and certain camera
+    // orientations leaves the host's effective bounds tight to the
+    // 1×1 plane and makes BabylonJS cull the entire mesh in one go.
+    // Was removed in the molrs-0.0.11 refactor; re-applied to fix the
+    // class of "atom disappears at certain rotation angles" bugs.
+    mesh.alwaysSelectAsActiveMesh = true;
+    // Pin atoms/bonds to a low `alphaIndex` so they always sort
+    // *before* translucent surfaces (mark_atom halos, isosurface lobes,
+    // ribbons) in the alpha-blend pass. Atoms write depth via
+    // `forceDepthWrite=true`; when a translucent surface happens to
+    // sort first by camera-distance, its depth write blocks atoms
+    // inside the lobe on the GL_LESS test. Atoms-first ordering keeps
+    // atoms in the depth buffer; surfaces render after and only
+    // partially blend with the existing atom pixels.
+    //
+    // 1 puts atoms after the cloud (alphaIndex=0) but before any
+    // mesh that defaults to MAX_VALUE — surface, ribbon, halo, etc.
+    mesh.alphaIndex = 1;
     return mesh;
   }
 
@@ -940,8 +967,12 @@ export class Artist {
     }
 
     if (state?.needsUpload) {
+      // Upload only the buffers marked dirty. The position-only playback path
+      // mutates just matrix + instanceData, so the (unchanged) color and
+      // picking buffers — by far the largest — are skipped. Structural changes
+      // mark everything dirty (isAllDirty) and re-upload all buffers.
       const matrixDesc = state.buffers.get("matrix");
-      if (matrixDesc) {
+      if (matrixDesc && state.isBufferDirty("matrix")) {
         const view = matrixDesc.data.subarray(
           0,
           totalCount * matrixDesc.stride,
@@ -951,10 +982,15 @@ export class Artist {
 
       for (const [name, desc] of state.buffers) {
         if (name === "matrix") continue;
+        if (!state.isBufferDirty(name)) continue;
         const view = desc.data.subarray(0, totalCount * desc.stride);
         mesh.thinInstanceSetBuffer(name, view, desc.stride, false);
       }
 
+      // thinInstanceCount/picking are idempotent; bounds must refresh whenever
+      // matrices moved (which is the case on every dirty cycle that touches
+      // positions). Keep these unconditional — they are cheap relative to the
+      // buffer uploads we just gated.
       mesh.thinInstanceCount = totalCount;
       mesh.thinInstanceEnablePicking = true;
       mesh.thinInstanceRefreshBoundingInfo(true);

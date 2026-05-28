@@ -1,349 +1,114 @@
-# Molvis
+<div align="center">
 
-> Interactive molecular visualization toolkit built with modern web technologies
+<h1>
+  <img src=".github/assets/moko.svg" alt="" height="48" align="absmiddle">
+  &nbsp;MolVis
+</h1>
 
-[![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)](https://github.com/molcrafts/molvis)
-[![License](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-blue.svg)](https://www.typescriptlang.org/)
+<p><strong>Interactive 3D molecular visualization for the web, VSCode, and Jupyter</strong></p>
 
-Molvis is a high-performance molecular visualization toolkit that brings interactive 3D molecular graphics to the web, desktop, and Jupyter notebooks. Built on [Babylon.js](https://www.babylonjs.com/) and powered by WebAssembly, Molvis delivers smooth, real-time rendering of large molecular systems with an intuitive, modern interface.
+<p>
+  <a href="https://github.com/molcrafts/molvis/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/MolCrafts/molvis/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@molcrafts/molvis-core"><img src="https://img.shields.io/npm/v/@molcrafts/molvis-core?style=flat-square&logo=npm&logoColor=white" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSD--3--Clause-18432B?style=flat-square" alt="License"></a>
+</p>
 
-## Features
+<p>
+  <a href="https://molvis.molcrafts.org/"><b>Documentation</b></a> &nbsp;&middot;&nbsp;
+  <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
+  <a href="#molcrafts-ecosystem"><b>Ecosystem</b></a>
+</p>
 
-- **🚀 High Performance**: WebAssembly-powered molecular data processing with GPU-accelerated rendering
-- **🎨 Multiple Rendering Modes**: View, select, edit, manipulate, and measure molecular structures
-- **📊 Trajectory Support**: Smooth playback and analysis of molecular dynamics trajectories
-- **🔧 Extensible Pipeline**: Modular modifier system for custom data transformations
-- **⚡ Modern Stack**: TypeScript, React, and cutting-edge build tools
-- **🧪 Well Tested**: Comprehensive unit tests with rstest framework
-- **📦 Multiple Interfaces**: Web app, Jupyter widget, and VSCode extension
+</div>
 
-## Quick Start
+MolVis renders molecules, simulation boxes, and trajectories straight in the browser, with one engine shared across a web viewer, a VSCode editor, and a Jupyter widget. It reads the common chemistry formats (PDB, XYZ, LAMMPS, Zarr), plays back dynamics frame-by-frame, and lets you select, edit, measure, and annotate structures interactively.
 
-### Installation
+> **Under active development.** Public APIs may change between minor releases.
 
-#### Using npm (for @molvis/core)
+## Vision
+
+Molecular visualization tools have long made you choose: a powerful desktop application that is hard to install and impossible to share, or a lightweight web viewer that cannot keep up once your work gets serious. MolVis exists to erase that trade-off — a single rendering engine that runs anywhere a browser does, with no compromise on what you can see or do.
+
+We want looking at a structure to be frictionless. Drag a file onto a page, open it in your editor next to its input deck, or display it inline in a notebook cell — the viewport, the modes, and the shortcuts are identical everywhere, so the muscle memory you build transfers across every context you work in.
+
+And we want visualization to be more than a picture. MolVis treats editing, measurement, pipeline transforms, and analysis as first-class, fully reversible operations on live molecular data — so the viewer becomes a place where you actually do the work, not just admire the result.
+
+## Capabilities
+
+| Subsystem | Capability |
+|-----------|------------|
+| `@molcrafts/molvis-core` | Engine library — Babylon.js rendering, commands, modes, pipeline, RPC bridge |
+| Rendering & artist | Thin-instance atom/bond buffers, impostor shaders, themes, representations, labels |
+| Interaction modes | View, Select, Edit, Manipulate, Measure — switchable without losing context |
+| Command system | Every operation is a reversible `do()`/`undo()` command with full history |
+| Modifier pipeline | Composable, reorderable transforms — slice, expression-select, color, wrap PBC, hide |
+| Analysis | RDF, clustering, MSD, ring detection, topology analysis |
+| I/O | Read/write PDB, XYZ, LAMMPS data & dump, Zarr trajectories |
+| Overlays | Arrows, text labels, vector fields, atom markers anchored to the scene |
+| `page` | React 19 web app — the single frontend bundle that drives every host |
+| `molvis` (npm) | VSCode extension — custom editor for `.pdb`/`.xyz`/`.data`/`.dump`/`.lammpstrj` |
+| `molcrafts-molvis` (PyPI) | Python package — drives the page bundle over a local WebSocket, with bidirectional events |
+
+## Install
 
 ```bash
-npm install @molvis/core
+npm install @molcrafts/molvis-core
 ```
 
-#### Using the Web Application
+Requires Node.js 22+. The Python package (`pip install molcrafts-molvis`) needs Python 3.10+; the VSCode extension installs from the Marketplace.
 
-```bash
-# Clone the repository
-git clone https://github.com/molcrafts/molvis.git
-cd molvis
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev:page
-```
-
-Visit `http://localhost:3000` to see the application.
-
-### Basic Usage
+## Quick start
 
 ```typescript
-import { mountMolvis, readFrame } from "@molvis/core";
+import { mountMolvis } from "@molcrafts/molvis-core";
+import { readFrames } from "@molcrafts/molvis-core/io";
 
 const container = document.getElementById("viewer");
-if (!container) {
-  throw new Error("viewer container not found");
-}
+if (!container) throw new Error("viewer container not found");
 
 const app = mountMolvis(container);
-const response = await fetch("/structure.pdb");
-const pdbText = await response.text();
-const frame = readFrame(pdbText, "structure.pdb");
-
-app.loadFrame(frame);
 await app.start();
+
+const pdbText = await (await fetch("/structure.pdb")).text();
+const [frame] = readFrames(pdbText, "structure.pdb");
+app.renderFrame(frame);
 ```
 
-## Project Structure
+See the [documentation](https://molvis.molcrafts.org/) for the web viewer, the VSCode extension, the Python API, and how to extend the engine.
 
-This repository is organized as a monorepo with multiple packages:
+## Documentation
 
-```
-molvis/
-├── core/              # Core TypeScript library
-│   ├── src/           # Source code
-│   │   ├── commands/  # Command system with undo/redo
-│   │   ├── core/      # Core rendering and scene management
-│   │   ├── pipeline/  # Data processing pipeline
-│   │   ├── mode/      # Interaction modes
-│   │   └── ui/        # UI components
-│   └── tests/         # Test files
-├── page/              # React web application
-│   └── src/           # Web app source
-├── python/            # Python Jupyter widget
-│   └── src/molvis/    # Python package source
-├── vsc-ext/           # VSCode extension
-│   └── src/           # Extension source
-└── docs/              # Documentation and release runbooks
-```
+- [Getting Started](https://molvis.molcrafts.org/getting-started/) — web viewer, VSCode extension, Jupyter widget
+- [Development](https://molvis.molcrafts.org/development/) — embed MolVis and write custom modifiers and commands
+- [API Reference](https://molvis.molcrafts.org/api/typescript/) — TypeScript library and Python package
 
-### Core Package (`@molvis/core`)
+## MolCrafts ecosystem
 
-The heart of Molvis, providing:
-
-- **Rendering Engine**: Babylon.js-based 3D visualization with custom shaders
-- **Command System**: Full undo/redo support for all operations
-- **Pipeline Architecture**: Extensible modifier system for data transformations
-- **Multiple Modes**: View, select, edit, manipulate, and measure
-- **File Format Support**: PDB, XYZ, LAMMPS data files
-- **Trajectory Playback**: Timeline controls with smooth interpolation
-
-### Web Application (`page/`)
-
-A modern React-based interface featuring:
-
-- Responsive layout with resizable panels
-- Integrated timeline control for trajectories
-- Real-time settings and property editing
-- Export capabilities
-- Dark/light theme support
-
-### Python package (`molvis`)
-
-One `mv.Molvis()` class, works in both scripts and Jupyter:
-
-```python
-import molvis as mv
-import molpy as mp
-
-viewer = mv.Molvis()              # script: opens a browser tab
-viewer.draw_frame(frame)
-viewer.snapshot()
-
-scene = mv.Molvis(name="demo")    # Jupyter: mounts the page bundle in the cell
-scene.draw_frame(frame)
-scene
-```
-
-Bidirectional events: canvas interactions (selection, mode, frame)
-flow back to Python without polling.
-
-```python
-viewer.on("selection_changed", lambda ev: print(ev["atom_ids"]))
-ev = viewer.wait_for("selection_changed", timeout=30)
-viewer.selection                 # Selection(atom_ids=(...), bond_ids=(...))
-```
-
-Implementation details:
-
-- One frontend app — the `page/` bundle — drives both hosts.
-- JSON-RPC 2.0 over a local WebSocket with a token handshake; numpy
-  arrays ride as binary buffers instead of JSON lists.
-- Frontend JSON-RPC failures are raised into Python as
-  `molvis.MolvisRPCError`.
-
-### VSCode Extension
-
-Custom editor for molecular files with:
-
-- Syntax highlighting for .pdb, .xyz, .data files
-- Inline preview commands
-- Integrated visualization panel
-
-## Development
-
-### Prerequisites
-
-- Node.js 18+ (recommend using [fnm](https://github.com/Schniz/fnm) or [nvm](https://github.com/nvm-sh/nvm))
-- npm, yarn, or pnpm
-
-### Setup
-
-```bash
-# Install dependencies
-npm install
-
-# Run tests
-npm test
-
-# Build all packages
-npm run build:all
-
-# Development mode for specific packages
-npm run dev:core    # Core library
-npm run dev:page    # Web application (also the bundle mounted in Jupyter cells)
-```
-
-### Testing
-
-Molvis uses multiple test lanes:
-
-- `core`: [rstest](https://rstest.rs)
-- `page`: Node's built-in test runner
-- `python`: `pytest`
-- `vsc-ext`: TypeScript + Mocha / VS Code test host
-
-```bash
-# Run all tests
-npm test
-
-# Run tests for a specific package
-npm run test -w core
-npm run test -w page
-npm run test -w python
-npm run test -w vsc-ext
-```
-
-### Code Quality
-
-```bash
-# Lint and format
-npx biome check --write
-```
-
-## Building and Publishing
-
-### Build for Production
-
-```bash
-# Build core library
-npm run build:core
-
-# Build web application (also copies into python/src/molvis/dist/)
-npm run build:page
-```
-
-### Publishing
-
-```bash
-# See the multi-package release runbook
-open docs/release/0.0.2-release-checklist.md
-```
-
-## Architecture
-
-### Command System
-
-All operations are implemented as commands with `do()` and `undo()` methods, enabling full undo/redo functionality:
-
-```typescript
-class MyCommand extends Command<void> {
-  async do(): Promise<void> {
-    // Perform operation
-  }
-
-  async undo(): Promise<void> {
-    // Reverse operation
-  }
-}
-```
-
-### Modifier Pipeline
-
-Data transformations are handled through a modular pipeline:
-
-```typescript
-const modifier: Modifier = {
-  id: 'wrap-pbc',
-  name: 'Wrap PBC',
-  enabled: true,
-  modify: (frame: Frame) => {
-    // Transform molecular data
-    return wrappedFrame;
-  }
-};
-
-pipeline.addModifier(modifier);
-```
-
-### Rendering Modes
-
-- **View Mode**: Camera controls and visualization settings
-- **Select Mode**: Atom/bond selection and inspection
-- **Edit Mode**: Add, delete, modify atoms and bonds
-- **Manipulate Mode**: Move, rotate selected groups
-- **Measure Mode**: Distance, angle, dihedral measurements
-
-## Technologies
-
-- **Language**: TypeScript 5.8+
-- **Rendering**: Babylon.js 7.x
-- **Build Tool**: Rsbuild
-- **Testing**: rstest
-- **Code Quality**: Biome
-- **UI Framework**: React 19
-- **WASM**: molwasm (Rust-based molecular data processing)
-
-## Supported File Formats
-
-- **PDB** - Protein Data Bank format
-- **XYZ** - Standard Cartesian coordinates
-- **LAMMPS Data** - LAMMPS data files with topology
-
-## Browser Support
-
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
+| Project | Role |
+|---------|------|
+| [molpy](https://github.com/MolCrafts/molpy)     | Python toolkit — the shared molecular data model & workflow layer |
+| [molrs](https://github.com/MolCrafts/molrs)     | Rust core — molecular data structures & compute kernels (native + WASM) |
+| [molpack](https://github.com/MolCrafts/molpack) | Packmol-grade molecular packing (Rust + Python) |
+| **molvis** — this repo | WebGL molecular visualization & editing |
+| [molexp](https://github.com/MolCrafts/molexp)   | Workflow & experiment-management platform |
+| [molnex](https://github.com/MolCrafts/molnex)   | Molecular machine-learning framework |
+| [molq](https://github.com/MolCrafts/molq)       | Unified job queue — local / SLURM / PBS / LSF |
+| [molcfg](https://github.com/MolCrafts/molcfg)   | Layered configuration library |
+| [mollog](https://github.com/MolCrafts/mollog)   | Structured logging, stdlib-compatible |
+| [molhub](https://github.com/MolCrafts/molhub)   | Molecular dataset hub |
+| [molmcp](https://github.com/MolCrafts/molmcp)   | MCP server for the ecosystem |
+| [molrec](https://github.com/MolCrafts/molrec)   | Atomistic record specification |
 
 ## Contributing
 
-We welcome contributions! Please see our contributing guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with clear commit messages
-4. Add tests for new functionality
-5. Ensure all tests pass (`npm test`)
-6. Run code quality checks (`npx biome check --write`)
-7. Submit a pull request
-
-### Development Guidelines
-
-- Write tests for all new features
-- Follow TypeScript best practices
-- Use meaningful variable and function names
-- Document public APIs with JSDoc comments
-- Keep commits atomic and well-described
-
-## Roadmap
-
-- [ ] Additional file format support (GRO, MOL2, CIF)
-- [ ] Advanced selection language
-- [ ] Animation and keyframe system
-- [ ] Collaborative editing features
-- [ ] Plugin system for custom modifiers
-- [ ] Performance profiling tools
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) or the [development guide](https://molvis.molcrafts.org/development/).
 
 ## License
 
-This project is licensed under the BSD-3-Clause License - see the [LICENSE](LICENSE) file for details.
+BSD-3-Clause — see [LICENSE](LICENSE).
 
-## Citation
+<hr>
 
-If you use Molvis in your research, please cite:
-
-```bibtex
-@software{molvis2026,
-  title = {Molvis: Interactive Molecular Visualization Toolkit},
-  author = {Roy Kid},
-  year = {2026},
-  version = {0.0.2},
-  url = {https://github.com/molcrafts/molvis}
-}
-```
-
-## Acknowledgments
-
-- Built with [Babylon.js](https://www.babylonjs.com/)
-- Molecular data processing powered by [molwasm](https://github.com/molcrafts/molwasm)
-- Inspired by [VMD](https://www.ks.uiuc.edu/Research/vmd/), [PyMOL](https://pymol.org/), and [Ovito](https://www.ovito.org/)
-
-## Support
-
-- 📖 [Documentation](https://molvis.readthedocs.io) (coming soon)
-- 🐛 [Issue Tracker](https://github.com/molcrafts/molvis/issues)
-- 💬 [Discussions](https://github.com/molcrafts/molvis/discussions)
-
----
-
-Made with ❤️ by the Molvis team
+<div align="center">
+<sub>Crafted with 💚 by <a href="https://github.com/MolCrafts">MolCrafts</a></sub>
+</div>

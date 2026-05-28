@@ -225,8 +225,12 @@ export function buildBondBuffers(
       ? bondsBlock.viewColU32("order")
       : undefined;
 
-  // Pre-allocate with upper bound (3x for all-triple), trim unused at end
-  const maxInstances = orderCol ? logicalCount * 3 : logicalCount;
+  // Size buffers exactly. Without an order column every bond is one instance;
+  // with one, countBondInstances() sums the per-bond instance counts in a
+  // single cheap pass. This avoids the old 3x over-allocation (upper bound for
+  // all-triple bonds) plus the slice() trim afterwards — wasteful for the
+  // overwhelmingly common all-single-order case.
+  const maxInstances = orderCol ? countBondInstances(bondsBlock) : logicalCount;
 
   const bondMatrix = new Float32Array(maxInstances * 16);
   const bondData0 = new Float32Array(maxInstances * 4);

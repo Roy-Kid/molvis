@@ -16,6 +16,7 @@
 
 import {
   Color3,
+  Matrix,
   MeshBuilder,
   StandardMaterial,
   TransformNode,
@@ -33,7 +34,6 @@ import type {
   MarkLabel,
   MarkShape,
   Overlay,
-  Vec3,
 } from "./types";
 
 const DEFAULT_SHAPE_COLOR = "#ffd54a";
@@ -61,7 +61,6 @@ type ResolvedShape = Required<MarkShape>;
 type ResolvedLabel = Required<MarkLabel>;
 
 interface ResolvedProps {
-  position: Vec3;
   anchorAtomId: number;
   shape: ResolvedShape | null;
   label: ResolvedLabel | null;
@@ -95,7 +94,9 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     this._scene = scene;
     this._uiTexture = uiTexture;
     this._root = new TransformNode(`${id}_root`, scene);
-    this._worldCenter = this._initialCenter();
+    // Seed at origin; the orchestrator (MolvisApp.syncAnchoredOverlay) fills
+    // in the real position from the anchor atom before the next render.
+    this._worldCenter = new Vector3(0, 0, 0);
     this._root.position.copyFrom(this._worldCenter);
 
     if (props.shape) this._createShape(props.shape);
@@ -107,6 +108,11 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     props: MarkAtomProps,
     uiTexture: AdvancedDynamicTexture,
   ): MarkAtomOverlay {
+    if (!Number.isInteger(props.anchorAtomId) || props.anchorAtomId < 0) {
+      throw new Error(
+        `MarkAtomOverlay: anchorAtomId must be a non-negative integer, got ${props.anchorAtomId}`,
+      );
+    }
     return new MarkAtomOverlay(
       nextId(),
       resolveDefaults(props),
@@ -143,27 +149,32 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     else if (patch.label === null) label = null;
     else label = { ...(prev.label ?? { text: "" }), ...patch.label };
 
-    const next = resolveDefaults({
-      position: patch.position ?? prev.position,
-      anchorAtomId: patch.anchorAtomId ?? prev.anchorAtomId,
+    let anchorAtomId = prev.anchorAtomId;
+    if (patch.anchorAtomId !== undefined) {
+      if (!Number.isInteger(patch.anchorAtomId) || patch.anchorAtomId < 0) {
+        throw new Error(
+          `MarkAtomOverlay.update: anchorAtomId must be a non-negative integer, got ${patch.anchorAtomId}`,
+        );
+      }
+      anchorAtomId = patch.anchorAtomId;
+    }
+
+    this._props = resolveDefaults({
+      anchorAtomId,
       shape,
       label,
       name: patch.name ?? prev.name,
     });
-    this._props = next;
 
-    // Anchor or position change → reseat world center.
-    const posChanged =
-      next.position[0] !== prev.position[0] ||
-      next.position[1] !== prev.position[1] ||
-      next.position[2] !== prev.position[2];
-    if (next.anchorAtomId !== prev.anchorAtomId || posChanged) {
-      this._worldCenter = this._initialCenter();
+    // Anchor change → park at origin; UpdateOverlayCommand will resync
+    // against the new atom so we don't render at the previous atom's spot.
+    if (anchorAtomId !== prev.anchorAtomId) {
+      this._worldCenter.set(0, 0, 0);
       this._root.position.copyFrom(this._worldCenter);
     }
 
-    this._applyShape(next.shape);
-    this._applyLabel(next.label);
+    this._applyShape(this._props.shape);
+    this._applyLabel(this._props.label);
     return this;
   }
 
@@ -194,14 +205,6 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
 
   // ── Private ──────────────────────────────────────────────────────────────
 
-  private _initialCenter(): Vector3 {
-    const { position, anchorAtomId } = this._props;
-    // When anchored, sync loop fills this in on the next frame-rendered event.
-    // Seed at origin so we do not flash at the wrong spot if the anchor is valid.
-    if (anchorAtomId >= 0) return new Vector3(0, 0, 0);
-    return new Vector3(position[0], position[1], position[2]);
-  }
-
   private _createShape(shape: ResolvedShape): void {
     const mat = new StandardMaterial(`${this.id}_mat`, this._scene);
     const color = hexToColor3(shape.color);
@@ -210,6 +213,14 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     mat.alpha = shape.opacity;
     mat.backFaceCulling = false;
     mat.separateCullingPass = true;
+    // Translucent halo must NOT write depth: StandardMaterial defaults
+    // `disableDepthWrite = false`, so the halo would write z at its
+    // surface and discard the atom impostor fragment behind it on the
+    // GL_LESS test — the marked atom then visibly disappears at angles
+    // where the halo center sorts in front of the atom by camera
+    // distance. This mirrors the cloud-renderer fix for the same class
+    // of bug. See artist.ts:cloudMesh and commit 2d3b5f6.
+    mat.disableDepthWrite = true;
 
     const sphere = MeshBuilder.CreateSphere(
       `${this.id}_sphere`,
@@ -222,6 +233,12 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     sphere.material = mat;
     sphere.isPickable = false;
     sphere.parent = this._root;
+    // Opt out of frustum culling — the parent TransformNode's position
+    // updates after the bounding box is cached, so at some camera
+    // orientations the (stale) world-space bounds fall outside the
+    // frustum and BabylonJS culls the halo wholesale. Same fix the cloud
+    // mesh uses (artist.ts:586).
+    sphere.alwaysSelectAsActiveMesh = true;
 
     this._shapeMaterial = mat;
     this._shapeMesh = sphere;
@@ -345,15 +362,29 @@ class _LabelBillboard {
       center.z + offset[2],
     );
 
+    // World matrix MUST be identity for world-space points; passing
+    // transformMatrix twice double-applies view*projection, mapping the
+    // label rectangle to absurd screen coordinates which BabylonJS GUI
+    // then re-interprets as a near-fullscreen rectangle. See
+    // memory/project_babylon_project_api.md.
     const projected = Vector3.Project(
       anchored,
-      transformMatrix,
+      Matrix.IdentityReadOnly,
       transformMatrix,
       viewportMatrix,
     );
 
     const control = this._container ?? this._textBlock;
     if (control) {
+      // Guard against non-finite projection (e.g. behind-camera, degenerate
+      // matrices). Without this, BabylonJS GUI's adaptWidthToChildren rect
+      // falls back to a fullscreen layout and the label background fills
+      // the entire viewport — see memory/project_babylon_project_api.md.
+      if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+        control.isVisible = false;
+        return;
+      }
+      control.isVisible = this._visible;
       control.left = `${projected.x - width / 2}px`;
       control.top = `${projected.y - height / 2}px`;
     }
@@ -452,8 +483,7 @@ function resolveLabel(
 
 function resolveDefaults(p: MarkAtomProps): ResolvedProps {
   return {
-    position: p.position ?? [0, 0, 0],
-    anchorAtomId: p.anchorAtomId ?? -1,
+    anchorAtomId: p.anchorAtomId,
     shape: resolveShape(p.shape),
     label: resolveLabel(p.label),
     name: p.name ?? "",

@@ -161,28 +161,27 @@ export interface MarkLabel {
 }
 
 /**
- * MarkAtom — a composite overlay that marks an atom with an optional shape
- * (e.g. a translucent halo) and/or an optional text label.
+ * MarkAtom — a composite overlay that marks a specific atom with an optional
+ * shape (translucent halo) and/or an optional text label.
  *
  * Intended for annotating endpoints in pSMILES / bigSMILES, tagging reactive
  * sites, or flagging atoms of interest from external analyses. One MarkAtom
  * represents one marked atom, carries a single id, and can be undone as a
- * unit — no need to keep a shape-overlay + label-overlay pair in sync.
+ * unit.
  *
- * Exactly one of `position` or `anchorAtomId` should be set. If
- * `anchorAtomId` is provided (>= 0), the mark follows that atom across
- * frame updates and `position` is ignored; otherwise the mark is pinned
- * to `position` in world space.
+ * Identity is **always** by atom id — never by world coordinates. A mark
+ * pinned to a coordinate would float in space when the trajectory advances
+ * or the molecule is re-aligned, defeating the purpose of marking *an
+ * atom*. Coordinate-anchored decoration is a different concept; use
+ * `text_label` (via `add_overlay`) for that.
  *
  * `shape` and `label` are independently optional. Pass `null` to omit a
  * component; omit the field entirely to accept the default (shape enabled
  * with sphere defaults, label disabled).
  */
 export interface MarkAtomProps {
-  /** World-space center. Ignored when anchorAtomId is set. */
-  position?: Vec3;
-  /** Atom index to follow across frames. Default: -1 (disabled). */
-  anchorAtomId?: number;
+  /** Atom index to mark. Must be a non-negative integer. */
+  anchorAtomId: number;
   /** Shape component. Pass null to show no shape. Default: { kind: "sphere" }. */
   shape?: MarkShape | null;
   /** Label component. Pass null or omit to show no label. Default: null. */

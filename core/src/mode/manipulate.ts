@@ -1,5 +1,5 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
-import { type Block, Frame } from "@molcrafts/molrs";
+import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
 import { DrawFrameCommand } from "../commands/draw";
@@ -84,11 +84,10 @@ class ManipulateMode extends BaseMode {
   private dragStartPosition: Vector3 | null = null;
   private draggedAtomId = -1;
 
-  // Frame conversion state
-  private originalFrameData: {
-    atomBlock: Block;
-    bondBlock?: Block;
-  } | null = null;
+  // Snapshot of the Frame at mode entry — restored by discardChanges().
+  // We hold the Frame (not its Blocks) so the snapshot survives any
+  // setMeta-driven block-handle invalidation that happens while in mode.
+  private originalFrame: Frame | null = null;
 
   constructor(app: Molvis) {
     super(ModeType.Manipulate, app);
@@ -101,14 +100,7 @@ class ManipulateMode extends BaseMode {
   }
 
   private convertFromSceneIndex(): void {
-    const atomBlock = this.world.sceneIndex.metaRegistry.atoms.frameBlock;
-    if (!atomBlock) return;
-
-    this.originalFrameData = {
-      atomBlock: atomBlock,
-      bondBlock:
-        this.world.sceneIndex.metaRegistry.bonds.frameBlock || undefined,
-    };
+    this.originalFrame = this.world.sceneIndex.metaRegistry.atoms.frame;
   }
 
   protected createContextMenuController(): ContextMenuController {
@@ -383,7 +375,7 @@ class ManipulateMode extends BaseMode {
     const cmd = new DrawFrameCommand(this.app, { frame });
     cmd.do();
 
-    this.originalFrameData = null;
+    this.originalFrame = null;
     logger.info("[ManipulateMode] Saved changes using syncSceneToFrame");
   }
 
@@ -392,18 +384,12 @@ class ManipulateMode extends BaseMode {
   }
 
   public async discardChanges(): Promise<void> {
-    if (!this.originalFrameData) return;
+    if (!this.originalFrame) return;
 
-    const frame = new Frame();
-    frame.insertBlock("atoms", this.originalFrameData.atomBlock);
-    if (this.originalFrameData.bondBlock) {
-      frame.insertBlock("bonds", this.originalFrameData.bondBlock);
-    }
-
-    const cmd = new DrawFrameCommand(this.app, { frame });
+    const cmd = new DrawFrameCommand(this.app, { frame: this.originalFrame });
     cmd.do();
 
-    this.originalFrameData = null;
+    this.originalFrame = null;
     logger.info(
       "[ManipulateMode] Discarded changes and restored original frame",
     );
@@ -416,7 +402,7 @@ class ManipulateMode extends BaseMode {
   public override finish(): void {
     this.clearSelection();
     this.restoreSceneFromFrame();
-    this.originalFrameData = null;
+    this.originalFrame = null;
     super.finish();
   }
 }

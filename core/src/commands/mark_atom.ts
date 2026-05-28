@@ -19,12 +19,15 @@ import { Command, command } from "./base";
 // ── mark_atom ────────────────────────────────────────────────────────────────
 
 /**
- * Mark an atom (or world position) with a halo and/or a text label.
+ * Mark a specific atom with a halo and/or a text label.
+ *
+ * Identity is **always** by atom id. World coordinates are not accepted —
+ * the mark must follow its atom across frame updates, which is impossible
+ * if it were pinned to a coordinate.
  *
  * Usage:
  *   app.execute("mark_atom", { anchorAtomId: 0 })
  *   app.execute("mark_atom", { anchorAtomId: 3, label: { text: "*" } })
- *   app.execute("mark_atom", { position: [1, 0, 0], shape: null, label: { text: "α" } })
  *
  * Returns the created MarkAtomOverlay (use `.id` for later unmark/update).
  */
@@ -46,6 +49,10 @@ export class MarkAtomCommand extends Command<MarkAtomOverlay> {
     );
     this._added = overlay;
     this.app.overlayManager.add(overlay);
+    // Snap onto the current atom synchronously — `frame-rendered` may not
+    // fire again on a static scene, in which case the mark would otherwise
+    // sit at the world origin instead of on the atom.
+    this.app.syncAnchoredOverlay(overlay);
     this.app.events.emit("overlay-added", { overlay });
     return overlay;
   }
@@ -117,6 +124,7 @@ export class RemarkAtomCommand extends Command<MarkAtomOverlay> {
 
   do(): MarkAtomOverlay {
     this.app.overlayManager.add(this._overlay);
+    this.app.syncAnchoredOverlay(this._overlay);
     this.app.events.emit("overlay-added", { overlay: this._overlay });
     return this._overlay;
   }

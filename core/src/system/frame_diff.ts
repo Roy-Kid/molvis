@@ -44,15 +44,37 @@ function equalStringArray(left: string[], right: string[]): boolean {
   return true;
 }
 
-function compareOptionalElement(leftAtoms: Block, rightAtoms: Block): boolean {
+// `copyColStr("element")` materializes the whole element column out of WASM —
+// the dominant cost of classifying a transition on large systems. During
+// playback the same Frame object is compared as `next` on one seek and
+// `previous` on the next, and trajectory frames are immutable, so cache the
+// copied column keyed weakly on the Frame. Entries are collected when the
+// frame is GC'd / freed. `null` means "no element column".
+const elementColumnCache = new WeakMap<Frame, string[] | null>();
+
+function getElementColumn(frame: Frame, atoms: Block): string[] | null {
+  const cached = elementColumnCache.get(frame);
+  if (cached !== undefined) return cached;
+  const column =
+    atoms.dtype("element") === DType.String
+      ? atoms.copyColStr("element")
+      : null;
+  elementColumnCache.set(frame, column);
+  return column;
+}
+
+function compareOptionalElement(
+  leftFrame: Frame,
+  leftAtoms: Block,
+  rightFrame: Frame,
+  rightAtoms: Block,
+): boolean {
   // Canonical identity column is `element: String`. LAMMPS data/dump without
   // element simply have no identity column — both sides missing is "equal".
-  const leftHas = leftAtoms.dtype("element") === DType.String;
-  const rightHas = rightAtoms.dtype("element") === DType.String;
-  if (!leftHas && !rightHas) return true;
-  if (!leftHas || !rightHas) return false;
-  const left = leftAtoms.copyColStr("element");
-  const right = rightAtoms.copyColStr("element");
+  const left = getElementColumn(leftFrame, leftAtoms);
+  const right = getElementColumn(rightFrame, rightAtoms);
+  if (left === null && right === null) return true;
+  if (left === null || right === null) return false;
   return equalStringArray(left, right);
 }
 
@@ -83,8 +105,12 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
     rightBonds.dtype("order") === DType.U32
       ? rightBonds.viewColU32("order")
       : undefined;
-  const count = leftBonds.nrows();
 
+  // With no order column on either side every bond is implicitly order 1, so
+  // the per-bond comparison is vacuously true — skip the linear scan entirely.
+  if (!leftOrder && !rightOrder) return true;
+
+  const count = leftBonds.nrows();
   for (let i = 0; i < count; i++) {
     if (getBondOrder(leftOrder, i) !== getBondOrder(rightOrder, i)) {
       return false;
@@ -130,7 +156,7 @@ export function classifyFrameTransition(
     );
   }
 
-  if (!compareOptionalElement(prevAtoms, nextAtoms)) {
+  if (!compareOptionalElement(previous, prevAtoms, next, nextAtoms)) {
     return decision(
       "full",
       nextAtomCount,

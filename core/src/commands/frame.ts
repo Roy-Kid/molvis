@@ -124,6 +124,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       };
     }
 
+    // NOTE: frameAtoms/frameBonds are getBlock wrappers and are deliberately
+    // NOT freed — freeing a getBlock/simbox handle corrupts the frame's shared
+    // data on subsequent reads (see memory: project_molrs_handle_ownership).
     // Internal buffer checks inside updateAtomBuffer / updateBondBuffer still
     // throw on soft failures (buffer missing, frame offset mismatch). Translate
     // those into `{success: false}` so the caller falls back to DrawFrameCommand.
@@ -134,9 +137,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         this.updateBondBuffer(bondMesh, frameAtoms, frameBonds);
       }
 
-      sceneIndex.metaRegistry.atoms.setFrame(frameAtoms);
+      sceneIndex.metaRegistry.atoms.setFrame(this.frame);
       if (frameBonds) {
-        sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
+        sceneIndex.metaRegistry.bonds.setFrame(this.frame);
       }
 
       this.app.artist.redrawFromSceneIndex(this.frame);
@@ -218,7 +221,10 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       // idx4+3 (radius) unchanged
     }
 
-    atomState.needsUpload = true;
+    // Position-only update: only matrix + instanceData changed. Mark just those
+    // dirty so applyStateToMesh skips re-uploading the unchanged color/picking
+    // buffers — the per-frame GPU-bandwidth win for large systems.
+    atomState.markDirty("matrix", "instanceData");
   }
 
   private updateBondBuffer(
@@ -323,7 +329,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       }
     }
 
-    bondState.needsUpload = true;
+    // Position-only update: bond matrix + impostor data changed; colors,
+    // split, and picking are unchanged. Mark only the touched buffers dirty.
+    bondState.markDirty("matrix", "instanceData0", "instanceData1");
   }
 
   /**

@@ -85,6 +85,16 @@ export class ExpressionSelector {
     return indices;
   }
 
+  /**
+   * Compile an expression, throwing on syntax error. Exposed so the pipeline's
+   * {@link ExpressionSelectionModifier} validates through the *exact same*
+   * compile path used for evaluation — a separate validation compile could
+   * accept an expression that then throws at eval time (or vice versa).
+   */
+  static compile(expression: string): ExpressionEvaluator {
+    return ExpressionSelector.createEvaluator(expression);
+  }
+
   private static createEvaluator(expression: string): ExpressionEvaluator {
     if (_cachedExpression === expression && _cachedEvaluator) {
       return _cachedEvaluator;

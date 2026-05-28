@@ -177,6 +177,36 @@ export class Trajectory {
     return false;
   }
   /**
+   * Free the WASM {@link Frame} objects this trajectory owns.
+   *
+   * Eager trajectories own their frames' WASM linear-memory backing; dropping
+   * the trajectory (e.g. on reload via `setTrajectory`) without freeing leaks
+   * that memory. Call this on the *outgoing* trajectory once it is no longer
+   * the active one.
+   *
+   * - **Lazy/provider-backed** trajectories are skipped — the provider owns
+   *   frame lifetime (and reuses/evicts via its own LRU).
+   * - Frames in `exclude` are still referenced elsewhere (e.g. the app's
+   *   source / last-rendered frame) and are left untouched to avoid a
+   *   use-after-free / double-free.
+   * - Boxes are intentionally not freed here: their ownership flows into draw
+   *   commands and `currentBox` falls back to `frame.simbox`, so freeing them
+   *   risks a double-free. They are released with their frame.
+   *
+   * After `dispose()` the trajectory holds no frames and must not be reused.
+   */
+  dispose(exclude?: ReadonlySet<Frame>): void {
+    if (this._provider) return;
+    for (const frame of this._frames) {
+      if (!frame || exclude?.has(frame)) continue;
+      frame.free();
+    }
+    this._frames = [];
+    this._boxes = [];
+    this._length = 0;
+  }
+
+  /**
    * Replace a frame at the specified index.
    * NOTE: This mutates the trajectory in place for performance — it is called
    * on every pipeline-driven visual update. The caller (System.updateCurrentFrame)

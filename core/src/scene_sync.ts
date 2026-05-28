@@ -44,6 +44,7 @@ export function syncSceneToFrame(
   }
 
   // 2. Collect Bonds
+  let droppedBonds = 0;
   for (const bondId of sceneIndex.metaRegistry.bonds.getAllIds()) {
     const meta = sceneIndex.metaRegistry.bonds.getMeta(bondId);
     if (!meta) continue;
@@ -58,7 +59,10 @@ export function syncSceneToFrame(
         order: meta.order,
       });
     } else {
-      // Bond refers to deleted atoms?
+      // Bond endpoint refers to an atom that no longer exists in the scene
+      // (e.g. deleted in edit mode). Drop it, but never silently — a save
+      // that loses topology should be observable.
+      droppedBonds++;
     }
   }
 
@@ -113,6 +117,11 @@ export function syncSceneToFrame(
   logger.info(
     `[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds.`,
   );
+  if (droppedBonds > 0) {
+    logger.warn(
+      `[syncSceneToFrame] Dropped ${droppedBonds} bond(s) referencing deleted atoms.`,
+    );
+  }
   if (options.markSaved !== false) {
     sceneIndex.markAllSaved();
   }

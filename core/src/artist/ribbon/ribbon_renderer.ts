@@ -147,6 +147,10 @@ export class RibbonRenderer {
 
     mesh.material = material;
     mesh.isPickable = false;
+    // Long, often concave ribbon — bounding box can miss the frustum
+    // at oblique angles even when the visible portion is on screen.
+    // Skip frustum culling; raster cost is unaffected.
+    mesh.alwaysSelectAsActiveMesh = true;
 
     return mesh;
   }

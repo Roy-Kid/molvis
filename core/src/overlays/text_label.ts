@@ -9,7 +9,7 @@
  * follows the atom position across frame updates automatically.
  */
 
-import { Vector3 } from "@babylonjs/core";
+import { Matrix, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import {
   type AdvancedDynamicTexture,
@@ -131,15 +131,24 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = this._scene.getTransformMatrix();
 
+    // World matrix MUST be identity for world-space points; see
+    // memory/project_babylon_project_api.md.
     const projected = Vector3.Project(
       this._worldPos,
-      transformMatrix,
+      Matrix.IdentityReadOnly,
       transformMatrix,
       viewportMatrix,
     );
 
     const control = this._container ?? this._textBlock;
     if (control) {
+      // Guard against non-finite projection — see
+      // memory/project_babylon_project_api.md.
+      if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+        control.isVisible = false;
+        return;
+      }
+      control.isVisible = true;
       control.left = `${projected.x - width / 2}px`;
       control.top = `${projected.y - height / 2}px`;
     }

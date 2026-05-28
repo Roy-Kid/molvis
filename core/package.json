@@ -30,6 +30,7 @@
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
     "test:watch": "rstest watch",
+    "bench": "rstest run -c rstest.bench.config.ts",
     "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
   },
   "devDependencies": {

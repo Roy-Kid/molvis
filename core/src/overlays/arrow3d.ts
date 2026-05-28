@@ -116,6 +116,14 @@ export class Arrow3DOverlay implements Overlay {
     mat.emissiveColor = color.scale(0.6);
     mat.alpha = this._props.opacity;
     mat.disableLighting = false;
+    // Translucent arrows must NOT write depth — otherwise the arrow
+    // body would block atoms/bonds behind it on the GL_LESS test. The
+    // shaft and cone meshes are also pinned to alphaIndex = MAX_VALUE
+    // (default), so they sort after impostors which carry alphaIndex=1.
+    // Mirrors the mark_atom halo fix.
+    if (this._props.opacity < 1) {
+      mat.disableDepthWrite = true;
+    }
     return mat;
   }
 
@@ -152,6 +160,10 @@ export class Arrow3DOverlay implements Overlay {
     shaft.material = this._material;
     shaft.isPickable = false;
     shaft.parent = root;
+    // Parented to a TransformNode whose position changes after build —
+    // the cached child bounds can fall outside the frustum at certain
+    // angles. Same fix as mark_atom halo.
+    shaft.alwaysSelectAsActiveMesh = true;
 
     // Cone: sits on top of the shaft
     const cone = MeshBuilder.CreateCylinder(
@@ -169,6 +181,7 @@ export class Arrow3DOverlay implements Overlay {
     cone.material = this._material;
     cone.isPickable = false;
     cone.parent = root;
+    cone.alwaysSelectAsActiveMesh = true;
 
     // Apply opacity directly on material
     this._material.alpha = opacity;
