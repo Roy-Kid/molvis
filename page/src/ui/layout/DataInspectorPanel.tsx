@@ -36,6 +36,8 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
   );
   const [scrollTop, setScrollTop] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [bondScrollTop, setBondScrollTop] = useState(0);
+  const bondContainerRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => {
     if (!app) return;
@@ -88,6 +90,10 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
     setScrollTop(e.currentTarget.scrollTop);
   };
 
+  const handleBondScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    setBondScrollTop(e.currentTarget.scrollTop);
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: filterRevision is an intentional cache-buster for Set identity changes
   const filteredAtomRows = useMemo(
     () =>
@@ -120,6 +126,23 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
   );
   const visibleAtomRows = filteredAtomRows.slice(startIdx, endIdx);
   const offsetY = startIdx * ROW_HEIGHT;
+
+  // Virtual scrolling — bonds (mirrors the atoms window above). Without this,
+  // a 23k-bond system mounts ~115k DOM nodes and freezes the UI on tab open.
+  const bondTotalHeight = filteredBondRows.length * ROW_HEIGHT;
+  const bondVisibleCount = bondContainerRef.current
+    ? Math.ceil(bondContainerRef.current.clientHeight / ROW_HEIGHT)
+    : 30;
+  const bondStartIdx = Math.max(
+    0,
+    Math.floor(bondScrollTop / ROW_HEIGHT) - OVERSCAN,
+  );
+  const bondEndIdx = Math.min(
+    filteredBondRows.length,
+    bondStartIdx + bondVisibleCount + OVERSCAN * 2,
+  );
+  const visibleBondRows = filteredBondRows.slice(bondStartIdx, bondEndIdx);
+  const bondOffsetY = bondStartIdx * ROW_HEIGHT;
 
   return (
     <Tabs defaultValue="atoms" className="h-full flex flex-col">
@@ -217,28 +240,43 @@ export const DataInspectorPanel: React.FC<DataInspectorPanelProps> = ({
             <div className="flex-1 min-w-[40px] px-0.5 py-0.5">ord</div>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {filteredBondRows.map((row) => (
+          {/* Virtual scrolled body */}
+          <div
+            ref={bondContainerRef}
+            className="flex-1 min-h-0 overflow-y-auto"
+            onScroll={handleBondScroll}
+          >
+            <div style={{ height: bondTotalHeight, position: "relative" }}>
               <div
-                key={row.index}
-                className="flex text-[9px] font-mono border-b border-muted/5"
-                style={{ height: ROW_HEIGHT }}
+                style={{
+                  position: "absolute",
+                  top: bondOffsetY,
+                  left: 0,
+                  right: 0,
+                }}
               >
-                <div className="w-8 px-0.5 flex items-center justify-end text-muted-foreground shrink-0">
-                  {row.index}
-                </div>
-                <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
-                  {row.i}
-                </div>
-                <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
-                  {row.j}
-                </div>
-                <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
-                  {row.order}
-                </div>
+                {visibleBondRows.map((row) => (
+                  <div
+                    key={row.index}
+                    className="flex text-[9px] font-mono border-b border-muted/5"
+                    style={{ height: ROW_HEIGHT }}
+                  >
+                    <div className="w-8 px-0.5 flex items-center justify-end text-muted-foreground shrink-0">
+                      {row.index}
+                    </div>
+                    <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
+                      {row.i}
+                    </div>
+                    <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
+                      {row.j}
+                    </div>
+                    <div className="flex-1 min-w-[40px] px-0.5 flex items-center">
+                      {row.order}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
             {filteredBondRows.length === 0 && (
               <div className="p-1.5 text-[9px] text-muted-foreground">
                 No bonds.
