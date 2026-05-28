@@ -14,9 +14,8 @@ import {
   Block,
   Box,
   Frame,
-  Grid,
-  LAMMPSDumpReader,
   LAMMPSReader,
+  LAMMPSTrajReader,
   LinkedCell,
   PDBReader,
   RDF,
@@ -150,34 +149,26 @@ describe("WASM Frame", () => {
     expect(frame.simbox).toBeUndefined();
   });
 
-  it("manages grids (insert / get / has / remove / names)", () => {
+  it("manages grid blocks (insert / get / remove / names)", () => {
     const frame = new Frame();
-    expect(frame.hasGrid("rho")).toBe(false);
-    expect(frame.gridNames()).toEqual([]);
+    expect(frame.getBlock("grid")).toBeUndefined();
+    expect(frame.blockNames()).toEqual([]);
 
-    const grid = new Grid(
-      2,
-      2,
-      2,
-      new Float64Array([0, 0, 0]),
-      new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-      false,
-      false,
-      false,
-    );
-    grid.insertArray("rho", new Float64Array(8).fill(0.25));
-    frame.insertGrid("rho", grid);
+    const grid = new Block();
+    grid.setColF("rho", new Float64Array(8).fill(0.25));
+    grid.setShape(new Uint32Array([2, 2, 2]));
+    frame.insertBlock("grid", grid);
 
-    expect(frame.hasGrid("rho")).toBe(true);
-    expect(frame.gridNames()).toEqual(["rho"]);
-    const retrieved = frame.getGrid("rho");
+    expect(frame.blockNames()).toEqual(["grid"]);
+    const retrieved = frame.getBlock("grid");
     expect(retrieved).toBeDefined();
-    expect(Array.from(retrieved?.getArray("rho") ?? [])).toEqual(
+    expect(Array.from(retrieved?.shape() ?? [])).toEqual([2, 2, 2]);
+    expect(Array.from(retrieved?.copyColF("rho") ?? [])).toEqual(
       new Array(8).fill(0.25),
     );
 
-    frame.removeGrid("rho");
-    expect(frame.hasGrid("rho")).toBe(false);
+    frame.removeBlock("grid");
+    expect(frame.getBlock("grid")).toBeUndefined();
   });
 });
 
@@ -218,51 +209,28 @@ describe("WASM Box", () => {
 
 // ── Grid ───────────────────────────────────────────────────────────────────
 
-describe("WASM Grid", () => {
-  it("stores and retrieves named arrays", () => {
-    const grid = new Grid(
-      3,
-      3,
-      3,
-      new Float64Array([0, 0, 0]),
-      new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-      false,
-      false,
-      false,
-    );
+describe("grid Block", () => {
+  it("stores and retrieves named value columns", () => {
+    const grid = new Block();
     expect(grid.isEmpty()).toBe(true);
-    expect(grid.len()).toBe(0);
-    expect(grid.total()).toBe(27);
-    expect(Array.from(grid.dim())).toEqual([3, 3, 3]);
-    expect(Array.from(grid.pbc())).toEqual([0, 0, 0]);
-    expect(Array.from(grid.origin().toCopy())).toEqual([0, 0, 0]);
-    expect(grid.cell().toCopy().length).toBe(9);
 
     const data = new Float64Array(27);
     for (let i = 0; i < 27; i++) data[i] = i;
-    grid.insertArray("rho", data);
+    grid.setColF("rho", data);
+    grid.setShape(new Uint32Array([3, 3, 3]));
 
     expect(grid.isEmpty()).toBe(false);
-    expect(grid.len()).toBe(1);
-    expect(grid.hasArray("rho")).toBe(true);
-    expect(grid.hasArray("spin")).toBe(false);
-    expect(grid.arrayNames()).toEqual(["rho"]);
-    expect(Array.from(grid.getArray("rho") ?? [])).toEqual(Array.from(data));
+    expect(grid.nrows()).toBe(27);
+    expect(Array.from(grid.shape())).toEqual([3, 3, 3]);
+    expect(grid.keys()).toEqual(["rho"]);
+    expect(Array.from(grid.copyColF("rho"))).toEqual(Array.from(data));
     grid.free();
   });
 
-  it("rejects mis-sized array inserts", () => {
-    const grid = new Grid(
-      2,
-      2,
-      2,
-      new Float64Array([0, 0, 0]),
-      new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
-      false,
-      false,
-      false,
-    );
-    expect(() => grid.insertArray("bad", new Float64Array(7))).toThrow();
+  it("rejects shapes whose product mismatches nrows", () => {
+    const grid = new Block();
+    grid.setColF("rho", new Float64Array(7));
+    expect(() => grid.setShape(new Uint32Array([2, 2, 2]))).toThrow();
     grid.free();
   });
 });
@@ -355,8 +323,8 @@ describe("WASM Readers", () => {
     reader.free();
   });
 
-  it("LAMMPSDumpReader reads a trajectory snapshot", () => {
-    const reader = new LAMMPSDumpReader(LAMMPS_DUMP_FIXTURE);
+  it("LAMMPSTrajReader reads a trajectory snapshot", () => {
+    const reader = new LAMMPSTrajReader(LAMMPS_DUMP_FIXTURE);
     expect(reader.isEmpty()).toBe(false);
     expect(reader.len()).toBeGreaterThanOrEqual(1);
     const frame = reader.read(0);

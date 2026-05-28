@@ -106,8 +106,10 @@ describe("computeRdf", () => {
     expect(result).not.toBe(null);
     expect(result?.rMin).toBe(1);
     expect(result?.r[0]).toBeCloseTo(1 + (3 - 1) / 10 / 2, 6);
-    // No pairs with d<1 → bin[0] (spanning ~[1, 1.2]) should be empty for this layout.
-    expect(result?.counts[0]).toBe(0);
+    // No pairs with d<1 → bin[0] (spanning ~[1, 1.2]) should be empty for this
+    // layout. molrs normalizes the empty bin to a denormal (~1e-308), so assert
+    // numerical zero rather than bit-exact +0.
+    expect(result?.counts[0]).toBeCloseTo(0, 10);
   });
 
   it("explicit volume overrides box volume", () => {

@@ -9,7 +9,7 @@ import {
   VertexData,
 } from "@babylonjs/core";
 import { WasmArray } from "@molcrafts/molrs";
-import type { Block, Box, Frame, Grid } from "@molcrafts/molrs";
+import type { Block, Box, Frame } from "@molcrafts/molrs";
 
 import type { MolvisApp } from "./app";
 
@@ -474,7 +474,8 @@ export class Artist {
   }
 
   public drawCloud(
-    grid: Grid,
+    block: Block,
+    frame: Frame,
     options?: {
       stride?: number;
       threshold?: number;
@@ -485,9 +486,15 @@ export class Artist {
     this.cloudMesh?.dispose();
     this.cloudMesh = null;
 
-    const arrayNames = grid.arrayNames();
-    if (arrayNames.length === 0) return;
-    const valuesArray = grid.getArray(arrayNames[0] as string);
+    // Voxel values live in the grid Block's first float column; geometry
+    // (origin + cell) comes from the frame's simbox, not the block.
+    const keys = block.keys() as string[];
+    const valueKey = keys.find((k) => {
+      const dt = block.dtype(k);
+      return dt === "f64" || dt === "f32";
+    });
+    if (!valueKey) return;
+    const valuesArray = block.copyColF(valueKey);
     if (!valuesArray || valuesArray.length === 0) return;
 
     let maxAbs = 0;
@@ -497,14 +504,17 @@ export class Artist {
     }
     if (maxAbs <= 0) return;
 
-    const shape = Array.from(grid.dim()) as number[];
+    const shape = Array.from(block.shape()) as number[];
+    if (shape.length !== 3) return;
     const stride =
       options?.stride ?? Math.max(1, Math.floor(Math.max(...shape) / 48));
     const threshold = options?.threshold ?? maxAbs * 0.08;
     const alpha = options?.alpha ?? 0.18;
 
-    const origin = Array.from(grid.origin().toCopy()) as number[];
-    const cellFlat = Array.from(grid.cell().toCopy()) as number[];
+    const box = frame.simbox;
+    if (!box) return;
+    const origin = Array.from(box.origin().toCopy()) as number[];
+    const cellFlat = Array.from(box.hMatrix().toCopy()) as number[];
     const cell: number[][] = [
       [cellFlat[0], cellFlat[1], cellFlat[2]],
       [cellFlat[3], cellFlat[4], cellFlat[5]],
@@ -849,26 +859,16 @@ export class Artist {
    * changes required.
    */
   private renderAuxiliaryLayers(frame: Frame): void {
-    // Volumetric / grid-backed fields.
-    const grid = frame.getGrid("electron_density") ?? this.firstGrid(frame);
-    if (grid) this.drawCloud(grid);
+    // Volumetric / grid-backed fields. Cube/CHGCAR readers attach the field
+    // as a rank-3 "grid" Block; geometry comes from frame.simbox.
+    const grid = frame.getBlock("grid");
+    if (grid && grid.shape().length === 3) this.drawCloud(grid, frame);
 
     // Protein backbone — populated by molrs's PDB reader.
     this.ribbonRenderer.syncFromFrame(frame);
     this.ribbonRenderer.setVisible(
       this.app.styleManager.getRepresentation().showRibbon,
     );
-  }
-
-  private firstGrid(frame: Frame): Grid | null {
-    const names = frame.gridNames();
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i];
-      if (typeof name !== "string") continue;
-      const grid = frame.getGrid(name);
-      if (grid) return grid;
-    }
-    return null;
   }
 
   private createBaseMesh(

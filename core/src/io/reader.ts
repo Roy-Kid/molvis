@@ -1,7 +1,7 @@
 import {
   type Frame,
-  LAMMPSDumpReader,
   LAMMPSReader,
+  LAMMPSTrajReader,
   PDBReader,
   XYZReader,
 } from "@molcrafts/molrs";
@@ -38,7 +38,7 @@ function openReader(content: string, format: FileFormat): MultiFrameReader {
     case "lammps":
       return new LAMMPSReader(content);
     case "lammps-dump":
-      return new LAMMPSDumpReader(content);
+      return new LAMMPSTrajReader(content);
   }
 }
 
