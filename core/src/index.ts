@@ -102,6 +102,12 @@ export {
   type RdfResult,
 } from "./analysis/rdf";
 export {
+  runExploration,
+  type DatasetExploration,
+  type ExplorationColorBy,
+  type ExplorationConfig,
+} from "./analysis/exploration";
+export {
   computeClusters,
   type ClusterParams,
   type ClusterResult,

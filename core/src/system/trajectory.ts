@@ -108,6 +108,15 @@ export class Trajectory {
   }
 
   /**
+   * True when frames are loaded on demand via a {@link FrameProvider}.
+   * Callers that would walk every frame eagerly (e.g. frame-label
+   * aggregation) skip lazy trajectories to preserve streaming behaviour.
+   */
+  get isLazy(): boolean {
+    return this._provider !== undefined;
+  }
+
+  /**
    * Return the frame at `index`, or `undefined` if out of range.
    * Consumers that need per-frame metadata walk the trajectory via
    * this accessor — there is no separate aggregation layer.
