@@ -15,6 +15,7 @@ import { SetRepresentationCommand } from "./commands/representation";
 import { ArrayFrameSource } from "./commands/sources";
 import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { EventEmitter, type MolvisEventMap } from "./events";
+import { FrameRenderScheduler } from "./frame_render_scheduler";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
@@ -22,7 +23,7 @@ import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import type { FrameSource } from "./pipeline/pipeline";
 import type { PipelineContext, SelectionMask } from "./pipeline/types";
-import { syncSceneToFrame } from "./scene_sync";
+import { buildFrameFromScene } from "./scene_sync";
 import {
   captureStructuralSelectionSnapshot,
   reconcileSelectionAfterStructuralUpdate,
@@ -79,8 +80,7 @@ export class MolvisApp {
   private _sourceFrame: Frame | null = null; // original frame, never overwritten by pipeline
   private _lastRenderedFrame: Frame | null = null;
   private _lastSelectionSet: Map<string, SelectionMask> = new Map();
-  private _frameRenderQueue: Promise<void> = Promise.resolve();
-  private _pendingFrameRender: { forceFull: boolean } | null = null;
+  private readonly _frameScheduler: FrameRenderScheduler;
 
   // Style System
   private _styleManager: StyleManager;
@@ -180,6 +180,12 @@ export class MolvisApp {
 
     // Initialize Command Manager
     this.commandManager = new CommandManager(this);
+
+    // Coalescing scheduler for trajectory-frame renders (latest-wins).
+    this._frameScheduler = new FrameRenderScheduler(
+      (forceFull) => this.renderActiveTrajectoryFrame(forceFull),
+      (error) => logger.error("Failed to render trajectory frame", error),
+    );
 
     // Wire scene-level dirty tracking to event bus
     this._world.sceneIndex.onDirtyChange = (isDirty: boolean) => {
@@ -359,10 +365,13 @@ export class MolvisApp {
   }
 
   public save(): void {
-    const frame = this._system.frame;
-    if (frame) {
-      syncSceneToFrame(this._world.sceneIndex, frame);
-    }
+    const sourceFrame = this._system.frame;
+    if (!sourceFrame) return;
+    // Build a NEW frame from the edited scene (preserving the box) and swap it
+    // into the system, instead of clearing the live frame in place.
+    const saved = buildFrameFromScene(this._world.sceneIndex, { sourceFrame });
+    this._system.updateCurrentFrame(saved);
+    this._sourceFrame = this._system.frame;
   }
 
   /**
@@ -474,7 +483,6 @@ export class MolvisApp {
     this.overlayManager.dispose();
     this._guiManager.unmount();
     this._lastRenderedFrame = null;
-    this._pendingFrameRender = null;
     this._engine.dispose();
 
     if (this._root.parentElement) {
@@ -608,29 +616,7 @@ export class MolvisApp {
    */
   private queueTrajectoryFrameRender(forceFull = false): void {
     if (!this._isRunning) return;
-
-    // If a render is already queued, upgrade to forceFull if requested.
-    if (this._pendingFrameRender) {
-      if (forceFull) this._pendingFrameRender.forceFull = true;
-      return;
-    }
-
-    this._pendingFrameRender = { forceFull };
-    this._frameRenderQueue = this._frameRenderQueue
-      .catch(() => {
-        // Previous render failure is already logged; keep queue alive.
-      })
-      .then(async () => {
-        // Drain the pending request (latest wins).
-        const pending = this._pendingFrameRender;
-        this._pendingFrameRender = null;
-        if (pending) {
-          await this.renderActiveTrajectoryFrame(pending.forceFull);
-        }
-      })
-      .catch((error) => {
-        logger.error("Failed to render trajectory frame", error);
-      });
+    this._frameScheduler.request(forceFull);
   }
 
   /**

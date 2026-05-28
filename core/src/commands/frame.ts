@@ -1,7 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
-import { type Block, Frame } from "@molcrafts/molrs";
+import type { Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
-import { syncSceneToFrame } from "../scene_sync";
+import { buildFrameFromScene } from "../scene_sync";
 import { DType } from "../utils/dtype";
 import { Command, command } from "./base";
 import type { DrawFrameOption } from "./draw";
@@ -356,8 +356,7 @@ export class ExportFrameCommand extends Command<{
   do(): {
     frameData: { blocks: FrameDataBlocks; metadata: Record<string, unknown> };
   } {
-    const tempFrame = new Frame();
-    syncSceneToFrame(this.app.world.sceneIndex, tempFrame, {
+    const tempFrame = buildFrameFromScene(this.app.world.sceneIndex, {
       markSaved: false,
     });
 

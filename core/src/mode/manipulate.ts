@@ -3,7 +3,7 @@ import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
 import { DrawFrameCommand } from "../commands/draw";
-import { syncSceneToFrame } from "../scene_sync";
+import { buildFrameFromScene } from "../scene_sync";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
@@ -364,15 +364,18 @@ class ManipulateMode extends BaseMode {
   public async saveChanges(): Promise<void> {
     if (!this.hasUnsavedChanges()) return;
 
-    const frame = this.app.system.frame;
-    if (!frame) {
+    const sourceFrame = this.app.system.frame;
+    if (!sourceFrame) {
       logger.warn("[ManipulateMode] No system frame to save to");
       return;
     }
 
-    syncSceneToFrame(this.world.sceneIndex, frame);
+    // Build a new frame from the edited scene (box preserved) and swap it in,
+    // rather than clearing the live frame in place.
+    const saved = buildFrameFromScene(this.world.sceneIndex, { sourceFrame });
+    this.app.system.updateCurrentFrame(saved);
 
-    const cmd = new DrawFrameCommand(this.app, { frame });
+    const cmd = new DrawFrameCommand(this.app, { frame: saved });
     cmd.do();
 
     this.originalFrame = null;

@@ -1,32 +1,36 @@
-import { Block, type Frame } from "@molcrafts/molrs";
+import { Block, Frame } from "@molcrafts/molrs";
 import type { SceneIndex } from "./scene_index";
 import { logger } from "./utils/logger";
 
-export interface SyncSceneToFrameOptions {
+export interface BuildFrameFromSceneOptions {
+  /**
+   * Source frame to carry the simulation box over from. The box is moved into
+   * the new frame via the `simbox` getter→setter (the proven, leak-free pattern
+   * used by pipeline modifiers); the source frame keeps its own box.
+   */
+  sourceFrame?: Frame;
   markSaved?: boolean;
 }
 
 /**
- * Synchronize scene data (meshes and thin instances) back to Frame.
- * Effectively dumps the current state of SceneIndex (MetaRegistry) into a new Frame structure.
+ * Build a NEW Frame from the current scene state (SceneIndex MetaRegistry).
+ *
+ * Returns a fresh Frame rather than mutating one in place — the previous
+ * `syncSceneToFrame(frame)` called `frame.clear()` on the live `system.frame`,
+ * which violated immutability and could corrupt the source if a write threw
+ * mid-rebuild. Callers swap the returned frame into the System.
  */
-export function syncSceneToFrame(
+export function buildFrameFromScene(
   sceneIndex: SceneIndex,
-  frame: Frame,
-  options: SyncSceneToFrameOptions = {},
-): void {
-  // Clear the frame
-  frame.clear();
+  options: BuildFrameFromSceneOptions = {},
+): Frame {
+  const frame = new Frame();
 
   const atoms: Array<{ x: number; y: number; z: number; element: string }> = [];
   const bonds: Array<{ atomId1: number; atomId2: number; order: number }> = [];
 
-  // Mapping from global semantic Atom ID -> New Frame Index
-  // Ideally we preserve IDs if possible, but Frame implies contiguous 0..N packing.
-  // If our IDs are sparse (e.g. we deleted some), we must re-index.
-  // SceneIndex IDs might be sparse if we support deletion (which we do via removal from edits,
-  // but Frame deletions are tricky).
-  // For now, let's just pack them.
+  // Atom IDs may be sparse (deletions in edit mode); Frame blocks are dense
+  // 0..N, so re-index while collecting.
   const atomIdToFrameIndex = new Map<number, number>();
 
   // 1. Collect Atoms
@@ -53,15 +57,11 @@ export function syncSceneToFrame(
     const idx2 = atomIdToFrameIndex.get(meta.atomId2);
 
     if (idx1 !== undefined && idx2 !== undefined) {
-      bonds.push({
-        atomId1: idx1,
-        atomId2: idx2,
-        order: meta.order,
-      });
+      bonds.push({ atomId1: idx1, atomId2: idx2, order: meta.order });
     } else {
-      // Bond endpoint refers to an atom that no longer exists in the scene
-      // (e.g. deleted in edit mode). Drop it, but never silently — a save
-      // that loses topology should be observable.
+      // Bond endpoint refers to an atom that no longer exists (e.g. deleted in
+      // edit mode). Drop it, but never silently — a save that loses topology
+      // should be observable.
       droppedBonds++;
     }
   }
@@ -112,17 +112,26 @@ export function syncSceneToFrame(
     frame.insertBlock("bonds", bondBlock);
   }
 
-  // Box synchronization intentionally omitted until a typed Frame box API is exposed.
+  // Preserve the simulation box. `sourceFrame.simbox` (getter) returns a copy;
+  // assigning it (setter) MOVES it into the new frame and leaves the source's
+  // own box intact — the same pattern pipeline modifiers use. This fixes the
+  // long-standing box-loss on save.
+  const sourceBox = options.sourceFrame?.simbox;
+  if (sourceBox) {
+    frame.simbox = sourceBox;
+  }
 
   logger.info(
-    `[syncSceneToFrame] Synchronized ${atomCount} atoms and ${bondCount} bonds.`,
+    `[buildFrameFromScene] Built ${atomCount} atoms and ${bondCount} bonds.`,
   );
   if (droppedBonds > 0) {
     logger.warn(
-      `[syncSceneToFrame] Dropped ${droppedBonds} bond(s) referencing deleted atoms.`,
+      `[buildFrameFromScene] Dropped ${droppedBonds} bond(s) referencing deleted atoms.`,
     );
   }
   if (options.markSaved !== false) {
     sceneIndex.markAllSaved();
   }
+
+  return frame;
 }
