@@ -59,6 +59,12 @@ export class DrawBoxCommand extends Command<void> {
     // Create a root mesh for the box
     this.boxMesh = new BABYLON.Mesh("sim_box", scene);
     this.boxMesh.isPickable = false;
+    // Restore the persisted edge-thickness multiplier — this mesh is recreated
+    // on every full draw, so the value must come from the StyleManager, not the
+    // previous (now-disposed) mesh. updateThickness() reads it each frame.
+    (
+      this.boxMesh as BABYLON.Mesh & { _userThicknessScale?: number }
+    )._userThicknessScale = this.app.styleManager.getBoxThicknessScale();
 
     const material = this.app.styleManager.getBoxMaterial();
 

@@ -160,8 +160,7 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   const bondScale = repr?.bondRadiusScale ?? 1;
   const boxMesh = app?.scene.getMeshByName("sim_box");
   const showBox = app?.styleManager.getShowBox() ?? true;
-  // biome-ignore lint/suspicious/noExplicitAny: _userThicknessScale is an internal per-mesh control read by DrawBoxCommand
-  const boxWidth = (boxMesh as any)?._userThicknessScale ?? 1.0;
+  const boxWidth = app?.styleManager.getBoxThicknessScale() ?? 1.0;
 
   const redraw = () => {
     app?.applyPipeline({ fullRebuild: true });
@@ -191,8 +190,9 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     redraw();
   };
   const onBoxWidth = (v: number) => {
-    // biome-ignore lint/suspicious/noExplicitAny: see boxWidth above
-    if (boxMesh) (boxMesh as any)._userThicknessScale = v;
+    app?.styleManager.setBoxThicknessScale(v); // persist across redraws
+    // biome-ignore lint/suspicious/noExplicitAny: _userThicknessScale is an internal per-mesh control read by DrawBoxCommand
+    if (boxMesh) (boxMesh as any)._userThicknessScale = v; // live apply
     onUpdate();
   };
 

@@ -75,7 +75,7 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       bondDiameterScale: repr.bondRadiusScale,
       boxVisible: app.styleManager.getShowBox(),
       boxColor: app.styleManager.getTheme().boxColor ?? "#ffffff",
-      boxThicknessScale: 1.0,
+      boxThicknessScale: app.styleManager.getBoxThicknessScale(),
       backgroundColor: rgbToHex(cc.r, cc.g, cc.b),
       gridEnabled: grid.enabled ?? false,
       gridOpacity: grid.opacity ?? 0.3,
@@ -136,9 +136,10 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
   };
 
   const onBoxThickness = (v: number) => {
+    app.styleManager.setBoxThicknessScale(v); // persist across redraws
     const m = app.scene.getMeshByName("sim_box");
     // biome-ignore lint/suspicious/noExplicitAny: _userThicknessScale is an internal BabylonJS mesh property
-    if (m) (m as any)._userThicknessScale = v;
+    if (m) (m as any)._userThicknessScale = v; // live apply (no redraw needed)
     set("boxThicknessScale", v);
   };
 
