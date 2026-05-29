@@ -1,14 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { Molvis } from "@molvis/core";
-import {
-  BrushCleaning,
-  Focus,
-  Maximize,
-  Minimize,
-  Redo2,
-  Undo2,
-} from "lucide-react";
+import { BrushCleaning, Focus, Maximize, Redo2, Undo2 } from "lucide-react";
 import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
@@ -18,23 +11,21 @@ import { ThemeToggle } from "./ThemeToggle";
 interface TopBarProps {
   app: Molvis | null;
   currentMode: string;
+  /** Enter "fullscreen" = hide all UI chrome, leaving only the 3D canvas. */
+  onToggleFullscreen: () => void;
 }
 
 /**
  * Compact toolbar with global actions.
  * Mode switching is owned by the right workbench sidebar.
  */
-export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
+export const TopBar: React.FC<TopBarProps> = ({
+  app,
+  currentMode,
+  onToggleFullscreen,
+}) => {
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
-  const [isFullscreen, setIsFullscreen] = React.useState(false);
-
-  React.useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onChange);
-    onChange();
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
 
   React.useEffect(() => {
     if (!app) return;
@@ -85,14 +76,6 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
 
   const handleReset = () => {
     if (app) app.reset();
-  };
-
-  const handleToggleFullscreen = () => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
-    } else {
-      void document.documentElement.requestFullscreen();
-    }
   };
 
   return (
@@ -150,14 +133,10 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={handleToggleFullscreen}
-          title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+          onClick={onToggleFullscreen}
+          title="Fullscreen (hide UI)"
         >
-          {isFullscreen ? (
-            <Minimize className="h-3.5 w-3.5" />
-          ) : (
-            <Maximize className="h-3.5 w-3.5" />
-          )}
+          <Maximize className="h-3.5 w-3.5" />
         </Button>
 
         <Separator orientation="vertical" className="h-4 mx-0.5" />
