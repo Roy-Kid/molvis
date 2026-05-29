@@ -211,8 +211,8 @@ export class DrawFrameCommand extends Command<void> {
     // 1. Draw Frame via Artist
     await artist.drawFrame(this.frame, this.box, this.options);
 
-    // 2. Draw Box (Delegate to DrawBoxCommand)
-    if (this.box) {
+    // 2. Draw Box (Delegate to DrawBoxCommand) — gated by box visibility
+    if (this.box && this.app.styleManager.getShowBox()) {
       this.app.execute("draw_box", { box: this.box });
     }
   }

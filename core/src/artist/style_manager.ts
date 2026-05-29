@@ -10,6 +10,11 @@ export class StyleManager {
 
   private _representation: RepresentationStyle = BALL_AND_STICK;
 
+  // Simulation-box visibility. Persistent across redraws: the box mesh is
+  // recreated on every full draw, so a transient mesh.setEnabled() would not
+  // survive a re-render. DrawFrameCommand / app consult this before drawing.
+  private _showBox = true;
+
   constructor(scene: Scene) {
     this.scene = scene;
     this.currentTheme = new ClassicTheme();
@@ -42,6 +47,30 @@ export class StyleManager {
       bondRadiusScale: scale,
       name: "Custom",
     };
+  }
+
+  public setShowAtoms(show: boolean) {
+    this._representation = {
+      ...this._representation,
+      showAtoms: show,
+      name: "Custom",
+    };
+  }
+
+  public setShowBonds(show: boolean) {
+    this._representation = {
+      ...this._representation,
+      showBonds: show,
+      name: "Custom",
+    };
+  }
+
+  public setShowBox(show: boolean) {
+    this._showBox = show;
+  }
+
+  public getShowBox(): boolean {
+    return this._showBox;
   }
 
   public getAtomRadiusScale(): number {

@@ -656,7 +656,7 @@ export class MolvisApp {
       const updateCmd = new UpdateFrameCommand(this, { frame });
       const result = await updateCmd.do();
       if (result.success) {
-        if (box) {
+        if (box && this.styleManager.getShowBox()) {
           this.execute("draw_box", { box });
         }
         this._lastRenderedFrame = frame;

@@ -17,11 +17,6 @@ export class DataSourceModifier extends BaseModifier {
   public sourceType: "file" | "empty" | "backend" = "empty";
   public filename = "";
 
-  // Visibility
-  public showAtoms = true;
-  public showBonds = true;
-  public showBox = true;
-
   private _frame: Frame | null = null;
   constructor() {
     super(`data-source-${Date.now()}`, "Data Source", ModifierCategory.Data);
@@ -36,14 +31,9 @@ export class DataSourceModifier extends BaseModifier {
   }
 
   apply(input: Frame, _context: PipelineContext): Frame {
-    const sourceFrame = this._frame || input;
-
-    if (this.showAtoms && this.showBonds && this.showBox) {
-      return sourceFrame;
-    }
-
-    // Visibility flags are currently used for UI state only.
-    // Frame-level block filtering is intentionally a no-op in v0.0.2.
-    return sourceFrame;
+    // Identity passthrough — this modifier is the pipeline's data entry point.
+    // Per-component render visibility lives in the StyleManager representation
+    // (atoms/bonds) and the sim_box mesh (box), which the Artist consumes.
+    return this._frame || input;
   }
 }
