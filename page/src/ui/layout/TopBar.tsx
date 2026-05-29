@@ -1,7 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import type { Molvis } from "@molvis/core";
-import { Redo2, Scan, Trash2, Undo2 } from "lucide-react";
+import {
+  BrushCleaning,
+  Focus,
+  Maximize,
+  Minimize,
+  Redo2,
+  Undo2,
+} from "lucide-react";
 import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
@@ -20,6 +27,14 @@ interface TopBarProps {
 export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+
+  React.useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    onChange();
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   React.useEffect(() => {
     if (!app) return;
@@ -72,6 +87,14 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
     if (app) app.reset();
   };
 
+  const handleToggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen();
+    }
+  };
+
   return (
     <div className="h-8 border-b bg-background flex items-center px-2 gap-2 shrink-0 justify-between">
       <div className="flex items-center gap-2 min-w-0">
@@ -89,7 +112,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           onClick={handleReset}
           title="Reset Scene"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <BrushCleaning className="h-3.5 w-3.5" />
         </Button>
         <ExportDialog app={app} />
         <Separator orientation="vertical" className="h-4 mx-0.5" />
@@ -121,7 +144,20 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           onClick={handleResetCamera}
           title="Reset Camera"
         >
-          <Scan className="h-3.5 w-3.5" />
+          <Focus className="h-3.5 w-3.5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleToggleFullscreen}
+          title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        >
+          {isFullscreen ? (
+            <Minimize className="h-3.5 w-3.5" />
+          ) : (
+            <Maximize className="h-3.5 w-3.5" />
+          )}
         </Button>
 
         <Separator orientation="vertical" className="h-4 mx-0.5" />
