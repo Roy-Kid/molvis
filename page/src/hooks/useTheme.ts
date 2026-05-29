@@ -21,6 +21,10 @@ function applyTheme(theme: Theme): void {
     root.classList.remove("dark");
   }
   root.style.colorScheme = theme;
+  // Notify the BabylonJS canvas to re-read its themed background (--canvas).
+  // Without this, the React UI restyles via CSS but the 3D scene clearColor
+  // stays stale. MolvisWrapper listens for this event.
+  window.dispatchEvent(new Event("molvis:theme-change"));
 }
 
 /** Call once before React hydrates to avoid a flash of the wrong theme. */
