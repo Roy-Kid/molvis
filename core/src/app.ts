@@ -1,4 +1,5 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
+import { type Box, Frame } from "@molcrafts/molrs";
 import { Artist } from "./artist";
 import { findRepresentation } from "./artist/representation";
 import { StyleManager } from "./artist/style_manager";
@@ -11,12 +12,16 @@ import {
 import type { DrawFrameOption } from "./commands/draw";
 import { CommandManager } from "./commands/manager";
 import { SetRepresentationCommand } from "./commands/representation";
-import { type MolvisConfig, defaultMolvisConfig } from "./config";
+import { defaultMolvisConfig, type MolvisConfig } from "./config";
+import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { EventEmitter, type MolvisEventMap } from "./events";
+import { FrameRenderScheduler } from "./frame_render_scheduler";
 import { viewAtomCoords } from "./io/atom_coords";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
+import { OverlayManager } from "./overlays/overlay_manager";
+import type { AtomAnchored, Overlay } from "./overlays/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import { applyAutoAttach } from "./pipeline/auto_attach";
 import {
@@ -29,32 +34,26 @@ import type {
   PipelineContext,
   SelectionMask,
 } from "./pipeline/types";
-import { syncSceneToFrame } from "./scene_sync";
+import { defaultSaveFile } from "./save_file";
+import { buildFrameFromScene } from "./scene_sync";
+import {
+  captureStructuralSelectionSnapshot,
+  reconcileSelectionAfterStructuralUpdate,
+} from "./selection_reconciler";
 import { type MolvisSetting, Settings } from "./settings";
 import { System } from "./system";
 import {
+  classifyFrameTransition,
   type FrameTransitionDecision,
   type FrameUpdateKind,
-  classifyFrameTransition,
 } from "./system/frame_diff";
 import { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
+import { DType } from "./utils/dtype";
 import { cropToContent, reencodeImage } from "./utils/image_crop";
 import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
-
-import { type Box, Frame } from "@molcrafts/molrs";
-import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
-import { OverlayManager } from "./overlays/overlay_manager";
-import type { AtomAnchored, Overlay } from "./overlays/types";
-import { defaultSaveFile } from "./save_file";
-import { DType } from "./utils/dtype";
-
-interface StructuralSelectionSnapshot {
-  atomIds: number[];
-  hasExpressionSelection: boolean;
-}
 
 function asAtomAnchored(overlay: Overlay): AtomAnchored | null {
   const a = overlay as Partial<AtomAnchored>;
@@ -87,8 +86,7 @@ export class MolvisApp {
   private _sourceFrame: Frame | null = null; // original frame, never overwritten by pipeline
   private _lastRenderedFrame: Frame | null = null;
   private _lastSelectionSet: Map<string, SelectionMask> = new Map();
-  private _frameRenderQueue: Promise<void> = Promise.resolve();
-  private _pendingFrameRender: { forceFull: boolean } | null = null;
+  private readonly _frameScheduler: FrameRenderScheduler;
 
   // Style System
   private _styleManager: StyleManager;
@@ -188,6 +186,12 @@ export class MolvisApp {
 
     // Initialize Command Manager
     this.commandManager = new CommandManager(this);
+
+    // Coalescing scheduler for trajectory-frame renders (latest-wins).
+    this._frameScheduler = new FrameRenderScheduler(
+      (forceFull) => this.renderActiveTrajectoryFrame(forceFull),
+      (error) => logger.error("Failed to render trajectory frame", error),
+    );
 
     // Wire scene-level dirty tracking to event bus
     this._world.sceneIndex.onDirtyChange = (isDirty: boolean) => {
@@ -367,10 +371,13 @@ export class MolvisApp {
   }
 
   public save(): void {
-    const frame = this._system.frame;
-    if (frame) {
-      syncSceneToFrame(this._world.sceneIndex, frame);
-    }
+    const sourceFrame = this._system.frame;
+    if (!sourceFrame) return;
+    // Build a NEW frame from the edited scene (preserving the box) and swap it
+    // into the system, instead of clearing the live frame in place.
+    const saved = buildFrameFromScene(this._world.sceneIndex, { sourceFrame });
+    this._system.updateCurrentFrame(saved);
+    this._sourceFrame = this._system.frame;
   }
 
   /**
@@ -430,7 +437,47 @@ export class MolvisApp {
     }
   }
 
+  /**
+   * Render a deterministic turntable rotation around the current scene and
+   * return one captured frame per step as a data URL.
+   *
+   * The camera orbits through a dedicated render camera (see
+   * {@link CameraAnimator}), so the user's interactive view is never disturbed.
+   * Frame count is `round(duration * fps)` and stepping is counter-driven, so
+   * the output is reproducible and independent of the live frame rate. Core
+   * emits only image data URLs; GIF/WebM encoding lives in the frontend.
+   */
+  public async exportTurntable(opts: {
+    duration: number;
+    fps: number;
+    revolutions?: number;
+    polarAngle?: number;
+    width?: number;
+    height?: number;
+    transparentBackground?: boolean;
+    format?: "png" | "webp";
+  }): Promise<string[]> {
+    return this._world.cameraAnimator.renderFrames(
+      {
+        duration: opts.duration,
+        fps: opts.fps,
+        revolutions: opts.revolutions,
+        polarAngle: opts.polarAngle,
+      },
+      () =>
+        this.screenshot({
+          width: opts.width,
+          height: opts.height,
+          transparentBackground: opts.transparentBackground,
+          format: opts.format,
+        }),
+    );
+  }
+
   private _syncAnchoredOverlays(frame: Frame): void {
+    // Fires on every frame render. Skip all WASM block/column access when there
+    // are no overlays to anchor (the common case).
+    if (this.overlayManager.size === 0) return;
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
     const coords = viewAtomCoords(atoms);
@@ -448,12 +495,38 @@ export class MolvisApp {
     }
   }
 
+  /**
+   * Snap a freshly-added overlay onto its anchor atom in the current frame.
+   *
+   * Atom-anchored overlays seed at the world origin and rely on the
+   * ``frame-rendered`` event to be moved onto their atom — but on a static
+   * scene that event won't fire again after creation, leaving the overlay
+   * parked at (0,0,0). Commands that create anchored overlays should call
+   * this once after ``overlayManager.add`` so the mark is positioned
+   * synchronously instead of waiting on the next render cycle.
+   */
+  public syncAnchoredOverlay(overlay: Overlay): void {
+    const anchored = asAtomAnchored(overlay);
+    if (!anchored) return;
+    const frame = this.frame;
+    if (!frame) return;
+    const atoms = frame.getBlock("atoms");
+    if (!atoms) return;
+    const atomId = anchored.getAnchorAtomId();
+    if (atomId < 0) return;
+    const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
+    const y = atoms.dtype("y") === DType.F64 ? atoms.viewColF("y") : undefined;
+    const z = atoms.dtype("z") === DType.F64 ? atoms.viewColF("z") : undefined;
+    if (!x || !y || !z) return;
+    if (atomId >= x.length) return;
+    anchored.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
+  }
+
   public destroy(): void {
     this.stop();
     this.overlayManager.dispose();
     this._guiManager.unmount();
     this._lastRenderedFrame = null;
-    this._pendingFrameRender = null;
     this._engine.dispose();
 
     if (this._root.parentElement) {
@@ -464,25 +537,13 @@ export class MolvisApp {
   }
 
   public setMode(mode: string): void {
-    switch (mode) {
-      case "view":
-        this._modeManager.switch_mode(ModeType.View);
-        break;
-      case "select":
-        this._modeManager.switch_mode(ModeType.Select);
-        break;
-      case "edit":
-        this._modeManager.switch_mode(ModeType.Edit);
-        break;
-      case "measure":
-        this._modeManager.switch_mode(ModeType.Measure);
-        break;
-      case "manipulate":
-        this._modeManager.switch_mode(ModeType.Manipulate);
-        break;
-      default:
-        logger.warn(`Unknown mode: ${mode}`);
-        break;
+    // ModeType values ARE the canonical mode strings ("view", "select", …),
+    // so validate against the enum directly instead of a parallel switch that
+    // could drift from ModeManager's key bindings.
+    if ((Object.values(ModeType) as string[]).includes(mode)) {
+      this._modeManager.switch_mode(mode as ModeType);
+    } else {
+      logger.warn(`Unknown mode: ${mode}`);
     }
   }
 
@@ -574,59 +635,7 @@ export class MolvisApp {
    */
   private queueTrajectoryFrameRender(forceFull = false): void {
     if (!this._isRunning) return;
-
-    // If a render is already queued, upgrade to forceFull if requested.
-    if (this._pendingFrameRender) {
-      if (forceFull) this._pendingFrameRender.forceFull = true;
-      return;
-    }
-
-    this._pendingFrameRender = { forceFull };
-    this._frameRenderQueue = this._frameRenderQueue
-      .catch(() => {
-        // Previous render failure is already logged; keep queue alive.
-      })
-      .then(async () => {
-        // Drain the pending request (latest wins).
-        const pending = this._pendingFrameRender;
-        this._pendingFrameRender = null;
-        if (pending) {
-          await this.renderActiveTrajectoryFrame(pending.forceFull);
-        }
-      })
-      .catch((error) => {
-        logger.error("Failed to render trajectory frame", error);
-      });
-  }
-
-  private captureStructuralSelectionSnapshot(): StructuralSelectionSnapshot {
-    const selection = this._world.selectionManager;
-    return {
-      atomIds: [...selection.getSelectedAtomIds()],
-      hasExpressionSelection: selection.hasExpressionSelectionContext(),
-    };
-  }
-
-  private reconcileSelectionAfterStructuralUpdate(
-    updateKind: Exclude<FrameUpdateKind, "position">,
-    snapshot: StructuralSelectionSnapshot,
-  ): void {
-    const selection = this._world.selectionManager;
-
-    if (snapshot.hasExpressionSelection) {
-      const rehydrated = selection.reapplyLastExpression();
-      if (!rehydrated) {
-        selection.clearSelection();
-      }
-      return;
-    }
-
-    if (updateKind === "bond" && snapshot.atomIds.length > 0) {
-      selection.replaceAtomsByIds(snapshot.atomIds);
-      return;
-    }
-
-    selection.clearSelection();
+    this._frameScheduler.request(forceFull);
   }
 
   /**
@@ -677,14 +686,15 @@ export class MolvisApp {
     const isPositionOnly = decision.kind === "position";
     const selectionSnapshot = isPositionOnly
       ? null
-      : this.captureStructuralSelectionSnapshot();
+      : captureStructuralSelectionSnapshot(this._world.selectionManager);
 
     await this.applyPipeline({
       changeKind: isPositionOnly ? "position" : "full",
     });
 
     if (!isPositionOnly && selectionSnapshot) {
-      this.reconcileSelectionAfterStructuralUpdate(
+      reconcileSelectionAfterStructuralUpdate(
+        this._world.selectionManager,
         decision.kind as Exclude<FrameUpdateKind, "position">,
         selectionSnapshot,
       );
@@ -878,6 +888,7 @@ export class MolvisApp {
    * Emits 'trajectory-change' through System.
    */
   public async setTrajectory(trajectory: Trajectory): Promise<void> {
+    const previousTrajectory = this._system.trajectory;
     this.artist.clear();
     this.commandManager.clearHistory();
 
@@ -924,6 +935,17 @@ export class MolvisApp {
     this._currentFrame = this._system.trajectory.currentIndex;
     this._sourceFrame = this._system.frame;
     this._lastRenderedFrame = null;
+
+    // Free the WASM frames the outgoing trajectory owned. By this point every
+    // app-held reference (_sourceFrame, _lastRenderedFrame) points at the new
+    // trajectory, so the old frames are unreachable and would otherwise leak.
+    // Skip if the trajectory was swapped for itself, and keep the new active
+    // frame as a guard against any accidental frame sharing across trajectories.
+    if (previousTrajectory !== trajectory) {
+      const keep = new Set<Frame>();
+      if (this._sourceFrame) keep.add(this._sourceFrame);
+      previousTrajectory.dispose(keep);
+    }
 
     if (this._isRunning) {
       await this.renderActiveTrajectoryFrame(true);

@@ -1,5 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -10,6 +8,8 @@ import {
   TrajectoryDataSource,
 } from "@molvis/core";
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface SortableModifierItemProps {
   modifier: Modifier;

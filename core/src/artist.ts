@@ -36,8 +36,8 @@ import {
   syncImpostorMaterialUniforms,
 } from "./artist/material_factory";
 import {
-  type ImpostorTarget,
   getImpostorMaterialSpec,
+  type ImpostorTarget,
 } from "./artist/material_spec";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
 import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
@@ -92,7 +92,7 @@ let MI_OUT_SCRATCH = new Float64Array(0);
  * Returns a row-major `Float64Array` view of length `3 * nbonds`
  * (`[dx0, dy0, dz0, dx1, …]`) to feed into `buildBondBuffers` /
  * `refreshBondPositions` via their `miDisplacements` option. Returns
- * `undefined` when there's no box, no bonds, or the required
+ * `undefined` when there is no box, no bonds, or the required
  * columns/views are missing.
  *
  * Why in WASM: `Box.delta` knows per-axis PBC flags and the full `h`
@@ -733,8 +733,7 @@ export class Artist {
 
   public drawCloud(
     block: Block,
-    columnName: string,
-    simbox: Box | undefined,
+    frame: Frame,
     options?: {
       stride?: number;
       threshold?: number;
@@ -745,7 +744,12 @@ export class Artist {
     this.cloudMesh?.dispose();
     this.cloudMesh = null;
 
-    const valuesArray = block.copyColF(columnName);
+    // Voxel values live in a column of the grid Block (prefer
+    // `electron_density`, else the first column); geometry (origin +
+    // cell) comes from the frame's simbox, not the block.
+    const valueKey = pickGridColumn(block);
+    if (!valueKey) return;
+    const valuesArray = block.copyColF(valueKey);
     if (!valuesArray || valuesArray.length === 0) return;
 
     const shape = Array.from(block.shape());
@@ -766,9 +770,11 @@ export class Artist {
     // Geometry comes from the simulation box. CHGCAR / POSCAR / CUBE
     // all share their voxel lattice with the simulation cell, so origin
     // and cell vectors derive from `frame.simbox` rather than per-grid
-    // metadata. Without a simbox we fall back to a unit cell at the
-    // origin; that lets the renderer at least show structure but won't
-    // be physically meaningful.
+    // metadata. `readCellFromBox` reads the 8 corners so triclinic cells
+    // are handled correctly. Without a simbox we fall back to a unit cell
+    // at the origin; that lets the renderer at least show structure but
+    // won't be physically meaningful.
+    const simbox = frame.simbox;
     const origin: number[] = simbox
       ? Array.from(copyAndFree(simbox.origin()))
       : [0, 0, 0];
@@ -847,6 +853,11 @@ export class Artist {
     cloudMesh.material = material;
     cloudMesh.isPickable = false;
     cloudMesh.alwaysSelectAsActiveMesh = true;
+    // Cloud sorts FIRST among translucent meshes — points are additive
+    // and have no real "front face" to occlude atoms with. Pinning to
+    // 0 documents the alpha-pass ordering: cloud (0) → atoms/bonds (1)
+    // → translucent surfaces (MAX_VALUE).
+    cloudMesh.alphaIndex = 0;
     this.cloudMesh = cloudMesh;
   }
 
@@ -1198,20 +1209,22 @@ export class Artist {
     // `alwaysSelectAsActiveMesh = true` opts this mesh out of frustum
     // culling — the actual rasterization still respects the camera so
     // no overdraw occurs; we just guarantee the mesh is never silently
-    // dropped from the active mesh list.
+    // dropped from the active mesh list. (Was removed in the
+    // molrs-0.0.11 refactor; re-applied to fix the class of "atom
+    // disappears at certain rotation angles" bugs.)
     mesh.alwaysSelectAsActiveMesh = true;
     // Pin atoms/bonds to a low `alphaIndex` so they always sort
-    // *before* translucent surfaces (isosurface lobes, ribbons) in the
-    // alpha-blend pass. Atoms write depth via `forceDepthWrite=true`;
-    // when a surface with `needDepthPrePass=true` happens to sort
-    // first by camera-distance, its front-face depth pre-pass writes a
-    // smaller z than atoms inside the lobe and fully blocks them on
-    // the GL_LESS depth test. Atoms-first ordering keeps atoms in the
-    // depth buffer; surfaces render after and only partially blend
-    // with the existing atom pixels.
+    // *before* translucent surfaces (mark_atom halos, isosurface lobes,
+    // ribbons) in the alpha-blend pass. Atoms write depth via
+    // `forceDepthWrite=true`; when a surface with `needDepthPrePass=true`
+    // happens to sort first by camera-distance, its front-face depth
+    // pre-pass writes a smaller z than atoms inside the lobe and fully
+    // blocks them on the GL_LESS depth test. Atoms-first ordering keeps
+    // atoms in the depth buffer; surfaces render after and only
+    // partially blend with the existing atom pixels.
     //
     // 1 puts atoms after the cloud (alphaIndex=0) but before any
-    // mesh that defaults to MAX_VALUE — surface, ribbon, etc.
+    // mesh that defaults to MAX_VALUE — surface, ribbon, halo, etc.
     mesh.alphaIndex = 1;
     return mesh;
   }
@@ -1269,8 +1282,12 @@ export class Artist {
     }
 
     if (state?.needsUpload) {
+      // Upload only the buffers marked dirty. The position-only playback path
+      // mutates just matrix + instanceData, so the (unchanged) color and
+      // picking buffers — by far the largest — are skipped. Structural changes
+      // mark everything dirty (isAllDirty) and re-upload all buffers.
       const matrixDesc = state.buffers.get("matrix");
-      if (matrixDesc) {
+      if (matrixDesc && state.isBufferDirty("matrix")) {
         const view = matrixDesc.data.subarray(
           0,
           totalCount * matrixDesc.stride,
@@ -1280,10 +1297,15 @@ export class Artist {
 
       for (const [name, desc] of state.buffers) {
         if (name === "matrix") continue;
+        if (!state.isBufferDirty(name)) continue;
         const view = desc.data.subarray(0, totalCount * desc.stride);
         mesh.thinInstanceSetBuffer(name, view, desc.stride, false);
       }
 
+      // thinInstanceCount/picking are idempotent; bounds must refresh whenever
+      // matrices moved (which is the case on every dirty cycle that touches
+      // positions). Keep these unconditional — they are cheap relative to the
+      // buffer uploads we just gated.
       mesh.thinInstanceCount = totalCount;
       mesh.thinInstanceEnablePicking = true;
       mesh.thinInstanceRefreshBoundingInfo(true);

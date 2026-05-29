@@ -253,6 +253,30 @@ describe("classifyFrameTransition", () => {
     expect(decision.kind).toBe("position");
   });
 
+  it("is stable across repeated classification of the same pair (element cache)", () => {
+    const previous = buildFrame([
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 1, y: 0, z: 0, element: "H" },
+    ]);
+    const next = buildFrame([
+      { x: 0.2, y: 0, z: 0, element: "C" },
+      { x: 1.2, y: 0, z: 0, element: "H" },
+    ]);
+    // The element column is cached per-Frame; classifying twice must agree.
+    expect(classifyFrameTransition(previous, next).kind).toBe("position");
+    expect(classifyFrameTransition(previous, next).kind).toBe("position");
+  });
+
+  it("does not leak a cached element column across distinct frames", () => {
+    // Reusing a frame as `previous` after it was `next` must compare against
+    // the NEW counterpart's elements, not a stale cached pairing.
+    const a = buildFrame([{ x: 0, y: 0, z: 0, element: "C" }]);
+    const b = buildFrame([{ x: 0.1, y: 0, z: 0, element: "C" }]);
+    const c = buildFrame([{ x: 0.2, y: 0, z: 0, element: "N" }]);
+    expect(classifyFrameTransition(a, b).kind).toBe("position"); // C vs C
+    expect(classifyFrameTransition(b, c).kind).toBe("full"); // C vs N
+  });
+
   it("returns position when only coordinates change", () => {
     const previous = buildFrame(
       [

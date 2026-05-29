@@ -21,6 +21,7 @@
 import type { MolvisApp } from "../app";
 import { RPCRouter } from "./rpc/router";
 import type { RPCResponseEnvelope } from "./rpc/types";
+import { createErrorResponse } from "./rpc/types";
 
 /**
  * Decode a binary WebSocket frame into a JSON object + DataView buffers.
@@ -31,28 +32,46 @@ import type { RPCResponseEnvelope } from "./rpc/types";
  *   [variable]  JSON payload (UTF-8)
  *   [variable]  concatenated buffer bytes
  */
-function decodeBinaryFrame(data: ArrayBuffer): {
+export function decodeBinaryFrame(data: ArrayBuffer): {
   json: Record<string, unknown>;
   buffers: DataView[];
 } {
+  // Every field below is attacker-controllable wire data. Validate each step
+  // against `byteLength` before using it to construct DataView/Uint8Array —
+  // an out-of-range offset/length would otherwise throw a RangeError (or read
+  // garbage) and tear down the message loop.
+  const byteLength = data.byteLength;
+  if (byteLength < 4) {
+    throw new Error("binary frame too short to contain a buffer count");
+  }
   const view = new DataView(data);
   let pos = 0;
 
   const bufferCount = view.getUint32(pos, true);
   pos += 4;
 
+  const headerSize = 4 + bufferCount * 8;
+  if (bufferCount < 0 || headerSize > byteLength) {
+    throw new Error(
+      `binary frame header overflows: bufferCount=${bufferCount}`,
+    );
+  }
+
   const offsetTable: Array<{ offset: number; length: number }> = [];
+  let totalBufferSize = 0;
   for (let i = 0; i < bufferCount; i++) {
     const offset = view.getUint32(pos, true);
     pos += 4;
     const length = view.getUint32(pos, true);
     pos += 4;
     offsetTable.push({ offset, length });
+    totalBufferSize += length;
   }
 
-  const headerSize = 4 + bufferCount * 8;
-  const totalBufferSize = offsetTable.reduce((sum, e) => sum + e.length, 0);
-  const jsonEnd = data.byteLength - totalBufferSize;
+  const jsonEnd = byteLength - totalBufferSize;
+  if (jsonEnd < headerSize || totalBufferSize > byteLength) {
+    throw new Error("binary frame buffer table exceeds payload size");
+  }
   const jsonBytes = new Uint8Array(data, headerSize, jsonEnd - headerSize);
   const jsonText = new TextDecoder().decode(jsonBytes);
   const json = JSON.parse(jsonText) as Record<string, unknown>;
@@ -60,6 +79,9 @@ function decodeBinaryFrame(data: ArrayBuffer): {
   const bufferDataStart = jsonEnd;
   const buffers: DataView[] = [];
   for (const { offset, length } of offsetTable) {
+    if (offset < 0 || length < 0 || offset + length > totalBufferSize) {
+      throw new Error("binary frame buffer reference out of range");
+    }
     buffers.push(new DataView(data, bufferDataStart + offset, length));
   }
 
@@ -70,7 +92,7 @@ function decodeBinaryFrame(data: ArrayBuffer): {
  * Encode a JSON-RPC response into the binary wire format.
  * Used when the response carries binary buffers (e.g. snapshot).
  */
-function encodeBinaryFrame(
+export function encodeBinaryFrame(
   json: Record<string, unknown>,
   buffers: ArrayBuffer[],
 ): ArrayBuffer {
@@ -123,7 +145,7 @@ export class WebSocketBridge {
   private cleanupBeforeUnload: (() => void) | null = null;
   private ready = false;
 
-  constructor(private readonly app: MolvisApp) {
+  constructor(readonly app: MolvisApp) {
     this.router = new RPCRouter(app);
   }
 
@@ -258,14 +280,26 @@ export class WebSocketBridge {
     let request: Record<string, unknown>;
     let buffers: DataView[];
 
-    if (event.data instanceof ArrayBuffer) {
-      const decoded = decodeBinaryFrame(event.data);
-      request = decoded.json;
-      buffers = decoded.buffers;
-    } else if (typeof event.data === "string") {
-      request = JSON.parse(event.data) as Record<string, unknown>;
-      buffers = [];
-    } else {
+    try {
+      if (event.data instanceof ArrayBuffer) {
+        const decoded = decodeBinaryFrame(event.data);
+        request = decoded.json;
+        buffers = decoded.buffers;
+      } else if (typeof event.data === "string") {
+        request = JSON.parse(event.data) as Record<string, unknown>;
+        buffers = [];
+      } else {
+        return;
+      }
+    } catch (error) {
+      // Malformed frame (bad binary framing or invalid JSON). Reply with a
+      // JSON-RPC parse error instead of letting the exception reject the
+      // listener promise — that would silently wedge the controller and drop
+      // every subsequent message on this socket.
+      const message = error instanceof Error ? error.message : String(error);
+      this.sendResponse({
+        content: createErrorResponse(null, -32700, `Parse error: ${message}`),
+      });
       return;
     }
 

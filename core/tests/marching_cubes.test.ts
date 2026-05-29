@@ -11,6 +11,7 @@
  * No BabylonJS dependency — all tests run purely in the rstest environment.
  */
 
+import { Block } from "@molcrafts/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "./setup_wasm";
 import { marchingCubes } from "../src/algo/marching_cubes";
@@ -63,6 +64,47 @@ function hasNoInvalid(arr: Float32Array | Float64Array): boolean {
   }
   return true;
 }
+
+// ── WASM Grid integration ─────────────────────────────────────────────────────
+
+describe("grid Block → Float64Array extraction", () => {
+  test("copyColF returns data matching inserted values", () => {
+    const block = new Block();
+    const input = new Float64Array(64).fill(0);
+    for (let i = 0; i < 64; i++) input[i] = i * 0.1;
+    block.setColF("rho", input);
+    block.setShape(new Uint32Array([4, 4, 4]));
+
+    const output = block.copyColF("rho");
+    expect(output.length).toBe(64);
+    for (let i = 0; i < 64; i++) {
+      expect(output[i]).toBeCloseTo(i * 0.1, 5);
+    }
+  });
+
+  test("shape() matches setShape arguments", () => {
+    const block = new Block();
+    block.setColF("rho", new Float64Array(5 * 6 * 7));
+    block.setShape(new Uint32Array([5, 6, 7]));
+    const dim = block.shape();
+    expect(dim[0]).toBe(5);
+    expect(dim[1]).toBe(6);
+    expect(dim[2]).toBe(7);
+  });
+
+  test("nrows() equals nx * ny * nz", () => {
+    const block = new Block();
+    block.setColF("rho", new Float64Array(3 * 4 * 5));
+    block.setShape(new Uint32Array([3, 4, 5]));
+    expect(block.nrows()).toBe(60);
+  });
+
+  test("setShape throws when product mismatches nrows", () => {
+    const block = new Block();
+    block.setColF("rho", new Float64Array(7));
+    expect(() => block.setShape(new Uint32Array([2, 2, 2]))).toThrow();
+  });
+});
 
 // ── Marching Cubes: degenerate cases ─────────────────────────────────────────
 
@@ -227,6 +269,42 @@ describe("marchingCubes end-to-end", () => {
     const data = sphereField(nx, ny, nz, r);
 
     const mesh = marchingCubes(data, [nx, ny, nz], UNIT_CELL, ZERO_ORIGIN, 0);
+
+    expect(mesh.positions.length).toBeGreaterThan(0);
+    expect(mesh.indices.length % 3).toBe(0);
+    expect(hasNoInvalid(mesh.positions)).toBe(true);
+    expect(hasNoInvalid(mesh.normals)).toBe(true);
+
+    const nVerts = mesh.positions.length / 3;
+    for (let i = 0; i < mesh.indices.length; i++) {
+      expect(mesh.indices[i]).toBeLessThan(nVerts);
+    }
+  });
+
+  test("sphere stored in WASM grid Block produces valid isosurface", () => {
+    const nx = 16;
+    const ny = 16;
+    const nz = 16;
+    const r = 5;
+    const raw = sphereField(nx, ny, nz, r);
+
+    // Store in a rank-3 grid Block
+    const block = new Block();
+    block.setColF("sdf", raw);
+    block.setShape(new Uint32Array([nx, ny, nz]));
+
+    // Extract voxel values (copyColF returns a Float64Array copy)
+    const data = block.copyColF("sdf");
+
+    // Run MC — geometry comes from the test's own cell/origin constants
+    const dim = block.shape();
+    const mesh = marchingCubes(
+      data,
+      [dim[0], dim[1], dim[2]],
+      UNIT_CELL,
+      ZERO_ORIGIN,
+      0,
+    );
 
     expect(mesh.positions.length).toBeGreaterThan(0);
     expect(mesh.indices.length % 3).toBe(0);

@@ -1,17 +1,17 @@
+import {
+  defaultMolvisConfig,
+  type Molvis,
+  type MolvisConfig,
+  type MolvisSetting,
+  mountMolvis,
+} from "@molvis/core";
+import type React from "react";
+import { useEffect, useRef } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
 import {
   loadFileSmart,
   useFormatPicker,
 } from "@/components/format-picker-dialog";
-import {
-  type Molvis,
-  type MolvisConfig,
-  type MolvisSetting,
-  defaultMolvisConfig,
-  mountMolvis,
-} from "@molvis/core";
-import type React from "react";
-import { useEffect, useRef } from "react";
 
 interface MolvisWrapperProps {
   onMount?: (app: Molvis) => void;
@@ -256,6 +256,8 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       // Always append: app.addDataSource handles the empty-pipeline
       // case (first DS becomes the primary trajectory). Replacement
       // is now an explicit remove + add through the pipeline UI.
+      // loadFileSmart owns the status-message emits and error handling
+      // (streaming/eager routing, format prompt, bond-mapping prompt).
       await loadFileSmart(
         app,
         file,

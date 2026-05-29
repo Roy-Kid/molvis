@@ -1,3 +1,20 @@
+import {
+  type DatasetExploration,
+  type ExplorationColorBy,
+  type ExplorationConfig,
+  type Molvis,
+  runExploration,
+} from "@molvis/core";
+import {
+  CHART_DEFAULT_COLOR,
+  CHART_PALETTE,
+  ScatterChart,
+  type ScatterMarkerConfig,
+  type ScatterPoint,
+} from "@molvis/core/charts";
+import { AlertCircle, Info, Play } from "lucide-react";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -10,79 +27,27 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import {
-  type Molvis,
-  type Trajectory,
-  WasmKMeans,
-  WasmPca2,
-} from "@molvis/core";
-import { AlertCircle, Info, Play } from "lucide-react";
-import type React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface PCAToolProps {
   app: Molvis | null;
-}
-
-type PlotlyModule = typeof import("plotly.js-dist-min");
-let _plotlyModule: PlotlyModule | null = null;
-async function loadPlotly(): Promise<PlotlyModule> {
-  if (!_plotlyModule) {
-    _plotlyModule = await import("plotly.js-dist-min");
-  }
-  return _plotlyModule;
 }
 
 const DEFAULT_K = 3;
 const K_MIN = 2;
 const K_MAX = 20;
 const DEFAULT_SEED = 42;
-const KMEANS_MAX_ITER = 100;
 
-/** 20-entry qualitative palette for cluster and categorical coloring. */
-const CATEGORICAL_PALETTE: readonly string[] = [
-  "#1f77b4",
-  "#ff7f0e",
-  "#2ca02c",
-  "#d62728",
-  "#9467bd",
-  "#8c564b",
-  "#e377c2",
-  "#7f7f7f",
-  "#bcbd22",
-  "#17becf",
-  "#aec7e8",
-  "#ffbb78",
-  "#98df8a",
-  "#ff9896",
-  "#c5b0d5",
-  "#c49c94",
-  "#f7b6d2",
-  "#c7c7c7",
-  "#dbdb8d",
-  "#9edae5",
-];
-
-const SOLID_COLOR = "#60a5fa";
+const CATEGORICAL_PALETTE = CHART_PALETTE;
+const SOLID_COLOR = CHART_DEFAULT_COLOR;
 
 type ClusteringMethod = "none" | "kmeans";
 
-type ColorBy =
-  | { kind: "cluster" }
-  | { kind: "label"; name: string }
-  | { kind: "frame-index" }
-  | { kind: "solid" };
-
-interface PcaResult {
-  coords: Float64Array;
-  variance: [number, number];
-  clusters: Int32Array | null;
-}
+type ColorBy = ExplorationColorBy;
 
 interface DescriptorInfo {
-  /** Descriptor name (a key found via `frame.metaNames()` across the trajectory). */
+  /** Descriptor name (a key in `system.frameLabels`). */
   name: string;
-  /** Number of frames where the key parses to a finite number. */
+  /** Number of frames where the label parses to a finite number. */
   finite: number;
   /** Total frame count. */
   total: number;
@@ -101,63 +66,34 @@ function clamp(v: number, lo: number, hi: number): number {
   return v;
 }
 
-function formatAxis(v: number, total: number, i: number): string {
-  const label = `PC${i + 1}`;
-  if (!Number.isFinite(total) || total <= 0) return label;
-  return `${label} (${((v / total) * 100).toFixed(1)}%)`;
-}
-
 /**
- * Walk the trajectory once and bucket every numeric meta key's finite count.
- * Keys that never produced a finite number are dropped (they are purely
- * categorical). This is the only consumer of `frame.getMetaScalar` in the
- * UI — there is no aggregated cache anywhere in core.
+ * Summarise each frame-label column into a descriptor row. The columns are
+ * already materialised on `system.frameLabels`, so this is a pure derivation —
+ * the UI never walks frame meta directly.
  */
-function scanDescriptors(trajectory: Trajectory): DescriptorInfo[] {
-  const nFrames = trajectory.length;
-  if (nFrames === 0) return [];
-
-  const finite = new Map<string, number>();
-  for (let i = 0; i < nFrames; i++) {
-    const frame = trajectory.get(i);
-    if (!frame) continue;
-    for (const name of frame.metaNames()) {
-      const v = frame.getMetaScalar(name);
-      if (v === undefined || !Number.isFinite(v)) {
-        if (!finite.has(name)) finite.set(name, 0);
-        continue;
-      }
-      finite.set(name, (finite.get(name) ?? 0) + 1);
-    }
-  }
-
+function describeLabels(
+  frameLabels: Map<string, Float64Array> | null,
+): DescriptorInfo[] {
+  if (!frameLabels) return [];
   const out: DescriptorInfo[] = [];
-  for (const [name, count] of finite) {
-    if (count > 0) out.push({ name, finite: count, total: nFrames });
+  for (const [name, column] of frameLabels) {
+    let finite = 0;
+    for (const v of column) if (Number.isFinite(v)) finite++;
+    if (finite > 0) out.push({ name, finite, total: column.length });
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
-/** Build a per-frame column for `name` on demand (NaN where missing). */
-function buildLabelColumn(trajectory: Trajectory, name: string): Float64Array {
-  const col = new Float64Array(trajectory.length).fill(Number.NaN);
-  for (let i = 0; i < trajectory.length; i++) {
-    const v = trajectory.get(i)?.getMetaScalar(name);
-    if (v !== undefined && Number.isFinite(v)) col[i] = v;
-  }
-  return col;
-}
-
 function buildMarker(
   colorBy: ColorBy,
-  result: PcaResult,
-  trajectory: Trajectory,
-): { color: unknown; colorscale?: unknown; showscale?: boolean } {
-  const nFrames = result.coords.length / 2;
+  exploration: DatasetExploration,
+  frameLabels: Map<string, Float64Array> | null,
+): ScatterMarkerConfig {
+  const nFrames = exploration.descriptors.nFrames;
 
   if (colorBy.kind === "cluster") {
-    const clusters = result.clusters;
+    const clusters = exploration.clusters;
     if (!clusters) return { color: SOLID_COLOR };
     const colors = new Array<string>(nFrames);
     for (let i = 0; i < nFrames; i++) {
@@ -169,7 +105,8 @@ function buildMarker(
   }
 
   if (colorBy.kind === "label") {
-    const column = buildLabelColumn(trajectory, colorBy.name);
+    const column = frameLabels?.get(colorBy.name);
+    if (!column) return { color: SOLID_COLOR };
     return {
       color: Array.from(column),
       colorscale: "Viridis",
@@ -187,14 +124,16 @@ function buildMarker(
 }
 
 export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
-  // We key the descriptor scan to `trajectoryRevision`: bumping it forces
-  // a re-walk of the (current) Trajectory. This is the only UI-side cache
-  // of frame meta; it lives for the component's lifetime, not on System.
-  const [trajectoryRevision, setTrajectoryRevision] = useState(0);
-  const [trajectoryLength, setTrajectoryLength] = useState<number>(
-    () => app?.system.trajectory.length ?? 0,
+  // Both slots mirror `System` state, kept in sync via the matching events.
+  // `frameLabels` is rebuilt by the loader on every trajectory swap;
+  // `exploration` is the persisted PCA result (cleared on swap).
+  const [frameLabels, setFrameLabels] = useState<Map<
+    string,
+    Float64Array
+  > | null>(() => app?.system.frameLabels ?? null);
+  const [exploration, setExploration] = useState<DatasetExploration | null>(
+    () => app?.system.exploration ?? null,
   );
-  const [pcaResult, setPcaResult] = useState<PcaResult | null>(null);
   const [tickedDescriptors, setTickedDescriptors] = useState<Set<string>>(
     new Set(),
   );
@@ -209,37 +148,39 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
 
   useEffect(() => {
     if (!app) return;
-    setTrajectoryLength(app.system.trajectory.length);
-    setTrajectoryRevision((r) => r + 1);
+    setFrameLabels(app.system.frameLabels);
+    setExploration(app.system.exploration);
 
-    const unsubTraj = app.events.on("trajectory-change", (traj) => {
-      setTrajectoryLength(traj.length);
-      setTrajectoryRevision((r) => r + 1);
-      // Previous embedding was keyed to the old trajectory — dump it.
-      setPcaResult(null);
+    const offLabels = app.events.on("frame-labels-change", (labels) => {
+      setFrameLabels(labels);
+    });
+    const offExploration = app.events.on("exploration-change", (next) => {
+      setExploration(next);
     });
 
     return () => {
-      unsubTraj();
+      offLabels();
+      offExploration();
     };
   }, [app]);
 
-  // Walk the trajectory once per revision to enumerate descriptors + finite
-  // counts. All three are pure derivations of current frame meta.
-  const descriptors = useMemo<DescriptorInfo[]>(() => {
-    if (!app) return [];
-    // Read trajectoryRevision just to declare the dep — the actual source
-    // is app.system.trajectory.
-    void trajectoryRevision;
-    return scanDescriptors(app.system.trajectory);
-  }, [app, trajectoryRevision]);
+  const descriptors = useMemo<DescriptorInfo[]>(
+    () => describeLabels(frameLabels),
+    [frameLabels],
+  );
 
   const descriptorNames = useMemo(
     () => descriptors.map((d) => d.name),
     [descriptors],
   );
 
-  // Auto-pick everything on new trajectories.
+  const nFrames = useMemo(() => {
+    if (!frameLabels) return 0;
+    for (const column of frameLabels.values()) return column.length;
+    return 0;
+  }, [frameLabels]);
+
+  // Auto-pick everything on new label sets.
   useEffect(() => {
     setTickedDescriptors(new Set(descriptorNames));
   }, [descriptorNames]);
@@ -254,65 +195,30 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
     computing ||
     descriptors.length === 0 ||
     tickedDescriptors.size < 2 ||
-    trajectoryLength < 3;
+    nFrames < 3;
 
   const handleCompute = useCallback(() => {
-    if (!app) return;
+    if (!app || !frameLabels) return;
     setComputing(true);
     setComputeError(null);
     try {
-      const trajectory = app.system.trajectory;
       const names = descriptorNames.filter((n) => tickedDescriptors.has(n));
-      const nFrames = trajectory.length;
-      const nDescriptors = names.length;
+      const config: ExplorationConfig = {
+        descriptorNames: names,
+        reduction: { method: "pca" },
+        clustering:
+          clusteringMethod === "kmeans"
+            ? { method: "kmeans", k: parsedK, seed: DEFAULT_SEED }
+            : { method: "none" },
+        colorBy,
+      };
 
-      // Walk the trajectory once, inline, to build the row-major matrix.
-      // Frames that are missing a value for a selected descriptor will
-      // leave NaN — molrs's PCA rejects non-finite input with a clear error.
-      const matrix = new Float64Array(nFrames * nDescriptors);
-      matrix.fill(Number.NaN);
-      for (let i = 0; i < nFrames; i++) {
-        const frame = trajectory.get(i);
-        if (!frame) continue;
-        for (let j = 0; j < nDescriptors; j++) {
-          const v = frame.getMetaScalar(names[j]);
-          if (v !== undefined && Number.isFinite(v)) {
-            matrix[i * nDescriptors + j] = v;
-          }
-        }
-      }
+      const result = runExploration(frameLabels, config);
+      app.system.setExploration(result);
 
-      let coords: Float64Array;
-      let variance: [number, number];
-      const pca = new WasmPca2();
-      try {
-        const result = pca.fitTransform(matrix, nFrames, nDescriptors);
-        try {
-          coords = result.coords();
-          const v = result.variance();
-          variance = [v[0], v[1]];
-        } finally {
-          result.free();
-        }
-      } finally {
-        pca.free();
-      }
-
-      let clusters: Int32Array | null = null;
-      if (clusteringMethod === "kmeans") {
-        const km = new WasmKMeans(parsedK, KMEANS_MAX_ITER, DEFAULT_SEED);
-        try {
-          clusters = km.fit(coords, nFrames, 2);
-        } finally {
-          km.free();
-        }
-      }
-
-      if (colorBy.kind === "cluster" && !clusters) {
+      if (colorBy.kind === "cluster" && !result.clusters) {
         setColorBy({ kind: "frame-index" });
       }
-
-      setPcaResult({ coords, variance, clusters });
     } catch (err) {
       setComputeError(
         err instanceof Error ? err.message : "PCA computation failed",
@@ -322,11 +228,12 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
     }
   }, [
     app,
+    frameLabels,
     descriptorNames,
     tickedDescriptors,
     clusteringMethod,
     parsedK,
-    colorBy.kind,
+    colorBy,
   ]);
 
   const toggleDescriptor = useCallback((name: string, checked: boolean) => {
@@ -395,205 +302,60 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
     [colorByOptions],
   );
 
-  const axes = useMemo((): [string, string] => {
-    if (!pcaResult) return ["PC1", "PC2"];
-    const [v0, v1] = pcaResult.variance;
-    const total = v0 + v1;
-    return [formatAxis(v0, total, 0), formatAxis(v1, total, 1)];
-  }, [pcaResult]);
+  const axes = useMemo<[string, string]>(
+    () => exploration?.embedding.axes ?? ["PC1", "PC2"],
+    [exploration],
+  );
 
   useEffect(() => {
     const div = plotDiv;
-    if (!div || !pcaResult || !app) return;
-    let cancelled = false;
+    if (!div || !exploration || !app) return;
 
-    (async () => {
-      const Plotly = await loadPlotly();
-      if (cancelled) return;
+    const { coords } = exploration.embedding;
+    const pointCount = coords.length / 2;
+    const points: ScatterPoint[] = new Array(pointCount);
+    for (let i = 0; i < pointCount; i++) {
+      points[i] = { x: coords[2 * i], y: coords[2 * i + 1], customdata: i };
+    }
 
-      const { coords } = pcaResult;
-      const nFrames = coords.length / 2;
-      const xs = new Array<number>(nFrames);
-      const ys = new Array<number>(nFrames);
-      for (let i = 0; i < nFrames; i++) {
-        xs[i] = coords[2 * i];
-        ys[i] = coords[2 * i + 1];
-      }
-      const customdata = Array.from({ length: nFrames }, (_, i) => i);
+    const chart = new ScatterChart(div, {
+      points,
+      xAxis: { label: axes[0] },
+      yAxis: { label: axes[1] },
+      marker: {
+        size: 6,
+        ...buildMarker(colorBy, exploration, frameLabels),
+      },
+      highlight: { index: app.system.trajectory.currentIndex ?? 0 },
+      hovertemplate:
+        "frame #%{customdata}<br>%{x:.3f}, %{y:.3f}<extra></extra>",
+    });
 
-      const marker = buildMarker(colorBy, pcaResult, app.system.trajectory);
+    const offClick = chart.onPointClick((e) => {
+      if (typeof e.customdata === "number") app.seekFrame(e.customdata);
+    });
 
-      const currentIdx = app.system.trajectory.currentIndex ?? 0;
-      const curX = coords[2 * currentIdx] ?? 0;
-      const curY = coords[2 * currentIdx + 1] ?? 0;
-
-      const traces: unknown[] = [
-        {
-          type: "scattergl",
-          mode: "markers",
-          x: xs,
-          y: ys,
-          customdata,
-          marker: { size: 6, ...marker },
-          hovertemplate:
-            "frame #%{customdata}<br>%{x:.3f}, %{y:.3f}<extra></extra>",
-          name: "frames",
-        },
-        {
-          type: "scattergl",
-          mode: "markers",
-          x: [curX],
-          y: [curY],
-          marker: {
-            size: 14,
-            line: { width: 2, color: "white" },
-            color: "rgba(0,0,0,0)",
-          },
-          hoverinfo: "skip",
-          showlegend: false,
-          name: "current",
-        },
-      ];
-
-      const layout: unknown = {
-        xaxis: { title: { text: axes[0] } },
-        yaxis: { title: { text: axes[1] } },
-        margin: { l: 40, r: 10, t: 10, b: 40 },
-        showlegend: false,
-        hovermode: "closest",
-        dragmode: "pan",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        paper_bgcolor: "rgba(0,0,0,0)",
-        font: { size: 10 },
-      };
-
-      const cfg: unknown = {
-        displayModeBar: false,
-        scrollZoom: true,
-        responsive: true,
-      };
-
-      await (
-        Plotly as unknown as {
-          react: (
-            div: HTMLElement,
-            traces: unknown,
-            layout: unknown,
-            cfg: unknown,
-          ) => Promise<unknown>;
-        }
-      ).react(div, traces, layout, cfg);
-
-      if (cancelled) return;
-
-      const clickHandler = (ev: unknown) => {
-        const e = ev as { points?: Array<{ customdata?: unknown }> };
-        const pt = e.points?.[0];
-        if (pt && typeof pt.customdata === "number") {
-          app.seekFrame(pt.customdata);
-        }
-      };
-
-      const divWithEvents = div as unknown as {
-        on: (ev: string, cb: (e: unknown) => void) => void;
-        removeAllListeners?: (ev: string) => void;
-      };
-      divWithEvents.removeAllListeners?.("plotly_click");
-      divWithEvents.on("plotly_click", clickHandler);
-    })();
-
-    return () => {
-      cancelled = true;
-      const divToClean = div as unknown as {
-        removeAllListeners?: (ev: string) => void;
-      };
-      divToClean.removeAllListeners?.("plotly_click");
-      loadPlotly()
-        .then((Plotly) => {
-          (Plotly as unknown as { purge: (div: HTMLElement) => void }).purge(
-            div,
-          );
-        })
-        .catch(() => {});
-    };
-  }, [app, plotDiv, pcaResult, colorBy, axes]);
-
-  useEffect(() => {
-    if (!app || !pcaResult) return;
     let rafId: number | null = null;
     let pending: number | null = null;
-    let cancelled = false;
-
-    const run = () => {
+    const flush = () => {
       rafId = null;
       const i = pending;
       pending = null;
-      if (cancelled) return;
-      if (i === null || !plotDiv) return;
-      const { coords } = pcaResult;
-      const nFrames = coords.length / 2;
-      if (i < 0 || i >= nFrames) return;
-      loadPlotly().then((Plotly) => {
-        if (cancelled || !plotDiv) return;
-        (
-          Plotly as unknown as {
-            restyle: (
-              div: HTMLElement,
-              update: unknown,
-              traces: number[],
-            ) => Promise<unknown>;
-          }
-        ).restyle(
-          plotDiv,
-          {
-            x: [[coords[2 * i]]],
-            y: [[coords[2 * i + 1]]],
-          },
-          [1],
-        );
-      });
+      if (i === null || i < 0 || i >= pointCount) return;
+      chart.setHighlight(i);
     };
-
-    const unsub = app.events.on("frame-change", (i) => {
+    const offFrame = app.events.on("frame-change", (i) => {
       pending = i;
-      if (rafId === null) rafId = requestAnimationFrame(run);
+      if (rafId === null) rafId = requestAnimationFrame(flush);
     });
 
     return () => {
-      cancelled = true;
-      unsub();
+      offClick();
+      offFrame();
       if (rafId !== null) cancelAnimationFrame(rafId);
+      chart.dispose();
     };
-  }, [app, plotDiv, pcaResult]);
-
-  useEffect(() => {
-    if (!plotDiv || !pcaResult) return;
-    let rafId: number | null = null;
-    let disposed = false;
-    const observer = new ResizeObserver(() => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (disposed) return;
-        loadPlotly()
-          .then((Plotly) => {
-            if (disposed) return;
-            (
-              Plotly as unknown as {
-                Plots: { resize: (el: HTMLElement) => void };
-              }
-            ).Plots.resize(plotDiv);
-          })
-          .catch(() => {});
-      });
-    });
-    observer.observe(plotDiv);
-    return () => {
-      disposed = true;
-      observer.disconnect();
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [plotDiv, pcaResult]);
+  }, [app, plotDiv, exploration, colorBy, axes, frameLabels]);
 
   const hasDescriptors = descriptors.length > 0;
 
@@ -797,7 +559,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
           <Play className="h-3.5 w-3.5" />
           {computing
             ? "Computing…"
-            : trajectoryLength < 3
+            : nFrames < 3
               ? "Needs ≥ 3 frames"
               : tickedDescriptors.size < 2
                 ? "Pick ≥ 2 descriptors"
@@ -813,7 +575,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
           </p>
         )}
 
-        {pcaResult && !computeError && (
+        {exploration && !computeError && (
           <p className="text-[9px] text-muted-foreground px-0.5 truncate">
             {axes[0]} · {axes[1]}
           </p>
@@ -826,7 +588,7 @@ export function PCATool({ app }: PCAToolProps): React.ReactElement | null {
         className="flex-1 min-h-0 flex flex-col"
         contentClassName="flex-1 min-h-0 flex flex-col"
       >
-        {pcaResult ? (
+        {exploration ? (
           <div ref={setPlotDiv} className="flex-1 min-h-0" />
         ) : (
           <p className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight px-0.5">

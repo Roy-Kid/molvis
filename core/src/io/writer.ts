@@ -1,6 +1,6 @@
-import { Frame, writeFrame as wasmWriteFrame } from "@molcrafts/molrs";
+import { type Frame, writeFrame as wasmWriteFrame } from "@molcrafts/molrs";
 import type { SceneIndex } from "../scene_index";
-import { syncSceneToFrame } from "../scene_sync";
+import { buildFrameFromScene } from "../scene_sync";
 import { logger } from "../utils/logger";
 import { inferFormatFromFilename } from "./reader";
 
@@ -24,8 +24,7 @@ export function exportFrame(
   sceneIndex: SceneIndex,
   options: WriteFrameOptions,
 ): ExportPayload {
-  const frame = new Frame();
-  syncSceneToFrame(sceneIndex, frame, { markSaved: false });
+  const frame = buildFrameFromScene(sceneIndex, { markSaved: false });
   return writeFrame(frame, options);
 }
 

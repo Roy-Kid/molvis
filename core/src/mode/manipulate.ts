@@ -1,8 +1,8 @@
 import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
-import { type Block, Frame } from "@molcrafts/molrs";
+import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
-import { syncSceneToFrame } from "../scene_sync";
+import { buildFrameFromScene } from "../scene_sync";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
@@ -83,11 +83,10 @@ class ManipulateMode extends BaseMode {
   private dragStartPosition: Vector3 | null = null;
   private draggedAtomId = -1;
 
-  // Frame conversion state
-  private originalFrameData: {
-    atomBlock: Block;
-    bondBlock?: Block;
-  } | null = null;
+  // Snapshot of the Frame at mode entry — restored by discardChanges().
+  // We hold the Frame (not its Blocks) so the snapshot survives any
+  // setMeta-driven block-handle invalidation that happens while in mode.
+  private originalFrame: Frame | null = null;
 
   constructor(app: Molvis) {
     super(ModeType.Manipulate, app);
@@ -100,14 +99,7 @@ class ManipulateMode extends BaseMode {
   }
 
   private convertFromSceneIndex(): void {
-    const atomBlock = this.world.sceneIndex.metaRegistry.atoms.frameBlock;
-    if (!atomBlock) return;
-
-    this.originalFrameData = {
-      atomBlock: atomBlock,
-      bondBlock:
-        this.world.sceneIndex.metaRegistry.bonds.frameBlock || undefined,
-    };
+    this.originalFrame = this.world.sceneIndex.metaRegistry.atoms.frame;
   }
 
   protected createContextMenuController(): ContextMenuController {
@@ -371,18 +363,23 @@ class ManipulateMode extends BaseMode {
   public async saveChanges(): Promise<void> {
     if (!this.hasUnsavedChanges()) return;
 
-    const frame = this.app.system.frame;
-    if (!frame) {
+    const sourceFrame = this.app.system.frame;
+    if (!sourceFrame) {
       logger.warn("[ManipulateMode] No system frame to save to");
       return;
     }
 
-    syncSceneToFrame(this.world.sceneIndex, frame);
+    // Build a new frame from the edited scene (box preserved) and swap it in,
+    // rather than clearing the live frame in place.
+    const saved = buildFrameFromScene(this.world.sceneIndex, { sourceFrame });
+    this.app.system.updateCurrentFrame(saved);
 
-    void this.app.applyPipeline({ changeKind: "full", sourceFrame: frame });
+    // Route the swapped-in frame back through the pipeline — the single
+    // scene-data ingress — instead of driving DrawFrameCommand directly.
+    void this.app.applyPipeline({ fullRebuild: true });
 
-    this.originalFrameData = null;
-    logger.info("[ManipulateMode] Saved changes using syncSceneToFrame");
+    this.originalFrame = null;
+    logger.info("[ManipulateMode] Saved changes using buildFrameFromScene");
   }
 
   protected override _on_press_ctrl_s(): void {
@@ -390,17 +387,16 @@ class ManipulateMode extends BaseMode {
   }
 
   public async discardChanges(): Promise<void> {
-    if (!this.originalFrameData) return;
+    if (!this.originalFrame) return;
 
-    const frame = new Frame();
-    frame.insertBlock("atoms", this.originalFrameData.atomBlock);
-    if (this.originalFrameData.bondBlock) {
-      frame.insertBlock("bonds", this.originalFrameData.bondBlock);
-    }
+    // Restore the frame snapshot captured at mode entry and run it back
+    // through the pipeline (the single scene-data ingress). We held the whole
+    // Frame — not its Blocks — so this snapshot survives any setMeta-driven
+    // block-handle invalidation that happened while in mode.
+    this.app.system.updateCurrentFrame(this.originalFrame);
+    void this.app.applyPipeline({ fullRebuild: true });
 
-    void this.app.applyPipeline({ changeKind: "full", sourceFrame: frame });
-
-    this.originalFrameData = null;
+    this.originalFrame = null;
     logger.info(
       "[ManipulateMode] Discarded changes and restored original frame",
     );
@@ -413,7 +409,7 @@ class ManipulateMode extends BaseMode {
   public override finish(): void {
     this.clearSelection();
     this.restoreSceneFromFrame();
-    this.originalFrameData = null;
+    this.originalFrame = null;
     super.finish();
   }
 }

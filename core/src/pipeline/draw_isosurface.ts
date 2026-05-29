@@ -12,10 +12,10 @@
 
 import type { Frame } from "@molcrafts/molrs";
 import {
-  DEFAULT_ISOSURFACE_STYLE,
-  type IsosurfaceStyle,
   channelIsSigned,
+  DEFAULT_ISOSURFACE_STYLE,
   defaultIsovalueFor,
+  type IsosurfaceStyle,
 } from "../artist/isosurface/isosurface_renderer";
 import { logger } from "../utils/logger";
 import { BaseModifier, ModifierCapability } from "./modifier";

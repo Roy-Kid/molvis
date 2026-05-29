@@ -1,6 +1,5 @@
-import { Molvis, Trajectory } from "../src/index";
-
 import { Block, Frame } from "@molcrafts/molrs";
+import { Molvis, Trajectory } from "../src/index";
 
 /**
  * Demo: Trajectory rendering

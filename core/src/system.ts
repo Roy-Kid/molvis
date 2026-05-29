@@ -1,5 +1,7 @@
 import { type Box, Frame } from "@molcrafts/molrs";
+import type { DatasetExploration } from "./analysis/exploration";
 import type { EventEmitter, MolvisEventMap } from "./events";
+import { aggregateFrameLabels } from "./system/frame_labels";
 import { Trajectory } from "./system/trajectory";
 import { logger } from "./utils/logger";
 
@@ -21,6 +23,8 @@ import { logger } from "./utils/logger";
 export class System {
   private _trajectory: Trajectory;
   private _currentFrame: Frame;
+  private _frameLabels: Map<string, Float64Array> | null = null;
+  private _exploration: DatasetExploration | null = null;
   private events?: EventEmitter<MolvisEventMap>;
   /** Monotonic id of the most-recently-issued seek; load callbacks
    *  compare against this to avoid clobbering the cache with a stale
@@ -47,12 +51,19 @@ export class System {
    * accessed synchronously (eager arrays, sync providers). Throws via
    * `Trajectory.currentFrame` if used with an async-only trajectory;
    * use `await system.setTrajectory(...)` instead.
+   *
+   * Rebuilds the per-frame label cache and invalidates any stale exploration
+   * **before** `trajectory-change` fires, so listeners observe consistent
+   * state. Lazy (provider-backed) trajectories skip aggregation to preserve
+   * on-demand frame loading — their `frameLabels` stay null.
    */
   set trajectory(value: Trajectory) {
     this._trajectory = value;
     this._activeLoad = null;
     this._currentFrame = value.length > 0 ? value.currentFrame : new Frame();
     logger.info(`[System] Trajectory set with ${value.length} frame(s)`);
+    this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
+    this.setExploration(null);
     this.events?.emit("trajectory-change", value);
     this.events?.emit("frame-change", this._trajectory.currentIndex);
   }
@@ -61,6 +72,10 @@ export class System {
    * Async setter — used by the streaming worker runtime. Awaits the
    * resolution of frame 0 (or the trajectory's current index) and
    * primes the `_currentFrame` cache before emitting events.
+   *
+   * Mirrors the sync setter's label/exploration bookkeeping: rebuilds the
+   * per-frame label cache (skipped for lazy/provider-backed trajectories)
+   * and invalidates any stale exploration before `trajectory-change` fires.
    */
   async setTrajectory(value: Trajectory): Promise<void> {
     this._trajectory = value;
@@ -73,8 +88,40 @@ export class System {
     logger.info(
       `[System] Trajectory set with ${value.length} frame(s) (async)`,
     );
+    this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
+    this.setExploration(null);
     this.events?.emit("trajectory-change", value);
     this.events?.emit("frame-change", this._trajectory.currentIndex);
+  }
+
+  /**
+   * Per-frame numeric descriptors aggregated from `frame.meta` at load time,
+   * or null for lazy trajectories / datasets without labels.
+   */
+  get frameLabels(): Map<string, Float64Array> | null {
+    return this._frameLabels;
+  }
+
+  /**
+   * The most recent dataset exploration (PCA + optional clustering), or null
+   * when none has been computed for the current trajectory.
+   */
+  get exploration(): DatasetExploration | null {
+    return this._exploration;
+  }
+
+  /** Replace the frame-label cache. Identity-guarded; emits on change. */
+  public setFrameLabels(next: Map<string, Float64Array> | null): void {
+    if (this._frameLabels === next) return;
+    this._frameLabels = next;
+    this.events?.emit("frame-labels-change", next);
+  }
+
+  /** Replace the current exploration. Identity-guarded; emits on change. */
+  public setExploration(next: DatasetExploration | null): void {
+    if (this._exploration === next) return;
+    this._exploration = next;
+    this.events?.emit("exploration-change", next);
   }
 
   /**

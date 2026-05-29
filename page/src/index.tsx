@@ -1,7 +1,7 @@
 import "./public-path";
 import {
-  type MountHostOpts,
   type MountedApp,
+  type MountHostOpts,
   mountMolvisApp,
 } from "@/lib/mount";
 import { readMountOptsFromUrl } from "@/lib/mount-opts";

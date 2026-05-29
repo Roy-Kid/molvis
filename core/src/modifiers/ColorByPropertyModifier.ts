@@ -1,7 +1,7 @@
 import { type Block, Frame } from "@molcrafts/molrs";
 import {
-  DEFAULT_CATEGORICAL_COLOR_MAP,
   buildCategoricalColorLookup,
+  DEFAULT_CATEGORICAL_COLOR_MAP,
   getColorMap,
 } from "../artist/palette";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";

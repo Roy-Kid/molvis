@@ -108,6 +108,10 @@ export abstract class DataSourceModifier extends BaseModifier {
   /**
    * Identity at apply time. Actual block injection happens during
    * pipeline phase A inside `ModifierPipeline.compute`.
+   *
+   * Per-component render visibility lives in the StyleManager
+   * representation (atoms/bonds) and the sim_box mesh (box), which the
+   * Artist consumes — never in this passthrough.
    */
   apply(input: Frame, _ctx: PipelineContext): Frame {
     return input;

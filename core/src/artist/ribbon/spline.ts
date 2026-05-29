@@ -168,7 +168,7 @@ export function catmullRomSpline(
     targetSx: number,
     targetSy: number,
     targetSz: number,
-    t: number,
+    _t: number,
   ): Frame => {
     let tx = tdx;
     let ty = tdy;

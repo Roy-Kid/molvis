@@ -1,3 +1,6 @@
+import type { Molvis } from "@molvis/core";
+import { Settings } from "lucide-react";
+import type React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -6,9 +9,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type { Molvis } from "@molvis/core";
-import { Settings } from "lucide-react";
-import type React from "react";
 import { BackendSection } from "./BackendSection";
 import { GraphicsSection } from "./GraphicsSection";
 

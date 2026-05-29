@@ -12,10 +12,10 @@ import {
   SelectModifier as CoreSelectModifier,
   SliceModifier as CoreSliceModifier,
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
+  isSelectionProducer,
   type Modifier,
   ModifierCapability,
   type Molvis,
-  isSelectionProducer,
   primaryCapabilityLabel,
 } from "@molvis/core";
 import type React from "react";

@@ -8,7 +8,7 @@ import {
 } from "../modifiers/ColorByPropertyModifier";
 import { encodePickingColorInto } from "../picker";
 import { DType } from "../utils/dtype";
-import { type LinearRGB, buildCategoricalColorLookup } from "./palette";
+import { buildCategoricalColorLookup, type LinearRGB } from "./palette";
 import type { StyleManager } from "./style_manager";
 
 export interface AtomBufferOptions {

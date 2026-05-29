@@ -9,14 +9,14 @@
  * follows the atom position across frame updates automatically.
  */
 
-import { Matrix, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
+import { Matrix, Vector3 } from "@babylonjs/core";
 import {
   type AdvancedDynamicTexture,
   Rectangle,
   TextBlock,
 } from "@babylonjs/gui";
-import type { AtomAnchored, Overlay, TextLabelProps, Vec3 } from "./types";
+import type { AtomAnchored, Overlay, TextLabelProps } from "./types";
 
 const DEFAULT_COLOR = "white";
 const DEFAULT_FONT_SIZE = 14;
@@ -131,8 +131,9 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = this._scene.getTransformMatrix();
 
-    // `_worldPos` is already in world space; world matrix must be identity.
-    // Passing `transformMatrix` here would apply view*projection twice.
+    // `_worldPos` is already in world space, so the world matrix MUST be
+    // identity; passing `transformMatrix` here would apply view*projection
+    // twice. See memory/project_babylon_project_api.md.
     const projected = Vector3.Project(
       this._worldPos,
       Matrix.IdentityReadOnly,
@@ -142,6 +143,13 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
 
     const control = this._container ?? this._textBlock;
     if (control) {
+      // Guard against non-finite projection — see
+      // memory/project_babylon_project_api.md.
+      if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+        control.isVisible = false;
+        return;
+      }
+      control.isVisible = true;
       control.left = `${projected.x - width / 2}px`;
       control.top = `${projected.y - height / 2}px`;
     }

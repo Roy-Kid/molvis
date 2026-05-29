@@ -46,12 +46,11 @@ class FakeWorker implements WorkerLike {
     // registered its own message listener — runtime.open() awaits
     // this before posting any outbound message.
     queueMicrotask(() => {
+      // Heartbeat is intentionally outside the WorkerResponse union — it's a
+      // ready signal, not a real response — so the payload is cast loosely.
       this.emit({
         kind: "worker-heartbeat",
-        // biome-ignore lint/suspicious/noExplicitAny: heartbeat is
-        // intentionally outside the WorkerResponse union — it's a
-        // ready signal, not a real response.
-      } as any);
+      } as unknown as Parameters<typeof this.emit>[0]);
     });
   }
 

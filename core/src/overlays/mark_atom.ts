@@ -14,6 +14,7 @@
  * per-frame sync dispatch in MolvisApp handles all anchored overlays uniformly.
  */
 
+import type { Mesh, Scene } from "@babylonjs/core";
 import {
   Axis,
   Color3,
@@ -23,7 +24,6 @@ import {
   TransformNode,
   Vector3,
 } from "@babylonjs/core";
-import type { Mesh, Scene } from "@babylonjs/core";
 import {
   type AdvancedDynamicTexture,
   Rectangle,
@@ -131,6 +131,9 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     this._atomRadius = atomRadius;
     this._labelFontSizeAuto = labelFontSizeAuto;
     this._root = new TransformNode(`${id}_root`, scene);
+    // Seed at the marked atom's position so the overlay appears in the right
+    // place immediately (no one-frame flash at origin); the orchestrator
+    // (MolvisApp.syncAnchoredOverlay) keeps it synced thereafter.
     this._worldCenter = new Vector3(
       initialPosition[0],
       initialPosition[1],
@@ -148,6 +151,11 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     uiTexture: AdvancedDynamicTexture,
     context: MarkAtomContext,
   ): MarkAtomOverlay {
+    if (!Number.isInteger(props.anchorAtomId) || props.anchorAtomId < 0) {
+      throw new Error(
+        `MarkAtomOverlay: anchorAtomId must be a non-negative integer, got ${props.anchorAtomId}`,
+      );
+    }
     // Detect "auto" BEFORE resolveDefaults fills the field in. We track this
     // independently so later update() calls can transition to a fixed size.
     const labelFontSizeAuto =
@@ -191,6 +199,16 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     else if (patch.label === null) label = null;
     else label = { ...(prev.label ?? { text: "" }), ...patch.label };
 
+    let anchorAtomId = prev.anchorAtomId;
+    if (patch.anchorAtomId !== undefined) {
+      if (!Number.isInteger(patch.anchorAtomId) || patch.anchorAtomId < 0) {
+        throw new Error(
+          `MarkAtomOverlay.update: anchorAtomId must be a non-negative integer, got ${patch.anchorAtomId}`,
+        );
+      }
+      anchorAtomId = patch.anchorAtomId;
+    }
+
     // If the user explicitly sets label.fontSize in a patch, pin it.
     if (patch.label && patch.label.fontSize !== undefined) {
       this._labelFontSizeAuto = false;
@@ -198,7 +216,7 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
 
     const next = resolveDefaults(
       {
-        anchorAtomId: patch.anchorAtomId ?? prev.anchorAtomId,
+        anchorAtomId,
         shape,
         label,
         name: patch.name ?? prev.name,
@@ -256,6 +274,14 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     mat.alpha = shape.opacity;
     mat.backFaceCulling = false;
     mat.separateCullingPass = true;
+    // Translucent halo must NOT write depth: StandardMaterial defaults
+    // `disableDepthWrite = false`, so the halo would write z at its
+    // surface and discard the atom impostor fragment behind it on the
+    // GL_LESS test — the marked atom then visibly disappears at angles
+    // where the halo center sorts in front of the atom by camera
+    // distance. This mirrors the cloud-renderer fix for the same class
+    // of bug. See artist.ts:cloudMesh and commit 2d3b5f6.
+    mat.disableDepthWrite = true;
 
     const sphere = MeshBuilder.CreateSphere(
       `${this.id}_sphere`,
@@ -268,6 +294,12 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     sphere.material = mat;
     sphere.isPickable = false;
     sphere.parent = this._root;
+    // Opt out of frustum culling — the parent TransformNode's position
+    // updates after the bounding box is cached, so at some camera
+    // orientations the (stale) world-space bounds fall outside the
+    // frustum and BabylonJS culls the halo wholesale. Same fix the cloud
+    // mesh uses (artist.ts:586).
+    sphere.alwaysSelectAsActiveMesh = true;
     // Atom impostors render in the transparent queue (needAlphaBlending + forceDepthWrite),
     // so the halo and the marked atom share a mesh center and BabylonJS's center-distance
     // sort flips arbitrarily as the camera orbits. Push the halo to a later rendering group
@@ -400,8 +432,11 @@ class _LabelBillboard {
       center.z + offset[2],
     );
 
-    // `anchored` is already in world space; world matrix must be identity.
-    // Passing `transformMatrix` here would apply view*projection twice.
+    // World matrix MUST be identity for world-space points; passing
+    // transformMatrix twice double-applies view*projection, mapping the
+    // label rectangle to absurd screen coordinates which BabylonJS GUI
+    // then re-interprets as a near-fullscreen rectangle. See
+    // memory/project_babylon_project_api.md.
     const projected = Vector3.Project(
       anchored,
       Matrix.IdentityReadOnly,
@@ -411,6 +446,15 @@ class _LabelBillboard {
 
     const control = this._container ?? this._textBlock;
     if (control) {
+      // Guard against non-finite projection (e.g. behind-camera, degenerate
+      // matrices). Without this, BabylonJS GUI's adaptWidthToChildren rect
+      // falls back to a fullscreen layout and the label background fills
+      // the entire viewport — see memory/project_babylon_project_api.md.
+      if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+        control.isVisible = false;
+        return;
+      }
+      control.isVisible = this._visible;
       control.left = `${projected.x - width / 2}px`;
       control.top = `${projected.y - height / 2}px`;
     }

@@ -1,3 +1,17 @@
+import type {
+  BondColumnMapping,
+  BondMappingDecision,
+  PickBondMapping,
+} from "@molvis/core/io";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,20 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type {
-  BondColumnMapping,
-  BondMappingDecision,
-  PickBondMapping,
-} from "@molvis/core/io";
-import {
-  type ReactNode,
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 
 interface PickerState {
   filename: string;

@@ -111,6 +111,39 @@ describe("Trajectory", () => {
     });
   });
 
+  describe("dispose", () => {
+    it("frees owned frames and empties the trajectory", () => {
+      const frames = makeFrames(3);
+      const traj = new Trajectory(frames);
+      traj.dispose();
+      expect(traj.length).toBe(0);
+      // Frames were freed: accessing a freed WASM Frame throws.
+      expect(() => frames[0].getBlock("atoms")).toThrow();
+    });
+
+    it("does not free frames listed in the exclude set", () => {
+      const frames = makeFrames(2);
+      const keep = frames[1];
+      const traj = new Trajectory(frames);
+      traj.dispose(new Set([keep]));
+      // The excluded frame is still alive and usable.
+      expect(() => keep.getBlock("atoms")).not.toThrow();
+    });
+
+    it("is a no-op for lazy/provider-backed trajectories", () => {
+      const frames = makeFrames(4);
+      const provider = {
+        length: frames.length,
+        get: (index: number) => frames[index],
+      };
+      const traj = Trajectory.fromProvider(provider);
+      traj.dispose();
+      // Provider owns frame lifetime — nothing was freed, length preserved.
+      expect(traj.length).toBe(4);
+      expect(() => frames[0].getBlock("atoms")).not.toThrow();
+    });
+  });
+
   describe("fromProvider (lazy)", () => {
     it("should support lazy frame loading", () => {
       const frames = makeFrames(5);

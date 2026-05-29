@@ -5,7 +5,7 @@
  * controls positioned via manual 3D→screen projection each frame.
  */
 
-import { type Camera, Matrix, type Scene, Vector3 } from "@babylonjs/core";
+import { Matrix, type Scene, Vector3 } from "@babylonjs/core";
 import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
 
 export type LabelMode = "none" | "all" | "selected";
@@ -164,8 +164,9 @@ export class LabelRenderer {
 
     for (const label of this.labels) {
       tmpVec.set(label.worldX, label.worldY, label.worldZ);
-      // Atom coordinates are already in world space; world matrix must be
-      // identity. Passing `transformMatrix` twice applies view*projection twice.
+      // Atom coordinates are already in world space; world matrix MUST be
+      // identity. Passing `transformMatrix` twice applies view*projection
+      // twice. See memory/project_babylon_project_api.md.
       const projected = Vector3.Project(
         tmpVec,
         Matrix.IdentityReadOnly,
@@ -173,6 +174,12 @@ export class LabelRenderer {
         viewportMatrix,
       );
 
+      // Guard against non-finite projection.
+      if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
+        label.textBlock.isVisible = false;
+        continue;
+      }
+      label.textBlock.isVisible = true;
       label.textBlock.left = `${projected.x - width / 2}px`;
       label.textBlock.top = `${projected.y - height / 2}px`;
     }

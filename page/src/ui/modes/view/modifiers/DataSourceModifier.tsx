@@ -1,17 +1,30 @@
 import {
   type DataSourceModifier as CoreDataSourceModifier,
+  Frame,
   FrameDataSource,
   type Molvis,
+  Trajectory,
   TrajectoryDataSource,
 } from "@molvis/core";
+import { getAllAcceptExtensions } from "@molvis/core/io";
+import { ChevronDown, ChevronRight, FileUp, Trash2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
+import {
+  loadFileWithFormatPrompt,
+  useFormatPicker,
+} from "@/components/format-picker-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { NumberField } from "@/components/ui/number-field";
 
 interface DataSourceModifierProps {
   modifier: CoreDataSourceModifier;
   app: Molvis | null;
   onUpdate: () => void;
 }
+
+type ComponentKey = "atoms" | "bonds" | "box";
 
 interface FrameStats {
   atomCount: number;
@@ -50,17 +63,86 @@ function readFrameStats(modifier: CoreDataSourceModifier): FrameStats {
   };
 }
 
-/**
- * Read-only inspector for a DataSourceModifier. The pipeline list
- * footer "+" menu adds new sources and the list-row trash removes
- * them — there is intentionally no in-panel "Replace" or "Remove"
- * button. To swap data, remove the DS and add a new one (or drop a
- * new file onto the canvas).
- */
+const ParamRow: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => (
+  <div className="flex items-center justify-between gap-1.5">
+    <span className="text-[10px] text-muted-foreground truncate min-w-0">
+      {label}
+    </span>
+    <div className="shrink-0">{children}</div>
+  </div>
+);
+
+const ComponentRow: React.FC<{
+  label: string;
+  count: number;
+  checked: boolean;
+  disabled?: boolean;
+  open: boolean;
+  onToggleShow: (c: boolean) => void;
+  onToggleExpand: () => void;
+  children?: React.ReactNode;
+}> = ({
+  label,
+  count,
+  checked,
+  disabled,
+  open,
+  onToggleShow,
+  onToggleExpand,
+  children,
+}) => (
+  <div className="border-b last:border-b-0">
+    <div className="flex items-center gap-1 px-1.5 py-1 hover:bg-muted/50 transition-colors">
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(c) => onToggleShow(c === true)}
+        className="h-3 w-3"
+        aria-label={`Show ${label}`}
+      />
+      <button
+        type="button"
+        className="flex items-center gap-1 flex-1 min-w-0 text-left disabled:opacity-50"
+        disabled={disabled || !children}
+        onClick={onToggleExpand}
+        aria-expanded={open}
+      >
+        {children ? (
+          open ? (
+            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+          )
+        ) : (
+          <span className="w-3 shrink-0" />
+        )}
+        <span className="font-medium">{label}</span>
+      </button>
+      <span className="font-mono text-muted-foreground tabular-nums">
+        {count}
+      </span>
+    </div>
+    {open && children && (
+      <div className="px-2 pb-1.5 pl-7 space-y-1 bg-muted/20">{children}</div>
+    )}
+  </div>
+);
+
 export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   modifier,
   app,
+  onUpdate,
 }) => {
+  const pickFormat = useFormatPicker();
+  const [expanded, setExpanded] = useState<Record<ComponentKey, boolean>>({
+    atoms: false,
+    bonds: false,
+    box: false,
+  });
+
   // Re-read stats on every frame-change. The DS's cached frame lands
   // during pipeline phase A's preload, which is what fires
   // frame-change — without this subscription the panel would stay
@@ -79,6 +161,45 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
       app.events.off("trajectory-change", refresh);
     };
   }, [app, modifier]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !app) return;
+
+    try {
+      const content = await file.text();
+      const started = await loadFileWithFormatPrompt(
+        app,
+        content,
+        file.name,
+        pickFormat,
+      );
+      if (started) {
+        onUpdate();
+      } else {
+        app.events.emit("status-message", {
+          text: `Cancelled loading ${file.name}`,
+          type: "info",
+        });
+      }
+    } catch (err) {
+      app.events.emit("status-message", {
+        text: `Failed to load file: ${err instanceof Error ? err.message : String(err)}`,
+        type: "error",
+      });
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleClear = async () => {
+    if (!app) return;
+    modifier.sourceType = "empty";
+    modifier.filename = "";
+    await app.setTrajectory(new Trajectory([new Frame()]));
+    await app.applyPipeline({ fullRebuild: true });
+    onUpdate();
+  };
 
   const filename = modifier.filename === "" ? "—" : modifier.filename;
   const isTraj = modifier instanceof TrajectoryDataSource;
@@ -101,48 +222,175 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
       ? modifier.contributedBlocks.join(", ")
       : "atoms, bonds (default)";
 
+  const atomCount = stats.atomCount;
+  const bondCount = stats.bondCount;
+  const hasBox = stats.hasBox;
+
+  // Render visibility/params read live from the render state the Artist
+  // consumes: the StyleManager representation (atoms/bonds) and the sim_box
+  // mesh (box). There is no separate "modifier visibility" — that was a no-op.
+  const repr = app?.styleManager.getRepresentation();
+  const showAtoms = repr?.showAtoms ?? true;
+  const showBonds = repr?.showBonds ?? true;
+  const atomScale = repr?.atomRadiusScale ?? 1;
+  const bondScale = repr?.bondRadiusScale ?? 1;
+  const boxMesh = app?.scene.getMeshByName("sim_box");
+  const showBox = app?.styleManager.getShowBox() ?? true;
+  const boxWidth = app?.styleManager.getBoxThicknessScale() ?? 1.0;
+
+  const redraw = () => {
+    app?.applyPipeline({ fullRebuild: true });
+    onUpdate();
+  };
+  const toggleExpand = (key: ComponentKey) =>
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const onShowAtoms = (c: boolean) => {
+    app?.styleManager.setShowAtoms(c);
+    redraw();
+  };
+  const onShowBonds = (c: boolean) => {
+    app?.styleManager.setShowBonds(c);
+    redraw();
+  };
+  const onShowBox = (c: boolean) => {
+    app?.styleManager.setShowBox(c);
+    redraw();
+  };
+  const onAtomScale = (v: number) => {
+    app?.styleManager.setAtomRadiusScale(v);
+    redraw();
+  };
+  const onBondScale = (v: number) => {
+    app?.styleManager.setBondRadiusScale(v);
+    redraw();
+  };
+  const onBoxWidth = (v: number) => {
+    app?.styleManager.setBoxThicknessScale(v); // persist across redraws
+    // biome-ignore lint/suspicious/noExplicitAny: _userThicknessScale is an internal per-mesh control read by DrawBoxCommand
+    if (boxMesh) (boxMesh as any)._userThicknessScale = v; // live apply
+    onUpdate();
+  };
+
   return (
-    <div className="rounded-md border bg-background overflow-hidden">
-      <div className="px-2 py-1 border-b flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-          {kindBadge}
-        </span>
-        <span className="text-[9px] text-muted-foreground">
-          {sourceTypeLabel}
-        </span>
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <div className="relative flex-1 min-w-0">
+          <input
+            type="file"
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            onChange={handleFileUpload}
+            accept={getAllAcceptExtensions()}
+            title="Load file"
+            aria-label="Load file"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-full px-2"
+            title="Load file"
+            aria-label="Load file"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleClear}
+          title="Clear scene"
+          aria-label="Clear scene"
+          className="h-7 w-7 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
       </div>
-      <dl className="text-[10px] divide-y">
-        <div className="flex items-center justify-between px-2 py-1">
-          <dt className="text-muted-foreground">Source</dt>
-          <dd className="font-mono text-foreground truncate ml-2 max-w-[60%]">
+
+      <div className="rounded-md border bg-background overflow-hidden">
+        <div className="px-2 py-1 border-b flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+            {kindBadge}
+          </span>
+          <span className="text-[9px] text-muted-foreground">
+            {sourceTypeLabel}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-2 py-1 border-b text-[10px]">
+          <span className="text-muted-foreground">Source</span>
+          <span className="font-mono text-foreground truncate ml-2 max-w-[60%]">
             {filename}
-          </dd>
+          </span>
         </div>
-        <div className="flex items-center justify-between px-2 py-1">
-          <dt className="text-muted-foreground">Atoms</dt>
-          <dd className="font-mono text-foreground">
-            {stats.atomCount.toLocaleString()}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between px-2 py-1">
-          <dt className="text-muted-foreground">Bonds</dt>
-          <dd className="font-mono text-foreground">
-            {stats.bondCount.toLocaleString()}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between px-2 py-1">
-          <dt className="text-muted-foreground">Box</dt>
-          <dd className="font-mono text-foreground truncate ml-2 max-w-[60%]">
-            {stats.boxLabel ?? "—"}
-          </dd>
-        </div>
-        <div className="flex items-center justify-between px-2 py-1">
-          <dt className="text-muted-foreground">Contributes</dt>
-          <dd className="font-mono text-foreground truncate ml-2 max-w-[60%]">
+        <div className="flex items-center justify-between px-2 py-1 text-[10px]">
+          <span className="text-muted-foreground">Contributes</span>
+          <span className="font-mono text-foreground truncate ml-2 max-w-[60%]">
             {blocksLabel}
-          </dd>
+          </span>
         </div>
-      </dl>
+      </div>
+
+      <div className="border rounded-md overflow-hidden bg-background text-[10px]">
+        <ComponentRow
+          label="Atoms"
+          count={atomCount}
+          checked={showAtoms}
+          disabled={atomCount === 0}
+          open={expanded.atoms}
+          onToggleShow={onShowAtoms}
+          onToggleExpand={() => toggleExpand("atoms")}
+        >
+          <ParamRow label="Radius scale">
+            <NumberField
+              value={atomScale}
+              min={0.1}
+              max={3}
+              step={0.05}
+              onChange={onAtomScale}
+            />
+          </ParamRow>
+        </ComponentRow>
+
+        <ComponentRow
+          label="Bonds"
+          count={bondCount}
+          checked={showBonds}
+          disabled={bondCount === 0}
+          open={expanded.bonds}
+          onToggleShow={onShowBonds}
+          onToggleExpand={() => toggleExpand("bonds")}
+        >
+          <ParamRow label="Radius scale">
+            <NumberField
+              value={bondScale}
+              min={0}
+              max={3}
+              step={0.05}
+              onChange={onBondScale}
+            />
+          </ParamRow>
+        </ComponentRow>
+
+        <ComponentRow
+          label="Box"
+          count={hasBox ? 1 : 0}
+          checked={showBox}
+          disabled={!hasBox}
+          open={expanded.box}
+          onToggleShow={onShowBox}
+          onToggleExpand={() => toggleExpand("box")}
+        >
+          <ParamRow label="Line width">
+            <NumberField
+              value={boxWidth}
+              min={0.5}
+              max={5}
+              step={0.1}
+              onChange={onBoxWidth}
+            />
+          </ParamRow>
+        </ComponentRow>
+      </div>
     </div>
   );
 };

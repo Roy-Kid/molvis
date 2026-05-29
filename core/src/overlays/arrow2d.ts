@@ -10,18 +10,17 @@
  * camera, useful for plan-view or diagram-style annotations.
  */
 
+import type { Scene } from "@babylonjs/core";
 import {
   Color3,
   Color4,
   Mesh,
   MeshBuilder,
   Quaternion,
-  StandardMaterial,
   TransformNode,
   Vector3,
 } from "@babylonjs/core";
-import type { Scene } from "@babylonjs/core";
-import type { Arrow2DProps, Overlay, Vec3 } from "./types";
+import type { Arrow2DProps, Overlay } from "./types";
 
 const DEFAULT_COLOR = "#44aaff";
 const DEFAULT_STROKE_WIDTH = 0.03;
@@ -40,7 +39,7 @@ function hexToColor4(hex: string, alpha = 1): Color4 {
   return new Color4(r, g, b, alpha);
 }
 
-function hexToColor3(hex: string): Color3 {
+function _hexToColor3(hex: string): Color3 {
   const h = hex.replace(/^#/, "");
   const r = Number.parseInt(h.substring(0, 2), 16) / 255;
   const g = Number.parseInt(h.substring(2, 4), 16) / 255;
@@ -108,7 +107,7 @@ export class Arrow2DOverlay implements Overlay {
 
   private _dispose(): void {
     if (this._root) {
-      this._root.getChildMeshes().forEach((m) => m.dispose());
+      for (const m of this._root.getChildMeshes()) m.dispose();
       this._root.dispose();
       this._root = null;
     }

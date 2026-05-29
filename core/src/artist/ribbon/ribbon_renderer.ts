@@ -26,10 +26,10 @@ import { computeSideVectors } from "./orientation";
 import type { ChainTrace, SecondaryStructureType } from "./pdb_backbone";
 import { buildRibbonGeometry } from "./ribbon_geometry";
 import {
-  DEFAULT_RIBBON_STYLE,
-  type RibbonStyle,
   chainColor,
+  DEFAULT_RIBBON_STYLE,
   hueToRgb,
+  type RibbonStyle,
 } from "./ribbon_style";
 import { catmullRomSpline } from "./spline";
 
@@ -190,6 +190,11 @@ export class RibbonRenderer {
 
     mesh.material = material;
     mesh.isPickable = false;
+    // Long, often concave ribbon — bounding box can miss the frustum
+    // at oblique angles even when the visible portion is on screen.
+    // Skip frustum culling; raster cost is unaffected.
+    mesh.alwaysSelectAsActiveMesh = true;
+
     return mesh;
   }
 

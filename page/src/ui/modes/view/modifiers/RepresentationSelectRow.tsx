@@ -1,3 +1,6 @@
+import { type Molvis, REPRESENTATIONS } from "@molvis/core";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -6,9 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Molvis, REPRESENTATIONS } from "@molvis/core";
-import type React from "react";
-import { useEffect, useState } from "react";
 
 interface RepresentationSelectRowProps {
   app: Molvis | null;

@@ -1,3 +1,5 @@
+import type { Modifier, Molvis } from "@molvis/core";
+import type React from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -6,8 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Modifier, Molvis } from "@molvis/core";
-import type React from "react";
 import { getAvailableParents, getSelectionLabel } from "./tree_utils";
 
 const NONE_VALUE = "__none__";

@@ -52,8 +52,12 @@ function resolveAnchorContext(
 // ── mark_atom ────────────────────────────────────────────────────────────────
 
 /**
- * Mark an atom with a halo and/or a text label. The halo radius and label
- * font size are auto-sized from the atom's rendered radius by default.
+ * Mark a specific atom with a halo and/or a text label. The halo radius and
+ * label font size are auto-sized from the atom's rendered radius by default.
+ *
+ * Identity is **always** by atom id. World coordinates are not accepted —
+ * the mark must follow its atom across frame updates, which is impossible
+ * if it were pinned to a coordinate.
  *
  * Usage:
  *   app.execute("mark_atom", { anchorAtomId: 0 })
@@ -81,6 +85,10 @@ export class MarkAtomCommand extends Command<MarkAtomOverlay> {
     );
     this._added = overlay;
     this.app.overlayManager.add(overlay);
+    // Snap onto the current atom synchronously — `frame-rendered` may not
+    // fire again on a static scene, in which case the mark would otherwise
+    // sit at the seeded position instead of tracking the atom.
+    this.app.syncAnchoredOverlay(overlay);
     this.app.events.emit("overlay-added", { overlay });
     return overlay;
   }
@@ -152,6 +160,7 @@ export class RemarkAtomCommand extends Command<MarkAtomOverlay> {
 
   do(): MarkAtomOverlay {
     this.app.overlayManager.add(this._overlay);
+    this.app.syncAnchoredOverlay(this._overlay);
     this.app.events.emit("overlay-added", { overlay: this._overlay });
     return this._overlay;
   }

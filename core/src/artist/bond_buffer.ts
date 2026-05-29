@@ -22,11 +22,10 @@ export interface BondBufferOptions {
    * laid out row-major `[dx0, dy0, dz0, dx1, dy1, dz1, …]`, one triple
    * per logical bond. When provided, the renderer derives the far
    * endpoint as `atom_i + displacement[b]` instead of reading atom j's
-   * raw position — that's how PBC-wrapped atoms get bonds unwrapped to
+   * raw position — that is how PBC-wrapped atoms get bonds unwrapped to
    * their nearest image. Callers should generate this via
-   * `Box.delta(a, b, true)` (with `minimum_image = true`) so per-axis
-   * PBC flags and triclinic cell geometry are honored natively by
-   * WASM.
+   * `Box.delta(a, b, true)` (with `minimum_image = true`) so per-axis PBC flags
+   * and triclinic cell geometry are honored natively by WASM.
    */
   miDisplacements?: Float64Array;
 }
@@ -226,8 +225,12 @@ export function buildBondBuffers(
       ? bondsBlock.viewColU32("order")
       : undefined;
 
-  // Pre-allocate with upper bound (3x for all-triple), trim unused at end
-  const maxInstances = orderCol ? logicalCount * 3 : logicalCount;
+  // Size buffers exactly. Without an order column every bond is one instance;
+  // with one, countBondInstances() sums the per-bond instance counts in a
+  // single cheap pass. This avoids the old 3x over-allocation (upper bound for
+  // all-triple bonds) plus the slice() trim afterwards — wasteful for the
+  // overwhelmingly common all-single-order case.
+  const maxInstances = orderCol ? countBondInstances(bondsBlock) : logicalCount;
 
   const bondMatrix = new Float32Array(maxInstances * 16);
   const bondData0 = new Float32Array(maxInstances * 4);

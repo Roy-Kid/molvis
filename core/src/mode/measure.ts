@@ -162,7 +162,7 @@ class MeasureMode extends BaseMode {
         ? this.world.sceneIndex.getMeta(meshId, thinIndex)
         : this.world.sceneIndex.getMeta(meshId);
 
-    if (!meta || meta.type !== "atom") {
+    if (meta?.type !== "atom") {
       return;
     }
 

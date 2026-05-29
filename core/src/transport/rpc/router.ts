@@ -8,6 +8,8 @@ import { type Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../../app";
 import { ClassicTheme } from "../../artist/presets/classic";
 import { ModernTheme } from "../../artist/presets/modern";
+import type { MarkAtomOverlay } from "../../overlays/mark_atom";
+import type { MarkAtomProps } from "../../overlays/types";
 import {
   DataSourceModifier,
   FrameDataSource,
@@ -292,12 +294,12 @@ export class RPCRouter {
       ["scene.remove_data_source", this.handleRemoveDataSource],
       ["scene.list_data_sources", this.handleListDataSources],
       ["snapshot.take", this.handleSnapshotTake],
+      ["overlay.mark_atom", this.handleOverlayMarkAtom],
+      ["overlay.unmark_atom", this.handleOverlayUnmarkAtom],
       ["view.set_style", this.handleSetStyle],
       ["view.set_theme", this.handleSetTheme],
       ["view.set_mode", this.handleSetMode],
       ["state.get", this.handleStateGet],
-      ["overlay.mark_atom", this.handleMarkAtom],
-      ["overlay.unmark_atom", this.handleUnmarkAtom],
     ]);
   }
 
@@ -360,7 +362,11 @@ export class RPCRouter {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      console.error("RPC execution failed", { method, error });
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error(
+        `RPC execution failed [${method}]: ${message}`,
+        stack ?? error,
+      );
       return {
         content: createErrorResponse(
           parsed.id,
@@ -740,6 +746,36 @@ export class RPCRouter {
   private handleSnapshotTake: RPCHandler = () =>
     this.app.execute("take_snapshot", {});
 
+  private handleOverlayMarkAtom: RPCHandler = async (params) => {
+    const rawId = params.anchorAtomId;
+    if (typeof rawId !== "number" || !Number.isInteger(rawId) || rawId < 0) {
+      throw invalidParams(
+        "overlay.mark_atom requires 'anchorAtomId' as a non-negative integer",
+      );
+    }
+    if ("position" in params) {
+      throw invalidParams(
+        "overlay.mark_atom does not accept a 'position' — atoms are identified by id, not coordinates",
+      );
+    }
+    const overlay = (await Promise.resolve(
+      this.app.execute<MarkAtomProps, MarkAtomOverlay>(
+        "mark_atom",
+        params as unknown as MarkAtomProps,
+      ),
+    )) as MarkAtomOverlay;
+    return { id: overlay.id };
+  };
+
+  private handleOverlayUnmarkAtom: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    if (!id) {
+      throw invalidParams("overlay.unmark_atom requires an 'id'");
+    }
+    await Promise.resolve(this.app.execute("unmark_atom", { id }));
+    return { success: true };
+  };
+
   private handleSetStyle: RPCHandler = async (params, buffers) => {
     let manualAtomRadii: number[] | null;
     try {
@@ -1033,29 +1069,6 @@ export class RPCRouter {
         enabled: ds.enabled,
       }));
     return { data_sources: dsList };
-  };
-
-  // ---------------------------------------------------------------------
-  // Overlay / annotation commands
-  // ---------------------------------------------------------------------
-
-  private handleMarkAtom: RPCHandler = async (params) => {
-    const overlay = await Promise.resolve(
-      this.app.execute<Record<string, unknown>, { id: string }>(
-        "mark_atom",
-        params,
-      ),
-    );
-    return { id: overlay.id };
-  };
-
-  private handleUnmarkAtom: RPCHandler = (params) => {
-    const id = requireString(params.id, "id");
-    if (!id) {
-      throw invalidParams("unmark_atom requires an 'id'");
-    }
-    this.app.execute("unmark_atom", { id });
-    return { success: true };
   };
 
   // ---------------------------------------------------------------------

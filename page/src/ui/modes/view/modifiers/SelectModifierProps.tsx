@@ -1,10 +1,10 @@
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import type {
   SelectModifier as CoreSelectModifier,
   Molvis,
 } from "@molvis/core";
 import type React from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface ModifierProps {
   modifier: CoreSelectModifier;

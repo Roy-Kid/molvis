@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 import {
-  FILE_FORMAT_REGISTRY,
   describeFormat,
+  FILE_FORMAT_REGISTRY,
   getAllAcceptExtensions,
   inferFormatFromFilename,
 } from "../src/io/formats";

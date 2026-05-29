@@ -17,16 +17,15 @@ import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
 import { ensureDataSource } from "../transport/rpc/router";
 import {
   type IndexProgressCallback,
-  type TrajectoryRuntime,
   spawnTrajectoryWorker,
+  type TrajectoryRuntime,
 } from "../transport/trajectory_worker";
 import { fingerprintFile } from "./cache";
 import {
-  type FileFormat,
   canStream,
+  type FileFormat,
   loadBinaryTrajectory,
   loadTextTrajectory,
-  readFrames,
 } from "./reader";
 import { BlobRangeSource } from "./sources";
 import { loadZarrFiles } from "./zarr";
@@ -34,9 +33,9 @@ import { loadZarrFiles } from "./zarr";
 export {
   canStream,
   describeFormat,
+  FILE_FORMAT_REGISTRY,
   type FileFormat,
   type FileFormatDescriptor,
-  FILE_FORMAT_REGISTRY,
   type FormatPayload,
   getAllAcceptExtensions,
   inferFormatFromFilename,
@@ -48,19 +47,19 @@ export {
   type StreamingCapability,
 } from "./reader";
 export { BlobRangeSource, type TrajectorySource } from "./sources";
-export { loadZarrFiles, type ZarrLoadResult } from "./zarr";
 export {
   defaultExtensionForFormat,
-  exportFrame,
   type ExportFormat,
   type ExportPayload,
+  exportFrame,
   mimeForFormat,
-  writeFrame,
   type WriteFrameOptions,
+  writeFrame,
   writeLAMMPSData,
   writePDBFrame,
   writeXYZFrame,
 } from "./writer";
+export { loadZarrFiles, type ZarrLoadResult } from "./zarr";
 
 /**
  * Payload shape accepted by {@link loadFileContent}.

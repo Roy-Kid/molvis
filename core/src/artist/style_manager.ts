@@ -10,6 +10,15 @@ export class StyleManager {
 
   private _representation: RepresentationStyle = BALL_AND_STICK;
 
+  // Simulation-box visibility. Persistent across redraws: the box mesh is
+  // recreated on every full draw, so a transient mesh.setEnabled() would not
+  // survive a re-render. DrawFrameCommand / app consult this before drawing.
+  private _showBox = true;
+  // Box edge thickness multiplier. Persisted here (not just on the mesh)
+  // because DrawBoxCommand recreates the sim_box mesh on every full draw —
+  // a value stored only on the mesh would reset to 1.0 on the next redraw.
+  private _boxThicknessScale = 1.0;
+
   constructor(scene: Scene) {
     this.scene = scene;
     this.currentTheme = new ClassicTheme();
@@ -42,6 +51,38 @@ export class StyleManager {
       bondRadiusScale: scale,
       name: "Custom",
     };
+  }
+
+  public setShowAtoms(show: boolean) {
+    this._representation = {
+      ...this._representation,
+      showAtoms: show,
+      name: "Custom",
+    };
+  }
+
+  public setShowBonds(show: boolean) {
+    this._representation = {
+      ...this._representation,
+      showBonds: show,
+      name: "Custom",
+    };
+  }
+
+  public setShowBox(show: boolean) {
+    this._showBox = show;
+  }
+
+  public getShowBox(): boolean {
+    return this._showBox;
+  }
+
+  public setBoxThicknessScale(scale: number) {
+    this._boxThicknessScale = scale;
+  }
+
+  public getBoxThicknessScale(): number {
+    return this._boxThicknessScale;
   }
 
   public getAtomRadiusScale(): number {

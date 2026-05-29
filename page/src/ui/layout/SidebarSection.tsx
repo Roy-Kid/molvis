@@ -1,7 +1,7 @@
-import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface SidebarSectionProps {
   title: string;

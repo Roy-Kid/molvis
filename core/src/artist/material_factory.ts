@@ -7,9 +7,9 @@ import {
 } from "@babylonjs/core";
 import type { MolvisApp } from "../app";
 import {
+  getImpostorMaterialSpec,
   type ImpostorMaterialSpec,
   type ImpostorTarget,
-  getImpostorMaterialSpec,
 } from "./material_spec";
 
 // Module-level scratch vector for lighting uniform updates.

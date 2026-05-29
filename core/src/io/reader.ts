@@ -13,8 +13,8 @@ import {
 import { type FrameProvider, Trajectory } from "../system/trajectory";
 import { logger } from "../utils/logger";
 import {
-  type FileFormat,
   describeFormat,
+  type FileFormat,
   getAllAcceptExtensions,
   inferFormatFromFilename,
 } from "./formats";
@@ -22,9 +22,9 @@ import {
 export {
   canStream,
   describeFormat,
+  FILE_FORMAT_REGISTRY,
   type FileFormat,
   type FileFormatDescriptor,
-  FILE_FORMAT_REGISTRY,
   type FormatPayload,
   getAllAcceptExtensions,
   inferFormatFromFilename,

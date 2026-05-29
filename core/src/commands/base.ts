@@ -18,8 +18,18 @@ const commandMetadataRegistry = new Map<CommandClass, CommandMetadata>();
 import { commands } from "./registry";
 
 /**
- * Decorator to expose a Command's do() method for RPC calls
- * Usage: @command("command_name")
+ * Decorator to expose a Command's `do()` method for RPC/registry calls.
+ * Usage: `@command("command_name")`
+ *
+ * EXECUTION-MODEL CONTRACT (read before assuming reversibility):
+ * registry execution (`app.execute(name, args)` / RPC) runs `do()` and
+ * **discards the instance — it is fire-and-forget and NEVER enters the undo
+ * history.** This is intentional: RPC/registry commands are imperative
+ * controller actions (e.g. `draw_frame`, `draw_box`) that must not pollute the
+ * user's undo stack. Reversible *user* actions must instead be run through
+ * `commandManager.execute(new SomeCommand(...))`, which retains the instance
+ * and calls `undo()` on rollback. A command may implement `undo()` and still be
+ * invoked through either path; the path — not the command — decides undoability.
  */
 export function command(name: string) {
   return ((target) => {

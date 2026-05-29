@@ -151,4 +151,44 @@ describe("System", () => {
       expect(emitted).toBe(true);
     });
   });
+
+  describe("exploration / frame-labels slots", () => {
+    it("identity-guards the setters", () => {
+      const events = new EventEmitter<MolvisEventMap>();
+      const system = new System(events);
+      let labelEmits = 0;
+      events.on("frame-labels-change", () => labelEmits++);
+
+      system.setFrameLabels(null); // already null — no emit
+      expect(labelEmits).toBe(0);
+
+      const labels = new Map<string, Float64Array>();
+      system.setFrameLabels(labels);
+      system.setFrameLabels(labels); // same identity — no second emit
+      expect(labelEmits).toBe(1);
+    });
+
+    it("invalidates exploration and rebuilds frameLabels before trajectory-change", () => {
+      const events = new EventEmitter<MolvisEventMap>();
+      const system = new System(events);
+      // Seed a (minimal) exploration so the swap has something to clear.
+      system.setExploration({} as never);
+
+      const order: string[] = [];
+      events.on("frame-labels-change", () => order.push("frame-labels-change"));
+      events.on("exploration-change", () => order.push("exploration-change"));
+      events.on("trajectory-change", () => order.push("trajectory-change"));
+
+      system.trajectory = new Trajectory(makeFrames(3));
+
+      expect(system.exploration).toBe(null);
+      expect(system.frameLabels).not.toBe(null);
+      expect(order.indexOf("frame-labels-change")).toBeLessThan(
+        order.indexOf("trajectory-change"),
+      );
+      expect(order.indexOf("exploration-change")).toBeLessThan(
+        order.indexOf("trajectory-change"),
+      );
+    });
+  });
 });

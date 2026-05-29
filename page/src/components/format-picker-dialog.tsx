@@ -1,3 +1,27 @@
+import type { Molvis } from "@molvis/core";
+import {
+  BondMappingCancelledError,
+  canStream,
+  FILE_FORMAT_REGISTRY,
+  type FileContent,
+  type FileFormat,
+  inferFormatFromFilename,
+  isBinaryFormat,
+  type LoadFileStreamOptions,
+  type LoadFileStreamResult,
+  loadFileContent,
+  loadFileStream,
+  type PickBondMapping,
+} from "@molvis/core/io";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,32 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Molvis } from "@molvis/core";
-import {
-  type BondColumnMapping,
-  BondMappingCancelledError,
-  type BondMappingDecision,
-  FILE_FORMAT_REGISTRY,
-  type FileContent,
-  type FileFormat,
-  type LoadFileStreamOptions,
-  type LoadFileStreamResult,
-  type PickBondMapping,
-  canStream,
-  inferFormatFromFilename,
-  isBinaryFormat,
-  loadFileContent,
-  loadFileStream,
-} from "@molvis/core/io";
-import {
-  type ReactNode,
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 
 type PickerReason = "unknown-extension" | "no-extension";
 

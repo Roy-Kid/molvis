@@ -158,26 +158,6 @@ export class Trajectory {
     return this._getFrame(index);
   }
 
-  /** Free the async provider and drop all cached Frames. Idempotent.
-   *  Disposal is the one place we DO call `frame.free()` explicitly —
-   *  by the time the trajectory is being torn down, no consumer is
-   *  navigating into it anymore, so racing with active references is
-   *  not a concern. */
-  dispose(): void {
-    if (this._asyncProvider) {
-      this._asyncProvider.dispose?.();
-      this._asyncProvider = undefined;
-    }
-    for (const frame of this._asyncCache.values()) {
-      try {
-        frame.free();
-      } catch {
-        // Already freed by GC — ignore.
-      }
-    }
-    this._asyncCache.clear();
-  }
-
   private _getFrame(index: number): Frame {
     if (this._provider) {
       const override = this._providerOverrides.get(index);
@@ -229,6 +209,15 @@ export class Trajectory {
    */
   get length(): number {
     return this._length;
+  }
+
+  /**
+   * True when frames are loaded on demand via a {@link FrameProvider}.
+   * Callers that would walk every frame eagerly (e.g. frame-label
+   * aggregation) skip lazy trajectories to preserve streaming behaviour.
+   */
+  get isLazy(): boolean {
+    return this._provider !== undefined;
   }
 
   /**
@@ -291,6 +280,62 @@ export class Trajectory {
     }
     return false;
   }
+  /**
+   * Free the WASM {@link Frame} objects this trajectory owns.
+   *
+   * Eager trajectories own their frames' WASM linear-memory backing; dropping
+   * the trajectory (e.g. on reload via `setTrajectory`) without freeing leaks
+   * that memory. Call this on the *outgoing* trajectory once it is no longer
+   * the active one.
+   *
+   * - **Lazy/provider-backed** trajectories are skipped — the provider owns
+   *   frame lifetime (and reuses/evicts via its own LRU).
+   * - Frames in `exclude` are still referenced elsewhere (e.g. the app's
+   *   source / last-rendered frame) and are left untouched to avoid a
+   *   use-after-free / double-free.
+   * - Boxes are intentionally not freed here: their ownership flows into draw
+   *   commands and `currentBox` falls back to `frame.simbox`, so freeing them
+   *   risks a double-free. They are released with their frame.
+   *
+   * Async (streaming) trajectories release their provider and the LRU cache
+   * of materialized Frames instead of an eager `_frames` array; sync
+   * provider-backed trajectories own nothing here (the provider manages frame
+   * lifetime). Frames in `exclude` are left untouched in every mode.
+   *
+   * After `dispose()` the trajectory holds no frames and must not be reused.
+   */
+  dispose(exclude?: ReadonlySet<Frame>): void {
+    // Async provider-backed (streaming worker): release the provider and the
+    // LRU of materialized Frames. Disposal is the one place we DO call
+    // `frame.free()` explicitly — by teardown no consumer is navigating the
+    // trajectory, so racing with active references is not a concern.
+    if (this._asyncProvider) {
+      this._asyncProvider.dispose?.();
+      this._asyncProvider = undefined;
+      for (const frame of this._asyncCache.values()) {
+        if (exclude?.has(frame)) continue;
+        try {
+          frame.free();
+        } catch {
+          // Already freed by GC — ignore.
+        }
+      }
+      this._asyncCache.clear();
+      this._length = 0;
+      return;
+    }
+    // Sync provider-backed: the provider owns frame lifetime, nothing to free.
+    if (this._provider) return;
+    // Eager: free owned frames except those still referenced elsewhere.
+    for (const frame of this._frames) {
+      if (!frame || exclude?.has(frame)) continue;
+      frame.free();
+    }
+    this._frames = [];
+    this._boxes = [];
+    this._length = 0;
+  }
+
   /**
    * Replace a frame at the specified index.
    * NOTE: This mutates the trajectory in place for performance — it is called

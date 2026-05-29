@@ -19,13 +19,13 @@ import {
   LAMMPSTrajReader,
   LinkedCell,
   PDBReader,
+  parseSMILES,
   RDF,
   SDFReader,
   Topology,
-  XYZReader,
-  parseSMILES,
   wasmMemory,
   writeFrame,
+  XYZReader,
 } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
@@ -150,21 +150,27 @@ describe("WASM Frame", () => {
     expect(frame.simbox).toBeUndefined();
   });
 
-  it("stores volumetric data as a 'grid' block with structural shape", () => {
+  it("manages grid blocks with structural shape (insert / get / remove / names)", () => {
     const frame = new Frame();
     expect(frame.getBlock("grid")).toBeUndefined();
+    expect(frame.blockNames()).toEqual([]);
 
-    const grid = frame.createBlock("grid");
+    const grid = new Block();
     grid.setColF("rho", new Float64Array(8).fill(0.25));
     grid.setShape(new Uint32Array([2, 2, 2]));
+    frame.insertBlock("grid", grid);
 
-    const block = frame.getBlock("grid");
-    expect(block).toBeDefined();
-    expect(Array.from(block!.shape())).toEqual([2, 2, 2]);
-    expect(block!.keys()).toContain("rho");
-    expect(Array.from(block!.copyColF("rho") ?? [])).toEqual(
+    expect(frame.blockNames()).toEqual(["grid"]);
+    const retrieved = frame.getBlock("grid");
+    expect(retrieved).toBeDefined();
+    expect(Array.from(retrieved?.shape() ?? [])).toEqual([2, 2, 2]);
+    expect(retrieved?.keys()).toContain("rho");
+    expect(Array.from(retrieved?.copyColF("rho") ?? [])).toEqual(
       new Array(8).fill(0.25),
     );
+
+    frame.removeBlock("grid");
+    expect(frame.getBlock("grid")).toBeUndefined();
   });
 });
 
@@ -200,6 +206,34 @@ describe("WASM Box", () => {
     );
     expect(tri.volume()).toBeCloseTo(1, 10);
     tri.free();
+  });
+});
+
+// ── Grid ───────────────────────────────────────────────────────────────────
+
+describe("grid Block", () => {
+  it("stores and retrieves named value columns", () => {
+    const grid = new Block();
+    expect(grid.isEmpty()).toBe(true);
+
+    const data = new Float64Array(27);
+    for (let i = 0; i < 27; i++) data[i] = i;
+    grid.setColF("rho", data);
+    grid.setShape(new Uint32Array([3, 3, 3]));
+
+    expect(grid.isEmpty()).toBe(false);
+    expect(grid.nrows()).toBe(27);
+    expect(Array.from(grid.shape())).toEqual([3, 3, 3]);
+    expect(grid.keys()).toEqual(["rho"]);
+    expect(Array.from(grid.copyColF("rho"))).toEqual(Array.from(data));
+    grid.free();
+  });
+
+  it("rejects shapes whose product mismatches nrows", () => {
+    const grid = new Block();
+    grid.setColF("rho", new Float64Array(7));
+    expect(() => grid.setShape(new Uint32Array([2, 2, 2]))).toThrow();
+    grid.free();
   });
 });
 

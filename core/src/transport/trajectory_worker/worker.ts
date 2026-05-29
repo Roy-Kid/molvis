@@ -420,28 +420,17 @@ function readSimbox(s: WasmTrajStream): SimboxPayload | null {
   };
 }
 
-function readGrids(s: WasmTrajStream): GridPayload[] {
-  const gridCount = s.gridCount();
-  const out: GridPayload[] = [];
-  for (let gi = 0; gi < gridCount; gi++) {
-    const name = s.gridName(gi);
-    const shape = new Uint32Array(s.gridShape(gi));
-    const origin = new Float64Array(s.gridOrigin(gi));
-    const cell = new Float64Array(s.gridCell(gi));
-    const pbc = pbcToTuple(s.gridPbc(gi));
-
-    const arrayCount = s.gridArrayCount(gi);
-    const arrays: { name: string; data: Float64Array }[] = [];
-    for (let ai = 0; ai < arrayCount; ai++) {
-      const arrName = s.gridArrayName(gi, ai);
-      const len = s.gridArrayLen(gi, ai);
-      const ptr = s.gridArrayPtrF64(gi, ai);
-      const view = new Float64Array(wasmMemory().buffer, ptr, len);
-      arrays.push({ name: arrName, data: new Float64Array(view) });
-    }
-    out.push({ name, shape, origin, cell, pbc, arrays });
-  }
-  return out;
+function readGrids(_s: WasmTrajStream): GridPayload[] {
+  // molrs >= 0.0.16 dropped the dedicated grid-streaming accessors
+  // (gridCount/gridShape/gridArrayPtrF64/...) in favour of the unified
+  // "grids are blocks" model. The incremental streaming API
+  // (WasmLammpsDumpStream et al.) exposes blocks + columns + simbox but no
+  // per-block shape, so a streamed volumetric "grid" block cannot be
+  // reconstructed with geometry here. Streamed trajectories therefore carry
+  // no volumetric grids; full-file loads still surface grids via the
+  // frame.getBlock("grid") + block.shape() path. The wire shape is kept so
+  // the protocol is stable if molrs restores streaming grid metadata.
+  return [];
 }
 
 function pbcToTuple(raw: unknown): [boolean, boolean, boolean] {

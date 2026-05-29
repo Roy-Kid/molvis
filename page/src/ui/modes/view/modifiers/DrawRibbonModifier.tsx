@@ -1,3 +1,9 @@
+import type {
+  DrawRibbonModifier as CoreDrawRibbonModifier,
+  Molvis,
+  RibbonColorMode,
+} from "@molvis/core";
+import type React from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -6,12 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type {
-  DrawRibbonModifier as CoreDrawRibbonModifier,
-  Molvis,
-  RibbonColorMode,
-} from "@molvis/core";
-import type React from "react";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawRibbonModifierProps {
