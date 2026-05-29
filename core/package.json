@@ -43,22 +43,22 @@
     "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
   },
   "devDependencies": {
-    "@rsbuild/core": "^1.7.0",
+    "@rsbuild/core": "^1.7.5",
     "@rslib/core": "^0.18.0",
-    "@rstest/browser": "^0.9.4",
-    "@rstest/core": "^0.9.4",
+    "@rstest/browser": "^0.10.3",
+    "@rstest/core": "^0.10.3",
     "@types/plotly.js-dist-min": "^2.3.4",
-    "playwright": "^1.58.2",
+    "playwright": "^1.60.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@babylonjs/core": "^7.52.2",
-    "@babylonjs/gui": "^7.52.2",
-    "@babylonjs/inspector": "^7.52.2",
-    "@babylonjs/materials": "^7.52.2",
+    "@babylonjs/core": "^7.54.3",
+    "@babylonjs/gui": "^7.54.3",
+    "@babylonjs/inspector": "^7.54.3",
+    "@babylonjs/materials": "^7.54.3",
     "@molcrafts/molrs": "^0.0.17",
-    "plotly.js-dist-min": "^3.5.0",
-    "tslog": "^4.9.3"
+    "plotly.js-dist-min": "^3.5.1",
+    "tslog": "^4.10.2"
   },
   "directories": {
     "example": "examples",
