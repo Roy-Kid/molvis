@@ -1,15 +1,15 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type AtomRow,
   type BondRow,
   type ColumnDescriptor,
-  type Molvis,
   discoverAtomColumns,
   extractAtomRows,
   extractBondRows,
+  type Molvis,
 } from "@molvis/core";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface DataInspectorPanelProps {
   app: Molvis | null;

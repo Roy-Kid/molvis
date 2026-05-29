@@ -6,6 +6,7 @@
  * naturally without any per-frame DOM projection.
  */
 
+import type { Scene } from "@babylonjs/core";
 import {
   Color3,
   Mesh,
@@ -15,7 +16,6 @@ import {
   TransformNode,
   Vector3,
 } from "@babylonjs/core";
-import type { Scene } from "@babylonjs/core";
 import type { Arrow3DProps, Overlay, Vec3 } from "./types";
 
 const DEFAULT_COLOR = "#ff4444";
@@ -102,7 +102,7 @@ export class Arrow3DOverlay implements Overlay {
   }
 
   dispose(): void {
-    this._root.getChildMeshes().forEach((m) => m.dispose());
+    for (const m of this._root.getChildMeshes()) m.dispose();
     this._root.dispose();
     this._material.dispose();
   }
@@ -193,7 +193,7 @@ export class Arrow3DOverlay implements Overlay {
   }
 
   private _rebuildMeshes(): void {
-    this._root.getChildMeshes().forEach((m) => m.dispose());
+    for (const m of this._root.getChildMeshes()) m.dispose();
     this._root.dispose();
 
     // Rebuild material in case color/opacity changed
@@ -218,5 +218,4 @@ function resolveDefaults(p: Arrow3DProps): Required<Arrow3DProps> {
   };
 }
 
-export type { Arrow3DProps };
-export type { Vec3 };
+export type { Arrow3DProps, Vec3 };

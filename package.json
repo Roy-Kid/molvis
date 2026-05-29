@@ -4,7 +4,11 @@
   "description": "interactive molecule visulization package",
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
-  "workspaces": ["core", "page", "vsc-ext"],
+  "workspaces": [
+    "core",
+    "page",
+    "vsc-ext"
+  ],
   "scripts": {
     "dev:core": "npm run dev -w core",
     "dev:page": "npm run dev -w page",
@@ -28,10 +32,10 @@
     "lint": "biome check --write"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.9.4",
-    "@rsbuild/core": "^1.7.5",
-    "@rslib/core": "^0.18.0",
-    "concurrently": "^9.2.1",
+    "@biomejs/biome": "2.4.16",
+    "@rsbuild/core": "^2.0.8",
+    "@rslib/core": "^0.22.0",
+    "concurrently": "^10.0.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "wait-on": "^9.0.10"
@@ -40,10 +44,10 @@
     "@molcrafts/molrs": "^0.0.17"
   },
   "overrides": {
-    "@rspack/core": "^1.6.0",
-    "@rsbuild/core": "^1.7.5",
-    "@rslib/core": "^0.18.0",
-    "@rsbuild/plugin-react": "^1.4.6",
+    "@rspack/core": "^2.0.5",
+    "@rsbuild/core": "^2.0.8",
+    "@rslib/core": "^0.22.0",
+    "@rsbuild/plugin-react": "^2.0.0",
     "@rstest/core": "^0.10.0",
     "@rstest/browser": "^0.10.0"
   },

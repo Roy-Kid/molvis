@@ -14,6 +14,7 @@
  * per-frame sync dispatch in MolvisApp handles all anchored overlays uniformly.
  */
 
+import type { Mesh, Scene } from "@babylonjs/core";
 import {
   Axis,
   Color3,
@@ -23,7 +24,6 @@ import {
   TransformNode,
   Vector3,
 } from "@babylonjs/core";
-import type { Mesh, Scene } from "@babylonjs/core";
 import {
   type AdvancedDynamicTexture,
   Rectangle,

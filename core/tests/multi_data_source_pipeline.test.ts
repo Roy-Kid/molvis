@@ -14,7 +14,6 @@ import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import type { MolvisApp } from "../src/app";
 import {
-  type BondColumnMapping,
   BondColumnRemapModifier,
   bondsIntegerColumns,
   bondsNeedColumnMapping,

@@ -1,3 +1,10 @@
+import {
+  DrawIsosurfaceModifier as CoreDrawIsosurfaceModifier,
+  type IsosurfaceRenderMode,
+  type Molvis,
+} from "@molvis/core";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -7,13 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  DrawIsosurfaceModifier as CoreDrawIsosurfaceModifier,
-  type IsosurfaceRenderMode,
-  type Molvis,
-} from "@molvis/core";
-import type React from "react";
-import { useEffect, useState } from "react";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawIsosurfaceModifierProps {

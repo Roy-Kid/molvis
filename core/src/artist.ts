@@ -36,8 +36,8 @@ import {
   syncImpostorMaterialUniforms,
 } from "./artist/material_factory";
 import {
-  type ImpostorTarget,
   getImpostorMaterialSpec,
+  type ImpostorTarget,
 } from "./artist/material_spec";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
 import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";

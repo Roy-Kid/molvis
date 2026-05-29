@@ -1,15 +1,15 @@
+export type { SmilesIR } from "@molcrafts/molrs";
 export {
-  Frame,
   Block,
   Box,
-  WasmArray,
-  MolRecReader,
-  SDFReader,
-  parseSMILES,
+  Frame,
   generate3D,
+  MolRecReader,
+  parseSMILES,
+  SDFReader,
+  WasmArray,
+  WasmKMeans,
   WasmPca2,
   WasmPcaResult,
-  WasmKMeans,
 } from "@molcrafts/molrs";
-export type { SmilesIR } from "@molcrafts/molrs";
-export { Trajectory, type FrameProvider } from "./trajectory";
+export { type FrameProvider, Trajectory } from "./trajectory";

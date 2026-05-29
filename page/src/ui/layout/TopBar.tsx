@@ -1,8 +1,8 @@
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import type { Molvis } from "@molvis/core";
 import { BrushCleaning, Focus, Maximize, Redo2, Undo2 } from "lucide-react";
 import React from "react";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { ExportDialog } from "./ExportDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
 import { SettingsDialog } from "./SettingsDialog";

@@ -1,3 +1,21 @@
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { type Modifier, ModifierRegistry, type Molvis } from "@molvis/core";
+import { getAllAcceptExtensions } from "@molvis/core/io";
+import { Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
 import {
   loadFileSmart,
@@ -12,24 +30,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { type Modifier, ModifierRegistry, type Molvis } from "@molvis/core";
-import { getAllAcceptExtensions } from "@molvis/core/io";
-import { Plus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { SortableModifierItem } from "./SortableModifierItem";
 import { buildTree, flattenTree } from "./tree_utils";
 

@@ -18,7 +18,9 @@
   },
   "publisher": "molcrafts",
   "activationEvents": [],
-  "categories": ["Visualization"],
+  "categories": [
+    "Visualization"
+  ],
   "keywords": [
     "molecular",
     "visualization",
@@ -202,7 +204,10 @@
               "type": "number"
             },
             "cameraMaxRadius": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "grid": {
               "type": "object",
@@ -295,8 +300,9 @@
     "deploy:ovsx": "ovsx publish"
   },
   "devDependencies": {
-    "@rslib/core": "^0.18.0",
-    "@rsbuild/plugin-react": "^1.4.6",
+    "@rsbuild/plugin-react": "^2.0.0",
+    "@rslib/core": "^0.22.0",
+    "@tailwindcss/postcss": "^4.3.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
@@ -305,14 +311,13 @@
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.9.1",
+    "autoprefixer": "^10.5.0",
     "npm-run-all": "^4.1.5",
+    "ovsx": "^1.0.0",
+    "postcss": "^8.5.15",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "ovsx": "^0.10.12",
-    "typescript": "^5.9.3",
-    "@tailwindcss/postcss": "^4.3.0",
-    "autoprefixer": "^10.5.0",
-    "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3"
   }
 }

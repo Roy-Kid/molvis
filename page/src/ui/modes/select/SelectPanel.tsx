@@ -1,11 +1,11 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { DataInspectorPanel } from "@/ui/layout/DataInspectorPanel";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { ExpressionSelectionModifier, type Molvis } from "@molvis/core";
 import { Lasso } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DataInspectorPanel } from "@/ui/layout/DataInspectorPanel";
+import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { useSelectionSnapshot } from "./useSelectionSnapshot";
 
 interface SelectPanelProps {

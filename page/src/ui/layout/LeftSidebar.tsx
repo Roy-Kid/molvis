@@ -1,3 +1,12 @@
+import {
+  computeRdf,
+  type Molvis,
+  type RdfResult,
+  type SelectionMask,
+} from "@molvis/core";
+import { AlertCircle, Download, Info, Play } from "lucide-react";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,15 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import {
-  type Molvis,
-  type RdfResult,
-  type SelectionMask,
-  computeRdf,
-} from "@molvis/core";
-import { AlertCircle, Download, Info, Play } from "lucide-react";
-import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { ClusterPanel } from "./ClusterPanel";
 import { PCATool } from "./PCATool";
 

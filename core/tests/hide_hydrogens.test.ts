@@ -10,7 +10,7 @@ function makeFrame(
 ): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  const n = elements.length;
+  const _n = elements.length;
   const pos =
     positions ?? elements.map((_, i) => [i, 0, 0] as [number, number, number]);
   atoms.setColF("x", new Float64Array(pos.map((p) => p[0])));

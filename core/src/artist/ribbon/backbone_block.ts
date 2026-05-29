@@ -9,9 +9,9 @@
 import type { Frame } from "@molcrafts/molrs";
 import {
   type ChainTrace,
+  parsePdbBackbone,
   type Residue,
   type SecondaryStructureType,
-  parsePdbBackbone,
 } from "./pdb_backbone";
 
 export const RESIDUES_BLOCK = "residues";

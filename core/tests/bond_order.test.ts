@@ -1,4 +1,4 @@
-import { Block, Box, Frame, WasmArray } from "@molcrafts/molrs";
+import { Block, Box, WasmArray } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import {

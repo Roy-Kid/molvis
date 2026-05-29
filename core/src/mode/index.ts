@@ -3,12 +3,11 @@ import type { MolvisApp } from "../app";
 
 import type { BaseMode } from "./base";
 import { ModeType } from "./base";
-import { ViewMode } from "./view";
-
 import { EditMode } from "./edit";
 import { ManipulateMode } from "./manipulate";
 import { MeasureMode } from "./measure";
 import { SelectMode } from "./select";
+import { ViewMode } from "./view";
 
 /**
  * Single source of truth mapping digit keys → modes. Shared by keyboard

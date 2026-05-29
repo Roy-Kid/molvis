@@ -1,15 +1,3 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import {
   type DatasetExploration,
   type ExplorationColorBy,
@@ -27,6 +15,18 @@ import {
 import { AlertCircle, Info, Play } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { SidebarSection } from "@/ui/layout/SidebarSection";
 
 interface PCAToolProps {
   app: Molvis | null;

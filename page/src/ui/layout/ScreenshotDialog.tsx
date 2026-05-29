@@ -1,3 +1,13 @@
+import {
+  type CropBounds,
+  cropToRect,
+  findAlphaBounds,
+  type Molvis,
+  reencodeImage,
+} from "@molvis/core";
+import { Camera, Crop, Download, Loader2, RefreshCw, X } from "lucide-react";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,16 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  type CropBounds,
-  type Molvis,
-  cropToRect,
-  findAlphaBounds,
-  reencodeImage,
-} from "@molvis/core";
-import { Camera, Crop, Download, Loader2, RefreshCw, X } from "lucide-react";
-import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CropMode = "none" | "auto" | "manual";
 type SaveFormat = "png" | "jpg" | "webp";
@@ -288,9 +288,9 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
   type DraftRectPct = { x: number; y: number; w: number; h: number };
   const [draftRect, setDraftRect] = useState<DraftRectPct | null>(null);
 
-  const widthNum = Number.parseInt(widthStr) || 0;
-  const heightNum = Number.parseInt(heightStr) || 0;
-  const dpiNum = Number.parseInt(dpiStr) || 96;
+  const widthNum = Number.parseInt(widthStr, 10) || 0;
+  const heightNum = Number.parseInt(heightStr, 10) || 0;
+  const dpiNum = Number.parseInt(dpiStr, 10) || 96;
   const targetAspect = heightNum > 0 ? widthNum / heightNum : 0;
 
   const captureViewport = useCallback(
@@ -606,17 +606,17 @@ export const ScreenshotDialog: React.FC<ScreenshotDialogProps> = ({ app }) => {
   };
 
   const commitWidthBlur = () => {
-    const n = Number.parseInt(widthStr);
+    const n = Number.parseInt(widthStr, 10);
     const clamped = clampDim(Number.isFinite(n) ? n : MIN_DIM);
     setWidthStr(String(clamped));
   };
   const commitHeightBlur = () => {
-    const n = Number.parseInt(heightStr);
+    const n = Number.parseInt(heightStr, 10);
     const clamped = clampDim(Number.isFinite(n) ? n : MIN_DIM);
     setHeightStr(String(clamped));
   };
   const commitDpiBlur = () => {
-    const n = Number.parseInt(dpiStr);
+    const n = Number.parseInt(dpiStr, 10);
     if (!Number.isFinite(n) || n < 1) setDpiStr("96");
     else if (n > 2400) setDpiStr("2400");
   };

@@ -29,8 +29,15 @@
   "bugs": {
     "url": "https://github.com/MolCrafts/molvis/issues"
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "sideEffects": ["./src/commands/*.ts", "./dist/commands/*.js"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "./src/commands/*.ts",
+    "./dist/commands/*.js"
+  ],
   "scripts": {
     "build": "rslib build",
     "build:demo": "rsbuild build",
@@ -43,19 +50,19 @@
     "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
   },
   "devDependencies": {
-    "@rsbuild/core": "^1.7.5",
-    "@rslib/core": "^0.18.0",
+    "@rsbuild/core": "^2.0.8",
+    "@rslib/core": "^0.22.0",
     "@rstest/browser": "^0.10.3",
     "@rstest/core": "^0.10.3",
     "@types/plotly.js-dist-min": "^2.3.4",
     "playwright": "^1.60.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@babylonjs/core": "^7.54.3",
-    "@babylonjs/gui": "^7.54.3",
-    "@babylonjs/inspector": "^7.54.3",
-    "@babylonjs/materials": "^7.54.3",
+    "@babylonjs/core": "^9.10.1",
+    "@babylonjs/gui": "^9.10.1",
+    "@babylonjs/inspector": "^9.10.1",
+    "@babylonjs/materials": "^9.10.1",
     "@molcrafts/molrs": "^0.0.17",
     "plotly.js-dist-min": "^3.5.1",
     "tslog": "^4.10.2"

@@ -19,13 +19,13 @@ import {
   LAMMPSTrajReader,
   LinkedCell,
   PDBReader,
+  parseSMILES,
   RDF,
   SDFReader,
   Topology,
-  XYZReader,
-  parseSMILES,
   wasmMemory,
   writeFrame,
+  XYZReader,
 } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";

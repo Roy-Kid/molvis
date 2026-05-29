@@ -1,9 +1,9 @@
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { NumberField } from "@/components/ui/number-field";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import { canEncodeVideo, recordTurntableVideo } from "./gif-encode";
 
 interface CameraTrajectoryOverlayProps {
@@ -14,7 +14,10 @@ interface CameraTrajectoryOverlayProps {
 const Row = ({
   label,
   children,
-}: { label: string; children: React.ReactNode }) => (
+}: {
+  label: string;
+  children: React.ReactNode;
+}) => (
   <div className="flex items-center justify-between gap-2">
     <Label className="text-[10px] text-muted-foreground">{label}</Label>
     <div className="shrink-0">{children}</div>

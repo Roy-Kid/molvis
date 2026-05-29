@@ -2,7 +2,7 @@ import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import { TransparentSelectionModifier } from "../src/modifiers/TransparentSelectionModifier";
-import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
+import { createDefaultContext, SelectionMask } from "../src/pipeline/types";
 
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();

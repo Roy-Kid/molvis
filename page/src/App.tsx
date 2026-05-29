@@ -1,7 +1,11 @@
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { TimelineControl } from "@/components/TimelineControl";
+import type { Molvis } from "@molvis/core";
+import { Minimize } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
+import { TimelineControl } from "@/components/TimelineControl";
 import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
@@ -15,10 +19,6 @@ import { useHostFileBridge } from "@/hooks/useHostFileBridge";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
 import { useMountOpts } from "@/lib/mount-opts";
-import type { Molvis } from "@molvis/core";
-import { Minimize } from "lucide-react";
-import type React from "react";
-import { useEffect, useState } from "react";
 import MolvisWrapper from "./MolvisWrapper";
 import { KeyboardShortcutsDialog } from "./ui/layout/KeyboardShortcutsDialog";
 import { LeftSidebar } from "./ui/layout/LeftSidebar";

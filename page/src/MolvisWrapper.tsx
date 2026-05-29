@@ -1,17 +1,17 @@
+import {
+  defaultMolvisConfig,
+  type Molvis,
+  type MolvisConfig,
+  type MolvisSetting,
+  mountMolvis,
+} from "@molvis/core";
+import type React from "react";
+import { useEffect, useRef } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
 import {
   loadFileSmart,
   useFormatPicker,
 } from "@/components/format-picker-dialog";
-import {
-  type Molvis,
-  type MolvisConfig,
-  type MolvisSetting,
-  defaultMolvisConfig,
-  mountMolvis,
-} from "@molvis/core";
-import type React from "react";
-import { useEffect, useRef } from "react";
 
 interface MolvisWrapperProps {
   onMount?: (app: Molvis) => void;

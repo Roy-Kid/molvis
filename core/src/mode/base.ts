@@ -1,14 +1,14 @@
-import {
-  KeyboardEventTypes,
-  PointerEventTypes,
-  Vector2,
-  Vector3,
-} from "@babylonjs/core";
 import type {
   AbstractMesh,
   KeyboardInfo,
   Observer,
   PointerInfo,
+} from "@babylonjs/core";
+import {
+  KeyboardEventTypes,
+  PointerEventTypes,
+  Vector2,
+  Vector3,
 } from "@babylonjs/core";
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
@@ -500,5 +500,4 @@ abstract class BaseMode {
   }
 }
 
-export { ModeType };
-export { BaseMode };
+export { BaseMode, ModeType };

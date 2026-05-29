@@ -1,4 +1,3 @@
-import { loadKekule } from "@/lib/kekule-loader";
 import {
   forwardRef,
   useEffect,
@@ -6,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { loadKekule } from "@/lib/kekule-loader";
 import "./kekule-overrides.css";
 
 export interface KekuleAtomData {

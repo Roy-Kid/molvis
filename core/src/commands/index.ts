@@ -24,8 +24,8 @@
 
 // Core command infrastructure
 export { Command, command, getCommandMetadata } from "./base";
-export { commands, CommandRegistry } from "./registry";
 export type { CommandFn } from "./registry";
+export { CommandRegistry, commands } from "./registry";
 
 import { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
 import { CameraAnimateCommand } from "./camera";
@@ -52,39 +52,37 @@ import {
   UpdateOverlayCommand,
 } from "./overlays";
 import { SetRepresentationCommand } from "./representation";
-import { SelectAtomByIdCommand, getSelectedCommand } from "./selection";
+import { getSelectedCommand, SelectAtomByIdCommand } from "./selection";
 import { TakeSnapshotCommand } from "./snapshot";
 
+export type { GetSelectedResponse } from "../selection_manager";
+export type { CameraAnimateArgs } from "./camera";
+// Public types
+export type { DrawFrameOption } from "./draw";
 // Re-export for downstream consumers.
 export {
-  DrawAtomCommand,
-  DeleteAtomCommand,
-  DrawBondCommand,
-  DeleteBondCommand,
+  AddOverlayCommand,
+  AddOverlaySnapshotCommand,
+  CameraAnimateCommand,
   ClearSceneCommand,
+  DeleteAtomCommand,
+  DeleteBondCommand,
+  DrawAtomCommand,
+  DrawBondCommand,
+  ExportFrameCommand,
   getSelectedCommand,
+  MarkAtomCommand,
+  NewFrameCommand,
+  RemarkAtomCommand,
+  RemoveOverlayCommand,
   SelectAtomByIdCommand,
   SetAttributeCommand,
   SetFrameMetaCommand,
-  NewFrameCommand,
-  ExportFrameCommand,
-  TakeSnapshotCommand,
   SetRepresentationCommand,
-  AddOverlayCommand,
-  RemoveOverlayCommand,
-  UpdateOverlayCommand,
-  AddOverlaySnapshotCommand,
-  MarkAtomCommand,
+  TakeSnapshotCommand,
   UnmarkAtomCommand,
-  RemarkAtomCommand,
-  CameraAnimateCommand,
+  UpdateOverlayCommand,
 };
-export type { CameraAnimateArgs } from "./camera";
-
-export type { GetSelectedResponse } from "../selection_manager";
-
-// Public types
-export type { DrawFrameOption } from "./draw";
 
 /**
  * Every class whose registration depends on `@command(...)` firing at

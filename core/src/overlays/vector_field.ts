@@ -5,6 +5,7 @@
  * for GPU-efficient rendering of large vector fields (e.g. atomic forces).
  */
 
+import type { Scene } from "@babylonjs/core";
 import {
   Color3,
   Matrix,
@@ -14,8 +15,7 @@ import {
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
-import type { Scene } from "@babylonjs/core";
-import type { Overlay, Vec3, VectorFieldProps } from "./types";
+import type { Overlay, VectorFieldProps } from "./types";
 
 const DEFAULT_COLOR = "#4488ff";
 const DEFAULT_SHAFT_RADIUS = 0.03;
@@ -207,7 +207,7 @@ export class VectorFieldOverlay implements Overlay {
 
     const pos = new Vector3();
     const vecV = new Vector3();
-    const translation = new Vector3();
+    const _translation = new Vector3();
     const matBuf = new Matrix();
 
     for (let i = 0; i < n; i++) {

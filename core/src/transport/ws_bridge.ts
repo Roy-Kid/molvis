@@ -20,8 +20,8 @@
 
 import type { MolvisApp } from "../app";
 import { RPCRouter } from "./rpc/router";
-import { createErrorResponse } from "./rpc/types";
 import type { RPCResponseEnvelope } from "./rpc/types";
+import { createErrorResponse } from "./rpc/types";
 
 /**
  * Decode a binary WebSocket frame into a JSON object + DataView buffers.
@@ -145,7 +145,7 @@ export class WebSocketBridge {
   private cleanupBeforeUnload: (() => void) | null = null;
   private ready = false;
 
-  constructor(private readonly app: MolvisApp) {
+  constructor(readonly app: MolvisApp) {
     this.router = new RPCRouter(app);
   }
 

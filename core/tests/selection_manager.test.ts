@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
 import {
-  SelectionManager,
   makeSelectionKey,
   parseSelectionKey,
+  SelectionManager,
 } from "../src/selection_manager";
 
 // Minimal SceneIndex mock

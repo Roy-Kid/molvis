@@ -1,3 +1,7 @@
+import { ModeType, type Molvis } from "@molvis/core";
+import { Atom, Link2 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -7,10 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { ModeType, type Molvis } from "@molvis/core";
-import { Atom, Link2 } from "lucide-react";
-import type React from "react";
-import { useEffect, useState } from "react";
 
 interface ToolsTabProps {
   app: Molvis | null;

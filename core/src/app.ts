@@ -1,4 +1,5 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
+import { type Box, Frame } from "@molcrafts/molrs";
 import { Artist } from "./artist";
 import { findRepresentation } from "./artist/representation";
 import { StyleManager } from "./artist/style_manager";
@@ -11,13 +12,16 @@ import {
 import type { DrawFrameOption } from "./commands/draw";
 import { CommandManager } from "./commands/manager";
 import { SetRepresentationCommand } from "./commands/representation";
-import { type MolvisConfig, defaultMolvisConfig } from "./config";
+import { defaultMolvisConfig, type MolvisConfig } from "./config";
+import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { FrameRenderScheduler } from "./frame_render_scheduler";
 import { viewAtomCoords } from "./io/atom_coords";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
+import { OverlayManager } from "./overlays/overlay_manager";
+import type { AtomAnchored, Overlay } from "./overlays/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import { applyAutoAttach } from "./pipeline/auto_attach";
 import {
@@ -30,6 +34,7 @@ import type {
   PipelineContext,
   SelectionMask,
 } from "./pipeline/types";
+import { defaultSaveFile } from "./save_file";
 import { buildFrameFromScene } from "./scene_sync";
 import {
   captureStructuralSelectionSnapshot,
@@ -38,23 +43,17 @@ import {
 import { type MolvisSetting, Settings } from "./settings";
 import { System } from "./system";
 import {
+  classifyFrameTransition,
   type FrameTransitionDecision,
   type FrameUpdateKind,
-  classifyFrameTransition,
 } from "./system/frame_diff";
 import { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
+import { DType } from "./utils/dtype";
 import { cropToContent, reencodeImage } from "./utils/image_crop";
 import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
-
-import { type Box, Frame } from "@molcrafts/molrs";
-import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
-import { OverlayManager } from "./overlays/overlay_manager";
-import type { AtomAnchored, Overlay } from "./overlays/types";
-import { defaultSaveFile } from "./save_file";
-import { DType } from "./utils/dtype";
 
 function asAtomAnchored(overlay: Overlay): AtomAnchored | null {
   const a = overlay as Partial<AtomAnchored>;

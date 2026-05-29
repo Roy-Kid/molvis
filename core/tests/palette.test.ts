@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 import {
-  DEFAULT_CATEGORICAL_COLOR_MAP,
   buildCategoricalColorLookup,
+  DEFAULT_CATEGORICAL_COLOR_MAP,
   getCategoricalPalette,
   getColorMap,
   getPaletteDefinition,

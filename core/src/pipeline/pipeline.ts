@@ -10,10 +10,10 @@ import {
   isTopologyChanging,
 } from "./nato_ids";
 import {
+  createDefaultContext,
   type FrameChangeKind,
   type PipelineContext,
   SelectionMask,
-  createDefaultContext,
 } from "./types";
 
 export interface PipelineEventMap {

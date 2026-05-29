@@ -5,7 +5,7 @@
  * controls positioned via manual 3D→screen projection each frame.
  */
 
-import { type Camera, Matrix, type Scene, Vector3 } from "@babylonjs/core";
+import { Matrix, type Scene, Vector3 } from "@babylonjs/core";
 import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
 
 export type LabelMode = "none" | "all" | "selected";

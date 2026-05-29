@@ -6,8 +6,7 @@ import { ExpressionSelectionModifier } from "../src/modifiers/ExpressionSelectio
 import { SelectModifier } from "../src/modifiers/SelectModifier";
 import { BaseModifier, ModifierCapability } from "../src/pipeline/modifier";
 import { ModifierPipeline } from "../src/pipeline/pipeline";
-import type { PipelineContext } from "../src/pipeline/types";
-import type { SelectionMask } from "../src/pipeline/types";
+import type { PipelineContext, SelectionMask } from "../src/pipeline/types";
 
 // ---------------------------------------------------------------------------
 // Helpers

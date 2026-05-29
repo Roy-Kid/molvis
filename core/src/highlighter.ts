@@ -1,6 +1,6 @@
 import { Color3, Color4, type Mesh, type Scene } from "@babylonjs/core";
 import type { MolvisApp } from "./app";
-import { type SelectionState, parseSelectionKey } from "./selection_manager";
+import { parseSelectionKey, type SelectionState } from "./selection_manager";
 
 /**
  * Highlighter: Mode-aware highlighting in a single module.
@@ -163,8 +163,8 @@ export class Highlighter {
     // Restore thin instance colors
     for (const [key, colors] of this.thinOriginalColors) {
       const [uniqueIdStr, thinIndexStr] = key.split(":");
-      const uniqueId = Number.parseInt(uniqueIdStr);
-      const thinIndex = Number.parseInt(thinIndexStr);
+      const uniqueId = Number.parseInt(uniqueIdStr, 10);
+      const thinIndex = Number.parseInt(thinIndexStr, 10);
 
       const mesh = this.scene.getMeshByUniqueId(uniqueId) as Mesh;
       if (!mesh) continue;

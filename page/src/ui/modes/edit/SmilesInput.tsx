@@ -1,9 +1,9 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { parseSMILES } from "@molvis/core";
 import { AlertCircle, Wand2 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface SmilesInputProps {
   onParsed: (smiles: string) => void;

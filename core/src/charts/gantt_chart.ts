@@ -1,4 +1,4 @@
-import { type PlotlyModule, loadPlotly } from "./plotly_loader";
+import { loadPlotly, type PlotlyModule } from "./plotly_loader";
 import { buildConfig, buildLayout, resolveTheme } from "./theme";
 import type { AxisConfig, ThemeMode } from "./types";
 

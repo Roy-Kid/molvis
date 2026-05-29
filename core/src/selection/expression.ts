@@ -37,7 +37,7 @@ export class ExpressionSelector {
           const key = sceneIndex.getSelectionKeyForAtom(atomId);
           if (key) matchingKeys.push(key);
         }
-      } catch (e) {
+      } catch (_e) {
         // Ignore errors
       }
     }
@@ -80,7 +80,7 @@ export class ExpressionSelector {
         if (evaluator(atomProxy, x, y, z, element, i, i)) {
           indices.push(i);
         }
-      } catch (e) {
+      } catch (_e) {
         // Ignore
       }
     }
@@ -115,7 +115,7 @@ export class ExpressionSelector {
       _cachedExpression = expression;
       _cachedEvaluator = evaluator as ExpressionEvaluator;
       return evaluator as ExpressionEvaluator;
-    } catch (e) {
+    } catch (_e) {
       throw new Error(`Invalid expression: ${expression}`);
     }
   }

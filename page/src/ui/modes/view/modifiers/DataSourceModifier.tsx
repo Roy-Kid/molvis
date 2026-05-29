@@ -1,11 +1,4 @@
 import {
-  loadFileWithFormatPrompt,
-  useFormatPicker,
-} from "@/components/format-picker-dialog";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { NumberField } from "@/components/ui/number-field";
-import {
   type DataSourceModifier as CoreDataSourceModifier,
   Frame,
   FrameDataSource,
@@ -17,6 +10,13 @@ import { getAllAcceptExtensions } from "@molvis/core/io";
 import { ChevronDown, ChevronRight, FileUp, Trash2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
+import {
+  loadFileWithFormatPrompt,
+  useFormatPicker,
+} from "@/components/format-picker-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { NumberField } from "@/components/ui/number-field";
 
 interface DataSourceModifierProps {
   modifier: CoreDataSourceModifier;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 import {
-  type ReconcilableSelection,
   captureStructuralSelectionSnapshot,
+  type ReconcilableSelection,
   reconcileSelectionAfterStructuralUpdate,
 } from "../src/selection_reconciler";
 

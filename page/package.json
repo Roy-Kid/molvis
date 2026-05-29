@@ -25,23 +25,23 @@
     "autoprefixer": "^10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.577.0",
+    "kekule": "^1.0.4",
+    "lucide-react": "^1.17.0",
     "postcss": "^8.5.15",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-resizable-panels": "^4.11.2",
     "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^4.3.0",
-    "kekule": "^1.0.4"
+    "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
-    "@rsbuild/core": "^1.7.5",
-    "@rsbuild/plugin-react": "^1.4.6",
+    "@rsbuild/core": "^2.0.8",
+    "@rsbuild/plugin-react": "^2.0.0",
     "@rstest/core": "^0.10.3",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3"
   },
   "scripts": {
     "dev": "rsbuild dev",

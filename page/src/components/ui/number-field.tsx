@@ -1,5 +1,5 @@
-import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/input";
 
 /**
  * Numeric input that holds a string draft while editing and commits a

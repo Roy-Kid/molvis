@@ -9,18 +9,18 @@ import type { MolvisApp } from "../app";
 import { EventForwarder } from "./event_forwarder";
 import { WebSocketBridge } from "./ws_bridge";
 
-export { WebSocketBridge, type BridgeConnectResult } from "./ws_bridge";
 export { EventForwarder } from "./event_forwarder";
 export { RPCRouter } from "./rpc/router";
-export { applyBackendState } from "./state_sync";
 export type {
+  BinaryBufferRef,
   JsonRPCRequest,
   JsonRPCResponse,
-  BinaryBufferRef,
-  SerializedFrameData,
-  SerializedBoxData,
   RPCResponseEnvelope,
+  SerializedBoxData,
+  SerializedFrameData,
 } from "./rpc/types";
+export { applyBackendState } from "./state_sync";
+export { type BridgeConnectResult, WebSocketBridge } from "./ws_bridge";
 
 export interface AttachWebSocketBridgeOpts {
   /** WebSocket URL served by the Python-side transport. */

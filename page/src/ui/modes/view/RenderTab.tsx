@@ -1,3 +1,6 @@
+import { type Molvis, REPRESENTATIONS } from "@molvis/core";
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { NumberField } from "@/components/ui/number-field";
 import {
@@ -9,9 +12,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import { type Molvis, REPRESENTATIONS } from "@molvis/core";
-import type React from "react";
-import { useCallback, useEffect, useState } from "react";
 
 interface RenderTabProps {
   app: Molvis | null;
@@ -51,7 +51,10 @@ const BG_PRESETS = [
 const Row = ({
   label,
   children,
-}: { label: string; children: React.ReactNode }) => (
+}: {
+  label: string;
+  children: React.ReactNode;
+}) => (
   <div className="flex items-center justify-between gap-1.5">
     <Label className="text-[10px] text-muted-foreground truncate min-w-0">
       {label}

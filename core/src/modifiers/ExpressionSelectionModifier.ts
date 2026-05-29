@@ -21,7 +21,7 @@ export class ExpressionSelectionModifier extends BaseModifier {
   }
 
   validate(_input: Frame, _context: PipelineContext): ValidationResult {
-    if (!this.expression || !this.expression.trim()) {
+    if (!this.expression?.trim()) {
       // Empty expression is valid (selects nothing or acts as pass-through)
       return { valid: true };
     }

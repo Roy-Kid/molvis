@@ -1,5 +1,5 @@
-import { ArcRotateCamera, Color4 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
+import { ArcRotateCamera, Color4 } from "@babylonjs/core";
 
 /**
  * Viewport configuration settings

@@ -1,3 +1,4 @@
+import type React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type React from "react";
 
 export interface StateSyncDialogProps {
   open: boolean;

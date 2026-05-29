@@ -9,14 +9,14 @@
  * follows the atom position across frame updates automatically.
  */
 
-import { Matrix, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
+import { Matrix, Vector3 } from "@babylonjs/core";
 import {
   type AdvancedDynamicTexture,
   Rectangle,
   TextBlock,
 } from "@babylonjs/gui";
-import type { AtomAnchored, Overlay, TextLabelProps, Vec3 } from "./types";
+import type { AtomAnchored, Overlay, TextLabelProps } from "./types";
 
 const DEFAULT_COLOR = "white";
 const DEFAULT_FONT_SIZE = 14;

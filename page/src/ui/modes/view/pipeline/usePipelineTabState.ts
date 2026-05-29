@@ -2,17 +2,17 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import {
   DataSourceModifier,
+  isSelectionProducer,
+  isTopologyChanging,
   type Modifier,
   ModifierCapability,
   type Molvis,
+  nextModifierId,
   PipelineEvents,
   SelectModifier,
-  isSelectionProducer,
-  isTopologyChanging,
-  nextModifierId,
 } from "@molvis/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSelectedAtomIndices } from "../modifiers/selectionUtils";
 import { getDescendants } from "./tree_utils";
 
