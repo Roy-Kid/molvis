@@ -15,6 +15,7 @@
  */
 
 import {
+  Axis,
   Color3,
   Matrix,
   MeshBuilder,
@@ -34,15 +35,27 @@ import type {
   MarkLabel,
   MarkShape,
   Overlay,
+  Vec3,
 } from "./types";
 
 const DEFAULT_SHAPE_COLOR = "#ffd54a";
 const DEFAULT_SHAPE_OPACITY = 0.35;
-const DEFAULT_SHAPE_RADIUS = 0.6;
 const DEFAULT_SHAPE_SEGMENTS = 24;
 
+// Halo auto-sizing: when shape.radius is not explicitly provided, the halo's
+// radius is this factor × the marked atom's rendered radius. 1.5× gives a
+// clear ring extending ~0.5× the atom radius outside the atom's mesh.
+const HALO_TO_ATOM_RATIO = 1.5;
+
 const DEFAULT_LABEL_COLOR = "white";
-const DEFAULT_LABEL_FONT_SIZE = 14;
+
+// Label dynamic-sizing clamps (screen pixels). Below 12 the text is unreadable;
+// above 64 it fills the canvas at extreme zoom-in and looks silly.
+const LABEL_FONT_MIN = 12;
+const LABEL_FONT_MAX = 64;
+// Factor applied to the atom's screen-projected pixel radius to pick font size.
+// Chosen so a single character's x-height roughly matches the atom's radius.
+const LABEL_FONT_PER_PIXEL_RADIUS = 1.6;
 
 let _counter = 0;
 function nextId(): string {
@@ -67,6 +80,20 @@ interface ResolvedProps {
   name: string;
 }
 
+/**
+ * Context the command layer injects when constructing a mark. Both fields
+ * are resolved from the current frame so the overlay can appear at the
+ * correct location immediately (no one-frame flash) and size itself from
+ * the atom's rendered radius (halo = 1.5 × atomRadius, label font tracks
+ * the atom's on-screen pixel radius).
+ */
+export interface MarkAtomContext {
+  /** Rendered radius of the marked atom in Å. */
+  atomRadius: number;
+  /** World-space position of the marked atom at creation time. */
+  initialPosition: Vec3;
+}
+
 export class MarkAtomOverlay implements Overlay, AtomAnchored {
   readonly id: string;
   readonly type = "mark_atom" as const;
@@ -83,20 +110,35 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
   /** Current world-space center of the mark (atom pos when anchored). */
   private _worldCenter: Vector3;
 
+  /** Rendered radius (Å) of the marked atom; drives halo & label auto-sizing. */
+  private _atomRadius: number;
+  /** True when the caller did not pin label.fontSize, so we scale per-frame. */
+  private _labelFontSizeAuto: boolean;
+
   private constructor(
     id: string,
     props: ResolvedProps,
     scene: Scene,
     uiTexture: AdvancedDynamicTexture,
+    atomRadius: number,
+    initialPosition: Vec3,
+    labelFontSizeAuto: boolean,
   ) {
     this.id = id;
     this._props = props;
     this._scene = scene;
     this._uiTexture = uiTexture;
+    this._atomRadius = atomRadius;
+    this._labelFontSizeAuto = labelFontSizeAuto;
     this._root = new TransformNode(`${id}_root`, scene);
-    // Seed at origin; the orchestrator (MolvisApp.syncAnchoredOverlay) fills
-    // in the real position from the anchor atom before the next render.
-    this._worldCenter = new Vector3(0, 0, 0);
+    // Seed at the marked atom's position so the overlay appears in the right
+    // place immediately (no one-frame flash at origin); the orchestrator
+    // (MolvisApp.syncAnchoredOverlay) keeps it synced thereafter.
+    this._worldCenter = new Vector3(
+      initialPosition[0],
+      initialPosition[1],
+      initialPosition[2],
+    );
     this._root.position.copyFrom(this._worldCenter);
 
     if (props.shape) this._createShape(props.shape);
@@ -107,17 +149,25 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     scene: Scene,
     props: MarkAtomProps,
     uiTexture: AdvancedDynamicTexture,
+    context: MarkAtomContext,
   ): MarkAtomOverlay {
     if (!Number.isInteger(props.anchorAtomId) || props.anchorAtomId < 0) {
       throw new Error(
         `MarkAtomOverlay: anchorAtomId must be a non-negative integer, got ${props.anchorAtomId}`,
       );
     }
+    // Detect "auto" BEFORE resolveDefaults fills the field in. We track this
+    // independently so later update() calls can transition to a fixed size.
+    const labelFontSizeAuto =
+      props.label != null && props.label.fontSize === undefined;
     return new MarkAtomOverlay(
       nextId(),
-      resolveDefaults(props),
+      resolveDefaults(props, context.atomRadius),
       scene,
       uiTexture,
+      context.atomRadius,
+      context.initialPosition,
+      labelFontSizeAuto,
     );
   }
 
@@ -159,22 +209,29 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
       anchorAtomId = patch.anchorAtomId;
     }
 
-    this._props = resolveDefaults({
-      anchorAtomId,
-      shape,
-      label,
-      name: patch.name ?? prev.name,
-    });
-
-    // Anchor change → park at origin; UpdateOverlayCommand will resync
-    // against the new atom so we don't render at the previous atom's spot.
-    if (anchorAtomId !== prev.anchorAtomId) {
-      this._worldCenter.set(0, 0, 0);
-      this._root.position.copyFrom(this._worldCenter);
+    // If the user explicitly sets label.fontSize in a patch, pin it.
+    if (patch.label && patch.label.fontSize !== undefined) {
+      this._labelFontSizeAuto = false;
     }
 
-    this._applyShape(this._props.shape);
-    this._applyLabel(this._props.label);
+    const next = resolveDefaults(
+      {
+        anchorAtomId,
+        shape,
+        label,
+        name: patch.name ?? prev.name,
+      },
+      this._atomRadius,
+    );
+    this._props = next;
+
+    // Anchor change: keep the current world center as a visible seed until
+    // the next frame-rendered event re-syncs to the new atom. Jumping to
+    // origin would cause a one-frame flash at (0,0,0); keeping the old
+    // position is visually safer.
+
+    this._applyShape(next.shape);
+    this._applyLabel(next.label);
     return this;
   }
 
@@ -200,7 +257,11 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
 
   updateScreenPositions(): void {
     // Only the label needs per-frame projection; the shape lives in world space.
-    this._labelBillboard?.project(this._scene, this._worldCenter);
+    this._labelBillboard?.project(
+      this._scene,
+      this._worldCenter,
+      this._labelFontSizeAuto ? this._atomRadius : null,
+    );
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
@@ -239,6 +300,11 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     // frustum and BabylonJS culls the halo wholesale. Same fix the cloud
     // mesh uses (artist.ts:586).
     sphere.alwaysSelectAsActiveMesh = true;
+    // Atom impostors render in the transparent queue (needAlphaBlending + forceDepthWrite),
+    // so the halo and the marked atom share a mesh center and BabylonJS's center-distance
+    // sort flips arbitrarily as the camera orbits. Push the halo to a later rendering group
+    // so it always draws after atoms — same convention as target_indicator / visual_guide.
+    sphere.renderingGroupId = 1;
 
     this._shapeMaterial = mat;
     this._shapeMesh = sphere;
@@ -342,7 +408,11 @@ class _LabelBillboard {
     if (this._textBlock) this._textBlock.isVisible = v;
   }
 
-  project(scene: Scene, center: Vector3): void {
+  project(
+    scene: Scene,
+    center: Vector3,
+    dynamicAtomRadius: number | null,
+  ): void {
     if (!this._visible) return;
     if (!this._container && !this._textBlock) return;
 
@@ -388,6 +458,44 @@ class _LabelBillboard {
       control.left = `${projected.x - width / 2}px`;
       control.top = `${projected.y - height / 2}px`;
     }
+
+    // Dynamic font sizing: project a probe point offset by `atomRadius` along
+    // the camera's right axis. The probe is always perpendicular to the view
+    // direction, so its pixel distance from `projected` is a clean measurement
+    // of the atom's on-screen radius at the current zoom.
+    if (dynamicAtomRadius !== null && this._textBlock) {
+      const right = camera.getDirection(Axis.X);
+      const probe = new Vector3(
+        center.x + right.x * dynamicAtomRadius,
+        center.y + right.y * dynamicAtomRadius,
+        center.z + right.z * dynamicAtomRadius,
+      );
+      const centerProj = Vector3.Project(
+        center,
+        Matrix.IdentityReadOnly,
+        transformMatrix,
+        viewportMatrix,
+      );
+      const probeProj = Vector3.Project(
+        probe,
+        Matrix.IdentityReadOnly,
+        transformMatrix,
+        viewportMatrix,
+      );
+      const pixelRadius = Math.hypot(
+        probeProj.x - centerProj.x,
+        probeProj.y - centerProj.y,
+      );
+      const target = Math.max(
+        LABEL_FONT_MIN,
+        Math.min(LABEL_FONT_MAX, pixelRadius * LABEL_FONT_PER_PIXEL_RADIUS),
+      );
+      const rounded = Math.round(target);
+      // Guard to avoid thrashing BabylonJS GUI layout on sub-pixel changes.
+      if (this._textBlock.fontSizeInPixels !== rounded) {
+        this._textBlock.fontSize = rounded;
+      }
+    }
   }
 
   dispose(): void {
@@ -405,6 +513,10 @@ class _LabelBillboard {
     tb.isHitTestVisible = false;
     tb.textHorizontalAlignment = TextBlock.HORIZONTAL_ALIGNMENT_CENTER;
     tb.textVerticalAlignment = TextBlock.VERTICAL_ALIGNMENT_CENTER;
+    // Without this, TextBlock stretches to fill its parent. Inside a
+    // Rectangle with adaptWidthToChildren, that blows the container up to
+    // the full AdvancedDynamicTexture (screen) size.
+    tb.resizeToFit = true;
 
     if (background) {
       const rect = new Rectangle(`${this._id}_bg`);
@@ -446,25 +558,27 @@ class _LabelBillboard {
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_SHAPE: ResolvedShape = {
-  kind: "sphere",
-  color: DEFAULT_SHAPE_COLOR,
-  opacity: DEFAULT_SHAPE_OPACITY,
-  radius: DEFAULT_SHAPE_RADIUS,
-  segments: DEFAULT_SHAPE_SEGMENTS,
-};
-
 function resolveShape(
   shape: MarkShape | null | undefined,
+  atomRadius: number,
 ): ResolvedShape | null {
   if (shape === null) return null;
-  if (shape === undefined) return { ...DEFAULT_SHAPE };
+  const autoRadius = atomRadius * HALO_TO_ATOM_RATIO;
+  if (shape === undefined) {
+    return {
+      kind: "sphere",
+      color: DEFAULT_SHAPE_COLOR,
+      opacity: DEFAULT_SHAPE_OPACITY,
+      radius: autoRadius,
+      segments: DEFAULT_SHAPE_SEGMENTS,
+    };
+  }
   return {
-    kind: shape.kind ?? DEFAULT_SHAPE.kind,
-    color: shape.color ?? DEFAULT_SHAPE.color,
-    opacity: shape.opacity ?? DEFAULT_SHAPE.opacity,
-    radius: shape.radius ?? DEFAULT_SHAPE.radius,
-    segments: shape.segments ?? DEFAULT_SHAPE.segments,
+    kind: shape.kind ?? "sphere",
+    color: shape.color ?? DEFAULT_SHAPE_COLOR,
+    opacity: shape.opacity ?? DEFAULT_SHAPE_OPACITY,
+    radius: shape.radius ?? autoRadius,
+    segments: shape.segments ?? DEFAULT_SHAPE_SEGMENTS,
   };
 }
 
@@ -472,19 +586,23 @@ function resolveLabel(
   label: MarkLabel | null | undefined,
 ): ResolvedLabel | null {
   if (label == null) return null;
+  // Font size here is only a seed; when fontSize was not provided the
+  // MarkAtomOverlay projects per-frame and overwrites this. The seed just
+  // keeps the control from initializing at an ugly size before the first
+  // render tick.
   return {
     text: label.text,
     color: label.color ?? DEFAULT_LABEL_COLOR,
-    fontSize: label.fontSize ?? DEFAULT_LABEL_FONT_SIZE,
+    fontSize: label.fontSize ?? LABEL_FONT_MIN,
     background: label.background ?? null,
     offset: label.offset ?? [0, 0, 0],
   };
 }
 
-function resolveDefaults(p: MarkAtomProps): ResolvedProps {
+function resolveDefaults(p: MarkAtomProps, atomRadius: number): ResolvedProps {
   return {
     anchorAtomId: p.anchorAtomId,
-    shape: resolveShape(p.shape),
+    shape: resolveShape(p.shape, atomRadius),
     label: resolveLabel(p.label),
     name: p.name ?? "",
   };

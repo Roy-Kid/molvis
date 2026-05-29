@@ -1,8 +1,25 @@
 /**
- * Commands module - Command pattern for MolVis operations
+ * Commands module — Command pattern for MolVis operations.
  *
- * All commands extend the Command base class with do() and undo() methods.
- * Commands are exposed for RPC using the @command decorator.
+ * All commands extend Command<T> with do()/undo(). The `@command(name)`
+ * decorator on a class body registers the class into the global `commands`
+ * registry as a *module-load side effect*.
+ *
+ * ⚠️  Tree-shaking trap (read before touching):
+ * When `page/` bundles core from source via alias, the bundler treats every
+ * source file as side-effect-free (core's package.json `sideEffects` glob
+ * never matches `./src/**`). Bare `import "./foo"` side-effect imports get
+ * dead-code-eliminated → `@command` decorator never runs → command vanishes
+ * at runtime with `Unknown command: xxx`.
+ *
+ * The fix below is to name-import every decorated class and pin them all
+ * into `REGISTERED_COMMAND_CLASSES`. `registerDefaultCommands()` then reads
+ * that array — a live, observable use — which pulls each module into the
+ * reachability graph and forces the bundler to evaluate it (running the
+ * decorator along the way).
+ *
+ * Adding a new `@command(...)` class? Import it below AND add it to
+ * `REGISTERED_COMMAND_CLASSES`. Do not rely on `import "./foo"` tricks.
  */
 
 // Core command infrastructure
@@ -10,71 +27,106 @@ export { Command, command, getCommandMetadata } from "./base";
 export { commands, CommandRegistry } from "./registry";
 export type { CommandFn } from "./registry";
 
-// Command classes
+import { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
+import { CameraAnimateCommand } from "./camera";
+import { ClearSceneCommand } from "./clear";
+// ── Name-imports: load every @command-decorated class so its decorator runs.
+//    These are NOT optional — removing one silently breaks the command at
+//    runtime (see header comment).
+import {
+  DeleteAtomCommand,
+  DeleteBondCommand,
+  DrawAtomCommand,
+  DrawBondCommand,
+} from "./draw";
+import { ExportFrameCommand, NewFrameCommand } from "./frame";
+import {
+  MarkAtomCommand,
+  RemarkAtomCommand,
+  UnmarkAtomCommand,
+} from "./mark_atom";
+import {
+  AddOverlayCommand,
+  AddOverlaySnapshotCommand,
+  RemoveOverlayCommand,
+  UpdateOverlayCommand,
+} from "./overlays";
+import { SetRepresentationCommand } from "./representation";
+import { SelectAtomByIdCommand, getSelectedCommand } from "./selection";
+import { TakeSnapshotCommand } from "./snapshot";
+
+// Re-export for downstream consumers.
 export {
-  DrawBoxCommand,
-  DrawFrameCommand,
   DrawAtomCommand,
   DeleteAtomCommand,
   DrawBondCommand,
   DeleteBondCommand,
-} from "./draw";
-export { ClearSceneCommand } from "./clear";
-export { getSelectedCommand, SelectAtomByIdCommand } from "./selection";
-export { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
-export {
+  ClearSceneCommand,
+  getSelectedCommand,
+  SelectAtomByIdCommand,
+  SetAttributeCommand,
+  SetFrameMetaCommand,
   NewFrameCommand,
-  UpdateFrameCommand,
   ExportFrameCommand,
-} from "./frame";
-export { TakeSnapshotCommand } from "./snapshot";
-export { SetRepresentationCommand } from "./representation";
-export {
+  TakeSnapshotCommand,
+  SetRepresentationCommand,
   AddOverlayCommand,
   RemoveOverlayCommand,
   UpdateOverlayCommand,
   AddOverlaySnapshotCommand,
-} from "./overlays";
-export {
   MarkAtomCommand,
   UnmarkAtomCommand,
   RemarkAtomCommand,
-} from "./mark_atom";
-
-export { CameraAnimateCommand } from "./camera";
+  CameraAnimateCommand,
+};
 export type { CameraAnimateArgs } from "./camera";
 
 export type { GetSelectedResponse } from "../selection_manager";
 
-// Utilities
-
-// Types
-export type { FrameSource } from "../pipeline/pipeline";
+// Public types
 export type { DrawFrameOption } from "./draw";
-export {
-  ArrayFrameSource,
-  SingleFrameSource,
-  AsyncFrameSource,
-} from "./sources";
 
-import "./draw";
-import "./clear";
-import "./selection";
-import "./frame";
-import "./snapshot";
-import "./attributes";
-import "./representation";
-import "./overlays";
-import "./mark_atom";
-import "./camera";
+/**
+ * Every class whose registration depends on `@command(...)` firing at
+ * module-load time. This array exists purely to pin those class references
+ * into the reachability graph — without it, bundlers drop modules that are
+ * re-exported but never imported by name elsewhere (mark_atom, clear,
+ * snapshot, attributes, etc.), and their decorators never execute.
+ *
+ * `RemarkAtomCommand` has no `@command` decorator but lives in the same
+ * module as `MarkAtomCommand`; including its sibling above is enough to
+ * keep the file alive, so it is not listed here.
+ */
+const REGISTERED_COMMAND_CLASSES = [
+  DrawAtomCommand,
+  DeleteAtomCommand,
+  DrawBondCommand,
+  DeleteBondCommand,
+  ClearSceneCommand,
+  SelectAtomByIdCommand,
+  SetAttributeCommand,
+  SetFrameMetaCommand,
+  NewFrameCommand,
+  ExportFrameCommand,
+  TakeSnapshotCommand,
+  SetRepresentationCommand,
+  AddOverlayCommand,
+  RemoveOverlayCommand,
+  UpdateOverlayCommand,
+  AddOverlaySnapshotCommand,
+  MarkAtomCommand,
+  UnmarkAtomCommand,
+  CameraAnimateCommand,
+] as const;
 
 /**
  * Ensure the default command set is registered with the global `commands`
- * registry. Idempotent — all command modules register via `@command`
- * decorators at load time, so merely importing this module is enough. The
- * explicit function exists so `MolvisApp` and external consumers can state
- * intent at the call site.
+ * registry. The `@command` decorators above already fired at import time;
+ * this function's sole job is to read `REGISTERED_COMMAND_CLASSES.length`
+ * so bundlers can see the array is live, which forces them to retain the
+ * imports and, transitively, execute each decorator. The return value is
+ * incidental — callers consume it for the side effect.
  */
-export function registerDefaultCommands(): void {
-  // no-op; side-effect imports above have already run
+export function registerDefaultCommands(): number {
+  return REGISTERED_COMMAND_CLASSES.length;
 }

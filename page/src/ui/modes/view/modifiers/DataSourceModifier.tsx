@@ -8,13 +8,15 @@ import { NumberField } from "@/components/ui/number-field";
 import {
   type DataSourceModifier as CoreDataSourceModifier,
   Frame,
+  FrameDataSource,
   type Molvis,
   Trajectory,
+  TrajectoryDataSource,
 } from "@molvis/core";
 import { getAllAcceptExtensions } from "@molvis/core/io";
 import { ChevronDown, ChevronRight, FileUp, Trash2 } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface DataSourceModifierProps {
   modifier: CoreDataSourceModifier;
@@ -23,6 +25,43 @@ interface DataSourceModifierProps {
 }
 
 type ComponentKey = "atoms" | "bonds" | "box";
+
+interface FrameStats {
+  atomCount: number;
+  bondCount: number;
+  hasBox: boolean;
+  boxLabel: string | null;
+}
+
+function readFrameStats(modifier: CoreDataSourceModifier): FrameStats {
+  const frame = modifier.peekFrame;
+  if (!frame) {
+    return { atomCount: 0, bondCount: 0, hasBox: false, boxLabel: null };
+  }
+  const atoms = frame.getBlock("atoms");
+  const bonds = frame.getBlock("bonds");
+  const box = frame.simbox;
+  let boxLabel: string | null = null;
+  if (box) {
+    try {
+      const lengths = box.lengths();
+      const L = lengths.toCopy();
+      lengths.free();
+      // Render as `lx × ly × lz` with 2 decimals. Triclinic tilts are
+      // not shown here — keep the cell description short; full geometry
+      // lives in a separate inspector if/when we add one.
+      boxLabel = `${L[0].toFixed(2)} × ${L[1].toFixed(2)} × ${L[2].toFixed(2)} Å`;
+    } catch {
+      boxLabel = null;
+    }
+  }
+  return {
+    atomCount: atoms?.nrows() ?? 0,
+    bondCount: bonds?.nrows() ?? 0,
+    hasBox: box !== undefined,
+    boxLabel,
+  };
+}
 
 const ParamRow: React.FC<{ label: string; children: React.ReactNode }> = ({
   label,
@@ -104,6 +143,25 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     box: false,
   });
 
+  // Re-read stats on every frame-change. The DS's cached frame lands
+  // during pipeline phase A's preload, which is what fires
+  // frame-change — without this subscription the panel would stay
+  // stuck at "0 atoms" until something else triggered a re-render.
+  const [stats, setStats] = useState<FrameStats>(() =>
+    readFrameStats(modifier),
+  );
+  useEffect(() => {
+    setStats(readFrameStats(modifier));
+    if (!app) return;
+    const refresh = () => setStats(readFrameStats(modifier));
+    app.events.on("frame-change", refresh);
+    app.events.on("trajectory-change", refresh);
+    return () => {
+      app.events.off("frame-change", refresh);
+      app.events.off("trajectory-change", refresh);
+    };
+  }, [app, modifier]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !app) return;
@@ -136,7 +194,6 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
 
   const handleClear = async () => {
     if (!app) return;
-    modifier.setFrame(null);
     modifier.sourceType = "empty";
     modifier.filename = "";
     await app.setTrajectory(new Trajectory([new Frame()]));
@@ -144,11 +201,30 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
     onUpdate();
   };
 
-  const filename = modifier.filename === "" ? "-" : modifier.filename;
-  const frame = app?.system.frame;
-  const atomCount = frame?.getBlock("atoms")?.nrows() ?? 0;
-  const bondCount = frame?.getBlock("bonds")?.nrows() ?? 0;
-  const hasBox = frame?.simbox !== undefined;
+  const filename = modifier.filename === "" ? "—" : modifier.filename;
+  const isTraj = modifier instanceof TrajectoryDataSource;
+  const isFrame = modifier instanceof FrameDataSource;
+  const kindBadge = isTraj
+    ? `Trajectory · ${modifier.frameCount} frame${modifier.frameCount === 1 ? "" : "s"}`
+    : isFrame
+      ? "Topology · 1 frame"
+      : "Data Source";
+
+  const sourceTypeLabel =
+    modifier.sourceType === "file"
+      ? "File"
+      : modifier.sourceType === "backend"
+        ? "Backend"
+        : "Empty";
+
+  const blocksLabel =
+    modifier.contributedBlocks.length > 0
+      ? modifier.contributedBlocks.join(", ")
+      : "atoms, bonds (default)";
+
+  const atomCount = stats.atomCount;
+  const bondCount = stats.bondCount;
+  const hasBox = stats.hasBox;
 
   // Render visibility/params read live from the render state the Artist
   // consumes: the StyleManager representation (atoms/bonds) and the sim_box
@@ -231,8 +307,27 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
         </Button>
       </div>
 
-      <div className="text-[10px] text-muted-foreground truncate px-1">
-        <span className="font-mono text-foreground">{filename}</span>
+      <div className="rounded-md border bg-background overflow-hidden">
+        <div className="px-2 py-1 border-b flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+            {kindBadge}
+          </span>
+          <span className="text-[9px] text-muted-foreground">
+            {sourceTypeLabel}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-2 py-1 border-b text-[10px]">
+          <span className="text-muted-foreground">Source</span>
+          <span className="font-mono text-foreground truncate ml-2 max-w-[60%]">
+            {filename}
+          </span>
+        </div>
+        <div className="flex items-center justify-between px-2 py-1 text-[10px]">
+          <span className="text-muted-foreground">Contributes</span>
+          <span className="font-mono text-foreground truncate ml-2 max-w-[60%]">
+            {blocksLabel}
+          </span>
+        </div>
       </div>
 
       <div className="border rounded-md overflow-hidden bg-background text-[10px]">

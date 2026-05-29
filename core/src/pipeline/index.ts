@@ -7,12 +7,18 @@ export {
 export type { PipelineContext, ValidationResult } from "./types";
 
 // Modifier base classes and interfaces
-export { ModifierCategory, BaseModifier } from "./modifier";
+export {
+  ModifierCapability,
+  BaseModifier,
+  primaryCapabilityLabel,
+} from "./modifier";
 export type { Modifier } from "./modifier";
+
+// Frame change classification (consumed by Draw modifiers)
+export type { FrameChangeKind } from "./types";
 
 // Pipeline execution
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
-export type { FrameSource } from "./pipeline";
 
 // Built-in modifiers
 export {
@@ -20,6 +26,14 @@ export {
   ClearSelectionModifier,
 } from "../modifiers/SelectModifier";
 export { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
+
+// Bond column remap (paired with the file-load column-mapping dialog)
+export {
+  type BondColumnMapping,
+  BondColumnRemapModifier,
+  bondsIntegerColumns,
+  bondsNeedColumnMapping,
+} from "./bond_column_remap";
 
 // Modifier registry
 export { ModifierRegistry, nextModifierId } from "./modifier_registry";

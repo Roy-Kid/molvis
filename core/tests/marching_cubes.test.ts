@@ -1,7 +1,12 @@
 /**
  * Marching Cubes tests.
  *
- * Pipeline tested: WASM Grid → Float64Array → marchingCubes() → MCMesh
+ * Pipeline tested: Float64Array → marchingCubes() → MCMesh.
+ *
+ * Volumetric data now flows through `frame.getBlock("grid")` (see
+ * `core/src/transport/trajectory_worker/frame_codec.ts`). The marching
+ * cubes algorithm consumes a flat `Float64Array` directly, so these
+ * tests construct sample fields without involving any wrapper type.
  *
  * No BabylonJS dependency — all tests run purely in the rstest environment.
  */
@@ -253,10 +258,30 @@ describe("marchingCubes — coordinate transform", () => {
   });
 });
 
-// ── End-to-end: Grid → MC ─────────────────────────────────────────────────────
+// ── End-to-end: Float64Array → MC ─────────────────────────────────────────────
 
-describe("Grid → marchingCubes end-to-end", () => {
-  test("sphere stored in WASM Grid produces valid isosurface", () => {
+describe("marchingCubes end-to-end", () => {
+  test("sphere field produces a valid isosurface", () => {
+    const nx = 16;
+    const ny = 16;
+    const nz = 16;
+    const r = 5;
+    const data = sphereField(nx, ny, nz, r);
+
+    const mesh = marchingCubes(data, [nx, ny, nz], UNIT_CELL, ZERO_ORIGIN, 0);
+
+    expect(mesh.positions.length).toBeGreaterThan(0);
+    expect(mesh.indices.length % 3).toBe(0);
+    expect(hasNoInvalid(mesh.positions)).toBe(true);
+    expect(hasNoInvalid(mesh.normals)).toBe(true);
+
+    const nVerts = mesh.positions.length / 3;
+    for (let i = 0; i < mesh.indices.length; i++) {
+      expect(mesh.indices[i]).toBeLessThan(nVerts);
+    }
+  });
+
+  test("sphere stored in WASM grid Block produces valid isosurface", () => {
     const nx = 16;
     const ny = 16;
     const nz = 16;

@@ -11,5 +11,11 @@
     "declaration": false,
     "types": ["node", "mocha", "vscode"]
   },
-  "include": ["src/extension.ts", "src/extension/**/*.ts", "src/test/**/*.ts"]
+  "include": [
+    "src/test/**/*.ts",
+    "src/extension/types.ts",
+    "src/extension/panels/panelRegistry.ts",
+    "src/extension/loading/zarrDirectoryReaderCore.ts",
+    "src/extension/loading/pathUtils.ts"
+  ]
 }

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from molvis import Molvis
+from molvis import DisplaySurface, Molvis
 from molvis.events import EventBus
 from molvis.transport import PageEndpoints
 
@@ -192,7 +192,11 @@ def test_fire_and_forget_returns_self_for_chaining() -> None:
 
 
 def test_repr_mimebundle_emits_inline_mount() -> None:
-    scene = Molvis(name="cell", transport=FakeTransport())
+    scene = Molvis(
+        name="cell",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+    )
     bundle = scene._repr_mimebundle_()
 
     assert bundle["text/plain"].startswith("Molvis(name='cell',")
@@ -212,13 +216,113 @@ def test_repr_mimebundle_emits_inline_mount() -> None:
 
 
 def test_repr_mimebundle_respects_include_exclude() -> None:
-    scene = Molvis(name="filtered", transport=FakeTransport())
+    scene = Molvis(
+        name="filtered",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+    )
     only_text = scene._repr_mimebundle_(include={"text/plain"})
     assert set(only_text.keys()) == {"text/plain"}
 
     drop_html = scene._repr_mimebundle_(exclude={"text/html"})
     assert "text/html" not in drop_html
     assert "text/plain" in drop_html
+
+
+def test_repr_mimebundle_browser_surface_omits_html() -> None:
+    """Script/terminal hosts have no notebook cell to render into —
+    the mimebundle should carry only ``text/plain``."""
+    scene = Molvis(
+        name="tab",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.BROWSER,
+    )
+    bundle = scene._repr_mimebundle_()
+    assert set(bundle.keys()) == {"text/plain"}
+
+
+def test_repr_mimebundle_headless_omits_html() -> None:
+    scene = Molvis(
+        name="ci",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.HEADLESS,
+    )
+    bundle = scene._repr_mimebundle_()
+    assert set(bundle.keys()) == {"text/plain"}
+
+
+def test_inline_repr_mounts_once_then_renders_status() -> None:
+    """Chained command calls in Jupyter should not clone the viewer.
+
+    First ``_repr_mimebundle_`` call mounts the bundle; subsequent
+    calls (e.g. ``scene.mark_atom(0)`` returning ``self`` in a later
+    cell) emit a compact status span instead of a second mount, because
+    the real update has already flowed over the WebSocket.
+    """
+    scene = Molvis(
+        name="inline",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+    )
+    first = scene._repr_mimebundle_()
+    assert "MolvisApp.mount" in first["text/html"]
+
+    second = scene._repr_mimebundle_()
+    assert "MolvisApp.mount" not in second["text/html"]
+    assert "molvis-status" in second["text/html"]
+    assert "viewer mounted above" in second["text/html"]
+
+
+def test_show_forces_a_fresh_mount() -> None:
+    scene = Molvis(
+        name="reshow",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+    )
+    scene._repr_mimebundle_()  # first mount
+    scene._repr_mimebundle_()  # status
+
+    returned = scene.show()
+    assert returned is scene
+    third = scene._repr_mimebundle_()
+    assert "MolvisApp.mount" in third["text/html"]
+
+
+def test_show_is_noop_on_browser_surface() -> None:
+    scene = Molvis(
+        name="script-show",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.BROWSER,
+    )
+    assert scene.show() is scene
+    bundle = scene._repr_mimebundle_()
+    assert set(bundle.keys()) == {"text/plain"}
+
+
+def test_runtime_properties_are_exposed() -> None:
+    scene = Molvis(
+        name="runtime",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+    )
+    assert scene.display_surface is DisplaySurface.INLINE
+    # runtime_env reflects the process, not the override — pytest runs
+    # under a plain Python interpreter with no IPython attached.
+    assert scene.runtime_env.value in {"script", "python_repl"}
+
+    info = scene.session_info
+    assert info["display_surface"] == "inline"
+    assert info["runtime"] == scene.runtime_env.value
+
+
+def test_display_surface_mismatch_on_cached_name_raises() -> None:
+    Molvis(
+        name="srf",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+    )
+    with pytest.raises(ValueError, match="display_surface"):
+        Molvis(name="srf", display_surface=DisplaySurface.BROWSER)
 
 
 def test_close_stops_transport_and_drops_registry() -> None:

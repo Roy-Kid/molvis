@@ -2,25 +2,33 @@ import {
   Color3,
   Mesh,
   MeshBuilder,
+  Quaternion,
   type Scene,
   type ShaderMaterial,
   StandardMaterial,
-  type Vector3,
+  Vector3,
   VertexData,
 } from "@babylonjs/core";
-import { WasmArray } from "@molcrafts/molrs";
 import type { Block, Box, Frame } from "@molcrafts/molrs";
-
+import { WasmArray } from "@molcrafts/molrs";
 import type { MolvisApp } from "./app";
 
-import { type AtomBufferOptions, buildAtomBuffers } from "./artist/atom_buffer";
 import {
-  type BondBufferResult,
+  type AtomBufferOptions,
+  buildAtomBuffers,
+  buildAtomColorOnly,
+} from "./artist/atom_buffer";
+import {
   buildBondBuffers,
   buildSubBondInstanceBuffers,
   clampBondOrder,
   refreshBondPositions,
 } from "./artist/bond_buffer";
+import {
+  DEFAULT_ISOSURFACE_STYLE,
+  IsosurfaceRenderer,
+  type IsosurfaceStyle,
+} from "./artist/isosurface/isosurface_renderer";
 import { LabelRenderer } from "./artist/label_renderer";
 import {
   compileShaderMaterial,
@@ -152,6 +160,50 @@ function computeBondMIDisplacements(
   }
 }
 
+function copyAndFree(wa: {
+  toCopy(): Float64Array;
+  free(): void;
+}): Float64Array {
+  try {
+    return wa.toCopy();
+  } finally {
+    wa.free();
+  }
+}
+
+const IDENTITY_CELL: number[][] = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+];
+
+/**
+ * Reconstruct the 3x3 cell matrix from a `Box` by reading its 8
+ * parallelepiped corners. Robust to triclinic geometry — corners 1/2/4
+ * (relative to corner 0 which is the origin) are exactly the a/b/c
+ * lattice vectors, regardless of tilt convention.
+ */
+function readCellFromBox(box: Box): number[][] {
+  const corners = copyAndFree(box.get_corners());
+  const o0 = [corners[0], corners[1], corners[2]];
+  const a = [corners[3] - o0[0], corners[4] - o0[1], corners[5] - o0[2]];
+  const b = [corners[6] - o0[0], corners[7] - o0[1], corners[8] - o0[2]];
+  const c = [corners[12] - o0[0], corners[13] - o0[1], corners[14] - o0[2]];
+  return [a, b, c];
+}
+
+/**
+ * Pick the most relevant column to render from a `"grid"` block.
+ * Prefers `electron_density` for chemistry-friendly defaults; falls
+ * back to whichever column happens to be first.
+ */
+function pickGridColumn(block: Block): string | null {
+  const keys = block.keys();
+  if (!keys || keys.length === 0) return null;
+  if (keys.includes("electron_density")) return "electron_density";
+  return keys[0] ?? null;
+}
+
 /**
  * Artist — Unified Graphics Engine
  *
@@ -170,6 +222,7 @@ export class Artist {
   public bondMesh: Mesh;
   public cloudMesh: Mesh | null = null;
   public ribbonRenderer: RibbonRenderer;
+  public isosurfaceRenderer: IsosurfaceRenderer;
   public labelRenderer: LabelRenderer;
 
   get globalOpacity(): number {
@@ -296,6 +349,7 @@ export class Artist {
       scene,
     );
     this.ribbonRenderer = new RibbonRenderer(scene);
+    this.isosurfaceRenderer = new IsosurfaceRenderer(scene);
     this.labelRenderer = new LabelRenderer(scene);
     this.registerRuntimeLayers();
   }
@@ -361,6 +415,15 @@ export class Artist {
       boxMesh.dispose();
     }
 
+    // Frame-derived auxiliary meshes — ribbon backbone strips and atom
+    // text labels are owned by their own renderers but still belong to
+    // "current scene content", so they must go when atoms/bonds do.
+    // Without these calls, Reset Scene leaves ghost ribbons/labels
+    // floating over an otherwise empty viewport.
+    this.ribbonRenderer.dispose();
+    this.isosurfaceRenderer.dispose();
+    this.labelRenderer.clearLabels();
+
     this.app.world.sceneIndex.clear();
 
     this.atomMesh = this.createBaseMesh(
@@ -381,11 +444,20 @@ export class Artist {
     this.bondMesh.dispose();
     this.cloudMesh?.dispose();
     this.ribbonRenderer.dispose();
+    this.isosurfaceRenderer.dispose();
     this.labelRenderer.dispose();
   }
 
   // ============ Frame Rendering (Bulk) ============
 
+  /**
+   * Composer: full-frame draw. Used by external callers (e.g. python
+   * RPC's `scene.draw_frame` and editor mode entry) that want a
+   * one-shot "render this frame" entry point. The pipeline path no
+   * longer goes through here — `DrawAtomModifier` / `DrawBondModifier`
+   * call `drawAtoms()` / `drawBonds()` directly so each visual element
+   * lives as its own modifier.
+   */
   public async drawFrame(
     frame: Frame,
     _box?: Box,
@@ -394,83 +466,269 @@ export class Artist {
       bonds?: { radii?: number; impostor?: boolean };
     },
   ): Promise<void> {
-    const atomsBlock = frame.getBlock("atoms");
-    const bondsBlock = frame.getBlock("bonds");
-
-    const visibleTargets = this.collectVisibleTargets({
-      atomCount: atomsBlock?.nrows() ?? 0,
-      bondCount: bondsBlock?.nrows() ?? 0,
-    });
-
-    await this.ensureShadersForVisibleGeometry(visibleTargets);
     this.clear();
+    await this.drawAtoms(frame, options?.atoms);
+    await this.drawBonds(frame, {
+      ...options?.bonds,
+      visible: options?.atoms?.visible,
+    });
+    this.applySceneIndexToMeshes();
+    this.renderAuxiliaryLayers(frame);
+    this.applySliceMaskIfPresent(frame);
+    this.app.world.sceneIndex.markAllSaved();
+    this.app.events.emit("frame-rendered", { frame, box: _box });
+    updateVisualGuide(
+      this.app.world.scene,
+      findSliceModifier(this.app.modifierPipeline),
+    );
+  }
 
-    if (!atomsBlock || atomsBlock.nrows() === 0) {
-      this.renderAuxiliaryLayers(frame);
-      this.app.events.emit("frame-rendered", { frame, box: _box });
-      updateVisualGuide(
-        this.app.world.scene,
-        findSliceModifier(this.app.modifierPipeline),
-      );
-      return;
-    }
+  /**
+   * Per-modifier atom draw path. Builds atom buffers, registers the
+   * atom layer in `SceneIndex`, and uploads to the GPU. Does not
+   * touch bonds, auxiliary layers, or slice. Idempotent: calling
+   * twice with the same frame is fine; the atom layer is overwritten.
+   *
+   * Always resets topology because atoms are the structural anchor —
+   * every bond references atom indices, so re-registering atoms means
+   * the previous topology is stale.
+   */
+  public async drawAtoms(
+    frame: Frame,
+    options?: AtomBufferOptions & { impostor?: boolean },
+  ): Promise<void> {
+    const atomsBlock = frame.getBlock("atoms");
+    if (!atomsBlock || atomsBlock.nrows() === 0) return;
+
+    await this.ensureShadersForVisibleGeometry(
+      this.collectVisibleTargets({
+        atomCount: atomsBlock.nrows(),
+        bondCount: 0,
+      }),
+    );
 
     const atomBuffers = buildAtomBuffers(
       atomsBlock,
       this.app.styleManager,
       this.atomMesh.uniqueId,
-      options?.atoms,
+      options,
     );
 
-    const atomColor = atomBuffers.get("instanceColor") as Float32Array;
-    let bondBlockObj: Block | undefined;
-    let bondResult: BondBufferResult | undefined;
-
-    if (bondsBlock && bondsBlock.nrows() > 0) {
-      bondBlockObj = bondsBlock;
-      const visibleArr = options?.atoms?.visible;
-      bondResult = buildBondBuffers(
-        bondsBlock,
-        atomsBlock,
-        atomColor,
-        this.bondMesh.uniqueId,
-        {
-          radius:
-            options?.bonds?.radii ??
-            this.app.styleManager.getBondStyle(1).radius,
-          visible: visibleArr ? (i: number) => visibleArr[i] : undefined,
-          miDisplacements: computeBondMIDisplacements(
-            frame,
-            atomsBlock,
-            bondsBlock,
-          ),
-        },
-      );
-    }
-
-    this.app.world.sceneIndex.registerFrame({
-      atomMesh: this.atomMesh,
-      bondMesh: this.bondMesh,
+    this.app.world.sceneIndex.registerAtomFrame({
       frame,
-      atomBlock: atomsBlock,
-      bondBlock: bondBlockObj,
-      atomBuffers,
-      bondBuffers: bondResult?.buffers,
-      bondInstanceCount: bondResult?.instanceCount,
-      bondInstanceMap: bondResult?.instanceMap,
+      mesh: this.atomMesh,
+      block: atomsBlock,
+      buffers: atomBuffers,
     });
+  }
 
-    this.applySceneIndexToMeshes();
-    this.renderAuxiliaryLayers(frame);
+  /**
+   * Per-modifier bond draw path. Builds bond buffers using the atom
+   * color buffer (recomputes locally if atoms haven't been registered
+   * yet — e.g. if `DrawAtomModifier` is disabled) and registers the
+   * bond layer in `SceneIndex`. Adds bond entries to topology without
+   * clearing it.
+   */
+  public async drawBonds(
+    frame: Frame,
+    options?: { radii?: number; impostor?: boolean; visible?: boolean[] },
+  ): Promise<void> {
+    const atomsBlock = frame.getBlock("atoms");
+    const bondsBlock = frame.getBlock("bonds");
+    if (!atomsBlock || !bondsBlock || bondsBlock.nrows() === 0) return;
 
-    // Apply slice visibility if a SliceModifier is in the pipeline
+    await this.ensureShadersForVisibleGeometry(
+      this.collectVisibleTargets({
+        atomCount: atomsBlock.nrows(),
+        bondCount: bondsBlock.nrows(),
+      }),
+    );
+
+    const sceneIndex = this.app.world.sceneIndex;
+    const atomColor = this.resolveAtomColorForBonds(atomsBlock);
+
+    const visible = options?.visible;
+    const bondResult = buildBondBuffers(
+      bondsBlock,
+      atomsBlock,
+      atomColor,
+      this.bondMesh.uniqueId,
+      {
+        radius: options?.radii ?? this.app.styleManager.getBondStyle(1).radius,
+        visible: visible ? (i: number) => visible[i] : undefined,
+        miDisplacements: computeBondMIDisplacements(
+          frame,
+          atomsBlock,
+          bondsBlock,
+        ),
+      },
+    );
+    if (!bondResult) return;
+
+    sceneIndex.registerBondFrame({
+      frame,
+      mesh: this.bondMesh,
+      block: bondsBlock,
+      buffers: bondResult.buffers,
+      instanceCount: bondResult.instanceCount,
+      instanceMap: bondResult.instanceMap,
+    });
+  }
+
+  /**
+   * Bond bicolor coloring needs per-atom RGBA. Reuse the already-
+   * registered atom buffer when `DrawAtomModifier` ran first;
+   * otherwise compute a fresh color-only buffer (the bond layer
+   * still works when atoms are disabled). Encapsulates the
+   * impostor-state probe so modifiers don't reach into buffers.
+   */
+  private resolveAtomColorForBonds(atomsBlock: Block): Float32Array {
+    const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+    const registered = atomState?.buffers.get("instanceColor")?.data as
+      | Float32Array
+      | undefined;
+    if (registered) return registered;
+    return buildAtomColorOnly(atomsBlock, this.app.styleManager);
+  }
+
+  /**
+   * Shared "apply slice mask if a SliceModifier is in the pipeline".
+   * Used by both the composer paths (`drawFrame` / `redrawFrame`) and
+   * by `applyPipeline()` after the pipeline has run.
+   */
+  public applySliceMaskIfPresent(frame: Frame): void {
     const sliceMod = findSliceModifier(this.app.modifierPipeline);
     if (sliceMod?.visibilityMask) {
       this.applySliceVisibility(sliceMod.visibilityMask, frame);
     }
+  }
 
-    this.app.events.emit("frame-rendered", { frame, box: _box });
-    updateVisualGuide(this.app.world.scene, sliceMod);
+  /**
+   * Draw the simulation-box wireframe for a frame's molrs Box.
+   *
+   * Disposes any existing `sim_box` mesh, builds 12 cylinder edges
+   * connecting the box corners, and registers the parent mesh in the
+   * scene index. Attaches an `onBeforeRenderObservable` that adjusts
+   * cylinder thickness based on camera distance, so edges read at any
+   * zoom level. The observer is removed when the box mesh disposes.
+   */
+  public drawBox(
+    box: Box | undefined,
+    options?: { thicknessScale?: number },
+  ): void {
+    const scene = this.app.world.scene;
+    const thicknessScale = options?.thicknessScale ?? 1.0;
+
+    const existing = scene.getMeshByName("sim_box");
+    if (existing) {
+      // Scoped unregister — `sceneIndex.unregister(meshId)` would clear
+      // atom/bond state too, which wipes a co-attached DrawAtom's just-
+      // registered atom layer when multiple DrawBoxes run in the same
+      // pipeline pass (multi-DS auto-attach scenario).
+      this.app.world.sceneIndex.unregisterBox();
+      existing.dispose();
+    }
+
+    if (!box) return;
+
+    const corners = copyAndFree(box.get_corners()); // length 24
+
+    const root = new Mesh("sim_box", scene);
+    root.isPickable = false;
+
+    const material = this.app.styleManager.getBoxMaterial();
+
+    const edges: ReadonlyArray<readonly [number, number]> = [
+      [0, 1],
+      [0, 3],
+      [0, 4],
+      [1, 5],
+      [4, 5],
+      [6, 5],
+      [2, 6],
+      [2, 3],
+      [1, 2],
+      [4, 7],
+      [3, 7],
+      [6, 7],
+    ];
+
+    const getPoint = (idx: number): Vector3 =>
+      new Vector3(corners[idx * 3], corners[idx * 3 + 1], corners[idx * 3 + 2]);
+
+    const l = copyAndFree(box.lengths());
+    const o = copyAndFree(box.origin());
+    const center = new Vector3(o[0], o[1], o[2]).add(
+      new Vector3(l[0], l[1], l[2]).scale(0.5),
+    );
+
+    for (const [i, j] of edges) {
+      const p1 = getPoint(i);
+      const p2 = getPoint(j);
+      const diff = p2.subtract(p1);
+      const len = diff.length();
+
+      const cyl = MeshBuilder.CreateCylinder(
+        "box_edge",
+        { height: len, diameter: 1, tessellation: 8 },
+        scene,
+      );
+      cyl.material = material;
+      cyl.parent = root;
+      cyl.isPickable = false;
+      cyl.position = p1.add(diff.scale(0.5));
+
+      const up = new Vector3(0, 1, 0);
+      const dir = diff.normalizeToNew();
+      const dot = Vector3.Dot(up, dir);
+      if (dot < -0.9999) {
+        cyl.rotationQuaternion = Quaternion.FromEulerAngles(Math.PI, 0, 0);
+      } else if (dot > 0.9999) {
+        cyl.rotationQuaternion = Quaternion.Identity();
+      } else {
+        const axis = Vector3.Cross(up, dir);
+        const angle = Math.acos(dot);
+        cyl.rotationQuaternion = Quaternion.RotationAxis(
+          axis.normalize(),
+          angle,
+        );
+      }
+    }
+
+    const updateThickness = () => {
+      if (root.isDisposed() || !scene.activeCamera) return;
+      const dist = Vector3.Distance(scene.activeCamera.position, center);
+      const scale = Math.max(dist * 0.002 * thicknessScale, 0.015);
+      const children = root.getChildren() as Mesh[];
+      for (const child of children) {
+        if (Math.abs(child.scaling.x - scale) > 0.0001) {
+          child.scaling.x = scale;
+          child.scaling.z = scale;
+        }
+      }
+    };
+    const observer = scene.onBeforeRenderObservable.add(updateThickness);
+    root.onDisposeObservable.add(() => {
+      scene.onBeforeRenderObservable.remove(observer);
+    });
+
+    this.app.world.sceneIndex.registerBox({
+      mesh: root,
+      meta: {
+        dimensions: [l[0], l[1], l[2]],
+        origin: [o[0], o[1], o[2]],
+      },
+    });
+  }
+
+  /** Remove the simulation-box wireframe (disposes mesh + observer). */
+  public clearBox(): void {
+    const scene = this.app.world.scene;
+    const existing = scene.getMeshByName("sim_box");
+    if (existing) {
+      this.app.world.sceneIndex.unregisterBox();
+      existing.dispose();
+    }
   }
 
   public drawCloud(
@@ -486,16 +744,16 @@ export class Artist {
     this.cloudMesh?.dispose();
     this.cloudMesh = null;
 
-    // Voxel values live in the grid Block's first float column; geometry
-    // (origin + cell) comes from the frame's simbox, not the block.
-    const keys = block.keys() as string[];
-    const valueKey = keys.find((k) => {
-      const dt = block.dtype(k);
-      return dt === "f64" || dt === "f32";
-    });
+    // Voxel values live in a column of the grid Block (prefer
+    // `electron_density`, else the first column); geometry (origin +
+    // cell) comes from the frame's simbox, not the block.
+    const valueKey = pickGridColumn(block);
     if (!valueKey) return;
     const valuesArray = block.copyColF(valueKey);
     if (!valuesArray || valuesArray.length === 0) return;
+
+    const shape = Array.from(block.shape());
+    if (shape.length !== 3) return;
 
     let maxAbs = 0;
     for (let i = 0; i < valuesArray.length; i++) {
@@ -504,22 +762,23 @@ export class Artist {
     }
     if (maxAbs <= 0) return;
 
-    const shape = Array.from(block.shape()) as number[];
-    if (shape.length !== 3) return;
     const stride =
       options?.stride ?? Math.max(1, Math.floor(Math.max(...shape) / 48));
     const threshold = options?.threshold ?? maxAbs * 0.08;
     const alpha = options?.alpha ?? 0.18;
 
-    const box = frame.simbox;
-    if (!box) return;
-    const origin = Array.from(box.origin().toCopy()) as number[];
-    const cellFlat = Array.from(box.hMatrix().toCopy()) as number[];
-    const cell: number[][] = [
-      [cellFlat[0], cellFlat[1], cellFlat[2]],
-      [cellFlat[3], cellFlat[4], cellFlat[5]],
-      [cellFlat[6], cellFlat[7], cellFlat[8]],
-    ];
+    // Geometry comes from the simulation box. CHGCAR / POSCAR / CUBE
+    // all share their voxel lattice with the simulation cell, so origin
+    // and cell vectors derive from `frame.simbox` rather than per-grid
+    // metadata. `readCellFromBox` reads the 8 corners so triclinic cells
+    // are handled correctly. Without a simbox we fall back to a unit cell
+    // at the origin; that lets the renderer at least show structure but
+    // won't be physically meaningful.
+    const simbox = frame.simbox;
+    const origin: number[] = simbox
+      ? Array.from(copyAndFree(simbox.origin()))
+      : [0, 0, 0];
+    const cell = simbox ? readCellFromBox(simbox) : IDENTITY_CELL;
     const spacing = [
       Math.hypot(
         cell[0][0] / shape[0],
@@ -604,12 +863,32 @@ export class Artist {
 
   // ============ Frame Refresh (Fast Path) ============
 
+  /**
+   * Composer for the position-only fast path. External callers and
+   * the legacy editor mode use this to refresh a frame without doing
+   * a full mesh rebuild. The pipeline path calls
+   * `refreshAtomPositions()` + `refreshBondPositions()` directly from
+   * `DrawAtomModifier` / `DrawBondModifier`.
+   */
   public redrawFrame(frame: Frame): void {
-    const atomsBlock = frame.getBlock("atoms");
-    if (!atomsBlock || atomsBlock.nrows() === 0) {
-      this.renderAuxiliaryLayers(frame);
-      return;
+    this.refreshAtomPositions(frame);
+    this.refreshBondPositions(frame);
+    this.renderAuxiliaryLayers(frame);
+    const sliceMod = findSliceModifier(this.app.modifierPipeline);
+    updateVisualGuide(this.app.world.scene, sliceMod);
+    if (sliceMod?.visibilityMask) {
+      this.applySliceVisibility(sliceMod.visibilityMask, frame);
     }
+  }
+
+  /**
+   * Update atom positions in place — no buffer realloc, no topology
+   * rebuild, no mesh dispose. Used by `DrawAtomModifier` on the
+   * position-only fast path during trajectory playback.
+   */
+  public refreshAtomPositions(frame: Frame): void {
+    const atomsBlock = frame.getBlock("atoms");
+    if (!atomsBlock || atomsBlock.nrows() === 0) return;
 
     const x = atomsBlock.viewColF("x");
     const y = atomsBlock.viewColF("y");
@@ -617,46 +896,48 @@ export class Artist {
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     if (!x || !y || !z || !atomState) return;
 
-    // Update atom positions in-place
     const count = Math.min(atomsBlock.nrows(), atomState.getTotalCount());
     const matDesc = atomState.buffers.get("matrix");
     const dataDesc = atomState.buffers.get("instanceData");
+    if (!matDesc || !dataDesc) return;
 
-    if (matDesc && dataDesc) {
-      for (let i = 0; i < count; i++) {
-        matDesc.data[i * 16 + 12] = x[i];
-        matDesc.data[i * 16 + 13] = y[i];
-        matDesc.data[i * 16 + 14] = z[i];
+    for (let i = 0; i < count; i++) {
+      matDesc.data[i * 16 + 12] = x[i];
+      matDesc.data[i * 16 + 13] = y[i];
+      matDesc.data[i * 16 + 14] = z[i];
 
-        dataDesc.data[i * 4 + 0] = x[i];
-        dataDesc.data[i * 4 + 1] = y[i];
-        dataDesc.data[i * 4 + 2] = z[i];
-      }
-      atomState.uploadBuffer("matrix");
-      atomState.uploadBuffer("instanceData");
+      dataDesc.data[i * 4 + 0] = x[i];
+      dataDesc.data[i * 4 + 1] = y[i];
+      dataDesc.data[i * 4 + 2] = z[i];
     }
+    atomState.uploadBuffer("matrix");
+    atomState.uploadBuffer("instanceData");
+  }
 
-    // Update bond positions
+  /**
+   * Update bond positions in place. Recomputes bond endpoints from
+   * the atom coordinates in the new frame. Skips when bond state
+   * isn't registered (e.g. `DrawBondModifier` is disabled).
+   */
+  public refreshBondPositions(frame: Frame): void {
+    const atomsBlock = frame.getBlock("atoms");
     const bondsBlock = frame.getBlock("bonds");
+    if (!atomsBlock || !bondsBlock) return;
+
+    const x = atomsBlock.viewColF("x");
+    const y = atomsBlock.viewColF("y");
+    const z = atomsBlock.viewColF("z");
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
-    if (bondsBlock && bondState) {
-      refreshBondPositions(
-        bondsBlock,
-        x,
-        y,
-        z,
-        bondState,
-        computeBondMIDisplacements(frame, atomsBlock, bondsBlock),
-      );
-    }
+    if (!x || !y || !z || !bondState) return;
 
-    // Update slice visibility
-    const sliceMod = findSliceModifier(this.app.modifierPipeline);
-    updateVisualGuide(this.app.world.scene, sliceMod);
-    this.renderAuxiliaryLayers(frame);
-    if (!sliceMod?.visibilityMask) return;
-
-    this.applySliceVisibility(sliceMod.visibilityMask, frame);
+    refreshBondPositions(
+      bondsBlock,
+      x,
+      y,
+      z,
+      bondState,
+      computeBondMIDisplacements(frame, atomsBlock, bondsBlock),
+    );
   }
 
   // ============ Single Entity Drawing ============
@@ -823,13 +1104,40 @@ export class Artist {
   }
 
   public async redrawRepresentation(frame?: Frame, box?: Box): Promise<void> {
-    const repr = this.app.styleManager.getRepresentation();
-    this.ribbonRenderer.setVisible(repr.showRibbon);
     if (!frame) {
       this.redrawFromSceneIndex();
       return;
     }
     await this.drawFrame(frame, box);
+  }
+
+  /**
+   * Drive the ribbon renderer from a frame's `residues` block. Owned
+   * by `DrawRibbonModifier` — the artist no longer reads any
+   * representation-level ribbon flag, so attach/detach of the
+   * modifier is the sole visibility control. A frame without a
+   * `residues` block produces no mesh (RibbonRenderer is no-op safe).
+   */
+  public drawRibbon(
+    frame: Frame,
+    style?: import("./artist/ribbon/ribbon_style").RibbonStyle,
+  ): void {
+    this.ribbonRenderer.syncFromFrame(frame, style);
+    this.ribbonRenderer.setVisible(true);
+  }
+
+  /**
+   * Drive the isosurface renderer from a frame's `grid` block. Owned by
+   * `DrawIsosurfaceModifier`; called from its `apply()` so the surface
+   * tracks frame changes and modifier-style edits. Frames without a 3-D
+   * `grid` block produce no mesh (IsosurfaceRenderer is no-op safe).
+   */
+  public drawIsosurface(
+    frame: Frame,
+    style: IsosurfaceStyle = DEFAULT_ISOSURFACE_STYLE,
+  ): void {
+    this.isosurfaceRenderer.rebuild(frame, style);
+    this.isosurfaceRenderer.setVisible(true);
   }
 
   public redrawFromSceneIndex(frame?: Frame): void {
@@ -851,24 +1159,26 @@ export class Artist {
   }
 
   /**
-   * Data-driven auxiliary rendering layers — everything that depends on
-   * frame data but isn't the primary atom/bond impostor pass (volumetric
-   * clouds, protein ribbons, future isosurfaces/SES). Each branch inspects
-   * the frame for the keys it cares about and renders or disposes. Adding
-   * another layer means adding a branch here — no loader or dispatcher
-   * changes required.
+   * Data-driven auxiliary rendering layers that don't yet have
+   * dedicated `Draws`-capability modifiers. Currently empty — grid
+   * (cube / CHGCAR volumetric) rendering moved into
+   * `DrawIsosurfaceModifier`; the previous implicit point-cloud
+   * fallback would duplicate the isosurface mesh and place points
+   * outside the simbox.
+   *
+   * Kept as a no-op stub so the call site in `app.applyPipeline`
+   * doesn't have to special-case a missing method. Add a new branch
+   * here only when introducing a new always-on render layer that
+   * doesn't fit the modifier model.
    */
-  private renderAuxiliaryLayers(frame: Frame): void {
-    // Volumetric / grid-backed fields. Cube/CHGCAR readers attach the field
-    // as a rank-3 "grid" Block; geometry comes from frame.simbox.
-    const grid = frame.getBlock("grid");
-    if (grid && grid.shape().length === 3) this.drawCloud(grid, frame);
-
-    // Protein backbone — populated by molrs's PDB reader.
-    this.ribbonRenderer.syncFromFrame(frame);
-    this.ribbonRenderer.setVisible(
-      this.app.styleManager.getRepresentation().showRibbon,
-    );
+  public renderAuxiliaryLayers(_frame: Frame): void {
+    // Tear down any stale cloud mesh left over from the legacy
+    // auto-render path. Idempotent — `dispose()` is safe to call when
+    // there is no mesh.
+    if (this.cloudMesh) {
+      this.cloudMesh.dispose();
+      this.cloudMesh = null;
+    }
   }
 
   private createBaseMesh(
@@ -894,17 +1204,22 @@ export class Artist {
     // model space; thin-instance bounding info should track all
     // instances after `thinInstanceRefreshBoundingInfo`, but the
     // combination of `freezeWorldMatrix()` and certain camera
-    // orientations leaves the host's effective bounds tight to the
-    // 1×1 plane and makes BabylonJS cull the entire mesh in one go.
-    // Was removed in the molrs-0.0.11 refactor; re-applied to fix the
-    // class of "atom disappears at certain rotation angles" bugs.
+    // orientations can leave the host's effective bounds tight to the
+    // 1×1 plane and cause Babylon to cull the entire mesh in one go.
+    // `alwaysSelectAsActiveMesh = true` opts this mesh out of frustum
+    // culling — the actual rasterization still respects the camera so
+    // no overdraw occurs; we just guarantee the mesh is never silently
+    // dropped from the active mesh list. (Was removed in the
+    // molrs-0.0.11 refactor; re-applied to fix the class of "atom
+    // disappears at certain rotation angles" bugs.)
     mesh.alwaysSelectAsActiveMesh = true;
     // Pin atoms/bonds to a low `alphaIndex` so they always sort
     // *before* translucent surfaces (mark_atom halos, isosurface lobes,
     // ribbons) in the alpha-blend pass. Atoms write depth via
-    // `forceDepthWrite=true`; when a translucent surface happens to
-    // sort first by camera-distance, its depth write blocks atoms
-    // inside the lobe on the GL_LESS test. Atoms-first ordering keeps
+    // `forceDepthWrite=true`; when a surface with `needDepthPrePass=true`
+    // happens to sort first by camera-distance, its front-face depth
+    // pre-pass writes a smaller z than atoms inside the lobe and fully
+    // blocks them on the GL_LESS depth test. Atoms-first ordering keeps
     // atoms in the depth buffer; surfaces render after and only
     // partially blend with the existing atom pixels.
     //
@@ -931,7 +1246,7 @@ export class Artist {
     return targets;
   }
 
-  private applySceneIndexToMeshes(): void {
+  public applySceneIndexToMeshes(): void {
     const repr = this.app.styleManager.getRepresentation();
     this.applyStateToMesh(
       this.app.world.sceneIndex.meshRegistry.getAtomState(),

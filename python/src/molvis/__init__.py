@@ -41,11 +41,13 @@ from .palettes import (
     render_palette_preview,
     save_palette_preview_bytes,
 )
+from .runtime import DisplaySurface, RuntimeEnv, detect_runtime, display_surface
 from .scene import Molvis
 from .transport import Transport, WebSocketTransport
 from .utils import NumpyEncoder
 
 __all__ = [
+    "DisplaySurface",
     "EventBus",
     "EventHandle",
     "Molvis",
@@ -54,10 +56,13 @@ __all__ = [
     "PaletteDefinition",
     "PaletteEntry",
     "PaletteInfo",
+    "RuntimeEnv",
     "Selection",
     "Transport",
     "ViewerState",
     "WebSocketTransport",
+    "detect_runtime",
+    "display_surface",
     "render_palette_preview",
     "save_palette_preview_bytes",
 ]

@@ -142,7 +142,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <Separator orientation="vertical" className="h-4 mx-0.5" />
 
         <ThemeToggle />
-        <SettingsDialog />
+        <SettingsDialog app={app} />
       </div>
     </div>
   );

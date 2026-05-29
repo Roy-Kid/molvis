@@ -164,8 +164,9 @@ export class LabelRenderer {
 
     for (const label of this.labels) {
       tmpVec.set(label.worldX, label.worldY, label.worldZ);
-      // World matrix MUST be identity for world-space points; see
-      // memory/project_babylon_project_api.md.
+      // Atom coordinates are already in world space; world matrix MUST be
+      // identity. Passing `transformMatrix` twice applies view*projection
+      // twice. See memory/project_babylon_project_api.md.
       const projected = Vector3.Project(
         tmpVec,
         Matrix.IdentityReadOnly,

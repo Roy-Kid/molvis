@@ -6,8 +6,8 @@
       "**/node_modules/**",
       "**/.venv/**",
       "**/.rslib/**",
-      "**/out-test/**",
-      "**/out/**"
+      "**/out/**",
+      "**/out-test/**"
     ]
   },
   "formatter": {

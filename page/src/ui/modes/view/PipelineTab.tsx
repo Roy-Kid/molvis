@@ -33,6 +33,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ app }) => {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <PipelineList
+        app={app}
         modifiers={modifiers}
         selectedId={selectedId}
         expandedIds={expandedIds}

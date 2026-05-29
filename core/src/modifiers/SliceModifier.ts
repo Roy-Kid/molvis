@@ -1,6 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Frame } from "@molcrafts/molrs";
-import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
+import { viewAtomCoords } from "../io/atom_coords";
+import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { calculateBoundingBox } from "../utils/bbox";
 import { logger } from "../utils/logger";
@@ -32,7 +33,7 @@ export class SliceModifier extends BaseModifier {
   } | null = null;
 
   constructor(id = "slice-default") {
-    super(id, "Slice", ModifierCategory.SelectionInsensitive);
+    super(id, "Slice", new Set([ModifierCapability.TransformsData]));
   }
 
   /**
@@ -92,12 +93,15 @@ export class SliceModifier extends BaseModifier {
       return input;
     }
 
-    const xCol = atomsBlock.viewColF("x");
-    const yCol = atomsBlock.viewColF("y");
-    const zCol = atomsBlock.viewColF("z");
+    const coords = viewAtomCoords(atomsBlock);
+    const xCol = coords?.x;
+    const yCol = coords?.y;
+    const zCol = coords?.z;
 
     if (!xCol || !yCol || !zCol) {
-      logger.warn("SliceModifier: Missing coordinate columns");
+      logger.warn(
+        "SliceModifier: Missing x/y/z and xu/yu/zu coordinate columns",
+      );
       return input;
     }
 

@@ -456,10 +456,15 @@ abstract class BaseMode {
       console.warn("hover pick failed", err);
     } finally {
       this._hoverPickInFlight = false;
-      if (epoch !== this._interactionEpoch) {
-        return;
-      }
-      if (this._hoverPickDirty && this.shouldRunHoverPickNow()) {
+      // Only chain the next hover-pick when this interaction is still current
+      // (epoch unchanged). Guarded as a single positive condition rather than
+      // an early `return` — a `return` inside `finally` would override the
+      // control flow of the `try`/`catch` above.
+      if (
+        epoch === this._interactionEpoch &&
+        this._hoverPickDirty &&
+        this.shouldRunHoverPickNow()
+      ) {
         this.scheduleHoverPick();
       }
     }

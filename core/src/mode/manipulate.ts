@@ -2,7 +2,6 @@ import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
 import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
-import { DrawFrameCommand } from "../commands/draw";
 import { buildFrameFromScene } from "../scene_sync";
 import { ContextMenuController } from "../ui/menus/controller";
 import { logger } from "../utils/logger";
@@ -375,11 +374,12 @@ class ManipulateMode extends BaseMode {
     const saved = buildFrameFromScene(this.world.sceneIndex, { sourceFrame });
     this.app.system.updateCurrentFrame(saved);
 
-    const cmd = new DrawFrameCommand(this.app, { frame: saved });
-    cmd.do();
+    // Route the swapped-in frame back through the pipeline — the single
+    // scene-data ingress — instead of driving DrawFrameCommand directly.
+    void this.app.applyPipeline({ fullRebuild: true });
 
     this.originalFrame = null;
-    logger.info("[ManipulateMode] Saved changes using syncSceneToFrame");
+    logger.info("[ManipulateMode] Saved changes using buildFrameFromScene");
   }
 
   protected override _on_press_ctrl_s(): void {
@@ -389,8 +389,12 @@ class ManipulateMode extends BaseMode {
   public async discardChanges(): Promise<void> {
     if (!this.originalFrame) return;
 
-    const cmd = new DrawFrameCommand(this.app, { frame: this.originalFrame });
-    cmd.do();
+    // Restore the frame snapshot captured at mode entry and run it back
+    // through the pipeline (the single scene-data ingress). We held the whole
+    // Frame — not its Blocks — so this snapshot survives any setMeta-driven
+    // block-handle invalidation that happened while in mode.
+    this.app.system.updateCurrentFrame(this.originalFrame);
+    void this.app.applyPipeline({ fullRebuild: true });
 
     this.originalFrame = null;
     logger.info(

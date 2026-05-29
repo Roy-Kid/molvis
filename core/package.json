@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-core",
-  "version": "0.0.8",
+  "version": "0.0.7",
   "type": "module",
   "exports": {
     ".": {
@@ -19,6 +19,15 @@
       "types": "./dist/charts/index.d.ts",
       "import": "./dist/charts/index.js"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MolCrafts/molvis.git",
+    "directory": "core"
+  },
+  "homepage": "https://github.com/MolCrafts/molvis#readme",
+  "bugs": {
+    "url": "https://github.com/MolCrafts/molvis/issues"
   },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": ["./src/commands/*.ts", "./dist/commands/*.js"],
@@ -47,7 +56,7 @@
     "@babylonjs/gui": "^7.52.2",
     "@babylonjs/inspector": "^7.52.2",
     "@babylonjs/materials": "^7.52.2",
-    "@molcrafts/molrs": "^0.0.16",
+    "@molcrafts/molrs": "^0.0.17",
     "plotly.js-dist-min": "^3.5.0",
     "tslog": "^4.9.3"
   },

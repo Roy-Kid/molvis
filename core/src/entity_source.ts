@@ -1,4 +1,5 @@
 import type { Block, Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "./io/atom_coords";
 import { DType } from "./utils/dtype";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,7 +64,12 @@ export class AtomSource {
   private _elementCache: readonly string[] | null = null;
   private _elementCacheFrame: Frame | null = null;
 
-  /** Fresh Block handle on every access — never cache the result. */
+  /**
+   * Fresh Block handle on every access — never cache the result. Block handles
+   * are fetched lazily so that any WASM-side version bumps (e.g. the
+   * conservative bump that `with_frame_mut` applies when meta/grids are
+   * mutated) never leave us holding a stale handle.
+   */
   get frameBlock(): Block | null {
     return this.frame?.getBlock("atoms") ?? null;
   }
@@ -142,8 +148,8 @@ export class AtomSource {
     const block = this.frameBlock;
     if (block && id < block.nrows()) {
       if (key === "x" || key === "y" || key === "z") {
-        const col =
-          block.dtype(key) === DType.F64 ? block.viewColF(key) : undefined;
+        const coords = viewAtomCoords(block);
+        const col = coords?.[key];
         if (col) return col[id];
       }
       if (key === "element") {
@@ -175,9 +181,10 @@ export class AtomSource {
     const fb = block ?? this.frameBlock;
     if (!fb) return null;
 
-    const x = fb.viewColF("x");
-    const y = fb.viewColF("y");
-    const z = fb.viewColF("z");
+    const coords = viewAtomCoords(fb);
+    const x = coords?.x;
+    const y = coords?.y;
+    const z = coords?.z;
 
     if (!x || !y || !z) return null;
 
@@ -224,12 +231,16 @@ export class BondSource {
   public frame: Frame | null = null;
   public edits = new Map<number, BondMeta>();
 
-  /** Fresh Block handle on every access — never cache the result. */
+  /**
+   * Fresh Block handle on every access — never cache the result. The bonds and
+   * atoms blocks are fetched lazily so WASM-side handle-version bumps never
+   * leave us holding a stale reference.
+   */
   get frameBlock(): Block | null {
     return this.frame?.getBlock("bonds") ?? null;
   }
 
-  /** Fresh Block handle on every access — never cache the result. */
+  /** Current atoms block (needed for bond endpoint positions). Never cache. */
   get atomBlock(): Block | null {
     return this.frame?.getBlock("atoms") ?? null;
   }
@@ -306,9 +317,10 @@ export class BondSource {
     const orders =
       bb.dtype("order") === DType.U32 ? bb.viewColU32("order") : undefined;
 
-    const ax = ab.viewColF("x");
-    const ay = ab.viewColF("y");
-    const az = ab.viewColF("z");
+    const coords = viewAtomCoords(ab);
+    const ax = coords?.x;
+    const ay = coords?.y;
+    const az = coords?.z;
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 

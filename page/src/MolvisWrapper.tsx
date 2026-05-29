@@ -1,5 +1,6 @@
+import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
 import {
-  loadFileWithFormatPrompt,
+  loadFileSmart,
   useFormatPicker,
 } from "@/components/format-picker-dialog";
 import {
@@ -114,6 +115,9 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
   const pickFormat = useFormatPicker();
   const pickFormatRef = useRef(pickFormat);
   pickFormatRef.current = pickFormat;
+  const pickBondMapping = useBondMappingPicker();
+  const pickBondMappingRef = useRef(pickBondMapping);
+  pickBondMappingRef.current = pickBondMapping;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -247,28 +251,20 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       e.preventDefault();
       e.stopPropagation();
       const file = e.dataTransfer?.files?.[0];
-      if (!file || !molvisRef.current) return;
-      try {
-        const content = await file.text();
-        const started = await loadFileWithFormatPrompt(
-          molvisRef.current,
-          content,
-          file.name,
-          pickFormatRef.current,
-        );
-        if (!started) {
-          molvisRef.current.events.emit("status-message", {
-            text: `Cancelled loading ${file.name}`,
-            type: "info",
-          });
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        molvisRef.current.events.emit("status-message", {
-          text: `Failed to load ${file.name}: ${message}`,
-          type: "error",
-        });
-      }
+      const app = molvisRef.current;
+      if (!file || !app) return;
+      // Always append: app.addDataSource handles the empty-pipeline
+      // case (first DS becomes the primary trajectory). Replacement
+      // is now an explicit remove + add through the pipeline UI.
+      // loadFileSmart owns the status-message emits and error handling
+      // (streaming/eager routing, format prompt, bond-mapping prompt).
+      await loadFileSmart(
+        app,
+        file,
+        pickFormatRef.current,
+        "append",
+        pickBondMappingRef.current,
+      );
     };
     container.addEventListener("dragover", handleDragOver);
     container.addEventListener("drop", handleDrop);

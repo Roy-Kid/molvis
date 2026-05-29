@@ -26,7 +26,7 @@ export function useDevDemo(
     let disposed = false;
 
     const initDemo = async () => {
-      const { DataSourceModifier, Frame, Block, Trajectory } = await import(
+      const { FrameDataSource, Frame, Block, Trajectory } = await import(
         "@molvis/core"
       );
       if (disposed) return;
@@ -110,11 +110,10 @@ export function useDevDemo(
       frame.insertBlock("atoms", atomsBlock);
       frame.insertBlock("bonds", bondsBlock);
 
-      const sourceMod = new DataSourceModifier();
-      sourceMod.setFrame(frame);
-      sourceMod.sourceType = "empty";
-      sourceMod.filename = "Dopamine";
-
+      const sourceMod = new FrameDataSource(frame, {
+        sourceType: "empty",
+        filename: "Dopamine",
+      });
       pipeline.addModifier(sourceMod);
       await app.setTrajectory(new Trajectory([frame]));
       app.setMode("view");

@@ -8,7 +8,9 @@ matching frame (i.e. the corresponding polymer).
 
 Capping strategy: each PSMILES wildcard ``[*]`` is first replaced with H
 and embedded; if the H cap fails (parse, sanitize, or embed) the row
-retries with a C cap (``-CH3``). Rows are split into three groups —
+retries with a C cap (``-CH3``). This avoids aborting on wildcards that
+carry a multi-order bond (``[*]=C``, ``[*]#C``), which fail RDKit
+sanitization under an H cap. Rows are split into three groups —
 ``H`` (H succeeded), ``C`` (H failed, C succeeded), ``fail`` (both failed).
 Each group is exported to its own CSV (``*_groups_H.csv``,
 ``*_groups_C.csv``, ``*_groups_fail.csv``); the C-cap file records
@@ -18,11 +20,16 @@ Each group is exported to its own CSV (``*_groups_H.csv``,
 
 Cap atoms are tagged on each Frame as ``is_cap`` (the cap atom plus any
 ``AddHs``-inserted hydrogens hanging off a C-cap) and ``is_cap_anchor``
-(only the atom that replaced ``[*]``, one per cap site). Frame 0's
-end-group atoms get a red ``*`` mark and cap anchors get a green ``+``
-mark via ``scene.mark_atom`` — composite overlays (halo + label) that
-follow their atom across trajectory frames, so the synthetic cap atoms
-remain distinguishable from the original monomer.
+(only the atom that replaced ``[*]``, one per cap site). End-group heavy
+atoms (neighbors of the original ``[*]``) are tagged with an RDKit
+atom-map-num *before* any mol edits and surface in the output Frame as an
+``is_end_group`` bool column on the atoms block. Using map-nums means we
+never have to reason about index shifts through ``RWMol`` /
+``SanitizeMol`` / ``AddHs``. Frame 0's end-group atoms get a red ``*``
+mark and cap anchors get a green ``+`` mark via ``scene.mark_atom`` —
+composite overlays (halo + label) that follow their atom across
+trajectory frames, so the synthetic cap atoms remain distinguishable from
+the original monomer.
 
 Architecture: Python only exposes a WebSocket; the frontend is whatever
 MolVis tab you already have open (e.g. ``npm run dev:page`` at
@@ -121,12 +128,17 @@ def cap_psmiles_to_mol(psmiles: str, cap_atomic_num: int) -> Chem.Mol:
     Tags the heavy-atom neighbour of every original ``[*]`` with an
     atom-map-num so downstream code can identify the polymer end groups
     after Sanitize / AddHs (RDKit preserves map-nums through both, and
-    new H atoms inserted by AddHs default to map-num 0).
+    new H atoms inserted by AddHs default to map-num 0). The replaced
+    wildcard atom itself is tagged separately so the cap anchor can be
+    distinguished from the original monomer end group.
     """
     mol = Chem.MolFromSmiles(psmiles)
     if mol is None:
         raise ValueError(f"RDKit could not parse: {psmiles!r}")
 
+    # Tag end-group heavy atoms. RDKit preserves atom-map-nums through
+    # atomic-number edits, Sanitize, and AddHs — new H's appended by
+    # AddHs default to map-num 0, so they never false-positive.
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() != 0:
             continue
@@ -425,7 +437,8 @@ def main(n_rows: int | None = None) -> None:
         raise SystemExit(f"CSV not found: {CSV_PATH}")
 
     df = pd.read_csv(CSV_PATH, nrows=n_rows)
-    logger.info("Loaded %d rows, %d columns", len(df), len(df.columns))
+    total = len(df)
+    logger.info("Loaded %d rows, %d columns", total, len(df.columns))
 
     frames, ok_row_ixs, results = build_frames(df)
     df_groups = export_groups_csv(results)
@@ -464,26 +477,31 @@ def main(n_rows: int | None = None) -> None:
     scene.set_trajectory(frames)
     scene.set_frame_labels(labels)
 
-    # Mark end-group atoms (red halo) and cap-anchor atoms (green halo)
-    # on frame 0. We read the indices straight from the Frame's own
-    # `is_end_group` / `is_cap_anchor` columns — the Frame is the single
-    # source of truth, so the marks can't drift out of sync with what
-    # the frontend actually renders. Halo-only — distinct colour is
-    # enough to tell end-group apart from cap-anchor; a text label would
-    # just clutter the viewport at trajectory scale.
-    end_group_ids = np.flatnonzero(frames[0]["atoms"][END_GROUP_COL]).tolist()
+    # Mark end-group atoms (red ``*`` halo + label) and cap-anchor atoms
+    # (green ``+`` halo + label) on frame 0. We read the indices straight
+    # from the Frame's own `is_end_group` / `is_cap_anchor` columns — the
+    # Frame is the single source of truth, so the marks can't drift out of
+    # sync with what the frontend actually renders.
+    frame0_atoms = frames[0]["atoms"]
+    end_group_ids = np.flatnonzero(frame0_atoms[END_GROUP_COL]).tolist()
     for atom_id in end_group_ids:
         scene.mark_atom(
             int(atom_id),
+            label="*",
             shape_color="#ff4d6d",
             shape_opacity=0.45,
+            label_background="#ff4d6d",
+            label_offset=(0.0, 0.8, 0.0),
         )
-    cap_anchor_ids = np.flatnonzero(frames[0]["atoms"][CAP_ANCHOR_COL]).tolist()
+    cap_anchor_ids = np.flatnonzero(frame0_atoms[CAP_ANCHOR_COL]).tolist()
     for atom_id in cap_anchor_ids:
         scene.mark_atom(
             int(atom_id),
+            label="+",
             shape_color="#1f9d55",
             shape_opacity=0.45,
+            label_background="#1f9d55",
+            label_offset=(0.0, 0.8, 0.0),
         )
 
     logger.info(

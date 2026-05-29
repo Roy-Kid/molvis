@@ -1,6 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import type { Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
+import { viewAtomCoords } from "../io/atom_coords";
 import { buildFrameFromScene } from "../scene_sync";
 import { DType } from "../utils/dtype";
 import { Command, command } from "./base";
@@ -364,9 +365,10 @@ export class ExportFrameCommand extends Command<{
 
     const atomsBlock = tempFrame.getBlock("atoms");
     if (atomsBlock) {
-      const x = atomsBlock.viewColF("x");
-      const y = atomsBlock.viewColF("y");
-      const z = atomsBlock.viewColF("z");
+      const coords = viewAtomCoords(atomsBlock);
+      const x = coords?.x;
+      const y = coords?.y;
+      const z = coords?.z;
       const elements =
         atomsBlock.dtype("element") === DType.String
           ? (atomsBlock.copyColStr("element") as string[])

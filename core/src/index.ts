@@ -66,7 +66,10 @@ export {
 export { ModeType } from "./mode";
 export { ModifierRegistry } from "./pipeline/modifier_registry";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
-export { ModifierCategory } from "./pipeline/modifier";
+export {
+  ModifierCapability,
+  primaryCapabilityLabel,
+} from "./pipeline/modifier";
 export type { Modifier } from "./pipeline/modifier";
 export { SelectionMask } from "./pipeline/types";
 export { nextModifierId } from "./pipeline/modifier_registry";
@@ -74,13 +77,28 @@ export {
   isSelectionProducer,
   isTopologyChanging,
 } from "./pipeline/nato_ids";
-export {
-  ArrayFrameSource,
-  ZarrFrameSource,
-  type ZarrReaderLike as ZarrReader,
-} from "./commands/sources";
 
-export { DataSourceModifier } from "./pipeline/data_source_modifier";
+export {
+  type DataSourceKind,
+  DataSourceModifier,
+  type DataSourceOptions,
+  FrameDataSource,
+  TrajectoryDataSource,
+} from "./pipeline/data_source_modifier";
+export { DrawAtomModifier } from "./pipeline/draw_atom";
+export { DrawBondModifier } from "./pipeline/draw_bond";
+export { DrawBoxModifier } from "./pipeline/draw_box";
+export { DrawIsosurfaceModifier } from "./pipeline/draw_isosurface";
+export {
+  DEFAULT_ISOSURFACE_STYLE,
+  type IsosurfaceRenderMode,
+  type IsosurfaceStyle,
+} from "./artist/isosurface/isosurface_renderer";
+export { DrawRibbonModifier } from "./pipeline/draw_ribbon";
+export type {
+  RibbonColorMode,
+  RibbonStyle,
+} from "./artist/ribbon/ribbon_style";
 export { SliceModifier } from "./modifiers/SliceModifier";
 export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";

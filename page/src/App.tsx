@@ -1,5 +1,6 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimelineControl } from "@/components/TimelineControl";
+import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dialog";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -90,18 +91,20 @@ const App: React.FC = () => {
           }}
         >
           <FormatPickerProvider>
-            <div
-              className="h-full w-full bg-background overflow-hidden"
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              <MolvisWrapper onMount={setApp} />
-            </div>
-            <StateSyncDialog
-              open={stateSync.pending !== null}
-              summary={stateSync.pending?.summary ?? null}
-              onKeepLocal={stateSync.keepLocal}
-              onApplyBackend={() => void stateSync.applyBackend()}
-            />
+            <BondMappingPickerProvider>
+              <div
+                className="h-full w-full bg-background overflow-hidden"
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <MolvisWrapper onMount={setApp} />
+              </div>
+              <StateSyncDialog
+                open={stateSync.pending !== null}
+                summary={stateSync.pending?.summary ?? null}
+                onKeepLocal={stateSync.keepLocal}
+                onApplyBackend={() => void stateSync.applyBackend()}
+              />
+            </BondMappingPickerProvider>
           </FormatPickerProvider>
         </BackendConnectionProvider>
       </ErrorBoundary>
@@ -119,113 +122,118 @@ const App: React.FC = () => {
         }}
       >
         <FormatPickerProvider>
-          <div
-            className="h-full w-full flex flex-col bg-background text-foreground overflow-hidden"
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            {!uiHidden && (
-              <TopBar
-                app={app}
-                currentMode={currentMode}
-                onToggleFullscreen={() => setUiHidden((v) => !v)}
-              />
-            )}
-
-            <ResizablePanelGroup
-              orientation="horizontal"
-              className="flex-1"
-              defaultLayout={{ left: 0, canvas: 79, right: 21 }}
-              resizeTargetMinimumSize={{ fine: 20, coarse: 36 }}
+          <BondMappingPickerProvider>
+            <div
+              className="h-full w-full flex flex-col bg-background text-foreground overflow-hidden"
+              onContextMenu={(e) => e.preventDefault()}
             >
               {!uiHidden && (
-                <ResizablePanel
-                  key="left"
-                  id="left"
-                  defaultSize="0%"
-                  collapsible={true}
-                  collapsedSize="0%"
-                  minSize="14%"
-                  maxSize="38%"
-                  className="bg-background flex flex-col min-w-0"
-                >
-                  <LeftSidebar app={app} />
-                </ResizablePanel>
+                <TopBar
+                  app={app}
+                  currentMode={currentMode}
+                  onToggleFullscreen={() => setUiHidden((v) => !v)}
+                />
               )}
 
-              {!uiHidden && <ResizableHandle key="handle-left" withHandle />}
-
-              <ResizablePanel
-                key="canvas"
-                id="canvas"
-                defaultSize="79%"
-                minSize={uiHidden ? "100%" : "35%"}
-                className="flex flex-col min-w-[360px]"
+              <ResizablePanelGroup
+                orientation="horizontal"
+                className="flex-1"
+                defaultLayout={{ left: 0, canvas: 87, right: 13 }}
+                resizeTargetMinimumSize={{ fine: 20, coarse: 36 }}
               >
-                <div className="flex-1 relative bg-muted/20 overflow-hidden">
-                  <MolvisWrapper onMount={setApp} />
-                  {uiHidden && <CameraTrajectoryOverlay app={app} />}
-                  {uiHidden && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setUiHidden(false)}
-                      title="Exit fullscreen (Esc)"
-                      className="absolute top-2 right-2 z-20 bg-background/70 hover:bg-background/90 backdrop-blur-sm"
-                    >
-                      <Minimize className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-
-                {app && trajectoryLength > 1 && !uiHidden && (
-                  <div className="h-9 border-t bg-muted/20 shrink-0 z-10">
-                    <TimelineControl app={app} totalFrames={trajectoryLength} />
-                  </div>
+                {!uiHidden && (
+                  <ResizablePanel
+                    key="left"
+                    id="left"
+                    defaultSize="0%"
+                    collapsible={true}
+                    collapsedSize="0%"
+                    minSize="14%"
+                    maxSize="38%"
+                    className="bg-background flex flex-col min-w-0"
+                  >
+                    <LeftSidebar app={app} />
+                  </ResizablePanel>
                 )}
-              </ResizablePanel>
 
-              {!uiHidden && <ResizableHandle key="handle-right" withHandle />}
+                {!uiHidden && <ResizableHandle key="handle-left" withHandle />}
+
+                <ResizablePanel
+                  key="canvas"
+                  id="canvas"
+                  defaultSize="87%"
+                  minSize={uiHidden ? "100%" : "35%"}
+                  className="flex flex-col min-w-[360px]"
+                >
+                  <div className="flex-1 relative bg-muted/20 overflow-hidden">
+                    <MolvisWrapper onMount={setApp} />
+                    {uiHidden && <CameraTrajectoryOverlay app={app} />}
+                    {uiHidden && (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setUiHidden(false)}
+                        title="Exit fullscreen (Esc)"
+                        className="absolute top-2 right-2 z-20 bg-background/70 hover:bg-background/90 backdrop-blur-sm"
+                      >
+                        <Minimize className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {app && trajectoryLength > 1 && !uiHidden && (
+                    <div className="h-9 border-t bg-muted/20 shrink-0 z-10">
+                      <TimelineControl
+                        app={app}
+                        totalFrames={trajectoryLength}
+                      />
+                    </div>
+                  )}
+                </ResizablePanel>
+
+                {!uiHidden && <ResizableHandle key="handle-right" withHandle />}
+
+                {!uiHidden && (
+                  <ResizablePanel
+                    key="right"
+                    id="right"
+                    defaultSize="13%"
+                    minSize="10%"
+                    maxSize="40%"
+                    collapsible={true}
+                    collapsedSize="0%"
+                    className="bg-background flex flex-col min-w-0"
+                  >
+                    <RightSidebar
+                      app={app}
+                      currentMode={currentMode}
+                      onModeChange={handleModeSwitch}
+                    />
+                  </ResizablePanel>
+                )}
+              </ResizablePanelGroup>
 
               {!uiHidden && (
-                <ResizablePanel
-                  key="right"
-                  id="right"
-                  defaultSize="21%"
-                  minSize="14%"
-                  maxSize="40%"
-                  collapsible={true}
-                  collapsedSize="0%"
-                  className="bg-background flex flex-col min-w-0"
+                <div
+                  className={`h-4 border-t bg-muted/60 flex items-center px-2 text-[9px] shrink-0 ${statusType === "error" ? "text-red-500 font-bold bg-red-100/10" : "text-muted-foreground"}`}
                 >
-                  <RightSidebar
-                    app={app}
-                    currentMode={currentMode}
-                    onModeChange={handleModeSwitch}
-                  />
-                </ResizablePanel>
+                  {statusMessage}
+                </div>
               )}
-            </ResizablePanelGroup>
 
-            {!uiHidden && (
-              <div
-                className={`h-4 border-t bg-muted/60 flex items-center px-2 text-[9px] shrink-0 ${statusType === "error" ? "text-red-500 font-bold bg-red-100/10" : "text-muted-foreground"}`}
-              >
-                {statusMessage}
-              </div>
-            )}
+              <KeyboardShortcutsDialog
+                open={shortcutsOpen}
+                onOpenChange={setShortcutsOpen}
+              />
 
-            <KeyboardShortcutsDialog
-              open={shortcutsOpen}
-              onOpenChange={setShortcutsOpen}
-            />
-
-            <StateSyncDialog
-              open={stateSync.pending !== null}
-              summary={stateSync.pending?.summary ?? null}
-              onKeepLocal={stateSync.keepLocal}
-              onApplyBackend={() => void stateSync.applyBackend()}
-            />
-          </div>
+              <StateSyncDialog
+                open={stateSync.pending !== null}
+                summary={stateSync.pending?.summary ?? null}
+                onKeepLocal={stateSync.keepLocal}
+                onApplyBackend={() => void stateSync.applyBackend()}
+              />
+            </div>
+          </BondMappingPickerProvider>
         </FormatPickerProvider>
       </BackendConnectionProvider>
     </ErrorBoundary>

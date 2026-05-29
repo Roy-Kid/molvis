@@ -8,21 +8,28 @@ import {
   commands,
   registerDefaultCommands,
 } from "./commands";
-import { DrawFrameCommand, type DrawFrameOption } from "./commands/draw";
-import { UpdateFrameCommand } from "./commands/frame";
+import type { DrawFrameOption } from "./commands/draw";
 import { CommandManager } from "./commands/manager";
 import { SetRepresentationCommand } from "./commands/representation";
-import { ArrayFrameSource } from "./commands/sources";
 import { type MolvisConfig, defaultMolvisConfig } from "./config";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { FrameRenderScheduler } from "./frame_render_scheduler";
+import { viewAtomCoords } from "./io/atom_coords";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { HitResult } from "./mode/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
+import { applyAutoAttach } from "./pipeline/auto_attach";
+import {
+  DataSourceModifier,
+  TrajectoryDataSource,
+} from "./pipeline/data_source_modifier";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
-import type { FrameSource } from "./pipeline/pipeline";
-import type { PipelineContext, SelectionMask } from "./pipeline/types";
+import type {
+  FrameChangeKind,
+  PipelineContext,
+  SelectionMask,
+} from "./pipeline/types";
 import { buildFrameFromScene } from "./scene_sync";
 import {
   captureStructuralSelectionSnapshot,
@@ -474,9 +481,10 @@ export class MolvisApp {
     if (this.overlayManager.size === 0) return;
     const atoms = frame.getBlock("atoms");
     if (!atoms) return;
-    const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
-    const y = atoms.dtype("y") === DType.F64 ? atoms.viewColF("y") : undefined;
-    const z = atoms.dtype("z") === DType.F64 ? atoms.viewColF("z") : undefined;
+    const coords = viewAtomCoords(atoms);
+    const x = coords?.x;
+    const y = coords?.y;
+    const z = coords?.z;
     if (!x || !y || !z) return;
 
     for (const overlay of this.overlayManager.list()) {
@@ -622,31 +630,6 @@ export class MolvisApp {
   }
 
   /**
-   * Compute a frame using the modifier pipeline.
-   * @param frameIndex Index of frame to compute
-   * @param source Frame source
-   * @returns Promise resolving to the computed frame
-   */
-  public async computeFrame(
-    frameIndex: number,
-    source?: FrameSource,
-  ): Promise<Frame> {
-    if (!source) {
-      throw new Error("computeFrame requires a source");
-    }
-    logger.info(
-      `App: computeFrame called with source ${source} index ${frameIndex}`,
-    );
-    const frame = await this._modifierPipeline.compute(
-      source,
-      frameIndex,
-      this,
-    );
-    this._currentFrame = frameIndex;
-    return frame;
-  }
-
-  /**
    * Queue a trajectory frame render using a "latest-wins" pattern.
    * Rapid calls (e.g. timeline scrubbing) coalesce: only the most recent
    * request executes after the current render finishes, skipping intermediates.
@@ -659,153 +642,200 @@ export class MolvisApp {
   /**
    * Render the currently active trajectory frame.
    *
-   * NOTE: This method deliberately bypasses the CommandManager and constructs
-   * UpdateFrameCommand / DrawFrameCommand directly. Trajectory playback renders
-   * are transient (not user-reversible) and must not pollute the undo history.
+   * Routes through the modifier pipeline so the per-frame work (selection,
+   * color, slice, hide, draw…) all executes against the new frame.
+   * `FrameDiff.classifyFrameTransition()` decides whether this is a
+   * cheap position-only update or a full rebuild; the result is threaded
+   * into `PipelineContext.changeKind` so the Draw modifiers can pick the
+   * fast or slow path internally.
    */
   private async renderActiveTrajectoryFrame(forceFull = false): Promise<void> {
     const frame = this._system.frame;
-    const box = this._system.box;
     this._currentFrame = this._system.trajectory.currentIndex;
 
     const atomCount = frame.getBlock("atoms")?.nrows() ?? 0;
     const bondCount = frame.getBlock("bonds")?.nrows() ?? 0;
 
-    // The data truth is `frame` itself. sceneIndex.atomState is just a GPU-side
-    // cache. The position fast path is only meaningful when that cache exists
-    // and matches topology; otherwise we rebuild from scratch. Treat "no GPU
-    // state" as a normal condition (first render, post-clear), not a fallback.
     const hasGpuState =
       this._world.sceneIndex.meshRegistry.getAtomState() !== null;
 
+    // FrameDiff classifies against `system.frame`, which only carries
+    // the primary trajectory's blocks. With 2+ DSes, the bonds block
+    // contributed by a topology DS is invisible here and the classifier
+    // would always return "position" — DrawBondModifier's fast path
+    // would then reuse stale atomi/atomj pairings. Force full until the
+    // classifier can run on the post-phase-A merged frame.
+    const isMultiDs = this._modifierPipeline.enabledDataSourceCount() > 1;
+
     let decision: FrameTransitionDecision;
-    if (forceFull || !hasGpuState) {
+    if (forceFull || !hasGpuState || isMultiDs) {
       decision = {
         kind: "full",
-        reasons: [forceFull ? "Forced full rebuild" : "No GPU state yet"],
+        reasons: [
+          forceFull
+            ? "Forced full rebuild"
+            : !hasGpuState
+              ? "No GPU state yet"
+              : "Multi-DS pipeline; classifier can't see merged phase A frame",
+        ],
         stats: { atomCount, bondCount },
       };
     } else {
       decision = classifyFrameTransition(this._lastRenderedFrame, frame);
     }
 
-    if (decision.kind === "position") {
-      const updateCmd = new UpdateFrameCommand(this, { frame });
-      const result = await updateCmd.do();
-      if (result.success) {
-        if (box && this.styleManager.getShowBox()) {
-          this.execute("draw_box", { box });
-        }
-        this._lastRenderedFrame = frame;
-        return;
-      }
-      // Position path failed despite passing the GPU-state + topology gates —
-      // this is a genuine inconsistency worth logging.
-      logger.warn(
-        `Position update failed (${result.reason ?? "unknown reason"}), falling back to full rebuild`,
-      );
-      decision = {
-        kind: "full",
-        reasons: [
-          ...decision.reasons,
-          `Fast update failed: ${result.reason ?? "unknown reason"}`,
-        ],
-        stats: decision.stats,
-      };
-    }
+    const isPositionOnly = decision.kind === "position";
+    const selectionSnapshot = isPositionOnly
+      ? null
+      : captureStructuralSelectionSnapshot(this._world.selectionManager);
 
-    const selectionSnapshot = captureStructuralSelectionSnapshot(
-      this._world.selectionManager,
-    );
-    const drawCmd = new DrawFrameCommand(this, { frame, box });
-    await drawCmd.do();
-    reconcileSelectionAfterStructuralUpdate(
-      this._world.selectionManager,
-      decision.kind as Exclude<FrameUpdateKind, "position">,
-      selectionSnapshot,
-    );
+    await this.applyPipeline({
+      changeKind: isPositionOnly ? "position" : "full",
+    });
+
+    if (!isPositionOnly && selectionSnapshot) {
+      reconcileSelectionAfterStructuralUpdate(
+        this._world.selectionManager,
+        decision.kind as Exclude<FrameUpdateKind, "position">,
+        selectionSnapshot,
+      );
+    }
     this._lastRenderedFrame = frame;
   }
 
   /**
-   * Render a frame using the draw_frame command.
-   * @param frame Frame to render
-   * @param options Drawing options
+   * Render a frame: route through the modifier pipeline. The `frame`
+   * parameter is retained for the public {@link renderFrame} signature
+   * but isn't passed as a phase-A override anymore — the pipeline now
+   * builds its working frame from its own DataSources at
+   * `_currentFrame`. All current callers pass `system.frame`, which
+   * matches what phase A would produce for a single-DS pipeline; for
+   * multi-DS the merged frame supersedes whatever the caller hands in.
    */
   private renderFrameInternal(
     frame: Frame,
-    box?: Box,
-    options?: DrawFrameOption,
+    _box?: Box,
+    _options?: DrawFrameOption,
   ): Promise<void> {
-    // NOTE: does NOT overwrite _system.frame — the source frame is preserved
-    // so the pipeline always operates on the original data.
-    const drawResult = this.execute("draw_frame", { frame, box, options });
-    const done = drawResult instanceof Promise ? drawResult : Promise.resolve();
-    return done.then(() => {
+    return this.applyPipeline({ changeKind: "full" }).then(() => {
       this._lastRenderedFrame = frame;
     });
   }
 
   public renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void {
     void this.renderFrameInternal(frame, box, options).catch((error) => {
-      logger.error("draw_frame failed", error);
+      logger.error("renderFrame failed", error);
     });
   }
 
   /**
    * Reset the app to its initial empty state.
-   * Clears the scene, pipeline, selection, history, and switches to View mode.
+   *
+   * Clears every layer that holds frame-derived or user-authored
+   * scene content:
+   *   - pipeline modifiers (also disposes streaming workers / OPFS
+   *     handles via `DataSourceModifier.dispose`)
+   *   - artist meshes (atoms / bonds / cloud / box / ribbon / labels —
+   *     this happens twice, once here and once inside `setTrajectory`,
+   *     but `artist.clear` is idempotent)
+   *   - user-placed overlays (markers, vectors, measurement annotations)
+   *   - selection state and selection-derived highlights
+   *   - command history
+   *
+   * Each clear is called *explicitly* rather than relying on
+   * `setTrajectory`'s side effects — that decoupling lets future
+   * refactors of the trajectory plumbing not silently break the reset
+   * contract.
    */
   public reset(): void {
     this._modifierPipeline.clear();
     this._world.selectionManager.clearSelection();
     this._world.highlighter.clearAll();
+    this.overlayManager.clear();
+    this.artist.clear();
+    this.commandManager.clearHistory();
     this._modeManager.switch_mode(ModeType.View);
     void this.setTrajectory(new Trajectory([new Frame()]));
     this._lastSelectionSet = new Map();
   }
 
   /**
-   * Run the modifier pipeline on the original source frame and apply the result.
-   * Always operates on the unmodified source frame so modifiers are composable.
-   * Use fullRebuild when atom count or topology changes (e.g. HideHydrogens).
+   * Run the modifier pipeline and let the pipeline's Draw modifiers
+   * render the result.
+   *
+   * - `changeKind` is threaded into PipelineContext so Draw modifiers
+   *   can pick the fast (position-only) or slow (full rebuild) path.
+   * - `sourceFrame`: opt-in override that bypasses pipeline phase A and
+   *   feeds the supplied frame straight to phase B. Used by
+   *   manipulate-mode rollback flows (`discardChanges`) that materialize
+   *   an off-pipeline frame for redraw without touching the DS cache.
+   *   New code should NOT reach for it — let phase A merge from DSs.
+   * - For a full / topology rebuild we discard stale Highlighter
+   *   originals so the pipeline-computed colors win.
+   *
+   * `fullRebuild: true` is accepted for backward-compat and aliases to
+   * `changeKind: "full"`.
+   *
+   * Phase A merge path is the default now: the working frame is built
+   * from the DataSources currently in the pipeline at this
+   * `_currentFrame`. Multi-DS contributions (e.g. a topology-only
+   * `bonds.dump` stacked on a position-only `traj.lammpstrj`) merge into
+   * a single frame for downstream modifiers. For a single DS this
+   * matches the previous `_sourceFrame` behavior bit-for-bit.
    */
   public async applyPipeline(options?: {
     fullRebuild?: boolean;
+    changeKind?: FrameChangeKind;
+    sourceFrame?: Frame;
   }): Promise<Frame | null> {
-    const sourceFrame = this._sourceFrame ?? this._system.frame;
-    if (!sourceFrame) return null;
+    const changeKind: FrameChangeKind = options?.changeKind ?? "full";
 
-    const source = new ArrayFrameSource([sourceFrame]);
+    if (changeKind === "full") {
+      this._world.highlighter.discardSavedOriginals();
+    }
 
-    // Capture pipeline context from the COMPUTED event
     const captured: { context: PipelineContext | null } = { context: null };
     const captureContext = ({ context }: { context: PipelineContext }) => {
       captured.context = context;
     };
     this._modifierPipeline.on(PipelineEvents.COMPUTED, captureContext);
 
-    // The source wraps a single frame (the current trajectory frame), so its
-    // index space is [0, 1). `this._currentFrame` is a trajectory index and
-    // must not be passed here — after navigating past frame 0 it exceeds the
-    // source length and crashes `ArrayFrameSource.getFrame`.
-    const computed = await this._modifierPipeline.compute(source, 0, this);
+    // Forward an explicit override only — the previous implicit
+    // `_sourceFrame ?? _system.frame` fallback masked multi-DS phase-A
+    // merging in every common code path, so it's gone. Callers that
+    // want phase A get phase A; callers that want a one-shot override
+    // (manipulate-mode rollback, tests) still ask for it.
+    const computed = await this._modifierPipeline.compute(
+      this._currentFrame,
+      this,
+      changeKind,
+      options?.sourceFrame,
+    );
 
     this._modifierPipeline.off(PipelineEvents.COMPUTED, captureContext);
 
-    // Render the pipeline output
-    if (options?.fullRebuild) {
-      // Discard stale Highlighter originals before rebuilding — the old buffer
-      // data is about to be replaced, so restoring it would overwrite the
-      // pipeline-computed colors (e.g. transparency alpha).
-      this._world.highlighter.discardSavedOriginals();
-      // Forward the current simulation box: `renderFrameInternal` routes
-      // through `DrawFrameCommand`, which disposes `sim_box` inside
-      // `artist.drawFrame` and only rebuilds it when a box is provided.
-      await this.renderFrameInternal(computed, this._system.box);
-    } else {
-      this.artist.redrawFrame(computed);
+    // After all Draw modifiers have registered their layers, flush the
+    // accumulated buffer state to the GPU and run the once-per-frame
+    // side effects that used to live inside the (now-deleted) drawFrame
+    // composer: auxiliary layers, slice mask upload, dirty bookkeeping,
+    // and the public frame-rendered event.
+    const renderTarget = computed;
+    this.artist.applySceneIndexToMeshes();
+    this.artist.renderAuxiliaryLayers(renderTarget);
+
+    // Reflect each Draws-modifier's enable state on its render layer
+    // — has to run *after* applySceneIndexToMeshes / renderAuxiliaryLayers
+    // because both unconditionally call setEnabled(true) on layers
+    // whose state has data, which would otherwise undo our hide.
+    for (const m of this._modifierPipeline.getModifiers()) {
+      m.applyVisibility(this, m.enabled);
     }
+    this.artist.applySliceMaskIfPresent(renderTarget);
+    this._world.sceneIndex.markAllSaved();
+    this.events.emit("frame-rendered", {
+      frame: renderTarget,
+      box: renderTarget.simbox ?? undefined,
+    });
 
     // Unified selection sync — single path, no duplication
     const ctx = captured.context;
@@ -848,14 +878,61 @@ export class MolvisApp {
   }
 
   /**
-   * Set the current trajectory and update the system.
-   * Emits 'trajectory-change' event.
+   * Set the current trajectory. Replaces any existing data source in
+   * the pipeline with a single `TrajectoryDataSource(trajectory)` so
+   * the pipeline's phase-A merge has data to draw from. Provenance
+   * (`sourceType` / `filename`) is preserved from the previous DS if
+   * one existed; otherwise the caller (typically a file ingress
+   * function or an RPC handler) is expected to update it via
+   * `ensureDataSource` after this call returns.
+   *
+   * Emits 'trajectory-change' through System.
    */
   public async setTrajectory(trajectory: Trajectory): Promise<void> {
     const previousTrajectory = this._system.trajectory;
     this.artist.clear();
     this.commandManager.clearHistory();
-    this._system.trajectory = trajectory;
+
+    // Sync the pipeline: replace any existing DataSourceModifier with a
+    // fresh TrajectoryDataSource wrapping the new trajectory. This is
+    // the push-side of the multi-DS spec's "system.trajectory derives
+    // from pipeline DSs" invariant — task #5 will replace this with a
+    // proper addDataSource()/removeDataSource() lifecycle.
+    const existingDS = this._modifierPipeline
+      .getModifiers()
+      .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
+    // Carry sourceType + filename forward; do NOT carry contributedBlocks
+    // — the empty default ("everything the new frame has") is correct
+    // for a freshly-installed trajectory, and the old DS's narrowing
+    // filter doesn't describe the new data shape.
+    const carriedMeta = existingDS
+      ? {
+          sourceType: existingDS.sourceType,
+          filename: existingDS.filename,
+        }
+      : undefined;
+    if (existingDS) {
+      this._modifierPipeline.removeModifier(existingDS.id);
+      // Dispose only when the predecessor was a Trajectory DS — its
+      // owned trajectory is being replaced. FrameDataSource placeholders
+      // installed by `ensureDataSource` wrap a transient empty Frame
+      // which the molrs FinalizationRegistry will GC; calling `free()`
+      // here is unnecessary and races with consumers that may still
+      // hold a reference between events.
+      if (existingDS instanceof TrajectoryDataSource) {
+        existingDS.dispose();
+      }
+    }
+    const newDS = new TrajectoryDataSource(trajectory, carriedMeta);
+    this._modifierPipeline.addModifier(newDS);
+    if (this._modifierPipeline.getModifiers().indexOf(newDS) > 0) {
+      this._modifierPipeline.reorderModifier(newDS.id, 0);
+    }
+
+    // Use the async setter — it handles both sync trajectories
+    // (resolves immediately) and streaming worker-backed ones
+    // (awaits frame 0 before priming the System cache).
+    await this._system.setTrajectory(trajectory);
     this._currentFrame = this._system.trajectory.currentIndex;
     this._sourceFrame = this._system.frame;
     this._lastRenderedFrame = null;
@@ -877,10 +954,148 @@ export class MolvisApp {
   }
 
   /**
-   * Navigate to the next frame.
+   * Append a {@link DataSourceModifier} to the pipeline.
+   *
+   * Multi-data-source semantics (`docs/specs/multi-data-source-pipeline.md`):
+   *
+   * - For a {@link TrajectoryDataSource}, frame count must match every
+   *   existing TrajectoryDataSource already in the pipeline. Mismatches
+   *   throw with a concrete message; callers (typically the io loaders
+   *   from task #6) catch and surface to the user.
+   * - {@link FrameDataSource}s are always safe to append (they
+   *   broadcast across the system's frame count).
+   * - Auto-attach runs against this DS's frame 0 so default Draw
+   *   modifiers (DrawAtom / DrawBond / DrawBox) get installed for new
+   *   block kinds the source contributes.
+   * - If this is the *first* TrajectoryDataSource in the pipeline,
+   *   System adopts its trajectory so navigation, frame-change events,
+   *   and the existing seek state machine all keep working.
+   *
+   * No-op for callers wanting "replace everything" — use
+   * {@link MolvisApp.setTrajectory} for that legacy path.
    */
-  public nextFrame(): void {
-    if (this._system.nextFrame()) {
+  public async addDataSource(ds: DataSourceModifier): Promise<void> {
+    if (ds instanceof TrajectoryDataSource) {
+      const existingTraj = this._modifierPipeline
+        .getModifiers()
+        .find(
+          (m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource,
+        );
+      if (existingTraj && existingTraj.frameCount !== ds.frameCount) {
+        throw new Error(
+          `Cannot add data source: file has ${ds.frameCount} frame(s); existing trajectory has ${existingTraj.frameCount}. File must be single-frame (topology) or match existing frame count.`,
+        );
+      }
+    }
+
+    this._modifierPipeline.addModifier(ds);
+
+    // If this is the first TrajectoryDS, promote System to follow it.
+    // Earlier FrameDataSources stay in place and broadcast across the
+    // newly grown timeline (their `getFrame(_)` ignores the index).
+    if (ds instanceof TrajectoryDataSource) {
+      const trajDSs = this._modifierPipeline
+        .getModifiers()
+        .filter(
+          (m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource,
+        );
+      const isFirstTraj = trajDSs.length === 1;
+      if (isFirstTraj) {
+        await this._system.setTrajectory(ds.trajectory);
+        this._currentFrame = this._system.trajectory.currentIndex;
+        this._sourceFrame = this._system.frame;
+        this._lastRenderedFrame = null;
+      }
+    }
+
+    // Auto-attach Draw modifiers based on what this DS contributes.
+    // Pre-load frame 0 so matches() can introspect the source frame.
+    // Pass the DS as parent so the new Draws nest under it in the UI
+    // tree (multi-DS spec phase 2 — purely organizational, no
+    // selection semantics).
+    await ds.preload(0);
+    applyAutoAttach(this._modifierPipeline, ds.cachedFrame, undefined, ds);
+
+    if (this._isRunning) {
+      await this.applyPipeline({ fullRebuild: true });
+    }
+  }
+
+  /**
+   * Remove a {@link DataSourceModifier} from the pipeline. Cascades
+   * through children (Draw modifiers nested under this DS in phase 2
+   * of the spec) via the existing {@link ModifierPipeline.removeModifier}
+   * semantics. Disposes the DS's WASM resources.
+   *
+   * Per the spec's 1a delete-rebuild semantics, removing a
+   * TrajectoryDataSource:
+   * - If another TrajectoryDataSource remains, System adopts its
+   *   trajectory; the system's frame count tracks that new primary.
+   * - If none remain, System collapses to a single empty frame so
+   *   navigation state stays well-defined (the pipeline still
+   *   produces an empty Frame from phase A).
+   *
+   * Throws if `id` does not refer to a DataSourceModifier in the
+   * pipeline. Use {@link ModifierPipeline.removeModifier} directly for
+   * non-DS modifiers (Select / Hide / Color / Draws / etc.).
+   */
+  public async removeDataSource(id: string): Promise<void> {
+    const target = this._modifierPipeline
+      .getModifiers()
+      .find(
+        (m): m is DataSourceModifier =>
+          m.id === id && m instanceof DataSourceModifier,
+      );
+    if (!target) {
+      throw new Error(`No DataSourceModifier with id '${id}' in pipeline`);
+    }
+
+    const removed = this._modifierPipeline.removeModifier(id);
+    for (const m of removed) {
+      if (m instanceof DataSourceModifier) m.dispose();
+    }
+
+    // Wipe scene state before re-running the pipeline. When the
+    // removed DS was the only contributor of atoms / bonds, phase A
+    // produces an empty frame and the Draw modifiers' `matches()`
+    // returns false — they never run, so without this `clear()` the
+    // previously-uploaded GPU buffers would survive in the scene
+    // forever. If other DSes remain, `applyPipeline` below
+    // repopulates from their cached frames.
+    this.artist.clear();
+
+    // Re-derive system trajectory from what's left.
+    if (target instanceof TrajectoryDataSource) {
+      const remainingTraj = this._modifierPipeline
+        .getModifiers()
+        .find(
+          (m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource,
+        );
+      if (remainingTraj) {
+        await this._system.setTrajectory(remainingTraj.trajectory);
+      } else {
+        // No trajectory anywhere: collapse to a single empty frame so
+        // navigation state stays consistent. Any FrameDataSource left
+        // in the pipeline still contributes blocks during phase A.
+        await this._system.setTrajectory(new Trajectory([new Frame()]));
+      }
+      this._currentFrame = this._system.trajectory.currentIndex;
+      this._sourceFrame = this._system.frame;
+      this._lastRenderedFrame = null;
+    }
+
+    if (this._isRunning) {
+      await this.applyPipeline({ fullRebuild: true });
+    }
+  }
+
+  /**
+   * Navigate to the next frame. Async to support streaming trajectories;
+   * fire-and-forget callers don't need to await — `frame-change` events
+   * still drive the rest of the system.
+   */
+  public async nextFrame(): Promise<void> {
+    if (await this._system.nextFrame()) {
       this._currentFrame = this._system.trajectory.currentIndex;
       this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
@@ -890,8 +1105,8 @@ export class MolvisApp {
   /**
    * Navigate to the previous frame.
    */
-  public prevFrame(): void {
-    if (this._system.prevFrame()) {
+  public async prevFrame(): Promise<void> {
+    if (await this._system.prevFrame()) {
       this._currentFrame = this._system.trajectory.currentIndex;
       this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
@@ -901,8 +1116,8 @@ export class MolvisApp {
   /**
    * Seek to a specific frame index.
    */
-  public seekFrame(index: number): void {
-    if (this._system.seekFrame(index)) {
+  public async seekFrame(index: number): Promise<void> {
+    if (await this._system.seekFrame(index)) {
       this._currentFrame = this._system.trajectory.currentIndex;
       this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();

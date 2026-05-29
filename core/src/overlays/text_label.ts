@@ -131,8 +131,9 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = this._scene.getTransformMatrix();
 
-    // World matrix MUST be identity for world-space points; see
-    // memory/project_babylon_project_api.md.
+    // `_worldPos` is already in world space, so the world matrix MUST be
+    // identity; passing `transformMatrix` here would apply view*projection
+    // twice. See memory/project_babylon_project_api.md.
     const projected = Vector3.Project(
       this._worldPos,
       Matrix.IdentityReadOnly,
@@ -176,6 +177,9 @@ export class TextLabelOverlay implements Overlay, AtomAnchored {
     tb.isHitTestVisible = false;
     tb.textHorizontalAlignment = TextBlock.HORIZONTAL_ALIGNMENT_CENTER;
     tb.textVerticalAlignment = TextBlock.VERTICAL_ALIGNMENT_CENTER;
+    // Size TextBlock to its text content, otherwise it fills its parent
+    // (the Rectangle w/ adaptWidthToChildren, or the fullscreen UI).
+    tb.resizeToFit = true;
 
     if (background) {
       const rect = new Rectangle(`${this.id}_bg`);
