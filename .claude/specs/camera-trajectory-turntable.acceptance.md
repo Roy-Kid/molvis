@@ -134,13 +134,14 @@ criteria:
     status: verified
     last_checked: 2026-05-29
   - id: ac-016
-    summary: View tab exposes turntable speed, play/stop, and export controls
+    summary: Fullscreen camera-trajectory overlay exposes controls, preview, export
     type: ui_runtime
     evaluator_hint: mol:web
     pass_when: |
-      In the running app, the View tab render area shows a turntable speed
-      control, a play/stop preview toggle, and an export button; play starts
-      an orbit preview and stop returns to the interactive view.
+      In the running app, entering fullscreen (canvas-only) shows a
+      camera-trajectory overlay with duration/revolutions/export-fps controls,
+      a play/stop preview toggle, and an export button; play starts an orbit
+      preview and exiting fullscreen stops it and restores the interactive view.
     status: pending
   - id: ac-017
     summary: Exported frames are correctly lit, framed, and downloadable as GIF/WebM

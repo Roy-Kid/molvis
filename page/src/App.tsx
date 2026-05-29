@@ -24,6 +24,7 @@ import { LeftSidebar } from "./ui/layout/LeftSidebar";
 import { RightSidebar } from "./ui/layout/RightSidebar";
 import { StateSyncDialog } from "./ui/layout/StateSyncDialog";
 import { TopBar } from "./ui/layout/TopBar";
+import { CameraTrajectoryOverlay } from "./ui/modes/view/CameraTrajectoryOverlay";
 
 /**
  * Main page application shell for the MolVis viewer.
@@ -162,6 +163,7 @@ const App: React.FC = () => {
               >
                 <div className="flex-1 relative bg-muted/20 overflow-hidden">
                   <MolvisWrapper onMount={setApp} />
+                  {uiHidden && <CameraTrajectoryOverlay app={app} />}
                   {uiHidden && (
                     <Button
                       variant="ghost"
