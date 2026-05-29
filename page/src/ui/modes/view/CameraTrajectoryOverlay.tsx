@@ -4,7 +4,7 @@ import { NumberField } from "@/components/ui/number-field";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { canEncodeVideo, exportFramesToVideo } from "./gif-encode";
+import { canEncodeVideo, recordTurntableVideo } from "./gif-encode";
 
 interface CameraTrajectoryOverlayProps {
   app: Molvis | null;
@@ -61,14 +61,14 @@ export const CameraTrajectoryOverlay: React.FC<
 
   const onExport = useCallback(async () => {
     if (!app || exporting) return;
+    // Recording drives its own play/stop; stop any manual preview first.
     if (previewing) {
       app.world.cameraAnimator.stop();
       setPreviewing(false);
     }
     setExporting(true);
     try {
-      const frames = await app.exportTurntable({ duration, fps, revolutions });
-      await exportFramesToVideo(frames, { fps });
+      await recordTurntableVideo(app, { duration, revolutions, fps });
     } finally {
       setExporting(false);
     }

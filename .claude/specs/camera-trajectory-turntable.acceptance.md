@@ -148,9 +148,10 @@ criteria:
     type: ui_runtime
     evaluator_hint: mol:web
     pass_when: |
-      In the running app, clicking export produces a GIF/WebM download whose
-      frames show the molecule fully framed and lit (key light follows the
-      orbit), confirming the animator's own light and shared fit framing.
+      In the running app, clicking export records the turntable in real time
+      (canvas captureStream + MediaRecorder) and downloads a WebM whose frames
+      show the molecule framed and lit (key light follows the orbit); the UI
+      stays responsive during recording and the main camera is restored after.
     status: pending
 ---
 

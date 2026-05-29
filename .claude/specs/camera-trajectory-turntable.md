@@ -33,7 +33,7 @@ A camera trajectory is modeled as a camera **pose** over time, never as `ArcRota
 - **`exportTurntable(opts)`** on `MolvisApp` is a thin async sibling of `screenshot()` that delegates to `cameraAnimator.renderFrames(...)`. It calls `app.screenshot()` per pose (reusing its transparent-bg save/restore and autocrop) and never re-invokes `Tools.CreateScreenshot*` directly. No command, no undo residue.
 - **`@command("animate_camera")`** starts a preview. `undo()` returns `this` (transient — follows `TakeSnapshotCommand` precedent, not `DrawBoxCommand`'s `NoOpCommand`). Added to `commands/index.ts` side-effect barrel; the `package.json` `sideEffects` glob `./src/commands/*.ts` already covers it.
 - **`renderOnce()` decision**: `renderFrames` drives frames through `world.renderOnce()`, so export frames carry the same chrome (axis helper, overlay screen-positions) as the live view. (Stated as a binding criterion below.)
-- **UI** lives in the fullscreen (canvas-only) view as a floating `CameraTrajectoryOverlay` (`page/src/ui/modes/view/CameraTrajectoryOverlay.tsx`): fullscreen is the "compose a shot" mode, so the turntable controls (duration / revolutions / export-fps, a play/stop preview toggle, an export button) live there rather than in the sidebar. The overlay stops any running preview on unmount, so leaving fullscreen restores the user's interactive view. The export button calls `app.exportTurntable`, receives `dataURL[]`, and a page-local `gif-encode.ts` encodes WebM (`MediaRecorder`) and triggers download. Encoding stays in `page/` — core ships only `dataURL[]` and pulls in no encoding deps.
+- **UI** lives in the fullscreen (canvas-only) view as a floating `CameraTrajectoryOverlay` (`page/src/ui/modes/view/CameraTrajectoryOverlay.tsx`): fullscreen is the "compose a shot" mode, so the turntable controls (duration / revolutions / export-fps, a play/stop preview toggle, an export button) live there rather than in the sidebar. The overlay stops any running preview on unmount, so leaving fullscreen restores the user's interactive view. Export records the live canvas in real time (`canvas.captureStream` + `MediaRecorder` in `gif-encode.ts`) while the turntable plays — this avoids per-frame GPU readback, which blocks the main thread and freezes the UI on large canvases. Recording stays in `page/`; core pulls in no media deps. The deterministic `app.exportTurntable` (frame-exact, offscreen) remains as a separate programmatic API for high-quality/headless export.
 
 ## Files to create or modify
 
@@ -49,7 +49,7 @@ A camera trajectory is modeled as a camera **pose** over time, never as `ArcRota
 - `core/src/index.ts` — export new camera public types (`CameraPose`, `CameraTrack`, `TurntableTrack`)
 - `page/src/ui/modes/view/CameraTrajectoryOverlay.tsx` (new) — fullscreen-only turntable controls + preview/export
 - `page/src/App.tsx` — mount the overlay when `uiHidden` (fullscreen)
-- `page/src/ui/modes/view/gif-encode.ts` (new) — `dataURL[]` -> WebM encode + download
+- `page/src/ui/modes/view/gif-encode.ts` (new) — real-time canvas-capture WebM recording + download
 
 ## Tasks
 

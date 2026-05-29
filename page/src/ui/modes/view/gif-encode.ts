@@ -1,18 +1,16 @@
 /**
- * Frontend encoder for turntable exports. The core engine emits a sequence of
- * still-frame data URLs (`app.exportTurntable`); this module assembles them
- * into a downloadable video. Encoding lives here, not in core, so the engine
- * stays free of media-encoding dependencies.
+ * Frontend video export for turntable rotations.
  *
- * Uses the browser-native MediaRecorder + canvas.captureStream pipeline — no
- * third-party encoder dependency. Output is WebM (the format MediaRecorder
- * supports across Chromium/Firefox).
+ * Records the live canvas in real time via `canvas.captureStream` +
+ * MediaRecorder while the turntable plays. This avoids per-frame GPU
+ * readback (which blocks the main thread and freezes the UI for large
+ * canvases) — the compositor harvests frames the GPU already drew, so the
+ * UI stays responsive and the orbit records smoothly. Output is WebM (the
+ * format MediaRecorder supports across Chromium/Firefox). Encoding lives in
+ * the frontend so the core engine stays free of media dependencies.
  */
 
-/** A canvas-capture track exposes requestFrame(); it is not in the base lib types. */
-interface RequestFrameTrack extends MediaStreamTrack {
-  requestFrame?: () => void;
-}
+import type { Molvis } from "@molvis/core";
 
 const WEBM_MIME_CANDIDATES = [
   "video/webm;codecs=vp9",
@@ -32,15 +30,6 @@ function pickMimeType(): string {
   return "video/webm";
 }
 
-function loadImage(dataUrl: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Failed to decode export frame"));
-    img.src = dataUrl;
-  });
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -55,7 +44,7 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** True when the browser can encode video (MediaRecorder + canvas capture). */
+/** True when the browser can record a canvas (MediaRecorder + captureStream). */
 export function canEncodeVideo(): boolean {
   return (
     typeof MediaRecorder !== "undefined" &&
@@ -65,34 +54,33 @@ export function canEncodeVideo(): boolean {
 }
 
 /**
- * Encode a sequence of frame data URLs to a WebM video and download it.
+ * Record a turntable rotation of the current scene to a WebM video and
+ * download it. Real-time: the turntable plays through the animation camera
+ * while the canvas stream is recorded, so wall-clock duration equals
+ * `opts.duration` seconds and the UI never blocks.
  *
- * @param dataUrls Still frames, in playback order (from `app.exportTurntable`).
- * @param opts.fps Playback frame rate (should match the export fps).
+ * @param opts.duration Seconds of footage (one full cycle of the turntable).
+ * @param opts.revolutions Whole turns over the duration.
+ * @param opts.fps Capture frame rate.
  * @param opts.filename Download name; defaults to `molvis-turntable.webm`.
  */
-export async function exportFramesToVideo(
-  dataUrls: string[],
-  opts: { fps: number; filename?: string },
+export async function recordTurntableVideo(
+  app: Molvis,
+  opts: {
+    duration: number;
+    revolutions: number;
+    fps: number;
+    filename?: string;
+  },
 ): Promise<void> {
-  if (dataUrls.length === 0) return;
-  if (!canEncodeVideo()) {
-    throw new Error("Video encoding is not supported in this browser");
+  const canvas = app.world.scene.getEngine().getRenderingCanvas();
+  if (!canvas || !canEncodeVideo()) {
+    throw new Error("Video recording is not supported in this browser");
   }
 
-  const images = await Promise.all(dataUrls.map(loadImage));
-  const width = images[0].naturalWidth;
-  const height = images[0].naturalHeight;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("2D canvas context unavailable");
-
-  const stream = canvas.captureStream(0);
-  const track = stream.getVideoTracks()[0] as RequestFrameTrack;
+  const animator = app.world.cameraAnimator;
   const mimeType = pickMimeType();
+  const stream = canvas.captureStream(opts.fps);
   const recorder = new MediaRecorder(stream, { mimeType });
 
   const chunks: Blob[] = [];
@@ -103,15 +91,19 @@ export async function exportFramesToVideo(
     recorder.onstop = () => resolve();
   });
 
+  animator.play(
+    animator.buildTurntable({
+      duration: opts.duration,
+      revolutions: opts.revolutions,
+    }),
+  );
   recorder.start();
-  const frameMs = 1000 / opts.fps;
-  for (const img of images) {
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
-    track.requestFrame?.();
-    await sleep(frameMs);
+  try {
+    await sleep(opts.duration * 1000);
+  } finally {
+    recorder.stop();
+    animator.stop();
   }
-  recorder.stop();
   await stopped;
 
   triggerDownload(
