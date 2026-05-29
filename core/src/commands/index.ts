@@ -41,6 +41,9 @@ export {
   RemarkAtomCommand,
 } from "./mark_atom";
 
+export { CameraAnimateCommand } from "./camera";
+export type { CameraAnimateArgs } from "./camera";
+
 export type { GetSelectedResponse } from "../selection_manager";
 
 // Utilities
@@ -63,6 +66,7 @@ import "./attributes";
 import "./representation";
 import "./overlays";
 import "./mark_atom";
+import "./camera";
 
 /**
  * Ensure the default command set is registered with the global `commands`

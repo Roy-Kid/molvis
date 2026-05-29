@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NumberField } from "@/components/ui/number-field";
 import {
@@ -12,6 +13,7 @@ import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { type Molvis, REPRESENTATIONS } from "@molvis/core";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
+import { canEncodeVideo, exportFramesToVideo } from "./gif-encode";
 
 interface RenderTabProps {
   app: Molvis | null;
@@ -30,6 +32,9 @@ interface RenderState {
   gridSize: number;
   fxaa: boolean;
   hardwareScaling: number;
+  turntableDuration: number;
+  turntableRevolutions: number;
+  turntableFps: number;
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -82,8 +87,15 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       gridSize: grid.size ?? 100,
       fxaa: gfx.fxaa ?? true,
       hardwareScaling: gfx.hardwareScaling ?? 1.0,
+      turntableDuration: 8,
+      turntableRevolutions: 1,
+      turntableFps: 30,
     });
   }, [app]);
+
+  // Transient action state for the turntable controls (not persisted render state).
+  const [previewing, setPreviewing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const set = useCallback(
     <K extends keyof RenderState>(key: K, value: RenderState[K]) => {
@@ -177,6 +189,42 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       ...app.settings.getGraphics(),
       hardwareScaling: v,
     });
+  };
+
+  const onPreviewToggle = () => {
+    const animator = app.world.cameraAnimator;
+    if (previewing) {
+      animator.stop();
+      setPreviewing(false);
+      return;
+    }
+    animator.play(
+      animator.buildTurntable({
+        duration: state.turntableDuration,
+        revolutions: state.turntableRevolutions,
+      }),
+    );
+    setPreviewing(true);
+  };
+
+  const onExport = async () => {
+    if (exporting) return;
+    // Stop any live preview so the deterministic export path starts clean.
+    if (previewing) {
+      app.world.cameraAnimator.stop();
+      setPreviewing(false);
+    }
+    setExporting(true);
+    try {
+      const frames = await app.exportTurntable({
+        duration: state.turntableDuration,
+        fps: state.turntableFps,
+        revolutions: state.turntableRevolutions,
+      });
+      await exportFramesToVideo(frames, { fps: state.turntableFps });
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -316,6 +364,61 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
             onChange={onHwScaling}
           />
         </Row>
+      </SidebarSection>
+
+      <SidebarSection title="Turntable" defaultOpen={false}>
+        <Row label="Duration (s)">
+          <NumberField
+            value={state.turntableDuration}
+            min={1}
+            max={60}
+            step={1}
+            onChange={(v) => set("turntableDuration", v)}
+          />
+        </Row>
+        <Row label="Revolutions">
+          <NumberField
+            value={state.turntableRevolutions}
+            min={1}
+            max={10}
+            step={1}
+            onChange={(v) => set("turntableRevolutions", v)}
+          />
+        </Row>
+        <Row label="Export FPS">
+          <NumberField
+            value={state.turntableFps}
+            min={5}
+            max={60}
+            step={1}
+            onChange={(v) => set("turntableFps", v)}
+          />
+        </Row>
+        <div className="flex items-center gap-1.5 pt-1">
+          <Button
+            size="sm"
+            variant={previewing ? "secondary" : "outline"}
+            className="h-7 flex-1 text-xs"
+            onClick={onPreviewToggle}
+            disabled={exporting}
+          >
+            {previewing ? "Stop" : "Preview"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 flex-1 text-xs"
+            onClick={onExport}
+            disabled={exporting || !canEncodeVideo()}
+          >
+            {exporting ? "Exporting…" : "Export"}
+          </Button>
+        </div>
+        {!canEncodeVideo() && (
+          <p className="text-[10px] text-muted-foreground pt-1">
+            Video export unavailable in this browser.
+          </p>
+        )}
       </SidebarSection>
     </div>
   );

@@ -1,3 +1,4 @@
 <!-- Active specs. Completed specs are deleted (lifecycle); decisions of record move to .claude/notes/. -->
 
 - [core-review-remediation](core-review-remediation.md) — code-complete — fixes from the 4-axis core review (correctness, memory, perf, robustness) landed + committed (eaa2343); blocked items tracked in notes/open-questions.md
+- [camera-trajectory-turntable](camera-trajectory-turntable.md) — code-complete — pose-based turntable on a dedicated render camera + deterministic WebM export; 15/17 criteria verified, ac-016/017 (ui_runtime) owed to /mol:web

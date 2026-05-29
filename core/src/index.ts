@@ -47,6 +47,17 @@ export type { SmilesIR } from "./system/index";
 export { Topology } from "./system/topology";
 export { System } from "./system";
 export { World } from "./world";
+// Programmable camera trajectories (turntable v1)
+export type { CameraPose, Vec3 } from "./camera/pose";
+export { applyPose } from "./camera/pose";
+export type { CameraTrack, TurntableConfig } from "./camera/track";
+export { TurntableTrack } from "./camera/track";
+export {
+  CameraAnimator,
+  type TurntableSpec,
+  type TurntableOptions,
+} from "./camera/animator";
+export { fitBoundsToView } from "./camera/fit";
 export {
   SelectionManager,
   type SelectionState,

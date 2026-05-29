@@ -13,6 +13,8 @@ import {
 // import { Inspector } from "@babylonjs/inspector";
 import type { MolvisApp } from "./app";
 import { AxisHelper } from "./axis_helper";
+import { CameraAnimator } from "./camera/animator";
+import { fitBoundsToView } from "./camera/fit";
 import { GridGround } from "./grid";
 import { Highlighter } from "./highlighter";
 import type { ModeManager } from "./mode";
@@ -37,6 +39,7 @@ export class World {
   public targetIndicator: TargetIndicator;
   public axisHelper: AxisHelper;
   public grid: GridGround;
+  public cameraAnimator: CameraAnimator;
 
   // New unified selection system
   public sceneIndex: SceneIndex;
@@ -129,6 +132,18 @@ export class World {
 
     this._scene = scene;
     this._camera = camera;
+
+    // Programmable camera trajectories (turntable preview + deterministic
+    // export) render through a dedicated camera so the user's interactive
+    // view is never mutated. See core/src/camera/.
+    this.cameraAnimator = new CameraAnimator({
+      scene,
+      mainCamera: camera,
+      viewport: this.viewportSettings.getConfig(),
+      renderOnce: () => this.renderOnce(),
+      getBounds: () => this.sceneIndex.getBounds(),
+      getAspectRatio: (cam) => this._engine.getAspectRatio(cam),
+    });
   }
 
   public get scene(): Scene {
@@ -156,41 +171,14 @@ export class World {
     const bounds = this.sceneIndex.getBounds();
 
     if (bounds) {
-      const center = new Vector3(
-        (bounds.min.x + bounds.max.x) * 0.5,
-        (bounds.min.y + bounds.max.y) * 0.5,
-        (bounds.min.z + bounds.max.z) * 0.5,
+      const { center, radius } = fitBoundsToView(
+        bounds,
+        this.camera.fov,
+        this._engine.getAspectRatio(this.camera),
       );
-
-      const size = new Vector3(
-        bounds.max.x - bounds.min.x,
-        bounds.max.y - bounds.min.y,
-        bounds.max.z - bounds.min.z,
-      );
-
-      const maxDim = Math.max(size.x, size.y, size.z);
-
-      // Calculate required radius to fit the scene
-      // FOV (alpha) is vertical.
-      const fov = this.camera.fov;
-      const aspectRatio = this._engine.getAspectRatio(this.camera);
-
-      // Distance needed to fit height
-      let distance = maxDim / (2 * Math.tan(fov / 2));
-
-      // If width is narrower, adjust for aspect ratio
-      if (aspectRatio < 1.0) {
-        distance = distance / aspectRatio;
-      }
-
-      // Add some padding (margin)
-      distance *= 1.2;
-
-      // Ensure minimum distance
-      distance = Math.max(distance, 5.0);
 
       this.camera.setTarget(center);
-      this.camera.radius = distance;
+      this.camera.radius = radius;
 
       // Reset angles to a nice isometric-ish view
       this.camera.alpha = Math.PI / 4;

@@ -431,6 +431,43 @@ export class MolvisApp {
     }
   }
 
+  /**
+   * Render a deterministic turntable rotation around the current scene and
+   * return one captured frame per step as a data URL.
+   *
+   * The camera orbits through a dedicated render camera (see
+   * {@link CameraAnimator}), so the user's interactive view is never disturbed.
+   * Frame count is `round(duration * fps)` and stepping is counter-driven, so
+   * the output is reproducible and independent of the live frame rate. Core
+   * emits only image data URLs; GIF/WebM encoding lives in the frontend.
+   */
+  public async exportTurntable(opts: {
+    duration: number;
+    fps: number;
+    revolutions?: number;
+    polarAngle?: number;
+    width?: number;
+    height?: number;
+    transparentBackground?: boolean;
+    format?: "png" | "webp";
+  }): Promise<string[]> {
+    return this._world.cameraAnimator.renderFrames(
+      {
+        duration: opts.duration,
+        fps: opts.fps,
+        revolutions: opts.revolutions,
+        polarAngle: opts.polarAngle,
+      },
+      () =>
+        this.screenshot({
+          width: opts.width,
+          height: opts.height,
+          transparentBackground: opts.transparentBackground,
+          format: opts.format,
+        }),
+    );
+  }
+
   private _syncAnchoredOverlays(frame: Frame): void {
     // Fires on every frame render. Skip all WASM block/column access when there
     // are no overlays to anchor (the common case).
