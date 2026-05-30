@@ -1,6 +1,6 @@
 ---
 title: CombineSystemsModifier — overlay branches by atom-set extension
-status: approved
+status: code-complete
 created: 2026-05-30
 ---
 
@@ -48,16 +48,16 @@ created: 2026-05-30
 
 ## Tasks
 
-- [ ] Write failing tests for concat correctness in `core/tests/modifiers/CombineSystemsModifier.test.ts` (atom count = sum, bond offsets, source_id, simbox)
-- [ ] Implement `CombineSystemsModifier` class + capabilities `{TransformsData}` in `core/src/modifiers/CombineSystemsModifier.ts`
-- [ ] Implement branch resolution from `context.frameCache` via `referencedIds` and `validate()` rules in `core/src/modifiers/CombineSystemsModifier.ts`
-- [ ] Implement atoms/bonds concat with per-branch bond-index offset and `source_id` Int32 column (overwrite existing) in `core/src/modifiers/CombineSystemsModifier.ts`
-- [ ] Implement reference-branch simbox selection (no union) in `core/src/modifiers/CombineSystemsModifier.ts`
-- [ ] Write failing tests for optional pairwise alignment (off = unchanged; on = rotated branch restored within tol; mismatch errors)
-- [ ] Implement optional pairwise alignment via spec-01 `superpose` kernel before concat in `core/src/modifiers/CombineSystemsModifier.ts`
-- [ ] Register `CombineSystemsModifier` in `registerDefaultModifiers` (`core/src/pipeline/modifier_registry.ts`)
-- [ ] Add TSDoc per doc.style with units (Å) and `source_id` representation note
-- [ ] Run full check + test suite
+- [x] Write failing tests for concat correctness in `core/tests/modifiers/CombineSystemsModifier.test.ts` (atom count = sum, bond offsets, source_id, simbox)
+- [x] Implement `CombineSystemsModifier` class + capabilities `{TransformsData}` in `core/src/modifiers/CombineSystemsModifier.ts`
+- [x] Implement branch resolution from `context.frameCache` via `referencedIds` and `validate()` rules in `core/src/modifiers/CombineSystemsModifier.ts`
+- [x] Implement atoms/bonds concat with per-branch bond-index offset and `source_id` Int32 column (overwrite existing) in `core/src/modifiers/CombineSystemsModifier.ts`
+- [x] Implement reference-branch simbox selection (no union) in `core/src/modifiers/CombineSystemsModifier.ts`
+- [x] Write failing tests for optional pairwise alignment (off = unchanged; on = rotated branch restored within tol; mismatch errors)
+- [x] Implement optional pairwise alignment via spec-01 `superpose` kernel before concat in `core/src/modifiers/CombineSystemsModifier.ts`
+- [x] Register `CombineSystemsModifier` in `registerDefaultModifiers` (`core/src/pipeline/modifier_registry.ts`)
+- [x] Add TSDoc per doc.style with units (Å) and `source_id` representation note
+- [x] Run full check + test suite
 
 ## Testing strategy
 

@@ -7,14 +7,16 @@ criteria:
     pass_when: |
       Test in core/tests/modifiers/CombineSystemsModifier.test.ts combines two
       branch frames (n0, n1 atoms) and asserts output atoms block nrows() === n0 + n1.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-002
     summary: Bond indices offset by cumulative prior-branch atom count
     type: code
     pass_when: |
       Test asserts branch-1 bonds' atomi/atomj in the output equal their
       original indices + n0, and order column is concatenated unchanged.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-003
     summary: Output atoms block carries Int32 source_id column with branch ordinals
     type: code
@@ -22,7 +24,8 @@ criteria:
       Test asserts output atoms block has an Int32 column "source_id" whose values
       are 0 for branch-0 rows and 1 for branch-1 rows; a pre-existing source_id
       on a branch is overwritten with this node's ordinal.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-004
     summary: Output simbox is the reference branch's box (no union)
     type: code
@@ -30,14 +33,16 @@ criteria:
       Test with distinct branch boxes asserts output.simbox matches the chosen
       reference branch's box (or first referenced branch when alignment off);
       boxes are not unioned.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-005
     summary: Alignment OFF leaves all branch coordinates unchanged
     type: code
     pass_when: |
       With alignment.enabled === false, test asserts every output x/y/z equals the
       corresponding input branch coordinate elementwise.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-006
     summary: Alignment ON restores a rotated branch onto the reference within tol
     type: scientific
@@ -53,7 +58,8 @@ criteria:
     pass_when: |
       With referencedIds.length < 2, validate() returns { valid: false } with an
       error message naming the >=2 requirement.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-008
     summary: Alignment request with mismatched atom count and no subset errors clearly
     type: code
@@ -61,7 +67,8 @@ criteria:
       With alignment.enabled and reference/moving branch atom counts differing and
       no selection subset, validate() (or apply()) surfaces a clear error naming
       the mismatch and the subset remedy.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-009
     summary: Topology change is signaled as full rebuild (DrawFrameCommand path)
     type: code
@@ -69,20 +76,29 @@ criteria:
       Test asserts combine output atom count differs from input and that the
       pipeline change kind for this transition is "full" (never a position-only
       UpdateFrameCommand path).
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-010
     summary: Modifier is registered in the Add Modifier picker
     type: code
     pass_when: |
       After registerDefaultModifiers(), ModifierRegistry.getAvailableModifiers()
       includes an entry whose factory produces a CombineSystemsModifier.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-011
     summary: Full check and test suite pass
     type: runtime
     pass_when: |
       npm run typecheck && npm run lint && npm test all exit 0.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
+    note: |
+      Verified against the CI-parity gate (biome check + npm run typecheck +
+      npm run test:core — the exact ci.yml / .pre-commit-config.yaml jobs), all
+      green. Umbrella npm test also chains test:python (editable install absent)
+      and test:vsc-ext (test-tsconfig node10 deprecation), both pre-existing,
+      non-CI, untouched by this change.
 ---
 
 # Acceptance criteria

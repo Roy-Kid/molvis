@@ -1,3 +1,4 @@
+import { CombineSystemsModifier } from "../modifiers/CombineSystemsModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
@@ -78,6 +79,7 @@ export function isTopologyChanging(mod: Modifier): boolean {
   return (
     mod instanceof HideSelectionModifier ||
     mod instanceof DeleteSelectedModifier ||
-    mod instanceof HideHydrogensModifier
+    mod instanceof HideHydrogensModifier ||
+    mod instanceof CombineSystemsModifier
   );
 }
