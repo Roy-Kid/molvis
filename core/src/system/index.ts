@@ -12,4 +12,12 @@ export {
   WasmPca2,
   WasmPcaResult,
 } from "@molcrafts/molrs";
+export {
+  applyTransform,
+  identityCorrespondence,
+  rmsd,
+  type SuperposeOptions,
+  type SuperpositionResult,
+  superpose,
+} from "./superposition";
 export { type FrameProvider, Trajectory } from "./trajectory";
