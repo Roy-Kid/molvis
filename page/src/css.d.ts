@@ -6,3 +6,11 @@
 // modules. This file is also pulled into the vsc-ext program (its tsconfig
 // includes `../page/src/**/*.d.ts`), covering the webview's CSS imports too.
 declare module "*.css";
+
+// Raw text imports (rsbuild/rspack `?raw` query) — the file's content is
+// inlined as a string at build time. Used to read CHANGELOG.md at compile
+// time so release notes have a single human-editable source of truth.
+declare module "*?raw" {
+  const content: string;
+  export default content;
+}
