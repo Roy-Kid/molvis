@@ -68,6 +68,10 @@ export default defineConfig({
   },
   tools: {
     rspack: {
+      // Inline the raw text of `?raw` imports (e.g. CHANGELOG.md) as a string.
+      module: {
+        rules: [{ resourceQuery: /raw/, type: "asset/source" }],
+      },
       node: {
         // kekule.js uses __dirname internally — mock it silently
         __dirname: "mock",

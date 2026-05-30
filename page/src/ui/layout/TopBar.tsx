@@ -3,6 +3,8 @@ import { BrushCleaning, Focus, Maximize, Redo2, Undo2 } from "lucide-react";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { APP_VERSION } from "@/lib/changelog";
+import { ChangelogDialog } from "./ChangelogDialog";
 import { ExportDialog } from "./ExportDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -26,6 +28,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
+  const [changelogOpen, setChangelogOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!app) return;
@@ -79,71 +82,82 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   return (
-    <div className="h-8 border-b bg-background flex items-center px-2 gap-2 shrink-0 justify-between">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="font-semibold tracking-wide text-xs">MolVis</div>
-        <div className="h-4 px-1.5 rounded border bg-muted/30 text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center">
-          {currentMode}
+    <>
+      <div className="h-8 border-b bg-background flex items-center px-2 gap-2 shrink-0 justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="font-semibold tracking-wide text-xs">MolVis</div>
+          <button
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            title="What's new"
+            className="font-mono text-[9px] leading-none text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-0.5"
+          >
+            v{APP_VERSION}
+          </button>
+          <div className="h-4 px-1.5 rounded border bg-muted/30 text-[9px] uppercase tracking-wide text-muted-foreground inline-flex items-center">
+            {currentMode}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-0.5">
+          <ScreenshotDialog app={app} />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleReset}
+            title="Reset Scene"
+          >
+            <BrushCleaning className="h-3.5 w-3.5" />
+          </Button>
+          <ExportDialog app={app} />
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleUndo}
+            title="Undo"
+            disabled={!canUndo}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleRedo}
+            title="Redo"
+            disabled={!canRedo}
+          >
+            <Redo2 className="h-3.5 w-3.5" />
+          </Button>
+
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleResetCamera}
+            title="Reset Camera"
+          >
+            <Focus className="h-3.5 w-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleFullscreen}
+            title="Fullscreen (hide UI)"
+          >
+            <Maximize className="h-3.5 w-3.5" />
+          </Button>
+
+          <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+          <ThemeToggle />
+          <SettingsDialog app={app} />
         </div>
       </div>
-
-      <div className="flex items-center gap-0.5">
-        <ScreenshotDialog app={app} />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleReset}
-          title="Reset Scene"
-        >
-          <BrushCleaning className="h-3.5 w-3.5" />
-        </Button>
-        <ExportDialog app={app} />
-        <Separator orientation="vertical" className="h-4 mx-0.5" />
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleUndo}
-          title="Undo"
-          disabled={!canUndo}
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleRedo}
-          title="Redo"
-          disabled={!canRedo}
-        >
-          <Redo2 className="h-3.5 w-3.5" />
-        </Button>
-
-        <Separator orientation="vertical" className="h-4 mx-0.5" />
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleResetCamera}
-          title="Reset Camera"
-        >
-          <Focus className="h-3.5 w-3.5" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onToggleFullscreen}
-          title="Fullscreen (hide UI)"
-        >
-          <Maximize className="h-3.5 w-3.5" />
-        </Button>
-
-        <Separator orientation="vertical" className="h-4 mx-0.5" />
-
-        <ThemeToggle />
-        <SettingsDialog app={app} />
-      </div>
-    </div>
+      <ChangelogDialog open={changelogOpen} onOpenChange={setChangelogOpen} />
+    </>
   );
 };

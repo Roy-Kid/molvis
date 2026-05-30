@@ -62,6 +62,16 @@ export default defineConfig({
         ...(config.node || {}),
         __dirname: "mock",
       };
+      // Inline the raw text of `?raw` imports (e.g. CHANGELOG.md) as a string.
+      // Mirrors the same rule in page/rsbuild.config.ts — the page source this
+      // webview bundles depends on it.
+      config.module = {
+        ...(config.module || {}),
+        rules: [
+          ...(config.module?.rules || []),
+          { resourceQuery: /raw/, type: "asset/source" },
+        ],
+      };
       config.resolve = {
         ...(config.resolve || {}),
         fallback: {
