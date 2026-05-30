@@ -29,6 +29,11 @@ export interface PipelineEventMap {
     oldParentId: string | null;
     newParentId: string | null;
   };
+  "modifier-references-changed": {
+    modifierId: string;
+    oldReferencedIds: string[];
+    newReferencedIds: string[];
+  };
   "pipeline-cleared": Record<string, never>;
   computed: { frame: Frame; context: PipelineContext };
 }
@@ -38,6 +43,7 @@ export const PipelineEvents = {
   MODIFIER_REMOVED: "modifier-removed" as const,
   MODIFIER_REORDERED: "modifier-reordered" as const,
   MODIFIER_REPARENTED: "modifier-reparented" as const,
+  MODIFIER_REFERENCES_CHANGED: "modifier-references-changed" as const,
   PIPELINE_CLEARED: "pipeline-cleared" as const,
   COMPUTED: "computed" as const,
 };
@@ -111,6 +117,26 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
         this.emit(PipelineEvents.MODIFIER_REMOVED, {
           modifier: mod,
           index,
+        });
+      }
+    }
+
+    // Auto-drop dangling reference edges: any surviving modifier that
+    // referenced a removed id loses that reference (the reference edge does
+    // NOT cascade-delete the consumer — unlike the parentId child cascade).
+    const removedIds = new Set(removed.map((m) => m.id));
+    for (const survivor of this.modifiers) {
+      if (survivor.referencedIds.length === 0) continue;
+      const filtered = survivor.referencedIds.filter(
+        (rid) => !removedIds.has(rid),
+      );
+      if (filtered.length !== survivor.referencedIds.length) {
+        const oldReferencedIds = survivor.referencedIds;
+        survivor.referencedIds = filtered;
+        this.emit(PipelineEvents.MODIFIER_REFERENCES_CHANGED, {
+          modifierId: survivor.id,
+          oldReferencedIds,
+          newReferencedIds: filtered,
         });
       }
     }
@@ -238,6 +264,87 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   }
 
   /**
+   * Set the reference edges of a modifier — the IDs of other modifiers whose
+   * output frames it reads via `context.frameCache` during compute. This is a
+   * SEPARATE edge kind from {@link setParent}: `parentId` carries a selection
+   * mask and bars topology-changing modifiers (those reset the world); the
+   * reference edge carries frame data and is consumed by topology-changing
+   * combine nodes, so it deliberately does NOT apply the `isTopologyChanging`
+   * gate.
+   *
+   * Rejects (returns false, leaving `referencedIds` unchanged) on:
+   * - unknown target id,
+   * - self-reference (`modifierId` ∈ `ids`),
+   * - dangling reference (an id not present in the pipeline),
+   * - a reference cycle (some `ids` entry can already reach `modifierId`
+   *   through existing reference edges).
+   *
+   * On success replaces `referencedIds` with a fresh copy and emits
+   * {@link PipelineEvents.MODIFIER_REFERENCES_CHANGED}.
+   */
+  setReferences(modifierId: string, ids: string[]): boolean {
+    const target = this.modifiers.find((m) => m.id === modifierId);
+    if (!target) {
+      return false;
+    }
+    // No self-reference.
+    if (ids.includes(modifierId)) {
+      return false;
+    }
+    // No dangling references — every id must resolve to a modifier.
+    for (const rid of ids) {
+      if (!this.modifiers.some((m) => m.id === rid)) {
+        return false;
+      }
+    }
+    // No cycles: adding modifierId → ids closes a cycle iff some referenced
+    // node can already reach modifierId via existing reference edges.
+    for (const rid of ids) {
+      if (this.referenceReaches(rid, modifierId, new Set())) {
+        return false;
+      }
+    }
+
+    const oldReferencedIds = target.referencedIds;
+    target.referencedIds = [...ids];
+    this.emit(PipelineEvents.MODIFIER_REFERENCES_CHANGED, {
+      modifierId,
+      oldReferencedIds,
+      newReferencedIds: target.referencedIds,
+    });
+    return true;
+  }
+
+  /**
+   * Whether `fromId` can reach `goalId` by following existing reference edges
+   * (depth-first, cycle-guarded). Used by {@link setReferences} to reject
+   * edges that would create a cycle.
+   */
+  private referenceReaches(
+    fromId: string,
+    goalId: string,
+    visited: Set<string>,
+  ): boolean {
+    if (fromId === goalId) {
+      return true;
+    }
+    if (visited.has(fromId)) {
+      return false;
+    }
+    visited.add(fromId);
+    const node = this.modifiers.find((m) => m.id === fromId);
+    if (!node) {
+      return false;
+    }
+    for (const rid of node.referencedIds) {
+      if (this.referenceReaches(rid, goalId, visited)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Reorder modifiers by moving a modifier to a new position.
    */
   reorderModifier(modifierId: string, newIndex: number): boolean {
@@ -342,6 +449,46 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     const atomsBlock = frame.getBlock("atoms");
     const atomCount = atomsBlock?.nrows() ?? 0;
 
+    // Reference edges: only cache the output of modifiers that are actually
+    // referenced by some enabled modifier (unreferenced outputs are not
+    // retained — keeps frameCache empty in the common no-reference case).
+    const referencedIds = new Set<string>();
+    for (const m of this.modifiers) {
+      if (!m.enabled) continue;
+      for (const rid of m.referencedIds) referencedIds.add(rid);
+    }
+
+    // Pre-pass: warn about reference targets that will resolve as ABSENT —
+    // a target that is missing, disabled, or positioned AFTER its consumer
+    // (the consumer applies before the target caches its output). The
+    // reference still resolves to undefined at apply time; this only surfaces
+    // the reason.
+    const indexById = new Map<string, number>();
+    this.modifiers.forEach((m, i) => {
+      indexById.set(m.id, i);
+    });
+    for (const m of this.modifiers) {
+      if (!m.enabled || m instanceof DataSourceModifier) continue;
+      if (m.referencedIds.length === 0) continue;
+      const consumerIndex = indexById.get(m.id) ?? -1;
+      for (const rid of m.referencedIds) {
+        const ref = this.modifiers.find((x) => x.id === rid);
+        if (ref === undefined) {
+          logger.warn(
+            `Modifier ${m.name} (${m.id}) references unknown modifier '${rid}'; treating as absent`,
+          );
+        } else if (!ref.enabled) {
+          logger.warn(
+            `Modifier ${m.name} (${m.id}) references disabled modifier ${ref.name} (${rid}); treating as absent`,
+          );
+        } else if ((indexById.get(rid) ?? -1) > consumerIndex) {
+          logger.warn(
+            `Modifier ${m.name} (${m.id}) references ${ref.name} (${rid}) which runs later in the pipeline; treating as absent`,
+          );
+        }
+      }
+    }
+
     for (const modifier of this.modifiers) {
       if (!modifier.enabled) continue;
       // DSs already contributed in phase A; their identity apply() is
@@ -374,6 +521,12 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       // returns — see Modifier.apply doc. Draw modifiers rely on this
       // to flush shader-compile awaits before applySceneIndexToMeshes.
       frame = await modifier.apply(frame, context);
+
+      // Cache this modifier's output frame for any referencing modifier
+      // downstream (only if referenced — see referencedIds set above).
+      if (referencedIds.has(modifier.id)) {
+        context.frameCache.set(modifier.id, frame);
+      }
 
       if (isSelectionProducer(modifier)) {
         context.selectionCache.set(modifier.id, context.currentSelection);

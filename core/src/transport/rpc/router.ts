@@ -289,6 +289,7 @@ export class RPCRouter {
       ["pipeline.reorder_modifier", this.handlePipelineReorderModifier],
       ["pipeline.set_enabled", this.handlePipelineSetEnabled],
       ["pipeline.set_parent", this.handlePipelineSetParent],
+      ["pipeline.set_references", this.handlePipelineSetReferences],
       ["pipeline.clear", this.handlePipelineClear],
       ["scene.add_data_source", this.handleAddDataSource],
       ["scene.remove_data_source", this.handleRemoveDataSource],
@@ -955,6 +956,25 @@ export class RPCRouter {
     if (!this.app.modifierPipeline.setParent(id, parentId)) {
       throw invalidParams(
         `Cannot set parent '${parentId}' on '${id}' — rejected by pipeline`,
+      );
+    }
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
+  private handlePipelineSetReferences: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    if (!id) {
+      throw invalidParams("pipeline.set_references requires an 'id'");
+    }
+    const raw = params.referenced_ids ?? params.referencedIds;
+    if (!Array.isArray(raw) || !raw.every((v) => typeof v === "string")) {
+      throw invalidParams("referenced_ids must be an array of string ids");
+    }
+    const referencedIds = raw as string[];
+    if (!this.app.modifierPipeline.setReferences(id, referencedIds)) {
+      throw invalidParams(
+        `Cannot set references ${JSON.stringify(referencedIds)} on '${id}' — rejected by pipeline (self-reference, cycle, or unknown id)`,
       );
     }
     await this.app.applyPipeline({ fullRebuild: true });
