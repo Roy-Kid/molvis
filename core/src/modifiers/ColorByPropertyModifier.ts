@@ -24,6 +24,12 @@ export interface ColorByPropertyConfig {
   range: { min: number; max: number } | null;
   /** Clamp out-of-range values (true) or fade to gray (false). */
   clampOutOfRange: boolean;
+  /**
+   * Treat a NUMERIC column as categorical (distinct color per distinct value
+   * via the categorical palette) instead of the continuous viridis ramp. Used
+   * to color by `source_id`. String columns are always categorical regardless.
+   */
+  categorical: boolean;
 }
 
 /**
@@ -40,6 +46,7 @@ export class ColorByPropertyModifier extends BaseModifier {
     colormap: "viridis",
     range: null,
     clampOutOfRange: true,
+    categorical: false,
   };
   private _warnedStringColormapIgnored = false;
   private _warnedNumericColormapFallback = false;
@@ -88,10 +95,28 @@ export class ColorByPropertyModifier extends BaseModifier {
     this._config.clampOutOfRange = v;
   }
 
+  get categorical(): boolean {
+    return this._config.categorical;
+  }
+  set categorical(v: boolean) {
+    this._config.categorical = v;
+  }
+
   getCacheKey(): string {
     const r = this._config.range;
     const rangeStr = r ? `${r.min}:${r.max}` : "auto";
-    return `${super.getCacheKey()}:${this._config.columnName}:${rangeStr}:${this._config.clampOutOfRange}`;
+    return `${super.getCacheKey()}:${this._config.columnName}:${rangeStr}:${this._config.clampOutOfRange}:cat=${this._config.categorical}`;
+  }
+
+  /**
+   * Only gates the `source_id` column: not applicable when coloring by
+   * `source_id` but the frame has no such column (single-source / no combine).
+   * Every other column is universally applicable (default).
+   */
+  isApplicable(frame: Frame): boolean {
+    if (this._config.columnName !== "source_id") return true;
+    const atoms = frame.getBlock("atoms");
+    return !!atoms && !!atoms.dtype("source_id");
   }
 
   inspect(frame: Frame): void {
@@ -148,14 +173,19 @@ export class ColorByPropertyModifier extends BaseModifier {
     const colorG = new Float64Array(atomCount);
     const colorB = new Float64Array(atomCount);
 
-    if (dtype === DType.String) {
-      const data = atoms.copyColStr(this._config.columnName) as
-        | string[]
-        | undefined;
-      if (!data) return input;
-      const normalized = data.map((value) => value ?? "UNK");
+    const isNumericDtype =
+      dtype === DType.F64 || dtype === DType.U32 || dtype === DType.I32;
+    // String columns are always categorical; numeric columns are categorical
+    // only when opted in (e.g. coloring by the integer source_id ordinal).
+    const useCategorical =
+      dtype === DType.String || (this._config.categorical && isNumericDtype);
+
+    if (useCategorical) {
+      const keys = readCategoricalKeys(atoms, this._config.columnName, dtype);
+      if (!keys) return input;
 
       if (
+        dtype === DType.String &&
         this._config.colormap !== DEFAULT_CATEGORICAL_COLOR_MAP &&
         !this._warnedStringColormapIgnored
       ) {
@@ -165,9 +195,9 @@ export class ColorByPropertyModifier extends BaseModifier {
         this._warnedStringColormapIgnored = true;
       }
 
-      const lookup = buildCategoricalColorLookup(normalized);
+      const lookup = buildCategoricalColorLookup(keys);
       for (let i = 0; i < atomCount; i++) {
-        const [r, g, b] = lookup.get(normalized[i])!;
+        const [r, g, b] = lookup.get(keys[i])!;
         colorR[i] = r;
         colorG[i] = g;
         colorB[i] = b;
@@ -251,6 +281,35 @@ export class ColorByPropertyModifier extends BaseModifier {
 
     return result;
   }
+}
+
+/**
+ * Read a column as categorical string keys. String columns map nullish → "UNK";
+ * numeric columns (F64/U32/I32) are stringified so distinct values become
+ * distinct categories. Returns null when the column is absent/unsupported.
+ */
+function readCategoricalKeys(
+  block: Block,
+  columnName: string,
+  dtype: string,
+): string[] | null {
+  if (dtype === DType.String) {
+    const data = block.copyColStr(columnName) as string[] | undefined;
+    return data ? data.map((value) => value ?? "UNK") : null;
+  }
+  if (dtype === DType.F64) {
+    const data = block.viewColF(columnName);
+    return data ? Array.from(data, (v) => String(v)) : null;
+  }
+  if (dtype === DType.U32) {
+    const data = block.viewColU32(columnName);
+    return data ? Array.from(data, (v) => String(v)) : null;
+  }
+  if (dtype === DType.I32) {
+    const data = block.viewColI32(columnName);
+    return data ? Array.from(data, (v) => String(v)) : null;
+  }
+  return null;
 }
 
 function detectRange(

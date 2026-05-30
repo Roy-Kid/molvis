@@ -1,6 +1,6 @@
 ---
 title: Color atoms by source via categorical ColorByProperty mode
-status: approved
+status: code-complete
 created: 2026-05-30
 ---
 
@@ -53,14 +53,14 @@ created: 2026-05-30
 
 ## Tasks
 
-- [ ] Write failing tests for categorical numeric coloring in ColorByPropertyModifier (core/tests/modifiers/ColorByPropertyModifier.source.test.ts)
-- [ ] Write failing tests for buildSourceColorLegend (core/tests/artist/palette.legend.test.ts)
-- [ ] Implement categorical config + numeric-as-categorical path in ColorByPropertyModifier (core/src/modifiers/ColorByPropertyModifier.ts)
-- [ ] Implement isApplicable override for missing source_id column in ColorByPropertyModifier (core/src/modifiers/ColorByPropertyModifier.ts)
-- [ ] Implement buildSourceColorLegend in palette.ts reusing buildCategoricalColorLookup (core/src/artist/palette.ts)
-- [ ] Add TSDoc per doc.style documenting categorical mode, glasbey-vivid default palette, ordinal determinism, and >N cycling
-- [ ] Record color-by-source design decision in .claude/notes/core-arch.md
-- [ ] Run full check + test suite
+- [x] Write failing tests for categorical numeric coloring in ColorByPropertyModifier (core/tests/modifiers/ColorByPropertyModifier.source.test.ts)
+- [x] Write failing tests for buildSourceColorLegend (core/tests/artist/palette.legend.test.ts)
+- [x] Implement categorical config + numeric-as-categorical path in ColorByPropertyModifier (core/src/modifiers/ColorByPropertyModifier.ts)
+- [x] Implement isApplicable override for missing source_id column in ColorByPropertyModifier (core/src/modifiers/ColorByPropertyModifier.ts)
+- [x] Implement buildSourceColorLegend in palette.ts reusing buildCategoricalColorLookup (core/src/artist/palette.ts)
+- [x] Add TSDoc per doc.style documenting categorical mode, glasbey-vivid default palette, ordinal determinism, and >N cycling
+- [x] Record color-by-source design decision in .claude/notes/core-arch.md
+- [x] Run full check + test suite
 
 ## Testing strategy
 

@@ -9,7 +9,8 @@ criteria:
       applied to an atoms block with source_id I32 [0,0,1,1,2], injects
       __color_r/g/b columns where the color triple for source_id 0 differs
       from that of 1 and of 2.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-002
     summary: Source-color mapping is deterministic by ordinal
     type: code
@@ -17,7 +18,8 @@ criteria:
       Two apply() calls on identical source_id sets yield identical
       __color_r/g/b triples, and the j-th distinct source_id (natural sort)
       maps to the categorical palette entry at index j mod N.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-003
     summary: Palette cycles for more sources than palette length
     type: code
@@ -25,7 +27,8 @@ criteria:
       With distinct source_id count > categorical palette length, apply()
       assigns palette[i % N] without throwing and source_id N reuses the
       same color as source_id 0.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-004
     summary: isApplicable false when source_id column absent
     type: code
@@ -33,14 +36,16 @@ criteria:
       isApplicable(frame) returns false when columnName="source_id" and the
       atoms block has no source_id column; apply() returns the input frame
       unchanged (no __color_r/g/b columns injected).
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-005
     summary: Numeric viridis path unchanged when categorical=false
     type: code
     pass_when: |
       With categorical=false on a numeric column, apply() still produces a
       continuous viridis ramp (existing behavior), proving no regression.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-006
     summary: Mode persists and re-applies across a redraw
     type: code
@@ -48,21 +53,24 @@ criteria:
       A second apply() on the same configured modifier instance re-injects
       __color_r/g/b with colors identical to the first apply(), showing the
       modifier config (not a GPU buffer) is the source of truth.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-007
     summary: getCacheKey changes when categorical toggles
     type: code
     pass_when: |
       getCacheKey() returns different strings for categorical=true vs
       categorical=false with all other config equal.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-008
     summary: buildSourceColorLegend returns source->color list
     type: code
     pass_when: |
       buildSourceColorLegend([0,1,2]) returns 3 entries {sourceId, hex},
       each hex matching the categorical palette entry for that ordinal.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-009
     summary: Renderer reads source colors via __color override columns
     type: code
@@ -70,13 +78,21 @@ criteria:
       buildAtomBuffers, given an atoms block carrying __color_r/g/b from the
       categorical source path, fills instanceColor with those override RGB
       values rather than element/type style colors.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-010
     summary: Full check and test suite pass
     type: runtime
     pass_when: |
       `npm run lint && npm run typecheck && npm test` all exit 0.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
+    note: |
+      Verified against the CI-parity gate (biome check + npm run typecheck +
+      npm run test:core — the exact ci.yml / .pre-commit-config.yaml jobs), all
+      green. Umbrella npm test also chains test:python (editable install absent)
+      and test:vsc-ext (test-tsconfig node10 deprecation), both pre-existing,
+      non-CI, untouched by this change.
   - id: ac-011
     summary: Sources are visually distinct on the live canvas
     type: ui_runtime
