@@ -228,6 +228,11 @@ export {
   WasmPca2,
   WasmPcaResult,
 } from "./system/index";
+export type {
+  SceneSynthesisConfig,
+  SynthesisAlignment,
+  SynthesisSource,
+} from "./system/scene_synthesis";
 export { Topology } from "./system/topology";
 export {
   type AttachWebSocketBridgeOpts,
