@@ -1,38 +1,36 @@
 import type { Frame } from "@molcrafts/molrs";
-import type { Trajectory } from "../system/trajectory";
+import { frameToTrajectory, type Trajectory } from "../system/trajectory";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
 
 /**
- * Discriminator for a {@link DataSourceModifier}'s temporal nature.
+ * Discriminator for a {@link DataSourceModifier}'s **acquisition** method —
+ * where its data comes from, not what shape it has (every source now exposes a
+ * unified {@link Trajectory}; a single frame is a length-1 trajectory).
  *
- * - `trajectory` — backed by a multi-frame {@link Trajectory}.
- *   `frameCount` reflects trajectory length; `getFrame(i)` returns the
- *   i-th frame.
- * - `frame` — backed by a single {@link Frame}. `frameCount` is always
- *   `1`; `getFrame(_)` returns the same frame regardless of index. This
- *   is the broadcast mechanism that lets a static topology file
- *   contribute to every step of an N-frame trajectory.
+ * - `file` — backed by a parsed file / lazy / streaming {@link Trajectory}
+ *   ({@link FileDataSource}).
+ * - `memory` — an in-memory single {@link Frame} wrapped as a length-1
+ *   trajectory ({@link MemoryDataSource}); broadcasts across the timeline.
+ * - `ssh` / `http` — reserved acquisition kinds (no concrete subclass yet).
  */
-export type DataSourceKind = "trajectory" | "frame";
+export type DataSourceKind = "file" | "memory" | "ssh" | "http";
 
 /**
- * A data source attached to the pipeline. Each DataSourceModifier owns
- * the data it contributes to the merged frame produced by
- * `ModifierPipeline.compute`. Multiple DSs in the same pipeline stack
- * their blocks onto a working frame in pipeline-array order; later DSs
- * overwrite earlier ones (last-wins) on block-name conflict.
+ * A data source attached to the pipeline. Each DataSourceModifier OWNS its own
+ * {@link Trajectory} (never shared with another source, never mutated in place
+ * by a common holder) and contributes it to the scene-synthesis step at the
+ * head of `ModifierPipeline.compute` (see `system/scene_synthesis.ts`).
  *
- * `apply()` is identity — block injection lives in pipeline phase A,
- * not here. The modifier still exists in the pipeline so it can
- * participate in array order, parent/child grouping, and `enabled`
- * toggling.
+ * `apply()` is identity — synthesis reads each source's trajectory directly.
+ * The modifier still exists in the pipeline so it participates in array order,
+ * `enabled` toggling, and the source list the synthesis step walks.
  *
- * Concrete implementations: {@link TrajectoryDataSource} (N frames),
- * {@link FrameDataSource} (1 frame, broadcast across the system).
+ * Concrete implementations: {@link FileDataSource} (parsed/streamed file),
+ * {@link MemoryDataSource} (in-memory single frame as a length-1 trajectory).
  */
 export abstract class DataSourceModifier extends BaseModifier {
-  /** Discriminator. See {@link DataSourceKind}. */
+  /** Acquisition discriminator. See {@link DataSourceKind}. */
   abstract readonly kind: DataSourceKind;
 
   /** Provenance: where the data came from. */
@@ -42,19 +40,15 @@ export abstract class DataSourceModifier extends BaseModifier {
   public filename = "";
 
   /**
-   * Optional narrowing filter for phase A. Empty (the default) means
-   * "every block present on the source frame is contributed" — the
-   * merge consults `frame.blockNames()` at compute time, so new block
-   * kinds flow through automatically without registry edits. Populate
-   * to restrict to a subset, e.g. `["bonds"]` for a topology-only file
-   * that should NOT shadow another DS's atoms.
+   * Optional narrowing filter for the synthesis step. Empty (the default)
+   * means "every block present on the source frame is contributed". Populate
+   * to restrict to a subset, e.g. `["bonds"]` for a topology-only file.
    */
   public contributedBlocks: ReadonlyArray<string> = [];
 
   /**
-   * @deprecated UI-only visibility flags. Will be replaced by per-DS
-   * Draw modifier `enabled` toggles in phase 3 of the multi-DS spec
-   * (`docs/specs/multi-data-source-pipeline.md`).
+   * @deprecated UI-only visibility flags carried over from the pre-synthesis
+   * model; per-component visibility belongs to the StyleManager / Draw layer.
    */
   public showAtoms = true;
   /** @deprecated See {@link DataSourceModifier.showAtoms}. */
@@ -66,88 +60,79 @@ export abstract class DataSourceModifier extends BaseModifier {
     super(id, name, new Set([ModifierCapability.TransformsData]));
   }
 
-  /** Number of frames this DS provides. Trajectory = N, Frame = 1. */
+  /**
+   * The trajectory this source owns — the unified payload the synthesis step
+   * reads. A single-frame source returns a length-1 trajectory.
+   */
+  abstract get trajectory(): Trajectory;
+
+  /** Number of frames this source provides (= `trajectory.length`). */
   abstract get frameCount(): number;
 
   /**
-   * Resolve the contributing frame for the given pipeline index.
-   *
-   * - {@link TrajectoryDataSource} returns `trajectory.frame(index)`.
-   * - {@link FrameDataSource} returns its single frame regardless of
-   *   `index` (static-topology broadcast).
-   *
-   * May be async when the underlying source is streamed
-   * (worker-backed). Callers MUST await before reading blocks.
+   * Resolve the contributing frame for the given timeline index. A length-1
+   * (memory) source returns its single frame regardless of `index`
+   * (broadcast). May be async for streamed sources — await before reading.
    */
   abstract getFrame(index: number): Promise<Frame> | Frame;
 
-  /**
-   * Pre-load the frame at `index` into a synchronous cache. Called by
-   * the pipeline before phase A so the merge step can read
-   * synchronously. Throws if `index` is out of range.
-   */
+  /** Pre-load the frame at `index` into a synchronous cache. Throws if out of range. */
   abstract preload(index: number): Promise<void>;
 
-  /**
-   * Sync access to the most recently preloaded frame. Throws if
-   * `preload()` has not been called.
-   */
+  /** Sync access to the most recently preloaded frame. Throws if `preload()` not called. */
   abstract get cachedFrame(): Frame;
 
-  /**
-   * Best-effort sync access to the cached frame. Returns `undefined`
-   * before the first `preload()` rather than throwing — suitable for
-   * UI panels that render before the pipeline has had a chance to
-   * preload (and re-render after `frame-change` fires).
-   */
+  /** Best-effort sync access; returns `undefined` before the first `preload()`. */
   abstract get peekFrame(): Frame | undefined;
 
-  /** Free WASM resources. Called when the DS is removed from the pipeline. */
+  /** Free WASM resources. Called when the source is removed from the pipeline. */
   abstract dispose(): void;
 
   /**
-   * Identity at apply time. Actual block injection happens during
-   * pipeline phase A inside `ModifierPipeline.compute`.
-   *
-   * Per-component render visibility lives in the StyleManager
-   * representation (atoms/bonds) and the sim_box mesh (box), which the
-   * Artist consumes — never in this passthrough.
+   * Identity at apply time. Block composition happens in the synthesis step at
+   * the head of `ModifierPipeline.compute`, not here.
    */
   apply(input: Frame, _ctx: PipelineContext): Frame {
     return input;
   }
 }
 
-/** Optional fields shared by both concrete data sources. */
+/** Optional fields shared by the concrete data sources. */
 export interface DataSourceOptions {
   filename?: string;
   sourceType?: DataSourceModifier["sourceType"];
   contributedBlocks?: ReadonlyArray<string>;
 }
 
+function applyOptions(
+  ds: DataSourceModifier,
+  options: DataSourceOptions,
+): void {
+  if (options.filename !== undefined) ds.filename = options.filename;
+  if (options.sourceType !== undefined) ds.sourceType = options.sourceType;
+  if (options.contributedBlocks !== undefined) {
+    ds.contributedBlocks = options.contributedBlocks;
+  }
+}
+
 /**
- * A data source backed by a multi-frame {@link Trajectory}. `getFrame(i)`
- * returns the i-th frame; `frameCount` reflects trajectory length.
- * Eager and async-streaming trajectories are both supported through
- * `Trajectory.frame(i)`'s unified async accessor.
+ * A data source acquired from a parsed file — backed by a multi-frame
+ * {@link Trajectory}. `getFrame(i)` returns the i-th frame; both eager and
+ * async-streaming trajectories work through `Trajectory.frame(i)`. The
+ * trajectory is consulted lazily — constructing the source pulls no frames.
  */
-export class TrajectoryDataSource extends DataSourceModifier {
-  readonly kind = "trajectory" as const;
+export class FileDataSource extends DataSourceModifier {
+  readonly kind = "file" as const;
 
   private readonly _trajectory: Trajectory;
   private _cached: Frame | null = null;
 
   constructor(trajectory: Trajectory, options: DataSourceOptions = {}) {
-    super("trajectory-data-source", "Data Source");
+    super("file-data-source", "Data Source");
     this._trajectory = trajectory;
-    if (options.filename !== undefined) this.filename = options.filename;
-    if (options.sourceType !== undefined) this.sourceType = options.sourceType;
-    if (options.contributedBlocks !== undefined) {
-      this.contributedBlocks = options.contributedBlocks;
-    }
+    applyOptions(this, options);
   }
 
-  /** The wrapped trajectory. Replace by removing + re-adding the DS. */
   get trajectory(): Trajectory {
     return this._trajectory;
   }
@@ -163,7 +148,7 @@ export class TrajectoryDataSource extends DataSourceModifier {
   async preload(index: number): Promise<void> {
     if (index < 0 || index >= this._trajectory.length) {
       throw new Error(
-        `TrajectoryDataSource ${this.id}: frame index ${index} out of range [0, ${this._trajectory.length})`,
+        `FileDataSource ${this.id}: frame index ${index} out of range [0, ${this._trajectory.length})`,
       );
     }
     this._cached = await this._trajectory.frame(index);
@@ -172,7 +157,7 @@ export class TrajectoryDataSource extends DataSourceModifier {
   get cachedFrame(): Frame {
     if (this._cached === null) {
       throw new Error(
-        `TrajectoryDataSource ${this.id}: cachedFrame accessed before preload()`,
+        `FileDataSource ${this.id}: cachedFrame accessed before preload()`,
       );
     }
     return this._cached;
@@ -189,30 +174,32 @@ export class TrajectoryDataSource extends DataSourceModifier {
 }
 
 /**
- * A data source carrying a single static {@link Frame}. `getFrame(_)`
- * returns the same frame regardless of index — this is the broadcast
- * mechanism that lets a 1-frame topology file contribute to every step
- * of an N-frame trajectory.
+ * A data source carrying a single in-memory {@link Frame}, wrapped as a
+ * length-1 {@link Trajectory} via {@link frameToTrajectory}. `getFrame(_)`
+ * returns the same frame regardless of index — the synthesis step broadcasts
+ * it across the timeline when combined with longer sources.
  */
-export class FrameDataSource extends DataSourceModifier {
-  readonly kind = "frame" as const;
+export class MemoryDataSource extends DataSourceModifier {
+  readonly kind = "memory" as const;
 
   private readonly _frame: Frame;
+  private readonly _trajectory: Trajectory;
 
   constructor(frame: Frame, options: DataSourceOptions = {}) {
-    super("frame-data-source", "Data Source");
+    super("memory-data-source", "Data Source");
     this._frame = frame;
-    if (options.filename !== undefined) this.filename = options.filename;
-    if (options.sourceType !== undefined) this.sourceType = options.sourceType;
-    if (options.contributedBlocks !== undefined) {
-      this.contributedBlocks = options.contributedBlocks;
-    }
+    this._trajectory = frameToTrajectory(frame);
+    applyOptions(this, options);
+  }
+
+  get trajectory(): Trajectory {
+    return this._trajectory;
   }
 
   /**
    * The wrapped single frame. Mutating it (Edit mode add/delete atoms)
-   * is allowed and propagates immediately to every pipeline frame
-   * since `getFrame(_)` returns this same instance.
+   * propagates immediately since it is the same instance the length-1
+   * trajectory holds.
    */
   get frame(): Frame {
     return this._frame;
@@ -223,8 +210,7 @@ export class FrameDataSource extends DataSourceModifier {
   }
 
   getFrame(_index: number): Frame {
-    // Index is intentionally ignored: a FrameDataSource broadcasts its
-    // single frame across the whole pipeline timeline.
+    // Index ignored: a memory source broadcasts its single frame.
     return this._frame;
   }
 
@@ -241,10 +227,6 @@ export class FrameDataSource extends DataSourceModifier {
   }
 
   dispose(): void {
-    try {
-      this._frame.free();
-    } catch {
-      // Already freed by molrs's FinalizationRegistry — safe to ignore.
-    }
+    this._trajectory.dispose();
   }
 }

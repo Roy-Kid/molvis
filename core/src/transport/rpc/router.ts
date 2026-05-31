@@ -12,7 +12,7 @@ import type { MarkAtomOverlay } from "../../overlays/mark_atom";
 import type { MarkAtomProps } from "../../overlays/types";
 import {
   DataSourceModifier,
-  FrameDataSource,
+  MemoryDataSource,
 } from "../../pipeline/data_source_modifier";
 import type { Modifier } from "../../pipeline/modifier";
 import { ModifierRegistry } from "../../pipeline/modifier_registry";
@@ -202,8 +202,8 @@ export function ensureDataSource(
     // Placeholder DS at pipeline head. Tasks #4–#5 of the multi-DS
     // spec replace this with a `addDataSource(spec)` flow that wraps
     // the actual loaded data; for now we install an empty
-    // FrameDataSource so the pipeline always has a head marker.
-    dataSource = new FrameDataSource(new Frame());
+    // MemoryDataSource so the pipeline always has a head marker.
+    dataSource = new MemoryDataSource(new Frame());
     pipeline.addModifier(dataSource);
     // Keep data source at the head — downstream modifiers read from its output.
     const currentIndex = pipeline
@@ -993,7 +993,7 @@ export class RPCRouter {
 
   /**
    * Append a single-frame data source. The decoded frame is wrapped in
-   * a {@link FrameDataSource} (broadcasts across the system's frame
+   * a {@link MemoryDataSource} (broadcasts across the system's frame
    * count) and added via `MolvisApp.addDataSource`. Frame-count and
    * atom-count validations are enforced by `addDataSource` itself; on
    * mismatch the error propagates to the caller as a JSON-RPC error.
@@ -1036,7 +1036,7 @@ export class RPCRouter {
       );
     }
 
-    const ds = new FrameDataSource(frame, {
+    const ds = new MemoryDataSource(frame, {
       sourceType: "backend",
       filename,
       contributedBlocks,

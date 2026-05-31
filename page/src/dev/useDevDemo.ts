@@ -33,7 +33,7 @@ export function useDevDemo(
     let disposed = false;
 
     const initDemo = async () => {
-      const { FrameDataSource, Frame, Block, Trajectory } = await import(
+      const { MemoryDataSource, Frame, Block, Trajectory } = await import(
         "@molvis/core"
       );
       if (disposed) return;
@@ -117,7 +117,7 @@ export function useDevDemo(
       frame.insertBlock("atoms", atomsBlock);
       frame.insertBlock("bonds", bondsBlock);
 
-      const sourceMod = new FrameDataSource(frame, {
+      const sourceMod = new MemoryDataSource(frame, {
         sourceType: "empty",
         filename: "Dopamine",
       });

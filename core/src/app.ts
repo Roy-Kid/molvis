@@ -26,7 +26,7 @@ import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import { applyAutoAttach } from "./pipeline/auto_attach";
 import {
   DataSourceModifier,
-  TrajectoryDataSource,
+  FileDataSource,
 } from "./pipeline/data_source_modifier";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import type {
@@ -878,7 +878,7 @@ export class MolvisApp {
 
   /**
    * Set the current trajectory. Replaces any existing data source in
-   * the pipeline with a single `TrajectoryDataSource(trajectory)` so
+   * the pipeline with a single `FileDataSource(trajectory)` so
    * the pipeline's phase-A merge has data to draw from. Provenance
    * (`sourceType` / `filename`) is preserved from the previous DS if
    * one existed; otherwise the caller (typically a file ingress
@@ -893,7 +893,7 @@ export class MolvisApp {
     this.commandManager.clearHistory();
 
     // Sync the pipeline: replace any existing DataSourceModifier with a
-    // fresh TrajectoryDataSource wrapping the new trajectory. This is
+    // fresh FileDataSource wrapping the new trajectory. This is
     // the push-side of the multi-DS spec's "system.trajectory derives
     // from pipeline DSs" invariant — task #5 will replace this with a
     // proper addDataSource()/removeDataSource() lifecycle.
@@ -913,16 +913,16 @@ export class MolvisApp {
     if (existingDS) {
       this._modifierPipeline.removeModifier(existingDS.id);
       // Dispose only when the predecessor was a Trajectory DS — its
-      // owned trajectory is being replaced. FrameDataSource placeholders
+      // owned trajectory is being replaced. MemoryDataSource placeholders
       // installed by `ensureDataSource` wrap a transient empty Frame
       // which the molrs FinalizationRegistry will GC; calling `free()`
       // here is unnecessary and races with consumers that may still
       // hold a reference between events.
-      if (existingDS instanceof TrajectoryDataSource) {
+      if (existingDS instanceof FileDataSource) {
         existingDS.dispose();
       }
     }
-    const newDS = new TrajectoryDataSource(trajectory, carriedMeta);
+    const newDS = new FileDataSource(trajectory, carriedMeta);
     this._modifierPipeline.addModifier(newDS);
     if (this._modifierPipeline.getModifiers().indexOf(newDS) > 0) {
       this._modifierPipeline.reorderModifier(newDS.id, 0);
@@ -957,16 +957,16 @@ export class MolvisApp {
    *
    * Multi-data-source semantics (`docs/specs/multi-data-source-pipeline.md`):
    *
-   * - For a {@link TrajectoryDataSource}, frame count must match every
-   *   existing TrajectoryDataSource already in the pipeline. Mismatches
+   * - For a {@link FileDataSource}, frame count must match every
+   *   existing FileDataSource already in the pipeline. Mismatches
    *   throw with a concrete message; callers (typically the io loaders
    *   from task #6) catch and surface to the user.
-   * - {@link FrameDataSource}s are always safe to append (they
+   * - {@link MemoryDataSource}s are always safe to append (they
    *   broadcast across the system's frame count).
    * - Auto-attach runs against this DS's frame 0 so default Draw
    *   modifiers (DrawAtom / DrawBond / DrawBox) get installed for new
    *   block kinds the source contributes.
-   * - If this is the *first* TrajectoryDataSource in the pipeline,
+   * - If this is the *first* FileDataSource in the pipeline,
    *   System adopts its trajectory so navigation, frame-change events,
    *   and the existing seek state machine all keep working.
    *
@@ -974,12 +974,10 @@ export class MolvisApp {
    * {@link MolvisApp.setTrajectory} for that legacy path.
    */
   public async addDataSource(ds: DataSourceModifier): Promise<void> {
-    if (ds instanceof TrajectoryDataSource) {
+    if (ds instanceof FileDataSource) {
       const existingTraj = this._modifierPipeline
         .getModifiers()
-        .find(
-          (m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource,
-        );
+        .find((m): m is FileDataSource => m instanceof FileDataSource);
       if (existingTraj && existingTraj.frameCount !== ds.frameCount) {
         throw new Error(
           `Cannot add data source: file has ${ds.frameCount} frame(s); existing trajectory has ${existingTraj.frameCount}. File must be single-frame (topology) or match existing frame count.`,
@@ -990,14 +988,12 @@ export class MolvisApp {
     this._modifierPipeline.addModifier(ds);
 
     // If this is the first TrajectoryDS, promote System to follow it.
-    // Earlier FrameDataSources stay in place and broadcast across the
+    // Earlier MemoryDataSources stay in place and broadcast across the
     // newly grown timeline (their `getFrame(_)` ignores the index).
-    if (ds instanceof TrajectoryDataSource) {
+    if (ds instanceof FileDataSource) {
       const trajDSs = this._modifierPipeline
         .getModifiers()
-        .filter(
-          (m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource,
-        );
+        .filter((m): m is FileDataSource => m instanceof FileDataSource);
       const isFirstTraj = trajDSs.length === 1;
       if (isFirstTraj) {
         await this._system.setTrajectory(ds.trajectory);
@@ -1027,8 +1023,8 @@ export class MolvisApp {
    * semantics. Disposes the DS's WASM resources.
    *
    * Per the spec's 1a delete-rebuild semantics, removing a
-   * TrajectoryDataSource:
-   * - If another TrajectoryDataSource remains, System adopts its
+   * FileDataSource:
+   * - If another FileDataSource remains, System adopts its
    *   trajectory; the system's frame count tracks that new primary.
    * - If none remain, System collapses to a single empty frame so
    *   navigation state stays well-defined (the pipeline still
@@ -1064,17 +1060,15 @@ export class MolvisApp {
     this.artist.clear();
 
     // Re-derive system trajectory from what's left.
-    if (target instanceof TrajectoryDataSource) {
+    if (target instanceof FileDataSource) {
       const remainingTraj = this._modifierPipeline
         .getModifiers()
-        .find(
-          (m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource,
-        );
+        .find((m): m is FileDataSource => m instanceof FileDataSource);
       if (remainingTraj) {
         await this._system.setTrajectory(remainingTraj.trajectory);
       } else {
         // No trajectory anywhere: collapse to a single empty frame so
-        // navigation state stays consistent. Any FrameDataSource left
+        // navigation state stays consistent. Any MemoryDataSource left
         // in the pipeline still contributes blocks during phase A.
         await this._system.setTrajectory(new Trajectory([new Frame()]));
       }

@@ -174,8 +174,8 @@ export {
   type DataSourceKind,
   DataSourceModifier,
   type DataSourceOptions,
-  FrameDataSource,
-  TrajectoryDataSource,
+  FileDataSource,
+  MemoryDataSource,
 } from "./pipeline/data_source_modifier";
 export { DrawAtomModifier } from "./pipeline/draw_atom";
 export { DrawBondModifier } from "./pipeline/draw_bond";

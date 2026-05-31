@@ -11,8 +11,8 @@
  *
  * Multi-data-source spec phase 4: backend snapshots can carry multiple
  * `Data Source` entries. The first DS adopts the snapshot's `frames`
- * array as its trajectory data (primary `TrajectoryDataSource`).
- * Subsequent DS entries are restored as empty `FrameDataSource`
+ * array as its trajectory data (primary `FileDataSource`).
+ * Subsequent DS entries are restored as empty `MemoryDataSource`
  * placeholders — actual file data does not survive the snapshot
  * format, so the user re-attaches files after restore.
  */
@@ -22,7 +22,7 @@ import type { MolvisApp } from "../app";
 import type { BackendStateSync } from "../events";
 import {
   DataSourceModifier,
-  FrameDataSource,
+  MemoryDataSource,
 } from "../pipeline/data_source_modifier";
 import type { Modifier } from "../pipeline/modifier";
 import {
@@ -48,7 +48,7 @@ export async function applyBackendState(
   const nonDsEntries = state.pipeline.filter((e) => e.name !== "Data Source");
 
   // Replay frames into the FIRST DataSource entry, if any. Subsequent
-  // DS entries are restored as empty FrameDataSource placeholders so
+  // DS entries are restored as empty MemoryDataSource placeholders so
   // the pipeline order matches the snapshot — the user re-attaches
   // their files after restore (the snapshot format intentionally does
   // not embed N×file payloads).
@@ -71,13 +71,13 @@ export async function applyBackendState(
     }
   }
 
-  // Append placeholder FrameDataSources for the remaining DS entries.
+  // Append placeholder MemoryDataSources for the remaining DS entries.
   // They contribute nothing (empty frame) until the user re-loads
   // their corresponding files via the UI's "Add Data Source" button
   // or RPC `scene.add_data_source`.
   for (let i = 1; i < dsEntries.length; i++) {
     const entry = dsEntries[i];
-    const placeholder = new FrameDataSource(new Frame(), {
+    const placeholder = new MemoryDataSource(new Frame(), {
       sourceType: entry.source_type ?? "empty",
       filename: entry.filename ?? "",
       contributedBlocks: entry.contributed_blocks ?? [],

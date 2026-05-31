@@ -1,10 +1,10 @@
 import {
   type DataSourceModifier as CoreDataSourceModifier,
+  FileDataSource,
   Frame,
-  FrameDataSource,
+  MemoryDataSource,
   type Molvis,
   Trajectory,
-  TrajectoryDataSource,
 } from "@molvis/core";
 import { getAllAcceptExtensions } from "@molvis/core/io";
 import { ChevronDown, ChevronRight, FileUp, Trash2 } from "lucide-react";
@@ -202,8 +202,8 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   };
 
   const filename = modifier.filename === "" ? "—" : modifier.filename;
-  const isTraj = modifier instanceof TrajectoryDataSource;
-  const isFrame = modifier instanceof FrameDataSource;
+  const isTraj = modifier instanceof FileDataSource;
+  const isFrame = modifier instanceof MemoryDataSource;
   const kindBadge = isTraj
     ? `Trajectory · ${modifier.frameCount} frame${modifier.frameCount === 1 ? "" : "s"}`
     : isFrame
