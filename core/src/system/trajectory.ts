@@ -363,3 +363,19 @@ export class Trajectory {
     return true;
   }
 }
+
+/**
+ * Wrap a single {@link Frame} as a length-1 {@link Trajectory}, the canonical
+ * "Frame = length-1 Trajectory" form the scene-synthesis pipeline relies on.
+ *
+ * The result is eager (`isLazy === false`) and holds the frame by reference —
+ * this helper does NOT clone or free `frame`. The returned Trajectory owns the
+ * frame's WASM lifetime via `dispose()` like any eager trajectory; the caller
+ * decides when to dispose.
+ *
+ * @param frame the frame to wrap.
+ * @returns a Trajectory of length 1 whose `get(0)` / `frame(0)` is `frame`.
+ */
+export function frameToTrajectory(frame: Frame): Trajectory {
+  return new Trajectory([frame]);
+}

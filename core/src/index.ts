@@ -221,6 +221,7 @@ export {
   Box,
   Frame,
   type FrameProvider,
+  frameToTrajectory,
   generate3D,
   MolRecReader,
   parseSMILES,

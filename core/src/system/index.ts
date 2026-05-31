@@ -20,4 +20,8 @@ export {
   type SuperpositionResult,
   superpose,
 } from "./superposition";
-export { type FrameProvider, Trajectory } from "./trajectory";
+export {
+  type FrameProvider,
+  frameToTrajectory,
+  Trajectory,
+} from "./trajectory";
