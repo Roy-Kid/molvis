@@ -974,17 +974,10 @@ export class MolvisApp {
    * {@link MolvisApp.setTrajectory} for that legacy path.
    */
   public async addDataSource(ds: DataSourceModifier): Promise<void> {
-    if (ds instanceof FileDataSource) {
-      const existingTraj = this._modifierPipeline
-        .getModifiers()
-        .find((m): m is FileDataSource => m instanceof FileDataSource);
-      if (existingTraj && existingTraj.frameCount !== ds.frameCount) {
-        throw new Error(
-          `Cannot add data source: file has ${ds.frameCount} frame(s); existing trajectory has ${existingTraj.frameCount}. File must be single-frame (topology) or match existing frame count.`,
-        );
-      }
-    }
-
+    // Frame-count compatibility is no longer hard-checked here: the synthesis
+    // head reconciles per-source counts at compute time (length-1 broadcast /
+    // equal-length zip / unequal>1 error with a concrete message), so a
+    // mismatch surfaces from `synthesize` rather than from an eager guard.
     this._modifierPipeline.addModifier(ds);
 
     // If this is the first TrajectoryDS, promote System to follow it.

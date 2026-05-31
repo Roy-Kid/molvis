@@ -66,15 +66,6 @@ export interface Modifier {
   parentId: string | null;
 
   /**
-   * IDs of other modifiers whose **output frames** this modifier reads (the
-   * "reference edge"). Distinct from {@link parentId}, which carries a
-   * selection mask: a reference edge carries frame data, resolved via
-   * `context.frameCache` during pipeline compute. Defaults to `[]` (no
-   * references). Managed through {@link ModifierPipeline.setReferences}.
-   */
-  referencedIds: string[];
-
-  /**
    * Auto-attach predicate. When a frame is loaded and a probe of this
    * class returns `true`, the modifier is automatically inserted into
    * the pipeline.
@@ -149,7 +140,6 @@ export interface Modifier {
 export abstract class BaseModifier implements Modifier {
   public enabled = true;
   public parentId: string | null = null;
-  public referencedIds: string[] = [];
 
   constructor(
     public readonly id: string,

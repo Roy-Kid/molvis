@@ -2,6 +2,7 @@
 title: Scene synthesis core — compose multiple source trajectories into one merged frame
 status: code-complete
 created: 2026-05-31
+revised: 2026-05-31
 ---
 
 # Scene synthesis core — compose multiple source trajectories into one merged frame
@@ -31,7 +32,7 @@ synthesize(sources: SynthesisSource[], frameIndex: number, config: SceneSynthesi
 
 **类型（可序列化）**
 
-- `SynthesisSource = { id: string; trajectory: Trajectory }` — `Trajectory` 来自 `core/src/system/trajectory.ts`。
+- `SynthesisSource = { id: string; trajectory: Trajectory; contributedBlocks?: ReadonlyArray<string> }` — `Trajectory` 来自 `core/src/system/trajectory.ts`。**（spec-04 supersede）** 新增可选 `contributedBlocks`：非空时只贡献这些块（如拓扑文件 `["bonds"]`），并在 `augment` / 单源直通路径统一跳过 0-row 块——把旧 Phase A 的 narrowing + empty-placeholder-skip 语义吸收进 `synthesize`，使管线 pivot 不丢这两项行为。`extend` 不受影响（按定义拼接 atoms）。
 - `SceneSynthesisConfig = { mode: "extend" | "augment"; referenceId: string | null; alignment: SynthesisAlignment | null }`。
 - `SynthesisAlignment = { enabled: boolean; massWeight: boolean; subset: Uint32Array | null }`。`subset` 为相对每个来源原子的索引子集（与 `superpose` 的 `indices` 同义）。
 

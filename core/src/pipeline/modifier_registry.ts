@@ -1,6 +1,5 @@
 import { AssignColorModifier } from "../modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
-import { CombineSystemsModifier } from "../modifiers/CombineSystemsModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
@@ -102,11 +101,6 @@ export class ModifierRegistry {
       "Delete Selected",
       "Selection Sensitive",
       () => new DeleteSelectedModifier(),
-    );
-    ModifierRegistry.register(
-      "Combine Systems",
-      "Selection Insensitive",
-      () => new CombineSystemsModifier(nextModifierId("combine-systems")),
     );
     ModifierRegistry.register(
       DrawAtomModifier.NAME,

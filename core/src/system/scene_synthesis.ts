@@ -10,6 +10,15 @@ const SOURCE_ID = "source_id";
 export interface SynthesisSource {
   id: string;
   trajectory: Trajectory;
+  /**
+   * Optional narrowing filter for `augment` / single-source passthrough: when
+   * non-empty, only these block names are contributed (e.g. `["bonds"]` for a
+   * topology-only file). Empty / omitted contributes every block the resolved
+   * frame carries. Has no effect on `extend` (which concatenates atoms by
+   * definition). 0-row blocks are always skipped so an empty placeholder never
+   * shadows a real block under last-wins.
+   */
+  contributedBlocks?: ReadonlyArray<string>;
 }
 
 /** Optional pre-concat structural superposition (extend mode only). */
@@ -44,8 +53,10 @@ export interface SceneSynthesisConfig {
  *   offset per source), inject a per-atom Int32 `source_id` ordinal. Optionally
  *   Kabsch-aligns each non-reference source onto the reference first; per-source
  *   RMSD is exposed on the result via numeric meta `synthesis_rmsd:<id>`.
- * - `augment`: union each source's blocks, last-wins on block-name conflict.
- * - single source: passthrough of `frame(frameIndex)` (no `source_id`).
+ * - `augment`: union each source's blocks (honoring `contributedBlocks` and
+ *   skipping 0-row blocks), last-wins on block-name conflict.
+ * - single source: fresh-frame passthrough of `frame(frameIndex)` (no
+ *   `source_id`), filtered by `contributedBlocks` when the source declares one.
  *
  * Coordinates / RMSD are in the frame's length unit (Å in MolVis).
  */
@@ -58,11 +69,47 @@ export async function synthesize(
 
   const frames = await resolveFrames(sources, frameIndex);
 
-  // Single source → passthrough (zero-config, no source_id).
-  if (sources.length === 1) return frames[0];
+  // Single source → fresh-frame passthrough (no source_id). project() returns a
+  // NEW Frame holding the source's (Arc-shared) blocks: with a contributedBlocks
+  // filter it narrows; without one it copies every non-empty block. The fresh
+  // wrapper keeps the pipeline's working frame a distinct object from the
+  // DataSource's stored trajectory frame, so a downstream modifier never mutates
+  // the source's frame through it.
+  if (sources.length === 1) return project(sources[0], frames[0]);
 
-  if (config.mode === "augment") return augment(frames);
+  if (config.mode === "augment") return augment(sources, frames);
   return extend(sources, frames, config);
+}
+
+/**
+ * The block names a source contributes from its resolved frame: its declared
+ * `contributedBlocks` (intersected with what the frame actually has) when set,
+ * else every block on the frame.
+ */
+function contributedNames(source: SynthesisSource, frame: Frame): string[] {
+  const declared = source.contributedBlocks;
+  if (declared && declared.length > 0) {
+    return declared.filter((name) => frame.getBlock(name) !== undefined);
+  }
+  return frame.blockNames();
+}
+
+/**
+ * Project a single resolved frame into a fresh {@link Frame} holding its
+ * contributed, non-empty blocks (Arc-shared) plus simbox. Backs the
+ * single-source passthrough — narrowing when `contributedBlocks` is set, a
+ * straight non-empty-block copy otherwise; the multi-source path inlines the
+ * same rule in {@link augment}.
+ */
+function project(source: SynthesisSource, frame: Frame): Frame {
+  const result = new Frame();
+  for (const name of contributedNames(source, frame)) {
+    const block = frame.getBlock(name);
+    if (block !== undefined && block.nrows() > 0)
+      result.insertBlock(name, block);
+  }
+  if (frame.simbox !== undefined) result.simbox = frame.simbox;
+  return result;
 }
 
 /**
@@ -90,13 +137,21 @@ async function resolveFrames(
   );
 }
 
-/** Union each source's blocks into one frame, last source wins on conflict. */
-function augment(frames: Frame[]): Frame {
+/**
+ * Union each source's blocks into one frame, last source wins on conflict.
+ * Honors each source's `contributedBlocks` filter and skips 0-row blocks so an
+ * empty placeholder (e.g. a topology-only source's empty `atoms`) never shadows
+ * a real block from another source.
+ */
+function augment(sources: SynthesisSource[], frames: Frame[]): Frame {
   const result = new Frame();
-  for (const frame of frames) {
-    for (const name of frame.blockNames()) {
+  for (let k = 0; k < frames.length; k++) {
+    const frame = frames[k];
+    for (const name of contributedNames(sources[k], frame)) {
       const block = frame.getBlock(name);
-      if (block !== undefined) result.insertBlock(name, block);
+      if (block !== undefined && block.nrows() > 0) {
+        result.insertBlock(name, block);
+      }
     }
     if (frame.simbox !== undefined) result.simbox = frame.simbox;
   }

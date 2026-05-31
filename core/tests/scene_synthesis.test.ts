@@ -513,3 +513,85 @@ describe("synthesize (ac-010 purity / immutability)", () => {
     expect(source.id).toBe("x");
   });
 });
+
+// ── ac-011 contributedBlocks filter + 0-row skip (spec-04 supersede) ──────────
+//
+// Extends the spec-03 contract per the data-source-synthesis-04 decision: the
+// frozen Phase-A behaviors (contributedBlocks narrowing, empty-placeholder
+// skipping) move into synthesize so the pipeline pivot keeps them.
+
+const AUGMENT: SceneSynthesisConfig = {
+  mode: "augment",
+  referenceId: null,
+  alignment: null,
+};
+
+describe("synthesize (ac-011 contributedBlocks + 0-row skip)", () => {
+  it("ac-011 single source honors contributedBlocks in passthrough", async () => {
+    // Source frame carries atoms + bonds; declares only "bonds".
+    const frame = makeFrame(
+      [
+        [0, 0, 0],
+        [1, 0, 0],
+      ],
+      ["C", "O"],
+      { bonds: [[0, 1]] },
+    );
+    const source: SynthesisSource = {
+      ...makeSource("only", [frame]),
+      contributedBlocks: ["bonds"],
+    };
+
+    const out = await synthesize([source], 0, AUGMENT);
+    expect(out.getBlock("atoms")).toBeUndefined();
+    expect(out.getBlock("bonds")?.nrows()).toBe(1);
+  });
+
+  it("ac-011 single source without filter passes through untouched (atoms kept)", async () => {
+    const frame = makeFrame([[0, 0, 0]], ["C"], { bonds: [[0, 0]] });
+    const out = await synthesize([makeSource("only", [frame])], 0, AUGMENT);
+    expect(out.getBlock("atoms")?.nrows()).toBe(1);
+    expect(out.getBlock("bonds")?.nrows()).toBe(1);
+  });
+
+  it("ac-011 augment skips a 0-row placeholder block so real data is not shadowed", async () => {
+    // Source A: real atoms. Source B: empty atoms placeholder + real bonds.
+    const a = makeSource("a", [
+      makeFrame(
+        [
+          [0, 0, 0],
+          [1, 0, 0],
+        ],
+        ["C", "O"],
+      ),
+    ]);
+    const b = makeSource("b", [makeFrame([], [], { bonds: [[0, 1]] })]);
+
+    const out = await synthesize([a, b], 0, AUGMENT);
+    // A's atoms survive (B's empty atoms did NOT win via last-wins).
+    expect(out.getBlock("atoms")?.nrows()).toBe(2);
+    expect(out.getBlock("bonds")?.nrows()).toBe(1);
+  });
+
+  it("ac-011 augment honors a per-source contributedBlocks filter", async () => {
+    const a = makeSource("a", [
+      makeFrame(
+        [
+          [0, 0, 0],
+          [1, 0, 0],
+        ],
+        ["C", "O"],
+      ),
+    ]);
+    // B has atoms + bonds but only contributes bonds — its atoms must not
+    // shadow A's via last-wins.
+    const b: SynthesisSource = {
+      ...makeSource("b", [makeFrame([[9, 9, 9]], ["H"], { bonds: [[0, 0]] })]),
+      contributedBlocks: ["bonds"],
+    };
+
+    const out = await synthesize([a, b], 0, AUGMENT);
+    expect(out.getBlock("atoms")?.nrows()).toBe(2);
+    expect(out.getBlock("bonds")?.nrows()).toBe(1);
+  });
+});

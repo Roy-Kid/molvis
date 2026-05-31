@@ -197,19 +197,6 @@ export interface PipelineContext {
   selectionCache: Map<string, SelectionMask>;
 
   /**
-   * Cache of output frames keyed by modifier ID — the data carrier for the
-   * reference edge. During compute, a modifier whose id is referenced by some
-   * enabled modifier stores its output frame here so referencing modifiers
-   * can resolve `referencedIds` via `frameCache.get(refId)`. Only referenced
-   * modifiers are cached (unreferenced outputs are not retained).
-   *
-   * Handle ownership: these are the pipeline's working `Frame`s. Referencing
-   * modifiers read them (getBlock / blockNames / nrows) but MUST NOT free them
-   * or any shared block/simbox handle obtained from them.
-   */
-  frameCache: Map<string, Frame>;
-
-  /**
    * Frame index in trajectory (if applicable).
    */
   frameIndex?: number;
@@ -244,7 +231,6 @@ export function createDefaultContext(
     suppressHighlight: false,
     postRenderEffects: [],
     selectionCache: new Map(),
-    frameCache: new Map(),
     frameIndex,
     app,
     changeKind,

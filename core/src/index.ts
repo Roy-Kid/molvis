@@ -138,10 +138,6 @@ export {
 export { ModeType } from "./mode";
 export { AssignColorModifier } from "./modifiers/AssignColorModifier";
 export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
-export {
-  type CombineAlignment,
-  CombineSystemsModifier,
-} from "./modifiers/CombineSystemsModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";

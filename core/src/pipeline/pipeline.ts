@@ -1,6 +1,11 @@
-import { Frame } from "@molcrafts/molrs";
+import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
 import { EventEmitter } from "../events";
+import {
+  type SceneSynthesisConfig,
+  type SynthesisSource,
+  synthesize,
+} from "../system/scene_synthesis";
 import { logger } from "../utils/logger";
 import { DataSourceModifier } from "./data_source_modifier";
 import { type Modifier, ModifierCapability } from "./modifier";
@@ -29,11 +34,6 @@ export interface PipelineEventMap {
     oldParentId: string | null;
     newParentId: string | null;
   };
-  "modifier-references-changed": {
-    modifierId: string;
-    oldReferencedIds: string[];
-    newReferencedIds: string[];
-  };
   "pipeline-cleared": Record<string, never>;
   computed: { frame: Frame; context: PipelineContext };
 }
@@ -43,7 +43,6 @@ export const PipelineEvents = {
   MODIFIER_REMOVED: "modifier-removed" as const,
   MODIFIER_REORDERED: "modifier-reordered" as const,
   MODIFIER_REPARENTED: "modifier-reparented" as const,
-  MODIFIER_REFERENCES_CHANGED: "modifier-references-changed" as const,
   PIPELINE_CLEARED: "pipeline-cleared" as const,
   COMPUTED: "computed" as const,
 };
@@ -54,6 +53,33 @@ export const PipelineEvents = {
  */
 export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   private modifiers: Modifier[] = [];
+
+  /**
+   * Scene-synthesis configuration consumed at the head of {@link compute}.
+   * Owned by the pipeline (mirroring how it owns its modifier list) and edited
+   * by the RPC / UI surfaces. Default `augment` reproduces the legacy last-wins
+   * block-union merge; `setSynthesisConfig` is pure state and never triggers a
+   * compute — callers re-run `applyPipeline` after editing it.
+   */
+  private synthesisConfig: SceneSynthesisConfig = {
+    mode: "augment",
+    referenceId: null,
+    alignment: null,
+  };
+
+  /** The current scene-synthesis configuration (see {@link setSynthesisConfig}). */
+  getSynthesisConfig(): SceneSynthesisConfig {
+    return this.synthesisConfig;
+  }
+
+  /**
+   * Replace the scene-synthesis configuration. Pure state mutation — does NOT
+   * itself recompute; the caller (RPC / UI) re-runs `applyPipeline` afterwards,
+   * exactly as it does after editing a modifier.
+   */
+  setSynthesisConfig(config: SceneSynthesisConfig): void {
+    this.synthesisConfig = config;
+  }
 
   /**
    * Add a modifier to the pipeline.
@@ -121,26 +147,6 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       }
     }
 
-    // Auto-drop dangling reference edges: any surviving modifier that
-    // referenced a removed id loses that reference (the reference edge does
-    // NOT cascade-delete the consumer — unlike the parentId child cascade).
-    const removedIds = new Set(removed.map((m) => m.id));
-    for (const survivor of this.modifiers) {
-      if (survivor.referencedIds.length === 0) continue;
-      const filtered = survivor.referencedIds.filter(
-        (rid) => !removedIds.has(rid),
-      );
-      if (filtered.length !== survivor.referencedIds.length) {
-        const oldReferencedIds = survivor.referencedIds;
-        survivor.referencedIds = filtered;
-        this.emit(PipelineEvents.MODIFIER_REFERENCES_CHANGED, {
-          modifierId: survivor.id,
-          oldReferencedIds,
-          newReferencedIds: filtered,
-        });
-      }
-    }
-
     return removed;
   }
 
@@ -166,7 +172,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   }
 
   /**
-   * Number of enabled DataSourceModifiers — the same set phase A merge
+   * Number of enabled DataSourceModifiers — the same set the synthesis head
    * walks. Callers use this to detect multi-DS pipelines without
    * leaking the filter logic.
    */
@@ -264,87 +270,6 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   }
 
   /**
-   * Set the reference edges of a modifier — the IDs of other modifiers whose
-   * output frames it reads via `context.frameCache` during compute. This is a
-   * SEPARATE edge kind from {@link setParent}: `parentId` carries a selection
-   * mask and bars topology-changing modifiers (those reset the world); the
-   * reference edge carries frame data and is consumed by topology-changing
-   * combine nodes, so it deliberately does NOT apply the `isTopologyChanging`
-   * gate.
-   *
-   * Rejects (returns false, leaving `referencedIds` unchanged) on:
-   * - unknown target id,
-   * - self-reference (`modifierId` ∈ `ids`),
-   * - dangling reference (an id not present in the pipeline),
-   * - a reference cycle (some `ids` entry can already reach `modifierId`
-   *   through existing reference edges).
-   *
-   * On success replaces `referencedIds` with a fresh copy and emits
-   * {@link PipelineEvents.MODIFIER_REFERENCES_CHANGED}.
-   */
-  setReferences(modifierId: string, ids: string[]): boolean {
-    const target = this.modifiers.find((m) => m.id === modifierId);
-    if (!target) {
-      return false;
-    }
-    // No self-reference.
-    if (ids.includes(modifierId)) {
-      return false;
-    }
-    // No dangling references — every id must resolve to a modifier.
-    for (const rid of ids) {
-      if (!this.modifiers.some((m) => m.id === rid)) {
-        return false;
-      }
-    }
-    // No cycles: adding modifierId → ids closes a cycle iff some referenced
-    // node can already reach modifierId via existing reference edges.
-    for (const rid of ids) {
-      if (this.referenceReaches(rid, modifierId, new Set())) {
-        return false;
-      }
-    }
-
-    const oldReferencedIds = target.referencedIds;
-    target.referencedIds = [...ids];
-    this.emit(PipelineEvents.MODIFIER_REFERENCES_CHANGED, {
-      modifierId,
-      oldReferencedIds,
-      newReferencedIds: target.referencedIds,
-    });
-    return true;
-  }
-
-  /**
-   * Whether `fromId` can reach `goalId` by following existing reference edges
-   * (depth-first, cycle-guarded). Used by {@link setReferences} to reject
-   * edges that would create a cycle.
-   */
-  private referenceReaches(
-    fromId: string,
-    goalId: string,
-    visited: Set<string>,
-  ): boolean {
-    if (fromId === goalId) {
-      return true;
-    }
-    if (visited.has(fromId)) {
-      return false;
-    }
-    visited.add(fromId);
-    const node = this.modifiers.find((m) => m.id === fromId);
-    if (!node) {
-      return false;
-    }
-    for (const rid of node.referencedIds) {
-      if (this.referenceReaches(rid, goalId, visited)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
    * Reorder modifiers by moving a modifier to a new position.
    */
   reorderModifier(modifierId: string, newIndex: number): boolean {
@@ -365,22 +290,24 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
 
   /**
    * Compute the merged frame at `frameIndex` and apply all enabled
-   * modifiers. Two-phase execution per the multi-data-source spec:
+   * modifiers. Two-phase execution:
    *
-   * - **Phase A (DS merge)**: pre-load every enabled
-   *   {@link DataSourceModifier}'s frame for `frameIndex` (in parallel),
-   *   then walk DSs in array order and inject each DS's
-   *   `contributedBlocks` into a fresh working `Frame`. Last DS wins
-   *   on block-name conflict; `simbox` follows the same last-wins rule.
+   * - **Synthesis head**: collect every enabled {@link DataSourceModifier}
+   *   as a {@link SynthesisSource} (its own trajectory + optional
+   *   `contributedBlocks`) and call the pure `synthesize` step with the
+   *   pipeline's {@link getSynthesisConfig}. It reconciles per-source frame
+   *   counts (length-1 broadcast / equal-length zip / unequal>1 error) and
+   *   combines per mode (`augment` block-union last-wins / `extend` atom-set
+   *   concat with `source_id` / optional Kabsch alignment). A single enabled
+   *   source is a zero-config passthrough; zero sources yield an empty frame.
    * - **Phase B (modifier apply)**: walk every enabled non-DS modifier
    *   in array order, applying it to the working frame. Existing DAG
    *   parent / selection-producer semantics are preserved unchanged.
    *
    * `overrideFrame` is a transitional bridge for legacy callers that
    * still hand the pipeline a pre-built frame (`app.applyPipeline({
-   * sourceFrame })`). When provided, phase A is skipped and the
+   * sourceFrame })`). When provided, the synthesis head is skipped and the
    * override is treated as the merged frame; phase B runs as usual.
-   * Tasks #3–#4 of the spec retire the override path.
    *
    * DAG parent resolution rules (phase B):
    * - `parentId !== null`: look up `selectionCache` for the parent's
@@ -402,46 +329,30 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     let frame: Frame;
 
     if (overrideFrame !== undefined) {
-      // Legacy bridge: skip phase A, treat the override as the merged
-      // frame. Used by `app.applyPipeline({ sourceFrame })` until the
-      // remaining phase-1 tasks migrate all callers onto the DS path.
+      // Legacy bridge: skip the synthesis head, treat the override as the
+      // merged frame. Used by `app.applyPipeline({ sourceFrame })` (manipulate-
+      // mode rollback, one-shot test injection) until that path is retired.
       frame = overrideFrame;
     } else {
-      // --- Phase A: build the merged frame from DS contributions ---
-      const dsModifiers: DataSourceModifier[] = [];
+      // --- Synthesis head: compose one merged frame from enabled DS sources ---
+      // Each enabled DataSourceModifier contributes its own trajectory; the
+      // pure `synthesize` step reconciles frame counts (length-1 broadcast /
+      // equal-length zip / unequal>1 error) and combines per the pipeline's
+      // SceneSynthesisConfig (augment block-union / extend atom-set concat with
+      // source_id / optional Kabsch alignment). A single enabled source is a
+      // zero-config passthrough.
+      const sources: SynthesisSource[] = [];
       for (const m of this.modifiers) {
-        if (m.enabled && m instanceof DataSourceModifier) dsModifiers.push(m);
-      }
-
-      // Pre-load each DS's frame for the requested index (parallel).
-      await Promise.all(dsModifiers.map((ds) => ds.preload(frameIndex)));
-
-      frame = new Frame();
-      for (const ds of dsModifiers) {
-        const src = ds.cachedFrame;
-        // Empty `contributedBlocks` means "everything the source frame
-        // actually has" — the WASM Frame is the source of truth, not a
-        // hardcoded registry. Populated `contributedBlocks` is a user-
-        // set narrowing filter (topology-only file → ["bonds"]).
-        const blockNames =
-          ds.contributedBlocks.length > 0
-            ? ds.contributedBlocks
-            : src.blockNames();
-        for (const name of blockNames) {
-          const block = src.getBlock(name);
-          // Skip 0-row blocks so a topology-only DS that happens to
-          // carry an empty `atoms` placeholder doesn't shadow another
-          // DS's real atoms via the last-wins rule.
-          if (block !== undefined && block.nrows() > 0) {
-            // Last-wins on block-name conflict. molrs Block::clone is an
-            // Arc::clone (refcount bump), so this is O(num_columns).
-            frame.insertBlock(name, block);
-          }
-        }
-        if (src.simbox !== undefined) {
-          frame.simbox = src.simbox;
+        if (m.enabled && m instanceof DataSourceModifier) {
+          sources.push({
+            id: m.id,
+            trajectory: m.trajectory,
+            contributedBlocks:
+              m.contributedBlocks.length > 0 ? m.contributedBlocks : undefined,
+          });
         }
       }
+      frame = await synthesize(sources, frameIndex, this.synthesisConfig);
     }
 
     // --- Phase B: apply non-DS modifiers in array order ---
@@ -449,50 +360,10 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     const atomsBlock = frame.getBlock("atoms");
     const atomCount = atomsBlock?.nrows() ?? 0;
 
-    // Reference edges: only cache the output of modifiers that are actually
-    // referenced by some enabled modifier (unreferenced outputs are not
-    // retained — keeps frameCache empty in the common no-reference case).
-    const referencedIds = new Set<string>();
-    for (const m of this.modifiers) {
-      if (!m.enabled) continue;
-      for (const rid of m.referencedIds) referencedIds.add(rid);
-    }
-
-    // Pre-pass: warn about reference targets that will resolve as ABSENT —
-    // a target that is missing, disabled, or positioned AFTER its consumer
-    // (the consumer applies before the target caches its output). The
-    // reference still resolves to undefined at apply time; this only surfaces
-    // the reason.
-    const indexById = new Map<string, number>();
-    this.modifiers.forEach((m, i) => {
-      indexById.set(m.id, i);
-    });
-    for (const m of this.modifiers) {
-      if (!m.enabled || m instanceof DataSourceModifier) continue;
-      if (m.referencedIds.length === 0) continue;
-      const consumerIndex = indexById.get(m.id) ?? -1;
-      for (const rid of m.referencedIds) {
-        const ref = this.modifiers.find((x) => x.id === rid);
-        if (ref === undefined) {
-          logger.warn(
-            `Modifier ${m.name} (${m.id}) references unknown modifier '${rid}'; treating as absent`,
-          );
-        } else if (!ref.enabled) {
-          logger.warn(
-            `Modifier ${m.name} (${m.id}) references disabled modifier ${ref.name} (${rid}); treating as absent`,
-          );
-        } else if ((indexById.get(rid) ?? -1) > consumerIndex) {
-          logger.warn(
-            `Modifier ${m.name} (${m.id}) references ${ref.name} (${rid}) which runs later in the pipeline; treating as absent`,
-          );
-        }
-      }
-    }
-
     for (const modifier of this.modifiers) {
       if (!modifier.enabled) continue;
-      // DSs already contributed in phase A; their identity apply() is
-      // a no-op and skipping it here is semantically equivalent and
+      // DSs already contributed in the synthesis head; their identity apply()
+      // is a no-op and skipping it here is semantically equivalent and
       // saves a function call per DS per compute.
       if (modifier instanceof DataSourceModifier) continue;
 
@@ -521,12 +392,6 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       // returns — see Modifier.apply doc. Draw modifiers rely on this
       // to flush shader-compile awaits before applySceneIndexToMeshes.
       frame = await modifier.apply(frame, context);
-
-      // Cache this modifier's output frame for any referencing modifier
-      // downstream (only if referenced — see referencedIds set above).
-      if (referencedIds.has(modifier.id)) {
-        context.frameCache.set(modifier.id, frame);
-      }
 
       if (isSelectionProducer(modifier)) {
         context.selectionCache.set(modifier.id, context.currentSelection);
