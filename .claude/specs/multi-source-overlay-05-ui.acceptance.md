@@ -45,7 +45,8 @@ criteria:
       it shows the branch picker, alignment controls, and color-by-source toggle
       in the properties pane styled per the sidebar design language (h-7 controls,
       text-[10px] headers).
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-006
     summary: Toggling alignment displays per-branch RMSD-to-reference
     type: ui_runtime
@@ -63,7 +64,8 @@ criteria:
       Attempting a branch reference the engine rejects (cycle) leaves the panel
       intact and shows a text-destructive AlertCircle status line instead of
       crashing or applying the invalid reference.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
 ---
 
 # Acceptance criteria
