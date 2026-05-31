@@ -14,7 +14,6 @@ import {
 } from "../pipeline/data_source_modifier";
 import { DrawBondModifier } from "../pipeline/draw_bond";
 import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
-import { ensureDataSource } from "../transport/rpc/router";
 import {
   type IndexProgressCallback,
   spawnTrajectoryWorker,
@@ -322,14 +321,13 @@ export async function loadFileContent(
     return;
   }
 
-  // Replace path: legacy "Open File" / first-load behavior.
+  // Replace path: "Open File" / first-load behavior.
   appCleanups.get(app)?.();
   appCleanups.delete(app);
 
-  ensureDataSource(app, { sourceType: "file", filename });
   appCleanups.set(app, dispose);
 
-  await app.setTrajectory(trajectory);
+  await app.setTrajectory(trajectory, { sourceType: "file", filename });
 
   // Auto-attach format-specific decoration modifiers (e.g. backbone
   // ribbon for protein-shape frames) based on what columns the freshly
@@ -460,12 +458,11 @@ export async function loadFileStream(
   appCleanups.get(app)?.();
   appCleanups.delete(app);
 
-  ensureDataSource(app, { sourceType: "file", filename });
   appCleanups.set(app, () => {
     trajectory.dispose();
   });
 
-  await app.setTrajectory(trajectory);
+  await app.setTrajectory(trajectory, { sourceType: "file", filename });
 
   const frame0 = app.system.frame;
   const headDS = app.modifierPipeline

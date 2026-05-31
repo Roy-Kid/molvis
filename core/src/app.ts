@@ -26,6 +26,7 @@ import { ModifierPipeline, PipelineEvents } from "./pipeline";
 import { applyAutoAttach } from "./pipeline/auto_attach";
 import {
   DataSourceModifier,
+  type DataSourceOptions,
   FileDataSource,
 } from "./pipeline/data_source_modifier";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
@@ -862,13 +863,15 @@ export class MolvisApp {
   /**
    * Set the current trajectory: replace the pipeline's primary data source
    * with a single `FileDataSource(trajectory)` that the synthesis head reads
-   * from. Provenance (`sourceType` / `filename`) is carried forward from the
-   * previous DS if one existed; otherwise the caller (a file ingress function
-   * or RPC handler) stamps it via `ensureDataSource` before/around this call.
+   * from. Pass `meta` (`sourceType` / `filename`) to stamp provenance on the
+   * new source; when omitted it is carried forward from the previous source.
    *
    * Emits 'trajectory-change' through System.
    */
-  public async setTrajectory(trajectory: Trajectory): Promise<void> {
+  public async setTrajectory(
+    trajectory: Trajectory,
+    meta?: DataSourceOptions,
+  ): Promise<void> {
     const previousTrajectory = this._system.trajectory;
     this.artist.clear();
     this.commandManager.clearHistory();
@@ -879,29 +882,25 @@ export class MolvisApp {
     const existingDS = this._modifierPipeline
       .getModifiers()
       .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
-    // Carry sourceType + filename forward; do NOT carry contributedBlocks
-    // — the empty default ("everything the new frame has") is correct
-    // for a freshly-installed trajectory, and the old DS's narrowing
-    // filter doesn't describe the new data shape.
-    const carriedMeta = existingDS
-      ? {
-          sourceType: existingDS.sourceType,
-          filename: existingDS.filename,
-        }
-      : undefined;
+    // Explicit `meta` wins; otherwise carry sourceType + filename forward from
+    // the previous source. Never carry contributedBlocks — the empty default
+    // ("everything the new frame has") is correct for fresh data.
+    const newMeta: DataSourceOptions | undefined =
+      meta ??
+      (existingDS
+        ? { sourceType: existingDS.sourceType, filename: existingDS.filename }
+        : undefined);
     if (existingDS) {
       this._modifierPipeline.removeModifier(existingDS.id);
-      // Dispose only when the predecessor was a Trajectory DS — its
-      // owned trajectory is being replaced. MemoryDataSource placeholders
-      // installed by `ensureDataSource` wrap a transient empty Frame
-      // which the molrs FinalizationRegistry will GC; calling `free()`
-      // here is unnecessary and races with consumers that may still
-      // hold a reference between events.
+      // Dispose only a FileDataSource predecessor — its owned trajectory is
+      // being replaced. A MemoryDataSource wraps a transient Frame the molrs
+      // FinalizationRegistry will GC; freeing here races with consumers that
+      // may still hold a reference between events.
       if (existingDS instanceof FileDataSource) {
         existingDS.dispose();
       }
     }
-    const newDS = new FileDataSource(trajectory, carriedMeta);
+    const newDS = new FileDataSource(trajectory, newMeta);
     this._modifierPipeline.addModifier(newDS);
     if (this._modifierPipeline.getModifiers().indexOf(newDS) > 0) {
       this._modifierPipeline.reorderModifier(newDS.id, 0);

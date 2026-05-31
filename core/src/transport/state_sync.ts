@@ -30,7 +30,6 @@ import {
   ModifierRegistry,
 } from "../pipeline/modifier_registry";
 import { Trajectory } from "../system/trajectory";
-import { ensureDataSource } from "./rpc/router";
 
 /**
  * Replace the current pipeline with ``state``. Safe to call repeatedly —
@@ -54,11 +53,10 @@ export async function applyBackendState(
   // not embed N×file payloads).
   const idMap = new Map<string, string>();
   if (dsEntries.length > 0 && state.frames.length > 0) {
-    ensureDataSource(app, {
+    await app.setTrajectory(new Trajectory(state.frames, state.boxes), {
       sourceType: dsEntries[0].source_type ?? "backend",
       filename: dsEntries[0].filename ?? "backend-sync",
     });
-    await app.setTrajectory(new Trajectory(state.frames, state.boxes));
 
     const head = app.modifierPipeline
       .getModifiers()

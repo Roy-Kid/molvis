@@ -168,44 +168,6 @@ function rebuildCurrentFrame(app: MolvisApp): Promise<Frame | null> {
   return app.applyPipeline({ fullRebuild: true });
 }
 
-/**
- * Ensure the pipeline has a ``DataSourceModifier`` — the single point of
- * ingress for both GUI ("Load File") and WS (``scene.draw_frame`` /
- * ``scene.set_trajectory``) data pushes. If one already exists we reuse
- * it so user-added downstream modifiers stay wired up; otherwise a fresh
- * one is inserted at the head of the pipeline.
- */
-export function ensureDataSource(
-  app: MolvisApp,
-  meta: { sourceType: DataSourceModifier["sourceType"]; filename: string },
-): DataSourceModifier {
-  const pipeline = app.modifierPipeline;
-  let dataSource = pipeline
-    .getModifiers()
-    .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
-
-  if (!dataSource) {
-    // No data source yet: install an empty MemoryDataSource head marker so the
-    // pipeline always has a source to stamp provenance on. A following
-    // `setTrajectory` swaps it for the real FileDataSource (carrying the
-    // sourceType/filename stamped here forward); a state-sync restore leaves it
-    // as the placeholder for the user to re-load into.
-    dataSource = new MemoryDataSource(new Frame());
-    pipeline.addModifier(dataSource);
-    // Keep data source at the head — downstream modifiers read from its output.
-    const currentIndex = pipeline
-      .getModifiers()
-      .findIndex((m) => m.id === dataSource?.id);
-    if (currentIndex > 0) {
-      pipeline.reorderModifier(dataSource.id, 0);
-    }
-  }
-
-  dataSource.sourceType = meta.sourceType;
-  dataSource.filename = meta.filename;
-  return dataSource;
-}
-
 /** Serialize a modifier to the wire shape used by ``pipeline.*`` RPCs. */
 function serializeModifier(modifier: Modifier): Record<string, unknown> {
   return {
@@ -426,11 +388,10 @@ export class RPCRouter {
       return { success: true };
     }
     const frame = new Frame();
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory([frame]), {
       sourceType: "empty",
       filename: "",
     });
-    await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
     return { success: true };
@@ -474,11 +435,10 @@ export class RPCRouter {
     // synthesis step degrades to passthrough when it is the only enabled
     // source, so existing single-source Python callers see unchanged behavior
     // (one frame in, one frame out, camera reset; no source_id injected).
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory([frame], [box]), {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    await this.app.setTrajectory(new Trajectory([frame], [box]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
 
@@ -528,11 +488,10 @@ export class RPCRouter {
 
   private handleClear: RPCHandler = async () => {
     const frame = new Frame();
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory([frame]), {
       sourceType: "empty",
       filename: "",
     });
-    await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
     return { success: true };
@@ -571,11 +530,10 @@ export class RPCRouter {
     });
 
     const sessionLabel = this.sessionLabel(frames.length);
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory(frames, boxes), {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    await this.app.setTrajectory(new Trajectory(frames, boxes));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
     return { success: true, nFrames: frames.length };
