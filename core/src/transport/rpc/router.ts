@@ -185,10 +185,11 @@ export function ensureDataSource(
     .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
 
   if (!dataSource) {
-    // Placeholder DS at pipeline head. Tasks #4–#5 of the multi-DS
-    // spec replace this with a `addDataSource(spec)` flow that wraps
-    // the actual loaded data; for now we install an empty
-    // MemoryDataSource so the pipeline always has a head marker.
+    // No data source yet: install an empty MemoryDataSource head marker so the
+    // pipeline always has a source to stamp provenance on. A following
+    // `setTrajectory` swaps it for the real FileDataSource (carrying the
+    // sourceType/filename stamped here forward); a state-sync restore leaves it
+    // as the placeholder for the user to re-load into.
     dataSource = new MemoryDataSource(new Frame());
     pipeline.addModifier(dataSource);
     // Keep data source at the head — downstream modifiers read from its output.

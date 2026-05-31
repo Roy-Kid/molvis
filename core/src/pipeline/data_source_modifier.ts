@@ -46,16 +46,6 @@ export abstract class DataSourceModifier extends BaseModifier {
    */
   public contributedBlocks: ReadonlyArray<string> = [];
 
-  /**
-   * @deprecated UI-only visibility flags carried over from the pre-synthesis
-   * model; per-component visibility belongs to the StyleManager / Draw layer.
-   */
-  public showAtoms = true;
-  /** @deprecated See {@link DataSourceModifier.showAtoms}. */
-  public showBonds = true;
-  /** @deprecated See {@link DataSourceModifier.showAtoms}. */
-  public showBox = true;
-
   protected constructor(id: string, name: string) {
     super(id, name, new Set([ModifierCapability.TransformsData]));
   }

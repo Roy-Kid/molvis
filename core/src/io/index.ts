@@ -178,7 +178,7 @@ async function appendTrajectoryAsDataSource(
     // Single-frame file → MemoryDataSource. Broadcasts across whatever
     // trajectory length the pipeline already has (or stays at 1 if
     // there's no trajectory yet). `contributedBlocks` defaults to empty
-    // → phase A merge propagates every block the frame actually has.
+    // → the synthesis head propagates every block the frame actually has.
     ds = new MemoryDataSource(probeFrame, meta);
   } else if (existingTraj === undefined || existingTraj.frameCount === N_file) {
     // Multi-frame file: either becomes the primary trajectory (no

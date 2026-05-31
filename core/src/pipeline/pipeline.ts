@@ -304,11 +304,6 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
    *   in array order, applying it to the working frame. Existing DAG
    *   parent / selection-producer semantics are preserved unchanged.
    *
-   * `overrideFrame` is a transitional bridge for legacy callers that
-   * still hand the pipeline a pre-built frame (`app.applyPipeline({
-   * sourceFrame })`). When provided, the synthesis head is skipped and the
-   * override is treated as the merged frame; phase B runs as usual.
-   *
    * DAG parent resolution rules (phase B):
    * - `parentId !== null`: look up `selectionCache` for the parent's
    *   mask. If found, set `currentSelection = parentMask`. If not
@@ -324,36 +319,26 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     frameIndex: number,
     app: MolvisApp,
     changeKind: FrameChangeKind = "full",
-    overrideFrame?: Frame,
   ): Promise<Frame> {
-    let frame: Frame;
-
-    if (overrideFrame !== undefined) {
-      // Legacy bridge: skip the synthesis head, treat the override as the
-      // merged frame. Used by `app.applyPipeline({ sourceFrame })` (manipulate-
-      // mode rollback, one-shot test injection) until that path is retired.
-      frame = overrideFrame;
-    } else {
-      // --- Synthesis head: compose one merged frame from enabled DS sources ---
-      // Each enabled DataSourceModifier contributes its own trajectory; the
-      // pure `synthesize` step reconciles frame counts (length-1 broadcast /
-      // equal-length zip / unequal>1 error) and combines per the pipeline's
-      // SceneSynthesisConfig (augment block-union / extend atom-set concat with
-      // source_id / optional Kabsch alignment). A single enabled source is a
-      // zero-config passthrough.
-      const sources: SynthesisSource[] = [];
-      for (const m of this.modifiers) {
-        if (m.enabled && m instanceof DataSourceModifier) {
-          sources.push({
-            id: m.id,
-            trajectory: m.trajectory,
-            contributedBlocks:
-              m.contributedBlocks.length > 0 ? m.contributedBlocks : undefined,
-          });
-        }
+    // --- Synthesis head: compose one merged frame from enabled DS sources ---
+    // Each enabled DataSourceModifier contributes its own trajectory; the
+    // pure `synthesize` step reconciles frame counts (length-1 broadcast /
+    // equal-length zip / unequal>1 error) and combines per the pipeline's
+    // SceneSynthesisConfig (augment block-union / extend atom-set concat with
+    // source_id / optional Kabsch alignment). A single enabled source is a
+    // zero-config passthrough.
+    const sources: SynthesisSource[] = [];
+    for (const m of this.modifiers) {
+      if (m.enabled && m instanceof DataSourceModifier) {
+        sources.push({
+          id: m.id,
+          trajectory: m.trajectory,
+          contributedBlocks:
+            m.contributedBlocks.length > 0 ? m.contributedBlocks : undefined,
+        });
       }
-      frame = await synthesize(sources, frameIndex, this.synthesisConfig);
     }
+    let frame = await synthesize(sources, frameIndex, this.synthesisConfig);
 
     // --- Phase B: apply non-DS modifiers in array order ---
     const context = createDefaultContext(frame, app, frameIndex, changeKind);

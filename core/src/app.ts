@@ -83,7 +83,6 @@ export class MolvisApp {
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
   private _currentFrame = 0;
-  private _sourceFrame: Frame | null = null; // original frame, never overwritten by pipeline
   private _lastRenderedFrame: Frame | null = null;
   private _lastSelectionSet: Map<string, SelectionMask> = new Map();
   private readonly _frameScheduler: FrameRenderScheduler;
@@ -377,7 +376,6 @@ export class MolvisApp {
     // into the system, instead of clearing the live frame in place.
     const saved = buildFrameFromScene(this._world.sceneIndex, { sourceFrame });
     this._system.updateCurrentFrame(saved);
-    this._sourceFrame = this._system.frame;
   }
 
   /**
@@ -663,7 +661,7 @@ export class MolvisApp {
     // contributed by a topology DS is invisible here and the classifier
     // would always return "position" — DrawBondModifier's fast path
     // would then reuse stale atomi/atomj pairings. Force full until the
-    // classifier can run on the post-phase-A merged frame.
+    // classifier can run on the synthesized merged frame.
     const isMultiDs = this._modifierPipeline.enabledDataSourceCount() > 1;
 
     let decision: FrameTransitionDecision;
@@ -675,7 +673,7 @@ export class MolvisApp {
             ? "Forced full rebuild"
             : !hasGpuState
               ? "No GPU state yet"
-              : "Multi-DS pipeline; classifier can't see merged phase A frame",
+              : "Multi-DS pipeline; classifier can't see the synthesized frame",
         ],
         stats: { atomCount, bondCount },
       };
@@ -705,11 +703,10 @@ export class MolvisApp {
   /**
    * Render a frame: route through the modifier pipeline. The `frame`
    * parameter is retained for the public {@link renderFrame} signature
-   * but isn't passed as a phase-A override anymore — the pipeline now
-   * builds its working frame from its own DataSources at
-   * `_currentFrame`. All current callers pass `system.frame`, which
-   * matches what phase A would produce for a single-DS pipeline; for
-   * multi-DS the merged frame supersedes whatever the caller hands in.
+   * but isn't passed as an override anymore — the pipeline's synthesis head
+   * builds its working frame from its own DataSources at `_currentFrame`.
+   * All current callers pass `system.frame`, which matches the single-DS
+   * passthrough; for multi-DS the synthesized frame supersedes it.
    */
   private renderFrameInternal(
     frame: Frame,
@@ -764,28 +761,20 @@ export class MolvisApp {
    *
    * - `changeKind` is threaded into PipelineContext so Draw modifiers
    *   can pick the fast (position-only) or slow (full rebuild) path.
-   * - `sourceFrame`: opt-in override that bypasses pipeline phase A and
-   *   feeds the supplied frame straight to phase B. Used by
-   *   manipulate-mode rollback flows (`discardChanges`) that materialize
-   *   an off-pipeline frame for redraw without touching the DS cache.
-   *   New code should NOT reach for it — let phase A merge from DSs.
    * - For a full / topology rebuild we discard stale Highlighter
    *   originals so the pipeline-computed colors win.
    *
-   * `fullRebuild: true` is accepted for backward-compat and aliases to
-   * `changeKind: "full"`.
+   * `fullRebuild: true` aliases to `changeKind: "full"`.
    *
-   * Phase A merge path is the default now: the working frame is built
-   * from the DataSources currently in the pipeline at this
-   * `_currentFrame`. Multi-DS contributions (e.g. a topology-only
-   * `bonds.dump` stacked on a position-only `traj.lammpstrj`) merge into
-   * a single frame for downstream modifiers. For a single DS this
-   * matches the previous `_sourceFrame` behavior bit-for-bit.
+   * The working frame is always built by the pipeline's synthesis head from
+   * the DataSources currently in the pipeline at this `_currentFrame`.
+   * Multi-DS contributions (e.g. a topology-only `bonds.dump` stacked on a
+   * position-only `traj.lammpstrj`) merge into a single frame for downstream
+   * modifiers; a single DS is a zero-config passthrough.
    */
   public async applyPipeline(options?: {
     fullRebuild?: boolean;
     changeKind?: FrameChangeKind;
-    sourceFrame?: Frame;
   }): Promise<Frame | null> {
     const changeKind: FrameChangeKind = options?.changeKind ?? "full";
 
@@ -799,16 +788,10 @@ export class MolvisApp {
     };
     this._modifierPipeline.on(PipelineEvents.COMPUTED, captureContext);
 
-    // Forward an explicit override only — the previous implicit
-    // `_sourceFrame ?? _system.frame` fallback masked multi-DS phase-A
-    // merging in every common code path, so it's gone. Callers that
-    // want phase A get phase A; callers that want a one-shot override
-    // (manipulate-mode rollback, tests) still ask for it.
     const computed = await this._modifierPipeline.compute(
       this._currentFrame,
       this,
       changeKind,
-      options?.sourceFrame,
     );
 
     this._modifierPipeline.off(PipelineEvents.COMPUTED, captureContext);
@@ -877,13 +860,11 @@ export class MolvisApp {
   }
 
   /**
-   * Set the current trajectory. Replaces any existing data source in
-   * the pipeline with a single `FileDataSource(trajectory)` so
-   * the pipeline's phase-A merge has data to draw from. Provenance
-   * (`sourceType` / `filename`) is preserved from the previous DS if
-   * one existed; otherwise the caller (typically a file ingress
-   * function or an RPC handler) is expected to update it via
-   * `ensureDataSource` after this call returns.
+   * Set the current trajectory: replace the pipeline's primary data source
+   * with a single `FileDataSource(trajectory)` that the synthesis head reads
+   * from. Provenance (`sourceType` / `filename`) is carried forward from the
+   * previous DS if one existed; otherwise the caller (a file ingress function
+   * or RPC handler) stamps it via `ensureDataSource` before/around this call.
    *
    * Emits 'trajectory-change' through System.
    */
@@ -892,11 +873,9 @@ export class MolvisApp {
     this.artist.clear();
     this.commandManager.clearHistory();
 
-    // Sync the pipeline: replace any existing DataSourceModifier with a
-    // fresh FileDataSource wrapping the new trajectory. This is
-    // the push-side of the multi-DS spec's "system.trajectory derives
-    // from pipeline DSs" invariant — task #5 will replace this with a
-    // proper addDataSource()/removeDataSource() lifecycle.
+    // Replace any existing DataSourceModifier with a fresh FileDataSource
+    // wrapping the new trajectory — the "replace primary source" half of the
+    // synthesis model (vs. addDataSource, which appends an extra source).
     const existingDS = this._modifierPipeline
       .getModifiers()
       .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
@@ -933,17 +912,17 @@ export class MolvisApp {
     // (awaits frame 0 before priming the System cache).
     await this._system.setTrajectory(trajectory);
     this._currentFrame = this._system.trajectory.currentIndex;
-    this._sourceFrame = this._system.frame;
     this._lastRenderedFrame = null;
 
-    // Free the WASM frames the outgoing trajectory owned. By this point every
-    // app-held reference (_sourceFrame, _lastRenderedFrame) points at the new
-    // trajectory, so the old frames are unreachable and would otherwise leak.
-    // Skip if the trajectory was swapped for itself, and keep the new active
-    // frame as a guard against any accidental frame sharing across trajectories.
+    // Free the WASM frames the outgoing trajectory owned. By this point the
+    // active frame (_lastRenderedFrame and System's own current frame) points
+    // at the new trajectory, so the old frames are unreachable and would
+    // otherwise leak. Skip if the trajectory was swapped for itself, and keep
+    // the new active frame as a guard against accidental frame sharing.
     if (previousTrajectory !== trajectory) {
       const keep = new Set<Frame>();
-      if (this._sourceFrame) keep.add(this._sourceFrame);
+      const active = this._system.frame;
+      if (active) keep.add(active);
       previousTrajectory.dispose(keep);
     }
 
@@ -953,34 +932,24 @@ export class MolvisApp {
   }
 
   /**
-   * Append a {@link DataSourceModifier} to the pipeline.
+   * Append an *additional* {@link DataSourceModifier} to the pipeline (vs.
+   * {@link MolvisApp.setTrajectory}, which replaces the primary source). The
+   * synthesis head merges every enabled source at compute time.
    *
-   * Multi-data-source semantics (`docs/specs/multi-data-source-pipeline.md`):
-   *
-   * - For a {@link FileDataSource}, frame count must match every
-   *   existing FileDataSource already in the pipeline. Mismatches
-   *   throw with a concrete message; callers (typically the io loaders
-   *   from task #6) catch and surface to the user.
-   * - {@link MemoryDataSource}s are always safe to append (they
-   *   broadcast across the system's frame count).
-   * - Auto-attach runs against this DS's frame 0 so default Draw
-   *   modifiers (DrawAtom / DrawBond / DrawBox) get installed for new
-   *   block kinds the source contributes.
-   * - If this is the *first* FileDataSource in the pipeline,
-   *   System adopts its trajectory so navigation, frame-change events,
-   *   and the existing seek state machine all keep working.
-   *
-   * No-op for callers wanting "replace everything" — use
-   * {@link MolvisApp.setTrajectory} for that legacy path.
+   * - Frame-count compatibility is NOT hard-checked: the synthesis head
+   *   reconciles per-source counts at compute time (length-1 broadcast /
+   *   equal-length zip / unequal>1 error with a concrete message).
+   * - Auto-attach runs against this DS's frame 0 so default Draw modifiers
+   *   (DrawAtom / DrawBond / DrawBox) get installed for the block kinds the
+   *   source contributes.
+   * - If this is the *first* FileDataSource in the pipeline, System adopts
+   *   its trajectory so navigation, frame-change events, and the seek state
+   *   machine keep working.
    */
   public async addDataSource(ds: DataSourceModifier): Promise<void> {
-    // Frame-count compatibility is no longer hard-checked here: the synthesis
-    // head reconciles per-source counts at compute time (length-1 broadcast /
-    // equal-length zip / unequal>1 error with a concrete message), so a
-    // mismatch surfaces from `synthesize` rather than from an eager guard.
     this._modifierPipeline.addModifier(ds);
 
-    // If this is the first TrajectoryDS, promote System to follow it.
+    // If this is the first FileDataSource, promote System to follow it.
     // Earlier MemoryDataSources stay in place and broadcast across the
     // newly grown timeline (their `getFrame(_)` ignores the index).
     if (ds instanceof FileDataSource) {
@@ -991,7 +960,6 @@ export class MolvisApp {
       if (isFirstTraj) {
         await this._system.setTrajectory(ds.trajectory);
         this._currentFrame = this._system.trajectory.currentIndex;
-        this._sourceFrame = this._system.frame;
         this._lastRenderedFrame = null;
       }
     }
@@ -999,7 +967,7 @@ export class MolvisApp {
     // Auto-attach Draw modifiers based on what this DS contributes.
     // Pre-load frame 0 so matches() can introspect the source frame.
     // Pass the DS as parent so the new Draws nest under it in the UI
-    // tree (multi-DS spec phase 2 — purely organizational, no
+    // tree (purely organizational nesting — no
     // selection semantics).
     await ds.preload(0);
     applyAutoAttach(this._modifierPipeline, ds.cachedFrame, undefined, ds);
@@ -1010,18 +978,15 @@ export class MolvisApp {
   }
 
   /**
-   * Remove a {@link DataSourceModifier} from the pipeline. Cascades
-   * through children (Draw modifiers nested under this DS in phase 2
-   * of the spec) via the existing {@link ModifierPipeline.removeModifier}
-   * semantics. Disposes the DS's WASM resources.
-   *
-   * Per the spec's 1a delete-rebuild semantics, removing a
-   * FileDataSource:
+   * Remove a {@link DataSourceModifier} from the pipeline. Cascades through
+   * children (Draw modifiers nested under this DS) via the existing
+   * {@link ModifierPipeline.removeModifier} semantics. Disposes the DS's WASM
+   * resources. Removing a FileDataSource:
    * - If another FileDataSource remains, System adopts its
    *   trajectory; the system's frame count tracks that new primary.
    * - If none remain, System collapses to a single empty frame so
-   *   navigation state stays well-defined (the pipeline still
-   *   produces an empty Frame from phase A).
+   *   navigation state stays well-defined (the synthesis head still
+   *   produces an empty Frame from the remaining sources).
    *
    * Throws if `id` does not refer to a DataSourceModifier in the
    * pipeline. Use {@link ModifierPipeline.removeModifier} directly for
@@ -1044,8 +1009,8 @@ export class MolvisApp {
     }
 
     // Wipe scene state before re-running the pipeline. When the
-    // removed DS was the only contributor of atoms / bonds, phase A
-    // produces an empty frame and the Draw modifiers' `matches()`
+    // removed DS was the only contributor of atoms / bonds, the synthesis
+    // head produces an empty frame and the Draw modifiers' `matches()`
     // returns false — they never run, so without this `clear()` the
     // previously-uploaded GPU buffers would survive in the scene
     // forever. If other DSes remain, `applyPipeline` below
@@ -1062,11 +1027,10 @@ export class MolvisApp {
       } else {
         // No trajectory anywhere: collapse to a single empty frame so
         // navigation state stays consistent. Any MemoryDataSource left
-        // in the pipeline still contributes blocks during phase A.
+        // in the pipeline still contributes blocks during synthesis.
         await this._system.setTrajectory(new Trajectory([new Frame()]));
       }
       this._currentFrame = this._system.trajectory.currentIndex;
-      this._sourceFrame = this._system.frame;
       this._lastRenderedFrame = null;
     }
 
@@ -1083,7 +1047,6 @@ export class MolvisApp {
   public async nextFrame(): Promise<void> {
     if (await this._system.nextFrame()) {
       this._currentFrame = this._system.trajectory.currentIndex;
-      this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
     }
   }
@@ -1094,7 +1057,6 @@ export class MolvisApp {
   public async prevFrame(): Promise<void> {
     if (await this._system.prevFrame()) {
       this._currentFrame = this._system.trajectory.currentIndex;
-      this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
     }
   }
@@ -1105,7 +1067,6 @@ export class MolvisApp {
   public async seekFrame(index: number): Promise<void> {
     if (await this._system.seekFrame(index)) {
       this._currentFrame = this._system.trajectory.currentIndex;
-      this._sourceFrame = this._system.frame;
       this.queueTrajectoryFrameRender();
     }
   }

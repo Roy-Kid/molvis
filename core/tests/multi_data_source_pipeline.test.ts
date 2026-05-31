@@ -309,23 +309,6 @@ describe("setParent — DS as parent (visual grouping)", () => {
 });
 
 // ---------------------------------------------------------------------------
-//  Override bridge (legacy applyPipeline path)
-// ---------------------------------------------------------------------------
-
-describe("pipeline.compute override bridge", () => {
-  it("overrideFrame short-circuits phase A even when DSs are present", async () => {
-    const pipeline = new ModifierPipeline();
-    pipeline.addModifier(new FileDataSource(makeMultiFrameTraj(2, ["C"])));
-
-    const externalFrame = makeAtomsFrame(["X", "X", "X", "X", "X"]);
-    const merged = await pipeline.compute(0, mockApp, "full", externalFrame);
-
-    // Override wins: 5 X atoms, not the DS's 1 C atom
-    expect(merged.getBlock("atoms")?.nrows()).toBe(5);
-  });
-});
-
-// ---------------------------------------------------------------------------
 //  Phase 5 — dispose chain (deterministic resource cleanup)
 // ---------------------------------------------------------------------------
 
