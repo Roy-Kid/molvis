@@ -6,7 +6,7 @@ scripting workflows: rotate the camera around a structure, walk through a
 trajectory frame by frame, capture each as a PNG, then pipe the result into
 ffmpeg via :mod:`molvis.video`.
 
-The mixin shadows :class:`SnapshotCommandsMixin.snapshot` (legacy
+The mixin shadows :class:`SnapshotCommandsMixin.snapshot` (the older
 ``snapshot.take`` RPC) with a richer implementation that returns binary
 PNG bytes via ``capture.snapshot`` — keep ``ControlMixin`` listed before
 ``SnapshotCommandsMixin`` in the MRO of any subclass.
@@ -124,7 +124,7 @@ def _png_bytes_from_response(response: Any) -> bytes:
             return ref.tobytes()
         if isinstance(ref, (bytes, bytearray, memoryview)):
             return bytes(ref)
-        # Some transports (legacy or fallback) may stuff base64 into a
+        # Some transports (older or fallback) may stuff base64 into a
         # 'data' field — handle gracefully.
         data = response.get("data")
         if isinstance(data, str):

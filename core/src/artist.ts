@@ -5,9 +5,7 @@ import {
   Quaternion,
   type Scene,
   type ShaderMaterial,
-  StandardMaterial,
   Vector3,
-  VertexData,
 } from "@babylonjs/core";
 import type { Block, Box, Frame } from "@molcrafts/molrs";
 import { WasmArray } from "@molcrafts/molrs";
@@ -171,39 +169,6 @@ function copyAndFree(wa: {
   }
 }
 
-const IDENTITY_CELL: number[][] = [
-  [1, 0, 0],
-  [0, 1, 0],
-  [0, 0, 1],
-];
-
-/**
- * Reconstruct the 3x3 cell matrix from a `Box` by reading its 8
- * parallelepiped corners. Robust to triclinic geometry — corners 1/2/4
- * (relative to corner 0 which is the origin) are exactly the a/b/c
- * lattice vectors, regardless of tilt convention.
- */
-function readCellFromBox(box: Box): number[][] {
-  const corners = copyAndFree(box.get_corners());
-  const o0 = [corners[0], corners[1], corners[2]];
-  const a = [corners[3] - o0[0], corners[4] - o0[1], corners[5] - o0[2]];
-  const b = [corners[6] - o0[0], corners[7] - o0[1], corners[8] - o0[2]];
-  const c = [corners[12] - o0[0], corners[13] - o0[1], corners[14] - o0[2]];
-  return [a, b, c];
-}
-
-/**
- * Pick the most relevant column to render from a `"grid"` block.
- * Prefers `electron_density` for chemistry-friendly defaults; falls
- * back to whichever column happens to be first.
- */
-function pickGridColumn(block: Block): string | null {
-  const keys = block.keys();
-  if (!keys || keys.length === 0) return null;
-  if (keys.includes("electron_density")) return "electron_density";
-  return keys[0] ?? null;
-}
-
 /**
  * Artist — Unified Graphics Engine
  *
@@ -220,7 +185,6 @@ export class Artist {
 
   public atomMesh: Mesh;
   public bondMesh: Mesh;
-  public cloudMesh: Mesh | null = null;
   public ribbonRenderer: RibbonRenderer;
   public isosurfaceRenderer: IsosurfaceRenderer;
   public labelRenderer: LabelRenderer;
@@ -406,8 +370,6 @@ export class Artist {
 
     this.atomMesh.dispose();
     this.bondMesh.dispose();
-    this.cloudMesh?.dispose();
-    this.cloudMesh = null;
 
     // Dispose box mesh if present
     const boxMesh = scene.getMeshByName("sim_box");
@@ -442,7 +404,6 @@ export class Artist {
   public dispose(): void {
     this.atomMesh.dispose();
     this.bondMesh.dispose();
-    this.cloudMesh?.dispose();
     this.ribbonRenderer.dispose();
     this.isosurfaceRenderer.dispose();
     this.labelRenderer.dispose();
@@ -473,7 +434,6 @@ export class Artist {
       visible: options?.atoms?.visible,
     });
     this.applySceneIndexToMeshes();
-    this.renderAuxiliaryLayers(frame);
     this.applySliceMaskIfPresent(frame);
     this.app.world.sceneIndex.markAllSaved();
     this.app.events.emit("frame-rendered", { frame, box: _box });
@@ -593,8 +553,8 @@ export class Artist {
 
   /**
    * Shared "apply slice mask if a SliceModifier is in the pipeline".
-   * Used by both the composer paths (`drawFrame` / `redrawFrame`) and
-   * by `applyPipeline()` after the pipeline has run.
+   * Used by the `drawFrame()` composer path and by `applyPipeline()`
+   * after the pipeline has run.
    */
   public applySliceMaskIfPresent(frame: Frame): void {
     const sliceMod = findSliceModifier(this.app.modifierPipeline);
@@ -731,155 +691,7 @@ export class Artist {
     }
   }
 
-  public drawCloud(
-    block: Block,
-    frame: Frame,
-    options?: {
-      stride?: number;
-      threshold?: number;
-      pointSize?: number;
-      alpha?: number;
-    },
-  ): void {
-    this.cloudMesh?.dispose();
-    this.cloudMesh = null;
-
-    // Voxel values live in a column of the grid Block (prefer
-    // `electron_density`, else the first column); geometry (origin +
-    // cell) comes from the frame's simbox, not the block.
-    const valueKey = pickGridColumn(block);
-    if (!valueKey) return;
-    const valuesArray = block.copyColF(valueKey);
-    if (!valuesArray || valuesArray.length === 0) return;
-
-    const shape = Array.from(block.shape());
-    if (shape.length !== 3) return;
-
-    let maxAbs = 0;
-    for (let i = 0; i < valuesArray.length; i++) {
-      const value = Math.abs(valuesArray[i]);
-      if (value > maxAbs) maxAbs = value;
-    }
-    if (maxAbs <= 0) return;
-
-    const stride =
-      options?.stride ?? Math.max(1, Math.floor(Math.max(...shape) / 48));
-    const threshold = options?.threshold ?? maxAbs * 0.08;
-    const alpha = options?.alpha ?? 0.18;
-
-    // Geometry comes from the simulation box. CHGCAR / POSCAR / CUBE
-    // all share their voxel lattice with the simulation cell, so origin
-    // and cell vectors derive from `frame.simbox` rather than per-grid
-    // metadata. `readCellFromBox` reads the 8 corners so triclinic cells
-    // are handled correctly. Without a simbox we fall back to a unit cell
-    // at the origin; that lets the renderer at least show structure but
-    // won't be physically meaningful.
-    const simbox = frame.simbox;
-    const origin: number[] = simbox
-      ? Array.from(copyAndFree(simbox.origin()))
-      : [0, 0, 0];
-    const cell = simbox ? readCellFromBox(simbox) : IDENTITY_CELL;
-    const spacing = [
-      Math.hypot(
-        cell[0][0] / shape[0],
-        cell[0][1] / shape[0],
-        cell[0][2] / shape[0],
-      ),
-      Math.hypot(
-        cell[1][0] / shape[1],
-        cell[1][1] / shape[1],
-        cell[1][2] / shape[1],
-      ),
-      Math.hypot(
-        cell[2][0] / shape[2],
-        cell[2][1] / shape[2],
-        cell[2][2] / shape[2],
-      ),
-    ];
-    const pointSize =
-      options?.pointSize ?? Math.max(2, Math.min(...spacing) * 18);
-
-    const positions: number[] = [];
-    const colors: number[] = [];
-
-    const index = (ix: number, iy: number, iz: number) =>
-      (ix * shape[1] + iy) * shape[2] + iz;
-
-    for (let ix = 0; ix < shape[0]; ix += stride) {
-      for (let iy = 0; iy < shape[1]; iy += stride) {
-        for (let iz = 0; iz < shape[2]; iz += stride) {
-          const value = valuesArray[index(ix, iy, iz)];
-          const magnitude = Math.abs(value);
-          if (magnitude < threshold) continue;
-
-          const fx = ix / shape[0];
-          const fy = iy / shape[1];
-          const fz = iz / shape[2];
-          const px =
-            origin[0] + fx * cell[0][0] + fy * cell[1][0] + fz * cell[2][0];
-          const py =
-            origin[1] + fx * cell[0][1] + fy * cell[1][1] + fz * cell[2][1];
-          const pz =
-            origin[2] + fx * cell[0][2] + fy * cell[1][2] + fz * cell[2][2];
-          const t = Math.min(1, magnitude / maxAbs);
-
-          positions.push(px, py, pz);
-
-          colors.push(
-            0.08 + 0.92 * t,
-            0.28 + 0.62 * t,
-            0.95 - 0.35 * t,
-            alpha * (0.35 + 0.65 * t),
-          );
-        }
-      }
-    }
-
-    if (colors.length === 0) return;
-
-    const scene = this.app.world.scene;
-    const cloudMesh = new Mesh("field_cloud_renderer", scene);
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.colors = colors;
-    vertexData.applyToMesh(cloudMesh, true);
-
-    const material = new StandardMaterial("field_cloud_material", scene);
-    material.disableLighting = true;
-    material.emissiveColor = Color3.White();
-    material.pointsCloud = true;
-    material.pointSize = pointSize;
-    material.alphaMode = 2;
-    cloudMesh.material = material;
-    cloudMesh.isPickable = false;
-    cloudMesh.alwaysSelectAsActiveMesh = true;
-    // Cloud sorts FIRST among translucent meshes — points are additive
-    // and have no real "front face" to occlude atoms with. Pinning to
-    // 0 documents the alpha-pass ordering: cloud (0) → atoms/bonds (1)
-    // → translucent surfaces (MAX_VALUE).
-    cloudMesh.alphaIndex = 0;
-    this.cloudMesh = cloudMesh;
-  }
-
   // ============ Frame Refresh (Fast Path) ============
-
-  /**
-   * Composer for the position-only fast path. External callers and
-   * the legacy editor mode use this to refresh a frame without doing
-   * a full mesh rebuild. The pipeline path calls
-   * `refreshAtomPositions()` + `refreshBondPositions()` directly from
-   * `DrawAtomModifier` / `DrawBondModifier`.
-   */
-  public redrawFrame(frame: Frame): void {
-    this.refreshAtomPositions(frame);
-    this.refreshBondPositions(frame);
-    this.renderAuxiliaryLayers(frame);
-    const sliceMod = findSliceModifier(this.app.modifierPipeline);
-    updateVisualGuide(this.app.world.scene, sliceMod);
-    if (sliceMod?.visibilityMask) {
-      this.applySliceVisibility(sliceMod.visibilityMask, frame);
-    }
-  }
 
   /**
    * Update atom positions in place — no buffer realloc, no topology
@@ -1156,29 +968,6 @@ export class Artist {
     const meshRegistry = this.app.world.sceneIndex.meshRegistry;
     meshRegistry.registerAtomLayer(this.atomMesh);
     meshRegistry.registerBondLayer(this.bondMesh);
-  }
-
-  /**
-   * Data-driven auxiliary rendering layers that don't yet have
-   * dedicated `Draws`-capability modifiers. Currently empty — grid
-   * (cube / CHGCAR volumetric) rendering moved into
-   * `DrawIsosurfaceModifier`; the previous implicit point-cloud
-   * fallback would duplicate the isosurface mesh and place points
-   * outside the simbox.
-   *
-   * Kept as a no-op stub so the call site in `app.applyPipeline`
-   * doesn't have to special-case a missing method. Add a new branch
-   * here only when introducing a new always-on render layer that
-   * doesn't fit the modifier model.
-   */
-  public renderAuxiliaryLayers(_frame: Frame): void {
-    // Tear down any stale cloud mesh left over from the legacy
-    // auto-render path. Idempotent — `dispose()` is safe to call when
-    // there is no mesh.
-    if (this.cloudMesh) {
-      this.cloudMesh.dispose();
-      this.cloudMesh = null;
-    }
   }
 
   private createBaseMesh(

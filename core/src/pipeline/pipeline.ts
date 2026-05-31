@@ -57,7 +57,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   /**
    * Scene-synthesis configuration consumed at the head of {@link compute}.
    * Owned by the pipeline (mirroring how it owns its modifier list) and edited
-   * by the RPC / UI surfaces. Default `augment` reproduces the legacy last-wins
+   * by the RPC / UI surfaces. Default `augment` reproduces the previous last-wins
    * block-union merge; `setSynthesisConfig` is pure state and never triggers a
    * compute — callers re-run `applyPipeline` after editing it.
    */

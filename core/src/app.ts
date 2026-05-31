@@ -800,16 +800,15 @@ export class MolvisApp {
     // After all Draw modifiers have registered their layers, flush the
     // accumulated buffer state to the GPU and run the once-per-frame
     // side effects that used to live inside the (now-deleted) drawFrame
-    // composer: auxiliary layers, slice mask upload, dirty bookkeeping,
-    // and the public frame-rendered event.
+    // composer: slice mask upload, dirty bookkeeping, and the public
+    // frame-rendered event.
     const renderTarget = computed;
     this.artist.applySceneIndexToMeshes();
-    this.artist.renderAuxiliaryLayers(renderTarget);
 
     // Reflect each Draws-modifier's enable state on its render layer
-    // — has to run *after* applySceneIndexToMeshes / renderAuxiliaryLayers
-    // because both unconditionally call setEnabled(true) on layers
-    // whose state has data, which would otherwise undo our hide.
+    // — has to run *after* applySceneIndexToMeshes because it
+    // unconditionally calls setEnabled(true) on layers whose state has
+    // data, which would otherwise undo our hide.
     for (const m of this._modifierPipeline.getModifiers()) {
       m.applyVisibility(this, m.enabled);
     }
