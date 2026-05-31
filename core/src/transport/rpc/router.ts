@@ -52,21 +52,6 @@ type RPCHandler = (
   buffers: DataView[],
 ) => Promise<unknown> | unknown;
 
-const LEGACY_ALIASES: Record<string, string> = {
-  new_frame: "scene.new_frame",
-  draw_frame: "scene.draw_frame",
-  draw_box: "scene.draw_box",
-  clear: "scene.clear",
-  clear_scene: "scene.clear",
-  export_frame: "scene.export_frame",
-  get_selected: "selection.get",
-  select_atoms: "selection.select_atoms",
-  take_snapshot: "snapshot.take",
-  set_style: "view.set_style",
-  set_theme: "view.set_theme",
-  set_view_mode: "view.set_mode",
-};
-
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
@@ -357,7 +342,7 @@ export class RPCRouter {
       };
     }
 
-    const method = LEGACY_ALIASES[parsed.method] ?? parsed.method;
+    const method = parsed.method;
     const handler = this.handlers.get(method);
 
     if (!handler) {
@@ -461,13 +446,12 @@ export class RPCRouter {
         string,
         unknown
       >;
-      // Accept both "frame"/"frameData" and "box"/"boxData" for compatibility
-      const rawFrame = decoded.frame ?? decoded.frameData;
+      const rawFrame = decoded.frame;
       if (!rawFrame) {
         throw invalidParams("scene.draw_frame requires a 'frame' payload");
       }
       const frameData = asRecord(rawFrame) as unknown as SerializedFrameData;
-      const rawBox = decoded.box ?? decoded.boxData;
+      const rawBox = decoded.box;
       const boxData = rawBox
         ? (asRecord(rawBox) as unknown as SerializedBoxData)
         : null;
@@ -517,7 +501,7 @@ export class RPCRouter {
         string,
         unknown
       >;
-      const rawBox = decoded.box ?? decoded.boxData;
+      const rawBox = decoded.box;
       if (!rawBox) {
         throw invalidParams("scene.draw_box requires a 'box' payload");
       }
@@ -1085,7 +1069,7 @@ export class RPCRouter {
         string,
         unknown
       >;
-      const rawFrame = decoded.frame ?? decoded.frameData;
+      const rawFrame = decoded.frame;
       if (!rawFrame) {
         throw invalidParams("scene.add_data_source requires a 'frame' payload");
       }
