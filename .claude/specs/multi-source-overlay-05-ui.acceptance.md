@@ -8,14 +8,16 @@ criteria:
       page/tests/combine_systems_logic.test.ts asserts getReferenceableBranches
       omits the modifier's own id and any id present in rejectedIds (cycle set),
       returning only valid candidates; test passes.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-002
     summary: formatRmsd renders 3-decimal Å string and dash for null
     type: code
     pass_when: |
       Tests assert formatRmsd(1.2345) === "1.234 Å", formatRmsd(0) === "0.000 Å",
       and formatRmsd(null) === "—"; test passes.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-003
     summary: buildSourceLegend maps branch ids to stable label/color pairs
     type: code
@@ -23,7 +25,8 @@ criteria:
       Tests assert buildSourceLegend([]) === [] and a non-empty id list yields
       one {label,color} per id with palette colors cycling when ids exceed
       palette length; test passes.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-004
     summary: CombineSystems panel wired into ModifierProperties dispatch
     type: code
@@ -31,7 +34,8 @@ criteria:
       ModifierProperties.tsx contains an instanceof CombineSystemsModifier branch
       rendering the CombineSystemsModifier panel component; npm run typecheck and
       npm run lint pass.
-    status: pending
+    status: verified
+    last_checked: 2026-05-31
   - id: ac-005
     summary: Selecting a CombineSystems modifier renders its config panel
     type: ui_runtime

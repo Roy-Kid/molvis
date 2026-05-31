@@ -1,6 +1,6 @@
 ---
 title: Multi-source overlay UI — CombineSystems config panel (page)
-status: approved
+status: code-complete
 created: 2026-05-30
 ---
 
@@ -46,12 +46,12 @@ created: 2026-05-30
 
 ## Tasks
 
-- [ ] Write failing tests for branch-filter / RMSD-format / legend logic (page/tests/combine_systems_logic.test.ts)
-- [ ] Implement getReferenceableBranches, formatRmsd, buildSourceLegend in page/src/ui/modes/view/modifiers/combine_systems_logic.ts
-- [ ] Implement useCombineSystemsState hook in page/src/ui/modes/view/modifiers/useCombineSystemsState.ts
-- [ ] Implement CombineSystemsModifier panel in page/src/ui/modes/view/modifiers/CombineSystemsModifier.tsx (branch picker, alignment controls, RMSD readout, color-by-source toggle + legend)
-- [ ] Wire CombineSystemsModifier into the instanceof dispatch in page/src/ui/modes/view/ModifierProperties.tsx
-- [ ] Run full check + test suite
+- [x] Write failing tests for branch-filter / RMSD-format / legend logic (page/tests/combine_systems_logic.test.ts)
+- [x] Implement getReferenceableBranches, formatRmsd, buildSourceLegend in page/src/ui/modes/view/modifiers/combine_systems_logic.ts
+- [x] Implement useCombineSystemsState hook in page/src/ui/modes/view/modifiers/useCombineSystemsState.ts
+- [x] Implement CombineSystemsModifier panel in page/src/ui/modes/view/modifiers/CombineSystemsModifier.tsx (branch picker, alignment controls, RMSD readout, color-by-source toggle + legend)
+- [x] Wire CombineSystemsModifier into the instanceof dispatch in page/src/ui/modes/view/ModifierProperties.tsx
+- [x] Run full check + test suite
 
 ## Testing strategy
 
