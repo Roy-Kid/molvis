@@ -52,8 +52,8 @@ export class ModifierRegistry {
   static initialize() {
     if (ModifierRegistry._defaultsRegistered) return;
     ModifierRegistry._defaultsRegistered = true;
-    // Note: DataSourceModifier subclasses (TrajectoryDataSource /
-    // FrameDataSource) are intentionally NOT registered here. They are
+    // Note: DataSourceModifier subclasses (FileDataSource /
+    // MemoryDataSource) are intentionally NOT registered here. They are
     // not user-addable from the modifier picker; they enter the
     // pipeline only via file ingress (`io/loadFileContent`,
     // `io/loadFileStream`) or RPC (`scene.add_data_source`).

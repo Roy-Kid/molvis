@@ -171,7 +171,7 @@ export async function loadFileWithFormatPrompt(
  * with `null` on user cancel; otherwise with the live `TrajectoryRuntime`
  * the caller can hold for status / cancellation.
  *
- * The format-resolution flow mirrors the legacy text path: extension
+ * The format-resolution flow mirrors the plain-text load path: extension
  * inference first, picker fallback for unknown extensions.
  */
 export async function loadFileStreamWithFormatPrompt(
@@ -211,7 +211,7 @@ export async function loadFileStreamWithFormatPrompt(
 
 /** Files larger than this threshold take the streaming worker path.
  *  The streaming path is correct at any size, but spawning a worker
- *  for a few-KB file is a net loss compared to the legacy whole-content
+ *  for a few-KB file is a net loss compared to the whole-content
  *  reader. */
 const STREAMING_FILE_THRESHOLD = 16 * 1024 * 1024;
 
@@ -220,7 +220,7 @@ export type LoadFileResult = "started" | "cancelled" | "error";
 /**
  * Single ingress for any user-supplied `File`. Routes large files
  * through the streaming worker pipeline and small files through the
- * legacy whole-content reader, emits status-bar progress messages, and
+ * whole-content reader, emits status-bar progress messages, and
  * surfaces errors as `status-message: error` events.
  *
  * Both `DataSourceModifier` (file picker) and `MolvisWrapper` (drag-drop)

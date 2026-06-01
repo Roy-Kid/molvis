@@ -279,8 +279,8 @@ export class MarkAtomOverlay implements Overlay, AtomAnchored {
     // surface and discard the atom impostor fragment behind it on the
     // GL_LESS test — the marked atom then visibly disappears at angles
     // where the halo center sorts in front of the atom by camera
-    // distance. This mirrors the cloud-renderer fix for the same class
-    // of bug. See artist.ts:cloudMesh and commit 2d3b5f6.
+    // distance. Other translucent overlays apply the same fix for this
+    // class of bug.
     mat.disableDepthWrite = true;
 
     const sphere = MeshBuilder.CreateSphere(

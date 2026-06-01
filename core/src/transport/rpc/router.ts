@@ -12,10 +12,11 @@ import type { MarkAtomOverlay } from "../../overlays/mark_atom";
 import type { MarkAtomProps } from "../../overlays/types";
 import {
   DataSourceModifier,
-  FrameDataSource,
+  MemoryDataSource,
 } from "../../pipeline/data_source_modifier";
 import type { Modifier } from "../../pipeline/modifier";
 import { ModifierRegistry } from "../../pipeline/modifier_registry";
+import type { SceneSynthesisConfig } from "../../system/scene_synthesis";
 import { Trajectory } from "../../system/trajectory";
 import { buildBox, buildFrame, decodeBinaryPayload } from "./serialization";
 import type {
@@ -50,21 +51,6 @@ type RPCHandler = (
   params: Record<string, unknown>,
   buffers: DataView[],
 ) => Promise<unknown> | unknown;
-
-const LEGACY_ALIASES: Record<string, string> = {
-  new_frame: "scene.new_frame",
-  draw_frame: "scene.draw_frame",
-  draw_box: "scene.draw_box",
-  clear: "scene.clear",
-  clear_scene: "scene.clear",
-  export_frame: "scene.export_frame",
-  get_selected: "selection.get",
-  select_atoms: "selection.select_atoms",
-  take_snapshot: "snapshot.take",
-  set_style: "view.set_style",
-  set_theme: "view.set_theme",
-  set_view_mode: "view.set_mode",
-};
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -182,43 +168,6 @@ function rebuildCurrentFrame(app: MolvisApp): Promise<Frame | null> {
   return app.applyPipeline({ fullRebuild: true });
 }
 
-/**
- * Ensure the pipeline has a ``DataSourceModifier`` — the single point of
- * ingress for both GUI ("Load File") and WS (``scene.draw_frame`` /
- * ``scene.set_trajectory``) data pushes. If one already exists we reuse
- * it so user-added downstream modifiers stay wired up; otherwise a fresh
- * one is inserted at the head of the pipeline.
- */
-export function ensureDataSource(
-  app: MolvisApp,
-  meta: { sourceType: DataSourceModifier["sourceType"]; filename: string },
-): DataSourceModifier {
-  const pipeline = app.modifierPipeline;
-  let dataSource = pipeline
-    .getModifiers()
-    .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
-
-  if (!dataSource) {
-    // Placeholder DS at pipeline head. Tasks #4–#5 of the multi-DS
-    // spec replace this with a `addDataSource(spec)` flow that wraps
-    // the actual loaded data; for now we install an empty
-    // FrameDataSource so the pipeline always has a head marker.
-    dataSource = new FrameDataSource(new Frame());
-    pipeline.addModifier(dataSource);
-    // Keep data source at the head — downstream modifiers read from its output.
-    const currentIndex = pipeline
-      .getModifiers()
-      .findIndex((m) => m.id === dataSource?.id);
-    if (currentIndex > 0) {
-      pipeline.reorderModifier(dataSource.id, 0);
-    }
-  }
-
-  dataSource.sourceType = meta.sourceType;
-  dataSource.filename = meta.filename;
-  return dataSource;
-}
-
 /** Serialize a modifier to the wire shape used by ``pipeline.*`` RPCs. */
 function serializeModifier(modifier: Modifier): Record<string, unknown> {
   return {
@@ -260,6 +209,30 @@ function requireInteger(value: unknown, label: string): number {
   return value;
 }
 
+/**
+ * Parse the wire `subset` field of a synthesis alignment into the atom-index
+ * `Uint32Array` the {@link SceneSynthesisConfig} holds. `null` / `undefined` /
+ * empty → `null`; a comma-separated list of non-negative integers (e.g.
+ * `"0,1,4"`) → the corresponding array; anything else → `invalidParams`.
+ */
+function parseAlignmentSubset(value: unknown): Uint32Array | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    throw invalidParams(
+      "alignment.subset must be a comma-separated index string or null",
+    );
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  const parts = trimmed.split(",").map((s) => Number(s.trim()));
+  if (parts.some((n) => !Number.isInteger(n) || n < 0)) {
+    throw invalidParams(
+      "alignment.subset must contain only non-negative integers",
+    );
+  }
+  return Uint32Array.from(parts);
+}
+
 export class RPCRouter {
   private readonly app: MolvisApp;
   private readonly handlers: Map<string, RPCHandler>;
@@ -273,6 +246,7 @@ export class RPCRouter {
       ["scene.clear", this.handleClear],
       ["scene.export_frame", this.handleExportFrame],
       ["scene.set_trajectory", this.handleSetTrajectory],
+      ["scene.set_synthesis", this.handleSetSynthesis],
       ["scene.set_frame_labels", this.handleSetFrameLabels],
       ["scene.apply_state", this.handleApplyState],
       ["selection.get", this.handleSelectionGet],
@@ -331,7 +305,7 @@ export class RPCRouter {
       };
     }
 
-    const method = LEGACY_ALIASES[parsed.method] ?? parsed.method;
+    const method = parsed.method;
     const handler = this.handlers.get(method);
 
     if (!handler) {
@@ -414,11 +388,10 @@ export class RPCRouter {
       return { success: true };
     }
     const frame = new Frame();
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory([frame]), {
       sourceType: "empty",
       filename: "",
     });
-    await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
     return { success: true };
@@ -435,13 +408,12 @@ export class RPCRouter {
         string,
         unknown
       >;
-      // Accept both "frame"/"frameData" and "box"/"boxData" for compatibility
-      const rawFrame = decoded.frame ?? decoded.frameData;
+      const rawFrame = decoded.frame;
       if (!rawFrame) {
         throw invalidParams("scene.draw_frame requires a 'frame' payload");
       }
       const frameData = asRecord(rawFrame) as unknown as SerializedFrameData;
-      const rawBox = decoded.box ?? decoded.boxData;
+      const rawBox = decoded.box;
       const boxData = rawBox
         ? (asRecord(rawBox) as unknown as SerializedBoxData)
         : null;
@@ -458,11 +430,15 @@ export class RPCRouter {
       );
     }
 
-    ensureDataSource(this.app, {
+    // Synthesis model: draw_frame replaces the primary (single) source —
+    // setTrajectory swaps the head DataSource for this one frame, and the
+    // synthesis step degrades to passthrough when it is the only enabled
+    // source, so existing single-source Python callers see unchanged behavior
+    // (one frame in, one frame out, camera reset; no source_id injected).
+    await this.app.setTrajectory(new Trajectory([frame], [box]), {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    await this.app.setTrajectory(new Trajectory([frame], [box]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
 
@@ -486,7 +462,7 @@ export class RPCRouter {
         string,
         unknown
       >;
-      const rawBox = decoded.box ?? decoded.boxData;
+      const rawBox = decoded.box;
       if (!rawBox) {
         throw invalidParams("scene.draw_box requires a 'box' payload");
       }
@@ -512,11 +488,10 @@ export class RPCRouter {
 
   private handleClear: RPCHandler = async () => {
     const frame = new Frame();
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory([frame]), {
       sourceType: "empty",
       filename: "",
     });
-    await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
     return { success: true };
@@ -555,11 +530,10 @@ export class RPCRouter {
     });
 
     const sessionLabel = this.sessionLabel(frames.length);
-    ensureDataSource(this.app, {
+    await this.app.setTrajectory(new Trajectory(frames, boxes), {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    await this.app.setTrajectory(new Trajectory(frames, boxes));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
     return { success: true, nFrames: frames.length };
@@ -973,7 +947,7 @@ export class RPCRouter {
 
   /**
    * Append a single-frame data source. The decoded frame is wrapped in
-   * a {@link FrameDataSource} (broadcasts across the system's frame
+   * a {@link MemoryDataSource} (broadcasts across the system's frame
    * count) and added via `MolvisApp.addDataSource`. Frame-count and
    * atom-count validations are enforced by `addDataSource` itself; on
    * mismatch the error propagates to the caller as a JSON-RPC error.
@@ -982,6 +956,68 @@ export class RPCRouter {
    * separate `set_trajectory`-style payload — backend-driven trajectory
    * append is a future RPC.
    */
+  /**
+   * Edit the pipeline's shared {@link SceneSynthesisConfig} and re-run the head
+   * synthesis. Snake_case wire fields map to the camelCase config; every field
+   * is optional and an absent field is left unchanged. `reference_id: null`
+   * explicitly clears the reference source. Builds a NEW config (immutable
+   * update) and commits + recomputes only after every field validates — a
+   * rejected request never mutates the config (no `applyPipeline` either).
+   *
+   * Wire shape (snake_case): `{ mode?: "extend" | "augment",
+   * reference_id?: string | null, alignment?: { enabled: boolean,
+   * mass_weight: boolean, subset?: string | null } }`.
+   */
+  private handleSetSynthesis: RPCHandler = async (params) => {
+    const current = this.app.modifierPipeline.getSynthesisConfig();
+    const next: SceneSynthesisConfig = {
+      mode: current.mode,
+      referenceId: current.referenceId,
+      alignment: current.alignment,
+    };
+
+    const mode = params.mode;
+    if (mode === "extend" || mode === "augment") {
+      next.mode = mode;
+    } else if (mode !== undefined) {
+      throw invalidParams('mode must be "extend" or "augment"');
+    }
+
+    if (
+      Object.hasOwn(params, "reference_id") ||
+      Object.hasOwn(params, "referenceId")
+    ) {
+      const raw = Object.hasOwn(params, "reference_id")
+        ? params.reference_id
+        : params.referenceId;
+      next.referenceId = requireString(raw, "reference_id", {
+        allowNull: true,
+      });
+    }
+
+    if (params.alignment !== undefined) {
+      const a = params.alignment;
+      if (typeof a !== "object" || a === null || Array.isArray(a)) {
+        throw invalidParams("alignment must be an object");
+      }
+      const al = a as Record<string, unknown>;
+      const enabled = requireBoolean(al.enabled, "alignment.enabled");
+      const massWeight = requireBoolean(
+        al.mass_weight ?? al.massWeight,
+        "alignment.mass_weight",
+      );
+      next.alignment = {
+        enabled,
+        massWeight,
+        subset: parseAlignmentSubset(al.subset),
+      };
+    }
+
+    this.app.modifierPipeline.setSynthesisConfig(next);
+    await this.app.applyPipeline({ fullRebuild: true });
+    return { success: true };
+  };
+
   private handleAddDataSource: RPCHandler = async (params, buffers) => {
     let frame: Frame;
     let filename: string;
@@ -992,7 +1028,7 @@ export class RPCRouter {
         string,
         unknown
       >;
-      const rawFrame = decoded.frame ?? decoded.frameData;
+      const rawFrame = decoded.frame;
       if (!rawFrame) {
         throw invalidParams("scene.add_data_source requires a 'frame' payload");
       }
@@ -1016,7 +1052,7 @@ export class RPCRouter {
       );
     }
 
-    const ds = new FrameDataSource(frame, {
+    const ds = new MemoryDataSource(frame, {
       sourceType: "backend",
       filename,
       contributedBlocks,

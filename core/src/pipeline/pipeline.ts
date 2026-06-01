@@ -1,6 +1,11 @@
-import { Frame } from "@molcrafts/molrs";
+import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
 import { EventEmitter } from "../events";
+import {
+  type SceneSynthesisConfig,
+  type SynthesisSource,
+  synthesize,
+} from "../system/scene_synthesis";
 import { logger } from "../utils/logger";
 import { DataSourceModifier } from "./data_source_modifier";
 import { type Modifier, ModifierCapability } from "./modifier";
@@ -48,6 +53,33 @@ export const PipelineEvents = {
  */
 export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   private modifiers: Modifier[] = [];
+
+  /**
+   * Scene-synthesis configuration consumed at the head of {@link compute}.
+   * Owned by the pipeline (mirroring how it owns its modifier list) and edited
+   * by the RPC / UI surfaces. Default `augment` reproduces the previous last-wins
+   * block-union merge; `setSynthesisConfig` is pure state and never triggers a
+   * compute — callers re-run `applyPipeline` after editing it.
+   */
+  private synthesisConfig: SceneSynthesisConfig = {
+    mode: "augment",
+    referenceId: null,
+    alignment: null,
+  };
+
+  /** The current scene-synthesis configuration (see {@link setSynthesisConfig}). */
+  getSynthesisConfig(): SceneSynthesisConfig {
+    return this.synthesisConfig;
+  }
+
+  /**
+   * Replace the scene-synthesis configuration. Pure state mutation — does NOT
+   * itself recompute; the caller (RPC / UI) re-runs `applyPipeline` afterwards,
+   * exactly as it does after editing a modifier.
+   */
+  setSynthesisConfig(config: SceneSynthesisConfig): void {
+    this.synthesisConfig = config;
+  }
 
   /**
    * Add a modifier to the pipeline.
@@ -140,7 +172,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   }
 
   /**
-   * Number of enabled DataSourceModifiers — the same set phase A merge
+   * Number of enabled DataSourceModifiers — the same set the synthesis head
    * walks. Callers use this to detect multi-DS pipelines without
    * leaking the filter logic.
    */
@@ -258,22 +290,19 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
 
   /**
    * Compute the merged frame at `frameIndex` and apply all enabled
-   * modifiers. Two-phase execution per the multi-data-source spec:
+   * modifiers. Two-phase execution:
    *
-   * - **Phase A (DS merge)**: pre-load every enabled
-   *   {@link DataSourceModifier}'s frame for `frameIndex` (in parallel),
-   *   then walk DSs in array order and inject each DS's
-   *   `contributedBlocks` into a fresh working `Frame`. Last DS wins
-   *   on block-name conflict; `simbox` follows the same last-wins rule.
+   * - **Synthesis head**: collect every enabled {@link DataSourceModifier}
+   *   as a {@link SynthesisSource} (its own trajectory + optional
+   *   `contributedBlocks`) and call the pure `synthesize` step with the
+   *   pipeline's {@link getSynthesisConfig}. It reconciles per-source frame
+   *   counts (length-1 broadcast / equal-length zip / unequal>1 error) and
+   *   combines per mode (`augment` block-union last-wins / `extend` atom-set
+   *   concat with `source_id` / optional Kabsch alignment). A single enabled
+   *   source is a zero-config passthrough; zero sources yield an empty frame.
    * - **Phase B (modifier apply)**: walk every enabled non-DS modifier
    *   in array order, applying it to the working frame. Existing DAG
    *   parent / selection-producer semantics are preserved unchanged.
-   *
-   * `overrideFrame` is a transitional bridge for legacy callers that
-   * still hand the pipeline a pre-built frame (`app.applyPipeline({
-   * sourceFrame })`). When provided, phase A is skipped and the
-   * override is treated as the merged frame; phase B runs as usual.
-   * Tasks #3–#4 of the spec retire the override path.
    *
    * DAG parent resolution rules (phase B):
    * - `parentId !== null`: look up `selectionCache` for the parent's
@@ -290,52 +319,26 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     frameIndex: number,
     app: MolvisApp,
     changeKind: FrameChangeKind = "full",
-    overrideFrame?: Frame,
   ): Promise<Frame> {
-    let frame: Frame;
-
-    if (overrideFrame !== undefined) {
-      // Legacy bridge: skip phase A, treat the override as the merged
-      // frame. Used by `app.applyPipeline({ sourceFrame })` until the
-      // remaining phase-1 tasks migrate all callers onto the DS path.
-      frame = overrideFrame;
-    } else {
-      // --- Phase A: build the merged frame from DS contributions ---
-      const dsModifiers: DataSourceModifier[] = [];
-      for (const m of this.modifiers) {
-        if (m.enabled && m instanceof DataSourceModifier) dsModifiers.push(m);
-      }
-
-      // Pre-load each DS's frame for the requested index (parallel).
-      await Promise.all(dsModifiers.map((ds) => ds.preload(frameIndex)));
-
-      frame = new Frame();
-      for (const ds of dsModifiers) {
-        const src = ds.cachedFrame;
-        // Empty `contributedBlocks` means "everything the source frame
-        // actually has" — the WASM Frame is the source of truth, not a
-        // hardcoded registry. Populated `contributedBlocks` is a user-
-        // set narrowing filter (topology-only file → ["bonds"]).
-        const blockNames =
-          ds.contributedBlocks.length > 0
-            ? ds.contributedBlocks
-            : src.blockNames();
-        for (const name of blockNames) {
-          const block = src.getBlock(name);
-          // Skip 0-row blocks so a topology-only DS that happens to
-          // carry an empty `atoms` placeholder doesn't shadow another
-          // DS's real atoms via the last-wins rule.
-          if (block !== undefined && block.nrows() > 0) {
-            // Last-wins on block-name conflict. molrs Block::clone is an
-            // Arc::clone (refcount bump), so this is O(num_columns).
-            frame.insertBlock(name, block);
-          }
-        }
-        if (src.simbox !== undefined) {
-          frame.simbox = src.simbox;
-        }
+    // --- Synthesis head: compose one merged frame from enabled DS sources ---
+    // Each enabled DataSourceModifier contributes its own trajectory; the
+    // pure `synthesize` step reconciles frame counts (length-1 broadcast /
+    // equal-length zip / unequal>1 error) and combines per the pipeline's
+    // SceneSynthesisConfig (augment block-union / extend atom-set concat with
+    // source_id / optional Kabsch alignment). A single enabled source is a
+    // zero-config passthrough.
+    const sources: SynthesisSource[] = [];
+    for (const m of this.modifiers) {
+      if (m.enabled && m instanceof DataSourceModifier) {
+        sources.push({
+          id: m.id,
+          trajectory: m.trajectory,
+          contributedBlocks:
+            m.contributedBlocks.length > 0 ? m.contributedBlocks : undefined,
+        });
       }
     }
+    let frame = await synthesize(sources, frameIndex, this.synthesisConfig);
 
     // --- Phase B: apply non-DS modifiers in array order ---
     const context = createDefaultContext(frame, app, frameIndex, changeKind);
@@ -344,8 +347,8 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
 
     for (const modifier of this.modifiers) {
       if (!modifier.enabled) continue;
-      // DSs already contributed in phase A; their identity apply() is
-      // a no-op and skipping it here is semantically equivalent and
+      // DSs already contributed in the synthesis head; their identity apply()
+      // is a no-op and skipping it here is semantically equivalent and
       // saves a function call per DS per compute.
       if (modifier instanceof DataSourceModifier) continue;
 

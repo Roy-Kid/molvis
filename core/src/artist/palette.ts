@@ -851,6 +851,29 @@ export function buildCategoricalColorLookup(
   return lookup;
 }
 
+/**
+ * Build a source→color legend for a set of numeric source ids (e.g. the
+ * `source_id` column emitted by the scene-synthesis `extend` mode). Returns one entry per
+ * DISTINCT id in ascending order; each `hex` is the categorical-palette color
+ * for that id's ordinal as an uppercase `#RRGGBB` string — the same mapping
+ * {@link buildCategoricalColorLookup} assigns, so the legend matches what the
+ * renderer shows.
+ */
+export function buildSourceColorLegend(
+  sourceIds: number[],
+  paletteName = DEFAULT_CATEGORICAL_COLOR_MAP,
+): Array<{ sourceId: number; hex: string }> {
+  const distinct = Array.from(new Set(sourceIds)).sort((a, b) => a - b);
+  const lookup = buildCategoricalColorLookup(
+    distinct.map((id) => String(id)),
+    paletteName,
+  );
+  return distinct.map((sourceId) => ({
+    sourceId,
+    hex: linearRgbToHex(lookup.get(String(sourceId)) ?? [0, 0, 0]),
+  }));
+}
+
 function lut(data: number[]): Float32Array {
   return Float32Array.from(data);
 }

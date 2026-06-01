@@ -20,8 +20,8 @@ import {
 } from "../src/pipeline/bond_column_remap";
 import {
   DataSourceModifier,
-  FrameDataSource,
-  TrajectoryDataSource,
+  FileDataSource,
+  MemoryDataSource,
 } from "../src/pipeline/data_source_modifier";
 import { ModifierPipeline } from "../src/pipeline/pipeline";
 import { createDefaultContext } from "../src/pipeline/types";
@@ -86,18 +86,18 @@ describe("pipeline.compute phase A — DS merge", () => {
     expect(merged.getBlock("bonds")).toBeUndefined();
   });
 
-  it("single TrajectoryDataSource contributes its frame at the requested index", async () => {
+  it("single FileDataSource contributes its frame at the requested index", async () => {
     const pipeline = new ModifierPipeline();
     const traj = makeMultiFrameTraj(3, ["C", "O", "N"]);
-    pipeline.addModifier(new TrajectoryDataSource(traj));
+    pipeline.addModifier(new FileDataSource(traj));
 
     const merged = await pipeline.compute(1, mockApp);
     expect(merged.getBlock("atoms")?.nrows()).toBe(3);
   });
 
-  it("FrameDataSource broadcasts its single frame across any compute index", async () => {
+  it("MemoryDataSource broadcasts its single frame across any compute index", async () => {
     const pipeline = new ModifierPipeline();
-    const fds = new FrameDataSource(makeBondsFrame([[0, 1]]));
+    const fds = new MemoryDataSource(makeBondsFrame([[0, 1]]));
     pipeline.addModifier(fds);
 
     for (const i of [0, 5, 100]) {
@@ -106,11 +106,11 @@ describe("pipeline.compute phase A — DS merge", () => {
     }
   });
 
-  it("TrajectoryDataSource + FrameDataSource stack: atoms from traj, bonds from frame", async () => {
+  it("FileDataSource + MemoryDataSource stack: atoms from traj, bonds from frame", async () => {
     const pipeline = new ModifierPipeline();
     const traj = makeMultiFrameTraj(2, ["C", "O"]);
-    pipeline.addModifier(new TrajectoryDataSource(traj));
-    pipeline.addModifier(new FrameDataSource(makeBondsFrame([[0, 1]])));
+    pipeline.addModifier(new FileDataSource(traj));
+    pipeline.addModifier(new MemoryDataSource(makeBondsFrame([[0, 1]])));
 
     const merged = await pipeline.compute(0, mockApp);
     expect(merged.getBlock("atoms")?.nrows()).toBe(2);
@@ -123,8 +123,8 @@ describe("pipeline.compute phase A — DS merge", () => {
 
   it("last-wins on block conflict (later DS overwrites earlier)", async () => {
     const pipeline = new ModifierPipeline();
-    pipeline.addModifier(new FrameDataSource(makeAtomsFrame(["C", "C", "C"])));
-    pipeline.addModifier(new FrameDataSource(makeAtomsFrame(["O", "O"])));
+    pipeline.addModifier(new MemoryDataSource(makeAtomsFrame(["C", "C", "C"])));
+    pipeline.addModifier(new MemoryDataSource(makeAtomsFrame(["O", "O"])));
 
     const merged = await pipeline.compute(0, mockApp);
     // Second DS contributed atoms: 2 elements, not 3
@@ -133,7 +133,7 @@ describe("pipeline.compute phase A — DS merge", () => {
 
   it("disabled DS is skipped during phase A", async () => {
     const pipeline = new ModifierPipeline();
-    const ds1 = new FrameDataSource(makeAtomsFrame(["C", "O"]));
+    const ds1 = new MemoryDataSource(makeAtomsFrame(["C", "O"]));
     pipeline.addModifier(ds1);
     ds1.enabled = false;
 
@@ -158,7 +158,7 @@ describe("pipeline.compute phase A — DS merge", () => {
 
     // DS contributes only bonds, even though its source frame has both.
     pipeline.addModifier(
-      new FrameDataSource(trajFrame, { contributedBlocks: ["bonds"] }),
+      new MemoryDataSource(trajFrame, { contributedBlocks: ["bonds"] }),
     );
 
     const merged = await pipeline.compute(0, mockApp);
@@ -172,27 +172,23 @@ describe("pipeline.compute phase A — DS merge", () => {
 // ---------------------------------------------------------------------------
 
 describe("pipeline state — DS lifecycle", () => {
-  it("adding a TrajectoryDataSource then a FrameDataSource yields {T, F} state", () => {
+  it("adding a FileDataSource then a MemoryDataSource yields {T, F} state", () => {
     const pipeline = new ModifierPipeline();
-    pipeline.addModifier(
-      new TrajectoryDataSource(makeMultiFrameTraj(5, ["C"])),
-    );
-    pipeline.addModifier(new FrameDataSource(makeBondsFrame([[0, 0]])));
+    pipeline.addModifier(new FileDataSource(makeMultiFrameTraj(5, ["C"])));
+    pipeline.addModifier(new MemoryDataSource(makeBondsFrame([[0, 0]])));
 
     const dsList = pipeline
       .getModifiers()
       .filter((m): m is DataSourceModifier => m instanceof DataSourceModifier);
     expect(dsList.length).toBe(2);
-    expect(dsList[0]).toBeInstanceOf(TrajectoryDataSource);
-    expect(dsList[1]).toBeInstanceOf(FrameDataSource);
+    expect(dsList[0]).toBeInstanceOf(FileDataSource);
+    expect(dsList[1]).toBeInstanceOf(MemoryDataSource);
   });
 
-  it("removing the FrameDataSource leaves the TrajectoryDataSource intact", () => {
+  it("removing the MemoryDataSource leaves the FileDataSource intact", () => {
     const pipeline = new ModifierPipeline();
-    pipeline.addModifier(
-      new TrajectoryDataSource(makeMultiFrameTraj(5, ["C"])),
-    );
-    const fds = new FrameDataSource(makeBondsFrame([[0, 0]]));
+    pipeline.addModifier(new FileDataSource(makeMultiFrameTraj(5, ["C"])));
+    const fds = new MemoryDataSource(makeBondsFrame([[0, 0]]));
     pipeline.addModifier(fds);
 
     pipeline.removeModifier(fds.id);
@@ -200,14 +196,14 @@ describe("pipeline state — DS lifecycle", () => {
       .getModifiers()
       .filter((m): m is DataSourceModifier => m instanceof DataSourceModifier);
     expect(remaining.length).toBe(1);
-    expect(remaining[0]).toBeInstanceOf(TrajectoryDataSource);
+    expect(remaining[0]).toBeInstanceOf(FileDataSource);
   });
 
-  it("removing the TrajectoryDataSource leaves only FrameDataSource → system collapses to 1 frame", async () => {
+  it("removing the FileDataSource leaves only MemoryDataSource → system collapses to 1 frame", async () => {
     const pipeline = new ModifierPipeline();
-    const tds = new TrajectoryDataSource(makeMultiFrameTraj(10, ["C", "O"]));
+    const tds = new FileDataSource(makeMultiFrameTraj(10, ["C", "O"]));
     pipeline.addModifier(tds);
-    pipeline.addModifier(new FrameDataSource(makeBondsFrame([[0, 1]])));
+    pipeline.addModifier(new MemoryDataSource(makeBondsFrame([[0, 1]])));
 
     pipeline.removeModifier(tds.id);
 
@@ -219,7 +215,7 @@ describe("pipeline state — DS lifecycle", () => {
 
   it("removing all DSs leaves the pipeline producing an empty frame", async () => {
     const pipeline = new ModifierPipeline();
-    const tds = new TrajectoryDataSource(makeMultiFrameTraj(3, ["C"]));
+    const tds = new FileDataSource(makeMultiFrameTraj(3, ["C"]));
     pipeline.addModifier(tds);
     pipeline.removeModifier(tds.id);
 
@@ -228,14 +224,14 @@ describe("pipeline state — DS lifecycle", () => {
     expect(merged.getBlock("bonds")).toBeUndefined();
   });
 
-  it("two TrajectoryDataSources stack their blocks in array order at the same index", async () => {
+  it("two FileDataSources stack their blocks in array order at the same index", async () => {
     const pipeline = new ModifierPipeline();
     const traj1 = makeMultiFrameTraj(4, ["C", "O", "N"]);
-    pipeline.addModifier(new TrajectoryDataSource(traj1));
+    pipeline.addModifier(new FileDataSource(traj1));
 
     // Second trajectory: same length, different atom count — last wins
     const traj2 = makeMultiFrameTraj(4, ["H", "H", "H", "H", "H"]);
-    pipeline.addModifier(new TrajectoryDataSource(traj2));
+    pipeline.addModifier(new FileDataSource(traj2));
 
     const merged = await pipeline.compute(2, mockApp);
     // Last DS's atoms block (5 H atoms) wins
@@ -253,7 +249,7 @@ describe("setParent — DS as parent (visual grouping)", () => {
     const { DrawAtomModifier } = await import("../src/pipeline/draw_atom");
 
     const pipeline = new ModifierPipeline();
-    const ds = new TrajectoryDataSource(makeMultiFrameTraj(2, ["C"]));
+    const ds = new FileDataSource(makeMultiFrameTraj(2, ["C"]));
     pipeline.addModifier(ds);
 
     const draw = new DrawAtomModifier();
@@ -269,7 +265,7 @@ describe("setParent — DS as parent (visual grouping)", () => {
     const { DrawBondModifier } = await import("../src/pipeline/draw_bond");
 
     const pipeline = new ModifierPipeline();
-    const ds = new FrameDataSource(makeBondsFrame([[0, 1]]));
+    const ds = new MemoryDataSource(makeBondsFrame([[0, 1]]));
     pipeline.addModifier(ds);
 
     const draw = new DrawBondModifier();
@@ -285,7 +281,7 @@ describe("setParent — DS as parent (visual grouping)", () => {
     );
 
     const pipeline = new ModifierPipeline();
-    const ds = new TrajectoryDataSource(makeMultiFrameTraj(1, ["C"]));
+    const ds = new FileDataSource(makeMultiFrameTraj(1, ["C"]));
     pipeline.addModifier(ds);
 
     const hide = new HideSelectionModifier();
@@ -300,7 +296,7 @@ describe("setParent — DS as parent (visual grouping)", () => {
     const { DrawAtomModifier } = await import("../src/pipeline/draw_atom");
 
     const pipeline = new ModifierPipeline();
-    const ds = new TrajectoryDataSource(makeMultiFrameTraj(1, ["C"]));
+    const ds = new FileDataSource(makeMultiFrameTraj(1, ["C"]));
     pipeline.addModifier(ds);
     const draw = new DrawAtomModifier();
     pipeline.addModifier(draw);
@@ -309,25 +305,6 @@ describe("setParent — DS as parent (visual grouping)", () => {
     expect(pipeline.setParent(draw.id, null)).toBe(true);
     expect(draw.parentId).toBeNull();
     expect(pipeline.getChildren(ds.id).length).toBe(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-//  Override bridge (legacy applyPipeline path)
-// ---------------------------------------------------------------------------
-
-describe("pipeline.compute override bridge", () => {
-  it("overrideFrame short-circuits phase A even when DSs are present", async () => {
-    const pipeline = new ModifierPipeline();
-    pipeline.addModifier(
-      new TrajectoryDataSource(makeMultiFrameTraj(2, ["C"])),
-    );
-
-    const externalFrame = makeAtomsFrame(["X", "X", "X", "X", "X"]);
-    const merged = await pipeline.compute(0, mockApp, "full", externalFrame);
-
-    // Override wins: 5 X atoms, not the DS's 1 C atom
-    expect(merged.getBlock("atoms")?.nrows()).toBe(5);
   });
 });
 
@@ -343,7 +320,7 @@ describe("DataSource dispose chain", () => {
     const pipeline = new ModifierPipeline();
     let disposeCalls = 0;
     const traj = makeMultiFrameTraj(2, ["C"]);
-    const ds = new TrajectoryDataSource(traj);
+    const ds = new FileDataSource(traj);
     const origDispose = ds.dispose.bind(ds);
     ds.dispose = () => {
       disposeCalls++;
@@ -358,8 +335,8 @@ describe("DataSource dispose chain", () => {
     const pipeline = new ModifierPipeline();
 
     let disposeCount = 0;
-    const ds1 = new TrajectoryDataSource(makeMultiFrameTraj(2, ["C"]));
-    const ds2 = new FrameDataSource(makeBondsFrame([[0, 1]]));
+    const ds1 = new FileDataSource(makeMultiFrameTraj(2, ["C"]));
+    const ds2 = new MemoryDataSource(makeBondsFrame([[0, 1]]));
     for (const ds of [ds1, ds2]) {
       const orig = ds.dispose.bind(ds);
       ds.dispose = () => {
@@ -377,7 +354,7 @@ describe("DataSource dispose chain", () => {
 
   it("pipeline.clear() tolerates a DS whose dispose throws", () => {
     const pipeline = new ModifierPipeline();
-    const ds1 = new TrajectoryDataSource(makeMultiFrameTraj(1, ["C"]));
+    const ds1 = new FileDataSource(makeMultiFrameTraj(1, ["C"]));
     ds1.dispose = () => {
       throw new Error("simulated dispose failure");
     };
@@ -388,7 +365,7 @@ describe("DataSource dispose chain", () => {
     expect(pipeline.getModifiers().length).toBe(0);
   });
 
-  it("TrajectoryDataSource.dispose forwards to the wrapped Trajectory.dispose", () => {
+  it("FileDataSource.dispose forwards to the wrapped Trajectory.dispose", () => {
     const traj = makeMultiFrameTraj(2, ["C"]);
     let trajDisposed = false;
     const origDispose = traj.dispose.bind(traj);
@@ -396,7 +373,7 @@ describe("DataSource dispose chain", () => {
       trajDisposed = true;
       origDispose();
     };
-    const ds = new TrajectoryDataSource(traj);
+    const ds = new FileDataSource(traj);
     ds.dispose();
     expect(trajDisposed).toBe(true);
   });
@@ -419,7 +396,7 @@ describe("phase A merge — empty contributedBlocks propagates all blocks", () =
     bonds.setColU32("atomi", new Uint32Array([0]));
     bonds.setColU32("atomj", new Uint32Array([1]));
     frame.insertBlock("bonds", bonds);
-    pipeline.addModifier(new FrameDataSource(frame));
+    pipeline.addModifier(new MemoryDataSource(frame));
 
     const merged = await pipeline.compute(0, mockApp);
     expect(merged.getBlock("atoms")?.nrows()).toBe(2);
@@ -435,7 +412,7 @@ describe("phase A merge — empty contributedBlocks propagates all blocks", () =
     const exotic = new Block();
     exotic.setColF("value", new Float64Array([1, 2, 3]));
     frame.insertBlock("custom-block", exotic);
-    pipeline.addModifier(new FrameDataSource(frame));
+    pipeline.addModifier(new MemoryDataSource(frame));
 
     const merged = await pipeline.compute(0, mockApp);
     expect(merged.getBlock("custom-block")?.nrows()).toBe(3);
@@ -444,7 +421,7 @@ describe("phase A merge — empty contributedBlocks propagates all blocks", () =
   it("skips zero-row blocks so empty placeholders don't shadow real data", async () => {
     const pipeline = new ModifierPipeline();
     // DS A: real atoms.
-    pipeline.addModifier(new FrameDataSource(makeAtomsFrame(["C", "O"])));
+    pipeline.addModifier(new MemoryDataSource(makeAtomsFrame(["C", "O"])));
     // DS B: empty atoms placeholder + real bonds.
     const topoFrame = new Frame();
     const emptyAtoms = new Block();
@@ -454,7 +431,7 @@ describe("phase A merge — empty contributedBlocks propagates all blocks", () =
     bonds.setColU32("atomi", new Uint32Array([0]));
     bonds.setColU32("atomj", new Uint32Array([1]));
     topoFrame.insertBlock("bonds", bonds);
-    pipeline.addModifier(new FrameDataSource(topoFrame));
+    pipeline.addModifier(new MemoryDataSource(topoFrame));
 
     const merged = await pipeline.compute(0, mockApp);
     // DS A's atoms survive — DS B's empty placeholder did NOT shadow.
@@ -695,13 +672,13 @@ describe("Phase A merge + bond remap (multi-DS integration)", () => {
     const pipeline = new ModifierPipeline();
 
     const atomsTraj = makeMultiFrameTraj(1, ["C", "O", "H"]);
-    pipeline.addModifier(new TrajectoryDataSource(atomsTraj));
+    pipeline.addModifier(new FileDataSource(atomsTraj));
 
     const bondsFrame = makeRawBondsFrame([
       [1, 2],
       [2, 3],
     ]);
-    const bondsDS = new FrameDataSource(bondsFrame, {
+    const bondsDS = new MemoryDataSource(bondsFrame, {
       contributedBlocks: ["bonds"],
     });
     pipeline.addModifier(bondsDS);
@@ -761,19 +738,19 @@ describe("SceneIndex.unregisterBox", () => {
 // ---------------------------------------------------------------------------
 
 describe("DataSource frame counts drive the system timeline", () => {
-  it("FrameDataSource always reports 1, regardless of trajectory length", () => {
-    const ds = new FrameDataSource(makeAtomsFrame(["C"]));
+  it("MemoryDataSource always reports 1, regardless of trajectory length", () => {
+    const ds = new MemoryDataSource(makeAtomsFrame(["C"]));
     expect(ds.frameCount).toBe(1);
   });
 
-  it("TrajectoryDataSource frame count mirrors its wrapped Trajectory", () => {
-    const ds = new TrajectoryDataSource(makeMultiFrameTraj(7, ["C"]));
+  it("FileDataSource frame count mirrors its wrapped Trajectory", () => {
+    const ds = new FileDataSource(makeMultiFrameTraj(7, ["C"]));
     expect(ds.frameCount).toBe(7);
   });
 
-  it("dispose on TrajectoryDataSource forwards to the wrapped trajectory", () => {
+  it("dispose on FileDataSource forwards to the wrapped trajectory", () => {
     const traj = makeMultiFrameTraj(2, ["C"]);
-    const ds = new TrajectoryDataSource(traj);
+    const ds = new FileDataSource(traj);
     expect(traj.length).toBe(2);
     ds.dispose();
     // Trajectory.dispose is idempotent and doesn't change `length`,

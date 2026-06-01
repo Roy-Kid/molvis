@@ -9,12 +9,11 @@ import {
 } from "../pipeline/bond_column_remap";
 import {
   DataSourceModifier,
-  FrameDataSource,
-  TrajectoryDataSource,
+  FileDataSource,
+  MemoryDataSource,
 } from "../pipeline/data_source_modifier";
 import { DrawBondModifier } from "../pipeline/draw_bond";
 import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
-import { ensureDataSource } from "../transport/rpc/router";
 import {
   type IndexProgressCallback,
   spawnTrajectoryWorker,
@@ -85,8 +84,8 @@ export type FileContent = string | Uint8Array | Record<string, string>;
  *   pre-multi-DS UX where opening a file resets the scene.
  * - `"append"` — add this file as an additional DataSourceModifier
  *   alongside any existing ones, applying the multi-data-source spec's
- *   load decision tree (single-frame → broadcast `FrameDataSource`,
- *   N-frame → index-aligned `TrajectoryDataSource`, mismatched N →
+ *   load decision tree (single-frame → broadcast `MemoryDataSource`,
+ *   N-frame → index-aligned `FileDataSource`, mismatched N →
  *   throw). Used by drag-drop on a non-empty system and the explicit
  *   "Add Data Source" UI button (phase 3 of the spec).
  */
@@ -144,7 +143,7 @@ async function appendTrajectoryAsDataSource(
   const N_file = trajectory.length;
   const existingTraj = app.modifierPipeline
     .getModifiers()
-    .find((m): m is TrajectoryDataSource => m instanceof TrajectoryDataSource);
+    .find((m): m is FileDataSource => m instanceof FileDataSource);
 
   const probeFrame = await trajectory.frame(0);
 
@@ -175,17 +174,17 @@ async function appendTrajectoryAsDataSource(
 
   let ds: DataSourceModifier;
   if (N_file === 1) {
-    // Single-frame file → FrameDataSource. Broadcasts across whatever
+    // Single-frame file → MemoryDataSource. Broadcasts across whatever
     // trajectory length the pipeline already has (or stays at 1 if
     // there's no trajectory yet). `contributedBlocks` defaults to empty
-    // → phase A merge propagates every block the frame actually has.
-    ds = new FrameDataSource(probeFrame, meta);
+    // → the synthesis head propagates every block the frame actually has.
+    ds = new MemoryDataSource(probeFrame, meta);
   } else if (existingTraj === undefined || existingTraj.frameCount === N_file) {
     // Multi-frame file: either becomes the primary trajectory (no
     // existing one) or stacks onto an existing trajectory of equal
     // length. Frame-count mismatches are caught here OR in
     // addDataSource — both produce the same error class.
-    ds = new TrajectoryDataSource(trajectory, meta);
+    ds = new FileDataSource(trajectory, meta);
   } else {
     throw new Error(
       `Cannot append "${meta.filename}": file has ${N_file} frame(s); existing trajectory has ${existingTraj.frameCount}. File must be single-frame (topology) or match existing frame count.`,
@@ -322,14 +321,13 @@ export async function loadFileContent(
     return;
   }
 
-  // Replace path: legacy "Open File" / first-load behavior.
+  // Replace path: "Open File" / first-load behavior.
   appCleanups.get(app)?.();
   appCleanups.delete(app);
 
-  ensureDataSource(app, { sourceType: "file", filename });
   appCleanups.set(app, dispose);
 
-  await app.setTrajectory(trajectory);
+  await app.setTrajectory(trajectory, { sourceType: "file", filename });
 
   // Auto-attach format-specific decoration modifiers (e.g. backbone
   // ribbon for protein-shape frames) based on what columns the freshly
@@ -460,12 +458,11 @@ export async function loadFileStream(
   appCleanups.get(app)?.();
   appCleanups.delete(app);
 
-  ensureDataSource(app, { sourceType: "file", filename });
   appCleanups.set(app, () => {
     trajectory.dispose();
   });
 
-  await app.setTrajectory(trajectory);
+  await app.setTrajectory(trajectory, { sourceType: "file", filename });
 
   const frame0 = app.system.frame;
   const headDS = app.modifierPipeline

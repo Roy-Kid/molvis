@@ -1,7 +1,7 @@
-import { Frame } from "@molcrafts/molrs";
+import { Block, Frame } from "@molcrafts/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
-import { Trajectory } from "../src/system/trajectory";
+import { frameToTrajectory, Trajectory } from "../src/system/trajectory";
 
 function makeFrames(n: number): Frame[] {
   return Array.from({ length: n }, () => new Frame());
@@ -179,6 +179,33 @@ describe("Trajectory", () => {
 
       expect(traj.replaceFrame(1, replacement)).toBe(true);
       expect(traj.get(1)).toBe(replacement);
+    });
+  });
+
+  describe("frameToTrajectory (ac-001..004)", () => {
+    it("ac-001: wraps a frame as a length-1 trajectory", () => {
+      expect(frameToTrajectory(new Frame()).length).toBe(1);
+    });
+
+    it("ac-002: get(0) returns the same frame reference", () => {
+      const f = new Frame();
+      expect(frameToTrajectory(f).get(0)).toBe(f);
+    });
+
+    it("ac-003: the wrapped trajectory is eager (isLazy false)", () => {
+      expect(frameToTrajectory(new Frame()).isLazy).toBe(false);
+    });
+
+    it("ac-004: block column data round-trips through the wrapper", () => {
+      const f = new Frame();
+      const atoms = new Block();
+      atoms.setColF("x", new Float64Array([1.5, 2.5, 3.5]));
+      f.insertBlock("atoms", atoms);
+      const out = frameToTrajectory(f).get(0)?.getBlock("atoms");
+      expect(out?.nrows()).toBe(3);
+      expect(Array.from(out?.copyColF("x") ?? new Float64Array())).toEqual([
+        1.5, 2.5, 3.5,
+      ]);
     });
   });
 });

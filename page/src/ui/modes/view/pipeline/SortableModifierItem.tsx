@@ -2,10 +2,10 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   ExpressionSelectionModifier,
-  FrameDataSource,
+  FileDataSource,
+  MemoryDataSource,
   type Modifier,
   SelectModifier,
-  TrajectoryDataSource,
 } from "@molvis/core";
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,11 @@ interface SortableModifierItemProps {
 }
 
 function getDisplayName(modifier: Modifier): string {
-  if (modifier instanceof TrajectoryDataSource) {
+  if (modifier instanceof FileDataSource) {
     const label = modifier.filename || modifier.name;
     return `${label} · Trajectory · ${modifier.frameCount} frame${modifier.frameCount === 1 ? "" : "s"}`;
   }
-  if (modifier instanceof FrameDataSource) {
+  if (modifier instanceof MemoryDataSource) {
     const label = modifier.filename || modifier.name;
     return `${label} · Topology · 1 frame`;
   }

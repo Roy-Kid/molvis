@@ -69,6 +69,7 @@ export {
 } from "./artist/label_renderer";
 export {
   buildCategoricalColorLookup,
+  buildSourceColorLegend,
   ColorMap,
   DEFAULT_CATEGORICAL_COLOR_MAP,
   getCategoricalPalette,
@@ -169,8 +170,8 @@ export {
   type DataSourceKind,
   DataSourceModifier,
   type DataSourceOptions,
-  FrameDataSource,
-  TrajectoryDataSource,
+  FileDataSource,
+  MemoryDataSource,
 } from "./pipeline/data_source_modifier";
 export { DrawAtomModifier } from "./pipeline/draw_atom";
 export { DrawBondModifier } from "./pipeline/draw_bond";
@@ -216,6 +217,7 @@ export {
   Box,
   Frame,
   type FrameProvider,
+  frameToTrajectory,
   generate3D,
   MolRecReader,
   parseSMILES,
@@ -226,6 +228,11 @@ export {
   WasmPca2,
   WasmPcaResult,
 } from "./system/index";
+export type {
+  SceneSynthesisConfig,
+  SynthesisAlignment,
+  SynthesisSource,
+} from "./system/scene_synthesis";
 export { Topology } from "./system/topology";
 export {
   type AttachWebSocketBridgeOpts,
