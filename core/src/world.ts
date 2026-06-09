@@ -180,6 +180,24 @@ export class World {
       this.camera.setTarget(center);
       this.camera.radius = radius;
 
+      // Grow the clip planes so the framed scene is never culled. The default
+      // `farClipPlane` (1000 Å, tuned for ordinary molecules) is smaller than
+      // the camera distance needed to frame large structures (e.g. a packing
+      // box spanning ~2000 Å sits entirely beyond a 1000 Å far plane → blank
+      // viewport). `fitBoundsToView` scales the camera *distance* with the
+      // scene but not the frustum, so do it here. Only ever push the far plane
+      // out — never shrink below the user's configured value — and lift the
+      // near plane proportionally to preserve depth-buffer precision.
+      const sizeX = bounds.max.x - bounds.min.x;
+      const sizeY = bounds.max.y - bounds.min.y;
+      const sizeZ = bounds.max.z - bounds.min.z;
+      const maxDim = Math.max(sizeX, sizeY, sizeZ);
+      const needFar = (radius + maxDim) * 2;
+      if (needFar > this.camera.maxZ) {
+        this.camera.maxZ = needFar;
+        this.camera.minZ = Math.max(this.camera.minZ, needFar / 50000);
+      }
+
       // Reset angles to a nice isometric-ish view
       this.camera.alpha = Math.PI / 4;
       this.camera.beta = Math.PI / 3;
