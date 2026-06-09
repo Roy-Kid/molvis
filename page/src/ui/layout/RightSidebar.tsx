@@ -1,8 +1,8 @@
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type { Molvis } from "@molvis/core";
 import { Edit3, MousePointer2, Move, Ruler, Video } from "lucide-react";
 import type React from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { EditPanel } from "../modes/edit/EditPanel";
 import { ManipulatePanel } from "../modes/manipulate/ManipulatePanel";
 import { MeasurePanel } from "../modes/measure/MeasurePanel";

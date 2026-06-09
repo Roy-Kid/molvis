@@ -1,14 +1,16 @@
-"""Detect the Jupyter execution environment and resolve viewer URLs.
+"""Resolve browser-reachable URLs for the bundled page.
 
-The page bundle is served from a port the kernel chose (the WS server in
-:class:`~molvis.transport.WebSocketTransport`). For the browser to reach
-both the JS assets and the WebSocket, we need an externally-routable
-URL — which depends on whether we are in plain Jupyter, JupyterLab via
-``jupyter-server-proxy``, Google Colab, etc.
+The page bundle is served from a port the kernel chose (the WS server
+in :class:`~molvis.transport.WebSocketTransport`). For the browser to
+reach both the JS assets and the WebSocket, we need an
+externally-routable URL — which depends on whether we are in plain
+Jupyter, JupyterLab via ``jupyter-server-proxy``, Google Colab, VSCode
+remote, etc.
 
-Detection happens once per process and is cached by :func:`detect_env`.
-:func:`resolve_endpoints` returns matching ``(base_url, ws_url)`` for
-the current env.
+*Runtime* detection (script vs terminal IPython vs notebook) lives in
+:mod:`molvis.runtime`. This module only handles the URL-reachability
+question and cannot, on its own, tell whether the calling code is
+inside a notebook cell or a terminal.
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ import functools
 import logging
 import os
 from typing import Literal
+
+from ..runtime import RuntimeEnv, detect_runtime
 
 logger = logging.getLogger("molvis")
 
@@ -30,24 +34,19 @@ __all__ = [
 ]
 
 
+_NOTEBOOK_RUNTIMES = frozenset(
+    {RuntimeEnv.JUPYTER, RuntimeEnv.COLAB, RuntimeEnv.VSCODE_NOTEBOOK}
+)
+
+
 def in_jupyter_kernel() -> bool:
-    """``True`` when running inside an IPython ZMQ kernel (Jupyter)."""
-    try:
-        from IPython import get_ipython
-    except ImportError:
-        return False
-    ip = get_ipython()
-    if ip is None:
-        return False
-    return ip.__class__.__name__ == "ZMQInteractiveShell"
+    """``True`` when running inside an IPython ZMQ kernel.
 
-
-def _has_google_colab() -> bool:
-    try:
-        import google.colab  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    Kept for backward-compatibility; new code should import
+    :func:`molvis.runtime.detect_runtime` (or
+    :func:`molvis.runtime.is_notebook_host`) instead.
+    """
+    return detect_runtime() in _NOTEBOOK_RUNTIMES
 
 
 def _has_jupyter_server_proxy() -> bool:
@@ -59,25 +58,28 @@ def _has_jupyter_server_proxy() -> bool:
     return True
 
 
-def _in_vscode() -> bool:
-    return "VSCODE_PID" in os.environ or "VSCODE_IPC_HOOK_CLI" in os.environ
-
-
 @functools.cache
 def detect_env() -> JupyterEnv:
-    """Return the environment kind.
+    """Return the URL-reachability kind for the current notebook host.
 
     Cached per process — the result cannot change at runtime.
+
+    - ``"colab"`` — Google Colab (kernel-side port needs JS proxy).
+    - ``"jupyter_proxy"`` — JupyterHub / JupyterLab with
+      ``jupyter-server-proxy`` mounted; requests pass through the
+      ``/proxy/<port>/`` prefix discovered from env vars.
+    - ``"vscode"`` — VSCode auto-forwards localhost ports, so a plain
+      ``http://localhost:<port>/`` URL works.
+    - ``"local"`` — non-notebook hosts and anything not matching the
+      above. Plain localhost URLs.
     """
-    if not in_jupyter_kernel():
-        return "local"
-    if _has_google_colab():
+    runtime = detect_runtime()
+    if runtime is RuntimeEnv.COLAB:
         return "colab"
-    if _has_jupyter_server_proxy():
-        return "jupyter_proxy"
-    if _in_vscode():
-        # VSCode notebooks auto-forward localhost ports → plain URL works.
+    if runtime is RuntimeEnv.VSCODE_NOTEBOOK:
         return "vscode"
+    if runtime is RuntimeEnv.JUPYTER and _has_jupyter_server_proxy():
+        return "jupyter_proxy"
     return "local"
 
 
@@ -103,9 +105,8 @@ def _colab_endpoints(port: int) -> tuple[str, str]:
     ``https://<random>.colab.googleusercontent.com/proxy/<port>/`` and
     Colab injects this when ``serve_kernel_port_as_iframe`` is called.
     For now we let Colab's JS proxy handle the URL by constructing it
-    directly via known pattern.
+    directly via the known pattern.
     """
-    # Colab's WebSocket proxy: same host, /proxy/<port>/ path
     base = f"/proxy/{port}/"
     ws = f"wss://_/proxy/{port}/ws"  # placeholder; cell script rewrites
     return base, ws

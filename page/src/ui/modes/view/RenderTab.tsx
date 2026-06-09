@@ -1,5 +1,8 @@
-import { Input } from "@/components/ui/input";
+import { type Molvis, REPRESENTATIONS } from "@molvis/core";
+import type React from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
 import {
   Select,
   SelectContent,
@@ -9,9 +12,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import { type Molvis, REPRESENTATIONS } from "@molvis/core";
-import type React from "react";
-import { useCallback, useEffect, useState } from "react";
 
 interface RenderTabProps {
   app: Molvis | null;
@@ -48,51 +48,13 @@ const BG_PRESETS = [
 ] as const;
 
 /** Compact number input that applies on blur or Enter. */
-function NumberField({
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  value: number;
-  min?: number;
-  max?: number;
-  step?: number;
-  onChange: (v: number) => void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-
-  const commit = () => {
-    let v = Number(draft);
-    if (Number.isNaN(v)) v = value;
-    if (min !== undefined) v = Math.max(min, v);
-    if (max !== undefined) v = Math.min(max, v);
-    if (step !== undefined) v = Math.round(v / step) * step;
-    onChange(v);
-    setDraft(String(v));
-  };
-
-  return (
-    <Input
-      type="number"
-      className="h-6 w-16 px-1.5 text-xs tabular-nums shrink-0"
-      value={draft}
-      min={min}
-      max={max}
-      step={step}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === "Enter" && commit()}
-    />
-  );
-}
-
 const Row = ({
   label,
   children,
-}: { label: string; children: React.ReactNode }) => (
+}: {
+  label: string;
+  children: React.ReactNode;
+}) => (
   <div className="flex items-center justify-between gap-1.5">
     <Label className="text-[10px] text-muted-foreground truncate min-w-0">
       {label}
@@ -114,9 +76,9 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
       representationName: repr.name,
       atomDiameterScale: repr.atomRadiusScale,
       bondDiameterScale: repr.bondRadiusScale,
-      boxVisible: !!app.scene.getMeshByName("sim_box")?.isEnabled(),
+      boxVisible: app.styleManager.getShowBox(),
       boxColor: app.styleManager.getTheme().boxColor ?? "#ffffff",
-      boxThicknessScale: 1.0,
+      boxThicknessScale: app.styleManager.getBoxThicknessScale(),
       backgroundColor: rgbToHex(cc.r, cc.g, cc.b),
       gridEnabled: grid.enabled ?? false,
       gridOpacity: grid.opacity ?? 0.3,
@@ -156,9 +118,9 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
   };
 
   const onBoxVisible = (c: boolean) => {
-    const m = app.scene.getMeshByName("sim_box");
-    if (m) m.setEnabled(c);
+    app.styleManager.setShowBox(c);
     set("boxVisible", c);
+    app.applyPipeline({ fullRebuild: true });
   };
 
   const onBoxColor = (hex: string) => {
@@ -177,9 +139,10 @@ export const RenderTab: React.FC<RenderTabProps> = ({ app }) => {
   };
 
   const onBoxThickness = (v: number) => {
+    app.styleManager.setBoxThicknessScale(v); // persist across redraws
     const m = app.scene.getMeshByName("sim_box");
     // biome-ignore lint/suspicious/noExplicitAny: _userThicknessScale is an internal BabylonJS mesh property
-    if (m) (m as any)._userThicknessScale = v;
+    if (m) (m as any)._userThicknessScale = v; // live apply (no redraw needed)
     set("boxThicknessScale", v);
   };
 

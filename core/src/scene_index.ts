@@ -1,5 +1,5 @@
 import type { Mesh } from "@babylonjs/core";
-import type { Block, Box } from "@molcrafts/molrs";
+import type { Block, Frame } from "@molcrafts/molrs";
 import { ATOM_IMPOSTOR_SPEC, BOND_IMPOSTOR_SPEC } from "./artist/material_spec";
 import {
   type AtomMeta,
@@ -15,18 +15,27 @@ import { Topology } from "./system/topology";
 
 // ============ Registration Options ============
 
-export interface RegisterFrameOptions {
-  atomMesh: Mesh;
-  bondMesh?: Mesh;
-  atomBlock: Block;
-  bondBlock?: Block;
-  box?: Box;
-  atomBuffers?: Map<string, Float32Array>;
-  bondBuffers?: Map<string, Float32Array>;
-  /** Total bond render instances (may exceed bondBlock.nrows() for multi-order bonds) */
-  bondInstanceCount?: number;
-  /** Optional render-instance to logical bond-id map. */
-  bondInstanceMap?: Uint32Array;
+export interface RegisterAtomFrameOptions {
+  /**
+   * Owning Frame for the registered atom data. MetaRegistry stores this
+   * reference and re-derives Block handles on every read so they survive
+   * `frame.setMeta` invalidations (see entity_source.ts header).
+   */
+  frame: Frame;
+  mesh: Mesh;
+  block: Block;
+  buffers: Map<string, Float32Array>;
+}
+
+export interface RegisterBondFrameOptions {
+  frame: Frame;
+  mesh: Mesh;
+  block: Block;
+  buffers: Map<string, Float32Array>;
+  /** Total bond render instances (may exceed block.nrows() for multi-order bonds). */
+  instanceCount?: number;
+  /** Optional render-instance → logical bond-id map. */
+  instanceMap?: Uint32Array;
 }
 
 export interface RegisterAtomOptions {
@@ -54,7 +63,19 @@ export class ImpostorState {
   public count = 0; // Number of EDIT atoms (added on top of frame)
   public capacity: number;
   public frameOffset = 0; // Number of FRAME atoms
-  public needsUpload = false;
+
+  // Per-buffer dirty tracking. `_allDirty` forces a full re-upload (first draw,
+  // topology/count change, color change). Otherwise only `_dirtyBuffers` are
+  // re-uploaded — the position-only playback path mutates just matrix +
+  // instanceData and must NOT re-upload the unchanged color/picking buffers
+  // (the per-frame GPU-bandwidth hog for large systems).
+  private _allDirty = false;
+  private _dirtyBuffers = new Set<string>();
+  // True when the frame segment uses identity mapping (no frameInstanceMap):
+  // logicalId === render index. In that case frameIdToIndex/logicalToAllIndices
+  // are left empty and the accessors synthesize identity on demand — avoiding
+  // frameCount Map insertions + frameCount single-element arrays per full draw.
+  private _frameMapIdentity = false;
   public frameIdToIndex = new Map<number, number>();
   /** All render instance indices per logical ID (for multi-order bonds). */
   public logicalToAllIndices = new Map<number, number[]>();
@@ -128,21 +149,31 @@ export class ImpostorState {
       }
     }
 
-    for (let i = 0; i < frameCount; i++) {
-      const logicalId = frameInstanceMap?.[i] ?? i;
-      if (!this.frameIdToIndex.has(logicalId)) {
-        this.frameIdToIndex.set(logicalId, i);
+    // Index maps are only needed when render index != logical id, i.e. for
+    // multi-order bonds (frameInstanceMap present). Without it the mapping is
+    // identity; skip building both maps and let the accessors + getIndex()
+    // synthesize identity. This avoids frameCount Map insertions + frameCount
+    // single-element arrays on every full draw.
+    if (frameInstanceMap) {
+      this._frameMapIdentity = false;
+      for (let i = 0; i < frameCount; i++) {
+        const logicalId = frameInstanceMap[i];
+        if (!this.frameIdToIndex.has(logicalId)) {
+          this.frameIdToIndex.set(logicalId, i);
+        }
+        // Store ALL render indices per logical ID (multi-order bonds).
+        const group = this.logicalToAllIndices.get(logicalId);
+        if (group) {
+          group.push(i);
+        } else {
+          this.logicalToAllIndices.set(logicalId, [i]);
+        }
       }
-      // Store ALL render indices per logical ID (needed for multi-order bonds)
-      const group = this.logicalToAllIndices.get(logicalId);
-      if (group) {
-        group.push(i);
-      } else {
-        this.logicalToAllIndices.set(logicalId, [i]);
-      }
+    } else {
+      this._frameMapIdentity = true;
     }
 
-    this.needsUpload = true;
+    this.markAllDirty();
   }
 
   getStride(name: string): number {
@@ -166,6 +197,37 @@ export class ImpostorState {
     const editIndex = this.idToIndex.get(id);
     if (editIndex === undefined) return undefined;
     return editIndex + this.frameOffset;
+  }
+
+  /**
+   * All render-instance indices for a logical id. Multi-instance entities
+   * (multi-order bonds) are tracked explicitly in `logicalToAllIndices`;
+   * single-instance entities resolve through getIndex() (identity for the
+   * frame segment, edit-table for edits), so they need no stored array.
+   */
+  renderIndicesForLogicalId(id: number): number[] {
+    const explicit = this.logicalToAllIndices.get(id);
+    if (explicit) return explicit;
+    const idx = this.getIndex(id);
+    return idx !== undefined ? [idx] : [];
+  }
+
+  /** Iterate `[logicalId, firstRenderIndex]` over the frame segment. */
+  *frameLogicalIds(): IterableIterator<[number, number]> {
+    if (this._frameMapIdentity) {
+      for (let i = 0; i < this.frameOffset; i++) yield [i, i];
+    } else {
+      yield* this.frameIdToIndex;
+    }
+  }
+
+  /** Iterate `[logicalId, allRenderIndices]` over the frame segment. */
+  *frameLogicalToRenderEntries(): IterableIterator<[number, number[]]> {
+    if (this._frameMapIdentity) {
+      for (let i = 0; i < this.frameOffset; i++) yield [i, [i]];
+    } else {
+      yield* this.logicalToAllIndices;
+    }
   }
 
   /**
@@ -210,7 +272,7 @@ export class ImpostorState {
     }
 
     this.count += subCount;
-    this.needsUpload = true;
+    this.markAllDirty();
     return firstAbsIndex;
   }
 
@@ -343,7 +405,7 @@ export class ImpostorState {
     }
 
     this.count -= subCount;
-    this.needsUpload = true;
+    this.markAllDirty();
   }
 
   updateMulti(id: number, values: Map<string, Float32Array | number[]>): void {
@@ -365,15 +427,46 @@ export class ImpostorState {
       const arr = vals instanceof Float32Array ? vals : new Float32Array(vals);
       desc.data.set(arr, absIndex * desc.stride);
     }
-    this.needsUpload = true;
+    this.markAllDirty();
   }
 
   getTotalCount(): number {
     return this.frameOffset + this.count;
   }
 
+  /** True when any buffer needs re-upload. */
+  get needsUpload(): boolean {
+    return this._allDirty || this._dirtyBuffers.size > 0;
+  }
+
+  /** Mark every buffer dirty — a full re-upload (structural/color change). */
+  markAllDirty(): void {
+    this._allDirty = true;
+  }
+
+  /**
+   * Mark specific buffers dirty for a partial re-upload. Used by the
+   * position-only playback fast path so unchanged color/picking buffers are
+   * not re-sent to the GPU. A pending full re-upload (`_allDirty`) wins.
+   */
+  markDirty(...names: string[]): void {
+    if (this._allDirty) return;
+    for (const name of names) this._dirtyBuffers.add(name);
+  }
+
+  /** True when a full re-upload (all buffers) is pending. */
+  get isAllDirty(): boolean {
+    return this._allDirty;
+  }
+
+  /** Whether `name` must be re-uploaded this cycle. */
+  isBufferDirty(name: string): boolean {
+    return this._allDirty || this._dirtyBuffers.has(name);
+  }
+
   markUploaded(): void {
-    this.needsUpload = false;
+    this._allDirty = false;
+    this._dirtyBuffers.clear();
   }
 
   /**
@@ -424,11 +517,16 @@ export class ImpostorState {
     // Promote using logical-ID-to-render-index mapping.
     // For multi-order bonds, frameIdToIndex contains only actual logical IDs
     // (not the extra render instances), preventing phantom edit entries.
-    for (const [logicalId, firstRenderIndex] of this.frameIdToIndex) {
+    // Use the identity-aware accessors so promotion works whether or not the
+    // frame-segment maps were materialized (identity mapping skips them).
+    for (const [logicalId, firstRenderIndex] of this.frameLogicalIds()) {
       newIdToIndex.set(logicalId, firstRenderIndex);
     }
     // Map ALL render indices back to their logical IDs (needed for picking)
-    for (const [logicalId, renderIndices] of this.logicalToAllIndices) {
+    for (const [
+      logicalId,
+      renderIndices,
+    ] of this.frameLogicalToRenderEntries()) {
       for (const renderIndex of renderIndices) {
         newIndexToId.set(renderIndex, logicalId);
       }
@@ -603,8 +701,8 @@ export class SceneIndex {
     const bondState = this.meshRegistry.getBondState();
     if (!bondState) return [];
 
-    const indices = bondState.logicalToAllIndices.get(bondId);
-    if (!indices || indices.length === 0) return [];
+    const indices = bondState.renderIndicesForLogicalId(bondId);
+    if (indices.length === 0) return [];
 
     return indices.map((idx) => makeSelectionKey(bondState.mesh.uniqueId, idx));
   }
@@ -619,60 +717,52 @@ export class SceneIndex {
 
   // ============ Registration APIs ============
 
-  registerFrame(options: RegisterFrameOptions): void {
-    const {
-      atomMesh,
-      bondMesh,
-      atomBlock,
-      bondBlock,
-      atomBuffers,
-      bondBuffers,
-      bondInstanceCount,
-      bondInstanceMap,
-    } = options;
+  /**
+   * Register the atom layer for a frame: mesh, GPU buffers, meta source,
+   * topology atoms. Clears topology because atoms are the structural
+   * anchor — bonds reference atom indices, so any prior bonds become
+   * stale when atoms re-register. Bond entries should be added via
+   * {@link registerBondFrame} after this.
+   *
+   * Stores the owning Frame in MetaRegistry (not borrowed Block handles,
+   * which go stale on frame.setMeta).
+   */
+  registerAtomFrame(options: RegisterAtomFrameOptions): void {
+    const { frame, mesh, block, buffers } = options;
 
-    if (!atomBlock) throw new Error("SceneIndex: atomBlock required");
+    this.meshRegistry.registerAtomLayer(mesh);
+    this.meshRegistry.getAtomState()?.setFrameData(buffers, block.nrows());
+    this.metaRegistry.atoms.setFrame(frame);
 
-    // 1. Setup MeshRegistry
-    this.meshRegistry.registerAtomLayer(atomMesh);
-    if (atomBuffers) {
-      this.meshRegistry
-        .getAtomState()
-        ?.setFrameData(atomBuffers, atomBlock.nrows());
-    }
-
-    // 2. Setup MetaRegistry
-    this.metaRegistry.atoms.setFrame(atomBlock);
-
-    // 3. Rebuild topology from frame
     this.topology.clear();
-    const atomCount = atomBlock.nrows();
+    const atomCount = block.nrows();
     for (let i = 0; i < atomCount; i++) {
       this.topology.addAtom(i);
     }
+  }
 
-    if (bondMesh && bondBlock) {
-      this.meshRegistry.registerBondLayer(bondMesh);
-      if (bondBuffers) {
-        const renderCount = bondInstanceCount ?? bondBlock.nrows();
-        this.meshRegistry
-          .getBondState()
-          ?.setFrameData(bondBuffers, renderCount, bondInstanceMap);
-      }
+  /**
+   * Register the bond layer: mesh, GPU buffers, meta source, and
+   * append bond entries to the existing topology (without clearing
+   * it, so atoms registered by {@link registerAtomFrame} are kept).
+   */
+  registerBondFrame(options: RegisterBondFrameOptions): void {
+    const { frame, mesh, block, buffers, instanceCount, instanceMap } = options;
 
-      this.metaRegistry.bonds.setFrame(bondBlock, atomBlock);
+    this.meshRegistry.registerBondLayer(mesh);
+    const renderCount = instanceCount ?? block.nrows();
+    this.meshRegistry
+      .getBondState()
+      ?.setFrameData(buffers, renderCount, instanceMap);
+    this.metaRegistry.bonds.setFrame(frame);
 
-      const bondCount = bondBlock.nrows();
-      const iAtoms = bondBlock.viewColU32("atomi");
-      const jAtoms = bondBlock.viewColU32("atomj");
-      if (iAtoms && jAtoms) {
-        for (let b = 0; b < bondCount; b++) {
-          this.topology.addBond(b, iAtoms[b], jAtoms[b]);
-        }
-      }
+    const bondCount = block.nrows();
+    const iAtoms = block.viewColU32("atomi");
+    const jAtoms = block.viewColU32("atomj");
+    if (!iAtoms || !jAtoms) return;
+    for (let b = 0; b < bondCount; b++) {
+      this.topology.addBond(b, iAtoms[b], jAtoms[b]);
     }
-
-    this.markAllSaved();
   }
 
   registerBox(options: RegisterBoxOptions): void {
@@ -683,6 +773,12 @@ export class SceneIndex {
   registerBoxFromFrame(mesh: Mesh, meta: Omit<BoxMeta, "type">): void {
     this.meshRegistry.registerBox(mesh);
     this.metaRegistry.box = { type: "box", ...meta };
+  }
+
+  /** Drop the box meta (mesh disposal is the caller's job).
+   *  Scoped to box only — does NOT touch atom/bond layers. */
+  unregisterBox(): void {
+    this.metaRegistry.box = null;
   }
 
   // ============ Creation / Editing APIs ============
@@ -794,22 +890,21 @@ export class SceneIndex {
         }
       }
       atomState.promoteFrameSegmentToEdits();
-      this.metaRegistry.atoms.frameBlock = null;
+      this.metaRegistry.atoms.setFrame(null);
     }
 
     const bondState = this.meshRegistry.getBondState();
     if (bondState && bondState.frameOffset > 0) {
       // Iterate logical bond IDs (not render instance indices) to avoid
       // promoting phantom entries for multi-order bond render instances.
-      for (const bondId of bondState.frameIdToIndex.keys()) {
+      for (const [bondId] of bondState.frameLogicalIds()) {
         const meta = this.metaRegistry.bonds.getMeta(bondId);
         if (meta) {
           this.metaRegistry.bonds.setEdit(bondId, { ...meta });
         }
       }
       bondState.promoteFrameSegmentToEdits();
-      this.metaRegistry.bonds.frameBlock = null;
-      this.metaRegistry.bonds.atomBlock = null;
+      this.metaRegistry.bonds.setFrame(null);
     }
   }
 

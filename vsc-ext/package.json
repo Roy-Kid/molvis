@@ -12,13 +12,15 @@
   },
   "license": "BSD-3-Clause",
   "icon": "image/molvis-icon.png",
-  "version": "0.0.4",
+  "version": "0.0.7",
   "engines": {
     "vscode": "^1.108.1"
   },
   "publisher": "molcrafts",
   "activationEvents": [],
-  "categories": ["Visualization"],
+  "categories": [
+    "Visualization"
+  ],
   "keywords": [
     "molecular",
     "visualization",
@@ -78,6 +80,12 @@
           },
           {
             "filenamePattern": "*.lammpstrj"
+          },
+          {
+            "filenamePattern": "*.cif"
+          },
+          {
+            "filenamePattern": "*.mmcif"
           }
         ],
         "priority": "option"
@@ -87,12 +95,12 @@
       "editor/title": [
         {
           "command": "molvis.quickView",
-          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .zarr",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .zarr || resourceExtname == .cif || resourceExtname == .mmcif",
           "group": "navigation"
         },
         {
           "command": "molvis.openEditor",
-          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .zarr",
+          "when": "resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .zarr || resourceExtname == .cif || resourceExtname == .mmcif",
           "group": "navigation"
         },
         {
@@ -104,7 +112,7 @@
       "explorer/context": [
         {
           "command": "molvis.quickView",
-          "when": "resourceExtname == .zarr || resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj",
+          "when": "resourceExtname == .zarr || resourceExtname == .pdb || resourceExtname == .xyz || resourceExtname == .data || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .cif || resourceExtname == .mmcif",
           "group": "navigation"
         }
       ]
@@ -196,7 +204,10 @@
               "type": "number"
             },
             "cameraMaxRadius": {
-              "type": ["number", "null"]
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "grid": {
               "type": "object",
@@ -265,12 +276,12 @@
     "clean:out": "node -e \"require('node:fs').rmSync('out',{recursive:true,force:true})\"",
     "clean:out-test": "node -e \"require('node:fs').rmSync('out-test',{recursive:true,force:true})\"",
     "clean": "npm-run-all clean:out clean:out-test",
-    "build:extension": "rslib build -c rslib.extension.config.ts",
-    "build:webview": "rslib build -c rslib.webview.config.ts",
+    "build:extension": "rslib build -c rslib.extension.config.mts",
+    "build:webview": "rslib build -c rslib.webview.config.mts",
     "build:all": "npm-run-all build:extension build:webview",
     "build": "npm run build:all",
-    "watch:extension": "rslib build --watch -c rslib.extension.config.ts",
-    "watch:webview": "rslib build --watch -c rslib.webview.config.ts",
+    "watch:extension": "rslib build --watch -c rslib.extension.config.mts",
+    "watch:webview": "rslib build --watch -c rslib.webview.config.mts",
     "watch:typecheck": "tsc --noEmit --watch",
     "watch": "npm-run-all -p watch:extension watch:webview watch:typecheck",
     "dev": "npm run watch",
@@ -289,24 +300,24 @@
     "deploy:ovsx": "ovsx publish"
   },
   "devDependencies": {
-    "@rslib/core": "^0.18.0",
-    "@rsbuild/plugin-react": "^1.4.0",
+    "@rsbuild/plugin-react": "^2.0.0",
+    "@rslib/core": "^0.22.0",
+    "@tailwindcss/postcss": "^4.3.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^25.3.2",
-    "@types/react": "^19.2.8",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@types/vscode": "^1.108.1",
+    "@types/vscode": "^1.120.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.2.1",
+    "@vscode/vsce": "^3.9.1",
+    "autoprefixer": "^10.5.0",
     "npm-run-all": "^4.1.5",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "ovsx": "^0.10.2",
-    "typescript": "^5.9.3",
-    "@tailwindcss/postcss": "^4.1.17",
-    "autoprefixer": "^10.4.22",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.17"
+    "ovsx": "^1.0.0",
+    "postcss": "^8.5.15",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3"
   }
 }

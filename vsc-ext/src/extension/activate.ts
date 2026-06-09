@@ -3,8 +3,8 @@ import {
   affectsMolvisSettings,
   createApplySettingsMessage,
 } from "./configuration";
+import { resolveActiveUri } from "./loading/activeUri";
 import { MolecularFileLoader } from "./loading/molecularFileLoader";
-import { resolveActiveUri } from "./loading/pathUtils";
 import { MolvisEditorProvider } from "./panels/editorProvider";
 import { createHotReloadWatcher } from "./panels/hotReload";
 import { sendToWebview } from "./panels/messaging";

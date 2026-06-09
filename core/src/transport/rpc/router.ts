@@ -8,7 +8,12 @@ import { type Box, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../../app";
 import { ClassicTheme } from "../../artist/presets/classic";
 import { ModernTheme } from "../../artist/presets/modern";
-import { DataSourceModifier } from "../../pipeline/data_source_modifier";
+import type { MarkAtomOverlay } from "../../overlays/mark_atom";
+import type { MarkAtomProps } from "../../overlays/types";
+import {
+  DataSourceModifier,
+  FrameDataSource,
+} from "../../pipeline/data_source_modifier";
 import type { Modifier } from "../../pipeline/modifier";
 import { ModifierRegistry } from "../../pipeline/modifier_registry";
 import { Trajectory } from "../../system/trajectory";
@@ -194,7 +199,11 @@ export function ensureDataSource(
     .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
 
   if (!dataSource) {
-    dataSource = new DataSourceModifier();
+    // Placeholder DS at pipeline head. Tasks #4–#5 of the multi-DS
+    // spec replace this with a `addDataSource(spec)` flow that wraps
+    // the actual loaded data; for now we install an empty
+    // FrameDataSource so the pipeline always has a head marker.
+    dataSource = new FrameDataSource(new Frame());
     pipeline.addModifier(dataSource);
     // Keep data source at the head — downstream modifiers read from its output.
     const currentIndex = pipeline
@@ -215,7 +224,7 @@ function serializeModifier(modifier: Modifier): Record<string, unknown> {
   return {
     id: modifier.id,
     name: modifier.name,
-    category: modifier.category,
+    capabilities: Array.from(modifier.capabilities),
     enabled: modifier.enabled,
     parent_id: modifier.parentId,
   };
@@ -281,7 +290,12 @@ export class RPCRouter {
       ["pipeline.set_enabled", this.handlePipelineSetEnabled],
       ["pipeline.set_parent", this.handlePipelineSetParent],
       ["pipeline.clear", this.handlePipelineClear],
+      ["scene.add_data_source", this.handleAddDataSource],
+      ["scene.remove_data_source", this.handleRemoveDataSource],
+      ["scene.list_data_sources", this.handleListDataSources],
       ["snapshot.take", this.handleSnapshotTake],
+      ["overlay.mark_atom", this.handleOverlayMarkAtom],
+      ["overlay.unmark_atom", this.handleOverlayUnmarkAtom],
       ["view.set_style", this.handleSetStyle],
       ["view.set_theme", this.handleSetTheme],
       ["view.set_mode", this.handleSetMode],
@@ -348,7 +362,11 @@ export class RPCRouter {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      console.error("RPC execution failed", { method, error });
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error(
+        `RPC execution failed [${method}]: ${message}`,
+        stack ?? error,
+      );
       return {
         content: createErrorResponse(
           parsed.id,
@@ -396,11 +414,10 @@ export class RPCRouter {
       return { success: true };
     }
     const frame = new Frame();
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "empty",
       filename: "",
     });
-    ds.setFrame(frame);
     await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -441,25 +458,23 @@ export class RPCRouter {
       );
     }
 
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    ds.setFrame(frame);
     await this.app.setTrajectory(new Trajectory([frame], [box]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
 
-    // Per-atom radius override runs as a follow-up draw_frame so modifier
-    // effects (Hide, Color) from applyPipeline are preserved.
+    // Per-atom radius override runs as a follow-up artist.drawFrame so
+    // modifier effects (Hide, Color) from applyPipeline are preserved.
     if (manualAtomRadii && manualAtomRadii.length > 0) {
-      await Promise.resolve(
-        this.app.execute("draw_frame", {
-          frame: this.app.frame,
-          box: this.app.system.box,
-          options: { atoms: { radii: manualAtomRadii } },
-        }) as void | Promise<void>,
-      );
+      const currentFrame = this.app.frame;
+      if (currentFrame) {
+        await this.app.artist.drawFrame(currentFrame, this.app.system.box, {
+          atoms: { radii: manualAtomRadii },
+        });
+      }
     }
     return { success: true };
   };
@@ -485,7 +500,7 @@ export class RPCRouter {
       );
     }
 
-    this.app.execute("draw_box", { box });
+    this.app.artist.drawBox(box);
 
     const currentFrame = this.app.frame;
     if (currentFrame) {
@@ -497,11 +512,10 @@ export class RPCRouter {
 
   private handleClear: RPCHandler = async () => {
     const frame = new Frame();
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "empty",
       filename: "",
     });
-    ds.setFrame(frame);
     await this.app.setTrajectory(new Trajectory([frame]));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -541,11 +555,10 @@ export class RPCRouter {
     });
 
     const sessionLabel = this.sessionLabel(frames.length);
-    const ds = ensureDataSource(this.app, {
+    ensureDataSource(this.app, {
       sourceType: "backend",
       filename: sessionLabel,
     });
-    ds.setFrame(frames[0]);
     await this.app.setTrajectory(new Trajectory(frames, boxes));
     await this.app.applyPipeline({ fullRebuild: true });
     this.app.world.resetCamera();
@@ -571,17 +584,18 @@ export class RPCRouter {
       const entry = asRecord(raw);
       const id = typeof entry.id === "string" ? entry.id : null;
       const name = typeof entry.name === "string" ? entry.name : null;
-      const category =
-        typeof entry.category === "string" ? entry.category : null;
-      if (id === null || name === null || category === null) {
+      const capabilities = Array.isArray(entry.capabilities)
+        ? entry.capabilities.filter((c): c is string => typeof c === "string")
+        : null;
+      if (id === null || name === null || capabilities === null) {
         throw invalidParams(
-          `scene.apply_state pipeline[${i}] missing id/name/category`,
+          `scene.apply_state pipeline[${i}] missing id/name/capabilities`,
         );
       }
       const enabled = typeof entry.enabled === "boolean" ? entry.enabled : true;
       const parent_id =
         typeof entry.parent_id === "string" ? entry.parent_id : null;
-      return { id, name, category, enabled, parent_id };
+      return { id, name, capabilities, enabled, parent_id };
     });
 
     const rawFrames = Array.isArray(decoded.frames) ? decoded.frames : [];
@@ -732,6 +746,36 @@ export class RPCRouter {
   private handleSnapshotTake: RPCHandler = () =>
     this.app.execute("take_snapshot", {});
 
+  private handleOverlayMarkAtom: RPCHandler = async (params) => {
+    const rawId = params.anchorAtomId;
+    if (typeof rawId !== "number" || !Number.isInteger(rawId) || rawId < 0) {
+      throw invalidParams(
+        "overlay.mark_atom requires 'anchorAtomId' as a non-negative integer",
+      );
+    }
+    if ("position" in params) {
+      throw invalidParams(
+        "overlay.mark_atom does not accept a 'position' — atoms are identified by id, not coordinates",
+      );
+    }
+    const overlay = (await Promise.resolve(
+      this.app.execute<MarkAtomProps, MarkAtomOverlay>(
+        "mark_atom",
+        params as unknown as MarkAtomProps,
+      ),
+    )) as MarkAtomOverlay;
+    return { id: overlay.id };
+  };
+
+  private handleOverlayUnmarkAtom: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    if (!id) {
+      throw invalidParams("overlay.unmark_atom requires an 'id'");
+    }
+    await Promise.resolve(this.app.execute("unmark_atom", { id }));
+    return { success: true };
+  };
+
   private handleSetStyle: RPCHandler = async (params, buffers) => {
     let manualAtomRadii: number[] | null;
     try {
@@ -751,13 +795,12 @@ export class RPCRouter {
 
     const computed = await rebuildCurrentFrame(this.app);
     if (manualAtomRadii && manualAtomRadii.length > 0) {
-      await Promise.resolve(
-        this.app.execute("draw_frame", {
-          frame: computed ?? this.app.frame,
-          box: this.app.system.box,
-          options: { atoms: { radii: manualAtomRadii } },
-        }) as void | Promise<void>,
-      );
+      const target = computed ?? this.app.frame;
+      if (target) {
+        await this.app.artist.drawFrame(target, this.app.system.box, {
+          atoms: { radii: manualAtomRadii },
+        });
+      }
     }
     return { success: true };
   };
@@ -922,6 +965,110 @@ export class RPCRouter {
     this.app.modifierPipeline.clear();
     await this.app.applyPipeline({ fullRebuild: true });
     return { success: true };
+  };
+
+  // ---------------------------------------------------------------------
+  // Multi-data-source commands (multi-data-source-pipeline spec phase 4)
+  // ---------------------------------------------------------------------
+
+  /**
+   * Append a single-frame data source. The decoded frame is wrapped in
+   * a {@link FrameDataSource} (broadcasts across the system's frame
+   * count) and added via `MolvisApp.addDataSource`. Frame-count and
+   * atom-count validations are enforced by `addDataSource` itself; on
+   * mismatch the error propagates to the caller as a JSON-RPC error.
+   *
+   * For multi-frame appends, the backend should send each frame as a
+   * separate `set_trajectory`-style payload — backend-driven trajectory
+   * append is a future RPC.
+   */
+  private handleAddDataSource: RPCHandler = async (params, buffers) => {
+    let frame: Frame;
+    let filename: string;
+    let contributedBlocks: string[] | undefined;
+
+    try {
+      const decoded = decodeBinaryPayload(params, buffers) as Record<
+        string,
+        unknown
+      >;
+      const rawFrame = decoded.frame ?? decoded.frameData;
+      if (!rawFrame) {
+        throw invalidParams("scene.add_data_source requires a 'frame' payload");
+      }
+      const frameData = asRecord(rawFrame) as unknown as SerializedFrameData;
+      frame = buildFrame(frameData);
+
+      filename =
+        requireString(decoded.filename, "filename", { allowNull: true }) ??
+        this.sessionLabel();
+
+      const rawBlocks = decoded.contributed_blocks ?? decoded.contributedBlocks;
+      if (Array.isArray(rawBlocks)) {
+        contributedBlocks = rawBlocks
+          .filter((b): b is string => typeof b === "string")
+          .slice();
+      }
+    } catch (error) {
+      if (error instanceof RPCError) throw error;
+      throw invalidParams(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+
+    const ds = new FrameDataSource(frame, {
+      sourceType: "backend",
+      filename,
+      contributedBlocks,
+    });
+    try {
+      await this.app.addDataSource(ds);
+    } catch (err) {
+      ds.dispose();
+      throw err instanceof Error ? invalidParams(err.message) : err;
+    }
+    return { success: true, id: ds.id };
+  };
+
+  /**
+   * Cascade-remove a DataSourceModifier and its children. The id must
+   * refer to a DS in the pipeline (use `pipeline.remove_modifier` for
+   * non-DS modifiers). System trajectory is re-derived per the spec's
+   * 1a delete-rebuild semantics.
+   */
+  private handleRemoveDataSource: RPCHandler = async (params) => {
+    const id = requireString(params.id, "id");
+    if (!id) {
+      throw invalidParams("scene.remove_data_source requires an 'id'");
+    }
+    try {
+      await this.app.removeDataSource(id);
+    } catch (err) {
+      throw invalidParams(err instanceof Error ? err.message : String(err));
+    }
+    return { success: true };
+  };
+
+  /**
+   * List all DataSourceModifiers in the pipeline with their kind,
+   * filename, sourceType, frame count, and contributed-block summary.
+   * Used by the Python backend to mirror UI state and by `state_sync`
+   * for snapshot round-tripping.
+   */
+  private handleListDataSources: RPCHandler = async () => {
+    const dsList = this.app.modifierPipeline
+      .getModifiers()
+      .filter((m): m is DataSourceModifier => m instanceof DataSourceModifier)
+      .map((ds) => ({
+        id: ds.id,
+        kind: ds.kind,
+        filename: ds.filename,
+        source_type: ds.sourceType,
+        frame_count: ds.frameCount,
+        contributed_blocks: [...ds.contributedBlocks],
+        enabled: ds.enabled,
+      }));
+    return { data_sources: dsList };
   };
 
   // ---------------------------------------------------------------------

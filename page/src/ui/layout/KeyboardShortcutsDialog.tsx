@@ -1,10 +1,10 @@
+import type React from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type React from "react";
 
 interface KeyboardShortcutsDialogProps {
   open: boolean;

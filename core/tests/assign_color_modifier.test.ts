@@ -7,7 +7,7 @@ import {
   COLOR_OVERRIDE_G,
   COLOR_OVERRIDE_R,
 } from "../src/modifiers/ColorByPropertyModifier";
-import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
+import { createDefaultContext, SelectionMask } from "../src/pipeline/types";
 
 function makeFrame(elements: string[]): Frame {
   const frame = new Frame();

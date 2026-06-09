@@ -1,15 +1,15 @@
-import { Button } from "@/components/ui/button";
 import {
   Block,
   Frame,
+  generate3D,
   ModeType,
   type Molvis,
-  generate3D,
   parseSMILES,
 } from "@molvis/core";
 import { AlertCircle, Loader2, MousePointerClick, Wand2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { SidebarSection } from "../../layout/SidebarSection";
 import { DownloadStructureSection } from "./DownloadStructureSection";
 import { KekuleComposer, type KekuleComposerRef } from "./KekuleComposer";

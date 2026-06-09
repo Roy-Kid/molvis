@@ -1,70 +1,92 @@
+---
+mol_project:
+  stage: experimental
+  language: typescript
+  specs_path: .claude/specs/
+  notes_path: .claude/notes/
+  arch:
+    style: monorepo
+  build:
+    command: npm run build:all
+    test: npm test
+    lint: npm run lint
+    format: npm run lint
+    typecheck: npm run typecheck
+  doc:
+    style: TSDoc/JSDoc
+  dev:
+    command: npm run dev:page
+    ready_pattern: "Local:"
+    url_pattern: "(http://localhost:\\d+)"
+---
+
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+<!-- mol:bootstrap:managed begin -->
 
-## Build & Development Commands
+## What this repo is
 
-Monorepo uses plain **npm workspaces** for orchestration — no turborepo/nx.
-Workspace refs use `workspace:*`; rspack-family versions pinned in root
-`overrides`. Each sub-package owns `build` / `dev` / `typecheck` / `test`
-scripts; root scripts chain them in dependency order.
+MolVis — interactive molecular visualization library. Web-first,
+WASM-accelerated, with VSCode and Jupyter integration. Monorepo:
+TypeScript core engine (`@molcrafts/molvis-core`), React 19 web app (`page/`),
+VSCode extension (`vsc-ext/`), Python package (`python/`).
+
+## Where things live
+
+| What | Where |
+|------|-------|
+| Source | `core/src/`, `page/src/`, `vsc-ext/src/`, `python/src/` |
+| Tests | `core/tests/`, `page/tests/`, `vsc-ext/tests/`, `python/tests/` |
+| Public docs | `docs/` |
+| Passive knowledge (decisions, architecture, style) | `.claude/notes/` |
+| Active specs (ephemeral, deleted on completion) | `.claude/specs/` |
+| Agent runtime (skills, agents, hooks) | `.claude/skills/`, `.claude/agents/` |
+
+## Build & test
 
 ```bash
-# Install all workspace dependencies
 npm install
-
-# Development (one dev server at a time)
-npm run dev:page       # page dev server at localhost:3000 (bundles core from source)
-npm run dev:core       # core's own demo at localhost:3000 (rsbuild dev)
-# For Python development: `MOLVIS_PAGE_DIST=page/dist` + a running dev:page.
-
-# Build (core → page → vsc-ext; Python ships the built page bundle)
-npm run build:all              # core + page (→ python/src/molvis/dist/) + vsc-ext
-npm run build:core             # just core (library dist/ for npm publish)
-npm run build:page             # page bundle + copy to python/src/molvis/dist/
-npm run build:vsc-ext          # VSCode extension (bundles core from source)
-
-# Test
-npm test                       # runs each package's test in declaration order
-npm run test:core              # rstest for core (unit + browser)
-npm run test:watch             # core watch
-
-# Typecheck (tsc --noEmit per package)
-npm run typecheck
-
-# Lint & Format (Biome)
-npm run lint
+npm run dev:page       # page dev server at localhost:3000
+npm run build:all      # core + page + vsc-ext
+npm test               # full suite
+npm run typecheck      # tsc --noEmit (all workspaces)
+npm run lint           # biome check --write
 ```
 
-**Core consumption**: `page/`, `vsc-ext/`, and `python/` resolve `@molvis/core`
-via rsbuild/rslib source alias + tsconfig `paths` → `core/src/index.ts`. They
-bundle core from source and do not depend on `core/dist/`. Core's `dist/` is
-only produced by `build:core` for npm publishing.
-
-## Monorepo Structure
+## Monorepo structure
 
 | Package | Path | Purpose |
 |---------|------|---------|
-| `@molvis/core` | `core/` | Rendering engine, commands, modes, pipeline |
-| `page` | `page/` | React 19 web app — the **single frontend** used by every host |
-| `molvis` (extension) | `vsc-ext/` | VSCode extension (custom editor for .pdb/.xyz/.data) |
-| `molvis` (pypi) | `python/` | Python package — drives the page bundle over WebSocket; iframe-hosted in Jupyter |
+| `@molcrafts/molvis-core` | `core/` | Engine: commands, modes, pipeline, rendering |
+| `page` | `page/` | React 19 web app — single frontend for all hosts |
+| `molvis` (ext) | `vsc-ext/` | VSCode extension (custom editor for .pdb/.xyz/.data) |
+| `molcrafts-molvis` (pypi) | `python/` | Python package — drives page bundle over WebSocket |
 
-The Python package is no longer an `npm` workspace — it has no JS
-build of its own. `npm run build:page` copies `page/dist/*` into
-`python/src/molvis/dist/` so the wheel ships the bundle.
+`page/` and `vsc-ext/` bundle `@molcrafts/molvis-core` from source via tsconfig
+`paths` + rsbuild alias. Core's `dist/` is for npm publish only.
+`npm run build:page` copies `page/dist/` into `python/src/molvis/dist/`.
 
-Dependencies flow: `page/` and `vsc-ext/` reference `@molvis/core` via source alias (not a workspace dependency). The Python package ships and serves the built `page/dist/` via `WebSocketTransport`. Core depends on `@babylonjs/*` and `@molcrafts/molrs` (local WASM package linked via `link:../../molrs/molrs-wasm/pkg`). The link is a symlink — rebuild wasm with `wasm-pack build --release --target bundler --scope molcrafts` in `molrs/molrs-wasm/` and rslib/rsbuild picks up the new `pkg/` automatically, no reinstall needed. WASM is a single full-subsystem build; no subpath variants.
+## Critical invariants
 
-## Core Architecture
+- **Immutability**: all data transforms return new objects; never mutate
+- **Command do()/undo() symmetry** — every reversible operation has undo
+- **Pipeline is the single scene-data ingress** — never bypass
+  `DataSourceModifier` when loading; both GUI and RPC funnel through it
+- **`UpdateFrameCommand` must never call `sceneIndex.registerFrame()`**
+- **`core/src/index.ts` must never re-export from `./charts`** (tree-shake)
+- Subpath exports (`./io`, `./io/formats`, `./charts`) are public API
 
-### Layer Separation
+## Architecture notes → `.claude/notes/`
 
-- **MolvisApp** (`app.ts`) — Orchestrator. Initializes all subsystems, provides public API (`start()`, `loadFrame()`, `setTrajectory()`, `seekFrame()`, `applyPipeline()`)
-- **World** (`world.ts`) — Rendering context. BabylonJS scene, camera (ArcRotateCamera, Z-up), lights, post-processing
-- **System** (`system.ts`) — Pure data layer. Owns Trajectory, manages frame navigation, emits `frame-change`/`trajectory-change` events
-- **Artist** (`artist.ts`) — Graphics engine. Translates frame data into GPU thin instances. Owns singleton `atom_base_renderer` and `bond_base_renderer` meshes
-- **SceneIndex** (`scene_index.ts`) — Entity registry. `ImpostorState` manages GPU buffers in two segments: frame data `[0..frameOffset)` and edit data `[frameOffset..count)`. `MetaRegistry` stores atom/bond metadata
+| File | Content |
+|------|---------|
+| `core-arch.md` | Layer separation, command/mode/pipeline/RPC system, thin instances |
+| `wasm-api.md` | molrs Frame/Block/Box/Grid WASM API reference |
+| `frontend-style.md` | Sidebar UI design language (typography, spacing, color, patterns) |
+| `architecture.md` | Blueprint populated by `/mol:map` |
+| `product/` | Vision, differentiators, iteration records |
+
+<!-- mol:bootstrap:managed end -->
 
 ### Command System (`commands/`)
 
@@ -135,14 +157,38 @@ Box.cube(size, origin, pbc_x, pbc_y, pbc_z);
 Box.ortho(lengths, origin, pbc_x, pbc_y, pbc_z);
 new Box(h_matrix, origin, pbc_x, pbc_y, pbc_z);
 
-// WASM memory: manually free Box / Grid / Frame objects you own
+// WASM memory: manually free Box / Frame objects you own
 box.free();
 ```
 
-Volumetric data lives on `Frame.getGrid(name)` / `Frame.gridNames()` /
-`Frame.insertGrid(name, grid)`. A `Grid` holds any number of named
-`Float64Array` scalar fields accessed via `grid.arrayNames()` and
-`grid.getArray(name)`.
+**Cell access for volumetric / box-aware code**: `box.hMatrix()` returns
+the 3×3 cell as a flat column-major `Float64Array[9]` — column j of `h`
+is the j-th lattice vector. Use this when you need the full cell shape
+(triclinic CHGCAR, arbitrary cube voxel vectors); for axis-aligned
+cases `box.lengths()` is enough. Same `WasmArray` lifetime rules as
+`origin()`/`lengths()` — call `.toCopy()` and free the handle.
+
+**Volumetric data is a Block**, not a separate Grid type. A frame with
+voxel data carries a third block named `"grid"` alongside `"atoms"`:
+- `frame.getBlock("grid")` returns the `Block`.
+- `block.shape()` returns `[nx, ny, nz]` (Uint32Array).
+- Each scalar field is a Float64Array column — `density` for cube
+  single-density / `mo_<idx>` for cube multi-orbital files,
+  `total` (+ optionally `diff` / `mx` / `my` / `mz`) for CHGCAR.
+- Build one with `frame.createBlock("grid")` then `block.setColF(name,
+  data)` + `block.setShape([nx, ny, nz])`.
+
+**File readers** (all share the `new R(content)`, `read(step)`,
+`len()`, `isEmpty()`, `free()` shape):
+- Text: `XYZReader`, `PDBReader`, `CIFReader`, `LAMMPSReader`,
+  `LAMMPSTrajReader`, `SDFReader`, **`CubeReader`**, **`CHGCARReader`**.
+- Binary (Uint8Array): `DCDReader`.
+
+`CubeReader` and `CHGCARReader` are single-frame (`len() == 1`,
+`step != 0` returns undefined). `CubeReader` normalises atoms and
+simbox to **Å** on read — Bohr files are converted via the 0.529177
+factor; the original unit is preserved in `frame.meta["cube_units"]`
+for round-tripping.
 
 ## Rendering: Thin Instances
 

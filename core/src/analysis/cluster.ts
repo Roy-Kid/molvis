@@ -279,7 +279,7 @@ function filterBySelection(
   selectedIndices: number[],
   minClusterSize: number,
 ): { clusterIdx: Int32Array; clusterSizes: Uint32Array; numClusters: number } {
-  const selected = new Set(selectedIndices);
+  const _selected = new Set(selectedIndices);
   const filtered = new Int32Array(nParticles).fill(-1);
 
   // Copy only selected atoms' assignments

@@ -1,5 +1,5 @@
-import { type PlotlyModule, loadPlotly } from "./plotly_loader";
-import { CHART_PALETTE, buildConfig, buildLayout, resolveTheme } from "./theme";
+import { loadPlotly, type PlotlyModule } from "./plotly_loader";
+import { buildConfig, buildLayout, CHART_PALETTE, resolveTheme } from "./theme";
 import type {
   AxisConfig,
   LineChartClickEvent,

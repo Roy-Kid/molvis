@@ -1,3 +1,9 @@
+import type {
+  ColorByPropertyModifier as CoreModifier,
+  Molvis,
+} from "@molvis/core";
+import { DEFAULT_CATEGORICAL_COLOR_MAP } from "@molvis/core";
+import type React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,12 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import type {
-  ColorByPropertyModifier as CoreModifier,
-  Molvis,
-} from "@molvis/core";
-import { DEFAULT_CATEGORICAL_COLOR_MAP } from "@molvis/core";
-import type React from "react";
 
 interface Props {
   modifier: CoreModifier;

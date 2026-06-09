@@ -3,7 +3,7 @@ import { describe, expect, test } from "@rstest/core";
 import "./setup_wasm";
 import type { MolvisApp } from "../src/app";
 import { HideSelectionModifier } from "../src/modifiers/HideSelectionModifier";
-import { SelectionMask, createDefaultContext } from "../src/pipeline/types";
+import { createDefaultContext, SelectionMask } from "../src/pipeline/types";
 
 describe("HideSelectionModifier", () => {
   // Mock app

@@ -1,8 +1,8 @@
-import { type PlotlyModule, loadPlotly } from "./plotly_loader";
+import { loadPlotly, type PlotlyModule } from "./plotly_loader";
 import {
-  CHART_DEFAULT_COLOR,
   buildConfig,
   buildLayout,
+  CHART_DEFAULT_COLOR,
   resolveTheme,
 } from "./theme";
 import type { ScatterChartConfig, ScatterClickEvent, ThemeMode } from "./types";

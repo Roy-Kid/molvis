@@ -1,5 +1,5 @@
 import type { Frame } from "@molcrafts/molrs";
-import { BaseModifier, ModifierCategory } from "../pipeline/modifier";
+import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
 import { ExpressionSelector } from "../selection/expression";
@@ -16,21 +16,20 @@ export class ExpressionSelectionModifier extends BaseModifier {
     super(
       id,
       `Expression Select: ${expression}`,
-      ModifierCategory.SelectionSensitive,
+      new Set([ModifierCapability.ProducesSelection]),
     );
   }
 
   validate(_input: Frame, _context: PipelineContext): ValidationResult {
-    if (!this.expression || !this.expression.trim()) {
+    if (!this.expression?.trim()) {
       // Empty expression is valid (selects nothing or acts as pass-through)
       return { valid: true };
     }
-    // We could try to pre-compile here to catch syntax errors
+    // Validate through the same compile path used at evaluation time so the
+    // two cannot disagree (and the compiled result is cached for the upcoming
+    // apply()).
     try {
-      // Just dry run compilation
-      // ExpressionSelector.createEvaluator is private, but we can rely on try/catch available in selectFromFrame?
-      // Or expose validation method? For now simple check.
-      new Function("atom", `return (${this.expression})`);
+      ExpressionSelector.compile(this.expression);
     } catch (e) {
       return {
         valid: false,

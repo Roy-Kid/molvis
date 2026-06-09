@@ -57,10 +57,25 @@ directly — `mountMolvis()` does that for you.
 
 | Method | Purpose |
 |---|---|
-| `loadFrame(frame: Frame): void` | Render a single frame. Replaces any current trajectory. |
-| `loadPdb(text: string): void` | Convenience wrapper that parses PDB text and builds ribbon geometry from HELIX/SHEET records. |
-| `setTrajectory(traj: Trajectory): void` | Attach a multi-frame trajectory; the timeline appears automatically. |
+| `renderFrame(frame: Frame, box?: Box, options?: DrawFrameOption): void` | Render a single frame. Does **not** overwrite the trajectory source — fire-and-forget; errors are logged. |
+| `setTrajectory(traj: Trajectory): Promise<void>` | Attach a multi-frame trajectory; the timeline appears automatically. |
 | `seekFrame(index: number): void` | Jump to a specific frame in the current trajectory. |
+
+`renderFrame` only draws once the app is running — call `await app.start()`
+first, otherwise the render loop is not active and nothing appears.
+
+```typescript
+import { readFrame } from "@molcrafts/molvis-core";
+
+const app = mountMolvis(document.getElementById("viewer")!);
+await app.start();                       // start() must come first
+
+const frame = readFrame(pdbText, "structure.pdb");
+app.renderFrame(frame);                  // optionally: renderFrame(frame, box)
+```
+
+To render a single frame as a navigable trajectory instead, wrap it:
+`await app.setTrajectory(new Trajectory([frame]))`.
 
 ### Interaction
 

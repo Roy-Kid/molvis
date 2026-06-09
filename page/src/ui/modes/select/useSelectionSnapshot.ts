@@ -1,7 +1,7 @@
 import {
   type Molvis,
-  type SelectionState,
   parseSelectionKey,
+  type SelectionState,
 } from "@molvis/core";
 import { useEffect, useMemo, useState } from "react";
 

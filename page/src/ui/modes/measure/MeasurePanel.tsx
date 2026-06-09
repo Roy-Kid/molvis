@@ -1,6 +1,6 @@
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import type { Molvis } from "@molvis/core";
 import type React from "react";
+import { SidebarSection } from "@/ui/layout/SidebarSection";
 
 interface MeasurePanelProps {
   app: Molvis | null;

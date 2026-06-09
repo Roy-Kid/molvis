@@ -1,13 +1,15 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   ExpressionSelectionModifier,
+  FrameDataSource,
   type Modifier,
   SelectModifier,
+  TrajectoryDataSource,
 } from "@molvis/core";
 import { ChevronDown, ChevronRight, GripVertical, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface SortableModifierItemProps {
   modifier: Modifier;
@@ -22,6 +24,14 @@ interface SortableModifierItemProps {
 }
 
 function getDisplayName(modifier: Modifier): string {
+  if (modifier instanceof TrajectoryDataSource) {
+    const label = modifier.filename || modifier.name;
+    return `${label} · Trajectory · ${modifier.frameCount} frame${modifier.frameCount === 1 ? "" : "s"}`;
+  }
+  if (modifier instanceof FrameDataSource) {
+    const label = modifier.filename || modifier.name;
+    return `${label} · Topology · 1 frame`;
+  }
   if (modifier instanceof SelectModifier) {
     return `${modifier.id} · ${modifier.selectionSummary}`;
   }

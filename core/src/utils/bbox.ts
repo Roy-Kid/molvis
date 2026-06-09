@@ -1,4 +1,5 @@
 import type { Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 
 export interface BoundingBox {
   min: [number, number, number];
@@ -7,7 +8,7 @@ export interface BoundingBox {
 
 /**
  * Calculate bounding box for a frame from its atoms block.
- * Uses x, y, z columns.
+ * Uses `x/y/z`, or `xu/yu/zu` when wrapped Cartesian coordinates are absent.
  * @param frame The frame to inspect
  * @param padding Optional padding to add to the box
  * @returns BoundingBox or null if no atoms
@@ -19,9 +20,10 @@ export function calculateBoundingBox(
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.viewColF("x");
-  const y = atoms.viewColF("y");
-  const z = atoms.viewColF("z");
+  const coords = viewAtomCoords(atoms);
+  const x = coords?.x;
+  const y = coords?.y;
+  const z = coords?.z;
 
   if (!x || !y || !z || x.length === 0) return null;
 

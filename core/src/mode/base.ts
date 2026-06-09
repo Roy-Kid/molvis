@@ -1,14 +1,14 @@
-import {
-  KeyboardEventTypes,
-  PointerEventTypes,
-  Vector2,
-  Vector3,
-} from "@babylonjs/core";
 import type {
   AbstractMesh,
   KeyboardInfo,
   Observer,
   PointerInfo,
+} from "@babylonjs/core";
+import {
+  KeyboardEventTypes,
+  PointerEventTypes,
+  Vector2,
+  Vector3,
 } from "@babylonjs/core";
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
@@ -448,12 +448,23 @@ abstract class BaseMode {
         return;
       }
       this.emitInfoTextIfChanged(this.formatHitInfo(hit));
+    } catch (err) {
+      // Hover-pick is fire-and-forget background work — never let it
+      // escape as an unhandled-promise-rejection. Most common cause is
+      // a transient WASM/molrs error mid-frame; the next frame will
+      // re-render and the next hover will retry.
+      console.warn("hover pick failed", err);
     } finally {
       this._hoverPickInFlight = false;
-      if (epoch !== this._interactionEpoch) {
-        return;
-      }
-      if (this._hoverPickDirty && this.shouldRunHoverPickNow()) {
+      // Only chain the next hover-pick when this interaction is still current
+      // (epoch unchanged). Guarded as a single positive condition rather than
+      // an early `return` — a `return` inside `finally` would override the
+      // control flow of the `try`/`catch` above.
+      if (
+        epoch === this._interactionEpoch &&
+        this._hoverPickDirty &&
+        this.shouldRunHoverPickNow()
+      ) {
         this.scheduleHoverPick();
       }
     }
@@ -489,5 +500,4 @@ abstract class BaseMode {
   }
 }
 
-export { ModeType };
-export { BaseMode };
+export { BaseMode, ModeType };

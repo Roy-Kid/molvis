@@ -19,7 +19,6 @@ import {
 } from "../commands/draw";
 import { PlaceMoleculeCommand } from "../commands/place_molecule";
 import { ContextMenuController } from "../ui/menus/controller";
-import { logger } from "../utils/logger";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { BindingEvent, HitResult, MenuItem } from "./types";

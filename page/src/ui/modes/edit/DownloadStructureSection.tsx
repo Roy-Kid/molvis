@@ -1,3 +1,7 @@
+import { type Frame, SDFReader } from "@molvis/core";
+import { Download, Loader2 } from "lucide-react";
+import type React from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -7,10 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Frame, SDFReader } from "@molvis/core";
-import { Download, Loader2 } from "lucide-react";
-import type React from "react";
-import { useState } from "react";
 import { SidebarSection } from "../../layout/SidebarSection";
 
 type Source =

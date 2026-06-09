@@ -1,7 +1,7 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Molvis } from "@molvis/core";
 import { FlaskConical, Pencil } from "lucide-react";
 import type React from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BuilderTab } from "./BuilderTab";
 import { ToolsTab } from "./ToolsTab";
 

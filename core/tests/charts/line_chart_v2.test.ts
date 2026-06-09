@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { LineChart } from "../../src/charts/line_chart";
 import { __setPlotlyForTesting } from "../../src/charts/plotly_loader";
-import { type FakePlotly, callsTo, createFakePlotly } from "./_fake_plotly";
+import { callsTo, createFakePlotly, type FakePlotly } from "./_fake_plotly";
 
 describe("LineChart layout extensions", () => {
   let fake: FakePlotly;

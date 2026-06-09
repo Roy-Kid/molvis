@@ -1,3 +1,14 @@
+import {
+  type ClusterResult,
+  type ConnectivityMode,
+  computeClusters,
+  getCategoricalPalette,
+  type Molvis,
+  type SelectionMask,
+} from "@molvis/core";
+import { AlertCircle, Download, Play } from "lucide-react";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -10,17 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
-import {
-  type ClusterResult,
-  type ConnectivityMode,
-  type Molvis,
-  type SelectionMask,
-  computeClusters,
-  getCategoricalPalette,
-} from "@molvis/core";
-import { AlertCircle, Download, Play } from "lucide-react";
-import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
 
 interface ClusterPanelProps {
   app: Molvis | null;

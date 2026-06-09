@@ -1,5 +1,5 @@
-import { Color4, MeshBuilder, Vector3 } from "@babylonjs/core";
 import type { Mesh, Scene } from "@babylonjs/core";
+import { Color4, MeshBuilder, Vector3 } from "@babylonjs/core";
 
 /**
  * Visual indicator showing the current camera rotation target.

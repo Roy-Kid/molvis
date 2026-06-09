@@ -1,3 +1,5 @@
+import type { Modifier } from "@molvis/core";
+import type React from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,8 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Modifier } from "@molvis/core";
-import type React from "react";
 
 interface DeleteConfirmDialogProps {
   open: boolean;

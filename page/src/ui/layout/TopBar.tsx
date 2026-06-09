@@ -1,8 +1,8 @@
+import type { Molvis } from "@molvis/core";
+import { BrushCleaning, Focus, Maximize, Redo2, Undo2 } from "lucide-react";
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import type { Molvis } from "@molvis/core";
-import { Redo2, Scan, Trash2, Undo2 } from "lucide-react";
-import React from "react";
 import { ExportDialog } from "./ExportDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -11,13 +11,19 @@ import { ThemeToggle } from "./ThemeToggle";
 interface TopBarProps {
   app: Molvis | null;
   currentMode: string;
+  /** Enter "fullscreen" = hide all UI chrome, leaving only the 3D canvas. */
+  onToggleFullscreen: () => void;
 }
 
 /**
  * Compact toolbar with global actions.
  * Mode switching is owned by the right workbench sidebar.
  */
-export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
+export const TopBar: React.FC<TopBarProps> = ({
+  app,
+  currentMode,
+  onToggleFullscreen,
+}) => {
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
 
@@ -89,7 +95,7 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           onClick={handleReset}
           title="Reset Scene"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <BrushCleaning className="h-3.5 w-3.5" />
         </Button>
         <ExportDialog app={app} />
         <Separator orientation="vertical" className="h-4 mx-0.5" />
@@ -121,13 +127,22 @@ export const TopBar: React.FC<TopBarProps> = ({ app, currentMode }) => {
           onClick={handleResetCamera}
           title="Reset Camera"
         >
-          <Scan className="h-3.5 w-3.5" />
+          <Focus className="h-3.5 w-3.5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onToggleFullscreen}
+          title="Fullscreen (hide UI)"
+        >
+          <Maximize className="h-3.5 w-3.5" />
         </Button>
 
         <Separator orientation="vertical" className="h-4 mx-0.5" />
 
         <ThemeToggle />
-        <SettingsDialog />
+        <SettingsDialog app={app} />
       </div>
     </div>
   );

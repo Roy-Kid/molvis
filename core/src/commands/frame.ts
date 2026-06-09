@@ -1,7 +1,8 @@
 import * as BABYLON from "@babylonjs/core";
-import { type Block, Frame } from "@molcrafts/molrs";
+import type { Block, Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
-import { syncSceneToFrame } from "../scene_sync";
+import { viewAtomCoords } from "../io/atom_coords";
+import { buildFrameFromScene } from "../scene_sync";
 import { DType } from "../utils/dtype";
 import { Command, command } from "./base";
 import type { DrawFrameOption } from "./draw";
@@ -124,6 +125,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       };
     }
 
+    // NOTE: frameAtoms/frameBonds are getBlock wrappers and are deliberately
+    // NOT freed — freeing a getBlock/simbox handle corrupts the frame's shared
+    // data on subsequent reads (see memory: project_molrs_handle_ownership).
     // Internal buffer checks inside updateAtomBuffer / updateBondBuffer still
     // throw on soft failures (buffer missing, frame offset mismatch). Translate
     // those into `{success: false}` so the caller falls back to DrawFrameCommand.
@@ -134,9 +138,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
         this.updateBondBuffer(bondMesh, frameAtoms, frameBonds);
       }
 
-      sceneIndex.metaRegistry.atoms.setFrame(frameAtoms);
+      sceneIndex.metaRegistry.atoms.setFrame(this.frame);
       if (frameBonds) {
-        sceneIndex.metaRegistry.bonds.setFrame(frameBonds, frameAtoms);
+        sceneIndex.metaRegistry.bonds.setFrame(this.frame);
       }
 
       this.app.artist.redrawFromSceneIndex(this.frame);
@@ -218,7 +222,10 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       // idx4+3 (radius) unchanged
     }
 
-    atomState.needsUpload = true;
+    // Position-only update: only matrix + instanceData changed. Mark just those
+    // dirty so applyStateToMesh skips re-uploading the unchanged color/picking
+    // buffers — the per-frame GPU-bandwidth win for large systems.
+    atomState.markDirty("matrix", "instanceData");
   }
 
   private updateBondBuffer(
@@ -323,7 +330,9 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
       }
     }
 
-    bondState.needsUpload = true;
+    // Position-only update: bond matrix + impostor data changed; colors,
+    // split, and picking are unchanged. Mark only the touched buffers dirty.
+    bondState.markDirty("matrix", "instanceData0", "instanceData1");
   }
 
   /**
@@ -348,8 +357,7 @@ export class ExportFrameCommand extends Command<{
   do(): {
     frameData: { blocks: FrameDataBlocks; metadata: Record<string, unknown> };
   } {
-    const tempFrame = new Frame();
-    syncSceneToFrame(this.app.world.sceneIndex, tempFrame, {
+    const tempFrame = buildFrameFromScene(this.app.world.sceneIndex, {
       markSaved: false,
     });
 
@@ -357,9 +365,10 @@ export class ExportFrameCommand extends Command<{
 
     const atomsBlock = tempFrame.getBlock("atoms");
     if (atomsBlock) {
-      const x = atomsBlock.viewColF("x");
-      const y = atomsBlock.viewColF("y");
-      const z = atomsBlock.viewColF("z");
+      const coords = viewAtomCoords(atomsBlock);
+      const x = coords?.x;
+      const y = coords?.y;
+      const z = coords?.z;
       const elements =
         atomsBlock.dtype("element") === DType.String
           ? (atomsBlock.copyColStr("element") as string[])

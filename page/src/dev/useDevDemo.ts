@@ -1,6 +1,6 @@
-import type { MountOpts } from "@/lib/mount-opts";
 import type { Molvis } from "@molvis/core";
 import { useEffect } from "react";
+import type { MountOpts } from "@/lib/mount-opts";
 
 /**
  * Seed a Dopamine demo frame when the pipeline is empty. Opt-in only:
@@ -14,9 +14,16 @@ export function useDevDemo(
   setCurrentMode: (mode: string) => void,
   opts: MountOpts,
 ): void {
-  const enabled =
-    opts.demo ??
-    (typeof process !== "undefined" && process.env?.NODE_ENV === "development");
+  // `process` is injected by the bundler in dev builds but is not a browser
+  // global, so reach for it defensively via globalThis (page does not pull in
+  // @types/node — declaring a global `process` here would clash with the
+  // extension host's node types).
+  const proc = (
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process;
+  const enabled = opts.demo ?? proc?.env?.NODE_ENV === "development";
 
   useEffect(() => {
     if (!app) return;
@@ -26,7 +33,7 @@ export function useDevDemo(
     let disposed = false;
 
     const initDemo = async () => {
-      const { DataSourceModifier, Frame, Block, Trajectory } = await import(
+      const { FrameDataSource, Frame, Block, Trajectory } = await import(
         "@molvis/core"
       );
       if (disposed) return;
@@ -110,11 +117,10 @@ export function useDevDemo(
       frame.insertBlock("atoms", atomsBlock);
       frame.insertBlock("bonds", bondsBlock);
 
-      const sourceMod = new DataSourceModifier();
-      sourceMod.setFrame(frame);
-      sourceMod.sourceType = "empty";
-      sourceMod.filename = "Dopamine";
-
+      const sourceMod = new FrameDataSource(frame, {
+        sourceType: "empty",
+        filename: "Dopamine",
+      });
       pipeline.addModifier(sourceMod);
       await app.setTrajectory(new Trajectory([frame]));
       app.setMode("view");

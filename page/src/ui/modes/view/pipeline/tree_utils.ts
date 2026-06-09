@@ -1,8 +1,8 @@
 import {
   ExpressionSelectionModifier,
+  isSelectionProducer,
   type Modifier,
   SelectModifier,
-  isSelectionProducer,
 } from "@molvis/core";
 
 export interface TreeNode {

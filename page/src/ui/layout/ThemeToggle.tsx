@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button";
-import { useTheme } from "@/hooks/useTheme";
 import { Moon, Sun } from "lucide-react";
 import type React from "react";
+import { Button } from "@/components/ui/button";
+import { useTheme } from "@/hooks/useTheme";
 
 export const ThemeToggle: React.FC = () => {
   const { isDark, toggleTheme } = useTheme();

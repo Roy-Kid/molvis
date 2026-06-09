@@ -1,9 +1,9 @@
-import { Label } from "@/components/ui/label";
 import type {
   AssignColorModifier as CoreAssignColorModifier,
   Molvis,
 } from "@molvis/core";
 import type React from "react";
+import { Label } from "@/components/ui/label";
 
 interface ModifierProps {
   modifier: CoreAssignColorModifier;

@@ -1,11 +1,11 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type {
   ExpressionSelectionModifier as CoreExpressionModifier,
   Molvis,
 } from "@molvis/core";
 import type React from "react";
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface ModifierProps {
   modifier: CoreExpressionModifier;

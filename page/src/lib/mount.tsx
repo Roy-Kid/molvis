@@ -1,7 +1,7 @@
+import React from "react";
+import { createRoot, type Root } from "react-dom/client";
 import App from "@/App";
 import { type MountOpts, MountOptsProvider } from "@/lib/mount-opts";
-import React from "react";
-import { type Root, createRoot } from "react-dom/client";
 
 /** Extra options for the host integration (not consumed by React tree). */
 export interface MountHostOpts extends MountOpts {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { __setPlotlyForTesting } from "../../src/charts/plotly_loader";
 import { RawChart } from "../../src/charts/raw_chart";
-import { type FakePlotly, callsTo, createFakePlotly } from "./_fake_plotly";
+import { callsTo, createFakePlotly, type FakePlotly } from "./_fake_plotly";
 
 describe("RawChart", () => {
   let fake: FakePlotly;

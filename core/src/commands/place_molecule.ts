@@ -1,6 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Frame } from "@molcrafts/molrs";
 import type { MolvisApp } from "../app";
+import { viewAtomCoords } from "../io/atom_coords";
 import { Command } from "./base";
 import { CompositeCommand } from "./composite";
 import { DrawAtomCommand, DrawBondCommand } from "./draw";
@@ -35,9 +36,13 @@ export class PlaceMoleculeCommand extends Command<void> {
     if (nAtoms === 0) return;
 
     // Read atom positions
-    const xs = atomBlock.copyColF("x");
-    const ys = atomBlock.copyColF("y");
-    const zs = atomBlock.copyColF("z");
+    const coords = viewAtomCoords(atomBlock);
+    const xs = coords?.x;
+    const ys = coords?.y;
+    const zs = coords?.z;
+    if (!xs || !ys || !zs) {
+      throw new Error("Frame atoms are missing x/y/z and xu/yu/zu coordinates");
+    }
 
     // Read element symbols — try canonical "element", fall back to "symbol" for
     // older molrs builds that still use the atomistic-layer column name.

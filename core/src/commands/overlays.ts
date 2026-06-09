@@ -70,6 +70,8 @@ export class AddOverlayCommand extends Command<Overlay> {
     const overlay = buildOverlay(this.app, this._spec);
     this._added = overlay;
     this.app.overlayManager.add(overlay);
+    // Snap onto the anchor atom (if any) synchronously — see MarkAtomCommand.
+    this.app.syncAnchoredOverlay(overlay);
     this.app.events.emit("overlay-added", { overlay });
     return overlay;
   }
@@ -139,6 +141,7 @@ export class AddOverlaySnapshotCommand extends Command<Overlay> {
 
   do(): Overlay {
     this.app.overlayManager.add(this._overlay);
+    this.app.syncAnchoredOverlay(this._overlay);
     this.app.events.emit("overlay-added", { overlay: this._overlay });
     return this._overlay;
   }
@@ -189,6 +192,9 @@ export class UpdateOverlayCommand extends Command<void> {
       update(patch: Record<string, unknown>): void;
     };
     updatable.update(this._patch);
+    // If the patch changed an atom anchor, resync immediately so the
+    // overlay snaps to the new atom rather than waiting on a render.
+    this.app.syncAnchoredOverlay(overlay);
     this.app.events.emit("overlay-changed", { overlay });
   }
 

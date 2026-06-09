@@ -5,6 +5,7 @@ import {
   LinkedCell,
   RDF as WasmRDF,
 } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 import { estimateRMax } from "./utils";
 
 export interface RdfParams {
@@ -147,12 +148,18 @@ function runWasmRdf(
       opts.volumeOverride !== null
         ? rdfObj.computeWithVolume(nlist, opts.volumeOverride)
         : rdfObj.compute(volumeFrame, nlist);
-    const r = wasmResult.binCenters();
     const gr = wasmResult.rdf();
     const counts = wasmResult.pairCounts();
     const nParticles = wasmResult.numPoints;
     const volume = wasmResult.volume;
     const dr = (opts.rMax - opts.rMin) / opts.nBins;
+    // Bin centers are closed-form in (rMin, dr, i) — compute in JS
+    // and skip the WASM round-trip. Float64 to match the rest of the
+    // molvis numeric stack (atom xyz, box h-matrix, copyColF).
+    const r = new Float64Array(opts.nBins);
+    for (let i = 0; i < opts.nBins; i++) {
+      r[i] = opts.rMin + (i + 0.5) * dr;
+    }
     wasmResult.free();
     return {
       r,
@@ -235,9 +242,10 @@ function buildSubFrame(frame: Frame, indices: number[]): Frame | null {
   const atoms = frame.getBlock("atoms");
   if (!atoms) return null;
 
-  const x = atoms.copyColF("x");
-  const y = atoms.copyColF("y");
-  const z = atoms.copyColF("z");
+  const coords = viewAtomCoords(atoms);
+  const x = coords?.x;
+  const y = coords?.y;
+  const z = coords?.z;
   if (!x || !y || !z) return null;
 
   const n = indices.length;

@@ -57,7 +57,7 @@ export default defineConfig({
   },
 
   tools: {
-    rspack(config, { addRules }) {
+    rspack(config) {
       config.node = {
         ...(config.node || {}),
         __dirname: "mock",

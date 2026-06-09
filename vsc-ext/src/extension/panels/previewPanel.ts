@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
 import { createInitMessage } from "../configuration";
+import { resolveActiveUri } from "../loading/activeUri";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
-import { getDisplayName, resolveActiveUri } from "../loading/pathUtils";
-import type { Logger } from "../types";
-import type { PanelRegistry } from "../types";
+import { getDisplayName } from "../loading/pathUtils";
+import type { Logger, PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import {

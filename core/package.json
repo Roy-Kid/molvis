@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-core",
-  "version": "0.0.8",
+  "version": "0.0.7",
   "type": "module",
   "exports": {
     ".": {
@@ -20,8 +20,24 @@
       "import": "./dist/charts/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "sideEffects": ["./src/commands/*.ts", "./dist/commands/*.js"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MolCrafts/molvis.git",
+    "directory": "core"
+  },
+  "homepage": "https://github.com/MolCrafts/molvis#readme",
+  "bugs": {
+    "url": "https://github.com/MolCrafts/molvis/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "./src/commands/*.ts",
+    "./dist/commands/*.js"
+  ],
   "scripts": {
     "build": "rslib build",
     "build:demo": "rsbuild build",
@@ -30,25 +46,26 @@
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
     "test:watch": "rstest watch",
+    "bench": "rstest run -c rstest.bench.config.ts",
     "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
   },
   "devDependencies": {
-    "@rsbuild/core": "^1.7.0",
-    "@rslib/core": "^0.18.0",
-    "@rstest/browser": "^0.9.4",
-    "@rstest/core": "^0.9.4",
+    "@rsbuild/core": "^2.0.8",
+    "@rslib/core": "^0.22.0",
+    "@rstest/browser": "^0.10.3",
+    "@rstest/core": "^0.10.3",
     "@types/plotly.js-dist-min": "^2.3.4",
-    "playwright": "^1.58.2",
-    "typescript": "^5.9.3"
+    "playwright": "^1.60.0",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@babylonjs/core": "^7.52.2",
-    "@babylonjs/gui": "^7.52.2",
-    "@babylonjs/inspector": "^7.52.2",
-    "@babylonjs/materials": "^7.52.2",
-    "@molcrafts/molrs": "^0.0.12",
-    "plotly.js-dist-min": "^3.5.0",
-    "tslog": "^4.9.3"
+    "@babylonjs/core": "^9.10.1",
+    "@babylonjs/gui": "^9.10.1",
+    "@babylonjs/inspector": "^9.10.1",
+    "@babylonjs/materials": "^9.10.1",
+    "@molcrafts/molrs": "^0.0.17",
+    "plotly.js-dist-min": "^3.5.1",
+    "tslog": "^4.10.2"
   },
   "directories": {
     "example": "examples",

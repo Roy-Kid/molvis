@@ -49,7 +49,7 @@ export function getAtomPositionFromThinInstance(
   }
 
   const meta = sceneIndex.getMeta(mesh.uniqueId, instanceIndex);
-  if (!meta || meta.type !== "atom") {
+  if (meta?.type !== "atom") {
     return null;
   }
 
@@ -86,7 +86,7 @@ export function getBondEndpointsFromThinInstance(
   }
 
   const meta = sceneIndex.getMeta(mesh.uniqueId, instanceIndex);
-  if (!meta || meta.type !== "bond") {
+  if (meta?.type !== "bond") {
     return null;
   }
 

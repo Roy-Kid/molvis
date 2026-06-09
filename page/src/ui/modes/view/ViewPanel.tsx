@@ -1,8 +1,8 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Molvis } from "@molvis/core";
 import { Palette, Workflow } from "lucide-react";
 import type React from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PipelineTab } from "./PipelineTab";
 import { RenderTab } from "./RenderTab";
 

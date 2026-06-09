@@ -1,4 +1,4 @@
-import { type PlotlyModule, loadPlotly } from "./plotly_loader";
+import { loadPlotly, type PlotlyModule } from "./plotly_loader";
 
 /**
  * Untyped passthrough to plotly's ``react`` — meant for callers that

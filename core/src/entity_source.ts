@@ -1,5 +1,22 @@
-import type { Block } from "@molcrafts/molrs";
+import type { Block, Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "./io/atom_coords";
 import { DType } from "./utils/dtype";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Block-handle lifetime
+//
+// molrs's Block handles are *borrows* into a Frame's column-store and are
+// invalidated whenever any code path takes a `with_frame_mut` on the Rust
+// side — most notably `frame.setMeta(...)`, which is fired for every label
+// column on every frame by `scene.set_frame_labels`. A stored Block field
+// becomes stale the moment that happens, and the next `viewCol*` /
+// `copyCol*` call throws "Invalid block handle".
+//
+// The fix is structural: store the Frame (the lifetime owner) and re-derive
+// fresh Block handles on every read. AtomSource / BondSource expose
+// `frameBlock` / `atomBlock` as getters that do exactly that, so existing
+// call sites compile unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ============ Entity Types ============
 
@@ -36,11 +53,50 @@ export type EntityMeta = AtomMeta | BondMeta | BoxMeta;
 // ============ Unified Source Classes ============
 
 export class AtomSource {
-  public frameBlock: Block | null = null;
+  public frame: Frame | null = null;
   public edits = new Map<number, AtomMeta>();
 
-  setFrame(block: Block) {
-    this.frameBlock = block;
+  // Cached element column for the current frame. `copyColStr` materializes the
+  // whole element column out of WASM — doing that per getMeta() call (every
+  // pick / selection-key lookup) is the dominant per-pick cost. The result is a
+  // plain JS string[] copy (NOT a WASM handle), so caching it is safe; it is
+  // invalidated whenever the frame changes via setFrame().
+  private _elementCache: readonly string[] | null = null;
+  private _elementCacheFrame: Frame | null = null;
+
+  /**
+   * Fresh Block handle on every access — never cache the result. Block handles
+   * are fetched lazily so that any WASM-side version bumps (e.g. the
+   * conservative bump that `with_frame_mut` applies when meta/grids are
+   * mutated) never leave us holding a stale handle.
+   */
+  get frameBlock(): Block | null {
+    return this.frame?.getBlock("atoms") ?? null;
+  }
+
+  setFrame(frame: Frame | null) {
+    this.frame = frame;
+    this._elementCache = null;
+    this._elementCacheFrame = null;
+  }
+
+  /**
+   * Element column for the current frame, cached. Returns null when the frame
+   * has no string `element` column (e.g. LAMMPS `type`-only data).
+   */
+  private elementColumn(fb: Block): readonly string[] | null {
+    if (this._elementCacheFrame === this.frame && this._elementCache) {
+      return this._elementCache;
+    }
+    if (fb.dtype("element") !== DType.String) {
+      this._elementCache = null;
+      this._elementCacheFrame = this.frame;
+      return null;
+    }
+    const col = fb.copyColStr("element");
+    this._elementCache = col;
+    this._elementCacheFrame = this.frame;
+    return col;
   }
 
   setEdit(id: number, meta: AtomMeta) {
@@ -89,27 +145,22 @@ export class AtomSource {
       }
     }
 
-    if (this.frameBlock && id < this.frameBlock.nrows()) {
+    const block = this.frameBlock;
+    if (block && id < block.nrows()) {
       if (key === "x" || key === "y" || key === "z") {
-        const col =
-          this.frameBlock.dtype(key) === DType.F64
-            ? this.frameBlock.viewColF(key)
-            : undefined;
+        const coords = viewAtomCoords(block);
+        const col = coords?.[key];
         if (col) return col[id];
       }
       if (key === "element") {
-        const col = this.frameBlock.copyColStr(key);
+        const col = this.elementColumn(block);
         if (col) return col[id];
       }
       const col =
-        this.frameBlock.dtype(key) === DType.F64
-          ? this.frameBlock.viewColF(key)
-          : undefined;
+        block.dtype(key) === DType.F64 ? block.viewColF(key) : undefined;
       if (col) return col[id];
       const strCol =
-        this.frameBlock.dtype(key) === DType.String
-          ? this.frameBlock.copyColStr(key)
-          : undefined;
+        block.dtype(key) === DType.String ? block.copyColStr(key) : undefined;
       if (strCol) return strCol[id];
     }
     return undefined;
@@ -119,26 +170,26 @@ export class AtomSource {
     const edit = this.edits.get(id);
     if (edit) return edit;
 
-    if (this.frameBlock && id < this.frameBlock.nrows()) {
-      return this.getFromFrame(id);
+    const block = this.frameBlock;
+    if (block && id < block.nrows()) {
+      return this.getFromFrame(id, block);
     }
     return null;
   }
 
-  private getFromFrame(index: number): AtomMeta | null {
-    if (!this.frameBlock) return null;
+  private getFromFrame(index: number, block?: Block): AtomMeta | null {
+    const fb = block ?? this.frameBlock;
+    if (!fb) return null;
 
-    const x = this.frameBlock.viewColF("x");
-    const y = this.frameBlock.viewColF("y");
-    const z = this.frameBlock.viewColF("z");
+    const coords = viewAtomCoords(fb);
+    const x = coords?.x;
+    const y = coords?.y;
+    const z = coords?.z;
 
     if (!x || !y || !z) return null;
 
     // Canonical convention: `element` is String when present, absent otherwise.
-    const elements =
-      this.frameBlock.dtype("element") === DType.String
-        ? this.frameBlock.copyColStr("element")
-        : undefined;
+    const elements = this.elementColumn(fb);
 
     return {
       type: "atom",
@@ -150,8 +201,9 @@ export class AtomSource {
 
   getMaxId(): number {
     let max = -1;
-    if (this.frameBlock) {
-      max = Math.max(max, this.frameBlock.nrows() - 1);
+    const block = this.frameBlock;
+    if (block) {
+      max = Math.max(max, block.nrows() - 1);
     }
     for (const id of this.edits.keys()) {
       max = Math.max(max, id);
@@ -161,14 +213,12 @@ export class AtomSource {
 
   *getAllIds(): IterableIterator<number> {
     // Yield all frame IDs (0..frameCount-1), whether overridden by edits or not
-    if (this.frameBlock) {
-      const count = this.frameBlock.nrows();
-      for (let i = 0; i < count; i++) {
-        yield i;
-      }
+    const block = this.frameBlock;
+    const frameCount = block?.nrows() ?? 0;
+    for (let i = 0; i < frameCount; i++) {
+      yield i;
     }
     // Yield edit-only IDs that are outside the frame range
-    const frameCount = this.frameBlock?.nrows() ?? 0;
     for (const id of this.edits.keys()) {
       if (id >= frameCount) {
         yield id;
@@ -178,13 +228,25 @@ export class AtomSource {
 }
 
 export class BondSource {
-  public frameBlock: Block | null = null;
-  public atomBlock: Block | null = null; // Needed for positions
+  public frame: Frame | null = null;
   public edits = new Map<number, BondMeta>();
 
-  setFrame(bondBlock: Block, atomBlock: Block) {
-    this.frameBlock = bondBlock;
-    this.atomBlock = atomBlock;
+  /**
+   * Fresh Block handle on every access — never cache the result. The bonds and
+   * atoms blocks are fetched lazily so WASM-side handle-version bumps never
+   * leave us holding a stale reference.
+   */
+  get frameBlock(): Block | null {
+    return this.frame?.getBlock("bonds") ?? null;
+  }
+
+  /** Current atoms block (needed for bond endpoint positions). Never cache. */
+  get atomBlock(): Block | null {
+    return this.frame?.getBlock("atoms") ?? null;
+  }
+
+  setFrame(frame: Frame | null) {
+    this.frame = frame;
   }
 
   setEdit(id: number, meta: BondMeta) {
@@ -212,23 +274,18 @@ export class BondSource {
       return (edit as unknown as Record<string, unknown>)[key];
     }
 
-    if (this.frameBlock && id < this.frameBlock.nrows()) {
+    const block = this.frameBlock;
+    if (block && id < block.nrows()) {
       if (key === "order") {
         const col =
-          this.frameBlock.dtype(key) === DType.U32
-            ? this.frameBlock.viewColU32(key)
-            : undefined;
+          block.dtype(key) === DType.U32 ? block.viewColU32(key) : undefined;
         if (col) return col[id];
       }
       const col =
-        this.frameBlock.dtype(key) === DType.F64
-          ? this.frameBlock.viewColF(key)
-          : undefined;
+        block.dtype(key) === DType.F64 ? block.viewColF(key) : undefined;
       if (col) return col[id];
       const strCol =
-        this.frameBlock.dtype(key) === DType.String
-          ? this.frameBlock.copyColStr(key)
-          : undefined;
+        block.dtype(key) === DType.String ? block.copyColStr(key) : undefined;
       if (strCol) return strCol[id];
     }
     return undefined;
@@ -238,25 +295,32 @@ export class BondSource {
     const edit = this.edits.get(id);
     if (edit) return edit;
 
-    if (this.frameBlock && this.atomBlock && id < this.frameBlock.nrows()) {
-      return this.getFromFrame(id);
+    const bondBlock = this.frameBlock;
+    const atomBlock = this.atomBlock;
+    if (bondBlock && atomBlock && id < bondBlock.nrows()) {
+      return this.getFromFrame(id, bondBlock, atomBlock);
     }
     return null;
   }
 
-  private getFromFrame(index: number): BondMeta | null {
-    if (!this.frameBlock || !this.atomBlock) return null;
+  private getFromFrame(
+    index: number,
+    bondBlock?: Block,
+    atomBlock?: Block,
+  ): BondMeta | null {
+    const bb = bondBlock ?? this.frameBlock;
+    const ab = atomBlock ?? this.atomBlock;
+    if (!bb || !ab) return null;
 
-    const iAtoms = this.frameBlock.viewColU32("atomi");
-    const jAtoms = this.frameBlock.viewColU32("atomj");
+    const iAtoms = bb.viewColU32("atomi");
+    const jAtoms = bb.viewColU32("atomj");
     const orders =
-      this.frameBlock.dtype("order") === DType.U32
-        ? this.frameBlock.viewColU32("order")
-        : undefined;
+      bb.dtype("order") === DType.U32 ? bb.viewColU32("order") : undefined;
 
-    const ax = this.atomBlock.viewColF("x");
-    const ay = this.atomBlock.viewColF("y");
-    const az = this.atomBlock.viewColF("z");
+    const coords = viewAtomCoords(ab);
+    const ax = coords?.x;
+    const ay = coords?.y;
+    const az = coords?.z;
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 
@@ -276,8 +340,9 @@ export class BondSource {
 
   getMaxId(): number {
     let max = -1;
-    if (this.frameBlock) {
-      max = Math.max(max, this.frameBlock.nrows() - 1);
+    const block = this.frameBlock;
+    if (block) {
+      max = Math.max(max, block.nrows() - 1);
     }
     for (const id of this.edits.keys()) {
       max = Math.max(max, id);
@@ -286,13 +351,11 @@ export class BondSource {
   }
 
   *getAllIds(): IterableIterator<number> {
-    if (this.frameBlock) {
-      const count = this.frameBlock.nrows();
-      for (let i = 0; i < count; i++) {
-        yield i;
-      }
+    const block = this.frameBlock;
+    const frameCount = block?.nrows() ?? 0;
+    for (let i = 0; i < frameCount; i++) {
+      yield i;
     }
-    const frameCount = this.frameBlock?.nrows() ?? 0;
     for (const id of this.edits.keys()) {
       if (id >= frameCount) {
         yield id;

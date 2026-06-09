@@ -1,4 +1,5 @@
 import type { Frame } from "@molcrafts/molrs";
+import { viewAtomCoords } from "../io/atom_coords";
 import type { SceneIndex } from "../scene_index";
 
 /**
@@ -36,7 +37,7 @@ export class ExpressionSelector {
           const key = sceneIndex.getSelectionKeyForAtom(atomId);
           if (key) matchingKeys.push(key);
         }
-      } catch (e) {
+      } catch (_e) {
         // Ignore errors
       }
     }
@@ -55,9 +56,10 @@ export class ExpressionSelector {
     if (!atomsBlock) return [];
 
     const count = atomsBlock.nrows();
-    const xCol = atomsBlock.viewColF("x");
-    const yCol = atomsBlock.viewColF("y");
-    const zCol = atomsBlock.viewColF("z");
+    const coords = viewAtomCoords(atomsBlock);
+    const xCol = coords?.x;
+    const yCol = coords?.y;
+    const zCol = coords?.z;
     const elCol = atomsBlock.dtype("element")
       ? (atomsBlock.copyColStr("element") as string[])
       : undefined;
@@ -78,11 +80,21 @@ export class ExpressionSelector {
         if (evaluator(atomProxy, x, y, z, element, i, i)) {
           indices.push(i);
         }
-      } catch (e) {
+      } catch (_e) {
         // Ignore
       }
     }
     return indices;
+  }
+
+  /**
+   * Compile an expression, throwing on syntax error. Exposed so the pipeline's
+   * {@link ExpressionSelectionModifier} validates through the *exact same*
+   * compile path used for evaluation — a separate validation compile could
+   * accept an expression that then throws at eval time (or vice versa).
+   */
+  static compile(expression: string): ExpressionEvaluator {
+    return ExpressionSelector.createEvaluator(expression);
   }
 
   private static createEvaluator(expression: string): ExpressionEvaluator {
@@ -103,7 +115,7 @@ export class ExpressionSelector {
       _cachedExpression = expression;
       _cachedEvaluator = evaluator as ExpressionEvaluator;
       return evaluator as ExpressionEvaluator;
-    } catch (e) {
+    } catch (_e) {
       throw new Error(`Invalid expression: ${expression}`);
     }
   }

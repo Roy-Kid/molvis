@@ -1,6 +1,6 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Modifier, Molvis } from "@molvis/core";
 import type React from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ModifierProperties } from "../ModifierProperties";
 
 interface PipelinePropertiesPaneProps {

@@ -169,7 +169,7 @@ export class MoveSelectionCommand extends Command<void> {
           bondMesh.uniqueId,
           bondIdx,
         );
-        if (!meta || meta.type !== "bond") continue;
+        if (meta?.type !== "bond") continue;
 
         const offset1 = meta.atomId1 * 16;
         const offset2 = meta.atomId2 * 16;
