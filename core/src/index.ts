@@ -138,6 +138,10 @@ export {
 export { ModeType } from "./mode";
 export { AssignColorModifier } from "./modifiers/AssignColorModifier";
 export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
+export {
+  type BondCriterion,
+  ComputeBondsModifier,
+} from "./modifiers/ComputeBondsModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
