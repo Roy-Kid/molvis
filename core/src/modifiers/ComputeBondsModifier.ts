@@ -1,5 +1,5 @@
 import { Block, Frame, LinkedCell } from "@molcrafts/molrs";
-import { resolveAtomCoordColumns } from "../io/atom_coords";
+import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { PeriodicTable } from "../system/elements";
@@ -86,10 +86,10 @@ export class ComputeBondsModifier extends BaseModifier {
     const atomCount = atoms.nrows();
     if (atomCount < 2) return input;
 
-    // LinkedCell reads the literal x/y/z columns; bail on xu/yu/zu-only frames.
-    const columns = resolveAtomCoordColumns(atoms);
-    if (columns?.x !== "x") {
-      logger.warn("ComputeBonds: requires x/y/z coordinate columns, skipping");
+    // Resolve coordinates (accepts x/y/z or LAMMPS-unwrapped xu/yu/zu).
+    const coords = viewAtomCoords(atoms);
+    if (!coords) {
+      logger.warn("ComputeBonds: missing x/y/z or xu/yu/zu columns, skipping");
       return input;
     }
 
@@ -120,10 +120,25 @@ export class ComputeBondsModifier extends BaseModifier {
     const bondI: number[] = [];
     const bondJ: number[] = [];
 
+    // LinkedCell reads the literal x/y/z columns. For unwrapped xu/yu/zu
+    // frames we alias the coordinates into a throwaway search frame; pair
+    // indices it returns line up with the original atom order. Unwrapped
+    // coordinates use free boundaries (no simbox) — wrapping them across
+    // PBC images would invent spurious bonds.
+    const searchFrame = coords.columns.x === "x" ? input : new Frame();
+    const tempFrame = searchFrame === input ? undefined : searchFrame;
+    if (tempFrame) {
+      const tempAtoms = new Block();
+      tempAtoms.setColF("x", coords.x.slice());
+      tempAtoms.setColF("y", coords.y.slice());
+      tempAtoms.setColF("z", coords.z.slice());
+      tempFrame.insertBlock("atoms", tempAtoms);
+    }
+
     const cell = new LinkedCell(searchCutoff);
     let nlist: ReturnType<LinkedCell["build"]> | undefined;
     try {
-      nlist = cell.build(input);
+      nlist = cell.build(searchFrame);
       const iIdx = nlist.queryPointIndices();
       const jIdx = nlist.pointIndices();
       const dSq = nlist.distSq();
@@ -149,9 +164,20 @@ export class ComputeBondsModifier extends BaseModifier {
     } finally {
       nlist?.free();
       cell.free();
+      tempFrame?.free();
     }
 
     return this.buildResult(input, atoms, bondI, bondJ);
+  }
+
+  /**
+   * Whether `frame` carries the string `element` column the covalent
+   * criterion needs. The UI uses this to disable covalent mode (with an
+   * explanatory tooltip) on frames that only have numeric atom types.
+   */
+  static hasElementData(frame: Frame): boolean {
+    const atoms = frame.getBlock("atoms");
+    return atoms?.dtype("element") === DType.String;
   }
 
   /**

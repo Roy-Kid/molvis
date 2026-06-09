@@ -1,7 +1,8 @@
-import type {
-  BondCriterion,
-  ComputeBondsModifier as CoreModifier,
-  Molvis,
+import {
+  type BondCriterion,
+  ComputeBondsModifier as CoreComputeBondsModifier,
+  type ComputeBondsModifier as CoreModifier,
+  type Molvis,
 } from "@molvis/core";
 import type React from "react";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,15 @@ export const ComputeBondsModifier: React.FC<Props> = ({
 
   const isCovalent = modifier.criterion === "covalent";
 
+  // Covalent mode needs per-atom element symbols. Disable it (with an
+  // explanatory tooltip) when the loaded frame carries only numeric types.
+  const frame = app?.system?.frame ?? null;
+  const hasElementData = frame
+    ? CoreComputeBondsModifier.hasElementData(frame)
+    : true;
+  const covalentDisabledReason =
+    "This frame has no element column (numeric atom types only). Covalent radii need element symbols — use Fixed distance instead.";
+
   return (
     <div className="space-y-4 text-xs">
       <div className="space-y-1">
@@ -60,10 +70,19 @@ export const ComputeBondsModifier: React.FC<Props> = ({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="covalent">Covalent radii</SelectItem>
+            <SelectItem value="covalent" disabled={!hasElementData}>
+              <span title={hasElementData ? undefined : covalentDisabledReason}>
+                Covalent radii
+              </span>
+            </SelectItem>
             <SelectItem value="distance">Fixed distance</SelectItem>
           </SelectContent>
         </Select>
+        {isCovalent && !hasElementData && (
+          <p className="text-[10px] text-destructive">
+            No element column — switch to Fixed distance
+          </p>
+        )}
       </div>
 
       <Separator />

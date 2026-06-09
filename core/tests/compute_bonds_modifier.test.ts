@@ -131,6 +131,36 @@ describe("ComputeBondsModifier", () => {
     expect(result).toBe(frame);
   });
 
+  it("supports LAMMPS-unwrapped xu/yu/zu coordinate columns", () => {
+    const frame = new Frame();
+    const atoms = new Block();
+    atoms.setColF("xu", new Float64Array([0, 1.0, 3.0]));
+    atoms.setColF("yu", new Float64Array([0, 0, 0]));
+    atoms.setColF("zu", new Float64Array([0, 0, 0]));
+    atoms.setColStr("element", ["C", "C", "C"]);
+    frame.insertBlock("atoms", atoms);
+
+    const mod = new ComputeBondsModifier();
+    mod.criterion = "distance";
+    mod.cutoff = 1.5;
+    const result = mod.apply(frame, createDefaultContext(frame));
+    // Same geometry as the x/y/z line test: only 0-1 (d=1.0) bonds.
+    expect(bondSet(result)).toEqual(new Set(["0-1"]));
+  });
+
+  it("hasElementData reflects presence of the element column", () => {
+    const withEl = makeFrame(["C", "O"], [0, 0, 0, 1, 0, 0]);
+    expect(ComputeBondsModifier.hasElementData(withEl)).toBe(true);
+
+    const noEl = new Frame();
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0, 1]));
+    atoms.setColF("y", new Float64Array([0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0]));
+    noEl.insertBlock("atoms", atoms);
+    expect(ComputeBondsModifier.hasElementData(noEl)).toBe(false);
+  });
+
   it("cache key reflects criterion and parameters", () => {
     const mod = new ComputeBondsModifier();
     mod.criterion = "covalent";
