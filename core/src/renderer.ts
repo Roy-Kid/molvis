@@ -3,6 +3,8 @@ import { Frame } from "@molcrafts/molrs";
 import { MolvisApp } from "./app";
 import type { Theme } from "./artist/theme";
 import type { MolvisConfig } from "./config";
+import { applyAutoAttach } from "./pipeline/auto_attach";
+import { DataSourceModifier } from "./pipeline/data_source_modifier";
 import type { MolvisSetting } from "./settings";
 import { Trajectory } from "./system/trajectory";
 
@@ -84,6 +86,17 @@ export class MolvisRenderer {
    */
   async load(input: RenderInput): Promise<void> {
     await this._app.setTrajectory(toTrajectory(input));
+    // setTrajectory is a low-level primitive that installs the data source but
+    // not the Draw modifiers. Mirror the file-loader path: auto-attach default
+    // decoration (DrawAtom/DrawBond/DrawBox) for the loaded blocks, nested
+    // under the head data source, so the scene actually renders headlessly.
+    const frame0 = this._app.frame;
+    if (frame0) {
+      const headDS = this._app.modifierPipeline
+        .getModifiers()
+        .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
+      applyAutoAttach(this._app.modifierPipeline, frame0, undefined, headDS);
+    }
     await this._app.applyPipeline({ changeKind: "full" });
   }
 

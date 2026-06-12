@@ -102,7 +102,15 @@ export {
   type TurntableOptions,
   type TurntableSpec,
 } from "./camera/animator";
-export { fitBoundsToView } from "./camera/fit";
+export { pickViewDirection } from "./camera/auto_view";
+export {
+  type BoxFit,
+  fitBoundsToView,
+  fitBoxToView,
+  type ViewAngles,
+  type ViewFitOptions,
+} from "./camera/fit";
+export { computeObb, type Obb } from "./camera/obb";
 // Programmable camera trajectories (turntable v1)
 export type { CameraPose, Vec3 } from "./camera/pose";
 export { applyPose } from "./camera/pose";
