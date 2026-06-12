@@ -198,6 +198,13 @@ export {
 } from "./pipeline/nato_ids";
 export { SelectionMask } from "./pipeline/types";
 export {
+  type AnimationOptions,
+  MolvisRenderer,
+  type MolvisRendererOptions,
+  type RenderInput,
+  type SnapshotOptions,
+} from "./renderer";
+export {
   type Point2D,
   pointInPolygon,
   simplifyPolyline,
