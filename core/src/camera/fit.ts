@@ -21,44 +21,29 @@ export const FIT_PADDING = 1.2;
 export const FIT_MIN_DISTANCE = 5.0;
 
 /**
- * Compute the camera framing ({@link ViewFit}) for an axis-aligned box.
- *
- * Extracted verbatim from `World.resetCamera` so the turntable orbit and the
- * reset view share one definition and cannot drift. Fits the box's largest
- * dimension to the vertical FOV, widens for narrow (portrait) aspect ratios,
- * applies {@link FIT_PADDING}, and clamps to {@link FIT_MIN_DISTANCE}.
- *
- * @param fov Vertical field of view, in radians.
- * @param aspectRatio Viewport width / height.
+ * Wrap an axis-aligned {@link Bounds} as a world-axis {@link Obb} so it can be
+ * framed by {@link fitBoxToView}. Used where only an AABB is available (e.g. the
+ * turntable orbit) — the box is already axis-aligned, so no PCA is needed.
  */
-export function fitBoundsToView(
-  bounds: Bounds,
-  fov: number,
-  aspectRatio: number,
-): ViewFit {
-  const center = new Vector3(
-    (bounds.min.x + bounds.max.x) * 0.5,
-    (bounds.min.y + bounds.max.y) * 0.5,
-    (bounds.min.z + bounds.max.z) * 0.5,
-  );
-
-  const sizeX = bounds.max.x - bounds.min.x;
-  const sizeY = bounds.max.y - bounds.min.y;
-  const sizeZ = bounds.max.z - bounds.min.z;
-  const maxDim = Math.max(sizeX, sizeY, sizeZ);
-
-  // Distance needed to fit the largest dimension to the vertical FOV.
-  let distance = maxDim / (2 * Math.tan(fov / 2));
-
-  // Portrait viewports see less horizontally — back off to fit width.
-  if (aspectRatio < 1.0) {
-    distance = distance / aspectRatio;
-  }
-
-  distance *= FIT_PADDING;
-  distance = Math.max(distance, FIT_MIN_DISTANCE);
-
-  return { center, radius: distance };
+export function aabbToObb(bounds: Bounds): Obb {
+  return {
+    center: [
+      (bounds.min.x + bounds.max.x) * 0.5,
+      (bounds.min.y + bounds.max.y) * 0.5,
+      (bounds.min.z + bounds.max.z) * 0.5,
+    ],
+    axes: [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ],
+    halfExtents: [
+      (bounds.max.x - bounds.min.x) * 0.5,
+      (bounds.max.y - bounds.min.y) * 0.5,
+      (bounds.max.z - bounds.min.z) * 0.5,
+    ],
+    degenerate: false,
+  };
 }
 
 /** Default azimuth (α) for the reset/"iso" view — 45° in the XY plane. Matches `World`. */

@@ -104,8 +104,8 @@ export {
 } from "./camera/animator";
 export { pickViewDirection } from "./camera/auto_view";
 export {
+  aabbToObb,
   type BoxFit,
-  fitBoundsToView,
   fitBoxToView,
   type ViewAngles,
   type ViewFitOptions,
