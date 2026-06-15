@@ -41,7 +41,7 @@
     "wait-on": "^9.0.10"
   },
   "dependencies": {
-    "@molcrafts/molrs": "^0.0.17"
+    "@molcrafts/molrs": "^0.1.2"
   },
   "overrides": {
     "@rspack/core": "^2.0.5",

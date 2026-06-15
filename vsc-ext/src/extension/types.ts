@@ -56,6 +56,14 @@ export type MolecularFileFormat =
   | "sdf"
   | "dcd";
 
+/**
+ * How a `loadFile` combines with the scene already in the webview. Mirrors
+ * `LoadMode` from `@molvis/core/io`. Omitted ⇒ `"replace"` (first open).
+ * Drops send `"auto"` so dropping a trajectory onto an open `.data` keeps
+ * the topology and animates the positions.
+ */
+export type MolecularLoadMode = "replace" | "append" | "auto";
+
 export type HostToWebviewMessage =
   | {
       type: "init";
@@ -69,6 +77,7 @@ export type HostToWebviewMessage =
       content: MolecularFilePayload;
       filename: string;
       format?: MolecularFileFormat;
+      mode?: MolecularLoadMode;
     }
   | { type: "triggerSave" }
   | { type: "error"; message: string };

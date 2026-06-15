@@ -38,6 +38,9 @@ dev = [
     "pytest-cov",
 ]
 
+[project.scripts]
+molvis = "molvis.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/molcrafts/molvis"
 Repository = "https://github.com/molcrafts/molvis"

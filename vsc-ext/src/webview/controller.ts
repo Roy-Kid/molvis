@@ -102,9 +102,9 @@ export function bootstrapWebview(container: HTMLElement): void {
         }
         break;
       case "loadFile": {
-        const { content, filename, format } = message;
+        const { content, filename, format, mode } = message;
         runAsync(vscode, `Failed to load ${filename}`, () =>
-          loadFileContent(app, content, filename, format),
+          loadFileContent(app, content, filename, format, mode),
         );
         break;
       }
@@ -165,13 +165,14 @@ export function bootstrapWebview(container: HTMLElement): void {
       }
     }
 
-    // OS file manager drag: browser File API (local only)
+    // OS file manager drag: browser File API (local only). "auto" mode keeps
+    // the topology when a trajectory is dropped onto an open structure.
     const file = event.dataTransfer?.files?.[0];
     if (!file) return;
 
     try {
       const content = await file.text();
-      await loadFileContent(app, content, file.name);
+      await loadFileContent(app, content, file.name, undefined, "auto");
     } catch (error) {
       reportError(vscode, `Failed to load dropped file ${file.name}`, error);
     }

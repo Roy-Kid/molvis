@@ -63,7 +63,7 @@
     "@babylonjs/gui": "^9.10.1",
     "@babylonjs/inspector": "^9.10.1",
     "@babylonjs/materials": "^9.10.1",
-    "@molcrafts/molrs": "^0.0.17",
+    "@molcrafts/molrs": "^0.1.2",
     "plotly.js-dist-min": "^3.5.1",
     "tslog": "^4.10.2"
   },

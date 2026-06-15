@@ -5,6 +5,7 @@ import { getDisplayName } from "../loading/pathUtils";
 import type {
   HostToWebviewMessage,
   Logger,
+  MolecularLoadMode,
   WebviewToHostMessage,
 } from "../types";
 
@@ -23,6 +24,7 @@ export async function sendLoadedFile(
   uri: vscode.Uri,
   fileLoader: MolecularFileLoader,
   logger: Logger,
+  mode?: MolecularLoadMode,
 ): Promise<void> {
   try {
     const loaded = await fileLoader.load(uri);
@@ -43,6 +45,7 @@ export async function sendLoadedFile(
       content: loaded.payload,
       filename: loaded.filename,
       ...(format ? { format } : {}),
+      ...(mode ? { mode } : {}),
     });
   } catch (error) {
     logger.error(`MolVis: Failed to load file: ${error}`);
@@ -116,10 +119,13 @@ export async function handleDropUri(
   fileLoader: MolecularFileLoader,
   logger: Logger,
 ): Promise<void> {
+  // A drop is "auto": replace, unless it's a trajectory dropped onto an open
+  // structure with topology — then keep the bonds and animate the positions.
   await sendLoadedFile(
     webview,
     vscode.Uri.parse(uriString),
     fileLoader,
     logger,
+    "auto",
   );
 }
