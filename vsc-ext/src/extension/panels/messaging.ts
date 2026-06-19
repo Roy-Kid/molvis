@@ -28,13 +28,15 @@ export async function sendLoadedFile(
 ): Promise<void> {
   try {
     const loaded = await fileLoader.load(uri);
-    // Zarr directory payloads are typed — the `Record` variant never
-    // needs a format hint because the reader dispatches on payload shape.
-    const format =
-      typeof loaded.payload === "string"
-        ? await resolveFileFormat(loaded.filename)
-        : null;
-    if (typeof loaded.payload === "string" && !format) {
+    // Text (string) and byte (Uint8Array) payloads both need a format hint;
+    // zarr `Record` payloads dispatch on shape and never do.
+    const needsFormat =
+      typeof loaded.payload === "string" ||
+      loaded.payload instanceof Uint8Array;
+    const format = needsFormat
+      ? await resolveFileFormat(loaded.filename)
+      : null;
+    if (needsFormat && !format) {
       logger.info(
         `MolVis: user cancelled format picker for ${loaded.filename}`,
       );
@@ -45,6 +47,7 @@ export async function sendLoadedFile(
       content: loaded.payload,
       filename: loaded.filename,
       ...(format ? { format } : {}),
+      ...(loaded.stream ? { stream: true } : {}),
       ...(mode ? { mode } : {}),
     });
   } catch (error) {
