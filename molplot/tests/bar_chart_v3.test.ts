@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
-import { BarChart } from "../../src/charts/bar_chart";
-import { __setPlotlyForTesting } from "../../src/charts/plotly_loader";
+import { BarChart } from "../src/bar_chart";
+import { __setPlotlyForTesting } from "../src/plotly_loader";
 import { callsTo, createFakePlotly, type FakePlotly } from "./_fake_plotly";
 
 describe("BarChart layout extensions", () => {

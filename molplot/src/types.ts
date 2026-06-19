@@ -14,6 +14,9 @@ export interface LineSeriesConfig {
   hovertemplate?: string;
   /** Default ``2`` — width in pixels of the line stroke. */
   width?: number;
+  /** Trace opacity in ``[0, 1]``. Default ``1`` (opaque). Lower to fade a
+   * background trace (e.g. the raw signal behind a smoothed overlay). */
+  opacity?: number;
   /** ``"lines"`` (default) or ``"lines+markers"``. */
   mode?: "lines" | "lines+markers";
 }

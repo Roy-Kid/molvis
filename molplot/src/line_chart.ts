@@ -240,6 +240,7 @@ export class LineChart {
           width: s.width ?? 2,
         },
       };
+      if (s.opacity !== undefined) trace.opacity = s.opacity;
       const tpl = s.hovertemplate ?? this.hovertemplate;
       if (tpl !== undefined) trace.hovertemplate = tpl;
       return trace;

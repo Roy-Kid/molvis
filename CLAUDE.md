@@ -57,14 +57,21 @@ npm run lint           # biome check --write
 
 | Package | Path | Purpose |
 |---------|------|---------|
-| `@molcrafts/molvis-core` | `core/` | Engine: commands, modes, pipeline, rendering |
+| `@molcrafts/molvis-core` | `core/` | Engine: commands, modes, pipeline, rendering (babylon.js + io) |
+| `@molcrafts/molplot` | `molplot/` | Plotly-based charting primitives (line/scatter/bar/gantt/raw) |
 | `page` | `page/` | React 19 web app — single frontend for all hosts |
 | `molvis` (ext) | `vsc-ext/` | VSCode extension (custom editor for .pdb/.xyz/.data) |
 | `molcrafts-molvis` (pypi) | `python/` | Python package — drives page bundle over WebSocket |
 
-`page/` and `vsc-ext/` bundle `@molcrafts/molvis-core` from source via tsconfig
-`paths` + rsbuild alias. Core's `dist/` is for npm publish only.
-`npm run build:page` copies `page/dist/` into `python/src/molvis/dist/`.
+`page/` and `vsc-ext/` bundle `@molcrafts/molvis-core` and `@molcrafts/molplot`
+from source via tsconfig `paths` + rsbuild alias. Each package's `dist/` is for
+npm publish only. `npm run build:page` copies `page/dist/` into
+`python/src/molvis/dist/`.
+
+**`molplot` carries the only `plotly` dependency.** `core` must never depend on
+plotly or re-export charting — anything plotly-shaped lives in `molplot`. The
+package is self-contained (charts import only `./theme` / `./types` /
+`./plotly_loader` + plotly) and depends on nothing else in the monorepo.
 
 ## Critical invariants
 
@@ -73,8 +80,10 @@ npm run lint           # biome check --write
 - **Pipeline is the single scene-data ingress** — never bypass
   `DataSourceModifier` when loading; both GUI and RPC funnel through it
 - **`UpdateFrameCommand` must never call `sceneIndex.registerFrame()`**
-- **`core/src/index.ts` must never re-export from `./charts`** (tree-shake)
-- Subpath exports (`./io`, `./io/formats`, `./charts`) are public API
+- **`core` must never depend on plotly or own charting** — charts live in the
+  separate `@molcrafts/molplot` package
+- Core subpath exports (`./io`, `./io/formats`) are public API; charting is the
+  `@molcrafts/molplot` package root
 
 ## Architecture notes → `.claude/notes/`
 

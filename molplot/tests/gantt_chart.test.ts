@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
-import { GanttChart } from "../../src/charts/gantt_chart";
-import { __setPlotlyForTesting } from "../../src/charts/plotly_loader";
+import { GanttChart } from "../src/gantt_chart";
+import { __setPlotlyForTesting } from "../src/plotly_loader";
 import { callsTo, createFakePlotly, type FakePlotly } from "./_fake_plotly";
 
 const COLORS = {

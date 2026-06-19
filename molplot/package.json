@@ -1,25 +1,17 @@
 {
-  "name": "@molcrafts/molvis-core",
-  "version": "0.1.0",
+  "name": "@molcrafts/molplot",
+  "version": "0.0.1",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./io": {
-      "types": "./dist/io/index.d.ts",
-      "import": "./dist/io/index.js"
-    },
-    "./io/formats": {
-      "types": "./dist/io/formats.d.ts",
-      "import": "./dist/io/formats.js"
     }
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MolCrafts/molvis.git",
-    "directory": "core"
+    "directory": "molplot"
   },
   "homepage": "https://github.com/MolCrafts/molvis#readme",
   "bugs": {
@@ -30,19 +22,11 @@
     "README.md",
     "LICENSE"
   ],
-  "sideEffects": [
-    "./src/commands/*.ts",
-    "./dist/commands/*.js"
-  ],
   "scripts": {
     "build": "rslib build",
-    "build:demo": "rsbuild build",
-    "dev": "rsbuild dev",
-    "preview:demo": "rsbuild preview",
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
     "test:watch": "rstest watch",
-    "bench": "rstest run -c rstest.bench.config.ts",
     "release:check": "npm run build && npm run test && npm_config_cache=/tmp/npm-cache npm pack --dry-run"
   },
   "devDependencies": {
@@ -50,22 +34,17 @@
     "@rslib/core": "^0.22.0",
     "@rstest/browser": "^0.10.3",
     "@rstest/core": "^0.10.3",
+    "@types/plotly.js-dist-min": "^2.3.4",
     "playwright": "^1.60.0",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@babylonjs/core": "^9.10.1",
-    "@babylonjs/gui": "^9.10.1",
-    "@babylonjs/inspector": "^9.10.1",
-    "@babylonjs/materials": "^9.10.1",
-    "@molcrafts/molrs": "^0.1.2",
-    "tslog": "^4.10.2"
+    "plotly.js-dist-min": "^3.5.1"
   },
   "directories": {
-    "example": "examples",
     "test": "tests"
   },
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
-  "description": "Molvis: interactive molecular visualization library"
+  "description": "Molplot: plotly-based scientific charting primitives for MolVis"
 }

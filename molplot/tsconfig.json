@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "paths": {
+      "@molcrafts/molplot": ["./src/index.ts"],
+      "@molcrafts/molplot/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

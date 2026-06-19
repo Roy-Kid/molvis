@@ -20,9 +20,9 @@ export default defineConfig({
         import.meta.dirname,
         "../core/src/io/index.ts",
       ),
-      "@molvis/core/charts": path.resolve(
+      "@molcrafts/molplot": path.resolve(
         import.meta.dirname,
-        "../core/src/charts/index.ts",
+        "../molplot/src/index.ts",
       ),
     },
   },
@@ -31,7 +31,10 @@ export default defineConfig({
       __WASM_INLINE__: "false",
     },
     watchFiles: {
-      paths: [path.resolve(import.meta.dirname, "../core/src/**")],
+      paths: [
+        path.resolve(import.meta.dirname, "../core/src/**"),
+        path.resolve(import.meta.dirname, "../molplot/src/**"),
+      ],
     },
   },
   performance: {

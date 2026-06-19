@@ -1,4 +1,4 @@
-import type { PlotlyModule } from "../../src/charts/plotly_loader";
+import type { PlotlyModule } from "../src/plotly_loader";
 
 export interface FakeCall {
   method: string;

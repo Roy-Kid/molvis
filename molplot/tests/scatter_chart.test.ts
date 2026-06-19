@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
-import { __setPlotlyForTesting } from "../../src/charts/plotly_loader";
-import { ScatterChart } from "../../src/charts/scatter_chart";
+import { __setPlotlyForTesting } from "../src/plotly_loader";
+import { ScatterChart } from "../src/scatter_chart";
 import { callsTo, createFakePlotly, type FakePlotly } from "./_fake_plotly";
 
 describe("ScatterChart", () => {
