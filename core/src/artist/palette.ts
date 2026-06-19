@@ -1028,8 +1028,10 @@ const ELEMENT_ORDER = [
   "Og",
 ];
 
-// Register cpk (118 elements)
-registerLookup("cpk", CPK_RECORD, undefined, ELEMENT_ORDER);
+// Register cpk (118 elements). Unknown/unmapped elements fall back to white
+// rather than the default magenta — a neutral atom reads better against the
+// dark canvas than a saturated "missing" marker.
+registerLookup("cpk", CPK_RECORD, "#FFFFFF", ELEMENT_ORDER);
 
 // Register ovito (118 elements)
 registerLookup("ovito", OVITO_RECORD, "#CCCCCC", ELEMENT_ORDER);

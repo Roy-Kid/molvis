@@ -18,6 +18,7 @@ import {
   getAllAcceptExtensions,
   inferFormatFromFilename,
 } from "./formats";
+import { normalizeAtomElements } from "./normalize_coords";
 
 export {
   canStream,
@@ -148,6 +149,7 @@ function buildLazyTrajectory(
       if (!frame) {
         throw new Error(`${format} reader returned no frame at step ${index}`);
       }
+      normalizeAtomElements(frame);
 
       if (cache.size >= FRAME_CACHE_SIZE) evictOldest(cache);
       cache.set(index, frame);
@@ -262,6 +264,7 @@ export function readFrames(
       if (!frame) {
         throw new Error(`${resolved} reader returned no frame at step ${step}`);
       }
+      normalizeAtomElements(frame);
       frames.push(frame);
     }
   } finally {
