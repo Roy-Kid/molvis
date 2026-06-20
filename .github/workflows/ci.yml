@@ -17,7 +17,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Biome lint & format check
         run: npx biome check
@@ -32,7 +32,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Typecheck (core / page / vsc-ext)
         run: npm run typecheck
@@ -47,7 +47,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -66,7 +66,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build core
         run: npm run build:core
@@ -82,7 +82,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build page
         run: npm run build:page
@@ -98,7 +98,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build vsc-ext
         run: npm run build:vsc-ext

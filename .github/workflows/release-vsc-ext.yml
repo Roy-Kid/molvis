@@ -22,7 +22,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
+      - run: npm install
 
       - name: Build vsc-ext
         run: npm run build:vsc-ext
