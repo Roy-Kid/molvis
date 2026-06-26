@@ -85,6 +85,7 @@ export {
 } from "./artist/palette";
 export { ClassicTheme } from "./artist/presets/classic";
 export { ModernTheme } from "./artist/presets/modern";
+export { VividTheme } from "./artist/presets/vivid";
 export type { RepresentationStyle } from "./artist/representation";
 export {
   BALL_AND_STICK,

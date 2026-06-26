@@ -69,6 +69,7 @@ describe("categorical palettes", () => {
       "cpk",
       DEFAULT_CATEGORICAL_COLOR_MAP,
       "ovito",
+      "vivid",
     ]);
   });
 
@@ -81,6 +82,7 @@ describe("categorical palettes", () => {
       { name: "cpk", kind: "element", size: 118 },
       { name: DEFAULT_CATEGORICAL_COLOR_MAP, kind: "categorical", size: 256 },
       { name: "ovito", kind: "element", size: 118 },
+      { name: "vivid", kind: "element", size: 118 },
     ]);
 
     const cpk = getPaletteDefinition("cpk");

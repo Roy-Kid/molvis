@@ -591,7 +591,7 @@ export async function loadFileStream(
 
   const provider: AsyncFrameProvider = {
     length: frameCount,
-    get: (index) => runtime.loadFrame(index),
+    get: (index) => runtime.loadFrameLatest(index),
     dispose: () => {
       void runtime.close();
     },

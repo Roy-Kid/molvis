@@ -12,9 +12,24 @@ export class CommonMenuItems {
   static snapshot(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Snapshot",
+      title: "Snapshot to Clipboard",
       action: () => {
-        app.world.takeScreenShot();
+        void app
+          .copyScreenshotToClipboard()
+          .then(() =>
+            app.events.emit("status-message", {
+              text: "Snapshot copied to clipboard",
+              type: "info",
+            }),
+          )
+          .catch((err: unknown) =>
+            app.events.emit("status-message", {
+              text: `Snapshot failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+              type: "error",
+            }),
+          );
       },
     };
   }
@@ -25,12 +40,23 @@ export class CommonMenuItems {
    * touches the writer.
    */
   static export(app: MolvisApp): MenuItem {
+    // Writable formats (must match io/writer.ts `ExportFormat`). Selecting one
+    // emits `export-requested` with the chosen format; the host owns the write.
+    const formats: Array<{ format: string; label: string }> = [
+      { format: "pdb", label: "PDB (.pdb)" },
+      { format: "xyz", label: "XYZ (.xyz)" },
+      { format: "lammps", label: "LAMMPS data (.lammps)" },
+    ];
     return {
-      type: "button",
+      type: "folder",
       title: "Export",
-      action: () => {
-        app.events.emit("export-requested", undefined);
-      },
+      items: formats.map(({ format, label }) => ({
+        type: "button",
+        title: label,
+        action: () => {
+          app.events.emit("export-requested", { format });
+        },
+      })),
     };
   }
 
@@ -65,6 +91,11 @@ export class CommonMenuItems {
    */
   static separator(): MenuItem {
     return { type: "separator" };
+  }
+
+  /** Wrap items in a flyout submenu (rendered by MolvisFolder). */
+  static submenu(title: string, items: MenuItem[]): MenuItem {
+    return { type: "folder", title, items };
   }
 
   /**

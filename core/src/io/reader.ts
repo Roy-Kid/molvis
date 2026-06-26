@@ -4,10 +4,15 @@ import {
   CubeReader,
   DCDReader,
   type Frame,
+  GROReader,
   LAMMPSReader,
   LAMMPSTrajReader,
+  MOL2Reader,
   PDBReader,
+  POSCARReader,
   SDFReader,
+  TRRReader,
+  XTCReader,
   XYZReader,
 } from "@molcrafts/molrs";
 import { type FrameProvider, Trajectory } from "../system/trajectory";
@@ -65,6 +70,12 @@ function openTextReader(content: string, format: FileFormat): MultiFrameReader {
       return new CubeReader(content);
     case "chgcar":
       return new CHGCARReader(content);
+    case "gro":
+      return new GROReader(content);
+    case "mol2":
+      return new MOL2Reader(content);
+    case "poscar":
+      return new POSCARReader(content);
     default:
       // Unreachable in practice: loadTextTrajectory rejects
       // payload="binary" formats before reaching this dispatch. Kept
@@ -84,6 +95,10 @@ function openBinaryReader(
   switch (format) {
     case "dcd":
       return new DCDReader(bytes);
+    case "trr":
+      return new TRRReader(bytes);
+    case "xtc":
+      return new XTCReader(bytes);
     default:
       // Unreachable in practice: loadBinaryTrajectory rejects non-binary
       // formats via descriptor.payload before reaching this dispatch.

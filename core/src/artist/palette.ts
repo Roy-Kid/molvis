@@ -277,6 +277,117 @@ const OVITO_RECORD = {
   Zr: "#00FF00",
 } as const;
 
+// ---------------------------------------------------------------------------
+//  vivid — a brighter, livelier element palette derived from CPK. Tuned to
+//  read well on a dark canvas: dull/dark elements are lifted toward a luminous
+//  mid band and harsh fully-saturated ones are softened slightly, so the
+//  result is vibrant without being garish. The elements that dominate real
+//  structures are hand-tuned; the long tail is derived from CPK by the same
+//  lift-and-soften rule (`vividize`).
+// ---------------------------------------------------------------------------
+
+function hexToHsl(hex: string): [number, number, number] {
+  const h0 = hex.startsWith("#") ? hex.slice(1) : hex;
+  const r = Number.parseInt(h0.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(h0.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(h0.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  const d = max - min;
+  if (d > 1e-6) {
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) {
+      h = (g - b) / d + (g < b ? 6 : 0);
+    } else if (max === g) {
+      h = (b - r) / d + 2;
+    } else {
+      h = (r - g) / d + 4;
+    }
+    h /= 6;
+  }
+  return [h, s, l];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue2rgb = (p: number, q: number, t: number): number => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  let r = l;
+  let g = l;
+  let b = l;
+  if (s !== 0) {
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+  const toHex = (v: number) =>
+    Math.round(Math.min(1, Math.max(0, v)) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+/** Lift a CPK color into the vivid band: raise lightness toward a luminous
+ *  mid-tone (so dark/dull elements pop) and gently cap saturation (so nothing
+ *  turns neon). Hand overrides below win for the common elements. */
+function vividize(hex: string): string {
+  const [h, s, l] = hexToHsl(hex);
+  const s2 = Math.min(0.8, s * 0.9);
+  const l2 = Math.min(0.82, Math.max(0.45, 0.5 + (l - 0.5) * 0.6 + 0.06));
+  return hslToHex(h, s2, l2);
+}
+
+// Hand-tuned soft-vivid colors for the elements that dominate real structures.
+const VIVID_OVERRIDES: Record<string, string> = {
+  H: "#EDF1F7",
+  He: "#C7F2F2",
+  Li: "#D49CFF",
+  B: "#FFB0B0",
+  C: "#C5CAD3",
+  N: "#5B7BFF",
+  O: "#FF5A5A",
+  F: "#8FE36B",
+  Ne: "#BEE9F7",
+  Na: "#B97CF5",
+  Mg: "#97E84A",
+  Al: "#D9BABA",
+  Si: "#F2CE9A",
+  P: "#FF9B45",
+  S: "#FFD740",
+  Cl: "#5FD86F",
+  Ar: "#8FD9E6",
+  K: "#9E5CE6",
+  Ca: "#6FE34F",
+  Fe: "#EE7B43",
+  Co: "#F2A0AE",
+  Ni: "#62D662",
+  Cu: "#DC8E4A",
+  Zn: "#969AD0",
+  Br: "#D2554F",
+  I: "#B45FD6",
+  Au: "#FFD84D",
+  Ag: "#D6D6E6",
+};
+
+const VIVID_RECORD: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const [el, hex] of Object.entries(CPK_RECORD)) {
+    out[el] = VIVID_OVERRIDES[el] ?? vividize(hex);
+  }
+  return out;
+})();
+
 const GLASBEY_VIVID_COLORS = [
   "#d70000",
   "#8a3dff",
@@ -1035,6 +1146,10 @@ registerLookup("cpk", CPK_RECORD, "#FFFFFF", ELEMENT_ORDER);
 
 // Register ovito (118 elements)
 registerLookup("ovito", OVITO_RECORD, "#CCCCCC", ELEMENT_ORDER);
+
+// Register vivid (brighter, livelier default element palette). Unknown
+// elements fall back to a bright neutral grey rather than white.
+registerLookup("vivid", VIVID_RECORD, "#CDD2DA", ELEMENT_ORDER);
 
 // Register glasbey-vivid (256 categorical colors)
 register(

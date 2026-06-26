@@ -18,7 +18,12 @@ export type FileFormat =
   | "sdf"
   | "dcd"
   | "cube"
-  | "chgcar";
+  | "chgcar"
+  | "gro"
+  | "mol2"
+  | "poscar"
+  | "trr"
+  | "xtc";
 
 /**
  * Whether a format's reader consumes the file as a UTF-8 string (`"text"`)
@@ -141,6 +146,51 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     payload: "text",
     streaming: "eager-only",
   },
+  {
+    format: "gro",
+    label: "GROMACS GRO",
+    description:
+      "GROMACS structure / trajectory; fixed-column atoms + box, coordinates nm\u2192\u00c5 on read (.gro)",
+    extensions: ["gro"],
+    payload: "text",
+    streaming: "eager-only",
+  },
+  {
+    format: "mol2",
+    label: "Tripos MOL2",
+    description:
+      "Tripos MOL2 connection table; @<TRIPOS> sections, atoms + bonds (.mol2)",
+    extensions: ["mol2"],
+    payload: "text",
+    streaming: "eager-only",
+  },
+  {
+    format: "poscar",
+    label: "VASP POSCAR / CONTCAR",
+    description:
+      "VASP crystal cell + atoms (filename POSCAR/CONTCAR or .poscar/.contcar/.vasp)",
+    extensions: ["poscar", "contcar", "vasp"],
+    payload: "text",
+    streaming: "eager-only",
+  },
+  {
+    format: "trr",
+    label: "GROMACS TRR",
+    description:
+      "GROMACS full-precision binary trajectory; coordinates nm\u2192\u00c5 on read (.trr)",
+    extensions: ["trr"],
+    payload: "binary",
+    streaming: "eager-only",
+  },
+  {
+    format: "xtc",
+    label: "GROMACS XTC",
+    description:
+      "GROMACS compressed binary trajectory; coordinates nm\u2192\u00c5 on read (.xtc)",
+    extensions: ["xtc"],
+    payload: "binary",
+    streaming: "eager-only",
+  },
 ];
 
 /** Returns the descriptor for a canonical FileFormat. */
@@ -201,6 +251,16 @@ export function inferFormatFromFilename(filename: string): FileFormat | null {
   if (base === "CHGCAR" || base.startsWith("CHGCAR_")) {
     return "chgcar";
   }
+  // VASP structure files are conventionally named POSCAR / CONTCAR (with
+  // optional suffixes), uppercase and extension-less like CHGCAR.
+  if (
+    base === "POSCAR" ||
+    base === "CONTCAR" ||
+    base.startsWith("POSCAR_") ||
+    base.startsWith("CONTCAR_")
+  ) {
+    return "poscar";
+  }
 
   // 2. Extension match.
   const ext = extensionOf(filename);
@@ -237,7 +297,10 @@ export function isBinaryFormat(format: FileFormat): boolean {
  */
 export function canStream(
   format: FileFormat,
-): format is Exclude<FileFormat, "dcd" | "cif" | "cube" | "chgcar"> {
+): format is Exclude<
+  FileFormat,
+  "dcd" | "cif" | "cube" | "chgcar" | "gro" | "mol2" | "poscar" | "trr" | "xtc"
+> {
   return describeFormat(format).streaming !== "eager-only";
 }
 

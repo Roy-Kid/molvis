@@ -26,7 +26,16 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
 
   useEffect(() => {
     if (!app) return;
-    const openDialog = () => setOpen(true);
+    const openDialog = (payload?: { format?: string }) => {
+      // Honor the format chosen from the right-click Export submenu by
+      // swapping the filename extension; the dialog infers format from it.
+      if (payload?.format) {
+        setFilename(
+          (prev) => `${prev.replace(/\.[^.]+$/, "")}.${payload.format}`,
+        );
+      }
+      setOpen(true);
+    };
     app.events.on("export-requested", openDialog);
     return () => app.events.off("export-requested", openDialog);
   }, [app]);

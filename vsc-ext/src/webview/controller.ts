@@ -8,7 +8,6 @@ import {
 import {
   exportFrame,
   type FileFormat,
-  inferFormatFromFilename,
   loadFileContent,
   loadFileStream,
 } from "@molvis/core/io";
@@ -155,16 +154,17 @@ export function bootstrapWebview(
   // Right-click "Export" in the canvas context menu emits export-requested.
   // Build a payload from the current scene and round-trip through saveFile,
   // which the host turns into a Save dialog.
-  app.events.on("export-requested", () => {
+  app.events.on("export-requested", (payload) => {
     runAsync(vscode, "Failed to export scene", async () => {
-      const suggestedName = "molvis.pdb";
-      const format = inferFormatFromFilename(suggestedName) ?? "pdb";
-      const payload = exportFrame(app.world.sceneIndex, {
+      // Format chosen from the Export ▸ <format> submenu (defaults to pdb).
+      const format = payload?.format ?? "pdb";
+      const suggestedName = `molvis.${format}`;
+      const result = exportFrame(app.world.sceneIndex, {
         format,
         filename: suggestedName,
       });
-      const blob = new Blob([payload.content], { type: payload.mime });
-      await app.saveFile(blob, payload.suggestedName);
+      const blob = new Blob([result.content], { type: result.mime });
+      await app.saveFile(blob, result.suggestedName);
     });
   });
 

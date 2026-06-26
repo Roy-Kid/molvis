@@ -190,14 +190,27 @@ voxel data carries a third block named `"grid"` alongside `"atoms"`:
 **File readers** (all share the `new R(content)`, `read(step)`,
 `len()`, `isEmpty()`, `free()` shape):
 - Text: `XYZReader`, `PDBReader`, `CIFReader`, `LAMMPSReader`,
-  `LAMMPSTrajReader`, `SDFReader`, **`CubeReader`**, **`CHGCARReader`**.
-- Binary (Uint8Array): `DCDReader`.
+  `LAMMPSTrajReader`, `SDFReader`, **`CubeReader`**, **`CHGCARReader`**,
+  **`GROReader`**, **`MOL2Reader`**, **`POSCARReader`**.
+- Binary (Uint8Array): `DCDReader`, **`TRRReader`**, **`XTCReader`**.
 
-`CubeReader` and `CHGCARReader` are single-frame (`len() == 1`,
-`step != 0` returns undefined). `CubeReader` normalises atoms and
-simbox to **Å** on read — Bohr files are converted via the 0.529177
-factor; the original unit is preserved in `frame.meta["cube_units"]`
-for round-tripping.
+This set mirrors every format molrs reads; the reader registry lives in
+`core/src/io/formats.ts` and dispatch in `core/src/io/reader.ts`.
+
+`CubeReader`, `CHGCARReader`, and `POSCARReader` are single-frame
+(`len() == 1`, `step != 0` returns undefined). `CubeReader` normalises
+atoms and simbox to **Å** on read — Bohr files are converted via the
+0.529177 factor; the original unit is preserved in
+`frame.meta["cube_units"]` for round-tripping.
+
+**Units: the GROMACS-native readers (`GROReader`, `TRRReader`,
+`XTCReader`) convert coordinates + box from nm → Å on read** (×10), in
+the WASM layer (`scale_nm_to_angstrom` in molrs-wasm `io/reader.rs`), so
+every JS consumer stays in Å. molrs *core* keeps these formats
+nm-native; only the WASM boundary normalises. `MOL2Reader`/`POSCARReader`
+are already Å. `TRR`/`XTC` are coordinate-only trajectories (no element
+column) — pair them with a topology (`.gro`/`.pdb`) via the
+topology-preserving merge.
 
 ## Rendering: Thin Instances
 
