@@ -63,6 +63,8 @@ export interface FileFormatDescriptor {
   readonly payload: FormatPayload;
   /** Whether the streaming-worker path is available for this format. */
   readonly streaming: StreamingCapability;
+  /** Whether molrs (via WASM) has a writer for this format (export support). */
+  readonly writable: boolean;
 }
 
 export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
@@ -73,6 +75,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["pdb", "ent", "brk"],
     payload: "text",
     streaming: "streaming-preferred",
+    writable: true,
   },
   {
     format: "xyz",
@@ -82,6 +85,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["xyz", "extxyz", "exyz"],
     payload: "text",
     streaming: "streaming-preferred",
+    writable: true,
   },
   {
     format: "cif",
@@ -91,6 +95,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["cif", "mmcif"],
     payload: "text",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "lammps",
@@ -100,6 +105,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["data", "lmp", "lammps", "lammpsdata"],
     payload: "text",
     streaming: "streaming-preferred",
+    writable: true,
   },
   {
     format: "lammps-dump",
@@ -109,6 +115,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["dump", "lammpstrj", "lmptrj", "lammpsdump"],
     payload: "text",
     streaming: "streaming-preferred",
+    writable: true,
   },
   {
     format: "sdf",
@@ -118,6 +125,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["sdf", "mol"],
     payload: "text",
     streaming: "streaming-preferred",
+    writable: false,
   },
   {
     format: "dcd",
@@ -127,6 +135,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["dcd"],
     payload: "binary",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "cube",
@@ -136,6 +145,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["cube", "cub"],
     payload: "text",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "chgcar",
@@ -145,6 +155,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["chgcar"],
     payload: "text",
     streaming: "eager-only",
+    writable: false,
   },
   {
     format: "gro",
@@ -154,6 +165,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["gro"],
     payload: "text",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "mol2",
@@ -163,6 +175,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["mol2"],
     payload: "text",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "poscar",
@@ -172,6 +185,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["poscar", "contcar", "vasp"],
     payload: "text",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "trr",
@@ -181,6 +195,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["trr"],
     payload: "binary",
     streaming: "eager-only",
+    writable: true,
   },
   {
     format: "xtc",
@@ -190,6 +205,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
     extensions: ["xtc"],
     payload: "binary",
     streaming: "eager-only",
+    writable: true,
   },
 ];
 

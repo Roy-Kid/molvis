@@ -1,3 +1,4 @@
+import { FILE_FORMAT_REGISTRY } from "@molvis/core/io/formats";
 import * as vscode from "vscode";
 import { resolveFileFormat } from "../loading/formatResolver";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
@@ -82,7 +83,10 @@ export async function handleSaveFile(
     const uri = await vscode.window.showSaveDialog({
       defaultUri,
       filters: {
-        "Molecular files": ["pdb", "xyz", "lammps", "dump", "lammpstrj"],
+        // Every extension molrs can write, straight from the format registry.
+        "Molecular files": FILE_FORMAT_REGISTRY.filter(
+          (d) => d.writable,
+        ).flatMap((d) => d.extensions),
       },
     });
     if (!uri) return;

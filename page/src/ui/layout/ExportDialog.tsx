@@ -52,7 +52,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ app }) => {
         throw new Error("Export payload is empty");
       }
 
-      const blob = new Blob([payload.content], { type: payload.mime });
+      // content is string (text formats) or Uint8Array (DCD/TRR/XTC); both
+      // are valid BlobParts.
+      const blob = new Blob([payload.content as BlobPart], {
+        type: payload.mime,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

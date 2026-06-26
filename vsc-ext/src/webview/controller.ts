@@ -163,7 +163,10 @@ export function bootstrapWebview(
         format,
         filename: suggestedName,
       });
-      const blob = new Blob([result.content], { type: result.mime });
+      // content is a string (text formats) or Uint8Array (DCD/TRR/XTC).
+      const blob = new Blob([result.content as BlobPart], {
+        type: result.mime,
+      });
       await app.saveFile(blob, result.suggestedName);
     });
   });

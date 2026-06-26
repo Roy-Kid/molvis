@@ -1,4 +1,5 @@
 import type { MolvisApp } from "../app";
+import { FILE_FORMAT_REGISTRY } from "../io/formats";
 import type { MenuItem } from "./types";
 
 /**
@@ -40,13 +41,13 @@ export class CommonMenuItems {
    * touches the writer.
    */
   static export(app: MolvisApp): MenuItem {
-    // Writable formats (must match io/writer.ts `ExportFormat`). Selecting one
-    // emits `export-requested` with the chosen format; the host owns the write.
-    const formats: Array<{ format: string; label: string }> = [
-      { format: "pdb", label: "PDB (.pdb)" },
-      { format: "xyz", label: "XYZ (.xyz)" },
-      { format: "lammps", label: "LAMMPS data (.lammps)" },
-    ];
+    // Writable formats come straight from the format registry (every entry
+    // molrs has a writer for). Selecting one emits `export-requested` with the
+    // chosen format; the host owns the write.
+    const formats = FILE_FORMAT_REGISTRY.filter((d) => d.writable).map((d) => ({
+      format: d.format,
+      label: `${d.label} (.${d.extensions[0]})`,
+    }));
     return {
       type: "folder",
       title: "Export",
