@@ -255,7 +255,6 @@ export class MolvisViewerElement extends HTMLElement {
 
   private mounted: MountedMolvisViewer | null = null;
   private abortController: AbortController | null = null;
-  private resizeObserver: ResizeObserver | null = null;
   private visibilityObserver: IntersectionObserver | null = null;
   private generation = 0;
 
@@ -365,8 +364,7 @@ export class MolvisViewerElement extends HTMLElement {
 
   private observeMountedViewer(): void {
     if (!this.mounted) return;
-    this.resizeObserver = new ResizeObserver(() => this.mounted?.resize());
-    this.resizeObserver.observe(this);
+    // Resize is owned by MolvisApp. Host only pauses when offscreen.
     this.visibilityObserver = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) this.mounted?.start();
@@ -399,8 +397,6 @@ export class MolvisViewerElement extends HTMLElement {
   private teardownMounted(): void {
     this.abortController?.abort();
     this.abortController = null;
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = null;
     this.visibilityObserver?.disconnect();
     this.visibilityObserver = null;
     this.mounted?.dispose();

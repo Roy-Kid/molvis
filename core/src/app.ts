@@ -167,9 +167,9 @@ export class MolvisApp {
       this._uiOverlay = dom.uiOverlay;
     }
 
-    // Host demos / embeds that only do `new Molvis(el)` never wire resize
-    // themselves (page and <molvis-viewer> do). Observe the container so
-    // browser/splitter size changes always update the drawing buffer.
+    // Core owns resize: observe the mount container so every host
+    // (demo, page, vsc-ext, <molvis-viewer>) gets a correct drawing buffer
+    // without wiring ResizeObserver themselves.
     if (typeof ResizeObserver !== "undefined") {
       this._resizeObserver = new ResizeObserver(() => {
         this.resize();

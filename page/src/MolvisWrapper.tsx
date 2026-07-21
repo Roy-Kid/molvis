@@ -240,14 +240,8 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
       }
     });
 
-    const resizeObserver = new ResizeObserver(() => {
-      molvisRef.current?.resize();
-    });
-    resizeObserver.observe(containerRef.current);
-
-    // Pause the render loop when the canvas is offscreen — critical for
-    // notebook embeds where multiple cells coexist on the page; each
-    // engine would otherwise render at 60fps even when scrolled away.
+    // Resize is owned by MolvisApp (container ResizeObserver). Hosts only
+    // opt into visibility pause for multi-cell notebook embeds.
     const visibilityObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -316,7 +310,6 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
     return () => {
       container.removeEventListener("dragover", handleDragOver);
       container.removeEventListener("drop", handleDrop);
-      resizeObserver.disconnect();
       visibilityObserver.disconnect();
       window.removeEventListener("message", handleHostMessage);
       window.removeEventListener("molvis:theme-change", handleThemeChange);

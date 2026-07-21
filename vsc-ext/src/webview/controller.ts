@@ -74,8 +74,7 @@ export function bootstrapWebview(
       grid: { enabled: true },
     },
   );
-  const resizeObserver = new ResizeObserver(() => app.resize());
-  resizeObserver.observe(container);
+  // Resize is owned by MolvisApp (container ResizeObserver).
 
   const applyOptions = (config: unknown, settings: unknown): void => {
     if (config && typeof config === "object") {
@@ -208,7 +207,6 @@ export function bootstrapWebview(
   });
 
   window.addEventListener("beforeunload", () => {
-    resizeObserver.disconnect();
     app.destroy();
   });
 
