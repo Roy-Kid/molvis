@@ -1,8 +1,7 @@
 import type { Observer, Scene } from "@babylonjs/core";
 import type { MolvisApp } from "../../app";
 import type { MenuItem } from "../../mode/types";
-import type { MolvisContextMenu } from "../menus/context_menu";
-import { contextMenuRegistry } from "../menus/registry";
+import { ContextMenuHost } from "../menus/host";
 import type { GUIComponent } from "../types";
 
 /**
@@ -15,19 +14,15 @@ export class ViewPanel implements GUIComponent {
 
   public element: HTMLElement;
   private app: MolvisApp;
-  private menu: MolvisContextMenu | null = null;
-  private isMenuVisible = false;
+  private readonly menuHost: ContextMenuHost;
   private cameraObserver: Observer<Scene> | null = null;
-
-  // Bound handlers so listeners can be removed safely.
-  private readonly boundHandleDocumentClick: (e: MouseEvent) => void;
-  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor(app: MolvisApp) {
     this.app = app;
-    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
-    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
     this.element = this.createPanel();
+    this.menuHost = new ContextMenuHost(app, ViewPanel.MENU_ID, {
+      ignoreCloseTargets: () => [this.element],
+    });
     this.updateDisplay();
   }
 
@@ -40,7 +35,7 @@ export class ViewPanel implements GUIComponent {
     const handleToggle = (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      this.toggleMenu(e.clientX, e.clientY);
+      this.menuHost.toggle(e.clientX, e.clientY, this.buildMenuItems());
     };
 
     panel.addEventListener("click", handleToggle);
@@ -49,23 +44,14 @@ export class ViewPanel implements GUIComponent {
     return panel;
   }
 
-  private toggleMenu(x: number, y: number): void {
-    if (this.isMenuVisible) {
-      this.hideMenu();
-      return;
-    }
-    this.showMenu(x, y);
-  }
-
   private buildMenuItems(): MenuItem[] {
-    const items: MenuItem[] = [
+    return [
       {
         type: "button",
         title: "Perspective",
         action: () => {
           const camera = this.app.world.camera;
           camera.mode = 0; // PERSPECTIVE_CAMERA
-          // Clear ortho bounds to avoid interference if we switch back and forth differently
           camera.orthoLeft = null;
           camera.orthoRight = null;
           camera.orthoTop = null;
@@ -78,14 +64,12 @@ export class ViewPanel implements GUIComponent {
         title: "Orthographic",
         action: () => {
           const camera = this.app.world.camera;
-          // Calculate current view size at target to match perspective view
           const dist = camera.radius;
           const fov = camera.fov;
           const aspect = this.app.world.scene
             .getEngine()
             .getAspectRatio(camera);
 
-          // Height at target distance
           const height = 2 * dist * Math.tan(fov / 2);
           const width = height * aspect;
 
@@ -163,151 +147,16 @@ export class ViewPanel implements GUIComponent {
         type: "button",
         title: "Reset Camera",
         action: () => {
-          // Keep behavior consistent with mode context menus.
           this.app.world.resetCamera();
           this.updateDisplay();
         },
       },
     ];
-
-    return items.map((item) => {
-      if (item.type !== "button" || !item.action) {
-        return item;
-      }
-
-      const originalAction = item.action;
-      return {
-        ...item,
-        action: () => {
-          try {
-            originalAction();
-          } finally {
-            this.hideMenu();
-          }
-        },
-      };
-    });
-  }
-
-  private showMenu(x: number, y: number): void {
-    if (this.app.config.ui?.showContextMenu === false) return;
-    if (!this.ensureMenu()) return;
-    if (!this.menu) return;
-
-    const items = this.wrapMenuItems(
-      this.app.resolveContextMenuItems({
-        menuId: ViewPanel.MENU_ID,
-        hit: null,
-        items: this.buildMenuItems(),
-      }),
-    );
-    contextMenuRegistry.activate(ViewPanel.MENU_ID, () => this.hideMenu());
-    this.menu.show(x, y, items);
-    this.isMenuVisible = true;
-
-    // Delay listener registration so the current click won't immediately close the menu.
-    setTimeout(() => {
-      this.addDocumentListeners();
-    }, 0);
-  }
-
-  private hideMenu(): void {
-    this.removeDocumentListeners();
-    if (this.menu) {
-      this.menu.hide();
-    }
-    this.isMenuVisible = false;
-    contextMenuRegistry.deactivate(ViewPanel.MENU_ID);
-  }
-
-  private ensureMenu(): boolean {
-    if (this.menu?.isConnected) {
-      return true;
-    }
-
-    const existing = document.getElementById(
-      ViewPanel.MENU_ID,
-    ) as MolvisContextMenu | null;
-    if (existing) {
-      this.menu = existing;
-      return true;
-    }
-
-    const menu = document.createElement(
-      "molvis-context-menu",
-    ) as MolvisContextMenu;
-    menu.id = ViewPanel.MENU_ID;
-    this.app.uiContainer.appendChild(menu);
-    this.menu = menu;
-    return true;
-  }
-
-  private wrapMenuItems(items: MenuItem[]): MenuItem[] {
-    return items.map((item) => {
-      if (item.type === "folder") {
-        return { ...item, items: this.wrapMenuItems(item.items) };
-      }
-      if (item.type !== "button") {
-        return item;
-      }
-
-      const originalAction = item.action;
-      return {
-        ...item,
-        action: () => {
-          try {
-            originalAction();
-          } finally {
-            this.hideMenu();
-          }
-        },
-      };
-    });
-  }
-
-  private handleDocumentClick(e: MouseEvent): void {
-    if (!this.isMenuVisible || !this.menu) return;
-
-    const path = e.composedPath();
-    const clickInsideMenu = path.includes(this.menu);
-    const clickInsidePanel = path.includes(this.element);
-    if (!clickInsideMenu && !clickInsidePanel) {
-      this.hideMenu();
-    }
-  }
-
-  private handleKeyDown(e: KeyboardEvent): void {
-    if (!this.isMenuVisible) return;
-    if (e.key !== "Escape") return;
-    this.hideMenu();
-    e.stopPropagation();
-    e.preventDefault();
-  }
-
-  private addDocumentListeners(): void {
-    document.addEventListener("click", this.boundHandleDocumentClick, true);
-    document.addEventListener(
-      "contextmenu",
-      this.boundHandleDocumentClick,
-      true,
-    );
-    document.addEventListener("keydown", this.boundHandleKeyDown, true);
-  }
-
-  private removeDocumentListeners(): void {
-    document.removeEventListener("click", this.boundHandleDocumentClick, true);
-    document.removeEventListener(
-      "contextmenu",
-      this.boundHandleDocumentClick,
-      true,
-    );
-    document.removeEventListener("keydown", this.boundHandleKeyDown, true);
   }
 
   private updateDisplay(): void {
     const camera = this.app.world.camera;
 
-    // Check projection mode first
     const isOrtho = camera.mode === 1; // ORTHOGRAPHIC_CAMERA = 1
 
     if (isOrtho) {
@@ -315,7 +164,6 @@ export class ViewPanel implements GUIComponent {
       return;
     }
 
-    // In perspective mode, check if we're in a specific view
     const alpha = this.normalizeAngle(camera.alpha);
     const beta = camera.beta;
 
@@ -336,7 +184,6 @@ export class ViewPanel implements GUIComponent {
       return;
     }
 
-    // Default to Persp for perspective mode
     this.element.textContent = "Persp";
   }
 
@@ -354,7 +201,6 @@ export class ViewPanel implements GUIComponent {
   public mount(container: HTMLElement): void {
     container.appendChild(this.element);
 
-    // Update display when camera changes
     this.cameraObserver = this.app.world.scene.onBeforeRenderObservable.add(
       () => {
         this.updateDisplay();
@@ -367,11 +213,7 @@ export class ViewPanel implements GUIComponent {
       this.app.world.scene.onBeforeRenderObservable.remove(this.cameraObserver);
       this.cameraObserver = null;
     }
-    this.hideMenu();
-    if (this.menu) {
-      this.menu.remove();
-      this.menu = null;
-    }
+    this.menuHost.dispose();
     this.element.remove();
   }
 
