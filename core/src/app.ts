@@ -86,6 +86,8 @@ export class MolvisApp {
   private _guiManager?: GUIManager;
   private _isRunning = false;
   private _rendererReady = true;
+  /** Keeps the drawing buffer in sync when the host container is resized. */
+  private _resizeObserver: ResizeObserver | null = null;
 
   // Pipelines
   private _modifierPipeline: ModifierPipeline;
@@ -163,6 +165,16 @@ export class MolvisApp {
       this._root = dom.root;
       this._canvas = dom.canvas;
       this._uiOverlay = dom.uiOverlay;
+    }
+
+    // Host demos / embeds that only do `new Molvis(el)` never wire resize
+    // themselves (page and <molvis-viewer> do). Observe the container so
+    // browser/splitter size changes always update the drawing buffer.
+    if (typeof ResizeObserver !== "undefined") {
+      this._resizeObserver = new ResizeObserver(() => {
+        this.resize();
+      });
+      this._resizeObserver.observe(this._container);
     }
 
     // Initialize Babylon engine — reuse an injected engine when provided
@@ -622,6 +634,8 @@ export class MolvisApp {
 
   public destroy(): void {
     this.stop();
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
     disposeLoadedFile(this);
     for (const modifier of this._modifierPipeline.getModifiers()) {
       if (modifier instanceof DataSourceModifier) modifier.dispose();
@@ -640,11 +654,18 @@ export class MolvisApp {
   }
 
   public setMode(mode: string): void {
-    // ModeType values ARE the canonical mode strings ("view", "select", …),
-    // so validate against the enum directly instead of a parallel switch that
-    // could drift from ModeManager's key bindings.
+    // ModeType values ARE the canonical mode strings ("view", "select", …).
+    // Compare string literals (not Object.values / shared arrays / enum
+    // members): under the vsc-ext dual-runtime split those bindings can be
+    // null when the module is evaluated on the non-owning runtime.
     if (!this._modeManager) return; // headless: no interaction modes
-    if ((Object.values(ModeType) as string[]).includes(mode)) {
+    if (
+      mode === "view" ||
+      mode === "select" ||
+      mode === "edit" ||
+      mode === "measure" ||
+      mode === "manipulate"
+    ) {
       this._modeManager.switch_mode(mode as ModeType);
     } else {
       logger.warn(`Unknown mode: ${mode}`);
