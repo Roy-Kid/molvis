@@ -156,24 +156,57 @@ class EditModeContextMenu extends ContextMenuController {
   }
 
   protected shouldShowMenu(
-    hit: HitResult | null,
+    _hit: HitResult | null,
     isDragging: boolean,
   ): boolean {
-    return !isDragging && (!hit || hit.type === "empty");
+    // Menu on any non-drag right-click; atom/bond Delete lives in the menu
+    // (no instant-delete on right-up).
+    return !isDragging;
   }
 
-  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
+  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
     const items: MenuItem[] = [];
+    const header = hit ? CommonMenuItems.hitLabel(hit) : null;
+    if (header) {
+      items.push(header);
+      items.push(CommonMenuItems.separator());
+    }
+
+    if (hit?.type === "atom") {
+      const atomId = hit.metadata.atomId;
+      items.push(
+        CommonMenuItems.button("Del", () => {
+          this.app.world.highlighter.clearAll();
+          void this.app.commandManager.execute(
+            new DeleteAtomCommand(this.app, atomId),
+          );
+        }),
+      );
+      items.push(CommonMenuItems.separator());
+    } else if (hit?.type === "bond") {
+      const bondId = hit.metadata.bondId;
+      items.push(
+        CommonMenuItems.button("Del", () => {
+          this.app.world.highlighter.clearAll();
+          void this.app.commandManager.execute(
+            new DeleteBondCommand(this.app, bondId),
+          );
+        }),
+      );
+      items.push(CommonMenuItems.separator());
+    }
+
+    // Tool settings (short labels / options).
     items.push({
       type: "binding",
       bindingConfig: {
         view: "list",
-        label: "Element",
+        label: "Elem",
         options: [
-          { text: "Carbon (C)", value: "C" },
-          { text: "Nitrogen (N)", value: "N" },
-          { text: "Oxygen (O)", value: "O" },
-          { text: "Hydrogen (H)", value: "H" },
+          { text: "C", value: "C" },
+          { text: "N", value: "N" },
+          { text: "O", value: "O" },
+          { text: "H", value: "H" },
         ],
         value: this.mode.element,
       },
@@ -181,16 +214,15 @@ class EditModeContextMenu extends ContextMenuController {
         this.mode.element = String(ev.value);
       },
     });
-    items.push({ type: "separator" });
     items.push({
       type: "binding",
       bindingConfig: {
         view: "list",
-        label: "Bond Order",
+        label: "Order",
         options: [
-          { text: "Single", value: 1 },
-          { text: "Double", value: 2 },
-          { text: "Triple", value: 3 },
+          { text: "1", value: 1 },
+          { text: "2", value: 2 },
+          { text: "3", value: 3 },
         ],
         value: this.mode.bondOrder,
       },
@@ -581,25 +613,14 @@ class EditMode extends BaseMode {
   }
 
   /**
-   * Handle right-click on atoms/bonds to delete them.
+   * Right-click on atoms/bonds is consumed by the context menu (Del item).
+   * No instant-delete path.
    */
   override onRightClickNotConsumed(
     _pointerInfo: PointerInfo,
-    hit: HitResult | null,
+    _hit: HitResult | null,
   ): void {
-    if (!hit || hit.type === "empty") return;
-
-    if (hit.type === "atom") {
-      const atomId = hit.metadata.atomId;
-      // Clear highlight before modifying geometry (indices might change)
-      this.app.world.highlighter.clearAll();
-      // Delete atom (and connected bonds via Command logic)
-      this.app.commandManager.execute(new DeleteAtomCommand(this.app, atomId));
-    } else if (hit.type === "bond") {
-      const bondId = hit.metadata.bondId;
-      this.app.world.highlighter.clearAll();
-      this.app.commandManager.execute(new DeleteBondCommand(this.app, bondId));
-    }
+    // no-op — destructive actions only via menu
   }
 
   _on_press_ctrl_z(): void {

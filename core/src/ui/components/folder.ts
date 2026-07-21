@@ -2,19 +2,19 @@ import type { MenuItem } from "../../mode/types";
 import { MolvisElement } from "../base";
 import { createControl } from "../builder";
 
+type FolderItem = Extract<MenuItem, { type: "folder" }>;
+
 /**
- * MolvisFolder — a submenu row that opens a flyout panel of nested items on
- * hover. The row shows the folder title plus a ▸ chevron; the flyout is a
- * fixed-positioned panel (so it escapes the parent menu's box) opened to the
- * right of the row, flipping left near the viewport edge. Nested folders
- * recurse — a folder item inside the flyout is just another MolvisFolder.
+ * MolvisFolder — dense submenu row.
+ * Opens on hover **or** click/Enter (touch-friendly); flyout flips at edges.
  */
 export class MolvisFolder extends MolvisElement {
-  private _data: Extract<MenuItem, { type: "folder" }> | null = null;
+  private _data: FolderItem | null = null;
   private _rendered = false;
   private panel: HTMLDivElement | null = null;
   private row: HTMLDivElement | null = null;
   private closeTimer: number | null = null;
+  private pinnedOpen = false;
 
   set data(item: MenuItem) {
     if (item.type !== "folder") {
@@ -41,10 +41,29 @@ export class MolvisFolder extends MolvisElement {
     }
   }
 
-  protected override render(): void {
-    // Clear previous content to prevent duplication
-    this.root.innerHTML = "";
+  get disabled(): boolean {
+    return Boolean(this._data?.disabled);
+  }
 
+  get isOpen(): boolean {
+    return Boolean(this.panel?.classList.contains("visible"));
+  }
+
+  /** Host / keyboard: open flyout. */
+  public openFlyout(): void {
+    if (this.disabled) return;
+    this.pinnedOpen = true;
+    this.open();
+  }
+
+  /** Host / keyboard: close flyout. */
+  public closeFlyout(): void {
+    this.pinnedOpen = false;
+    this.closeNow();
+  }
+
+  protected override render(): void {
+    this.root.innerHTML = "";
     this.injectSharedStyles();
 
     const style = document.createElement("style");
@@ -55,25 +74,42 @@ export class MolvisFolder extends MolvisElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        padding: 6px 12px;
+        gap: 6px;
+        padding: 4px 8px;
+        min-height: 22px;
         cursor: default;
         user-select: none;
-        transition: background-color 0.15s;
+        transition: background-color 0.12s;
       }
-      .folder-row:hover, .folder-row.open { background: var(--hover-color); }
-      .folder-chevron { opacity: 0.6; font-size: 10px; }
+      .folder-row:hover:not(.disabled),
+      .folder-row.open:not(.disabled),
+      .folder-row:focus-visible:not(.disabled) {
+        background: var(--hover-color);
+        outline: none;
+      }
+      .folder-row.disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .folder-title {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .folder-chevron { opacity: 0.55; font-size: 10px; flex: 0 0 auto; }
 
       .submenu {
         position: fixed;
         display: none;
-        min-width: 180px;
-        max-width: 300px;
+        min-width: 100px;
+        max-width: 200px;
         background: var(--bg-color);
         border: 1px solid var(--border-color);
         border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        padding: 4px 0;
+        padding: 2px 0;
         z-index: 10001;
       }
       .submenu.visible { display: block; }
@@ -82,17 +118,31 @@ export class MolvisFolder extends MolvisElement {
 
     const row = document.createElement("div");
     row.className = "folder-row";
+    row.setAttribute("role", "menuitem");
+    row.setAttribute("aria-haspopup", "true");
+    row.setAttribute("aria-expanded", "false");
+    row.tabIndex = -1;
+
     const title = document.createElement("span");
+    title.className = "folder-title";
     title.textContent = this._data?.title ?? "";
     const chevron = document.createElement("span");
     chevron.className = "folder-chevron";
-    chevron.textContent = "▸"; // ▸
+    chevron.textContent = "▸";
+    chevron.setAttribute("aria-hidden", "true");
     row.append(title, chevron);
     this.root.appendChild(row);
     this.row = row;
 
+    if (this._data?.disabled) {
+      row.classList.add("disabled");
+      row.setAttribute("aria-disabled", "true");
+      this.setAttribute("data-disabled", "");
+    }
+
     const panel = document.createElement("div");
     panel.className = "submenu";
+    panel.setAttribute("role", "menu");
     if (this._data) {
       for (const item of this._data.items) {
         const control = createControl(item);
@@ -102,11 +152,21 @@ export class MolvisFolder extends MolvisElement {
     this.root.appendChild(panel);
     this.panel = panel;
 
-    // The flyout is a DOM descendant of this host, so hovering it keeps
-    // mouseleave from firing — one enter/leave pair on the host covers both
-    // the row and the (fixed-positioned) panel.
-    this.addEventListener("mouseenter", () => this.open());
-    this.addEventListener("mouseleave", () => this.scheduleClose());
+    if (!this._data?.disabled) {
+      this.addEventListener("mouseenter", () => this.open());
+      this.addEventListener("mouseleave", () => {
+        if (!this.pinnedOpen) this.scheduleClose();
+      });
+      // Click / touch toggles pin so flyout stays open without hover.
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (this.isOpen && this.pinnedOpen) {
+          this.closeFlyout();
+        } else {
+          this.openFlyout();
+        }
+      });
+    }
   }
 
   private open(): void {
@@ -114,9 +174,10 @@ export class MolvisFolder extends MolvisElement {
       window.clearTimeout(this.closeTimer);
       this.closeTimer = null;
     }
-    if (!this.panel || !this.row) return;
+    if (!this.panel || !this.row || this.disabled) return;
     this.row.classList.add("open");
     this.panel.classList.add("visible");
+    this.row.setAttribute("aria-expanded", "true");
     this.position();
   }
 
@@ -124,28 +185,31 @@ export class MolvisFolder extends MolvisElement {
     if (this.closeTimer !== null) window.clearTimeout(this.closeTimer);
     this.closeTimer = window.setTimeout(() => {
       this.closeTimer = null;
-      this.panel?.classList.remove("visible");
-      this.row?.classList.remove("open");
+      if (!this.pinnedOpen) this.closeNow();
     }, 180);
   }
 
-  /** Place the flyout to the right of the row, flipping to the left and
-   *  clamping vertically when it would overflow the viewport. */
+  private closeNow(): void {
+    this.panel?.classList.remove("visible");
+    this.row?.classList.remove("open");
+    this.row?.setAttribute("aria-expanded", "false");
+  }
+
   private position(): void {
     if (!this.panel || !this.row) return;
     const rowRect = this.row.getBoundingClientRect();
     const panelRect = this.panel.getBoundingClientRect();
-    const margin = 8;
+    const margin = 4;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
     let left = rowRect.right - 2;
     if (left + panelRect.width > vw - margin) {
-      left = rowRect.left - panelRect.width + 2; // flip to the left
+      left = rowRect.left - panelRect.width + 2;
     }
     left = Math.max(margin, left);
 
-    let top = rowRect.top - 4;
+    let top = rowRect.top - 2;
     if (top + panelRect.height > vh - margin) {
       top = vh - panelRect.height - margin;
     }

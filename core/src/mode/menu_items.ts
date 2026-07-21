@@ -1,31 +1,29 @@
 import type { MolvisApp } from "../app";
 import { FILE_FORMAT_REGISTRY } from "../io/formats";
-import type { MenuItem } from "./types";
+import type { HitResult, MenuItem } from "./types";
 
 /**
- * Common menu item factory functions
- * These ensure consistent behavior across all modes
+ * Short-label menu factories for small canvases.
+ * Prefer ≤8 chars in titles when possible.
  */
 export class CommonMenuItems {
-  /**
-   * Snapshot menu item - takes a screenshot
-   */
+  /** Shot — clipboard screenshot. */
   static snapshot(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Copy Screenshot",
+      title: "Shot",
       action: () => {
         void app
           .copyScreenshotToClipboard()
           .then(() =>
             app.events.emit("status-message", {
-              text: "Screenshot copied to clipboard",
+              text: "Shot copied",
               type: "info",
             }),
           )
           .catch((err: unknown) =>
             app.events.emit("status-message", {
-              text: `Screenshot failed: ${
+              text: `Shot failed: ${
                 err instanceof Error ? err.message : String(err)
               }`,
               type: "error",
@@ -35,18 +33,11 @@ export class CommonMenuItems {
     };
   }
 
-  /**
-   * Export menu item - emits `export-requested`. The host UI registers a
-   * handler (page or vsc-ext) and owns the actual file-write. Core never
-   * touches the writer.
-   */
+  /** Export — writable formats as short .ext labels. */
   static export(app: MolvisApp): MenuItem {
-    // Writable formats come straight from the format registry (every entry
-    // molrs has a writer for). Selecting one emits `export-requested` with the
-    // chosen format; the host owns the write.
     const formats = FILE_FORMAT_REGISTRY.filter((d) => d.writable).map((d) => ({
       format: d.format,
-      label: `${d.label} (.${d.extensions[0]})`,
+      label: `.${d.extensions[0]}`,
     }));
     return {
       type: "folder",
@@ -61,47 +52,94 @@ export class CommonMenuItems {
     };
   }
 
-  /**
-   * Reset Camera menu item - resets camera to default position
-   */
+  /** Fit — reset camera framing. */
   static resetCamera(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Reset Camera",
+      title: "Fit",
       action: () => {
         app.world.resetCamera();
       },
     };
   }
 
-  /**
-   * Clear Selection menu item - clears all selected entities
-   */
+  /** Clear selection. */
   static clearSelection(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Clear Selection",
+      title: "Clear",
       action: () => {
         app.world.selectionManager.apply({ type: "clear" });
       },
     };
   }
 
-  /**
-   * Separator menu item
-   */
   static separator(): MenuItem {
     return { type: "separator" };
   }
 
-  /** Wrap items in a flyout submenu (rendered by MolvisFolder). */
   static submenu(title: string, items: MenuItem[]): MenuItem {
     return { type: "folder", title, items };
   }
 
+  /** Toggle-style button with check mark. */
+  static toggle(
+    title: string,
+    checked: boolean,
+    action: () => void,
+    opts?: { disabled?: boolean; shortcut?: string },
+  ): MenuItem {
+    return {
+      type: "button",
+      title,
+      checked,
+      disabled: opts?.disabled,
+      shortcut: opts?.shortcut,
+      action,
+    };
+  }
+
+  static button(
+    title: string,
+    action: () => void,
+    opts?: { disabled?: boolean; shortcut?: string; checked?: boolean },
+  ): MenuItem {
+    return {
+      type: "button",
+      title,
+      action,
+      disabled: opts?.disabled,
+      shortcut: opts?.shortcut,
+      checked: opts?.checked,
+    };
+  }
+
   /**
-   * Append export + snapshot as the final menu items.
+   * Compact hit header (disabled label). Atom: element+id; bond: B·id.
    */
+  static hitLabel(hit: HitResult): MenuItem | null {
+    if (hit.type === "atom") {
+      const el = hit.metadata.element ?? "?";
+      const id = hit.metadata.atomId;
+      return {
+        type: "button",
+        title: `${el}${id}`,
+        disabled: true,
+        action: () => {},
+      };
+    }
+    if (hit.type === "bond") {
+      return {
+        type: "button",
+        title: `B${hit.metadata.bondId}`,
+        disabled: true,
+        action: () => {},
+      };
+    }
+    return null;
+  }
+
+  /** Append Export + Shot. */
   static appendCommonTail(items: MenuItem[], app: MolvisApp): MenuItem[] {
     items.push(CommonMenuItems.export(app));
     items.push(CommonMenuItems.snapshot(app));

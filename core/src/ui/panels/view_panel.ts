@@ -45,10 +45,11 @@ export class ViewPanel implements GUIComponent {
   }
 
   private buildMenuItems(): MenuItem[] {
+    // Short labels — panel menu can sit on a tiny canvas.
     return [
       {
         type: "button",
-        title: "Perspective",
+        title: "Persp",
         action: () => {
           const camera = this.app.world.camera;
           camera.mode = 0; // PERSPECTIVE_CAMERA
@@ -61,7 +62,7 @@ export class ViewPanel implements GUIComponent {
       },
       {
         type: "button",
-        title: "Orthographic",
+        title: "Ortho",
         action: () => {
           const camera = this.app.world.camera;
           const dist = camera.radius;
@@ -134,7 +135,7 @@ export class ViewPanel implements GUIComponent {
       },
       {
         type: "button",
-        title: "Bottom",
+        title: "Bot",
         action: () => {
           const camera = this.app.world.camera;
           camera.alpha = 0;
@@ -145,7 +146,7 @@ export class ViewPanel implements GUIComponent {
       { type: "separator" },
       {
         type: "button",
-        title: "Reset Camera",
+        title: "Fit",
         action: () => {
           this.app.world.resetCamera();
           this.updateDisplay();

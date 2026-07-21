@@ -55,17 +55,24 @@ class MeasureModeContextMenu extends ContextMenuController {
     return !isDragging;
   }
 
-  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
-    const items: MenuItem[] = [
+  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+    const items: MenuItem[] = [];
+    const header = hit ? CommonMenuItems.hitLabel(hit) : null;
+    if (header) {
+      items.push(header);
+      items.push(CommonMenuItems.separator());
+    }
+
+    items.push(
       {
         type: "binding",
         bindingConfig: {
           view: "list",
-          label: "Distance Unit",
+          label: "Dist",
           options: [
-            { text: "Angstrom (Å)", value: "angstrom" },
-            { text: "Nanometer (nm)", value: "nanometer" },
-            { text: "Picometer (pm)", value: "picometer" },
+            { text: "Å", value: "angstrom" },
+            { text: "nm", value: "nanometer" },
+            { text: "pm", value: "picometer" },
           ],
           value: this.mode.distanceUnit,
         },
@@ -78,10 +85,10 @@ class MeasureModeContextMenu extends ContextMenuController {
         type: "binding",
         bindingConfig: {
           view: "list",
-          label: "Angle Unit",
+          label: "Ang",
           options: [
-            { text: "Degrees (°)", value: "degrees" },
-            { text: "Radians (rad)", value: "radians" },
+            { text: "°", value: "degrees" },
+            { text: "rad", value: "radians" },
           ],
           value: this.mode.angleUnit,
         },
@@ -93,7 +100,7 @@ class MeasureModeContextMenu extends ContextMenuController {
       {
         type: "binding",
         bindingConfig: {
-          label: "Precision",
+          label: "Prec",
           min: 1,
           max: 6,
           step: 1,
@@ -104,16 +111,12 @@ class MeasureModeContextMenu extends ContextMenuController {
           this.mode.updateAllLabels();
         },
       },
-      { type: "separator" },
-      {
-        type: "button",
-        title: "Clear All Measurements",
-        action: () => {
-          this.mode.clearAllMeasurements();
-        },
-      },
-      { type: "separator" },
-    ];
+      CommonMenuItems.separator(),
+      CommonMenuItems.button("Clear", () => {
+        this.mode.clearAllMeasurements();
+      }),
+      CommonMenuItems.separator(),
+    );
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

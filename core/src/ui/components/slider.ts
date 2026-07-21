@@ -56,11 +56,12 @@ export class MolvisSlider extends MolvisElement {
             }
             
             .binding {
-                padding: 6px 12px;
+                padding: 4px 8px;
+                min-height: 22px;
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
-                gap: 8px;
+                gap: 6px;
             }
             
             .binding-label {

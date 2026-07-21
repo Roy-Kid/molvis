@@ -233,4 +233,51 @@ describe("ContextMenuHost", () => {
     expect(seenHit).toBe(hit);
     host.dispose();
   });
+
+  it("renders checked mark and does not fire disabled actions", async () => {
+    const app = track(createStubApp());
+    const host = new ContextMenuHost(asApp(app), "test-menu-btn");
+    let disabledClicks = 0;
+    let enabledClicks = 0;
+    host.show(5, 5, [
+      {
+        type: "button",
+        title: "On",
+        checked: true,
+        action: () => {
+          enabledClicks += 1;
+        },
+      },
+      {
+        type: "button",
+        title: "No",
+        disabled: true,
+        action: () => {
+          disabledClicks += 1;
+        },
+      },
+    ]);
+    await flushOpen();
+
+    const buttons =
+      menuEl("test-menu-btn")?.shadowRoot?.querySelectorAll("molvis-button");
+    expect(buttons?.length).toBe(2);
+    const check = buttons![0].shadowRoot?.querySelector(".check");
+    expect(check?.textContent).toBe("✓");
+
+    const disabledRow = buttons![1].shadowRoot?.querySelector(
+      ".button",
+    ) as HTMLElement;
+    disabledRow.click();
+    expect(disabledClicks).toBe(0);
+    expect(host.isVisible).toBe(true);
+
+    const enabledRow = buttons![0].shadowRoot?.querySelector(
+      ".button",
+    ) as HTMLElement;
+    enabledRow.click();
+    expect(enabledClicks).toBe(1);
+    expect(host.isVisible).toBe(false);
+    host.dispose();
+  });
 });

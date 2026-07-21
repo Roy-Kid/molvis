@@ -30,11 +30,50 @@ class SelectModeContextMenu extends ContextMenuController {
     return !isDragging;
   }
 
-  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
-    const items: MenuItem[] = [
-      CommonMenuItems.clearSelection(this.app),
-      { type: "separator" },
-    ];
+  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+    const items: MenuItem[] = [];
+    const header = hit ? CommonMenuItems.hitLabel(hit) : null;
+    if (header) {
+      items.push(header);
+      items.push(CommonMenuItems.separator());
+    }
+
+    if (hit?.type === "atom") {
+      const atomId = hit.metadata.atomId;
+      items.push(
+        CommonMenuItems.button("Pick", () => {
+          this.app.world.selectionManager.apply({
+            type: "replace",
+            atoms: [atomId],
+          });
+        }),
+        CommonMenuItems.button("+Atom", () => {
+          this.app.world.selectionManager.apply({
+            type: "add",
+            atoms: [atomId],
+          });
+        }),
+      );
+    } else if (hit?.type === "bond") {
+      const bondId = hit.metadata.bondId;
+      items.push(
+        CommonMenuItems.button("Pick", () => {
+          this.app.world.selectionManager.apply({
+            type: "replace",
+            bonds: [bondId],
+          });
+        }),
+        CommonMenuItems.button("+Bond", () => {
+          this.app.world.selectionManager.apply({
+            type: "add",
+            bonds: [bondId],
+          });
+        }),
+      );
+    }
+
+    items.push(CommonMenuItems.clearSelection(this.app));
+    items.push(CommonMenuItems.separator());
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

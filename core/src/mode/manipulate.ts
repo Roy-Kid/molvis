@@ -30,46 +30,31 @@ class ManipulateModeContextMenu extends ContextMenuController {
     return !isDragging;
   }
 
-  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
+  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
     const items: MenuItem[] = [];
+    const header = hit ? CommonMenuItems.hitLabel(hit) : null;
+    if (header) {
+      items.push(header);
+      items.push(CommonMenuItems.separator());
+    }
 
     if (this.mode.hasUnsavedChanges()) {
       items.push(
-        {
-          type: "button",
-          title: "Save Changes",
-          action: () => {
-            this.mode.saveChanges();
-          },
-        },
-        {
-          type: "button",
-          title: "Discard Changes",
-          action: () => {
-            this.mode.discardChanges();
-          },
-        },
-        { type: "separator" },
+        CommonMenuItems.button("Save", () => {
+          this.mode.saveChanges();
+        }),
+        CommonMenuItems.button("Drop", () => {
+          this.mode.discardChanges();
+        }),
+        CommonMenuItems.separator(),
       );
     }
 
     items.push(
-      {
-        type: "button",
-        title: "Clear Selection",
-        action: () => {
-          this.mode.clearSelection();
-        },
-      },
-      { type: "separator" },
-      {
-        type: "button",
-        title: "Reset Positions",
-        action: () => {
-          this.app.events.emit("info-text-change", "Reset not implemented yet");
-        },
-      },
-      { type: "separator" },
+      CommonMenuItems.button("Clear", () => {
+        this.mode.clearSelection();
+      }),
+      CommonMenuItems.separator(),
     );
     return CommonMenuItems.appendCommonTail(items, this.app);
   }

@@ -30,68 +30,77 @@ class ViewModeContextMenu extends ContextMenuController {
     return !isDragging;
   }
 
-  protected buildMenuItems(_hit: HitResult | null): MenuItem[] {
-    const items: MenuItem[] = [CommonMenuItems.resetCamera(this.app)];
+  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+    const items: MenuItem[] = [];
 
-    // Dynamic bonding — perceive bonds from geometry for topology-less
-    // formats (xyz, LAMMPS dump). Toggle + criterion live in a submenu.
+    const header = hit ? CommonMenuItems.hitLabel(hit) : null;
+    if (header) {
+      items.push(header);
+      items.push(CommonMenuItems.separator());
+    }
+
+    // Hit atom/bond → select that entity.
+    if (hit?.type === "atom") {
+      const atomId = hit.metadata.atomId;
+      items.push(
+        CommonMenuItems.button("Select", () => {
+          this.app.world.selectionManager.apply({
+            type: "replace",
+            atoms: [atomId],
+          });
+        }),
+      );
+    } else if (hit?.type === "bond") {
+      const bondId = hit.metadata.bondId;
+      items.push(
+        CommonMenuItems.button("Select", () => {
+          this.app.world.selectionManager.apply({
+            type: "replace",
+            bonds: [bondId],
+          });
+        }),
+      );
+    }
+
+    items.push(CommonMenuItems.resetCamera(this.app));
+
     const bondingOn = this.mode.isDynamicBondingEnabled();
     const criterion = this.mode.getBondingCriterion();
     const canCovalent = this.mode.canUseCovalentBonding();
     items.push(
-      CommonMenuItems.submenu("Dynamic Bonding", [
-        {
-          type: "button",
-          title: bondingOn ? "Turn Off" : "Turn On",
-          action: () => {
-            this.mode.setDynamicBondingEnabled(!bondingOn);
-          },
-        },
-        { type: "separator" },
-        {
-          type: "button",
-          title: `${criterion === "covalent" ? "● " : "○ "}Covalent${
-            canCovalent ? "" : " (needs elements)"
-          }`,
-          action: () => {
+      CommonMenuItems.submenu("Bond", [
+        CommonMenuItems.toggle("On", bondingOn, () => {
+          this.mode.setDynamicBondingEnabled(!bondingOn);
+        }),
+        CommonMenuItems.separator(),
+        CommonMenuItems.toggle(
+          "Cov",
+          criterion === "covalent",
+          () => {
             if (canCovalent) this.mode.setBondingCriterion("covalent");
           },
-        },
-        {
-          type: "button",
-          title: `${criterion === "distance" ? "● " : "○ "}Distance`,
-          action: () => {
-            this.mode.setBondingCriterion("distance");
-          },
-        },
+          { disabled: !canCovalent },
+        ),
+        CommonMenuItems.toggle("Dist", criterion === "distance", () => {
+          this.mode.setBondingCriterion("distance");
+        }),
       ]),
     );
 
-    // Display toggles. Wrap PBC is a no-op when every atom is already inside
-    // the box (typical for X-ray asymmetric units), so don't expect a visible
-    // diff unless atoms span beyond the cell.
     const gridEnabled = this.mode.isGridEnabled();
     const pbcEnabled = this.mode.isPbcEnabled();
     items.push(
-      CommonMenuItems.submenu("Display", [
-        {
-          type: "button",
-          title: gridEnabled ? "Grid: On" : "Grid: Off",
-          action: () => {
-            this.mode.setGridEnabled(!gridEnabled);
-          },
-        },
-        {
-          type: "button",
-          title: pbcEnabled ? "Wrap PBC: On" : "Wrap PBC: Off",
-          action: () => {
-            this.mode.setPbcEnabled(!pbcEnabled);
-          },
-        },
+      CommonMenuItems.submenu("View", [
+        CommonMenuItems.toggle("Grid", gridEnabled, () => {
+          this.mode.setGridEnabled(!gridEnabled);
+        }),
+        CommonMenuItems.toggle("PBC", pbcEnabled, () => {
+          this.mode.setPbcEnabled(!pbcEnabled);
+        }),
       ]),
     );
 
-    items.push({ type: "separator" });
+    items.push(CommonMenuItems.separator());
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

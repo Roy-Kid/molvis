@@ -1,5 +1,4 @@
 import {
-  CommonMenuItems,
   defaultMolvisConfig,
   type Molvis,
   type MolvisConfig,
@@ -176,13 +175,9 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
         showTrajPanel: false,
         showContextMenu: true,
         contextMenu: {
-          buildItems: ({ app, menuId, items }) => {
-            if (menuId === "molvis-view-panel-menu") {
-              return [...items];
-            }
-
-            return [CommonMenuItems.snapshot(app)];
-          },
+          // Keep mode / panel menu items (short core titles). Hosts may
+          // append only — do not strip to a single Shot entry.
+          buildItems: ({ items }) => [...items],
         },
       },
     };

@@ -41,13 +41,20 @@ export interface BindingEvent {
 }
 
 /**
- * Menu item configuration for context menus
+ * Menu item configuration for context menus.
+ * Keep `title` short — canvas menus can be very small.
  */
 export type MenuItem =
   | {
       type: "button";
       title: string;
       action: () => void;
+      /** Show a check mark (toggle / radio). */
+      checked?: boolean;
+      /** Non-interactive, muted. */
+      disabled?: boolean;
+      /** Optional shortcut hint shown on the right (display only). */
+      shortcut?: string;
     }
   | {
       type: "separator";
@@ -56,6 +63,7 @@ export type MenuItem =
       type: "folder";
       title: string;
       items: MenuItem[];
+      disabled?: boolean;
     }
   | {
       type: "binding";
