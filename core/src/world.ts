@@ -318,56 +318,10 @@ export class World {
    * Resize the engine and immediately re-render so the canvas is never
    * displayed in a cleared (blank) state between resize and the next
    * render-loop tick.
-   *
-   * Also re-syncs the orthographic frustum to the current aspect ratio.
-   * ViewPanel / viewport code freezes orthoLeft/Right/Top/Bottom at the
-   * moment of switching to Ortho; without this, dragging a splitter stretches
-   * the whole scene (drawing buffer updates but projection aspect does not).
    */
   public resize() {
-    const canvas = this._engine.getRenderingCanvas();
-    // Skip zero-box frames during layout thrash (panel collapse animation).
-    if (canvas && (canvas.clientWidth < 1 || canvas.clientHeight < 1)) {
-      return;
-    }
-
-    // forceSetSize: always rewrite the drawing-buffer from the CSS box so we
-    // never leave a stale bitmap that the browser then stretches.
-    this._engine.resize(true);
-    this.syncOrthographicAspect();
+    this._engine.resize();
     this.renderOnce();
-  }
-
-  /**
-   * Keep ortho frustum aspect = viewport aspect (preserve vertical span).
-   * No-op in perspective mode or when ortho bounds are unset.
-   */
-  public syncOrthographicAspect(): void {
-    const camera = this._camera;
-    // ORTHOGRAPHIC_CAMERA === 1
-    if (camera.mode !== 1) return;
-    if (
-      camera.orthoTop === null ||
-      camera.orthoBottom === null ||
-      camera.orthoLeft === null ||
-      camera.orthoRight === null
-    ) {
-      return;
-    }
-
-    const halfH = (camera.orthoTop - camera.orthoBottom) / 2;
-    if (!(halfH > 0) || !Number.isFinite(halfH)) return;
-
-    const cy = (camera.orthoTop + camera.orthoBottom) / 2;
-    const cx = (camera.orthoLeft + camera.orthoRight) / 2;
-    const aspect = this._engine.getAspectRatio(camera);
-    if (!(aspect > 0) || !Number.isFinite(aspect)) return;
-
-    const halfW = halfH * aspect;
-    camera.orthoTop = cy + halfH;
-    camera.orthoBottom = cy - halfH;
-    camera.orthoLeft = cx - halfW;
-    camera.orthoRight = cx + halfW;
   }
 
   public renderOnce() {
