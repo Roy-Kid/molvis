@@ -42,7 +42,7 @@ export interface BindingEvent {
 
 /**
  * Menu item configuration for context menus.
- * Keep `title` short — canvas menus can be very small.
+ * Keep `title` to at most two words (readable on small canvases).
  */
 export type MenuItem =
   | {

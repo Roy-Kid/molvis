@@ -43,7 +43,7 @@ class ManipulateModeContextMenu extends ContextMenuController {
         CommonMenuItems.button("Save", () => {
           this.mode.saveChanges();
         }),
-        CommonMenuItems.button("Drop", () => {
+        CommonMenuItems.button("Discard", () => {
           this.mode.discardChanges();
         }),
         CommonMenuItems.separator(),
@@ -51,7 +51,7 @@ class ManipulateModeContextMenu extends ContextMenuController {
     }
 
     items.push(
-      CommonMenuItems.button("Clear", () => {
+      CommonMenuItems.button("Clear Select", () => {
         this.mode.clearSelection();
       }),
       CommonMenuItems.separator(),

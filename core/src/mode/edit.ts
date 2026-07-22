@@ -175,7 +175,7 @@ class EditModeContextMenu extends ContextMenuController {
     if (hit?.type === "atom") {
       const atomId = hit.metadata.atomId;
       items.push(
-        CommonMenuItems.button("Del", () => {
+        CommonMenuItems.button("Delete", () => {
           this.app.world.highlighter.clearAll();
           void this.app.commandManager.execute(
             new DeleteAtomCommand(this.app, atomId),
@@ -186,7 +186,7 @@ class EditModeContextMenu extends ContextMenuController {
     } else if (hit?.type === "bond") {
       const bondId = hit.metadata.bondId;
       items.push(
-        CommonMenuItems.button("Del", () => {
+        CommonMenuItems.button("Delete", () => {
           this.app.world.highlighter.clearAll();
           void this.app.commandManager.execute(
             new DeleteBondCommand(this.app, bondId),
@@ -196,12 +196,12 @@ class EditModeContextMenu extends ContextMenuController {
       items.push(CommonMenuItems.separator());
     }
 
-    // Tool settings (short labels / options).
+    // Tool settings (≤2-word labels).
     items.push({
       type: "binding",
       bindingConfig: {
         view: "list",
-        label: "Elem",
+        label: "Element",
         options: [
           { text: "C", value: "C" },
           { text: "N", value: "N" },
@@ -218,7 +218,7 @@ class EditModeContextMenu extends ContextMenuController {
       type: "binding",
       bindingConfig: {
         view: "list",
-        label: "Order",
+        label: "Bond Order",
         options: [
           { text: "1", value: 1 },
           { text: "2", value: 2 },

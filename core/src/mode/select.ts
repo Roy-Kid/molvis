@@ -41,13 +41,13 @@ class SelectModeContextMenu extends ContextMenuController {
     if (hit?.type === "atom") {
       const atomId = hit.metadata.atomId;
       items.push(
-        CommonMenuItems.button("Pick", () => {
+        CommonMenuItems.button("Select Only", () => {
           this.app.world.selectionManager.apply({
             type: "replace",
             atoms: [atomId],
           });
         }),
-        CommonMenuItems.button("+Atom", () => {
+        CommonMenuItems.button("Add Atom", () => {
           this.app.world.selectionManager.apply({
             type: "add",
             atoms: [atomId],
@@ -57,13 +57,13 @@ class SelectModeContextMenu extends ContextMenuController {
     } else if (hit?.type === "bond") {
       const bondId = hit.metadata.bondId;
       items.push(
-        CommonMenuItems.button("Pick", () => {
+        CommonMenuItems.button("Select Only", () => {
           this.app.world.selectionManager.apply({
             type: "replace",
             bonds: [bondId],
           });
         }),
-        CommonMenuItems.button("+Bond", () => {
+        CommonMenuItems.button("Add Bond", () => {
           this.app.world.selectionManager.apply({
             type: "add",
             bonds: [bondId],

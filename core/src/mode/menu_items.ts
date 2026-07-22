@@ -3,27 +3,26 @@ import { FILE_FORMAT_REGISTRY } from "../io/formats";
 import type { HitResult, MenuItem } from "./types";
 
 /**
- * Short-label menu factories for small canvases.
- * Prefer ≤8 chars in titles when possible.
+ * Context-menu factories. Titles: at most two words (readable on small canvas).
  */
 export class CommonMenuItems {
-  /** Shot — clipboard screenshot. */
+  /** Copy screenshot to clipboard. */
   static snapshot(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Shot",
+      title: "Screenshot",
       action: () => {
         void app
           .copyScreenshotToClipboard()
           .then(() =>
             app.events.emit("status-message", {
-              text: "Shot copied",
+              text: "Screenshot copied",
               type: "info",
             }),
           )
           .catch((err: unknown) =>
             app.events.emit("status-message", {
-              text: `Shot failed: ${
+              text: `Screenshot failed: ${
                 err instanceof Error ? err.message : String(err)
               }`,
               type: "error",
@@ -33,7 +32,7 @@ export class CommonMenuItems {
     };
   }
 
-  /** Export — writable formats as short .ext labels. */
+  /** Export — writable formats as .ext labels. */
   static export(app: MolvisApp): MenuItem {
     const formats = FILE_FORMAT_REGISTRY.filter((d) => d.writable).map((d) => ({
       format: d.format,
@@ -52,11 +51,11 @@ export class CommonMenuItems {
     };
   }
 
-  /** Fit — reset camera framing. */
+  /** Fit camera to scene. */
   static resetCamera(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Fit",
+      title: "Fit View",
       action: () => {
         app.world.resetCamera();
       },
@@ -67,7 +66,7 @@ export class CommonMenuItems {
   static clearSelection(app: MolvisApp): MenuItem {
     return {
       type: "button",
-      title: "Clear",
+      title: "Clear Select",
       action: () => {
         app.world.selectionManager.apply({ type: "clear" });
       },
@@ -115,15 +114,15 @@ export class CommonMenuItems {
   }
 
   /**
-   * Compact hit header (disabled label). Atom: element+id; bond: B·id.
+   * Hit header (disabled). Atom: "Atom N" or "C N"; bond: "Bond N".
    */
   static hitLabel(hit: HitResult): MenuItem | null {
     if (hit.type === "atom") {
-      const el = hit.metadata.element ?? "?";
+      const el = hit.metadata.element?.trim();
       const id = hit.metadata.atomId;
       return {
         type: "button",
-        title: `${el}${id}`,
+        title: el ? `${el} ${id}` : `Atom ${id}`,
         disabled: true,
         action: () => {},
       };
@@ -131,7 +130,7 @@ export class CommonMenuItems {
     if (hit.type === "bond") {
       return {
         type: "button",
-        title: `B${hit.metadata.bondId}`,
+        title: `Bond ${hit.metadata.bondId}`,
         disabled: true,
         action: () => {},
       };
@@ -139,7 +138,7 @@ export class CommonMenuItems {
     return null;
   }
 
-  /** Append Export + Shot. */
+  /** Append Export + Screenshot. */
   static appendCommonTail(items: MenuItem[], app: MolvisApp): MenuItem[] {
     items.push(CommonMenuItems.export(app));
     items.push(CommonMenuItems.snapshot(app));

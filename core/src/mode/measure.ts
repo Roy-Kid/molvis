@@ -68,7 +68,7 @@ class MeasureModeContextMenu extends ContextMenuController {
         type: "binding",
         bindingConfig: {
           view: "list",
-          label: "Dist",
+          label: "Distance",
           options: [
             { text: "Å", value: "angstrom" },
             { text: "nm", value: "nanometer" },
@@ -85,7 +85,7 @@ class MeasureModeContextMenu extends ContextMenuController {
         type: "binding",
         bindingConfig: {
           view: "list",
-          label: "Ang",
+          label: "Angle",
           options: [
             { text: "°", value: "degrees" },
             { text: "rad", value: "radians" },
@@ -100,7 +100,7 @@ class MeasureModeContextMenu extends ContextMenuController {
       {
         type: "binding",
         bindingConfig: {
-          label: "Prec",
+          label: "Precision",
           min: 1,
           max: 6,
           step: 1,
@@ -112,7 +112,7 @@ class MeasureModeContextMenu extends ContextMenuController {
         },
       },
       CommonMenuItems.separator(),
-      CommonMenuItems.button("Clear", () => {
+      CommonMenuItems.button("Clear All", () => {
         this.mode.clearAllMeasurements();
       }),
       CommonMenuItems.separator(),

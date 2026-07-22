@@ -68,20 +68,20 @@ class ViewModeContextMenu extends ContextMenuController {
     const criterion = this.mode.getBondingCriterion();
     const canCovalent = this.mode.canUseCovalentBonding();
     items.push(
-      CommonMenuItems.submenu("Bond", [
-        CommonMenuItems.toggle("On", bondingOn, () => {
+      CommonMenuItems.submenu("Dynamic Bond", [
+        CommonMenuItems.toggle("Enabled", bondingOn, () => {
           this.mode.setDynamicBondingEnabled(!bondingOn);
         }),
         CommonMenuItems.separator(),
         CommonMenuItems.toggle(
-          "Cov",
+          "Covalent",
           criterion === "covalent",
           () => {
             if (canCovalent) this.mode.setBondingCriterion("covalent");
           },
           { disabled: !canCovalent },
         ),
-        CommonMenuItems.toggle("Dist", criterion === "distance", () => {
+        CommonMenuItems.toggle("Distance", criterion === "distance", () => {
           this.mode.setBondingCriterion("distance");
         }),
       ]),
@@ -90,11 +90,11 @@ class ViewModeContextMenu extends ContextMenuController {
     const gridEnabled = this.mode.isGridEnabled();
     const pbcEnabled = this.mode.isPbcEnabled();
     items.push(
-      CommonMenuItems.submenu("View", [
+      CommonMenuItems.submenu("Display", [
         CommonMenuItems.toggle("Grid", gridEnabled, () => {
           this.mode.setGridEnabled(!gridEnabled);
         }),
-        CommonMenuItems.toggle("PBC", pbcEnabled, () => {
+        CommonMenuItems.toggle("Wrap PBC", pbcEnabled, () => {
           this.mode.setPbcEnabled(!pbcEnabled);
         }),
       ]),

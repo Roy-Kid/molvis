@@ -49,7 +49,7 @@ export class ViewPanel implements GUIComponent {
     return [
       {
         type: "button",
-        title: "Persp",
+        title: "Perspective",
         action: () => {
           const camera = this.app.world.camera;
           camera.mode = 0; // PERSPECTIVE_CAMERA
@@ -62,7 +62,7 @@ export class ViewPanel implements GUIComponent {
       },
       {
         type: "button",
-        title: "Ortho",
+        title: "Orthographic",
         action: () => {
           const camera = this.app.world.camera;
           const dist = camera.radius;
@@ -135,7 +135,7 @@ export class ViewPanel implements GUIComponent {
       },
       {
         type: "button",
-        title: "Bot",
+        title: "Bottom",
         action: () => {
           const camera = this.app.world.camera;
           camera.alpha = 0;
@@ -146,7 +146,7 @@ export class ViewPanel implements GUIComponent {
       { type: "separator" },
       {
         type: "button",
-        title: "Fit",
+        title: "Fit View",
         action: () => {
           this.app.world.resetCamera();
           this.updateDisplay();
