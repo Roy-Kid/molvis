@@ -3,10 +3,10 @@ import type { MolvisApp } from "../app";
 import { isModeEnabled } from "../config";
 import { logger } from "../utils/logger";
 import type { BaseMode } from "./base";
-import { ModeType } from "./base";
 import { EditMode } from "./edit";
 import { ManipulateMode } from "./manipulate";
 import { MeasureMode } from "./measure";
+import { ModeType } from "./mode_type";
 import { SelectMode } from "./select";
 import { ViewMode } from "./view";
 
@@ -93,4 +93,5 @@ class ModeManager {
   }
 }
 
-export { ModeManager, ModeType };
+export { ALL_MODE_TYPES, ModeType } from "./mode_type";
+export { ModeManager };

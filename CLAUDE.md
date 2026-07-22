@@ -37,27 +37,87 @@ extension, and a Python package that drives the page bundle over WebSocket.
 
 - Source code: `core/src/` (engine, TS), `page/src/` (React 19 web app),
   `vsc-ext/src/` (VSCode extension), `python/src/` (Python package)
-- Tests: `core/tests/`, `page/tests/`, `vsc-ext/tests/`, `python/tests/`
+- Tests: `core/tests/` (+ `integration/`), `page/tests/`, `vsc-ext/tests/`,
+  `python/tests/` (+ `integration/`); public-API goldens → `regressions/`
 - Public documentation: `docs/` (incl. `docs/specs/` public design docs)
-- Passive project knowledge (notes, decisions, blueprint): `.claude/notes/`
+- Passive project knowledge (notes, decisions, debt, blueprint): `.claude/notes/`
 - Active runtime specs (alive, deleted on completion): `.claude/specs/`
 - Claude Code runtime config (agents, skills, hooks, settings):
   `.claude/agents/`, `.claude/skills/`, `.claude/hooks/`, `.claude/settings.json`
 
-## Build & test
+## Design preferences (default)
 
-- Install: `npm install`
-- Build: `npm run build:all` (core + page + vsc-ext)
-- Test: `npm test` · Typecheck: `npm run typecheck` · Lint: `npm run lint` (biome)
-- CI-parity check: `biome check . && npm run typecheck`
+**Default for all MolCrafts projects.** Apply unless the operator
+**explicitly** requires a functional (or other) style for a named
+subsystem — then capture the exception with `/mol:note` and scope it.
+Do **not** invent a functional style on your own.
+
+### Iron law — no silent debt (all projects)
+
+Discover anti-pattern / failing test / broken invariant / clear bug
+in the surface you touch or depend on → **prioritize or hard-stop**:
+
+1. **Do not ignore** ("pre-existing, leave it"), skip-mark, weaken
+   asserts, or land features on known rot.
+2. **Fix now** if local + stage-allowed; else **stop**, report
+   path:line, route `/mol:fix` / `/mol:refactor` / supersede.
+3. **Name it** in the summary (found / fixed / blocking). Silence = process failure.
+
+Outranks "stay in scope" / "minimal diff" when those mean knowingly
+leaving rot you already saw.
+
+### Prefer
+
+- **OOP by default.** Domain concepts are types with methods
+  (`NeighborList.build`, `ForceField.energy`), not free-floating
+  helpers. Module-level functions only for true free operations (pure
+  math with no natural owner) or thin package re-exports.
+- **Primitive, single-responsibility public APIs.** Callers compose:
+  construct → configure → one concern → read result. Each public
+  method does one named thing.
+- **Inline until the second real use.** A helper used in exactly one
+  place stays inline (or a private method on the owning type). Extract
+  only at a second call site, or when a unit test must target that unit.
+
+### Forbid
+
+- **Factory functions as the primary constructor story.** No
+  `make_foo` / `build_bar` / `create_*` wrappers around construction.
+  Prefer `Foo(...)`. Explicit alternate constructors only when they
+  have distinct semantics (`Foo.from_file`, `Foo.empty`) — not
+  `make_foo` aliases of `__init__`.
+- **God data structures.** No mega-dict / mega-struct / ambient
+  "context" blob every layer reaches into. Pass the few fields a call
+  needs, or a narrow typed view. Split types that accumulate more
+  than one coherent responsibility.
+- **All-in-one façade APIs.** No public `run_everything` /
+  `compute_all` / `pipeline` that hides multi-step work. Composition
+  is the **caller's** job (scripts, docs examples, `regressions/`).
+  The library exposes primitives only.
+
+### Shape check (before adding a public symbol)
+
+1. Natural owning type? → method on that type, not a free function.
+2. More than one user-visible step? → split into primitives.
+3. Only one in-tree call site? → do not extract.
+4. Tempted to hang another field on a "context" bag? → new parameter
+   or smaller type instead.
+
+### Tests (default)
+
+- Unit tests **only** under `tests/`, path mirrors source
+  (`src/foo/boo.py` → `tests/test_foo/test_boo.py`), types mirror
+  (`FooClass` → `TestFooClass`). Single-function tests — no e2e under
+  `tests/`. Public-API scenarios → `regressions/` with **hard-coded**
+  goldens (no live third-party oracles). Details: `tester` agent.
 
 ## Default workflow
 
 For non-trivial work, prefer:
-1. plan — `/mol:spec` (writes to `.claude/specs/`)
-2. implement — `/mol:impl` or `/mol:fix`
-3. review — `/mol:review`
-4. capture decisions — `/mol:note` (writes to `.claude/notes/notes.md`)
+1. plan (`/mol:spec` or free-form → discuss / grill)
+2. implement (`/mol:impl` or `/mol:fix`)
+3. review (`/mol:review`)
+4. capture decisions (`/mol:note` — harness sync, not append-only)
 
 ## What must never change casually
 

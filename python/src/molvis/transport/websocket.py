@@ -174,10 +174,10 @@ class WebSocketTransport:
     event_bus
         :class:`~molvis.events.EventBus` to dispatch frontend-pushed
         JSON-RPC notifications into. Usually set by :class:`Molvis`.
-    minimal
-        When ``True``, the standalone URL is built with ``&minimal=1``
-        so the page bundle hides all chrome (TopBar, sidebars, timeline)
-        and renders only the 3D canvas. Defaults to ``False``.
+    surface
+        Page chrome preset: ``"full"`` (default) or ``"canvas"`` (no
+        chrome — TopBar, sidebars, timeline hidden). Standalone URL gets
+        ``&surface=canvas`` when set to ``"canvas"``.
     handshake_timeout
         Seconds to wait for the browser to finish the hello handshake —
         both on the server side (after a TCP accept, before a hello
@@ -204,7 +204,7 @@ class WebSocketTransport:
         open_browser: bool = True,
         dist: pathlib.Path | None = None,
         event_bus: EventBus | None = None,
-        minimal: bool = False,
+        surface: str = "full",
         handshake_timeout: float | None = None,
         serve_page: bool = True,
     ) -> None:
@@ -217,7 +217,11 @@ class WebSocketTransport:
         self._open_browser = open_browser
         self._dist = dist or resolve_dist()
         self._event_bus = event_bus
-        self._minimal = minimal
+        if surface not in ("full", "canvas"):
+            raise ValueError(
+                f"surface must be 'full' or 'canvas', got {surface!r}"
+            )
+        self._surface = surface
         self._handshake_timeout = handshake_timeout
         self._serve_page = serve_page
 
@@ -298,8 +302,8 @@ class WebSocketTransport:
             "token": self._token,
             "session": session,
         }
-        if self._minimal:
-            params["minimal"] = "1"
+        if self._surface != "full":
+            params["surface"] = self._surface
         query = urllib.parse.urlencode(params)
         standalone_url = f"{base}{sep}{query}"
 

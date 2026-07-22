@@ -1,9 +1,5 @@
 import { type Block, Frame } from "@molcrafts/molrs";
-import {
-  buildCategoricalColorLookup,
-  DEFAULT_CATEGORICAL_COLOR_MAP,
-  getColorMap,
-} from "../artist/palette";
+import { buildCategoricalColorLookup, getColorMap } from "../artist/palette";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { DType } from "../utils/dtype";
@@ -18,8 +14,6 @@ export const COLOR_OVERRIDE_B = "__color_b";
 export interface ColorByPropertyConfig {
   /** Column name in atoms Block. Empty string = disabled. */
   columnName: string;
-  /** Deprecated user-facing choice; numeric columns now use a fixed viridis ramp. */
-  colormap: string;
   /** Manual range override. null = auto-detect. */
   range: { min: number; max: number } | null;
   /** Clamp out-of-range values (true) or fade to gray (false). */
@@ -43,13 +37,10 @@ export interface ColorByPropertyConfig {
 export class ColorByPropertyModifier extends BaseModifier {
   private _config: ColorByPropertyConfig = {
     columnName: "",
-    colormap: "viridis",
     range: null,
     clampOutOfRange: true,
     categorical: false,
   };
-  private _warnedStringColormapIgnored = false;
-  private _warnedNumericColormapFallback = false;
 
   /** Detected min/max — populated by inspect(), exposed for UI display. */
   public detectedRange: { min: number; max: number } | null = null;
@@ -70,15 +61,6 @@ export class ColorByPropertyModifier extends BaseModifier {
   }
   set columnName(v: string) {
     this._config.columnName = v;
-  }
-
-  get colormap(): string {
-    return this._config.colormap;
-  }
-  set colormap(v: string) {
-    this._config.colormap = v;
-    this._warnedStringColormapIgnored = false;
-    this._warnedNumericColormapFallback = false;
   }
 
   get range(): { min: number; max: number } | null {
@@ -184,44 +166,21 @@ export class ColorByPropertyModifier extends BaseModifier {
       const keys = readCategoricalKeys(atoms, this._config.columnName, dtype);
       if (!keys) return input;
 
-      if (
-        dtype === DType.String &&
-        this._config.colormap !== DEFAULT_CATEGORICAL_COLOR_MAP &&
-        !this._warnedStringColormapIgnored
-      ) {
-        logger.warn(
-          `[ColorByPropertyModifier] String column '${this._config.columnName}' ignores continuous colormap '${this._config.colormap}' and uses '${DEFAULT_CATEGORICAL_COLOR_MAP}'.`,
-        );
-        this._warnedStringColormapIgnored = true;
-      }
-
       const lookup = buildCategoricalColorLookup(keys);
       for (let i = 0; i < atomCount; i++) {
-        const [r, g, b] = lookup.get(keys[i])!;
+        const rgb = lookup.get(keys[i]);
+        if (!rgb) continue;
+        const [r, g, b] = rgb;
         colorR[i] = r;
         colorG[i] = g;
         colorB[i] = b;
       }
     } else {
-      if (
-        this._config.colormap &&
-        this._config.colormap !== "viridis" &&
-        !this._warnedNumericColormapFallback
-      ) {
-        logger.warn(
-          `[ColorByPropertyModifier] Numeric column '${this._config.columnName}' uses the fixed 'viridis' ramp; ignoring '${this._config.colormap}'.`,
-        );
-        this._warnedNumericColormapFallback = true;
-      }
-
       const cm = getColorMap("viridis");
       if (cm.kind !== "continuous") {
-        if (!this._warnedNumericColormapFallback) {
-          logger.warn(
-            `[ColorByPropertyModifier] Internal numeric colormap 'viridis' is unavailable; numeric coloring cannot proceed.`,
-          );
-          this._warnedNumericColormapFallback = true;
-        }
+        logger.warn(
+          `[ColorByPropertyModifier] Internal numeric colormap 'viridis' is unavailable; numeric coloring cannot proceed.`,
+        );
         return input;
       }
 

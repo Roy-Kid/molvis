@@ -201,7 +201,6 @@ def test_visual_style_is_global_not_a_draw_argument() -> None:
             "atom_radius",
             "bond_radius",
             "color_by",
-            "colormap",
         ):
             assert visual_parameter not in parameters
     style_parameters = inspect.signature(Molvis.set_style).parameters

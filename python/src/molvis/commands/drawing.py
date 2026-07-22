@@ -220,39 +220,6 @@ class DrawingCommandsMixin:
         self.send_cmd(FrontendCommands.SET_BACKGROUND.method, {"color": color})
         return self
 
-    def color_by(
-        self: "Molvis",
-        column: str | None = None,
-        colormap: str = "viridis",
-        range: tuple[float, float] | None = None,
-        clamp: bool = True,
-    ) -> "Molvis":
-        """
-        Color atoms by a frame column.
-
-        Args:
-            column: Column name to color by (e.g. ``"type"``, ``"charge"``).
-                Use ``"element"`` or ``None`` to reset to default CPK coloring.
-            colormap: Backward-compatible numeric ramp hint. Numeric columns
-                currently use ``viridis``; categorical columns use the fixed
-                ``glasbey-vivid`` palette.
-            range: ``(min, max)`` for numeric normalization. Auto-detected
-                when ``None``.
-            clamp: Clamp out-of-range values (True) or fade to gray (False).
-
-        Returns:
-            Self for method chaining
-        """
-        params: dict[str, Any] = {
-            "column": column,
-            "colormap": colormap,
-            "clamp": clamp,
-        }
-        if range is not None:
-            params["range"] = {"min": range[0], "max": range[1]}
-        self.send_cmd(FrontendCommands.COLOR_BY.method, params)
-        return self
-
     def set_view_mode(self: "Molvis", mode: str) -> "Molvis":
         """Set camera view mode."""
         self.send_cmd(FrontendCommands.SET_VIEW_MODE.method, {"mode": mode})

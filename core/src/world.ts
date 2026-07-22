@@ -303,18 +303,6 @@ export class World {
   }
 
   /**
-   * Historical "I" hotkey entry. Babylon's Inspector/gui-editor stack is
-   * deliberately not a dependency of molvis-core (it was pulling ~10MB of
-   * debug UI into the CDN `elements` bundle). Kept as a no-op so mode
-   * keyboard handlers do not need a special case.
-   */
-  public async toggleInspector(): Promise<void> {
-    logger.warn(
-      "[World] Babylon Inspector is not shipped with molvis-core; ignoring toggle",
-    );
-  }
-
-  /**
    * Resize the engine and immediately re-render so the canvas is never
    * displayed in a cleared (blank) state between resize and the next
    * render-loop tick.

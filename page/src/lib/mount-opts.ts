@@ -4,8 +4,7 @@ import { createContext, useContext } from "react";
  * Named surface presets for the page chrome layout.
  *
  * - `"full"` — all chrome visible (default).
- * - `"canvas"` — no chrome; 3D canvas only (identical to the legacy
- *   `minimal: true` flag).
+ * - `"canvas"` — no chrome; 3D canvas only (embeds / `gui=False`).
  */
 export type MolvisSurface = "full" | "canvas";
 
@@ -50,12 +49,6 @@ export interface MountOpts {
    */
   chrome?: MolvisChromeFlags;
   /**
-   * When `true`, hide all chrome and render only the canvas.
-   * @deprecated Use `surface: "canvas"` instead; this alias is honored for
-   * backward compatibility.
-   */
-  minimal?: boolean;
-  /**
    * Opt-in demo seed. `true` seeds a Dopamine molecule on start; `false`
    * or undefined leaves the canvas empty. Defaults on in dev mode so
    * `npm run dev:page` stays interactive; production embeds (VSCode,
@@ -76,12 +69,11 @@ export function useMountOpts(): MountOpts {
 /**
  * Resolve the effective chrome flags from a {@link MountOpts} value.
  *
- * Precedence (highest wins): `chrome` overrides → `surface` preset →
- * legacy `minimal` alias. When nothing is specified the default is
- * `surface: "full"` (all flags `true`).
+ * Precedence (highest wins): `chrome` overrides → `surface` preset.
+ * When nothing is specified the default is `surface: "full"` (all flags true).
  */
 export function resolveChrome(opts: MountOpts): Required<MolvisChromeFlags> {
-  const surface = opts.surface ?? (opts.minimal ? "canvas" : "full");
+  const surface = opts.surface ?? "full";
 
   const defaults: Required<MolvisChromeFlags> =
     surface === "canvas"
@@ -132,11 +124,14 @@ export function readMountOptsFromHost(): Partial<MountOpts> {
 /** Build {@link MountOpts} from the current `window.location.search`. */
 export function readMountOptsFromUrl(): MountOpts {
   const params = new URLSearchParams(window.location.search);
+  const surfaceRaw = params.get("surface");
+  const surface: MolvisSurface | undefined =
+    surfaceRaw === "full" || surfaceRaw === "canvas" ? surfaceRaw : undefined;
   return {
     wsUrl: params.get("ws_url") ?? undefined,
     token: params.get("token") ?? undefined,
     session: params.get("session") ?? undefined,
-    minimal: params.has("minimal"),
+    surface,
     demo: params.has("demo") ? true : undefined,
   };
 }

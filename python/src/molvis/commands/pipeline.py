@@ -38,6 +38,7 @@ class ModifierInfo:
     enabled: bool
     selection_scope_id: str | None
     source_owner_id: str | None
+    kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,10 +53,11 @@ def _to_modifier_info(raw: Any) -> ModifierInfo:
     return ModifierInfo(
         id=str(raw["id"]),
         name=str(raw["name"]),
-        category=str(raw["category"]),
+        category=str(raw.get("category") or ""),
         enabled=bool(raw["enabled"]),
         selection_scope_id=raw.get("selection_scope_id"),
         source_owner_id=raw.get("source_owner_id"),
+        kind=raw.get("kind") if isinstance(raw.get("kind"), str) else None,
     )
 
 

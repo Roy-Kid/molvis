@@ -16,6 +16,7 @@ import {
 import type { MarkAtomOverlay } from "../../overlays/mark_atom";
 import type { MarkAtomProps } from "../../overlays/types";
 import {
+  DATA_SOURCE_CATEGORY,
   DataSourceModifier,
   MemoryDataSource,
 } from "../../pipeline/data_source_modifier";
@@ -167,7 +168,7 @@ function rebuildCurrentFrame(app: MolvisApp): Promise<Frame | null> {
 
 /** Serialize a modifier to the wire shape used by ``pipeline.*`` RPCs. */
 function serializeModifier(modifier: Modifier): Record<string, unknown> {
-  return {
+  const base: Record<string, unknown> = {
     id: modifier.id,
     name: modifier.name,
     capabilities: Array.from(modifier.capabilities),
@@ -175,6 +176,16 @@ function serializeModifier(modifier: Modifier): Record<string, unknown> {
     selection_scope_id: modifier.selectionScopeId,
     source_owner_id: modifier.sourceOwnerId,
   };
+  if (modifier instanceof DataSourceModifier) {
+    base.category = DATA_SOURCE_CATEGORY;
+    base.kind = modifier.kind;
+    base.filename = modifier.filename;
+    base.source_type = modifier.sourceType;
+    if (modifier.contributedBlocks.length > 0) {
+      base.contributed_blocks = [...modifier.contributedBlocks];
+    }
+  }
+  return base;
 }
 
 function requireString(
@@ -539,14 +550,38 @@ export class RPCRouter {
         typeof entry.source_owner_id === "string"
           ? entry.source_owner_id
           : null;
-      return {
+      const category =
+        typeof entry.category === "string" ? entry.category : undefined;
+      const kind = typeof entry.kind === "string" ? entry.kind : undefined;
+      let source_type: "file" | "empty" | "backend" | undefined;
+      if (
+        entry.source_type === "file" ||
+        entry.source_type === "empty" ||
+        entry.source_type === "backend"
+      ) {
+        source_type = entry.source_type;
+      }
+      const filename =
+        typeof entry.filename === "string" ? entry.filename : undefined;
+      const contributed_blocks = Array.isArray(entry.contributed_blocks)
+        ? entry.contributed_blocks.filter(
+            (b): b is string => typeof b === "string",
+          )
+        : undefined;
+      const parsed: import("../../events").BackendStateSyncPipelineEntry = {
         id,
         name,
+        category,
         capabilities,
         enabled,
         selection_scope_id,
         source_owner_id,
+        kind,
+        filename,
+        source_type,
+        contributed_blocks,
       };
+      return parsed;
     });
 
     const rawFrames = Array.isArray(decoded.frames) ? decoded.frames : [];

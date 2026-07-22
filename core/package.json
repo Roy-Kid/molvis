@@ -51,6 +51,7 @@
     "preview:demo": "rsbuild preview",
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
+    "test:regressions": "rstest run -c rstest.regressions.config.ts",
     "test:headless": "npm run build:headless && node scripts/headless_render_runner.mjs --dist examples-dist/headless --specs examples/headless_smoke.json --outdir examples-dist/headless-smoke",
     "test:watch": "rstest watch",
     "bench": "rstest run -c rstest.bench.config.ts",

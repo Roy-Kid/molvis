@@ -27,7 +27,7 @@ export { Command, command, getCommandMetadata } from "./base";
 export type { CommandFn } from "./registry";
 export { CommandRegistry, commands } from "./registry";
 
-import { SetAttributeCommand, SetFrameMetaCommand } from "./attributes";
+import { SetAttributeCommand } from "./attributes";
 import { CameraAnimateCommand } from "./camera";
 import { ClearSceneCommand } from "./clear";
 // ── Name-imports: load every @command-decorated class so its decorator runs.
@@ -76,7 +76,6 @@ export {
   RemoveOverlayCommand,
   SelectAtomByIdCommand,
   SetAttributeCommand,
-  SetFrameMetaCommand,
   SetRepresentationCommand,
   TakeSnapshotCommand,
   UnmarkAtomCommand,
@@ -102,7 +101,6 @@ const REGISTERED_COMMAND_CLASSES = [
   ClearSceneCommand,
   SelectAtomByIdCommand,
   SetAttributeCommand,
-  SetFrameMetaCommand,
   NewFrameCommand,
   ExportFrameCommand,
   TakeSnapshotCommand,

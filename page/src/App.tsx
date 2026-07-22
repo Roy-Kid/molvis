@@ -31,7 +31,7 @@ import { CameraTrajectoryOverlay } from "./ui/modes/view/CameraTrajectoryOverlay
 /**
  * Main page application shell for the MolVis viewer.
  *
- * When mounted with `opts.minimal`, all chrome is hidden and only the
+ * When mounted with `surface: "canvas"`, all chrome is hidden and only the
  * 3D canvas is rendered (useful for embeds that supply their own UI).
  */
 const App: React.FC = () => {

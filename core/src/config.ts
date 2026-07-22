@@ -4,7 +4,7 @@
 
 import type { Engine } from "@babylonjs/core";
 import type { MolvisApp } from "./app";
-import { ModeType } from "./mode/base";
+import type { ModeType } from "./mode/mode_type";
 import type { HitResult, MenuItem } from "./mode/types";
 
 // Canvas settings
@@ -94,87 +94,134 @@ export interface MolvisConfig {
   decorations?: boolean;
 }
 
-/**
- * Default configuration values
- */
-export const DEFAULT_CONFIG: Required<Omit<MolvisConfig, "engine">> & {
+export type ResolvedMolvisConfig = Required<Omit<MolvisConfig, "engine">> & {
   ui: Required<Omit<UIConfig, "contextMenu">> & {
     contextMenu?: ContextMenuConfig;
   };
   canvas: Required<CanvasConfig>;
-} = {
-  showUI: true,
-  useRightHandedSystem: true,
-  gui: true,
-  engineOwnership: "app",
-  interactive: true,
-  decorations: true,
-  enabledModes: Object.values(ModeType),
-  ui: {
-    showModePanel: true,
-    showViewPanel: true,
-    showInfoPanel: true,
-    showPerfPanel: true,
-    showTrajPanel: true,
-    showContextMenu: true,
-  },
-  canvas: {
-    antialias: true,
-    alpha: false,
-    preserveDrawingBuffer: true,
-    stencil: true,
-  },
 };
+
+/**
+ * Build default config from pure literals inside a function body.
+ *
+ * Critical for the VS Code webview dual-runtime split: rspack rewrites some
+ * module-level `const` exports to `chunkId === owner ? value : null` when the
+ * same module is evaluated under two webpack runtimes (vendor `runtime.js` vs
+ * wasm `96612.js`). Closures that read those exports at call time then throw
+ * ("X is not iterable", "Cannot convert null to object"). Function bodies that
+ * only construct local literals are immune.
+ */
+function buildDefaultConfig(): ResolvedMolvisConfig {
+  return {
+    showUI: true,
+    useRightHandedSystem: true,
+    gui: true,
+    engineOwnership: "app",
+    interactive: true,
+    decorations: true,
+    enabledModes: [
+      "view",
+      "select",
+      "edit",
+      "measure",
+      "manipulate",
+    ] as ModeType[],
+    ui: {
+      showModePanel: true,
+      showViewPanel: true,
+      showInfoPanel: true,
+      showPerfPanel: true,
+      showTrajPanel: true,
+      showContextMenu: true,
+    },
+    canvas: {
+      antialias: true,
+      alpha: false,
+      preserveDrawingBuffer: true,
+      stencil: true,
+    },
+  };
+}
+
+/** Cache on the function object — not a module binding, so dual-runtime safe. */
+function defaultConfig(): ResolvedMolvisConfig {
+  const fn = defaultConfig as typeof defaultConfig & {
+    _cache?: ResolvedMolvisConfig;
+  };
+  if (fn._cache === undefined) {
+    fn._cache = buildDefaultConfig();
+  }
+  return fn._cache;
+}
+
+/**
+ * Default configuration values.
+ *
+ * Implemented as a Proxy so property reads always go through
+ * {@link defaultConfig} (function-local cache) instead of a module-level
+ * object that dual-runtime bundling may null out.
+ */
+export const DEFAULT_CONFIG: ResolvedMolvisConfig = new Proxy(
+  {} as ResolvedMolvisConfig,
+  {
+    get(_target, prop, _receiver) {
+      return Reflect.get(defaultConfig(), prop);
+    },
+    has(_target, prop) {
+      return Reflect.has(defaultConfig(), prop);
+    },
+    ownKeys() {
+      return Reflect.ownKeys(defaultConfig());
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      return Reflect.getOwnPropertyDescriptor(defaultConfig(), prop);
+    },
+  },
+);
 
 /**
  * Helper to create config.
  * Merges user config with defaults.
  */
 export function defaultMolvisConfig(config: MolvisConfig = {}): MolvisConfig {
+  const d = defaultConfig();
+  // Always keep "view" even if the host passes a custom enabledModes list.
   const enabledModes = Array.from(
-    new Set([
-      ModeType.View,
-      ...(config.enabledModes ?? DEFAULT_CONFIG.enabledModes),
+    new Set<ModeType>([
+      "view" as ModeType,
+      ...(config.enabledModes ?? d.enabledModes),
     ]),
   );
   return {
-    showUI: config.showUI ?? DEFAULT_CONFIG.showUI,
-    useRightHandedSystem:
-      config.useRightHandedSystem ?? DEFAULT_CONFIG.useRightHandedSystem,
-    gui: config.gui ?? DEFAULT_CONFIG.gui,
-    engineOwnership: config.engineOwnership ?? DEFAULT_CONFIG.engineOwnership,
-    interactive: config.interactive ?? DEFAULT_CONFIG.interactive,
-    decorations: config.decorations ?? DEFAULT_CONFIG.decorations,
+    showUI: config.showUI ?? d.showUI,
+    useRightHandedSystem: config.useRightHandedSystem ?? d.useRightHandedSystem,
+    gui: config.gui ?? d.gui,
+    engineOwnership: config.engineOwnership ?? d.engineOwnership,
+    interactive: config.interactive ?? d.interactive,
+    decorations: config.decorations ?? d.decorations,
     enabledModes,
     // Carry the injected engine reference through verbatim (gui:false only).
     engine: config.engine,
     ui: {
-      showModePanel:
-        config.ui?.showModePanel ?? DEFAULT_CONFIG.ui.showModePanel,
-      showViewPanel:
-        config.ui?.showViewPanel ?? DEFAULT_CONFIG.ui.showViewPanel,
-      showInfoPanel:
-        config.ui?.showInfoPanel ?? DEFAULT_CONFIG.ui.showInfoPanel,
-      showPerfPanel:
-        config.ui?.showPerfPanel ?? DEFAULT_CONFIG.ui.showPerfPanel,
-      showTrajPanel:
-        config.ui?.showTrajPanel ?? DEFAULT_CONFIG.ui.showTrajPanel,
-      showContextMenu:
-        config.ui?.showContextMenu ?? DEFAULT_CONFIG.ui.showContextMenu,
+      showModePanel: config.ui?.showModePanel ?? d.ui.showModePanel,
+      showViewPanel: config.ui?.showViewPanel ?? d.ui.showViewPanel,
+      showInfoPanel: config.ui?.showInfoPanel ?? d.ui.showInfoPanel,
+      showPerfPanel: config.ui?.showPerfPanel ?? d.ui.showPerfPanel,
+      showTrajPanel: config.ui?.showTrajPanel ?? d.ui.showTrajPanel,
+      showContextMenu: config.ui?.showContextMenu ?? d.ui.showContextMenu,
       contextMenu: config.ui?.contextMenu,
     },
     canvas: {
-      antialias: config.canvas?.antialias ?? DEFAULT_CONFIG.canvas.antialias,
-      alpha: config.canvas?.alpha ?? DEFAULT_CONFIG.canvas.alpha,
+      antialias: config.canvas?.antialias ?? d.canvas.antialias,
+      alpha: config.canvas?.alpha ?? d.canvas.alpha,
       preserveDrawingBuffer:
-        config.canvas?.preserveDrawingBuffer ??
-        DEFAULT_CONFIG.canvas.preserveDrawingBuffer,
-      stencil: config.canvas?.stencil ?? DEFAULT_CONFIG.canvas.stencil,
+        config.canvas?.preserveDrawingBuffer ?? d.canvas.preserveDrawingBuffer,
+      stencil: config.canvas?.stencil ?? d.canvas.stencil,
     },
   };
 }
 
 /** Whether a mode is permitted by a resolved or partial configuration. */
 export function isModeEnabled(config: MolvisConfig, mode: ModeType): boolean {
-  return (config.enabledModes ?? DEFAULT_CONFIG.enabledModes).includes(mode);
+  return (config.enabledModes ?? defaultConfig().enabledModes).includes(mode);
 }

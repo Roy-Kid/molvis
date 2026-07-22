@@ -1,7 +1,7 @@
 import { defineConfig } from "@vscode/test-cli";
 
 export default defineConfig({
-  files: "out-test/test/integration/**/*.test.js",
+  files: "out-test/tests/integration/**/*.test.js",
   extensionDevelopmentPath: ".",
   mocha: {
     ui: "tdd",

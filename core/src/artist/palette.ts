@@ -879,11 +879,6 @@ export class ColorMap {
     return this.sample(t);
   }
 
-  resetKeys(): void {
-    // Compatibility no-op. Dataset-level categorical assignment now happens
-    // before rendering rather than incrementally at lookup time.
-  }
-
   static fromLookup(
     name: string,
     record: Record<string, string>,

@@ -13,16 +13,9 @@ import {
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
 import { isCtrlOrMeta } from "../utils/platform";
+import type { ModeType } from "./mode_type";
 import type { HitResult } from "./types";
 import { pointOnScreenAlignedPlane } from "./utils";
-
-enum ModeType {
-  View = "view",
-  Select = "select",
-  Edit = "edit",
-  Measure = "measure",
-  Manipulate = "manipulate",
-}
 
 /**
  * Base class for all interaction modes.
@@ -217,9 +210,6 @@ abstract class BaseMode {
               case "q":
                 this._on_press_q();
                 break;
-              case "i":
-                this._on_press_i();
-                break;
               case "Escape":
                 this._on_press_escape();
                 break;
@@ -350,10 +340,6 @@ abstract class BaseMode {
   _on_press_e(): void {}
 
   _on_press_q(): void {}
-
-  protected _on_press_i(): void {
-    this.world.toggleInspector();
-  }
 
   protected _on_press_escape(): void {
     // Override in subclasses for custom escape behavior
@@ -500,4 +486,5 @@ abstract class BaseMode {
   }
 }
 
-export { BaseMode, ModeType };
+export { ModeType } from "./mode_type";
+export { BaseMode };

@@ -24,6 +24,7 @@ import type {
   BackendStateSyncPipelineEntry,
 } from "../events";
 import {
+  DATA_SOURCE_CATEGORY,
   DataSourceModifier,
   MemoryDataSource,
 } from "../pipeline/data_source_modifier";
@@ -35,13 +36,22 @@ import {
 import { Trajectory } from "../system/trajectory";
 
 /**
- * Identify a serialized pipeline entry as a DataSource. Uses the `kind`
- * field (present only on DataSource entries) as the primary discriminator,
- * with a fallback to the legacy `"Data Source"` name for backward
- * compatibility with Python backends that predate the rename.
+ * Identify a serialized pipeline entry as a DataSource.
+ * Prefer `category === DATA_SOURCE_CATEGORY` or a known acquisition `kind`.
  */
 function isDataSourceEntry(e: BackendStateSyncPipelineEntry): boolean {
-  return e.kind !== undefined || e.name === "Data Source";
+  if (e.category === DATA_SOURCE_CATEGORY) return true;
+  if (
+    e.kind === "file" ||
+    e.kind === "memory" ||
+    e.kind === "ssh" ||
+    e.kind === "http" ||
+    e.kind === "trajectory" ||
+    e.kind === "frame"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

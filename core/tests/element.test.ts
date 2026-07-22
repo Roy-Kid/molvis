@@ -1,10 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 import { defaultMolvisConfig, isModeEnabled } from "../src/config";
 import {
-  defineMolvisStyleGallery,
-  defineMolvisViewer,
-  type MolvisStyleGalleryElement,
-  type MolvisViewerElement,
+  normalizeInlineSource,
   parseMolvisStyleGallery,
   parseMolvisViewer,
 } from "../src/element";
@@ -34,6 +31,17 @@ function inlineGallery(attributes: Record<string, string> = {}): HTMLElement {
   element.appendChild(template);
   return element;
 }
+
+describe("normalizeInlineSource", () => {
+  it("strips pretty-print leading/trailing blank lines", () => {
+    const pretty = `\n3\nname=water\nO  0.0000  0.0000  0.0000\nH  0.9572  0.0000  0.0000\nH -0.2390  0.9266  0.0000\n      `;
+    const cleaned = normalizeInlineSource(pretty);
+    expect(cleaned.startsWith("3\n")).toBe(true);
+    expect(cleaned.endsWith("0.0000")).toBe(true);
+    expect(cleaned).not.toMatch(/^\s/);
+    expect(cleaned).not.toMatch(/\s$/);
+  });
+});
 
 describe("molvis-viewer author configuration", () => {
   it("parses inline source with safe embed defaults", () => {
@@ -80,48 +88,6 @@ describe("molvis-viewer author configuration", () => {
   });
 });
 
-describe("molvis-viewer browser lifecycle", () => {
-  it("keeps the loading root in the viewer's own layout", () => {
-    defineMolvisViewer();
-    const element = inlineViewer({ format: "xyz" }) as MolvisViewerElement;
-    document.body.appendChild(element);
-
-    const root = element.querySelector<HTMLElement>(
-      "[data-molvis-viewer-root]",
-    );
-    expect(root?.style.position).toBe("relative");
-    expect(root?.style.width).toBe("100%");
-    expect(root?.style.height).toBe("100%");
-
-    element.remove();
-  });
-
-  it("mounts inline XYZ through the real loader and disposes on detach", async () => {
-    defineMolvisViewer();
-    const element = inlineViewer({ format: "xyz" }) as MolvisViewerElement;
-    element.style.width = "320px";
-    element.style.height = "240px";
-    const ready = new Promise<void>((resolve, reject) => {
-      element.addEventListener("molvis:ready", () => resolve(), { once: true });
-      element.addEventListener(
-        "molvis:error",
-        (event) =>
-          reject((event as CustomEvent<{ error: Error }>).detail.error),
-        { once: true },
-      );
-    });
-    document.body.appendChild(element);
-    await ready;
-    const app = element.app;
-    expect(app).toBeDefined();
-    expect(app?.frame?.getBlock("atoms")?.nrows()).toBe(2);
-    expect(element.querySelector("canvas")).toBeTruthy();
-
-    element.remove();
-    expect(element.app).toBeNull();
-  });
-});
-
 describe("molvis-style-gallery", () => {
   it("defaults to every representation and validates read-only options", () => {
     const options = parseMolvisStyleGallery(
@@ -142,48 +108,6 @@ describe("molvis-style-gallery", () => {
     ).toThrow(/non-negative/);
   });
 
-  it("mounts multiple canvases and scenes on exactly one engine", async () => {
-    defineMolvisStyleGallery();
-    const element = inlineGallery({
-      format: "xyz",
-      representations: "flat spacefill",
-      "rotation-speed": "0",
-    }) as MolvisStyleGalleryElement;
-    const ready = new Promise<void>((resolve, reject) => {
-      element.addEventListener("molvis:ready", () => resolve(), { once: true });
-      element.addEventListener(
-        "molvis:error",
-        (event) =>
-          reject((event as CustomEvent<{ error: Error }>).detail.error),
-        { once: true },
-      );
-    });
-    document.body.appendChild(element);
-    await ready;
-
-    expect(
-      element.querySelectorAll("canvas.molvis-style-gallery__canvas"),
-    ).toHaveLength(2);
-    expect(element.apps).toHaveLength(2);
-    expect(new Set(element.apps.map((app) => app.scene.getEngine())).size).toBe(
-      1,
-    );
-    expect(element.apps[0].scene.getEngine()).toBe(element.engine);
-    for (const app of element.apps) {
-      expect(app.world.camera.beta).toBeCloseTo(Math.PI / 6, 6);
-    }
-    const preview = element.querySelector(".molvis-style-gallery__preview");
-    expect(
-      preview?.dispatchEvent(
-        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
-      ),
-    ).toBe(false);
-
-    element.remove();
-    expect(element.engine).toBeNull();
-    expect(element.apps).toHaveLength(0);
-  });
-
   it("advances every gallery camera at the configured automatic speed", () => {
     const cameras = [{ alpha: Math.PI / 4 }, { alpha: Math.PI / 4 }];
     for (const camera of cameras) {
@@ -197,7 +121,7 @@ describe("molvis-style-gallery", () => {
 });
 
 describe("enabled interaction modes", () => {
-  it("keeps ordinary core mounts backward compatible", () => {
+  it("enables every mode by default", () => {
     const config = defaultMolvisConfig();
     for (const mode of Object.values(ModeType)) {
       expect(isModeEnabled(config, mode)).toBe(true);

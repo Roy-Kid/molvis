@@ -61,14 +61,18 @@ export interface MolvisEventMap {
 export interface BackendStateSyncPipelineEntry {
   id: string;
   name: string;
+  /** Pipeline category label (e.g. Data Source). Preferred DS discriminator. */
+  category?: string;
   capabilities: string[];
   enabled: boolean;
   selection_scope_id: string | null;
   source_owner_id: string | null;
-  /** DataSourceModifier-only fields (multi-DS spec phase 4). Present
-   *  for entries whose `kind` field is set (e.g. "trajectory" or "frame");
-   *  ignored otherwise. */
-  kind?: "trajectory" | "frame";
+  /**
+   * DataSource acquisition kind (`file` | `memory` | …) when serialized from
+   * core, or legacy multi-DS labels (`trajectory` | `frame`). Presence or
+   * `category === "Data Source"` identifies a data source entry.
+   */
+  kind?: string;
   filename?: string;
   source_type?: "file" | "empty" | "backend";
   contributed_blocks?: string[];

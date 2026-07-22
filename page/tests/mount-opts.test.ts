@@ -24,13 +24,7 @@ describe("resolveChrome", () => {
     expect(result.timeline).toBe(false);
   });
 
-  it("minimal:true → same as canvas (backward-compat alias)", () => {
-    const fromMinimal = resolveChrome({ minimal: true });
-    const fromCanvas = resolveChrome({ surface: "canvas" });
-    expect(fromMinimal).toEqual(fromCanvas);
-  });
-
-  it("default (no surface, no minimal) → all true", () => {
+  it("default (no surface) → all true", () => {
     const result = resolveChrome({});
     expect(result.topBar).toBe(true);
     expect(result.leftSidebar).toBe(true);
@@ -61,13 +55,6 @@ describe("resolveChrome", () => {
     expect(result.rightSidebar).toBe(false);
     expect(result.statusBar).toBe(false);
     expect(result.timeline).toBe(false);
-  });
-
-  it("surface takes precedence over minimal when both set", () => {
-    // surface is explicit; minimal is only a fallback
-    const result = resolveChrome({ surface: "full", minimal: true });
-    expect(result.topBar).toBe(true);
-    expect(result.leftSidebar).toBe(true);
   });
 });
 

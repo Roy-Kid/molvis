@@ -70,11 +70,12 @@ def test_payload_carries_pipeline_and_frames() -> None:
     scene._mirror_pipeline = [
         ModifierInfo(
             id="data-source-1",
-            name="Data Source",
-            category="data",
+            name="File Loader",
+            category="Data Source",
             enabled=True,
             selection_scope_id=None,
             source_owner_id=None,
+            kind="file",
         ),
         ModifierInfo(
             id="hide-h-2",

@@ -27,6 +27,7 @@
     "test:page": "npm run test -w page",
     "test:python": "cd python && if [ -x .venv/bin/python ]; then .venv/bin/python -m pytest tests; else python3 -m pytest tests; fi",
     "test:vsc-ext": "npm run test:unit -w vsc-ext",
+    "test:regressions": "npm run test:regressions -w core",
     "test": "npm run test:core && npm run test:page && npm run test:python && npm run test:vsc-ext",
     "test:watch": "npm run test:watch -w core",
     "release:core:check": "npm run release:check -w core",

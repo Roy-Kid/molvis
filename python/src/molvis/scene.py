@@ -238,7 +238,7 @@ class Molvis(
                 open_browser=want_browser,
                 serve_page=self.serve_page,
                 event_bus=self._events,
-                minimal=not self.gui,
+                surface="full" if self.gui else "canvas",
             )
         else:
             attach = getattr(transport, "attach_event_bus", None)
@@ -657,6 +657,9 @@ class Molvis(
                     "enabled": m.enabled,
                     "selection_scope_id": m.selection_scope_id,
                     "source_owner_id": m.source_owner_id,
+                    **({"kind": m.kind} if m.kind else {}),
+                    # apply_state requires capabilities; mirror may lack them.
+                    "capabilities": [],
                 }
                 for m in self._mirror_pipeline
             ]
@@ -786,7 +789,7 @@ class Molvis(
             "useShadowDOM": True,
             "cssUrls": list(endpoints.css),
             "theme": "dark",
-            "minimal": not self.gui,
+            "surface": "full" if self.gui else "canvas",
         }
         loader = _BOOTSTRAP_LOADER.format(
             cell_id=json.dumps(cell_id),

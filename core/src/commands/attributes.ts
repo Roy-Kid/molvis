@@ -66,35 +66,3 @@ export class SetAttributeCommand extends Command<void> {
     });
   }
 }
-
-export interface SetFrameMetaArgs {
-  key: string;
-  value: unknown;
-}
-
-@command("set_frame_meta")
-export class SetFrameMetaCommand extends Command<void> {
-  private key: string;
-  private value: unknown;
-
-  constructor(app: MolvisApp, args: SetFrameMetaArgs) {
-    super(app);
-    this.key = args.key;
-    this.value = args.value;
-  }
-
-  do(): void {
-    // Reserved for API compatibility. Frame-level metadata storage is not wired yet.
-    void this.key;
-    void this.value;
-  }
-
-  undo(): Command {
-    // Dummy undo that does nothing or reverses?
-    // Since do() does nothing, undo returns a no-op command.
-    return new SetFrameMetaCommand(this.app, {
-      key: this.key,
-      value: undefined,
-    });
-  }
-}

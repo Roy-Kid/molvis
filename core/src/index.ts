@@ -274,7 +274,6 @@ export {
   type RegionWireframeSpec,
   type SphereRegion,
 } from "./overlays/region_wireframe";
-export { SphereWireframeOverlay } from "./overlays/sphere_wireframe";
 export { TextLabelOverlay } from "./overlays/text_label";
 export type {
   Arrow2DProps,
@@ -284,7 +283,6 @@ export type {
   MarkLabel,
   MarkShape,
   Overlay,
-  SphereWireframeProps,
   TextLabelProps,
   VectorFieldProps,
 } from "./overlays/types";

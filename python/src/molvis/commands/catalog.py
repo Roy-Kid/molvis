@@ -43,7 +43,6 @@ class FrontendCommands:
     SET_THEME = FrontendCommand(FrontendCommandGroup.VIEW, "set_theme")
     SET_VIEW_MODE = FrontendCommand(FrontendCommandGroup.VIEW, "set_mode")
     SET_BACKGROUND = FrontendCommand(FrontendCommandGroup.VIEW, "set_background")
-    COLOR_BY = FrontendCommand(FrontendCommandGroup.VIEW, "color_by")
     SESSION_COUNT = FrontendCommand(
         FrontendCommandGroup.SESSION, "get_session_count"
     )

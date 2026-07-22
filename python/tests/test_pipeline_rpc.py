@@ -62,8 +62,9 @@ def test_list_modifiers_decodes_response_and_updates_mirror() -> None:
     modifiers_payload = [
         {
             "id": "data-source-1",
-            "name": "Data Source",
-            "category": "data",
+            "name": "File Loader",
+            "category": "Data Source",
+            "kind": "file",
             "enabled": True,
             "selection_scope_id": None,
             "source_owner_id": None,
@@ -89,11 +90,12 @@ def test_list_modifiers_decodes_response_and_updates_mirror() -> None:
     assert len(result) == 2
     assert result[0] == ModifierInfo(
         id="data-source-1",
-        name="Data Source",
-        category="data",
+        name="File Loader",
+        category="Data Source",
         enabled=True,
         selection_scope_id=None,
         source_owner_id=None,
+        kind="file",
     )
     assert result[1].enabled is False
     # Mirror is populated and ready for state sync.
