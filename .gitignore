@@ -161,3 +161,6 @@ Untitled*.ipynb
 .claude/worktrees/
 .playwright-mcp/
 package-lock.json
+
+.tox/
+.venv/

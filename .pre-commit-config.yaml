@@ -1,3 +1,6 @@
+# Managed by prek: `prek install`
+default_install_hook_types: [pre-commit, pre-push]
+
 # Mirrors every job in .github/workflows/ci.yml. Any divergence is a bug
 # — when you add/modify a CI job, update this file in the same commit.
 # (We deliberately do NOT add docs / doc-build hooks here: there is no
