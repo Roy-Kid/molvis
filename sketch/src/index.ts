@@ -23,3 +23,24 @@ export {
   SKETCH_ELEMENT_COLORS,
   colorForElement,
 } from "./style/element_colors";
+export {
+  DEFAULT_BOND_LENGTH,
+  SNAP_RADIUS,
+  findAtom,
+} from "./geometry/snap";
+export {
+  buildRingTemplate,
+  type RingGeometry,
+  type RingKind,
+} from "./geometry/ring_template";
+export { buildChainPoints } from "./geometry/chain_builder";
+export {
+  PlaceRingCommand,
+  CycleBondOrderCommand,
+  SetBondStereoCommand,
+  AdjustAtomChargeCommand,
+  MoveSelectionCommand,
+  ClearDocumentCommand,
+} from "./commands/ops_commands";
+export { resolveKeymap, type SketchAction } from "./board/keymap";
+export { ViewportController } from "./board/viewport";
