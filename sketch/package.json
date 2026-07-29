@@ -1,0 +1,33 @@
+{
+  "name": "@molcrafts/molvis-sketch",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "rslib build",
+    "typecheck": "tsc --noEmit",
+    "test": "rstest run",
+    "test:watch": "rstest watch"
+  },
+  "dependencies": {
+    "@molcrafts/molrs": "0.10.0"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^2.0.8",
+    "@rslib/core": "^0.22.0",
+    "@rstest/browser": "^0.10.3",
+    "@rstest/core": "^0.10.3",
+    "playwright": "^1.60.0",
+    "typescript": "^6.0.3"
+  },
+  "author": "Roy Kid",
+  "license": "BSD-3-Clause",
+  "description": "MolVis 2D molecule sketch engine (Canvas + graph model)"
+}
