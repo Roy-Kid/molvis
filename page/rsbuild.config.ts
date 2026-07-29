@@ -20,12 +20,19 @@ export default defineConfig({
         import.meta.dirname,
         "../core/src/io/index.ts",
       ),
+      "@molcrafts/molvis-sketch": path.resolve(
+        import.meta.dirname,
+        "../sketch/src/index.ts",
+      ),
       // @molcrafts/molplot resolves from node_modules (published Vega-Lite pkg).
     },
   },
   source: {
     watchFiles: {
-      paths: [path.resolve(import.meta.dirname, "../core/src/**")],
+      paths: [
+        path.resolve(import.meta.dirname, "../core/src/**"),
+        path.resolve(import.meta.dirname, "../sketch/src/**"),
+      ],
     },
   },
   performance: {
@@ -68,7 +75,7 @@ export default defineConfig({
         ...config.experiments,
         asyncWebAssembly: true,
       };
-      // Inline the raw text of `?raw` imports (e.g. CHANGELOG.md) as a string.
+      // Inline the raw text of `?raw` imports as a string.
       config.module = {
         ...config.module,
         rules: [
@@ -76,17 +83,6 @@ export default defineConfig({
           { resourceQuery: /raw/, type: "asset/source" },
         ],
       };
-      config.node = {
-        ...(config.node || {}),
-        // kekule.js uses __dirname internally — mock it silently
-        __dirname: "mock",
-      };
-      config.ignoreWarnings = [
-        ...(config.ignoreWarnings || []),
-        // kekule.js uses dynamic require internally — harmless in browser
-        /Critical dependency/,
-        /__dirname/,
-      ];
     },
   },
 });

@@ -26,7 +26,7 @@
     "autoprefixer": "^10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "kekule": "^1.0.4",
+    "@molcrafts/molvis-sketch": "*",
     "lucide-react": "^1.17.0",
     "postcss": "^8.5.15",
     "react": "^19.2.6",
