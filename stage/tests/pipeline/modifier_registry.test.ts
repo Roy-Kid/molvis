@@ -46,7 +46,32 @@ describe("ModifierRegistry — OVITO-aligned menu", () => {
       .filter((e) => e.category === "Selection")
       .map((e) => e.name)
       .sort();
-    expect(selection).toEqual(["Expression Select", "Hide Selection"]);
+    expect(selection).toEqual([
+      "Clear Selection",
+      "Expand Selection",
+      "Expression Select",
+      "Hide Selection",
+      "Invert Selection",
+      "Select Type",
+    ]);
+  });
+
+  it("registers OVITO Selection parity entries as user-addable", () => {
+    ModifierRegistry.initialize();
+    const byName = new Map(
+      ModifierRegistry.getUserAddableModifiers().map((e) => [
+        e.name,
+        e.category,
+      ]),
+    );
+    for (const name of [
+      "Clear Selection",
+      "Invert Selection",
+      "Select Type",
+      "Expand Selection",
+    ]) {
+      expect(byName.get(name)).toBe("Selection");
+    }
   });
 
   it("uses OVITO-style categories for every menu entry", () => {
@@ -59,6 +84,10 @@ describe("ModifierRegistry — OVITO-aligned menu", () => {
     );
 
     expect(byName.get("Expression Select")).toBe("Selection");
+    expect(byName.get("Clear Selection")).toBe("Selection");
+    expect(byName.get("Invert Selection")).toBe("Selection");
+    expect(byName.get("Select Type")).toBe("Selection");
+    expect(byName.get("Expand Selection")).toBe("Selection");
     expect(byName.get("Hide Selection")).toBe("Selection");
     expect(byName.get("Slice")).toBe("Modification");
     expect(byName.get("Wrap PBC")).toBe("Modification");

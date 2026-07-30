@@ -2,7 +2,10 @@ import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "../setup_wasm";
 import type { MolvisApp } from "../../src/app";
-import { SelectModifier } from "../../src/modifiers/SelectModifier";
+import {
+  ClearSelectionModifier,
+  SelectModifier,
+} from "../../src/modifiers/SelectModifier";
 import { createDefaultContext, SelectionMask } from "../../src/pipeline/types";
 
 function hchFrame(): Frame {
@@ -105,5 +108,32 @@ describe("SelectModifier", () => {
     new SelectModifier("sel", "element == 'H'", "remove").apply(frame, context);
     expect(context.currentSelection.count()).toBe(1);
     expect(context.currentSelection.isSelected(1)).toBe(true);
+  });
+});
+
+describe("ClearSelectionModifier", () => {
+  const mockApp = {} as MolvisApp;
+
+  test("writes empty mask not all (OVITO clear)", () => {
+    const frame = hchFrame();
+    const context = createDefaultContext(frame, mockApp);
+    context.currentSelection = SelectionMask.all(3);
+    context.selectedBondIds = [0, 1];
+
+    new ClearSelectionModifier("clear").apply(frame, context);
+
+    expect(context.currentSelection.count()).toBe(0);
+    expect(context.currentSelection.isEmpty()).toBe(true);
+    expect(context.currentSelection.isAll()).toBe(false);
+    expect(context.selectedBondIds).toEqual([]);
+    expect(context.selectionSet.get("clear")?.isEmpty()).toBe(true);
+  });
+
+  test("clears a partial selection to empty", () => {
+    const frame = hchFrame();
+    const context = createDefaultContext(frame, mockApp);
+    context.currentSelection = SelectionMask.fromIndices(3, [0, 2]);
+    new ClearSelectionModifier().apply(frame, context);
+    expect(context.currentSelection.count()).toBe(0);
   });
 });

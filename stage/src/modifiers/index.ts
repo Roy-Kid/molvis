@@ -7,10 +7,16 @@ export {
   ComputeBondsModifier,
 } from "./ComputeBondsModifier";
 export { DeleteSelectedModifier } from "./DeleteSelectedModifier";
+export {
+  type ExpandSelectionMode,
+  ExpandSelectionModifier,
+} from "./ExpandSelectionModifier";
 export { ExpressionSelectionModifier } from "./ExpressionSelectionModifier";
 export { HideHydrogensModifier } from "./HideHydrogensModifier";
 export { HideSelectionModifier } from "./HideSelectionModifier";
+export { InvertSelectionModifier } from "./InvertSelectionModifier";
 export { ClearSelectionModifier, SelectModifier } from "./SelectModifier";
+export { SelectTypeModifier } from "./SelectTypeModifier";
 export { type GuideLine, SliceModifier } from "./SliceModifier";
 export { SolidLiquidModifier } from "./SolidLiquidModifier";
 export { SteinhardtOrderModifier } from "./SteinhardtOrderModifier";

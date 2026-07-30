@@ -35,7 +35,7 @@ Aligned with OVITO’s Add-modifier groups:
 
 | Category | Examples | Effect |
 |---|---|---|
-| Selection | Expression Select, Hide Selection | Create or act on a selection set |
+| Selection | Expression Select, Clear / Invert / Select Type / Expand Selection, Hide Selection | Create or act on a selection set |
 | Modification | Slice, Wrap PBC, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
 | Coloring | Color by Property, Assign Color, Steinhardt order, Solid-liquid | Per-atom color / structure-order → color |
 | Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density surface | Scene-changing visual helpers |

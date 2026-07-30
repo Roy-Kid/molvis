@@ -365,6 +365,10 @@ app.pipeline.setEnabled(id, false);
 |---|---|---|
 | `DataSourceModifier` | Data | Selects which trajectory slice feeds the pipeline. |
 | `ExpressionSelectionModifier` | Selection | VMD-style selection expression. |
+| `ClearSelectionModifier` | Selection | Empty selection (OVITO clear; not select-all). |
+| `InvertSelectionModifier` | Selection | Complement of current selection. |
+| `SelectTypeModifier` | Selection | Multi-select by `element` / `type` columns. |
+| `ExpandSelectionModifier` | Selection | Grow selection by bonds and/or cutoff neighbors. |
 | `SliceModifier` | Modification | Keeps atoms inside a half-space. |
 | `WrapPBCModifier` | Modification | Wraps atoms into the primary cell. |
 | `HideSelectionModifier` | Modification | Drops selected atoms from the render. |

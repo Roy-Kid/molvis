@@ -15,6 +15,11 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 ## Shipped batches
 
+### 2026-07-30 — OVITO Selection parity
+
+- **ovito-modifier-align** — Clear / Invert / Select Type / Expand Selection (+ registry, regression)
+
+
 ### 2026-07-29 — molvis-sketch chain
 
 - **molvis-sketch-01-model** — `@molcrafts/molvis-sketch` graph, history, Frame IO

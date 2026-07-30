@@ -19,8 +19,8 @@
 
 import { describe, expect, it } from "@rstest/core";
 // Paths relative to monorepo root (see core/rstest.regressions.config.ts root).
-import { loadTextTrajectory } from "../core/src/io/reader";
-import { writeFrame } from "../core/src/io/writer";
+import { loadTextTrajectory } from "../stage/src/io/reader";
+import { writeFrame } from "../stage/src/io/writer";
 
 /** Mirrors molrs gro water fixture (fixed 44-column atom rows). */
 const WATER_GRO = `Water box

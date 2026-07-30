@@ -151,13 +151,22 @@ export class SelectModifier extends BaseModifier {
 }
 
 /**
- * Clear selection modifier that resets currentSelection to "all".
+ * OVITO-style **Clear Selection**: write an empty particle selection
+ * (`SelectionMask.none`), not "all selected".
+ *
+ * Distinct from the pipeline default when no selection producer is in
+ * scope — `ModifierPipeline` still resets consumers without a
+ * `selectionScopeId` to `SelectionMask.all` (consume-all). This
+ * modifier only affects steps that read the mask it produces
+ * (via `selectionCache` / `selectionScopeId`).
  */
 export class ClearSelectionModifier extends BaseModifier {
-  constructor(id: string) {
+  static readonly NAME = "Clear Selection";
+
+  constructor(id = "clear-selection-default") {
     super(
       id,
-      "Clear Selection",
+      ClearSelectionModifier.NAME,
       new Set([ModifierCapability.ProducesSelection]),
     );
   }
@@ -165,7 +174,9 @@ export class ClearSelectionModifier extends BaseModifier {
   apply(input: Frame, context: PipelineContext): Frame {
     const atomsBlock = input.getBlock("atoms");
     const atomCount = atomsBlock?.nrows() ?? 0;
-    context.currentSelection = SelectionMask.all(atomCount);
+    const mask = SelectionMask.none(atomCount);
+    context.currentSelection = mask;
+    context.selectionSet.set(this.id, mask);
     context.selectedBondIds = [];
     return input;
   }

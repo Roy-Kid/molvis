@@ -2,9 +2,15 @@
 
 // Built-in modifiers
 export {
+  type ExpandSelectionMode,
+  ExpandSelectionModifier,
+} from "../modifiers/ExpandSelectionModifier";
+export { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
+export {
   ClearSelectionModifier,
   SelectModifier,
 } from "../modifiers/SelectModifier";
+export { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 export { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 // Bond column remap (paired with the file-load column-mapping dialog)
 export {

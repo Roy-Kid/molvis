@@ -16,8 +16,8 @@
 
 import { describe, expect, it } from "@rstest/core";
 // Paths relative to this file under monorepo root (rstest.regressions.config.ts).
-import { inferFormatFromFilename } from "../core/src/io/formats";
-import { loadTextTrajectory } from "../core/src/io/reader";
+import { inferFormatFromFilename } from "../stage/src/io/formats";
+import { loadTextTrajectory } from "../stage/src/io/reader";
 
 const WATER_GRO = `Water box
     3

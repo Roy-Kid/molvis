@@ -282,10 +282,19 @@ export {
   ComputeBondsModifier,
 } from "./modifiers/ComputeBondsModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
+export {
+  type ExpandSelectionMode,
+  ExpandSelectionModifier,
+} from "./modifiers/ExpandSelectionModifier";
 export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
-export { SelectModifier } from "./modifiers/SelectModifier";
+export { InvertSelectionModifier } from "./modifiers/InvertSelectionModifier";
+export {
+  ClearSelectionModifier,
+  SelectModifier,
+} from "./modifiers/SelectModifier";
+export { SelectTypeModifier } from "./modifiers/SelectTypeModifier";
 export { SliceModifier } from "./modifiers/SliceModifier";
 export { SolidLiquidModifier } from "./modifiers/SolidLiquidModifier";
 export { SteinhardtOrderModifier } from "./modifiers/SteinhardtOrderModifier";

@@ -2,9 +2,13 @@ import { AssignColorModifier } from "../modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
+import { ExpandSelectionModifier } from "../modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
+import { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
+import { ClearSelectionModifier } from "../modifiers/SelectModifier";
+import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
 import { SolidLiquidModifier } from "../modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "../modifiers/SteinhardtOrderModifier";
@@ -125,10 +129,33 @@ export class ModifierRegistry {
 
     // ── Selection ───────────────────────────────────────────────────
     // Selection = "xx selection" style ops (produce or consume selection).
+    // OVITO Selection group: Expression / Clear / Invert / Select Type /
+    // Expand / Hide. Manual selection stays on Select mode → SelectModifier
+    // (not Add-menu).
     ModifierRegistry.register(
       "Expression Select",
       "Selection",
       () => new ExpressionSelectionModifier(nextModifierId("expr-sel"), ""),
+    );
+    ModifierRegistry.register(
+      ClearSelectionModifier.NAME,
+      "Selection",
+      () => new ClearSelectionModifier(nextModifierId("clear-sel")),
+    );
+    ModifierRegistry.register(
+      InvertSelectionModifier.NAME,
+      "Selection",
+      () => new InvertSelectionModifier(nextModifierId("invert-sel")),
+    );
+    ModifierRegistry.register(
+      SelectTypeModifier.NAME,
+      "Selection",
+      () => new SelectTypeModifier(nextModifierId("select-type")),
+    );
+    ModifierRegistry.register(
+      ExpandSelectionModifier.NAME,
+      "Selection",
+      () => new ExpandSelectionModifier(nextModifierId("expand-sel")),
     );
     ModifierRegistry.register(
       "Hide Selection",
