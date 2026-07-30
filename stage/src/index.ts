@@ -275,8 +275,13 @@ export {
 } from "./mode";
 export { CommonMenuItems } from "./mode/menu_items";
 export type { HitResult, MenuItem } from "./mode/types";
+export {
+  type AffineMatrix3,
+  AffineTransformationModifier,
+} from "./modifiers/AffineTransformationModifier";
 export { AssignColorModifier } from "./modifiers/AssignColorModifier";
 export { ColorByPropertyModifier } from "./modifiers/ColorByPropertyModifier";
+export { ColorByTypeModifier } from "./modifiers/ColorByTypeModifier";
 export {
   type BondCriterion,
   ComputeBondsModifier,

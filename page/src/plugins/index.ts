@@ -33,6 +33,8 @@ export { loadPluginModule, rewriteModuleGraph } from "./loader";
 export { PluginManager, pluginManager } from "./manager";
 export { resolvePluginSource } from "./resolve";
 export type {
+  ModifierPanelComponent,
+  ModifierPanelSurface,
   MolvisPluginModule,
   PluginAnalysisSpec,
   PluginAPI,

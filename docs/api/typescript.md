@@ -371,9 +371,11 @@ app.pipeline.setEnabled(id, false);
 | `ExpandSelectionModifier` | Selection | Grow selection by bonds and/or cutoff neighbors. |
 | `SliceModifier` | Modification | Keeps atoms inside a half-space. |
 | `WrapPBCModifier` | Modification | Wraps atoms into the primary cell. |
+| `AffineTransformationModifier` | Modification | x′ = M·x + t; optional cell transform. |
 | `HideSelectionModifier` | Modification | Drops selected atoms from the render. |
 | `DeleteSelectedModifier` | Modification | Removes selected atoms from the frame. |
 | `ColorByPropertyModifier` | Coloring | Maps a column to a color ramp. |
+| `ColorByTypeModifier` | Coloring | Categorical color by `element` (OVITO Color by Type). |
 | `AssignColorModifier` | Coloring | Fixed color on selected atoms. |
 | `SteinhardtOrderModifier` | Coloring | Writes `steinhardt_q{l}`; optional scene color. |
 | `SolidLiquidModifier` | Coloring | Writes `solid_liquid` / `solid_liquid_n_bonds`; optional color. |

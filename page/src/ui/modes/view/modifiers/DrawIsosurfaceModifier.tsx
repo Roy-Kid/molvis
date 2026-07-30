@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
+import type { ModifierPanelSurface } from "@/plugins/types";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawIsosurfaceModifierProps {
   modifier: CoreDrawIsosurfaceModifier;
   app: Molvis | null;
   onUpdate: () => void;
+  surface?: ModifierPanelSurface;
 }
 
 function rgbToHex(rgb: readonly [number, number, number]): string {
@@ -68,7 +70,10 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
   modifier,
   app,
   onUpdate,
+  surface = "full",
 }) => {
+  const showCompute = surface === "full" || surface === "compute";
+  const showDraw = surface === "full" || surface === "draw";
   // Query available channels from the current frame. Re-read whenever
   // the modifier identity or app changes; channels are static for a
   // given file so we don't need a live subscription.
@@ -120,253 +125,277 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
       aria-busy={pipelineRunning}
       className="m-0 min-w-0 space-y-2 border-0 p-0 text-xs"
     >
-      <div className="flex items-center gap-2">
-        <Label className="text-micro text-muted-foreground w-16 shrink-0">
-          Channel
-        </Label>
-        <Select
-          value={style.channel}
-          onValueChange={(v) => {
-            modifier.setStyle({ channel: v });
-            applyPipeline();
-          }}
-        >
-          <SelectTrigger
-            aria-label="Isosurface channel"
-            className="h-control-compact text-xs flex-1 min-w-0"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {channels.length === 0 ? (
-              <SelectItem value={style.channel} className="text-xs" disabled>
-                {channelLabel(style.channel)}
-              </SelectItem>
-            ) : (
-              channels.map((c) => (
-                <SelectItem key={c} value={c} className="text-xs">
-                  {channelLabel(c)}
-                </SelectItem>
-              ))
-            )}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Label className="text-micro text-muted-foreground w-16 shrink-0">
-          Display
-        </Label>
-        <Select
-          value={style.renderMode}
-          onValueChange={(v) => {
-            modifier.setStyle({ renderMode: v as IsosurfaceRenderMode });
-            applyPipeline();
-          }}
-        >
-          <SelectTrigger
-            aria-label="Isosurface display mode"
-            className="h-control-compact text-xs flex-1 min-w-0"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="surface" className="text-xs">
-              Surface
-            </SelectItem>
-            <SelectItem value="cloud" className="text-xs">
-              Point cloud
-            </SelectItem>
-            <SelectItem value="both" className="text-xs">
-              Surface + cloud
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {style.renderMode !== "cloud" && (
-        <div className="flex items-center gap-2">
-          <Label className="text-micro text-muted-foreground w-16 shrink-0">
-            Surface
-          </Label>
-          <Select
-            value={style.surfaceStyle}
-            onValueChange={(v) => {
-              modifier.setStyle({ surfaceStyle: v as SurfaceStyle });
-              applyPipeline();
-            }}
-          >
-            <SelectTrigger
-              aria-label="Isosurface surface style"
-              className="h-control-compact text-xs flex-1 min-w-0"
+      {showCompute && (
+        <>
+          {surface === "compute" && (
+            <p className="text-micro text-muted-foreground">
+              Compute: which grid channel to contour. Appearance is on the
+              pipeline properties pane.
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <Label className="text-micro text-muted-foreground w-16 shrink-0">
+              Channel
+            </Label>
+            <Select
+              value={style.channel}
+              onValueChange={(v) => {
+                modifier.setStyle({ channel: v });
+                applyPipeline();
+              }}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="solid" className="text-xs">
-                Solid
-              </SelectItem>
-              <SelectItem value="mesh" className="text-xs">
-                Mesh
-              </SelectItem>
-              <SelectItem value="contour" className="text-xs">
-                Contour
-              </SelectItem>
-              <SelectItem value="dot" className="text-xs">
-                Dot
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+              <SelectTrigger
+                aria-label="Isosurface channel"
+                className="h-control-compact text-xs flex-1 min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {channels.length === 0 ? (
+                  <SelectItem
+                    value={style.channel}
+                    className="text-xs"
+                    disabled
+                  >
+                    {channelLabel(style.channel)}
+                  </SelectItem>
+                ) : (
+                  channels.map((c) => (
+                    <SelectItem key={c} value={c} className="text-xs">
+                      {channelLabel(c)}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </>
       )}
 
-      {style.renderMode !== "cloud" &&
-        (style.surfaceStyle === "contour" || style.surfaceStyle === "dot") && (
-          <ScalarSliderRow
-            label="Band gap"
-            value={style.contourSpacing}
-            min={0.05}
-            max={2}
-            step={0.05}
-            format={(v) => `${v.toFixed(2)} Å`}
-            onPreview={(v) => {
-              modifier.setStyle({ contourSpacing: v });
-              onUpdate();
-            }}
-            onCommit={(v) => {
-              modifier.setStyle({ contourSpacing: v });
-              applyPipeline();
-            }}
-          />
-        )}
-
-      <ScalarSliderRow
-        label="Isovalue"
-        value={isoValueClamped}
-        min={isoMin}
-        max={isoMax}
-        step={isoStep}
-        format={(v) =>
-          maxAbs > 0
-            ? `${v.toExponential(2)} (${((v / maxAbs) * 100).toFixed(1)}% of max)`
-            : v.toFixed(4)
-        }
-        onPreview={(v) => {
-          modifier.setStyle({ isovalue: v });
-          onUpdate();
-        }}
-        onCommit={(v) => {
-          modifier.setStyle({ isovalue: v });
-          applyPipeline();
-        }}
-      />
-
-      <div className="flex items-center gap-2">
-        <Label className="text-micro text-muted-foreground w-16 shrink-0">
-          Color
-        </Label>
-        <input
-          type="color"
-          value={rgbToHex(style.color)}
-          onChange={(e) => {
-            modifier.setStyle({ color: hexToRgb(e.target.value) });
-            applyPipeline();
-          }}
-          className="size-control-compact rounded-control cursor-pointer border-0 p-0"
-          aria-label="Isosurface color"
-        />
-      </div>
-
-      <ScalarSliderRow
-        label="Opacity"
-        value={style.opacity}
-        min={0}
-        max={1}
-        step={0.05}
-        format={(v) => `${Math.round(v * 100)}%`}
-        onPreview={(v) => {
-          modifier.setStyle({ opacity: v });
-          app?.artist.isosurfaceRenderer.setOpacity(v);
-          onUpdate();
-        }}
-        onCommit={(v) => {
-          modifier.setStyle({ opacity: v });
-          app?.artist.isosurfaceRenderer.setOpacity(v);
-          onUpdate();
-        }}
-      />
-
-      <div className="flex items-center gap-2">
-        <Label
-          htmlFor={`iso-neg-${modifier.id}`}
-          className="text-micro text-muted-foreground flex-1 min-w-0"
-        >
-          Show negative isosurface
-        </Label>
-        <Switch
-          id={`iso-neg-${modifier.id}`}
-          checked={style.showNegative}
-          onCheckedChange={(v) => {
-            modifier.setStyle({ showNegative: v });
-            applyPipeline();
-          }}
-        />
-      </div>
-
-      {/* Cloud-only knobs — gated on render mode so the panel stays
-          visually compact for plain-surface users. */}
-      {(style.renderMode === "cloud" || style.renderMode === "both") && (
+      {showDraw && (
         <>
-          <ScalarSliderRow
-            label="Cloud cut"
-            value={style.cloudThreshold}
-            min={0}
-            max={1}
-            step={0.01}
-            format={(v) => `${Math.round(v * 100)}% of max`}
-            onPreview={(v) => {
-              modifier.setStyle({ cloudThreshold: v });
-              onUpdate();
-            }}
-            onCommit={(v) => {
-              modifier.setStyle({ cloudThreshold: v });
-              applyPipeline();
-            }}
-          />
+          {surface === "draw" && (
+            <p className="text-micro text-muted-foreground">
+              Draw: isosurface appearance. Channel is on the left panel.
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <Label className="text-micro text-muted-foreground w-16 shrink-0">
+              Display
+            </Label>
+            <Select
+              value={style.renderMode}
+              onValueChange={(v) => {
+                modifier.setStyle({ renderMode: v as IsosurfaceRenderMode });
+                applyPipeline();
+              }}
+            >
+              <SelectTrigger
+                aria-label="Isosurface display mode"
+                className="h-control-compact text-xs flex-1 min-w-0"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="surface" className="text-xs">
+                  Surface
+                </SelectItem>
+                <SelectItem value="cloud" className="text-xs">
+                  Point cloud
+                </SelectItem>
+                <SelectItem value="both" className="text-xs">
+                  Surface + cloud
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {style.renderMode !== "cloud" && (
+            <div className="flex items-center gap-2">
+              <Label className="text-micro text-muted-foreground w-16 shrink-0">
+                Surface
+              </Label>
+              <Select
+                value={style.surfaceStyle}
+                onValueChange={(v) => {
+                  modifier.setStyle({ surfaceStyle: v as SurfaceStyle });
+                  applyPipeline();
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Isosurface surface style"
+                  className="h-control-compact text-xs flex-1 min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="solid" className="text-xs">
+                    Solid
+                  </SelectItem>
+                  <SelectItem value="mesh" className="text-xs">
+                    Mesh
+                  </SelectItem>
+                  <SelectItem value="contour" className="text-xs">
+                    Contour
+                  </SelectItem>
+                  <SelectItem value="dot" className="text-xs">
+                    Dot
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {style.renderMode !== "cloud" &&
+            (style.surfaceStyle === "contour" ||
+              style.surfaceStyle === "dot") && (
+              <ScalarSliderRow
+                label="Band gap"
+                value={style.contourSpacing}
+                min={0.05}
+                max={2}
+                step={0.05}
+                format={(v) => `${v.toFixed(2)} Å`}
+                onPreview={(v) => {
+                  modifier.setStyle({ contourSpacing: v });
+                  onUpdate();
+                }}
+                onCommit={(v) => {
+                  modifier.setStyle({ contourSpacing: v });
+                  applyPipeline();
+                }}
+              />
+            )}
 
           <ScalarSliderRow
-            label="Cloud step"
-            value={style.cloudStride}
-            min={1}
-            max={8}
-            step={1}
-            format={(v) => `every ${v}`}
+            label="Isovalue"
+            value={isoValueClamped}
+            min={isoMin}
+            max={isoMax}
+            step={isoStep}
+            format={(v) =>
+              maxAbs > 0
+                ? `${v.toExponential(2)} (${((v / maxAbs) * 100).toFixed(1)}% of max)`
+                : v.toFixed(4)
+            }
             onPreview={(v) => {
-              modifier.setStyle({ cloudStride: v });
+              modifier.setStyle({ isovalue: v });
               onUpdate();
             }}
             onCommit={(v) => {
-              modifier.setStyle({ cloudStride: v });
+              modifier.setStyle({ isovalue: v });
               applyPipeline();
             }}
           />
 
           <div className="flex items-center gap-2">
+            <Label className="text-micro text-muted-foreground w-16 shrink-0">
+              Color
+            </Label>
+            <input
+              type="color"
+              value={rgbToHex(style.color)}
+              onChange={(e) => {
+                modifier.setStyle({ color: hexToRgb(e.target.value) });
+                applyPipeline();
+              }}
+              className="size-control-compact rounded-control cursor-pointer border-0 p-0"
+              aria-label="Isosurface color"
+            />
+          </div>
+
+          <ScalarSliderRow
+            label="Opacity"
+            value={style.opacity}
+            min={0}
+            max={1}
+            step={0.05}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onPreview={(v) => {
+              modifier.setStyle({ opacity: v });
+              app?.artist.isosurfaceRenderer.setOpacity(v);
+              onUpdate();
+            }}
+            onCommit={(v) => {
+              modifier.setStyle({ opacity: v });
+              app?.artist.isosurfaceRenderer.setOpacity(v);
+              onUpdate();
+            }}
+          />
+
+          <div className="flex items-center gap-2">
             <Label
-              htmlFor={`iso-pbc-${modifier.id}`}
+              htmlFor={`iso-neg-${modifier.id}`}
               className="text-micro text-muted-foreground flex-1 min-w-0"
             >
-              Show PBC images
+              Show negative isosurface
             </Label>
             <Switch
-              id={`iso-pbc-${modifier.id}`}
-              checked={style.showPbcImages}
+              id={`iso-neg-${modifier.id}`}
+              checked={style.showNegative}
               onCheckedChange={(v) => {
-                modifier.setStyle({ showPbcImages: v });
+                modifier.setStyle({ showNegative: v });
                 applyPipeline();
               }}
             />
           </div>
+
+          {/* Cloud-only knobs — gated on render mode so the panel stays
+          visually compact for plain-surface users. */}
+          {(style.renderMode === "cloud" || style.renderMode === "both") && (
+            <>
+              <ScalarSliderRow
+                label="Cloud cut"
+                value={style.cloudThreshold}
+                min={0}
+                max={1}
+                step={0.01}
+                format={(v) => `${Math.round(v * 100)}% of max`}
+                onPreview={(v) => {
+                  modifier.setStyle({ cloudThreshold: v });
+                  onUpdate();
+                }}
+                onCommit={(v) => {
+                  modifier.setStyle({ cloudThreshold: v });
+                  applyPipeline();
+                }}
+              />
+
+              <ScalarSliderRow
+                label="Cloud step"
+                value={style.cloudStride}
+                min={1}
+                max={8}
+                step={1}
+                format={(v) => `every ${v}`}
+                onPreview={(v) => {
+                  modifier.setStyle({ cloudStride: v });
+                  onUpdate();
+                }}
+                onCommit={(v) => {
+                  modifier.setStyle({ cloudStride: v });
+                  applyPipeline();
+                }}
+              />
+
+              <div className="flex items-center gap-2">
+                <Label
+                  htmlFor={`iso-pbc-${modifier.id}`}
+                  className="text-micro text-muted-foreground flex-1 min-w-0"
+                >
+                  Show PBC images
+                </Label>
+                <Switch
+                  id={`iso-pbc-${modifier.id}`}
+                  checked={style.showPbcImages}
+                  onCheckedChange={(v) => {
+                    modifier.setStyle({ showPbcImages: v });
+                    applyPipeline();
+                  }}
+                />
+              </div>
+            </>
+          )}
         </>
       )}
     </fieldset>

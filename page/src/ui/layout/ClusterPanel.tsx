@@ -1,14 +1,17 @@
 import { BarChart, type BarPoint } from "@molcrafts/molplot";
 import {
   type ClusterResult,
+  ColorByPropertyModifier,
   type ConnectivityMode,
   categoricalColorAt,
   computeClusters,
   type Molvis,
+  nextModifierId,
   type SelectionMask,
 } from "@molvis/stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -378,6 +381,32 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
 
   const selectionBlocked = useSelection && modifiers.length === 0;
 
+  /** Analysis (left) → pipeline draw modifier (right): Color by Property on cluster_id. */
+  const handleAddColorModifier = useCallback(() => {
+    if (!app || !result) return;
+    const frame = app.system.frame;
+    const atoms = frame?.getBlock("atoms");
+    if (!atoms || atoms.nrows() !== result.nParticles) {
+      setError("Frame atom count does not match cluster result.");
+      return;
+    }
+    // Persist labels on the working atoms block so Color by Property can read them.
+    atoms.setColI32("cluster_id", Int32Array.from(result.clusterIdx));
+    const existing = app.modifierPipeline
+      .getModifiers()
+      .find(
+        (m) =>
+          m instanceof ColorByPropertyModifier && m.columnName === "cluster_id",
+      );
+    if (!existing) {
+      const mod = new ColorByPropertyModifier(nextModifierId("color-cluster"));
+      mod.columnName = "cluster_id";
+      mod.categorical = true;
+      app.modifierPipeline.addModifier(mod);
+    }
+    void app.applyPipeline({ fullRebuild: true });
+  }, [app, result]);
+
   return (
     <AnalysisPanelShell
       footer={
@@ -395,6 +424,18 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
                 : `Connectivity: cutoff ${rMax || "auto"} Å`
             }
           />
+          {result && result.numClusters > 0 && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-control-compact w-full text-xs"
+              disabled={!app || computing}
+              onClick={handleAddColorModifier}
+            >
+              Add Color by Property (cluster_id)
+            </Button>
+          )}
         </div>
       }
     >

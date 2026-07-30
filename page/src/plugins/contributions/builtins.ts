@@ -5,6 +5,7 @@
  */
 
 import {
+  AffineTransformationModifier as CoreAffineTransformationModifier,
   AssignColorModifier as CoreAssignColorModifier,
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   ComputeBondsModifier as CoreComputeBondsModifier,
@@ -14,10 +15,12 @@ import {
   DrawBoxModifier as CoreDrawBoxModifier,
   DrawIsosurfaceModifier as CoreDrawIsosurfaceModifier,
   DrawRibbonModifier as CoreDrawRibbonModifier,
+  ExpandSelectionModifier as CoreExpandSelectionModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   GaussianDensitySurfaceModifier as CoreGaussianDensitySurfaceModifier,
   HideSelectionModifier as CoreHideModifier,
   SelectModifier as CoreSelectModifier,
+  SelectTypeModifier as CoreSelectTypeModifier,
   SliceModifier as CoreSliceModifier,
   SolidLiquidModifier as CoreSolidLiquidModifier,
   SteinhardtOrderModifier as CoreSteinhardtOrderModifier,
@@ -25,6 +28,7 @@ import {
   VectorFieldModifier as CoreVectorFieldModifier,
   type Modifier,
 } from "@molvis/stage";
+import { AffineTransformationModifier } from "@/ui/modes/view/modifiers/AffineTransformationModifier";
 import { AssignColorModifier } from "@/ui/modes/view/modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "@/ui/modes/view/modifiers/ColorByPropertyModifier";
 import { ComputeBondsModifier } from "@/ui/modes/view/modifiers/ComputeBondsModifier";
@@ -34,10 +38,12 @@ import { DrawBondModifier } from "@/ui/modes/view/modifiers/DrawBondModifier";
 import { DrawBoxModifier } from "@/ui/modes/view/modifiers/DrawBoxModifier";
 import { DrawIsosurfaceModifier } from "@/ui/modes/view/modifiers/DrawIsosurfaceModifier";
 import { DrawRibbonModifier } from "@/ui/modes/view/modifiers/DrawRibbonModifier";
+import { ExpandSelectionModifier } from "@/ui/modes/view/modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/ExpressionSelectionModifier";
 import { GaussianDensitySurfaceModifier } from "@/ui/modes/view/modifiers/GaussianDensitySurfaceModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
 import { SelectModifierProps } from "@/ui/modes/view/modifiers/SelectModifierProps";
+import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier";
 import { SliceModifier } from "@/ui/modes/view/modifiers/SliceModifier";
 import { SolidLiquidModifier } from "@/ui/modes/view/modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "@/ui/modes/view/modifiers/SteinhardtOrderModifier";
@@ -80,9 +86,24 @@ export function registerBuiltinModifierPanels(): void {
       component: asPanel(ExpressionSelectionModifier),
     },
     {
+      id: "builtin:SelectType",
+      match: (m) => m instanceof CoreSelectTypeModifier,
+      component: asPanel(SelectTypeModifier),
+    },
+    {
+      id: "builtin:ExpandSelection",
+      match: (m) => m instanceof CoreExpandSelectionModifier,
+      component: asPanel(ExpandSelectionModifier),
+    },
+    {
       id: "builtin:HideSelection",
       match: (m) => m instanceof CoreHideModifier,
       component: asPanel(HideSelectionModifier),
+    },
+    {
+      id: "builtin:AffineTransformation",
+      match: (m) => m instanceof CoreAffineTransformationModifier,
+      component: asPanel(AffineTransformationModifier),
     },
     {
       id: "builtin:ColorByProperty",

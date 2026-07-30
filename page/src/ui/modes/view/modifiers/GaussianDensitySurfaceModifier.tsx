@@ -6,12 +6,14 @@ import type React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
+import type { ModifierPanelSurface } from "@/plugins/types";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface Props {
   modifier: CoreGaussianDensitySurfaceModifier;
   app: Molvis | null;
   onUpdate: () => void;
+  surface?: ModifierPanelSurface;
 }
 
 const PIPELINE_COPY = {
@@ -39,6 +41,7 @@ export const GaussianDensitySurfaceModifier: React.FC<Props> = ({
   modifier,
   app,
   onUpdate,
+  surface = "full",
 }) => {
   const { applyPipeline, pipelineRunning } = useApplyPipelineOperation(
     app,
@@ -46,6 +49,8 @@ export const GaussianDensitySurfaceModifier: React.FC<Props> = ({
     PIPELINE_COPY,
   );
   const style = modifier.style;
+  const showCompute = surface === "full" || surface === "compute";
+  const showDraw = surface === "full" || surface === "draw";
 
   return (
     <fieldset
@@ -53,103 +58,118 @@ export const GaussianDensitySurfaceModifier: React.FC<Props> = ({
       aria-busy={pipelineRunning}
       className="m-0 space-y-3 border-0 p-0"
     >
-      <p className="text-micro text-muted-foreground">
-        Builds a Gaussian density grid from atoms (molrs) and draws an
-        isosurface. Requires a simulation cell.
-      </p>
+      {showCompute && (
+        <>
+          <p className="text-micro text-muted-foreground">
+            Compute: Gaussian density grid from atoms (molrs). Requires a
+            simulation cell. Surface appearance is on the pipeline properties
+            pane.
+          </p>
 
-      <div className="grid grid-cols-3 gap-1.5">
-        {(
-          [
-            ["nx", modifier.nx],
-            ["ny", modifier.ny],
-            ["nz", modifier.nz],
-          ] as const
-        ).map(([key, value]) => (
-          <div key={key} className="space-y-1">
-            <Label className="text-micro">{key}</Label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(
+              [
+                ["nx", modifier.nx],
+                ["ny", modifier.ny],
+                ["nz", modifier.nz],
+              ] as const
+            ).map(([key, value]) => (
+              <div key={key} className="space-y-1">
+                <Label className="text-micro">{key}</Label>
+                <Input
+                  type="number"
+                  min={2}
+                  max={128}
+                  step={1}
+                  className="h-8 text-xs"
+                  value={value}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    const nx = key === "nx" ? n : modifier.nx;
+                    const ny = key === "ny" ? n : modifier.ny;
+                    const nz = key === "nz" ? n : modifier.nz;
+                    modifier.setGrid(nx, ny, nz);
+                    onUpdate();
+                  }}
+                  onBlur={() => void applyPipeline()}
+                />
+              </div>
+            ))}
+          </div>
+
+          <ScalarSliderRow
+            label="Sigma (Å)"
+            value={modifier.sigma}
+            min={0.1}
+            max={5}
+            step={0.05}
+            onPreview={(sigma) => {
+              modifier.setSigma(sigma);
+              onUpdate();
+            }}
+            onCommit={() => {
+              void applyPipeline();
+            }}
+          />
+        </>
+      )}
+
+      {showDraw && (
+        <>
+          {surface === "draw" && (
+            <p className="text-micro text-muted-foreground">
+              Draw: isosurface appearance. Grid/sigma are on the left panel.
+            </p>
+          )}
+
+          <ScalarSliderRow
+            label="Isovalue"
+            value={style.isovalue}
+            min={0}
+            max={Math.max(style.isovalue * 2, 1)}
+            step={Math.max(style.isovalue / 50, 0.001)}
+            onPreview={(isovalue) => {
+              modifier.setStyle({ isovalue });
+              onUpdate();
+            }}
+            onCommit={() => {
+              void applyPipeline();
+            }}
+          />
+
+          <ScalarSliderRow
+            label="Opacity"
+            value={style.opacity}
+            min={0}
+            max={1}
+            step={0.05}
+            onPreview={(opacity) => {
+              modifier.setStyle({ opacity });
+              onUpdate();
+            }}
+            onCommit={() => {
+              void applyPipeline();
+            }}
+          />
+
+          <div className="space-y-1.5">
+            <Label className="text-micro" htmlFor="gds-color">
+              Color
+            </Label>
             <Input
-              type="number"
-              min={2}
-              max={128}
-              step={1}
-              className="h-8 text-xs"
-              value={value}
+              id="gds-color"
+              type="color"
+              value={rgbToHex(style.color)}
+              className="h-8 w-full p-1"
               onChange={(e) => {
-                const n = Number(e.target.value);
-                if (!Number.isFinite(n)) return;
-                const nx = key === "nx" ? n : modifier.nx;
-                const ny = key === "ny" ? n : modifier.ny;
-                const nz = key === "nz" ? n : modifier.nz;
-                modifier.setGrid(nx, ny, nz);
-                onUpdate();
+                modifier.setStyle({ color: hexToRgb(e.target.value) });
+                void applyPipeline();
               }}
-              onBlur={() => void applyPipeline()}
             />
           </div>
-        ))}
-      </div>
-
-      <ScalarSliderRow
-        label="Sigma (Å)"
-        value={modifier.sigma}
-        min={0.1}
-        max={5}
-        step={0.05}
-        onPreview={(sigma) => {
-          modifier.setSigma(sigma);
-          onUpdate();
-        }}
-        onCommit={() => {
-          void applyPipeline();
-        }}
-      />
-
-      <ScalarSliderRow
-        label="Isovalue"
-        value={style.isovalue}
-        min={0}
-        max={Math.max(style.isovalue * 2, 1)}
-        step={Math.max(style.isovalue / 50, 0.001)}
-        onPreview={(isovalue) => {
-          modifier.setStyle({ isovalue });
-          onUpdate();
-        }}
-        onCommit={() => {
-          void applyPipeline();
-        }}
-      />
-
-      <ScalarSliderRow
-        label="Opacity"
-        value={style.opacity}
-        min={0}
-        max={1}
-        step={0.05}
-        onPreview={(opacity) => {
-          modifier.setStyle({ opacity });
-          onUpdate();
-        }}
-        onCommit={() => {
-          void applyPipeline();
-        }}
-      />
-
-      <div className="space-y-1.5">
-        <Label className="text-micro" htmlFor="gds-color">
-          Color
-        </Label>
-        <Input
-          id="gds-color"
-          type="color"
-          value={rgbToHex(style.color)}
-          className="h-8 w-full p-1"
-          onChange={(e) => {
-            modifier.setStyle({ color: hexToRgb(e.target.value) });
-            void applyPipeline();
-          }}
-        />
-      </div>
+        </>
+      )}
     </fieldset>
   );
 };

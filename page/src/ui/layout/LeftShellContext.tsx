@@ -1,9 +1,11 @@
 /**
  * Left advanced-panel mode: Analysis charts vs dedicated modifier config.
  *
- * Complex visual modifiers (isosurface, voids, vectors, structure→color)
- * call {@link openLeftForModifier} when selected in the pipeline so the
- * left column shows their full property form instead of Analysis.
+ * Analysis-nature / mesh-building pipeline modifiers
+ * (`usesLeftConfig`) call {@link openLeftForModifier} when **added or
+ * selected** so the left column shows **compute** parameters
+ * (`surface="compute"`). The pipeline bottom pane shows **draw**
+ * parameters only (`surface="draw"`). Pure charts stay in Analysis mode.
  */
 
 import {

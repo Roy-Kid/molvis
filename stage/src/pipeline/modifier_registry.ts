@@ -1,5 +1,7 @@
+import { AffineTransformationModifier } from "../modifiers/AffineTransformationModifier";
 import { AssignColorModifier } from "../modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
+import { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { ExpandSelectionModifier } from "../modifiers/ExpandSelectionModifier";
@@ -175,6 +177,12 @@ export class ModifierRegistry {
       () => new WrapPBCModifier(nextModifierId("wrap-pbc")),
     );
     ModifierRegistry.register(
+      AffineTransformationModifier.NAME,
+      "Modification",
+      () =>
+        new AffineTransformationModifier(nextModifierId("affine-transform")),
+    );
+    ModifierRegistry.register(
       "Delete Selected",
       "Modification",
       () => new DeleteSelectedModifier(),
@@ -190,6 +198,11 @@ export class ModifierRegistry {
       "Color by Property",
       "Coloring",
       () => new ColorByPropertyModifier(),
+    );
+    ModifierRegistry.register(
+      ColorByTypeModifier.NAME,
+      "Coloring",
+      () => new ColorByTypeModifier(nextModifierId("color-by-type")),
     );
     ModifierRegistry.register(
       "Assign Color",

@@ -1,7 +1,12 @@
 // Re-export all modifiers for convenience
 
+export {
+  type AffineMatrix3,
+  AffineTransformationModifier,
+} from "./AffineTransformationModifier";
 export { AssignColorModifier } from "./AssignColorModifier";
 export { ColorByPropertyModifier } from "./ColorByPropertyModifier";
+export { ColorByTypeModifier } from "./ColorByTypeModifier";
 export {
   type BondCriterion,
   ComputeBondsModifier,

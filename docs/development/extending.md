@@ -80,8 +80,11 @@ decides the **functional group** rendered in the Add menu from the
 put it in the left Analysis panel (`molrsComputeCatalog`). Pure visual elements
 that auto-attach on load (Particles, Ribbon) use `{ userAddable: false }`.
 
-Complex visual modifiers can register `usesLeftConfig: true` on their page panel
-matcher so selecting them opens the left dedicated config page.
+Analysis-nature / mesh-building modifiers register `usesLeftConfig: true` so
+**adding or selecting** them opens the left panel with `surface="compute"`
+(algorithm params). The pipeline bottom pane gets `surface="draw"` (appearance
+only). Pure Analysis catalog tools that can paint the scene should offer a
+button to add a right-side pipeline modifier (e.g. Color by Property).
 
 ### Important rules
 

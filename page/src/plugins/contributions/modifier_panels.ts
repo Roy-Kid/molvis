@@ -7,8 +7,11 @@ export type ModifierPanelMatcher = {
   match: (modifier: Modifier) => boolean;
   component: ModifierPanelComponent;
   /**
-   * When true, selecting this modifier opens the left dedicated config page
-   * instead of (only) the pipeline bottom properties pane.
+   * When true, selecting/adding this modifier opens the left advanced panel
+   * for **compute** params (`surface="compute"`). The pipeline bottom pane
+   * shows **draw** params (`surface="draw"`) instead of a dead stub.
+   *
+   * Use for analysis-nature / mesh-building modifiers only.
    */
   usesLeftConfig?: boolean;
 };

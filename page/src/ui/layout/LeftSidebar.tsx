@@ -383,6 +383,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 modifier={configModifier}
                 app={app}
                 onUpdate={handleLeftConfigUpdate}
+                surface="compute"
               />
             ) : (
               <p className="text-micro text-muted-foreground text-center p-3">

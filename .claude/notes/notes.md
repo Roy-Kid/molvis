@@ -3,6 +3,23 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+## 2026-07-30 — left compute / right draw (analysis-nature modifiers)
+
+**UX iron law (extends scene-modifier placement):**
+
+1. **Pipeline modifiers that are analysis-nature** (structure order, density
+   surfaces, vector fields, isosurfaces, …) register `usesLeftConfig: true`.
+2. On **add or select**, open the left advanced panel with
+   `surface="compute"` (algorithm params + recompute).
+3. Pipeline bottom properties show `surface="draw"` only (colors, isovalue,
+   opacity, arrow scale, …) — not a dead stub.
+4. **Pure Analysis catalog** (charts) stays left-only. If the analysis can
+   also drive the canvas, offer a button to **add a right-side pipeline
+   modifier** (e.g. Cluster → Color by Property on `cluster_id`).
+
+Do not put chart-only RDF/MSD into the pipeline. Do not put full dual forms on
+both left and right.
+
 ## 2026-07-30 — single scene path (Empty Scene always)
 
 **Invariant — form and path are unique.**

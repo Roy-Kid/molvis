@@ -57,10 +57,24 @@ export interface PluginStorage {
 }
 
 /** Property panel for a pipeline modifier (lives under `api.modifiers`). */
+/**
+ * Which surface of a split analysis/visual modifier panel to render.
+ *
+ * - `full` — entire form (simple modifiers; also default for plugins).
+ * - `compute` — left advanced panel: algorithm params + run compute.
+ * - `draw` — pipeline bottom: drawing / appearance params only.
+ *
+ * Analysis-nature pipeline modifiers (`usesLeftConfig`) open the left panel
+ * for `compute`; the right properties pane shows `draw`.
+ */
+export type ModifierPanelSurface = "full" | "compute" | "draw";
+
 export type ModifierPanelComponent = React.FC<{
   modifier: Modifier;
   app: Molvis | null;
   onUpdate: () => void;
+  /** Default `full`. Split left-config panels pass `compute` / `draw`. */
+  surface?: ModifierPanelSurface;
 }>;
 
 /** Optional toolbar chrome for a command (lives under `api.commands`). */

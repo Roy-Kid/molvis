@@ -2,6 +2,11 @@
 
 // Built-in modifiers
 export {
+  type AffineMatrix3,
+  AffineTransformationModifier,
+} from "../modifiers/AffineTransformationModifier";
+export { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
+export {
   type ExpandSelectionMode,
   ExpandSelectionModifier,
 } from "../modifiers/ExpandSelectionModifier";
