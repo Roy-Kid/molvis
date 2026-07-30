@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import App from "@/App";
+import { PipelineOperationProvider } from "@/components/viewer/PipelineOperationProvider";
 import { type MountOpts, MountOptsProvider } from "@/lib/mount-opts";
 
 /** Extra options for the host integration (not consumed by React tree). */
@@ -124,7 +125,9 @@ export function mountMolvisApp(
   root.render(
     <React.StrictMode>
       <MountOptsProvider value={opts}>
-        <App />
+        <PipelineOperationProvider>
+          <App />
+        </PipelineOperationProvider>
       </MountOptsProvider>
     </React.StrictMode>,
   );

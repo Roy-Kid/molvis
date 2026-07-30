@@ -2,6 +2,8 @@ import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 
+const root = import.meta.dirname;
+
 export default defineConfig({
   server: { port: 3000 },
   plugins: [pluginReact()],
@@ -10,28 +12,35 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "./src"),
-      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
-      "@molvis/core/io/formats": path.resolve(
-        import.meta.dirname,
-        "../core/src/io/formats.ts",
+      "@": path.resolve(root, "./src"),
+      // 3D engine
+      "@molvis/stage": path.resolve(root, "../stage/src/index.ts"),
+      "@molvis/stage/io/formats": path.resolve(
+        root,
+        "../stage/src/io/formats.ts",
       ),
-      "@molvis/core/io": path.resolve(
-        import.meta.dirname,
-        "../core/src/io/index.ts",
+      "@molvis/stage/io": path.resolve(root, "../stage/src/io/index.ts"),
+      "@molcrafts/molvis-stage": path.resolve(root, "../stage/src/index.ts"),
+      // Shared core (molrs face + elements)
+      "@molcrafts/molvis-core": path.resolve(root, "../core/src/index.ts"),
+      "@molcrafts/molvis-core/molrs": path.resolve(
+        root,
+        "../core/src/molrs.ts",
       ),
-      "@molcrafts/molvis-sketch": path.resolve(
-        import.meta.dirname,
-        "../sketch/src/index.ts",
+      "@molcrafts/molvis-core/elements": path.resolve(
+        root,
+        "../core/src/elements.ts",
       ),
-      // @molcrafts/molplot resolves from node_modules (published Vega-Lite pkg).
+      // 2D sketch
+      "@molcrafts/molvis-sketch": path.resolve(root, "../sketch/src/index.ts"),
     },
   },
   source: {
     watchFiles: {
       paths: [
-        path.resolve(import.meta.dirname, "../core/src/**"),
-        path.resolve(import.meta.dirname, "../sketch/src/**"),
+        path.resolve(root, "../core/src/**"),
+        path.resolve(root, "../stage/src/**"),
+        path.resolve(root, "../sketch/src/**"),
       ],
     },
   },
@@ -41,22 +50,18 @@ export default defineConfig({
       splitChunks: {
         chunks: "all",
         cacheGroups: {
-          // BabylonJS core/gui/materials — sync, cached separately (large, stable).
-          // serializers is lazy (glTF export); inspector is not a dependency.
           babylonjs: {
             test: /[\\/]node_modules[\\/]@babylonjs[\\/](?!serializers)/,
             name: "lib-babylonjs",
             chunks: "initial",
             priority: 20,
           },
-          // React — sync, small
           react: {
             test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/,
             name: "lib-react",
             chunks: "initial",
             priority: 15,
           },
-          // Other sync vendor deps (Radix UI, etc.)
           vendors: {
             test: /[\\/]node_modules[\\/]/,
             name: "lib-vendors",
@@ -70,17 +75,18 @@ export default defineConfig({
   },
   tools: {
     rspack(config) {
-      // molrs is wasm-bindgen bundler-target only.
       config.experiments = {
         ...config.experiments,
         asyncWebAssembly: true,
       };
-      // Inline the raw text of `?raw` imports as a string.
       config.module = {
         ...config.module,
         rules: [
-          ...(config.module?.rules || []),
-          { resourceQuery: /raw/, type: "asset/source" },
+          ...(config.module?.rules ?? []),
+          {
+            resourceQuery: /raw/,
+            type: "asset/source",
+          },
         ],
       };
     },

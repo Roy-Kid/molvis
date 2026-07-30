@@ -1,11 +1,18 @@
 import {
+  type AnalysisDefinition,
   analysisAvailability,
   frameHasStructure,
   listAnalysisCategoriesWithEntries,
   type Molvis,
   structureProbeKey,
-} from "@molvis/core";
-import { useEffect, useRef, useState } from "react";
+} from "@molvis/stage";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  listPluginAnalysisSpecs,
+  PLUGIN_ANALYSIS_CATEGORY,
+  pluginSpecToDefinition,
+  subscribePluginAnalyses,
+} from "@/plugins/analysis_catalog";
 import type { PickerGroup } from "./AnalysisPicker";
 
 export interface AnalysisCatalogState {
@@ -17,14 +24,34 @@ export interface AnalysisCatalogState {
   hasData: boolean;
   /** Last structure key that produced `groups` (for debug / tests). */
   probeKey: string;
+  /** Probe failure detail, if the most recent pass failed. */
+  error: string | null;
+  /** Re-run the current probe after a failure. */
+  retry: () => void;
 }
 
-const EMPTY: AnalysisCatalogState = {
+type AnalysisCatalogSnapshot = Omit<AnalysisCatalogState, "retry">;
+
+const EMPTY: AnalysisCatalogSnapshot = {
   groups: [],
   probing: false,
   hasData: false,
   probeKey: "empty|sel=0",
+  error: null,
 };
+
+/**
+ * Product-facing labels that supersede the raw molrs catalog names.
+ * Keep ids stable (dispatch / panel routing); only the display string changes.
+ */
+const ANALYSIS_DISPLAY_LABELS: Readonly<Record<string, string>> = {
+  "rdf.radial_distribution": "Pair distribution",
+};
+
+function withDisplayLabel(analysis: AnalysisDefinition): AnalysisDefinition {
+  const label = ANALYSIS_DISPLAY_LABELS[analysis.id];
+  return label && label !== analysis.label ? { ...analysis, label } : analysis;
+}
 
 function buildGroups(
   app: Molvis,
@@ -38,9 +65,10 @@ function buildGroups(
     ({ category, analyses }) => ({
       category,
       entries: analyses.map((analysis) => {
-        const availability = analysisAvailability(frame, analysis, context);
+        const display = withDisplayLabel(analysis);
+        const availability = analysisAvailability(frame, display, context);
         return {
-          analysis,
+          analysis: display,
           blockedReason: availability.runnable
             ? undefined
             : (availability.reason ?? "unavailable"),
@@ -48,6 +76,23 @@ function buildGroups(
       }),
     }),
   );
+
+  // Deep-merge plugin analyses into the same picker (own "Plugins" group).
+  const pluginSpecs = listPluginAnalysisSpecs();
+  if (pluginSpecs.length > 0) {
+    groups.push({
+      category: {
+        id: PLUGIN_ANALYSIS_CATEGORY.id,
+        label: PLUGIN_ANALYSIS_CATEGORY.label,
+      },
+      entries: pluginSpecs.map((spec) => ({
+        analysis: pluginSpecToDefinition(spec),
+        // Plugins decide applicability in run(); only require a structure.
+        blockedReason: hasData ? undefined : "Load a structure first",
+      })),
+    });
+  }
+
   return { groups, hasData, probeKey };
 }
 
@@ -63,10 +108,16 @@ export function useAnalysisCatalog(
   app: Molvis | null,
   hasSelection: boolean,
 ): AnalysisCatalogState {
-  const [state, setState] = useState<AnalysisCatalogState>(EMPTY);
+  const [state, setState] = useState<AnalysisCatalogSnapshot>(EMPTY);
+  const [retryNonce, setRetryNonce] = useState(0);
   const lastKeyRef = useRef<string>("");
   const generationRef = useRef(0);
+  const retry = useCallback(() => {
+    lastKeyRef.current = "";
+    setRetryNonce((value) => value + 1);
+  }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce is the explicit retry trigger for this scheduled probe.
   useEffect(() => {
     if (!app) {
       lastKeyRef.current = "";
@@ -80,7 +131,11 @@ export function useAnalysisCatalog(
     const scheduleProbe = () => {
       // Coalesce bursts (trajectory-change + frame-change + frame-load-end).
       if (timer !== null) clearTimeout(timer);
-      setState((prev) => (prev.probing ? prev : { ...prev, probing: true }));
+      setState((prev) => ({
+        ...prev,
+        probing: true,
+        error: null,
+      }));
 
       timer = setTimeout(() => {
         timer = null;
@@ -89,30 +144,47 @@ export function useAnalysisCatalog(
         void Promise.resolve().then(() => {
           if (cancelled || generation !== generationRef.current) return;
 
-          const context = { hasSelection };
-          const key = structureProbeKey(app.system.frame, context);
-          if (key === lastKeyRef.current) {
-            setState((prev) =>
-              prev.probing ? { ...prev, probing: false } : prev,
-            );
-            return;
-          }
+          try {
+            const context = { hasSelection };
+            const key = structureProbeKey(app.system.frame, context);
+            if (key === lastKeyRef.current) {
+              setState((prev) =>
+                prev.probing ? { ...prev, probing: false } : prev,
+              );
+              return;
+            }
 
-          const next = buildGroups(app, hasSelection);
-          if (cancelled || generation !== generationRef.current) return;
-          lastKeyRef.current = next.probeKey;
-          setState({
-            groups: next.groups,
-            hasData: next.hasData,
-            probeKey: next.probeKey,
-            probing: false,
-          });
+            const next = buildGroups(app, hasSelection);
+            if (cancelled || generation !== generationRef.current) return;
+            lastKeyRef.current = next.probeKey;
+            setState({
+              groups: next.groups,
+              hasData: next.hasData,
+              probeKey: next.probeKey,
+              probing: false,
+              error: null,
+            });
+          } catch (error) {
+            if (cancelled || generation !== generationRef.current) return;
+            setState((prev) => ({
+              ...prev,
+              probing: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Analysis requirements could not be checked",
+            }));
+          }
         });
       }, 0);
     };
 
     // Initial probe + re-run when the loaded structure / labels / selection
     // change. Playback with the same columns is a no-op thanks to the key.
+    const forceProbe = () => {
+      lastKeyRef.current = "";
+      scheduleProbe();
+    };
     scheduleProbe();
     const unsubs = [
       app.events.on("trajectory-change", scheduleProbe),
@@ -127,6 +199,8 @@ export function useAnalysisCatalog(
       "modifier-removed",
       scheduleProbe,
     );
+    // Plugin activate/deactivate mutates the analysis contribution store.
+    const offPlugins = subscribePluginAnalyses(forceProbe);
 
     return () => {
       cancelled = true;
@@ -135,8 +209,9 @@ export function useAnalysisCatalog(
       offComputed();
       offAdded();
       offRemoved();
+      offPlugins();
     };
-  }, [app, hasSelection]);
+  }, [app, hasSelection, retryNonce]);
 
-  return state;
+  return { ...state, retry };
 }

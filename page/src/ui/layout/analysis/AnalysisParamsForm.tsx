@@ -1,4 +1,4 @@
-import type { AnalysisParamSpec, AnalysisParamValues } from "@molvis/core";
+import type { AnalysisParamSpec, AnalysisParamValues } from "@molvis/stage";
 import type React from "react";
 import { useId } from "react";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ export const AnalysisParamsForm: React.FC<AnalysisParamsFormProps> = ({
 }) => {
   if (params.length === 0) {
     return (
-      <p className="px-0.5 text-[10px] leading-snug text-muted-foreground">
+      <p className="px-1 text-micro leading-snug text-muted-foreground">
         This analysis takes no parameters.
       </p>
     );
@@ -83,14 +83,14 @@ function ParamField({
       htmlFor={controlId}
       className="flex min-w-0 cursor-default items-baseline gap-1"
     >
-      <span className="truncate text-[11px]">{spec.label}</span>
+      <span className="truncate text-micro">{spec.label}</span>
       {spec.unit && (
-        <span className="shrink-0 text-[10px] text-muted-foreground">
+        <span className="shrink-0 text-micro text-muted-foreground">
           {spec.unit}
         </span>
       )}
       {spec.optional && (
-        <span className="shrink-0 text-[10px] text-muted-foreground">
+        <span className="shrink-0 text-micro text-muted-foreground">
           (optional)
         </span>
       )}
@@ -120,7 +120,10 @@ function ParamField({
           onValueChange={onChange}
           disabled={disabled}
         >
-          <SelectTrigger id={controlId} className="h-7 px-2 text-xs">
+          <SelectTrigger
+            id={controlId}
+            className="h-control-compact px-2 text-xs"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -141,7 +144,7 @@ function ParamField({
       {label}
       <Input
         id={controlId}
-        className="h-7 min-w-0 font-mono text-xs"
+        className="h-control-compact min-w-0 font-mono text-xs"
         inputMode={numeric ? "decimal" : "text"}
         value={String(value)}
         placeholder={LIST_PLACEHOLDER[spec.kind] ?? String(spec.default)}

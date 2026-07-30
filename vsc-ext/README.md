@@ -15,6 +15,7 @@ Interactive 3D molecular viewer directly inside VSCode. Open PDB, XYZ, or LAMMPS
 - Simulation box wireframe with color/thickness controls
 - Modifier pipeline: hide hydrogens, color by property, slice, expression selection
 - Drag-and-drop file loading onto any MolVis canvas
+- Standalone 2D structure editor in the Activity Bar with SVG and PNG export
 
 ## Supported Formats
 
@@ -34,7 +35,9 @@ Interactive 3D molecular viewer directly inside VSCode. Open PDB, XYZ, or LAMMPS
    - **Open Structure…** — pick a file or Zarr folder
    - **Peek Active File** — side-by-side Quick View
    - **Recent** — re-open files you viewed before
-3. Or right-click any structure file in the Explorer → **MolVis: Quick View** / **Open Workspace**
+3. Click the separate **MolVis Sketch** Activity Bar icon to draw a 2D
+   structure and export it as SVG or PNG.
+4. Or right-click any structure file in the Explorer → **MolVis: Quick View** / **Open Workspace**
 
 You can also use **Reopen Editor With… → MolVis Quick View** on a structure tab.
 

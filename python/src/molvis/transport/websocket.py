@@ -192,6 +192,10 @@ class WebSocketTransport:
         where the frontend is hosted elsewhere (e.g. an
         already-open ``npm run dev:page`` tab) and only the
         ``ws://…?token=…&session=…`` URL is shared.
+    plugins
+        Optional list of page plugin sources (``owner/repo[@tag]`` or
+        HTTPS URL). Injected into the standalone URL and notebook
+        ``MolvisApp.mount`` opts so the page loads them on start.
     """
 
     def __init__(
@@ -207,6 +211,7 @@ class WebSocketTransport:
         surface: str = "full",
         handshake_timeout: float | None = None,
         serve_page: bool = True,
+        plugins: list[str] | None = None,
     ) -> None:
         self._page_base_url = (
             page_base_url.rstrip("/") + "/" if page_base_url else None
@@ -224,6 +229,9 @@ class WebSocketTransport:
         self._surface = surface
         self._handshake_timeout = handshake_timeout
         self._serve_page = serve_page
+        # Plugin sources (owner/repo[@tag] or HTTPS URL) injected into the
+        # page mount opts / standalone URL. Empty list means none.
+        self._plugins: list[str] = list(plugins or [])
 
         self._decoder = BinaryPayloadDecoder()
         self._response_lock = threading.Lock()
@@ -304,6 +312,9 @@ class WebSocketTransport:
         }
         if self._surface != "full":
             params["surface"] = self._surface
+        if self._plugins:
+            # Comma-separated list; page `readMountOptsFromUrl` splits it.
+            params["plugins"] = ",".join(self._plugins)
         query = urllib.parse.urlencode(params)
         standalone_url = f"{base}{sep}{query}"
 
@@ -316,6 +327,11 @@ class WebSocketTransport:
             css=css,
             standalone_url=standalone_url,
         )
+
+    @property
+    def plugins(self) -> list[str]:
+        """Plugin sources forwarded to the page on mount / standalone URL."""
+        return list(self._plugins)
 
     def connection_url(self, *, session: str = "default") -> str:
         """Return a single pasteable ``ws://…`` URL with token + session.

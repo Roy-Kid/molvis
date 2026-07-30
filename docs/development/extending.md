@@ -1,7 +1,13 @@
 # Extending MolVis
 
 This page shows how to add your own behavior without forking the core.
-Most extensions fall into one of four buckets:
+
+> **Runtime plugins (page):** end users can load third-party ESM plugins from
+> GitHub without rebuilding MolVis. See [plugins.md](./plugins.md) and the
+> official template
+> [MolCrafts/molvis-plugin-template](https://github.com/MolCrafts/molvis-plugin-template).
+
+Most compile-time extensions fall into one of four buckets:
 
 | I want to… | Add a… |
 |---|---|
@@ -20,9 +26,9 @@ mutates the input; it returns a new `Frame` derived from the last
 block of columns it was handed.
 
 ```typescript
-import type { Modifier, PipelineContext } from "@molcrafts/molvis-core";
-import { ModifierCategory, nextModifierId } from "@molcrafts/molvis-core";
-import type { Frame } from "@molcrafts/molvis-core";
+import type { Modifier, PipelineContext } from "@molcrafts/molvis-stage";
+import { ModifierCategory, nextModifierId } from "@molcrafts/molvis-stage";
+import type { Frame } from "@molcrafts/molvis-stage";
 
 interface ScaleXOptions {
   factor: number;
@@ -55,20 +61,27 @@ export class ScaleXModifier implements Modifier<ScaleXOptions> {
 Register it at startup:
 
 ```typescript
-import { ModifierRegistry } from "@molcrafts/molvis-core";
+import { ModifierRegistry } from "@molcrafts/molvis-stage";
 
 ModifierRegistry.register("scale-x", () => new ScaleXModifier());
 ```
 
 Now it shows up in the pipeline's *Add modifier* menu. The registry
 decides the **functional group** rendered in the Add menu from the
-`category` field:
+`category` field (OVITO-aligned):
 
-- `Draw` — rendering layers such as atoms, bonds, boxes, ribbons, and isosurfaces.
-- `Selection` — creates or consumes a selection.
-- `Geometry` — spatial transforms such as Slice or Wrap PBC.
-- `Structure` — topology-related transforms such as Compute Bonds or Hide Hydrogens.
-- `Color` — global property coloring.
+- `Selection` — selection ops (Expression Select, Hide Selection, …).
+- `Modification` — topology / geometry edits (Slice, Wrap PBC, Delete Selected, …).
+- `Coloring` — appearance-data writers (Color by Property, Assign Color).
+- `Visualization` — scene-changing helpers (Create bonds, Bonds, Simulation cell,
+  Create isosurface, Vector field, …).
+
+**Iron law:** if it does not change the canvas, it is not a pipeline modifier —
+put it in the left Analysis panel (`molrsComputeCatalog`). Pure visual elements
+that auto-attach on load (Particles, Ribbon) use `{ userAddable: false }`.
+
+Complex visual modifiers can register `usesLeftConfig: true` on their page panel
+matcher so selecting them opens the left dedicated config page.
 
 ### Important rules
 
@@ -87,7 +100,7 @@ A `Command<T>` is an object with `do()` and `undo()`. The registry maps
 a string name to a factory; the manager tracks history.
 
 ```typescript
-import { command, type Command } from "@molcrafts/molvis-core";
+import { command, type Command } from "@molcrafts/molvis-stage";
 
 interface RotateArgs { axis: [number, number, number]; angle: number; }
 
@@ -141,7 +154,7 @@ implements `start()` / `finish()` and typically subscribes to pointer
 events.
 
 ```typescript
-import type { Mode, ModeContext } from "@molcrafts/molvis-core";
+import type { Mode, ModeContext } from "@molcrafts/molvis-stage";
 
 export class HighlightMode implements Mode {
   readonly type = "highlight";
@@ -173,7 +186,7 @@ something outside the atom/bond contract — arrows for forces, cages for
 clusters, labels — register an **overlay**:
 
 ```typescript
-import type { OverlaySpec } from "@molcrafts/molvis-core";
+import type { OverlaySpec } from "@molcrafts/molvis-stage";
 
 const spec: OverlaySpec = {
   id: "com-marker",
@@ -198,7 +211,7 @@ every `frame-rendered` event.
 3. If it needs its own click / drag semantics, introduce a **mode**.
 4. If it needs new geometry on the canvas, register an **overlay**.
 5. Add a **test**. Mock `SceneIndex` for modifier tests; the command
-   test harness is part of `@molcrafts/molvis-core` and runs with
+   test harness is part of `@molcrafts/molvis-stage` and runs with
    `rstest`.
 6. If it has user-visible controls, add them to the host application
    (the web viewer, the VSCode extension, or your own frontend).

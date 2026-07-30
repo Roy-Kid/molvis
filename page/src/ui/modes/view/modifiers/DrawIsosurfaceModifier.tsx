@@ -3,7 +3,7 @@ import {
   type IsosurfaceRenderMode,
   type Molvis,
   type SurfaceStyle,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawIsosurfaceModifierProps {
@@ -57,6 +58,12 @@ function channelLabel(channel: string): string {
   return channel;
 }
 
+const PIPELINE_COPY = {
+  running: "Rebuilding the isosurface…",
+  success: "Isosurface updated",
+  error: "Could not rebuild the isosurface",
+};
+
 export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
   modifier,
   app,
@@ -70,6 +77,11 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
   // selected channel — keeps the slider centered on values that can
   // produce a non-empty surface. Recompute when the channel changes.
   const [maxAbs, setMaxAbs] = useState<number>(0);
+  const { applyPipeline, pipelineRunning } = useApplyPipelineOperation(
+    app,
+    onUpdate,
+    PIPELINE_COPY,
+  );
   useEffect(() => {
     const frame = app?.system.frame;
     setChannels(
@@ -103,20 +115,26 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
   const isoValueClamped = Math.min(Math.max(style.isovalue, isoMin), isoMax);
 
   return (
-    <div className="space-y-2 text-xs">
-      <div className="flex items-center gap-1.5">
-        <Label className="text-[10px] text-muted-foreground w-16 shrink-0">
+    <fieldset
+      disabled={!app || pipelineRunning}
+      aria-busy={pipelineRunning}
+      className="m-0 min-w-0 space-y-2 border-0 p-0 text-xs"
+    >
+      <div className="flex items-center gap-2">
+        <Label className="text-micro text-muted-foreground w-16 shrink-0">
           Channel
         </Label>
         <Select
           value={style.channel}
           onValueChange={(v) => {
             modifier.setStyle({ channel: v });
-            void app?.applyPipeline();
-            onUpdate();
+            applyPipeline();
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+          <SelectTrigger
+            aria-label="Isosurface channel"
+            className="h-control-compact text-xs flex-1 min-w-0"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -135,19 +153,21 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
         </Select>
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <Label className="text-[10px] text-muted-foreground w-16 shrink-0">
+      <div className="flex items-center gap-2">
+        <Label className="text-micro text-muted-foreground w-16 shrink-0">
           Display
         </Label>
         <Select
           value={style.renderMode}
           onValueChange={(v) => {
             modifier.setStyle({ renderMode: v as IsosurfaceRenderMode });
-            void app?.applyPipeline();
-            onUpdate();
+            applyPipeline();
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+          <SelectTrigger
+            aria-label="Isosurface display mode"
+            className="h-control-compact text-xs flex-1 min-w-0"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -165,19 +185,21 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
       </div>
 
       {style.renderMode !== "cloud" && (
-        <div className="flex items-center gap-1.5">
-          <Label className="text-[10px] text-muted-foreground w-16 shrink-0">
+        <div className="flex items-center gap-2">
+          <Label className="text-micro text-muted-foreground w-16 shrink-0">
             Surface
           </Label>
           <Select
             value={style.surfaceStyle}
             onValueChange={(v) => {
               modifier.setStyle({ surfaceStyle: v as SurfaceStyle });
-              void app?.applyPipeline();
-              onUpdate();
+              applyPipeline();
             }}
           >
-            <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+            <SelectTrigger
+              aria-label="Isosurface surface style"
+              className="h-control-compact text-xs flex-1 min-w-0"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -213,8 +235,7 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
             }}
             onCommit={(v) => {
               modifier.setStyle({ contourSpacing: v });
-              void app?.applyPipeline();
-              onUpdate();
+              applyPipeline();
             }}
           />
         )}
@@ -236,13 +257,12 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
         }}
         onCommit={(v) => {
           modifier.setStyle({ isovalue: v });
-          void app?.applyPipeline();
-          onUpdate();
+          applyPipeline();
         }}
       />
 
-      <div className="flex items-center gap-1.5">
-        <Label className="text-[10px] text-muted-foreground w-16 shrink-0">
+      <div className="flex items-center gap-2">
+        <Label className="text-micro text-muted-foreground w-16 shrink-0">
           Color
         </Label>
         <input
@@ -250,10 +270,9 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
           value={rgbToHex(style.color)}
           onChange={(e) => {
             modifier.setStyle({ color: hexToRgb(e.target.value) });
-            void app?.applyPipeline();
-            onUpdate();
+            applyPipeline();
           }}
-          className="w-7 h-7 rounded cursor-pointer border-0 p-0"
+          className="size-control-compact rounded-control cursor-pointer border-0 p-0"
           aria-label="Isosurface color"
         />
       </div>
@@ -277,10 +296,10 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
         }}
       />
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         <Label
           htmlFor={`iso-neg-${modifier.id}`}
-          className="text-[10px] text-muted-foreground flex-1 min-w-0"
+          className="text-micro text-muted-foreground flex-1 min-w-0"
         >
           Show negative isosurface
         </Label>
@@ -289,8 +308,7 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
           checked={style.showNegative}
           onCheckedChange={(v) => {
             modifier.setStyle({ showNegative: v });
-            void app?.applyPipeline();
-            onUpdate();
+            applyPipeline();
           }}
         />
       </div>
@@ -312,8 +330,7 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
             }}
             onCommit={(v) => {
               modifier.setStyle({ cloudThreshold: v });
-              void app?.applyPipeline();
-              onUpdate();
+              applyPipeline();
             }}
           />
 
@@ -330,15 +347,14 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
             }}
             onCommit={(v) => {
               modifier.setStyle({ cloudStride: v });
-              void app?.applyPipeline();
-              onUpdate();
+              applyPipeline();
             }}
           />
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <Label
               htmlFor={`iso-pbc-${modifier.id}`}
-              className="text-[10px] text-muted-foreground flex-1 min-w-0"
+              className="text-micro text-muted-foreground flex-1 min-w-0"
             >
               Show PBC images
             </Label>
@@ -347,13 +363,12 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
               checked={style.showPbcImages}
               onCheckedChange={(v) => {
                 modifier.setStyle({ showPbcImages: v });
-                void app?.applyPipeline();
-                onUpdate();
+                applyPipeline();
               }}
             />
           </div>
         </>
       )}
-    </div>
+    </fieldset>
   );
 };

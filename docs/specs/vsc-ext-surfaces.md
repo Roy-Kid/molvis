@@ -2,7 +2,7 @@
 
 ## Summary
 Redesign the VSCode extension's webview entry points into three clearly-named
-surfaces — a lightweight **Quick View** (molvis-core canvas) for peeking at a
+surfaces — a lightweight **Quick View** (molvis-stage canvas) for peeking at a
 file, a persistent **MolVis** activity-bar view hosting the full React page, and
 a **page surface/flag system** that lets one page codebase render as either the
 full app or a slimmed variant. Removes the current naming overload

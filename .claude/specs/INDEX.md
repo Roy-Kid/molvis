@@ -5,7 +5,13 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 | Spec | Status | Summary |
 |------|--------|---------|
-| _No active specs._ | | |
+| [scene-modifier-iron-law](scene-modifier-iron-law.md) | in-progress | Scene-changing modifiers vs left Analysis; left config for surfaces/voids; molrs visual sync |
+| [stage-commit-scene](stage-commit-scene.md) | code-complete | Git-like working tree vs molrs HEAD; commitScene/discardScene; analysis waits for commit |
+| [package-split-core-stage](package-split-core-stage.md) | code-complete | Split shared `core` (molrs face) / `stage` 3D / sketch 2D / umbrella `@molcrafts/molvis` |
+| [shared-element-picker-01-core](shared-element-picker-01-core.md) | code-complete | Add the single native periodic-table picker and layout catalog to shared core |
+| [shared-element-picker-02-sketch](shared-element-picker-02-sketch.md) | code-complete | Reuse the core picker in the standalone Sketch surface |
+| [shared-element-picker-03-page](shared-element-picker-03-page.md) | code-complete | Reuse the core picker in both 2D and 3D page edit surfaces |
+| [shared-element-picker-04-stage](shared-element-picker-04-stage.md) | code-complete | Reuse the core picker in Stage's native edit context menu |
 
 ## Shipped batches
 

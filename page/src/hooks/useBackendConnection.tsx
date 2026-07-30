@@ -1,4 +1,4 @@
-import { attachWebSocketBridge, type Molvis } from "@molvis/core";
+import { attachWebSocketBridge, type Molvis } from "@molvis/stage";
 import type React from "react";
 import {
   createContext,

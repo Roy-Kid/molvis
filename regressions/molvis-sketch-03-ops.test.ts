@@ -16,8 +16,11 @@ describe("molvis-sketch-03-ops regression", () => {
   it("benzene + chain + order + stereo + charge", () => {
     const board = new SketchBoard();
     const h = new SketchHistory();
-    h.execute(new PlaceRingCommand(board.graph, 6, 0, 0, 1, "benzene"));
+    h.execute(new PlaceRingCommand(board.graph, 6, 0, 0, undefined, "benzene"));
     expect(board.graph.atomCount()).toBe(6);
+    expect(board.graph.getMoleculeData().bonds.map((b) => b.order)).toEqual([
+      2, 1, 2, 1, 2, 1,
+    ]);
 
     // extend from atom 0 along +x by 2*1.2
     h.execute(new PlaceChainCommand(board.graph, 0, 2.4, 0, 1.2, 1));
@@ -27,7 +30,7 @@ describe("molvis-sketch-03-ops regression", () => {
     h.execute(new CycleBondOrderCommand(board.graph, 0));
     expect(
       board.graph.getMoleculeData().bonds.filter((b) => b.order === 2),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
 
     // stereo on a single bond (find one with order 1)
     const bonds = board.graph.getMoleculeData().bonds;

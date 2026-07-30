@@ -1,84 +1,55 @@
 {
   "name": "@molcrafts/molvis-core",
   "version": "0.1.1",
+  "private": true,
   "type": "module",
+  "description": "MolVis shared core: molrs gateway, element data, and framework-free shared controls (workspace-private)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./src/index.ts"
     },
-    "./element": {
-      "types": "./dist/element.d.ts",
-      "import": "./dist/element.js"
+    "./molrs": {
+      "types": "./dist/molrs.d.ts",
+      "import": "./dist/molrs.js",
+      "default": "./src/molrs.ts"
     },
     "./elements": {
-      "import": "./dist/elements.js"
+      "types": "./dist/elements.d.ts",
+      "import": "./dist/elements.js",
+      "default": "./src/elements.ts"
     },
-    "./io": {
-      "types": "./dist/io/index.d.ts",
-      "import": "./dist/io/index.js"
-    },
-    "./io/formats": {
-      "types": "./dist/io/formats.d.ts",
-      "import": "./dist/io/formats.js"
+    "./element-picker": {
+      "types": "./dist/element_picker.d.ts",
+      "import": "./dist/element_picker.js",
+      "default": "./src/element_picker.ts"
     }
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/MolCrafts/molvis.git",
-    "directory": "core"
-  },
-  "homepage": "https://github.com/MolCrafts/molvis#readme",
-  "bugs": {
-    "url": "https://github.com/MolCrafts/molvis/issues"
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE"
+    "src",
+    "README.md"
   ],
   "sideEffects": [
-    "./src/commands/*.ts",
-    "./dist/commands/*.js",
-    "./src/element_entry.ts",
-    "./dist/elements.js"
+    "./src/molrs.ts",
+    "./dist/molrs.js"
   ],
   "scripts": {
     "build": "rslib build",
-    "build:demo": "rsbuild build",
-    "build:headless": "rsbuild build -c rsbuild.headless.config.ts",
-    "dev": "rsbuild dev",
-    "preview:demo": "rsbuild preview",
     "typecheck": "tsc --noEmit",
-    "test": "rstest run",
-    "test:regressions": "rstest run -c rstest.regressions.config.ts",
-    "test:headless": "npm run build:headless && node scripts/headless_render_runner.mjs --dist examples-dist/headless --specs examples/headless_smoke.json --outdir examples-dist/headless-smoke",
-    "test:watch": "rstest watch",
-    "bench": "rstest run -c rstest.bench.config.ts",
-    "release:check": "npm run build && npm run test && npm run check:pack && npm_config_cache=/tmp/npm-cache npm pack --dry-run",
-    "check:pack": "node ./scripts/check_pack.mjs"
+    "test": "rstest run"
+  },
+  "dependencies": {
+    "@molcrafts/molrs": "0.10.0"
   },
   "devDependencies": {
-    "@rsbuild/core": "^2.0.8",
     "@rslib/core": "^0.22.0",
     "@rstest/browser": "^0.10.3",
     "@rstest/core": "^0.10.3",
     "playwright": "^1.60.0",
     "typescript": "^6.0.3"
   },
-  "dependencies": {
-    "@babylonjs/core": "^9.10.1",
-    "@babylonjs/gui": "^9.10.1",
-    "@babylonjs/materials": "^9.10.1",
-    "@babylonjs/serializers": "^9.10.1",
-    "@molcrafts/molrs": "0.9.0",
-    "tslog": "^4.10.2"
-  },
-  "directories": {
-    "example": "examples",
-    "test": "tests"
-  },
   "author": "Roy Kid",
-  "license": "BSD-3-Clause",
-  "description": "Molvis: interactive molecular visualization library"
+  "license": "BSD-3-Clause"
 }

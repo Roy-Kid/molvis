@@ -10,9 +10,12 @@ import {
   nextModifierId,
   PipelineEvents,
   SelectModifier,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
+import { modifierUsesLeftConfig } from "@/plugins";
+import { useLeftShellOptional } from "@/ui/layout/LeftShellContext";
 import { getSelectedAtomIndices } from "../modifiers/selectionUtils";
 import { getDescendants } from "./tree_utils";
 
@@ -30,11 +33,14 @@ interface PipelineState {
   selectedId: string | null;
   selectedModifier: Modifier | undefined;
   propertiesHeight: number;
+  propertiesMaxHeight: number;
   isResizing: boolean;
   expandedIds: Set<string>;
   pendingDelete: PendingDelete | null;
+  pipelineRunning: boolean;
   setSelectedId: (id: string | null) => void;
-  startResizing: (event: React.MouseEvent) => void;
+  startResizing: (event: React.PointerEvent) => void;
+  resizePropertiesBy: (delta: number) => void;
   handleAddModifier: (factory: () => Modifier) => void;
   handleRemoveModifier: (id: string) => void;
   handleToggleModifier: (modifier: Modifier) => void;
@@ -45,9 +51,47 @@ interface PipelineState {
   refreshModifiers: () => void;
 }
 
+const ADD_COPY = {
+  running: "Adding the pipeline step…",
+  success: "Pipeline step added",
+  error: "Could not add the pipeline step",
+};
+
+const REMOVE_COPY = {
+  running: "Removing the pipeline step…",
+  success: "Pipeline step removed",
+  error: "Could not remove the pipeline step",
+};
+
+const UPDATE_COPY = {
+  running: "Recomputing the pipeline…",
+  success: "Pipeline updated",
+  error: "Could not recompute the pipeline",
+};
+
+const REORDER_COPY = {
+  running: "Reordering the pipeline…",
+  success: "Pipeline reordered",
+  error: "Could not reorder the pipeline",
+};
+
 export function usePipelineTabState(app: Molvis | null): PipelineState {
+  const { run, running: pipelineRunning } = usePipelineOperation();
+  const leftShell = useLeftShellOptional();
   const [modifiers, setModifiers] = useState<Modifier[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(null);
+
+  const setSelectedId = useCallback(
+    (id: string | null) => {
+      setSelectedIdState(id);
+      if (!id || !app || !leftShell) return;
+      const mod = app.modifierPipeline.getModifiers().find((m) => m.id === id);
+      if (mod && modifierUsesLeftConfig(mod)) {
+        leftShell.openLeftForModifier(id);
+      }
+    },
+    [app, leftShell],
+  );
   const [propertiesHeight, setPropertiesHeight] = useState(
     DEFAULT_PROPERTIES_HEIGHT,
   );
@@ -97,14 +141,14 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     if (!modifiers.some((modifier) => modifier.id === selectedId)) {
       setSelectedId(null);
     }
-  }, [modifiers, selectedId]);
+  }, [modifiers, selectedId, setSelectedId]);
 
   useEffect(() => {
     if (!isResizing) {
       return;
     }
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const handlePointerMove = (event: PointerEvent) => {
       const nextHeight = window.innerHeight - event.clientY;
       const clampedHeight = Math.max(
         MIN_PROPERTIES_HEIGHT,
@@ -113,22 +157,34 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
       setPropertiesHeight(clampedHeight);
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsResizing(false);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
 
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
     };
   }, [isResizing]);
 
-  const startResizing = useCallback((event: React.MouseEvent) => {
+  const startResizing = useCallback((event: React.PointerEvent) => {
     setIsResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
+  }, []);
+
+  const resizePropertiesBy = useCallback((delta: number) => {
+    setPropertiesHeight((current) =>
+      Math.max(
+        MIN_PROPERTIES_HEIGHT,
+        Math.min(current + delta, window.innerHeight * MAX_PROPERTIES_RATIO),
+      ),
+    );
   }, []);
 
   const handleToggleExpand = useCallback((id: string) => {
@@ -145,7 +201,7 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
 
   const handleAddModifier = useCallback(
     (factory: () => Modifier) => {
-      if (!app) {
+      if (!app || pipelineRunning) {
         return;
       }
 
@@ -190,14 +246,15 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
 
       pipeline.addModifier(modifier);
       setSelectedId(modifier.id);
-      void app.applyPipeline({ fullRebuild: true });
+      // setSelectedId already opens left config when applicable
+      void run(() => app.applyPipeline({ fullRebuild: true }), ADD_COPY);
     },
-    [app],
+    [app, pipelineRunning, run, setSelectedId],
   );
 
   const handleRemoveModifier = useCallback(
     (id: string) => {
-      if (!app) {
+      if (!app || pipelineRunning) {
         return;
       }
       const mod = modifiers.find((m) => m.id === id);
@@ -214,30 +271,30 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
       // DataSources need the lifecycle path (dispose WASM, re-derive
       // system trajectory). Plain modifiers go straight through pipeline.
       if (mod instanceof DataSourceModifier) {
-        void app.removeDataSource(id);
+        void run(() => app.removeDataSource(id), REMOVE_COPY);
       } else {
         app.modifierPipeline.removeModifier(id);
-        void app.applyPipeline({ fullRebuild: true });
+        void run(() => app.applyPipeline({ fullRebuild: true }), REMOVE_COPY);
       }
-      setSelectedId((prev) => (prev === id ? null : prev));
+      setSelectedIdState((prev) => (prev === id ? null : prev));
     },
-    [app, modifiers],
+    [app, modifiers, pipelineRunning, run],
   );
 
   const handleConfirmDelete = useCallback(() => {
-    if (!app || !pendingDelete) {
+    if (!app || !pendingDelete || pipelineRunning) {
       return;
     }
     const target = pendingDelete.modifier;
     if (target instanceof DataSourceModifier) {
-      void app.removeDataSource(target.id);
+      void run(() => app.removeDataSource(target.id), REMOVE_COPY);
     } else {
       app.modifierPipeline.removeModifier(target.id);
-      void app.applyPipeline({ fullRebuild: true });
+      void run(() => app.applyPipeline({ fullRebuild: true }), REMOVE_COPY);
     }
     setSelectedId(null);
     setPendingDelete(null);
-  }, [app, pendingDelete]);
+  }, [app, pendingDelete, pipelineRunning, run, setSelectedId]);
 
   const handleCancelDelete = useCallback(() => {
     setPendingDelete(null);
@@ -245,21 +302,22 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
 
   const handleToggleModifier = useCallback(
     (modifier: Modifier) => {
+      if (pipelineRunning) return;
       modifier.enabled = !modifier.enabled;
       setModifiers((current) => [...current]);
       if (!app) {
         return;
       }
-      void app.applyPipeline({ fullRebuild: true });
+      void run(() => app.applyPipeline({ fullRebuild: true }), UPDATE_COPY);
     },
-    [app],
+    [app, pipelineRunning, run],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
 
-      if (!app || !over || active.id === over.id) {
+      if (!app || pipelineRunning || !over || active.id === over.id) {
         return;
       }
 
@@ -282,9 +340,9 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
 
       setModifiers((current) => arrayMove(current, oldIndex, newIndex));
       app.modifierPipeline.reorderModifier(active.id as string, newIndex);
-      void app.applyPipeline({ fullRebuild: true });
+      void run(() => app.applyPipeline({ fullRebuild: true }), REORDER_COPY);
     },
-    [app, modifiers],
+    [app, modifiers, pipelineRunning, run],
   );
 
   const selectedModifier = useMemo(
@@ -297,11 +355,14 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     selectedId,
     selectedModifier,
     propertiesHeight,
+    propertiesMaxHeight: window.innerHeight * MAX_PROPERTIES_RATIO,
     isResizing,
     expandedIds,
     pendingDelete,
+    pipelineRunning,
     setSelectedId,
     startResizing,
+    resizePropertiesBy,
     handleAddModifier,
     handleRemoveModifier,
     handleToggleModifier,

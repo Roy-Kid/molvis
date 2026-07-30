@@ -1,6 +1,5 @@
-import type { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/stage";
 import type React from "react";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 
 interface MeasurePanelProps {
   app: Molvis | null;
@@ -8,14 +7,19 @@ interface MeasurePanelProps {
 
 export const MeasurePanel: React.FC<MeasurePanelProps> = ({ app: _app }) => {
   return (
-    <div className="h-full flex flex-col">
-      <SidebarSection title="Measure" subtitle="Pick atoms on the canvas">
-        <div className="rounded border bg-muted/10 px-2 py-1 text-[10px] text-muted-foreground leading-4 space-y-0.5">
-          <div>2 atoms — distance</div>
-          <div>3 atoms — angle</div>
-          <div>4 atoms — dihedral</div>
-        </div>
-      </SidebarSection>
+    <div
+      role="region"
+      className="flex h-full flex-col px-2 py-2"
+      aria-label="Measure tools"
+    >
+      <p className="mb-2 text-micro text-muted-foreground">
+        Pick atoms on the canvas
+      </p>
+      <div className="space-y-1 text-micro leading-4 text-muted-foreground">
+        <div>2 atoms — distance</div>
+        <div>3 atoms — angle</div>
+        <div>4 atoms — dihedral</div>
+      </div>
     </div>
   );
 };

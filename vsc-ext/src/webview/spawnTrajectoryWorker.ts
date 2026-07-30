@@ -7,15 +7,15 @@
  * colocated with `chunks/shared.js`.
  */
 
-import type { Format } from "../../../core/src/transport/trajectory_worker/protocol";
+import type { Format } from "../../../stage/src/transport/trajectory_worker/protocol";
 import {
   TrajectoryRuntime,
   type WorkerLike,
-} from "../../../core/src/transport/trajectory_worker/runtime";
+} from "../../../stage/src/transport/trajectory_worker/runtime";
 
 // Re-export everything the original runtime module exposes so call sites
 // that import types / classes from the same path keep working.
-export type { Format } from "../../../core/src/transport/trajectory_worker/protocol";
+export type { Format } from "../../../stage/src/transport/trajectory_worker/protocol";
 export {
   CancellationError,
   type IndexProgressCallback,
@@ -23,7 +23,7 @@ export {
   type OpenResult,
   TrajectoryRuntime,
   type WorkerLike,
-} from "../../../core/src/transport/trajectory_worker/runtime";
+} from "../../../stage/src/transport/trajectory_worker/runtime";
 
 export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
   if (typeof Worker === "undefined") {

@@ -16,7 +16,7 @@ export type MolvisSurface = "full" | "canvas";
 export interface MolvisChromeFlags {
   /** Top bar (mode selector, fullscreen toggle, settings). */
   topBar?: boolean;
-  /** Left sidebar (analysis, RDF, pipeline). */
+  /** Left sidebar (analysis, pair distribution, pipeline). */
   leftSidebar?: boolean;
   /** Right sidebar (mode-specific panels). */
   rightSidebar?: boolean;
@@ -56,6 +56,12 @@ export interface MountOpts {
    * this flag explicitly (or the URL carries `?demo=1`).
    */
   demo?: boolean;
+  /**
+   * Plugin sources to load on mount (`owner/repo[@ref]` or HTTPS URL).
+   * Merged with Settings / localStorage plugins; host sources are enabled.
+   * VSCode: `molvis.plugins`. Python: `Molvis(plugins=[…])` / URL `plugins=`.
+   */
+  plugins?: string[];
 }
 
 const MountOptsContext = createContext<MountOpts>({});
@@ -107,18 +113,48 @@ export function resolveChrome(opts: MountOpts): Required<MolvisChromeFlags> {
  * global is absent (e.g. standalone or notebook hosts) so the result
  * is always safe to spread.
  */
+function parsePluginsField(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const list = value
+      .filter((v): v is string => typeof v === "string")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return list.length > 0 ? list : undefined;
+  }
+  if (typeof value === "string" && value.trim()) {
+    // Comma-separated for URL: plugins=a/b@v1,c/d@v2
+    const list = value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return list.length > 0 ? list : undefined;
+  }
+  return undefined;
+}
+
 export function readMountOptsFromHost(): Partial<MountOpts> {
   if (typeof window === "undefined") return {};
 
   const init = (
     window as Window &
       typeof globalThis & {
-        __MOLVIS_VSCODE_INIT__?: { mount?: Partial<MountOpts> };
+        __MOLVIS_VSCODE_INIT__?: {
+          mount?: Partial<MountOpts>;
+          /** Flat plugins list some hosts put next to mount. */
+          plugins?: unknown;
+        };
       }
   ).__MOLVIS_VSCODE_INIT__;
 
-  if (!init?.mount) return {};
-  return init.mount;
+  if (!init) return {};
+
+  const mount = init.mount ? { ...init.mount } : {};
+  const fromMount = parsePluginsField(mount.plugins);
+  const fromRoot = parsePluginsField(init.plugins);
+  if (fromMount || fromRoot) {
+    mount.plugins = fromMount ?? fromRoot;
+  }
+  return mount;
 }
 
 /** Build {@link MountOpts} from the current `window.location.search`. */
@@ -133,5 +169,6 @@ export function readMountOptsFromUrl(): MountOpts {
     session: params.get("session") ?? undefined,
     surface,
     demo: params.has("demo") ? true : undefined,
+    plugins: parsePluginsField(params.get("plugins") ?? undefined),
   };
 }

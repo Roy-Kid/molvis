@@ -8,6 +8,7 @@ export type SketchAction =
   | { type: "panHold"; down: boolean };
 
 const ELEMENT_KEYS: Record<string, string> = {
+  b: "B",
   c: "C",
   n: "N",
   o: "O",

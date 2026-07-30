@@ -167,6 +167,7 @@ class Molvis(
         gui: bool | _Unset = _UNSET,
         serve_page: bool | _Unset = _UNSET,
         display_surface: DisplaySurface | _Unset = _UNSET,
+        plugins: list[str] | None = None,
     ) -> "Molvis":
         scene_name = name or cls._DEFAULT_NAME
         existing = cls._scene_registry.get(scene_name)
@@ -193,6 +194,7 @@ class Molvis(
         gui: bool | _Unset = _UNSET,
         serve_page: bool | _Unset = _UNSET,
         display_surface: DisplaySurface | _Unset = _UNSET,
+        plugins: list[str] | None = None,
     ) -> None:
         if getattr(self, "_initialised", False):
             return
@@ -205,6 +207,8 @@ class Molvis(
         self.serve_page: bool = (
             True if isinstance(serve_page, _Unset) else serve_page
         )
+        # Page plugins (owner/repo[@tag] or URL) injected on mount.
+        self._plugins: list[str] = list(plugins or [])
         self._created_at: float = time.time()
 
         # Runtime context frozen at construction time. Tracking the
@@ -239,6 +243,7 @@ class Molvis(
                 serve_page=self.serve_page,
                 event_bus=self._events,
                 surface="full" if self.gui else "canvas",
+                plugins=self._plugins,
             )
         else:
             attach = getattr(transport, "attach_event_bus", None)
@@ -782,7 +787,7 @@ class Molvis(
         """Build the cell HTML — a div + a loader script."""
         nonce = secrets.token_hex(4)
         cell_id = f"molvis-cell-{nonce}"
-        opts = {
+        opts: dict[str, object] = {
             "wsUrl": endpoints.ws_url,
             "token": endpoints.token,
             "session": endpoints.session,
@@ -791,6 +796,8 @@ class Molvis(
             "theme": "dark",
             "surface": "full" if self.gui else "canvas",
         }
+        if self._plugins:
+            opts["plugins"] = list(self._plugins)
         loader = _BOOTSTRAP_LOADER.format(
             cell_id=json.dumps(cell_id),
             asset_base=json.dumps(endpoints.base_url),

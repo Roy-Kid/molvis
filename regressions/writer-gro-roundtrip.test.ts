@@ -8,7 +8,7 @@
  * Provenance: fixtures mirror molrs `gro.rs` `water_gro`; golden values
  * captured from core integration suite writer_roundtrip (2026-07-22).
  *
- * Public surface: `@molcrafts/molvis-core` IO (`loadTextTrajectory`,
+ * Public surface: `@molcrafts/molvis-stage` IO (`loadTextTrajectory`,
  * `writeFrame`) — imported via source paths for the monorepo runner.
  *
  * Run from repo root:

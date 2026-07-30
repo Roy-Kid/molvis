@@ -147,6 +147,20 @@ suite("extension host commands", () => {
       (c) => c.id === "molvis",
     );
     assert.ok(molvisContainer, "Expected molvis activity bar container");
+
+    const sketchContainer = containers?.activitybar?.find(
+      (c) => c.id === "molvisSketch",
+    );
+    assert.ok(sketchContainer, "Expected standalone sketch activity container");
+
+    const views = ext.packageJSON?.contributes?.views as
+      | Record<string, Array<{ id: string; type?: string }>>
+      | undefined;
+    const sketchView = views?.molvisSketch?.find(
+      (view) => view.id === "molvis.sketch",
+    );
+    assert.ok(sketchView, "Expected molvis.sketch in views.molvisSketch");
+    assert.strictEqual(sketchView?.type, "webview");
   });
 
   test("quickView accepts URI argument", async () => {

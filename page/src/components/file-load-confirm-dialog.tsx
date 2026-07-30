@@ -1,5 +1,4 @@
-import { DataSourceModifier, type Molvis } from "@molvis/core";
-import { Button } from "@/components/ui/button";
+import { DataSourceModifier, type Molvis } from "@molvis/stage";
 import {
   Dialog,
   DialogContent,
@@ -7,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ViewerAction } from "@/components/viewer/ViewerAction";
 
 export function sceneHasLoadedData(app: Molvis | null): boolean {
   if (!app) return false;
@@ -22,57 +22,93 @@ export function sceneHasLoadedData(app: Molvis | null): boolean {
 interface FileLoadConfirmDialogProps {
   open: boolean;
   filename: string;
+  busy?: boolean;
   onCancel: () => void;
   onAddSource: () => void;
   onReplace: () => void;
   onExtend: () => void;
 }
 
+/** Ask how to load a file when the scene already has data. */
 export const FileLoadConfirmDialog: React.FC<FileLoadConfirmDialogProps> = ({
   open,
   filename,
+  busy = false,
   onCancel,
   onAddSource,
   onReplace,
   onExtend,
 }) => (
-  <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
-    <DialogContent className="max-w-[400px] gap-3 p-4">
+  <Dialog
+    open={open}
+    onOpenChange={(next) => {
+      if (!next && !busy) onCancel();
+    }}
+  >
+    <DialogContent
+      className="max-w-dialog-sm gap-3 p-4"
+      aria-busy={busy}
+      showCloseButton={!busy}
+    >
       <DialogHeader>
-        <DialogTitle className="text-sm">Load file</DialogTitle>
+        <DialogTitle className="text-sm">Load into scene</DialogTitle>
       </DialogHeader>
+
       <div className="space-y-2 text-xs">
-        <div className="truncate font-mono">{filename}</div>
-        <div className="text-muted-foreground space-y-1">
-          <p>A scene is already loaded. Choose how to load this file.</p>
-          <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-            <li>
-              <strong>Replace</strong> — clear the scene and load as the single
-              source
-            </li>
-            <li>
-              <strong>Add</strong> — keep existing sources, add as a separate
-              source
-            </li>
-            <li>
-              <strong>Extend</strong> — merge all atoms into one combined source
-            </li>
-          </ul>
+        <div className="truncate font-mono" title={filename}>
+          {filename}
         </div>
+        <p className="text-micro text-muted-foreground">
+          Scene already has data — choose how to combine.
+        </p>
+        {busy && (
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-micro text-muted-foreground"
+          >
+            Waiting for the current viewer operation…
+          </p>
+        )}
       </div>
-      <DialogFooter>
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+
+      <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+        <div className="grid w-full grid-cols-3 gap-1.5">
+          <ViewerAction
+            className="w-full"
+            disabled={busy}
+            onClick={onReplace}
+            title="Clear the scene and load this file"
+          >
+            Replace
+          </ViewerAction>
+          <ViewerAction
+            purpose="dismiss"
+            className="w-full"
+            disabled={busy}
+            onClick={onAddSource}
+            title="Keep existing data and add this as another source"
+          >
+            Add
+          </ViewerAction>
+          <ViewerAction
+            purpose="dismiss"
+            className="w-full"
+            disabled={busy}
+            onClick={onExtend}
+            title="Concatenate atoms into the current structure"
+          >
+            Extend
+          </ViewerAction>
+        </div>
+        <ViewerAction
+          purpose="dismiss"
+          className="w-full"
+          disabled={busy}
+          onClick={onCancel}
+        >
           Cancel
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onExtend}>
-          Extend
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onAddSource}>
-          Add
-        </Button>
-        <Button type="button" size="sm" onClick={onReplace}>
-          Replace
-        </Button>
+        </ViewerAction>
       </DialogFooter>
     </DialogContent>
   </Dialog>

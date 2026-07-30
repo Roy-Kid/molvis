@@ -3,14 +3,18 @@ import {
   isSelectionProducer,
   type Molvis,
   SelectModifier,
-} from "@molvis/core";
+} from "@molvis/stage";
 import { Lasso, Plus, Trash2, X } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
+import { ViewerAction } from "@/components/viewer/ViewerAction";
+import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
+import { ViewerToggleAction } from "@/components/viewer/ViewerToggleAction";
+import { cn } from "@/lib/utils";
 import { DataInspectorPanel } from "@/ui/layout/DataInspectorPanel";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { useSelectionSnapshot } from "./useSelectionSnapshot";
 
 interface SelectPanelProps {
@@ -23,7 +27,34 @@ interface SelectionItem {
   atomCount: number;
 }
 
+const DELETE_COPY = {
+  running: "Removing the selection…",
+  success: "Selection removed",
+  error: "Could not remove the selection",
+};
+
+const EXPRESSION_COPY = {
+  running: "Evaluating the selection expression…",
+  success: "Expression selection added",
+  error: "Could not evaluate the selection expression",
+};
+
+function formatCount(atoms: number, bonds: number): string {
+  return `${atoms} atom${atoms === 1 ? "" : "s"} · ${bonds} bond${bonds === 1 ? "" : "s"}`;
+}
+
+/**
+ * Right-inspector surface for Select mode.
+ *
+ * Layout (top → bottom, one concern each):
+ * 1. Live selection summary
+ * 2. Canvas pick (fence + pending commit)
+ * 3. Expression form
+ * 4. Named pipeline selections (when any)
+ * 5. Atom/bond table for the current selection (fills remaining height)
+ */
 export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
+  const { run, running } = usePipelineOperation();
   const [expression, setExpression] = useState("");
   const [fenceActive, setFenceActive] = useState(false);
   const [pendingAtomCount, setPendingAtomCount] = useState(0);
@@ -31,7 +62,6 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const [selectionItems, setSelectionItems] = useState<SelectionItem[]>([]);
   const snapshot = useSelectionSnapshot(app);
 
-  // Fence state
   useEffect(() => {
     if (!app) return;
     const unsub = app.events.on("fence-select-change", (active: boolean) =>
@@ -40,7 +70,6 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     return unsub;
   }, [app]);
 
-  // Pending counts — initial read + live event
   useEffect(() => {
     if (!app) {
       setPendingAtomCount(0);
@@ -68,7 +97,6 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     return unsub;
   }, [app]);
 
-  // Selection items from pipeline
   const refreshSelectionItems = useCallback(() => {
     if (!app) {
       setSelectionItems([]);
@@ -82,9 +110,9 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
       const atomCount = mask?.count() ?? 0;
       let label: string;
       if (mod instanceof ExpressionSelectionModifier) {
-        label = mod.selectionName || mod.name;
+        label = mod.selectionName || mod.expression || mod.name;
       } else if (mod instanceof SelectModifier) {
-        label = `${mod.id} · ${mod.selectionSummary}`;
+        label = mod.selectionSummary || mod.id;
       } else {
         label = mod.name;
       }
@@ -110,10 +138,18 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const handleDeleteSelection = useCallback(
     (id: string) => {
       if (!app) return;
-      app.modifierPipeline.removeModifier(id);
-      void app.applyPipeline({ fullRebuild: true });
+      void run(async () => {
+        if (
+          app.modifierPipeline
+            .getModifiers()
+            .some((modifier) => modifier.id === id)
+        ) {
+          app.modifierPipeline.removeModifier(id);
+        }
+        await app.applyPipeline({ fullRebuild: true });
+      }, DELETE_COPY);
     },
-    [app],
+    [app, run],
   );
 
   const handleAddPending = useCallback(() => {
@@ -126,18 +162,28 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
 
   const handleExpressionSelect = useCallback(() => {
     if (!app || !expression.trim()) return;
-    try {
-      app.modifierPipeline.addModifier(
-        new ExpressionSelectionModifier(
-          `expr-sel-${Date.now()}`,
-          expression.trim(),
-        ),
-      );
-      void app.applyPipeline({ fullRebuild: true });
-    } catch {
-      // expression validated by ExpressionSelector.compile
-    }
-  }, [app, expression]);
+    const modifier = new ExpressionSelectionModifier(
+      `expr-sel-${Date.now()}`,
+      expression.trim(),
+    );
+    void run(async () => {
+      if (
+        !app.modifierPipeline
+          .getModifiers()
+          .some((item) => item.id === modifier.id)
+      ) {
+        app.modifierPipeline.addModifier(modifier);
+      }
+      await app.applyPipeline({ fullRebuild: true });
+      setExpression("");
+    }, EXPRESSION_COPY);
+  }, [app, expression, run]);
+
+  const toggleFence = useCallback(() => {
+    if (!app) return;
+    if (fenceActive) app.exitFenceSelect();
+    else app.enterFenceSelect();
+  }, [app, fenceActive]);
 
   const selectedAtomIdsSet = useMemo(
     () => new Set(snapshot.atomIds),
@@ -145,117 +191,167 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   );
 
   const hasPending = pendingAtomCount > 0 || pendingBondCount > 0;
+  const hasSelection = snapshot.atomCount > 0 || snapshot.bondCount > 0;
+  const canApplyExpression = expression.trim().length > 0;
 
   return (
-    <div className="flex flex-col min-h-full">
-      {/* Compact header */}
-      <div className="h-7 px-2 border-b bg-muted/15 shrink-0 flex items-center justify-between">
-        <span className="text-[10px] font-semibold tracking-wide uppercase">
-          Select
-        </span>
-        <span className="text-[9px] text-muted-foreground tabular-nums">
-          {snapshot.atomCount}a / {snapshot.bondCount}b
-        </span>
+    <fieldset
+      disabled={!app || running}
+      aria-busy={running}
+      aria-label="Select tools"
+      className="m-0 flex min-h-full min-w-0 flex-col border-0 p-0"
+    >
+      {/* 1. Live summary — count only; mode name lives in the tab strip */}
+      <div
+        className="flex h-control-compact shrink-0 items-center border-b border-border/70 px-2"
+        aria-live="polite"
+      >
+        <p className="text-micro tabular-nums text-muted-foreground">
+          {formatCount(snapshot.atomCount, snapshot.bondCount)}
+        </p>
       </div>
 
-      {/* Selection list — inline, no section header */}
-      {selectionItems.length > 0 && (
-        <div className="shrink-0 border-b">
-          <div className="divide-y divide-border/30 max-h-28 overflow-y-auto">
-            {selectionItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-1 py-0.5 px-2 text-[11px] hover:bg-accent/50 group"
-              >
-                <span className="flex-1 truncate">{item.label}</span>
-                <span className="text-[10px] text-muted-foreground tabular-nums shrink-0 mr-0.5">
-                  {item.atomCount}a
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDeleteSelection(item.id)}
-                  aria-label="Remove selection"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-          </div>
+      {/* 2. Canvas pick — fence + pending commit */}
+      <section
+        aria-label="Canvas pick"
+        className="shrink-0 space-y-2 border-b border-border/70 px-2 py-2"
+      >
+        <div className="flex items-center gap-1">
+          <ViewerToggleAction
+            selected={fenceActive}
+            className="min-w-0 flex-1 justify-start"
+            onClick={toggleFence}
+          >
+            <Lasso />
+            <span className="truncate">
+              {fenceActive ? "Drawing fence…" : "Fence"}
+            </span>
+          </ViewerToggleAction>
         </div>
+
+        {hasPending ? (
+          <div className="flex items-center gap-1">
+            <span className="min-w-0 flex-1 truncate text-micro tabular-nums text-muted-foreground">
+              Pending · {formatCount(pendingAtomCount, pendingBondCount)}
+            </span>
+            <ViewerAction
+              className="shrink-0"
+              disabled={!hasPending}
+              onClick={handleAddPending}
+            >
+              <Plus />
+              Add
+            </ViewerAction>
+            <ViewerIconAction
+              icon={<X />}
+              label="Clear pending pick"
+              onClick={handleClearPending}
+            />
+          </div>
+        ) : (
+          <p className="text-micro leading-snug text-subtle-foreground">
+            Pick on the canvas, then add the pending pick here.
+          </p>
+        )}
+      </section>
+
+      {/* 3. Expression */}
+      <section
+        aria-label="Expression selection"
+        className="shrink-0 space-y-1.5 border-b border-border/70 px-2 py-2"
+      >
+        <label
+          htmlFor="select-expression"
+          className="text-micro font-medium text-muted-foreground"
+        >
+          Expression
+        </label>
+        <div className="flex gap-1">
+          <Input
+            id="select-expression"
+            aria-label="Selection expression"
+            className="h-control-compact min-w-0 flex-1 font-mono text-xs"
+            placeholder="element == 'C'"
+            value={expression}
+            onChange={(e) => setExpression(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleExpressionSelect();
+            }}
+          />
+          <ViewerAction
+            className="shrink-0"
+            disabled={!canApplyExpression}
+            onClick={handleExpressionSelect}
+          >
+            Apply
+          </ViewerAction>
+        </div>
+      </section>
+
+      {/* 4. Named selections from the pipeline */}
+      {selectionItems.length > 0 && (
+        <section
+          aria-label="Named selections"
+          className="shrink-0 border-b border-border/70"
+        >
+          <div className="flex items-center justify-between gap-2 px-2 pt-2 pb-1">
+            <span className="text-micro font-medium text-muted-foreground">
+              Named
+            </span>
+            <span className="text-micro tabular-nums text-subtle-foreground">
+              {selectionItems.length}
+            </span>
+          </div>
+          <ul className="max-h-28 divide-y divide-border/40 overflow-y-auto">
+            {selectionItems.map((item) => (
+              <li
+                key={item.id}
+                className="group flex items-center gap-1 px-2 py-1 text-micro hover:bg-interactive"
+              >
+                <span className="min-w-0 flex-1 truncate" title={item.label}>
+                  {item.label}
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {item.atomCount}
+                </span>
+                <ViewerIconAction
+                  icon={<Trash2 />}
+                  label={`Remove ${item.label}`}
+                  tooltipSide="left"
+                  onClick={() => handleDeleteSelection(item.id)}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
-      {/* Pending — compact */}
-      <SidebarSection
-        title={
-          hasPending
-            ? `Pending (${pendingAtomCount}a ${pendingBondCount}b)`
-            : "Pending"
-        }
-        defaultOpen
-        className="shrink-0"
+      {/* 5. Selection table — primary body */}
+      <section
+        aria-label="Selected atoms and bonds"
+        className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex gap-1">
-          <Button
-            size="sm"
-            variant="default"
-            className="h-7 flex-1 text-xs"
-            disabled={!hasPending}
-            onClick={handleAddPending}
+        {hasSelection ? (
+          <DataInspectorPanel
+            app={app}
+            filterAtomIds={selectedAtomIdsSet}
+            filterRevision={snapshot.revision}
+            compact
+          />
+        ) : (
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col items-center justify-center px-3",
+            )}
           >
-            <Plus className="h-3 w-3 mr-1" />
-            Add
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 px-2 text-xs"
-            disabled={!hasPending}
-            onClick={handleClearPending}
-          >
-            <X className="h-3 w-3 mr-1" />
-            Clear
-          </Button>
-        </div>
-      </SidebarSection>
-
-      {/* Fence */}
-      <SidebarSection title="Fence" defaultOpen className="shrink-0">
-        <Button
-          size="sm"
-          variant={fenceActive ? "secondary" : "outline"}
-          className={`h-7 w-full px-2${fenceActive ? " ring-1 ring-ring" : ""}`}
-          onClick={() => {
-            if (fenceActive) app?.exitFenceSelect();
-            else app?.enterFenceSelect();
-          }}
-          aria-pressed={fenceActive}
-        >
-          <Lasso className="h-3.5 w-3.5" />
-        </Button>
-      </SidebarSection>
-
-      {/* Expression */}
-      <SidebarSection title="Expression" defaultOpen className="shrink-0">
-        <Input
-          className="h-7 text-xs font-mono"
-          placeholder="element == 'C'"
-          value={expression}
-          onChange={(e) => setExpression(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleExpressionSelect()}
-        />
-      </SidebarSection>
-
-      {/* Data inspector — fills remaining space */}
-      <div className="flex-1 min-h-0">
-        <DataInspectorPanel
-          app={app}
-          filterAtomIds={selectedAtomIdsSet}
-          filterRevision={snapshot.revision}
-          compact
-        />
-      </div>
-    </div>
+            <EmptyState
+              density="compact"
+              title="Nothing selected"
+              description="Use the canvas tools, fence, or an expression above."
+            />
+          </div>
+        )}
+      </section>
+    </fieldset>
   );
 };

@@ -1,10 +1,11 @@
-import type { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/stage";
+import { buildStructureOutline } from "@molvis/stage";
 import {
   type FileContent,
   type FileFormat,
   type LoadMode,
   loadFileContent,
-} from "@molvis/core/io";
+} from "@molvis/stage/io";
 import { useEffect } from "react";
 
 interface VsCodeApi {
@@ -30,12 +31,29 @@ function getVsCodeApi(): VsCodeApi | null {
   }
 }
 
+function postStructureOutline(app: Molvis, vscode: VsCodeApi): void {
+  const frame = app.system.frame;
+  if (!frame) {
+    vscode.postMessage({
+      type: "structureOutline",
+      outline: { roots: [] },
+    });
+    return;
+  }
+  const outline = buildStructureOutline(frame);
+  vscode.postMessage({
+    type: "structureOutline",
+    outline,
+  });
+}
+
 /**
  * Bridges the React page to a VSCode-like host. When `acquireVsCodeApi`
  * is available, posts a single `ready` message on mount (so the host
- * knows to push `loadFile` back) and routes inbound `loadFile` messages
- * through the unified core ingress. When not in a VSCode webview, this
- * is a no-op.
+ * knows to push `loadFile` back) and routes inbound `loadFile` /
+ * `selectAtoms` messages. Posts `structureOutline` after each frame
+ * render so the native Outline tree can refresh. When not in a VSCode
+ * webview, this is a no-op.
  */
 export function useHostFileBridge(app: Molvis | null): void {
   useEffect(() => {
@@ -45,10 +63,28 @@ export function useHostFileBridge(app: Molvis | null): void {
 
     vscode.postMessage({ type: "ready" });
 
+    const onFrameRendered = (_payload: {
+      frame: unknown;
+      box?: unknown;
+    }): void => {
+      postStructureOutline(app, vscode);
+    };
+    app.events.on("frame-rendered", onFrameRendered);
+    // Seed once in case a frame is already present.
+    postStructureOutline(app, vscode);
+
     const handler = (event: MessageEvent<unknown>) => {
       const data = event.data;
       if (!data || typeof data !== "object") return;
       const message = data as { type?: string };
+
+      if (message.type === "selectAtoms") {
+        const { indices } = message as { indices?: number[] };
+        if (!Array.isArray(indices) || indices.length === 0) return;
+        app.world.selectionManager.replaceAtomsByIds(indices);
+        return;
+      }
+
       if (message.type !== "loadFile") return;
       const { content, filename, format, mode } = message as {
         content: FileContent;
@@ -68,6 +104,9 @@ export function useHostFileBridge(app: Molvis | null): void {
     };
 
     window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+    return () => {
+      window.removeEventListener("message", handler);
+      app.events.off("frame-rendered", onFrameRendered);
+    };
   }, [app]);
 }

@@ -1,14 +1,15 @@
 import { AlertCircle, Link2, Link2Off, Loader2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ViewerAction } from "@/components/viewer/ViewerAction";
 import {
   type BackendStatus,
   type BackendTarget,
   useBackendConnection,
 } from "@/hooks/useBackendConnection";
+import { SettingsSection } from "./SettingsSection";
 
 const STATUS_COPY: Record<BackendStatus, { label: string; className: string }> =
   {
@@ -22,11 +23,11 @@ const STATUS_COPY: Record<BackendStatus, { label: string; className: string }> =
     },
     connected: {
       label: "Connected",
-      className: "text-emerald-500",
+      className: "text-status-completed-foreground",
     },
     error: {
       label: "Error",
-      className: "text-destructive",
+      className: "text-status-failed-foreground",
     },
   };
 
@@ -42,7 +43,7 @@ function StatusBadge({ status }: { status: BackendStatus }) {
           : Link2Off;
   return (
     <div
-      className={`flex items-center gap-1 text-[10px] ${className}`}
+      className={`flex items-center gap-1 text-micro ${className}`}
       aria-live="polite"
     >
       <Icon
@@ -97,7 +98,13 @@ function buildDisplayUrl(conn: {
   }
 }
 
-export const BackendSection: React.FC = () => {
+interface BackendSectionProps {
+  sectionId?: string;
+}
+
+export const BackendSection: React.FC<BackendSectionProps> = ({
+  sectionId,
+}) => {
   const conn = useBackendConnection();
 
   const [urlText, setUrlText] = useState<string>(() => buildDisplayUrl(conn));
@@ -123,24 +130,27 @@ export const BackendSection: React.FC = () => {
   const shownError = parseError ?? conn.error;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-wide">
-          Backend
-        </div>
-        <StatusBadge status={conn.status} />
-      </div>
-
+    <SettingsSection
+      id={sectionId}
+      title="Backend"
+      trailing={<StatusBadge status={conn.status} />}
+      description={
+        <>
+          Run a Python script with <code>WebSocketTransport</code>; paste the
+          printed <code>ws://…</code> URL below and press Connect.
+        </>
+      }
+    >
       <div className="space-y-1">
         <Label
           htmlFor="backend-url"
-          className="text-[10px] text-muted-foreground"
+          className="text-micro text-muted-foreground"
         >
           Connection URL
         </Label>
         <Input
           id="backend-url"
-          className="h-7 text-xs font-mono"
+          className="h-control-compact text-xs font-mono"
           placeholder="ws://localhost:8765/ws?token=…&session=…"
           value={urlText}
           onChange={(e) => {
@@ -152,30 +162,29 @@ export const BackendSection: React.FC = () => {
           }}
         />
         {conn.session && (
-          <p className="text-[9px] text-muted-foreground truncate">
+          <p className="text-micro text-muted-foreground truncate">
             session: <span className="font-mono">{conn.session}</span>
           </p>
         )}
       </div>
 
       {shownError && (
-        <div className="flex items-start gap-1 text-[10px] text-destructive">
-          <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-1 text-micro text-status-failed-foreground">
+          <AlertCircle className="h-3 w-3 mt-1 shrink-0" />
           <span className="break-all">{shownError}</span>
         </div>
       )}
 
-      <div className="flex items-center gap-1.5 pt-1">
-        <Button
-          className="h-7 flex-1 text-xs"
+      <div className="flex items-center gap-2 pt-1">
+        <ViewerAction
+          className="flex-1"
           onClick={onConnect}
           disabled={!canConnect}
         >
           {isConnected ? "Reconnect" : "Connect"}
-        </Button>
-        <Button
-          className="h-7 text-xs"
-          variant="outline"
+        </ViewerAction>
+        <ViewerAction
+          purpose="dismiss"
           onClick={() => {
             setUrlText("");
             conn.disconnect();
@@ -183,13 +192,8 @@ export const BackendSection: React.FC = () => {
           disabled={conn.status === "idle"}
         >
           Disconnect
-        </Button>
+        </ViewerAction>
       </div>
-
-      <p className="text-[10px] text-muted-foreground leading-snug">
-        Run a Python script with <code>WebSocketTransport</code>; paste the
-        printed <code>ws://…</code> URL above and press Connect.
-      </p>
-    </div>
+    </SettingsSection>
   );
 };

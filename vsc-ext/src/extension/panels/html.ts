@@ -30,6 +30,15 @@ function getViewerCssUri(
   );
 }
 
+function getSketchScriptUri(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): vscode.Uri {
+  return webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, "out", "sketch", "index.js"),
+  );
+}
+
 // --- HTML generation (was webview/htmlFactory.ts) ---
 
 function getNonce(): string {
@@ -142,6 +151,34 @@ export function getViewerHtml(
   <body>
     <div id="root"></div>
     <script nonce="${nonce}">window.__MOLVIS_VSCODE_INIT__ = ${serializedOptions};</script>
+    <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
+  </body>
+</html>`;
+}
+
+export function getSketchHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+): string {
+  const nonce = getNonce();
+  const scriptUri = getSketchScriptUri(webview, extensionUri);
+  const cssUri = getViewerCssUri(webview, extensionUri);
+  const csp = buildCsp(webview, nonce);
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MolVis Sketch</title>
+    <link rel="stylesheet" href="${cssUri}">
+    <style>
+      html, body, #root { position: absolute; inset: 0; margin: 0; padding: 0; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
     <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
   </body>
 </html>`;

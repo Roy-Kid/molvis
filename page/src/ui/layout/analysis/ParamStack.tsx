@@ -9,8 +9,8 @@ export function ParamStack({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[10px] text-muted-foreground">{label}</span>
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-micro text-muted-foreground">{label}</span>
       {children}
     </div>
   );

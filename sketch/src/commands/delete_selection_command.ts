@@ -19,7 +19,6 @@ export class DeleteSelectionCommand extends SketchCommand {
     const data = this.before;
     const atomSet = new Set(this.atomIndices);
     const bondSet = new Set(this.bondIndices);
-
     const atoms = data.atoms.filter((_, i) => !atomSet.has(i));
     const map = new Map<number, number>();
     let ni = 0;

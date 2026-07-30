@@ -42,7 +42,7 @@ the unit and multi-orbital quirks the new fixtures require.
   - molrs-wasm: expose `CubeReader` and `CHGCARReader` classes
     matching the existing reader contract (`new R(content)`, `len()`,
     `read(step)`, `free()`).
-  - molvis-core: register `cube` + `chgcar` formats; wire WASM readers
+  - molvis-stage: register `cube` + `chgcar` formats; wire WASM readers
     in `openTextReader`; add a `DrawIsosurfaceModifier` (auto-attaches
     when `frame.getBlock("grid")` exists) that calls a new
     `artist.drawIsosurface()` implementation built on the existing
@@ -302,7 +302,7 @@ case "chgcar": return new CHGCARReader(content);
 
 ### Auto-attach
 The new `DrawIsosurfaceModifier` is registered in
-`modifier_registry.ts` under category `"Draw"`, then picked up
+`modifier_registry.ts` under category `"Visualization"` (auto-attach only), then picked up
 automatically by `applyAutoAttach` in `core/src/pipeline/auto_attach.ts`
 because its `matches()` returns `true` whenever the loaded frame has a
 3-D grid block.
@@ -376,7 +376,7 @@ Ordered by dependency:
    `{Draws}`. `matches(frame)` checks for 3-D grid block. Register in
    `modifier_registry.ts`. **Acceptance**: rstest:
    `applyAutoAttach(pipeline, frame_with_grid)` returns a list
-   containing `"Draw Isosurface"`.
+   containing `"Create isosurface"`.
 
 - [ ] **UI: `DrawIsosurfaceModifier.tsx`** —
    `page/src/ui/modes/view/modifiers/DrawIsosurfaceModifier.tsx`.
@@ -389,7 +389,7 @@ Ordered by dependency:
    for **every** fixture in
    `molrs-core/target/tests-data/{cube,chgcar}/` (skip the `bad/`
    directory), load via `loadTextTrajectory`, run the pipeline, and
-   assert auto-attached modifiers include `"Draw Isosurface"`. Use
+   assert auto-attached modifiers include `"Create isosurface"`. Use
    rstest's file-system fixture loader (test runs in browser env via
    the existing `setup_wasm.ts`). Per fixture:
    - cube — assert `frame.getBlock("grid")` exists, the modifier's

@@ -5,12 +5,22 @@
     "jsx": "react-jsx",
     "types": ["node", "mocha", "vscode"],
     "paths": {
-      "@molvis/core": ["../core/src/index.ts"],
-      "@molvis/core/io": ["../core/src/io/index.ts"],
-      "@molvis/core/io/formats": ["../core/src/io/formats.ts"],
+      "@molvis/stage": ["../stage/src/index.ts"],
+      "@molvis/stage/io": ["../stage/src/io/index.ts"],
+      "@molvis/stage/io/formats": ["../stage/src/io/formats.ts"],
+      "@molcrafts/molvis-stage": ["../stage/src/index.ts"],
+      "@molcrafts/molvis-core": ["../core/src/index.ts"],
+      "@molcrafts/molvis-core/molrs": ["../core/src/molrs.ts"],
+      "@molcrafts/molvis-core/elements": ["../core/src/elements.ts"],
+      "@molcrafts/molvis-sketch": ["../sketch/src/index.ts"],
       "@/*": ["../page/src/*"]
     }
   },
-  "include": ["src/**/*", "../core/src/types/**/*", "../page/src/**/*.d.ts"],
+  "include": [
+    "src/**/*",
+    "../stage/src/types/**/*",
+    "../page/src/**/*.d.ts",
+    "../sketch/src/**/*.ts"
+  ],
   "exclude": ["rslib.*.config.ts"]
 }

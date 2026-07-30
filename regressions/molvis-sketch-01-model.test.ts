@@ -1,7 +1,7 @@
 /**
  * Public-API regression for @molcrafts/molvis-sketch model layer.
  * Goldens: hand-derived H2O topology + BuilderTab Frame columns (2026-07-29).
- * No Kekule / generate3D / third-party oracle at runtime.
+ * No legacy editor, generate3D, or third-party oracle at runtime.
  */
 import { describe, expect, it } from "@rstest/core";
 import {
@@ -35,7 +35,8 @@ describe("molvis-sketch-01-model regression", () => {
       const bonds = frame.getBlock("bonds");
       expect(Array.from(bonds?.copyColU32("atomi") ?? [])).toEqual([0, 0]);
       expect(Array.from(bonds?.copyColU32("atomj") ?? [])).toEqual([1, 2]);
-      expect(Array.from(bonds?.copyColU32("order") ?? [])).toEqual([1, 1]);
+      // generate3D requires float bond order; u32 is mis-read as 0
+      expect(Array.from(bonds?.copyColF("order") ?? [])).toEqual([1, 1]);
 
       const g2 = new MoleculeGraph();
       g2.fromFrame(frame);

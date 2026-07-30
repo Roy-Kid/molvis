@@ -9,6 +9,8 @@ export interface Atom2D {
   y: number;
   /** Formal charge (dimensionless). Default 0 when omitted. */
   charge?: number;
+  /** Optional per-atom label color as a six-digit CSS hex value. */
+  color?: string;
 }
 
 /**
@@ -23,10 +25,12 @@ export interface Bond2D {
   order: number;
   /** Stereochemistry for single bonds only. */
   stereo?: "none" | "up" | "down";
+  /** Optional per-bond stroke color as a six-digit CSS hex value. */
+  color?: string;
 }
 
 /**
- * Stable sketch export contract (generalized from former KekuleComposer.getMoleculeData).
+ * Stable, implementation-independent sketch document contract.
  */
 export interface MoleculeData {
   atoms: Atom2D[];

@@ -5,17 +5,15 @@ import { cn } from "@/lib/utils";
 /**
  * Inline code, following shadcn's typography `inline-code` recipe.
  *
- * Sizing is `em`-relative rather than shadcn's fixed `text-sm`, so the same
- * component reads correctly inside the sidebar's 10px labels and inside body
- * copy. Everything else — the muted surface, the mono face — comes from the
- * theme, not from ad-hoc classes at the call site.
+ * It inherits the surrounding semantic type size; surface, radius, spacing,
+ * and the mono face come from the viewer token layer.
  */
 function Code({ className, ...props }: React.ComponentProps<"code">) {
   return (
     <code
       data-slot="code"
       className={cn(
-        "relative rounded bg-muted px-[0.3em] py-[0.1em] font-mono text-[0.9em] font-medium",
+        "relative rounded-control bg-muted px-1 font-mono font-medium",
         className,
       )}
       {...props}

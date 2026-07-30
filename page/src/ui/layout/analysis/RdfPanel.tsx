@@ -1,11 +1,18 @@
 import { LineChart, type SeriesPoint } from "@molcrafts/molplot";
 import {
   computeRdfTrajectory,
+  estimateBoundingBoxVolume,
+  estimateBoundingSphereVolume,
+  estimateNBins,
+  estimateRMax,
   type FrameRange,
   type Molvis,
+  type PairRepresentation,
   type RdfResult,
   type RdfTrajectoryResult,
-} from "@molvis/core";
+  type ResolvedPairRepresentation,
+  resolvePairRepresentation,
+} from "@molvis/stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -17,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { AnalysisAlert } from "./AnalysisAlert";
 import { AnalysisChart, type AnalysisChartController } from "./AnalysisChart";
 import { AnalysisPanelShell } from "./AnalysisPanelShell";
@@ -31,22 +37,34 @@ import {
   type SelectionOptionMap,
 } from "./selectionOptions";
 
-function RdfChart({ result }: { result: RdfResult }) {
+type VolumeSource = "manual" | "bbox" | "sphere";
+
+function PairChart({ result }: { result: RdfResult }) {
   const controller = useMemo<AnalysisChartController>(() => {
-    const { r, gr, nBins } = result;
+    const { r, y, nBins, yLabel } = result;
     const points: SeriesPoint[] = new Array(nBins);
-    for (let i = 0; i < nBins; i++) points[i] = { x: r[i], y: gr[i] };
+    for (let i = 0; i < nBins; i++) points[i] = { x: r[i], y: y[i] };
     return {
       mount: (el) => {
         const chart = new LineChart(el, {
           series: [
-            { id: "gr", label: "g(r)", initialPoints: points, mode: "lines" },
+            {
+              id: "y",
+              label: yLabel,
+              initialPoints: points,
+              mode: "lines",
+            },
           ],
           xAxis: { label: "r (Å)", rangemode: "tozero" },
-          yAxis: { label: "g(r)", rangemode: "tozero" },
+          yAxis: { label: yLabel, rangemode: "tozero" },
           showLegend: true,
         });
-        return { dispose: () => chart.dispose() };
+        return {
+          ready: async () => {
+            await chart.ready();
+          },
+          dispose: () => chart.dispose(),
+        };
       },
     };
   }, [result]);
@@ -54,39 +72,39 @@ function RdfChart({ result }: { result: RdfResult }) {
   return (
     <AnalysisChart
       controller={controller}
-      chartKey={`${result.nBins}-${result.rMax}`}
-      title="RDF g(r)"
+      chartKey={`${result.representation}-${result.nBins}-${result.rMax}`}
+      title={result.yLabel}
     />
   );
 }
 
 // ---------------------------------------------------------------------------
-// RDF Raw Data Table
+// Raw Data Table
 // ---------------------------------------------------------------------------
 
 const TABLE_ROW_HEIGHT = 22;
 const TABLE_OVERSCAN = 5;
 
 function downloadCsv(result: RdfResult) {
-  const { r, gr, counts, nBins } = result;
-  const lines = ["r,g(r),counts"];
+  const { r, y, gr, counts, density, nBins, yLabel } = result;
+  const lines = [`r,${yLabel},g(r),counts,rho(r)`];
   for (let i = 0; i < nBins; i++) {
-    lines.push(`${r[i]},${gr[i]},${counts[i]}`);
+    lines.push(`${r[i]},${y[i]},${gr[i]},${counts[i]},${density[i]}`);
   }
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "rdf.csv";
+  a.download = "pair-distribution.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function RdfTable({ result }: { result: RdfResult }) {
+function PairTable({ result }: { result: RdfResult }) {
   const [scrollTop, setScrollTop] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { r, gr, counts, nBins } = result;
+  const { r, y, counts, nBins, yLabel } = result;
 
   const totalHeight = nBins * TABLE_ROW_HEIGHT;
   const visibleCount = containerRef.current
@@ -115,11 +133,11 @@ function RdfTable({ result }: { result: RdfResult }) {
       className="flex flex-col"
       style={{ height: Math.min(nBins * TABLE_ROW_HEIGHT + 24, 300) }}
     >
-      <div className="flex shrink-0 border-b border-border/70 bg-muted/30 text-[10px] font-semibold text-muted-foreground">
-        <div className="w-8 shrink-0 px-0.5 py-0.5 text-right">#</div>
-        <div className="min-w-0 flex-1 truncate px-0.5 py-0.5">r</div>
-        <div className="min-w-0 flex-1 truncate px-0.5 py-0.5">g(r)</div>
-        <div className="min-w-0 flex-1 truncate px-0.5 py-0.5">counts</div>
+      <div className="flex shrink-0 border-b border-border/70 bg-muted/30 text-micro font-semibold text-muted-foreground">
+        <div className="w-8 shrink-0 px-1 py-1 text-right">#</div>
+        <div className="min-w-0 flex-1 truncate px-1 py-1">r</div>
+        <div className="min-w-0 flex-1 truncate px-1 py-1">{yLabel}</div>
+        <div className="min-w-0 flex-1 truncate px-1 py-1">counts</div>
       </div>
       <div
         ref={containerRef}
@@ -135,19 +153,19 @@ function RdfTable({ result }: { result: RdfResult }) {
               return (
                 <div
                   key={i}
-                  className="flex border-b border-border/50 font-mono text-[10px] tabular-nums hover:bg-muted/40"
+                  className="flex border-b border-border/50 font-mono text-micro tabular-nums hover:bg-muted/40"
                   style={{ height: TABLE_ROW_HEIGHT }}
                 >
-                  <div className="flex w-8 shrink-0 items-center justify-end px-0.5 text-muted-foreground">
+                  <div className="flex w-8 shrink-0 items-center justify-end px-1 text-muted-foreground">
                     {i}
                   </div>
-                  <div className="flex min-w-0 flex-1 items-center truncate px-0.5">
+                  <div className="flex min-w-0 flex-1 items-center truncate px-1">
                     {fmt(r[i])}
                   </div>
-                  <div className="flex min-w-0 flex-1 items-center truncate px-0.5">
-                    {fmt(gr[i])}
+                  <div className="flex min-w-0 flex-1 items-center truncate px-1">
+                    {fmt(y[i])}
                   </div>
-                  <div className="flex min-w-0 flex-1 items-center truncate px-0.5">
+                  <div className="flex min-w-0 flex-1 items-center truncate px-1">
                     {counts[i]}
                   </div>
                 </div>
@@ -165,8 +183,19 @@ function formatVolume(v: number): string {
   return v >= 100 ? v.toFixed(2) : v.toFixed(4);
 }
 
-// Threshold below which a user-typed volume is treated as "unchanged from box".
-const VOLUME_OVERRIDE_EPSILON = 1e-6;
+function formatAutoHint(v: number | null | undefined, unit: string): string {
+  if (v === null || v === undefined || !Number.isFinite(v) || v <= 0) {
+    return "Auto";
+  }
+  return `Auto ≈ ${v >= 100 ? v.toFixed(1) : v.toFixed(2)} ${unit}`;
+}
+
+function resolvedNeedsVolume(
+  resolved: ResolvedPairRepresentation,
+  hasBox: boolean,
+): boolean {
+  return resolved === "gr" && !hasBox;
+}
 
 export function RdfPanel({
   app,
@@ -183,11 +212,18 @@ export function RdfPanel({
   const [modifiers, setModifiers] = useState<ModifierOption[]>([]);
   const [groupA, setGroupA] = useState(ALL_ATOMS_OPTION_ID);
   const [groupB, setGroupB] = useState(ALL_ATOMS_OPTION_ID);
-  const [nBins, setNBins] = useState("100");
+  const [representation, setRepresentation] =
+    useState<PairRepresentation>("auto");
+  const [nBins, setNBins] = useState(""); // empty = Auto
   const [rMin, setRMin] = useState("0");
-  const [rMax, setRMax] = useState("");
+  const [rMax, setRMax] = useState(""); // empty = Auto
   const [volume, setVolume] = useState("");
+  const [volumeSource, setVolumeSource] = useState<VolumeSource>("manual");
   const [hasBox, setHasBox] = useState(false);
+  const [boxVolume, setBoxVolume] = useState<number | null>(null);
+  const [autoRMax, setAutoRMax] = useState<number | null>(null);
+  const [bboxVolume, setBboxVolume] = useState<number | null>(null);
+  const [sphereVolume, setSphereVolume] = useState<number | null>(null);
   const [result, setResult] = useState<RdfTrajectoryResult | null>(null);
   const [computing, setComputing] = useState(false);
   const [progress, setProgress] = useState<{
@@ -198,18 +234,39 @@ export function RdfPanel({
   const [resultKey, setResultKey] = useState<string | null>(null);
   const selectionsRef = useRef<SelectionOptionMap>(new Map());
 
+  const resolvedRep = useMemo((): ResolvedPairRepresentation => {
+    if (representation === "auto") {
+      return hasBox ? "gr" : "pair";
+    }
+    return representation;
+  }, [representation, hasBox]);
+
+  const needsManualVolume = resolvedNeedsVolume(resolvedRep, hasBox);
+
   const paramsKey = useMemo(
     () =>
       JSON.stringify({
         groupA,
         groupB,
+        representation,
         nBins,
         rMin,
         rMax,
         volume,
+        volumeSource,
         frameRange,
       }),
-    [groupA, groupB, nBins, rMin, rMax, volume, frameRange],
+    [
+      groupA,
+      groupB,
+      representation,
+      nBins,
+      rMin,
+      rMax,
+      volume,
+      volumeSource,
+      frameRange,
+    ],
   );
   const stale =
     result !== null && resultKey !== null && resultKey !== paramsKey;
@@ -229,8 +286,6 @@ export function RdfPanel({
         setGroupA(opts[0].id);
         setGroupB(opts[0].id);
       } else if (!groupB || !opts.some((o) => o.id === groupB)) {
-        // Re-home B when its modifier disappeared; avoid depending on groupB
-        // in the effect deps (would re-subscribe on every B change).
         setGroupB(groupA);
       }
     };
@@ -251,26 +306,50 @@ export function RdfPanel({
 
   useEffect(() => {
     if (!app) return;
-    // `frame.box` yields a fresh Box wrapper on every access, so compare by
-    // the numeric volume (stable across ticks) and free the transient wrapper.
-    let lastVolume: number | null = Number.NaN;
-    const syncBoxVolume = () => {
-      const box = app.system.frame?.box;
+    // `frame.box` is a frame-owned getter handle — do NOT free() it.
+    let lastKey = "";
+    const syncGeometry = () => {
+      const frame = app.system.frame;
+      if (!frame) {
+        setHasBox(false);
+        setBoxVolume(null);
+        setAutoRMax(null);
+        setBboxVolume(null);
+        setSphereVolume(null);
+        return;
+      }
+      const box = frame.box;
       const v = box ? box.volume() : null;
-      box?.free();
-      if (v === lastVolume) return;
-      lastVolume = v;
-      if (v !== null) {
+      const rEst = estimateRMax(frame);
+      const bb = estimateBoundingBoxVolume(frame);
+      const sp = estimateBoundingSphereVolume(frame);
+      const key = `${v ?? "none"}|${rEst}|${bb ?? "n"}|${sp ?? "n"}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      if (v !== null && Number.isFinite(v) && v > 0) {
         setHasBox(true);
-        setVolume(formatVolume(v));
+        setBoxVolume(v);
       } else {
         setHasBox(false);
-        setVolume("");
+        setBoxVolume(null);
       }
+      setAutoRMax(rEst > 0 ? rEst : null);
+      setBboxVolume(bb);
+      setSphereVolume(sp);
     };
-    syncBoxVolume();
-    return app.events.on("frame-change", syncBoxVolume);
+    syncGeometry();
+    return app.events.on("frame-change", syncGeometry);
   }, [app]);
+
+  // When volume source is bbox/sphere, mirror the estimate into the field.
+  useEffect(() => {
+    if (!needsManualVolume) return;
+    if (volumeSource === "bbox" && bboxVolume != null) {
+      setVolume(formatVolume(bboxVolume));
+    } else if (volumeSource === "sphere" && sphereVolume != null) {
+      setVolume(formatVolume(sphereVolume));
+    }
+  }, [needsManualVolume, volumeSource, bboxVolume, sphereVolume]);
 
   const handleGroupAChange = (val: string) => {
     setGroupA(val);
@@ -292,23 +371,21 @@ export function RdfPanel({
       return;
     }
 
-    const parsedVolume =
-      volume.trim() === "" ? Number.NaN : Number.parseFloat(volume);
+    const resolved = resolvePairRepresentation(frame, representation);
+    const needsVol = resolvedNeedsVolume(resolved, frame.box != null);
+
     let volumeParam: number | undefined;
-    if (hasBox) {
-      const box = frame.box;
-      const boxVol = box ? box.volume() : Number.NaN;
-      box?.free();
-      if (
-        Number.isFinite(parsedVolume) &&
-        parsedVolume > 0 &&
-        Math.abs(parsedVolume - boxVol) > VOLUME_OVERRIDE_EPSILON
-      ) {
-        volumeParam = parsedVolume;
-      }
-    } else {
+    if (frame.box) {
+      // Periodic: never send volume override unless user somehow forced one.
+      // Box is the sole source for Auto g(r).
+      volumeParam = undefined;
+    } else if (needsVol) {
+      const parsedVolume =
+        volume.trim() === "" ? Number.NaN : Number.parseFloat(volume);
       if (!Number.isFinite(parsedVolume) || parsedVolume <= 0) {
-        setError("Non-periodic frame — enter a positive volume (Å³).");
+        setError(
+          "RDF g(r) needs a reference volume (Å³). Pick bounding box / sphere, or enter a value.",
+        );
         return;
       }
       volumeParam = parsedVolume;
@@ -317,6 +394,45 @@ export function RdfPanel({
     const parsedRMin = Number.parseFloat(rMin);
     const rMinParam =
       Number.isFinite(parsedRMin) && parsedRMin >= 0 ? parsedRMin : 0;
+
+    let rMaxParam: number | undefined;
+    if (rMax.trim() === "") {
+      rMaxParam = undefined; // stage auto
+    } else {
+      const parsedRMax = Number.parseFloat(rMax);
+      if (!(Number.isFinite(parsedRMax) && parsedRMax > rMinParam)) {
+        setError("r_max must be > r_min.");
+        return;
+      }
+      rMaxParam = parsedRMax;
+    }
+
+    let nBinsParam: number | undefined;
+    if (nBins.trim() === "") {
+      // Leave undefined so stage uses estimateNBins after resolving rMax —
+      // but trajectory path needs a concrete value if rMax is also auto.
+      // Resolve rMax client-side for auto bins consistency.
+      const effectiveRMax = rMaxParam ?? estimateRMax(frame);
+      if (!(effectiveRMax > rMinParam)) {
+        setError("Could not estimate r_max — enter a value.");
+        return;
+      }
+      nBinsParam = estimateNBins(effectiveRMax, rMinParam);
+      if (rMaxParam === undefined) rMaxParam = effectiveRMax;
+    } else {
+      nBinsParam = Math.max(
+        10,
+        Math.min(500, Number.parseInt(nBins, 10) || 100),
+      );
+      if (rMaxParam === undefined) {
+        const est = estimateRMax(frame);
+        if (!(est > rMinParam)) {
+          setError("Could not estimate r_max — enter a value.");
+          return;
+        }
+        rMaxParam = est;
+      }
+    }
 
     setComputing(true);
     setProgress(null);
@@ -327,13 +443,11 @@ export function RdfPanel({
           const r = await computeRdfTrajectory(
             app.system.trajectory,
             {
-              nBins: Math.max(
-                10,
-                Math.min(500, Number.parseInt(nBins, 10) || 100),
-              ),
+              nBins: nBinsParam,
               rMin: rMinParam,
-              rMax: rMax ? Number.parseFloat(rMax) : undefined,
+              rMax: rMaxParam,
               volume: volumeParam,
+              representation,
               groupASelection: selectionA,
               groupBSelection: groupA === groupB ? undefined : selectionB,
             },
@@ -344,13 +458,23 @@ export function RdfPanel({
             },
           );
           if (!r) {
-            setError("Not enough atoms to compute RDF.");
+            setError(
+              trajectoryLength === 0
+                ? "Load a trajectory first."
+                : "No frames in the selected range produced a histogram (need ≥2 atoms per frame).",
+            );
           } else {
             setResult(r);
             setResultKey(paramsKey);
           }
         } catch (e) {
-          setError(e instanceof Error ? e.message : "RDF computation failed");
+          const message =
+            e instanceof Error
+              ? e.message
+              : typeof e === "string"
+                ? e
+                : "Pair distribution computation failed";
+          setError(message);
         } finally {
           setComputing(false);
         }
@@ -360,160 +484,273 @@ export function RdfPanel({
     app,
     groupA,
     groupB,
+    representation,
     nBins,
     rMin,
     rMax,
     volume,
-    hasBox,
     frameRange,
     paramsKey,
+    trajectoryLength,
   ]);
 
   const isSelf = groupA === groupB;
   const volumeBlank = volume.trim() === "";
-  const volumeMissing = !hasBox && volumeBlank;
+  const volumeMissing = needsManualVolume && volumeBlank;
   const computeDisabled =
     computing || !groupA || volumeMissing || trajectoryLength === 0;
+
+  const autoBinsHint = useMemo(() => {
+    const r = rMax.trim() === "" ? autoRMax : Number.parseFloat(rMax);
+    if (r === null || r === undefined || !Number.isFinite(r) || r <= 0) {
+      return "Auto";
+    }
+    const rMinV = Number.parseFloat(rMin);
+    const rMinParam = Number.isFinite(rMinV) && rMinV >= 0 ? rMinV : 0;
+    return `Auto ≈ ${estimateNBins(r, rMinParam)}`;
+  }, [rMax, rMin, autoRMax]);
 
   return (
     <AnalysisPanelShell
       footer={
-        <AnalysisRunBar
-          onRun={handleCompute}
-          running={computing}
-          progress={progress}
-          disabled={computeDisabled}
-          label={isSelf ? "Compute self-RDF" : "Compute cross-RDF"}
-          summary={
-            trajectoryLength === 0
-              ? "Load a trajectory first"
-              : `${trajectoryLength} frame${trajectoryLength === 1 ? "" : "s"} available`
-          }
-          hint={
-            volumeMissing
-              ? "Volume is required for non-periodic systems."
-              : undefined
-          }
-        />
+        <div className="shrink-0 space-y-2 border-t border-border/70 bg-background/95 px-2 py-2 backdrop-blur">
+          {children}
+          <AnalysisRunBar
+            className="border-0 p-0"
+            onRun={handleCompute}
+            running={computing}
+            progress={progress}
+            disabled={computeDisabled}
+            label={
+              isSelf
+                ? `Compute self-${resolvedRep === "gr" ? "RDF" : "histogram"}`
+                : `Compute cross-${resolvedRep === "gr" ? "RDF" : "histogram"}`
+            }
+            summary={
+              trajectoryLength === 0
+                ? "Load a trajectory first"
+                : trajectoryLength === 1
+                  ? "1 frame"
+                  : `${trajectoryLength} frames`
+            }
+            hint={
+              volumeMissing ? "Reference volume required for g(r)." : undefined
+            }
+          />
+        </div>
       }
     >
-      {children}
-      <SidebarSection
-        title="RDF"
-        subtitle={
-          trajectoryLength > 1
-            ? `${trajectoryLength} frames available`
-            : isSelf
-              ? "Self g(r)"
-              : "Cross g(r)"
-        }
-        defaultOpen={true}
-      >
-        <div className="flex flex-col gap-2">
-          <ParamStack label="Group A">
-            <Select value={groupA} onValueChange={handleGroupAChange}>
-              <SelectTrigger className="h-7 w-full min-w-0 px-2 text-xs">
-                <SelectValue placeholder="Choose group" />
-              </SelectTrigger>
-              <SelectContent>
-                {modifiers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    <span className="text-xs">
-                      {m.label}
-                      <span className="ml-1 text-muted-foreground">
-                        ({m.count})
-                      </span>
+      <div className="flex flex-col gap-2 p-2">
+        <ParamStack label="Group A">
+          <Select value={groupA} onValueChange={handleGroupAChange}>
+            <SelectTrigger
+              aria-label="Pair distribution group A"
+              className="h-control-compact w-full min-w-0 px-2 text-xs"
+            >
+              <SelectValue placeholder="Choose group" />
+            </SelectTrigger>
+            <SelectContent>
+              {modifiers.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  <span className="text-xs">
+                    {m.label}
+                    <span className="ml-1 text-muted-foreground">
+                      ({m.count})
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </ParamStack>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ParamStack>
 
-          <ParamStack label="Group B">
-            <Select value={groupB} onValueChange={setGroupB}>
-              <SelectTrigger className="h-7 w-full min-w-0 px-2 text-xs">
-                <SelectValue placeholder="Choose group" />
-              </SelectTrigger>
-              <SelectContent>
-                {modifiers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    <span className="text-xs">
-                      {m.label}
-                      <span className="ml-1 text-muted-foreground">
-                        ({m.count})
-                      </span>
+        <ParamStack label="Group B">
+          <Select value={groupB} onValueChange={setGroupB}>
+            <SelectTrigger
+              aria-label="Pair distribution group B"
+              className="h-control-compact w-full min-w-0 px-2 text-xs"
+            >
+              <SelectValue placeholder="Choose group" />
+            </SelectTrigger>
+            <SelectContent>
+              {modifiers.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  <span className="text-xs">
+                    {m.label}
+                    <span className="ml-1 text-muted-foreground">
+                      ({m.count})
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </ParamStack>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </ParamStack>
 
-          <div className="grid grid-cols-2 gap-1.5">
-            <ParamStack label="Bins">
-              <Input
-                className="h-7 min-w-0 font-mono text-xs tabular-nums"
-                value={nBins}
-                onChange={(e) => setNBins(e.target.value)}
-                placeholder="100"
-                aria-label="Number of bins"
-              />
-            </ParamStack>
-            <ParamStack label="r_min">
-              <Input
-                className="h-7 min-w-0 font-mono text-xs tabular-nums"
-                value={rMin}
-                onChange={(e) => setRMin(e.target.value)}
-                placeholder="0"
-                aria-label="r_min"
-              />
-            </ParamStack>
-            <ParamStack label="r_max">
-              <Input
-                className="h-7 min-w-0 font-mono text-xs tabular-nums"
-                value={rMax}
-                onChange={(e) => setRMax(e.target.value)}
-                placeholder="auto"
-                aria-label="r_max"
-              />
-            </ParamStack>
-            <ParamStack label="Volume">
-              <Input
-                className="h-7 min-w-0 font-mono text-xs tabular-nums"
-                value={volume}
-                onChange={(e) => setVolume(e.target.value)}
-                placeholder={hasBox ? "from box" : "Å³ required"}
-                aria-label="Normalization volume in cubic angstrom"
-              />
-            </ParamStack>
-          </div>
+        <ParamStack label="Representation">
+          <Select
+            value={representation}
+            onValueChange={(v) => setRepresentation(v as PairRepresentation)}
+          >
+            <SelectTrigger
+              aria-label="Pair distribution representation"
+              className="h-control-compact w-full min-w-0 px-2 text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">
+                <span className="text-xs">
+                  Auto
+                  <span className="ml-1 text-muted-foreground">
+                    ({hasBox ? "g(r)" : "p(r)"})
+                  </span>
+                </span>
+              </SelectItem>
+              <SelectItem value="gr">
+                <span className="text-xs">RDF g(r)</span>
+              </SelectItem>
+              <SelectItem value="pair">
+                <span className="text-xs">Pair distribution p(r)</span>
+              </SelectItem>
+              <SelectItem value="density">
+                <span className="text-xs">Radial density ρ(r)</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </ParamStack>
+
+        <div className="grid grid-cols-2 gap-1.5">
+          <ParamStack label="bins">
+            <Input
+              className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
+              value={nBins}
+              onChange={(e) => setNBins(e.target.value)}
+              placeholder={autoBinsHint}
+              aria-label="Number of bins (empty = Auto)"
+            />
+          </ParamStack>
+          <ParamStack label="r_min">
+            <Input
+              className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
+              value={rMin}
+              onChange={(e) => setRMin(e.target.value)}
+              placeholder="0"
+              aria-label="r_min"
+            />
+          </ParamStack>
+          <ParamStack label="r_max">
+            <Input
+              className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
+              value={rMax}
+              onChange={(e) => setRMax(e.target.value)}
+              placeholder={formatAutoHint(autoRMax, "Å")}
+              aria-label="r_max (empty = Auto)"
+            />
+          </ParamStack>
         </div>
 
-        {volumeMissing && (
-          <AnalysisAlert tone="warning">
-            Non-periodic frame — enter a volume in Å³
+        {/* Reference density — only when it matters */}
+        {hasBox && resolvedRep === "gr" && (
+          <ParamStack label="Reference density">
+            <div
+              className="flex h-control-compact items-center rounded-control border border-border/70 bg-muted/20 px-2 font-mono text-xs tabular-nums text-muted-foreground"
+              title="Periodic box volume (read-only)"
+            >
+              Auto (Periodic box)
+              {boxVolume != null && (
+                <span className="ml-auto">{formatVolume(boxVolume)} Å³ 🔒</span>
+              )}
+            </div>
+          </ParamStack>
+        )}
+
+        {!hasBox && resolvedRep !== "gr" && (
+          <AnalysisAlert tone="info">
+            {representation === "auto"
+              ? "No simulation box — showing pair distribution. RDF g(r) needs a reference density."
+              : "No simulation box — reference density not used for this representation."}
           </AnalysisAlert>
         )}
 
+        {needsManualVolume && (
+          <div className="flex flex-col gap-1.5 rounded-control border border-border/70 p-2">
+            <span className="text-micro font-medium text-muted-foreground">
+              Reference volume
+            </span>
+            <Select
+              value={volumeSource}
+              onValueChange={(v) => setVolumeSource(v as VolumeSource)}
+            >
+              <SelectTrigger
+                aria-label="Reference volume source"
+                className="h-control-compact w-full min-w-0 px-2 text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bbox">
+                  <span className="text-xs">
+                    Bounding box
+                    {bboxVolume != null && (
+                      <span className="ml-1 text-muted-foreground">
+                        ({formatVolume(bboxVolume)} Å³)
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
+                <SelectItem value="sphere">
+                  <span className="text-xs">
+                    Bounding sphere
+                    {sphereVolume != null && (
+                      <span className="ml-1 text-muted-foreground">
+                        ({formatVolume(sphereVolume)} Å³)
+                      </span>
+                    )}
+                  </span>
+                </SelectItem>
+                <SelectItem value="manual">
+                  <span className="text-xs">Manual</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
+              value={volume}
+              onChange={(e) => {
+                setVolumeSource("manual");
+                setVolume(e.target.value);
+              }}
+              placeholder="Å³ required"
+              aria-label="Normalization volume in cubic angstrom"
+              readOnly={volumeSource !== "manual"}
+            />
+            {volumeMissing && (
+              <AnalysisAlert tone="warning">
+                Enter a positive volume (Å³) for g(r)
+              </AnalysisAlert>
+            )}
+          </div>
+        )}
+
         {error && <AnalysisAlert tone="error">{error}</AnalysisAlert>}
-      </SidebarSection>
+      </div>
 
       {!result && !computing && (
         <EmptyState
           density="compact"
-          title="No RDF yet"
-          description="Set groups and bins, then compute g(r)."
+          title="No pair distribution yet"
+          description="Set groups, then compute. Auto picks g(r) for periodic frames and p(r) otherwise."
         />
       )}
 
       {result && (
         <ResultSection
-          subtitle={`${result.perFrame.length} frame${result.perFrame.length === 1 ? "" : "s"} · ${result.average.nBins} bins · r_max=${result.average.rMax.toFixed(1)}`}
+          subtitle={`${result.average.yLabel} · ${result.perFrame.length} frame${result.perFrame.length === 1 ? "" : "s"} · ${result.average.nBins} bins · r_max=${result.average.rMax.toFixed(1)}`}
           stale={stale}
           onExport={() => downloadCsv(result.average)}
-          chart={<RdfChart result={result.average} />}
-          data={<RdfTable result={result.average} />}
+          chart={<PairChart result={result.average} />}
+          data={<PairTable result={result.average} />}
         />
       )}
     </AnalysisPanelShell>

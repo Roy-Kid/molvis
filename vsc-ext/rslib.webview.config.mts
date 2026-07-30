@@ -10,6 +10,7 @@ import { rspack } from "@rspack/core";
  * Entries:
  *   - `webview/index` — Quick View / custom-editor preview
  *   - `viewer/index`  — full React workspace
+ *   - `sketch/index`  — standalone 2D structure editor
  *
  * The trajectory worker is a **separate** build
  * (`rslib.webview.worker.config.mts`) so it never shares a module graph
@@ -24,11 +25,11 @@ import { rspack } from "@rspack/core";
  *    `f[e] is not a function` / `Object.values(undefined)` /
  *    `X is not iterable` failures at module init.
  *
- * 2. **One sync shared chunk** (`chunks/shared`) for all of `core/src`,
- *    `page/src`, and sync `node_modules` (babylon, react, molrs, tslog, …).
+ * 2. **One sync shared chunk** (`chunks/shared`) for all of `stage/src`,
+ *    `core/src`, `page/src`, and sync `node_modules` (babylon, react, molrs, …).
  *    No per-package allowlist to maintain when deps change.
  *
- * 3. **Async-only heavies** — kekule / plotly / babylon-serializers.
+ * 3. **Async-only heavies** — plotly / babylon-serializers.
  *
  * 4. **No worker extraction** (`worker: false`). Main loads
  *    `chunks/worker.js` via a runtime-relative URL (see
@@ -38,10 +39,10 @@ import { rspack } from "@rspack/core";
  *
  * ```
  * out/
- *   webview/index.js  viewer/index.js  controller.js
+ *   webview/index.js  viewer/index.js  sketch/index.js  controller.js
  *   chunks/runtime.js chunks/shared.js chunks/styles.css
  *   chunks/worker.js                  ← from worker config
- *   chunks/kekule.js  chunks/babylon-serializers.js
+ *   chunks/babylon-serializers.js
  *   static/wasm/*.module.wasm
  * ```
  */
@@ -51,7 +52,7 @@ const sharedDefine = {
 };
 
 const sharedModulesPattern =
-  /[\\/](node_modules|core[\\/](src|dist)|page[\\/]src)[\\/]/;
+  /[\\/](node_modules|core[\\/](src|dist)|stage[\\/](src|dist)|page[\\/]src|sketch[\\/]src)[\\/]/;
 
 const spawnWrapper = path.resolve(
   import.meta.dirname,
@@ -69,6 +70,7 @@ export default defineConfig({
         entry: {
           "webview/index": "./src/webview/index.ts",
           "viewer/index": "./src/viewer/index.tsx",
+          "sketch/index": "./src/sketch/index.tsx",
         },
         define: sharedDefine,
       },
@@ -92,16 +94,39 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@molvis/core": path.resolve(import.meta.dirname, "../core/src/index.ts"),
-      "@molvis/core/io/formats": path.resolve(
+      "@molvis/stage": path.resolve(
         import.meta.dirname,
-        "../core/src/io/formats.ts",
+        "../stage/src/index.ts",
       ),
-      "@molvis/core/io": path.resolve(
+      "@molvis/stage/io/formats": path.resolve(
         import.meta.dirname,
-        "../core/src/io/index.ts",
+        "../stage/src/io/formats.ts",
+      ),
+      "@molvis/stage/io": path.resolve(
+        import.meta.dirname,
+        "../stage/src/io/index.ts",
+      ),
+      "@molcrafts/molvis-stage": path.resolve(
+        import.meta.dirname,
+        "../stage/src/index.ts",
+      ),
+      "@molcrafts/molvis-core": path.resolve(
+        import.meta.dirname,
+        "../core/src/index.ts",
+      ),
+      "@molcrafts/molvis-core/molrs": path.resolve(
+        import.meta.dirname,
+        "../core/src/molrs.ts",
+      ),
+      "@molcrafts/molvis-core/elements": path.resolve(
+        import.meta.dirname,
+        "../core/src/elements.ts",
       ),
       "@": path.resolve(import.meta.dirname, "../page/src"),
+      "@molcrafts/molvis-sketch": path.resolve(
+        import.meta.dirname,
+        "../sketch/src/index.ts",
+      ),
     },
   },
 
@@ -157,13 +182,6 @@ export default defineConfig({
         splitChunks: {
           chunks: "all",
           cacheGroups: {
-            kekule: {
-              name: "chunks/kekule",
-              test: /[\\/]node_modules[\\/]kekule[\\/]/,
-              priority: 50,
-              enforce: true,
-              chunks: "async",
-            },
             plotly: {
               name: "chunks/plotly",
               test: /[\\/]node_modules[\\/]plotly\.js-dist-min[\\/]/,

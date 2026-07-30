@@ -1,15 +1,30 @@
 /**
- * Screen (CSS px relative to canvas) ↔ document (Å-like) coordinates.
+ * Screen (CSS px relative to canvas) ↔ document (bond-length units) coordinates.
+ *
+ * Scale convention (ChemDraw / Ketcher-like on screen):
+ * one bond-length unit ≈ {@link DEFAULT_BOND_SCREEN_PX} CSS pixels.
+ */
+
+/** Target on-screen bond length (px). Typical paper sketchers ~28–32px. */
+export const DEFAULT_BOND_SCREEN_PX = 30;
+
+/** Hard cap so a lone ring never fills the whole panel after fit. */
+export const MAX_SCALE = 36;
+
+/** Floor so tiny molecules stay clickable. */
+export const MIN_SCALE = 16;
+
+/**
+ * Screen (CSS px relative to canvas) ↔ document coordinates.
  */
 export class ViewportCoords {
   private cssWidth = 1;
   private cssHeight = 1;
   private dpr = 1;
-  /** Pan in document units. */
   private panX = 0;
   private panY = 0;
-  /** Zoom scale (document units per CSS px inverse). */
-  private scale = 40;
+  /** CSS pixels per document unit. */
+  private scale = DEFAULT_BOND_SCREEN_PX;
 
   resize(cssWidth: number, cssHeight: number, dpr: number): void {
     this.cssWidth = Math.max(1, cssWidth);
@@ -49,10 +64,6 @@ export class ViewportCoords {
     return this.scale;
   }
 
-  /**
-   * CSS-pixel point relative to canvas top-left → document coordinates.
-   * Origin of document maps to canvas center + pan.
-   */
   screenToDoc(sx: number, sy: number): { x: number; y: number } {
     const cx = this.cssWidth / 2;
     const cy = this.cssHeight / 2;

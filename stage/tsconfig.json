@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "paths": {
+      "@molvis/stage": ["./src/index.ts"],
+      "@molvis/stage/*": ["./src/*"],
+      "@molcrafts/molvis-core": ["../core/src/index.ts"],
+      "@molcrafts/molvis-core/molrs": ["../core/src/molrs.ts"],
+      "@molcrafts/molvis-core/elements": ["../core/src/elements.ts"],
+      "@molcrafts/molvis-core/element-picker": ["../core/src/element_picker.ts"]
+    }
+  },
+  "include": ["src"]
+}

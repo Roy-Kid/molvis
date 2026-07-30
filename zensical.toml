@@ -1,6 +1,6 @@
 [project]
 site_name = "MolVis Documentation"
-site_url = "https://molvis.molcrafts.org/"
+site_url = "https://docs.molcrafts.org/molvis/"
 site_description = "Interactive molecular visualization toolkit built with modern web technologies."
 site_author = "MolCrafts Team"
 repo_url = "https://github.com/molcrafts/molvis"
@@ -8,8 +8,11 @@ repo_name = "molcrafts/molvis"
 docs_dir = "docs"
 site_dir = "site"
 copyright = "Copyright &copy; 2026 MolCrafts Team"
-# Stage from the npm package (workspace link → core package dist).
-watch = ["node_modules/@molcrafts/molvis-core/dist"]
+# Stage from npm packages (workspace links → stage + sketch dist).
+watch = [
+  "node_modules/@molcrafts/molvis-stage/dist",
+  "node_modules/@molcrafts/molvis-sketch/dist",
+]
 
 extra_javascript = [
   { path = "assets/javascripts/molvis-elements.js", type = "module" },
@@ -67,6 +70,7 @@ nav = [
 
 [project.theme]
 name = "molcrafts"
+language = "en"
 
 [project.extra.molcrafts]
 product = "molvis"

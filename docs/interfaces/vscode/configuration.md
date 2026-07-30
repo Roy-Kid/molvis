@@ -51,11 +51,29 @@ Runtime settings tune camera, grid, and graphics behavior:
 VS Code validates known fields and offers completion. Unknown forward-compatible
 fields are allowed so the extension does not block newer core options.
 
+## `molvis.plugins`
+
+Array of page plugin sources loaded when a viewer starts:
+
+```jsonc
+{
+  "molvis.plugins": [
+    "MolCrafts/molvis-plugin-template@master",
+    "alice/my-analysis@v1.0.0"
+  ]
+}
+```
+
+Each entry is `owner/repo[@tag]`, a GitHub URL, or an HTTPS package URL. The
+webview injects them as `mount.plugins` for the page plugin runtime. Remote
+code runs in the webview with the same trust model as the in-app Plugins
+settings.
+
 ## Apply changes
 
 Existing webviews do not reconstruct themselves for every settings edit. Run
-**MolVis: Reload View** or reopen the editor/workspace after changing either
-object.
+**MolVis: Reload View** or reopen the editor/workspace after changing config,
+settings, or plugins.
 
 Prefer workspace settings for project-specific conventions and user settings
 for hardware/performance preferences.

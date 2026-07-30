@@ -1,10 +1,11 @@
 import type {
   DrawBoxModifier as CoreDrawBoxModifier,
   Molvis,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";
+import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawBoxModifierProps {
@@ -12,6 +13,12 @@ interface DrawBoxModifierProps {
   app: Molvis | null;
   onUpdate: () => void;
 }
+
+const PIPELINE_COPY = {
+  running: "Updating the simulation box…",
+  success: "Simulation box updated",
+  error: "Could not update the simulation box",
+};
 
 export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
   modifier,
@@ -23,6 +30,11 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
   );
   const [boxColor, setBoxColor] = useState(
     () => app?.styleManager.getTheme().boxColor ?? "#ffffff",
+  );
+  const { applyPipeline, pipelineRunning } = useApplyPipelineOperation(
+    app,
+    onUpdate,
+    PIPELINE_COPY,
   );
 
   // Sync from external changes (e.g. other panels or programmatic toggles)
@@ -43,8 +55,7 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
     if (!app) return;
     setShowBox(show);
     app.styleManager.setShowBox(show);
-    void app.applyPipeline({ fullRebuild: true });
-    onUpdate();
+    applyPipeline({ fullRebuild: true });
   };
 
   const handleColorChange = (hex: string) => {
@@ -65,19 +76,27 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
   };
 
   return (
-    <div className="space-y-2 text-xs">
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <span className="text-[10px] text-muted-foreground">Show Box</span>
-        <Switch checked={showBox} onCheckedChange={handleToggleShow} />
+    <fieldset
+      disabled={!app || pipelineRunning}
+      aria-busy={pipelineRunning}
+      className="m-0 min-w-0 space-y-2 border-0 p-0 text-xs"
+    >
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="text-micro text-muted-foreground">Show Box</span>
+        <Switch
+          aria-label="Show periodic box"
+          checked={showBox}
+          onCheckedChange={handleToggleShow}
+        />
       </div>
 
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <span className="text-[10px] text-muted-foreground">Color</span>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="text-micro text-muted-foreground">Color</span>
         <input
           type="color"
           value={boxColor}
           onChange={(e) => handleColorChange(e.target.value)}
-          className="w-6 h-6 rounded cursor-pointer border-0 p-0"
+          className="w-6 h-6 rounded-control cursor-pointer border-0 p-0"
           aria-label="Box color"
         />
       </div>
@@ -95,10 +114,9 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
         }}
         onCommit={(v) => {
           modifier.thicknessScale = v;
-          void app?.applyPipeline();
-          onUpdate();
+          applyPipeline();
         }}
       />
-    </div>
+    </fieldset>
   );
 };

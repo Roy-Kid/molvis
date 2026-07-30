@@ -7,7 +7,6 @@ export type HitResult =
 
 /**
  * Hit-test atoms (disk) and bonds (segment distance) in document space.
- * Overlap prefers atoms.
  */
 export class HitTester {
   constructor(

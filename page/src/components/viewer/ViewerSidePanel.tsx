@@ -1,0 +1,135 @@
+import * as React from "react";
+import { cn } from "@/lib/utils";
+
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
+export interface ViewerSidePanelProps {
+  children: React.ReactNode;
+  drawer: boolean;
+  inlineWidth: string;
+  label: string;
+  onClose: () => void;
+  open: boolean;
+  panelRef: React.RefObject<HTMLElement | null>;
+  side: "left" | "right";
+}
+
+/**
+ * One persistent side-panel state owner that changes presentation without
+ * remounting its contents. Wide layouts align it over a resizable shell slot;
+ * narrow layouts turn the same DOM subtree into a modal edge drawer.
+ */
+export const ViewerSidePanel: React.FC<ViewerSidePanelProps> = ({
+  children,
+  drawer,
+  inlineWidth,
+  label,
+  onClose,
+  open,
+  panelRef,
+  side,
+}) => {
+  const restoreFocusRef = React.useRef<HTMLElement | null>(null);
+  const wasModalOpenRef = React.useRef(false);
+  const modalOpen = drawer && open;
+
+  React.useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    if (modalOpen) {
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "true");
+    } else {
+      panel.removeAttribute("role");
+      panel.removeAttribute("aria-modal");
+    }
+  }, [modalOpen, panelRef]);
+
+  React.useEffect(() => {
+    if (modalOpen && !wasModalOpenRef.current) {
+      restoreFocusRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      const frame = requestAnimationFrame(() => {
+        panelRef.current
+          ?.querySelector<HTMLElement>("[data-drawer-close]")
+          ?.focus();
+      });
+      wasModalOpenRef.current = true;
+      return () => cancelAnimationFrame(frame);
+    }
+
+    if (!modalOpen && wasModalOpenRef.current) {
+      const restoreTarget = restoreFocusRef.current;
+      if (restoreTarget?.isConnected && restoreTarget.offsetParent !== null) {
+        restoreTarget.focus();
+      }
+      restoreFocusRef.current = null;
+      wasModalOpenRef.current = false;
+    }
+  }, [modalOpen, panelRef]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!modalOpen) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+    ).filter((element) => element.offsetParent !== null);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      panelRef.current?.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <aside
+      ref={panelRef}
+      aria-hidden={!open}
+      aria-label={label}
+      inert={!open ? true : undefined}
+      tabIndex={modalOpen ? -1 : undefined}
+      onKeyDown={handleKeyDown}
+      style={drawer ? undefined : { width: inlineWidth }}
+      className={cn(
+        "absolute inset-y-0 z-10 flex min-w-0 flex-col bg-background",
+        side === "left" ? "left-0" : "right-0",
+        drawer &&
+          "z-30 w-inspector-overlay shadow-overlay motion-reduce:transform-none",
+        drawer && side === "left" && "border-r border-border/70",
+        drawer && side === "right" && "border-l border-border/70",
+        drawer && open && side === "left" && "motion-enter-left",
+        drawer && open && side === "right" && "motion-enter-right",
+        !open && "invisible pointer-events-none",
+      )}
+    >
+      <React.Activity mode={open ? "visible" : "hidden"}>
+        {children}
+      </React.Activity>
+    </aside>
+  );
+};

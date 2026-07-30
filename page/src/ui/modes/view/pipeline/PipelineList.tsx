@@ -19,10 +19,19 @@ import {
   ModifierRegistry,
   type Molvis,
   nextModifierId,
-} from "@molvis/core";
-import { getAllAcceptExtensions, type LoadMode } from "@molvis/core/io";
-import { Plus } from "lucide-react";
+} from "@molvis/stage";
+import { getAllAcceptExtensions, type LoadMode } from "@molvis/stage/io";
 import {
+  Eye,
+  FilePlus2,
+  Filter,
+  Palette,
+  Plus,
+  Shapes,
+  Wand2,
+} from "lucide-react";
+import {
+  type ComponentType,
   type CSSProperties,
   useEffect,
   useMemo,
@@ -38,7 +47,6 @@ import {
   loadFileSmart,
   useFormatPicker,
 } from "@/components/format-picker-dialog";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -60,6 +68,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
+import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { SortableModifierItem } from "./SortableModifierItem";
 import { buildTree, flattenTree } from "./tree_utils";
 
@@ -68,16 +78,27 @@ type RegistryEntry = ReturnType<
 >[number];
 type AvailableEntry = { entry: RegistryEntry; applicable: boolean };
 
+/** OVITO-aligned Add-menu groups (see ModifierRegistry categories). */
 const MODIFIER_MENU_GROUPS = [
-  "Draw",
   "Selection",
-  "Geometry",
-  "Structure",
-  "Color",
+  "Modification",
+  "Coloring",
+  "Visualization",
   "Other",
 ] as const;
 
 type ModifierMenuGroup = (typeof MODIFIER_MENU_GROUPS)[number];
+
+const GROUP_ICONS: Record<
+  ModifierMenuGroup,
+  ComponentType<{ className?: string }>
+> = {
+  Selection: Filter,
+  Modification: Shapes,
+  Coloring: Palette,
+  Visualization: Eye,
+  Other: Wand2,
+};
 
 type DrawBoxForm = {
   lx: string;
@@ -107,6 +128,12 @@ const DEFAULT_DRAW_BOX_FORM: DrawBoxForm = {
   px: true,
   py: true,
   pz: true,
+};
+
+const FILE_LOAD_COPY = {
+  running: "Loading the data source…",
+  success: "Data source loaded",
+  error: "Could not load the data source",
 };
 
 function modifierMenuGroup(entry: RegistryEntry): ModifierMenuGroup {
@@ -142,32 +169,30 @@ function drawBoxSpecFromForm(form: DrawBoxForm): DrawBoxSpec | null {
 }
 
 function drawBoxFormFromApp(app: Molvis | null): DrawBoxForm {
+  // `frame.box` is a frame-owned getter handle — free only the WasmArray
+  // views (lengths/origin), never the Box itself.
   const box = app?.frame?.box;
   if (!box) return DEFAULT_DRAW_BOX_FORM;
+  const lengths = box.lengths();
+  const origin = box.origin();
   try {
-    const lengths = box.lengths();
-    const origin = box.origin();
-    try {
-      const l = lengths.toCopy();
-      const o = origin.toCopy();
-      const pbc = box.pbc();
-      return {
-        lx: String(l[0] ?? 30),
-        ly: String(l[1] ?? 30),
-        lz: String(l[2] ?? 30),
-        ox: String(o[0] ?? 0),
-        oy: String(o[1] ?? 0),
-        oz: String(o[2] ?? 0),
-        px: pbc[0] !== 0,
-        py: pbc[1] !== 0,
-        pz: pbc[2] !== 0,
-      };
-    } finally {
-      lengths.free();
-      origin.free();
-    }
+    const l = lengths.toCopy();
+    const o = origin.toCopy();
+    const pbc = box.pbc();
+    return {
+      lx: String(l[0] ?? 30),
+      ly: String(l[1] ?? 30),
+      lz: String(l[2] ?? 30),
+      ox: String(o[0] ?? 0),
+      oy: String(o[1] ?? 0),
+      oz: String(o[2] ?? 0),
+      px: pbc[0] !== 0,
+      py: pbc[1] !== 0,
+      pz: pbc[2] !== 0,
+    };
   } finally {
-    box.free();
+    lengths.free();
+    origin.free();
   }
 }
 
@@ -196,6 +221,8 @@ export function PipelineList({
   onDragEnd,
   onToggleExpand,
 }: PipelineListProps) {
+  const { run: runPipelineOperation, running: pipelineOperationRunning } =
+    usePipelineOperation();
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -213,7 +240,20 @@ export function PipelineList({
 
   const loadDataSourceFile = async (file: File, mode: LoadMode) => {
     if (!app) return;
-    await loadFileSmart(app, file, pickFormat, mode, pickBondMapping);
+    await runPipelineOperation(async () => {
+      // Throws with molrs parse detail on failure — keep that message.
+      const result = await loadFileSmart(
+        app,
+        file,
+        pickFormat,
+        mode,
+        pickBondMapping,
+      );
+      if (result === "cancelled") {
+        throw new DOMException("File loading cancelled", "AbortError");
+      }
+      return result;
+    }, FILE_LOAD_COPY);
   };
 
   const handleDataSourceFile = async (
@@ -283,7 +323,9 @@ export function PipelineList({
   // biome-ignore lint/correctness/useExhaustiveDependencies: frameVersion is the cache-busting signal — app.frame may keep the same reference while content changes underneath.
   const availableEntries = useMemo(() => {
     const frame = app?.frame ?? null;
-    return ModifierRegistry.getAvailableModifiers().map((entry) => {
+    // Only user-addable entries (auto-attach visual elements like Draw
+    // Atoms / Ribbon / Isosurface stay out of the menu — OVITO-style).
+    return ModifierRegistry.getUserAddableModifiers().map((entry) => {
       // No frame loaded → don't gate. A user staging a pipeline before
       // loading data should still see every option.
       if (!frame || entry.name === DrawBoxModifier.NAME) {
@@ -300,11 +342,10 @@ export function PipelineList({
 
   const groupedEntries = useMemo(() => {
     const groups: Record<ModifierMenuGroup, AvailableEntry[]> = {
-      Draw: [],
       Selection: [],
-      Geometry: [],
-      Structure: [],
-      Color: [],
+      Modification: [],
+      Coloring: [],
+      Visualization: [],
       Other: [],
     };
     for (const item of availableEntries) {
@@ -365,7 +406,7 @@ export function PipelineList({
             </SortableContext>
           </DndContext>
 
-          <div className="p-1.5 border-t">
+          <div className="border-t p-1.5">
             <input
               ref={fileInputRef}
               type="file"
@@ -375,34 +416,40 @@ export function PipelineList({
             />
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-full min-w-0 border border-dashed text-muted-foreground px-2 sm:px-3 overflow-hidden"
-                  title="Add"
-                  aria-label="Add"
+                <ViewerAction
+                  purpose="dismiss"
+                  className="h-control-compact w-full min-w-0 justify-center border-dashed px-2 text-muted-foreground hover:text-foreground"
+                  title="Add modifier"
+                  aria-label="Add modifier"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
+                  <Plus />
+                  <span className="truncate">Add</span>
+                </ViewerAction>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="center"
-                className="min-w-[180px] max-w-[240px]"
+                className="min-w-pipeline-menu-min max-w-pipeline-menu-max"
               >
-                <DropdownMenuItem className="text-xs" onSelect={openFilePicker}>
+                <DropdownMenuItem
+                  className="text-xs gap-2"
+                  onSelect={openFilePicker}
+                >
+                  <FilePlus2 className="h-3.5 w-3.5 shrink-0" />
                   File loader…
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {MODIFIER_MENU_GROUPS.map((group) => {
                   const entries = groupedEntries[group];
                   if (entries.length === 0) return null;
+                  const GroupIcon = GROUP_ICONS[group];
                   return (
                     <DropdownMenuSub key={group}>
-                      <DropdownMenuSubTrigger className="text-xs">
+                      <DropdownMenuSubTrigger className="text-xs gap-2">
+                        <GroupIcon className="h-3.5 w-3.5 shrink-0" />
                         {group}
                       </DropdownMenuSubTrigger>
                       <DropdownMenuSubContent
-                        className="min-w-[180px] max-w-[240px]"
+                        className="min-w-pipeline-menu-min max-w-pipeline-menu-max"
                         style={MENU_SCROLL_STYLE}
                       >
                         {entries.map(renderModifierItem)}
@@ -426,6 +473,7 @@ export function PipelineList({
       <FileLoadConfirmDialog
         open={pendingFileLoad !== null}
         filename={pendingFileLoad?.name ?? ""}
+        busy={pipelineOperationRunning}
         onCancel={() => setPendingFileLoad(null)}
         onAddSource={() => void resolvePendingFileLoad("augment")}
         onReplace={() => void resolvePendingFileLoad("replace")}
@@ -460,9 +508,9 @@ function DrawBoxDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[360px] gap-3 p-4">
+      <DialogContent className="max-w-dialog-sm gap-3 p-4">
         <DialogHeader>
-          <DialogTitle className="text-sm">Draw Box</DialogTitle>
+          <DialogTitle className="text-sm">Simulation cell</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 text-xs">
           <BoxVectorInputs
@@ -489,7 +537,7 @@ function DrawBoxDialog({
                 <label
                   key={key}
                   htmlFor={`pbc-${key}`}
-                  className="flex h-7 items-center gap-2 rounded border px-2 text-xs"
+                  className="flex h-control-compact items-center gap-2 rounded-control border px-2 text-xs"
                 >
                   <Checkbox
                     id={`pbc-${key}`}
@@ -503,17 +551,16 @@ function DrawBoxDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button
+          <ViewerAction
             type="button"
-            variant="outline"
-            size="sm"
+            purpose="dismiss"
             onClick={() => onOpenChange(false)}
           >
             Cancel
-          </Button>
-          <Button type="button" size="sm" disabled={!valid} onClick={onSubmit}>
+          </ViewerAction>
+          <ViewerAction type="button" disabled={!valid} onClick={onSubmit}>
             Add
-          </Button>
+          </ViewerAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -550,7 +597,7 @@ function BoxVectorInputs({
             value={values[index]}
             onChange={onChange[index]}
             aria-label={`${label} ${axis}`}
-            className="h-7 px-2 text-xs"
+            className="h-control-compact px-2 text-xs"
           />
         ))}
       </div>

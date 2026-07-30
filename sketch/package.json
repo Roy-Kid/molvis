@@ -8,16 +8,23 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "rslib build",
+    "dev": "rsbuild dev",
+    "preview:demo": "rsbuild preview",
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
     "test:watch": "rstest watch"
   },
+
   "dependencies": {
-    "@molcrafts/molrs": "0.10.0"
+    "@molcrafts/molvis-core": "*"
   },
   "devDependencies": {
     "@rsbuild/core": "^2.0.8",

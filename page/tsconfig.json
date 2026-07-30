@@ -4,9 +4,16 @@
     "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"],
-      "@molvis/core": ["../core/src/index.ts"],
-      "@molvis/core/io": ["../core/src/io/index.ts"],
-      "@molvis/core/io/formats": ["../core/src/io/formats.ts"],
+      "@molvis/stage": ["../stage/src/index.ts"],
+      "@molvis/stage/io": ["../stage/src/io/index.ts"],
+      "@molvis/stage/io/formats": ["../stage/src/io/formats.ts"],
+      "@molcrafts/molvis-stage": ["../stage/src/index.ts"],
+      "@molcrafts/molvis-core": ["../core/src/index.ts"],
+      "@molcrafts/molvis-core/molrs": ["../core/src/molrs.ts"],
+      "@molcrafts/molvis-core/elements": ["../core/src/elements.ts"],
+      "@molcrafts/molvis-core/element-picker": [
+        "../core/src/element_picker.ts"
+      ],
       "@molcrafts/molvis-sketch": ["../sketch/src/index.ts"]
     }
   },

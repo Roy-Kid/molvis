@@ -12,6 +12,7 @@ renderer: its webviews host the same MolVis frontend described by the tutorial.
 | Side-by-side Quick View | You want text and the molecular view together |
 | MolVis Workspace | You need the complete UI, multiple loads, analysis, and pipeline tools |
 | Activity Bar Home | You are opening recent files or choosing a workflow |
+| Activity Bar Sketch | You want a standalone 2D structure editor with SVG/PNG export |
 
 ## Read this section
 

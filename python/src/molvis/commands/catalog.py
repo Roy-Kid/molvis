@@ -3,7 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-__all__ = ["FrontendCommand", "FrontendCommandGroup", "FrontendCommands"]
+__all__ = [
+    "FrontendCommand",
+    "FrontendCommandGroup",
+    "FrontendCommands",
+    "RPC_PROTOCOL_VERSION",
+    "rpc_method_names",
+]
+
+# Keep in lockstep with core `RPC_PROTOCOL_VERSION` / `rpc.list_methods`.
+RPC_PROTOCOL_VERSION = "1.1.0"
 
 
 class FrontendCommandGroup(str, Enum):
@@ -14,6 +23,7 @@ class FrontendCommandGroup(str, Enum):
     SESSION = "session"
     OVERLAY = "overlay"
     PIPELINE = "pipeline"
+    RPC = "rpc"
 
 
 @dataclass(frozen=True)
@@ -82,3 +92,30 @@ class FrontendCommands:
         FrontendCommandGroup.PIPELINE, "set_source_owner"
     )
     PIPELINE_CLEAR = FrontendCommand(FrontendCommandGroup.PIPELINE, "clear")
+    # Scene multi-source + state (core router)
+    APPLY_STATE = FrontendCommand(FrontendCommandGroup.SCENE, "apply_state")
+    ADD_DATA_SOURCE = FrontendCommand(
+        FrontendCommandGroup.SCENE, "add_data_source"
+    )
+    REMOVE_DATA_SOURCE = FrontendCommand(
+        FrontendCommandGroup.SCENE, "remove_data_source"
+    )
+    LIST_DATA_SOURCES = FrontendCommand(
+        FrontendCommandGroup.SCENE, "list_data_sources"
+    )
+    CLEAR_SELECTION = FrontendCommand(FrontendCommandGroup.SELECTION, "clear")
+    SELECT_BY_EXPRESSION = FrontendCommand(
+        FrontendCommandGroup.SELECTION, "select_by_expression"
+    )
+    # Introspection — single-source version discovery
+    LIST_METHODS = FrontendCommand(FrontendCommandGroup.RPC, "list_methods")
+
+
+def rpc_method_names() -> list[str]:
+    """All FrontendCommand method strings (including non-router session cmds)."""
+    names: list[str] = []
+    for value in FrontendCommands.__dict__.values():
+        if isinstance(value, FrontendCommand):
+            names.append(value.method)
+    return sorted(set(names))
+

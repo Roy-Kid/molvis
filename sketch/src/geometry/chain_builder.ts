@@ -1,7 +1,7 @@
-import { DEFAULT_BOND_LENGTH } from "./snap";
+import { DEFAULT_BOND_LENGTH, snapDirection } from "./snap";
 
 export interface ChainGeometry {
-  /** Points including start (may be existing atom). */
+  /** Canonical points after the start; does not include the start. */
   points: Array<{ x: number; y: number }>;
 }
 
@@ -19,15 +19,20 @@ export function buildChainPoints(
   const dx = endX - startX;
   const dy = endY - startY;
   const dist = Math.hypot(dx, dy);
-  if (dist < step * 0.5) {
+  const segmentCount = Math.round(dist / step);
+  if (segmentCount < 2) {
     return { points: [] };
   }
-  const nSeg = Math.max(1, Math.round(dist / step));
-  const ux = dx / dist;
-  const uy = dy / dist;
+  const { ux, uy } = snapDirection(dx, dy);
+  const cos30 = Math.sqrt(3) / 2;
   const points: Array<{ x: number; y: number }> = [];
-  for (let s = 1; s <= nSeg; s++) {
-    points.push({ x: startX + ux * step * s, y: startY + uy * step * s });
+  let x = startX;
+  let y = startY;
+  for (let segment = 0; segment < segmentCount; segment++) {
+    const sin30 = segment % 2 === 0 ? 0.5 : -0.5;
+    x += step * (ux * cos30 - uy * sin30);
+    y += step * (uy * cos30 + ux * sin30);
+    points.push({ x, y });
   }
   return { points };
 }

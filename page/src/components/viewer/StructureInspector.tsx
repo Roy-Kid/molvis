@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/stage";
 import { Edit3, MousePointer2, Move, Ruler, Video } from "lucide-react";
 import type React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

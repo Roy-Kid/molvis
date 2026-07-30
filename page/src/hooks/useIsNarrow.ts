@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Default width (px) below which the page switches to its narrow layout
@@ -19,24 +19,46 @@ export const NARROW_BREAKPOINT = 560;
  */
 export function useIsNarrow<T extends HTMLElement = HTMLDivElement>(
   breakpoint: number = NARROW_BREAKPOINT,
+  coarsePointerBreakpoint: number = breakpoint,
 ): readonly [React.RefObject<T | null>, boolean] {
   const ref = useRef<T>(null);
   const [isNarrow, setIsNarrow] = useState(false);
+  const [coarsePointer, setCoarsePointer] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(pointer: coarse)").matches === true,
+  );
 
   useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const query = window.matchMedia("(pointer: coarse)");
+    const updatePointer = () => setCoarsePointer(query.matches);
+    updatePointer();
+    query.addEventListener("change", updatePointer);
+    return () => query.removeEventListener("change", updatePointer);
+  }, []);
+
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
+    const activeBreakpoint = coarsePointer
+      ? coarsePointerBreakpoint
+      : breakpoint;
+    const updateWidth = (width: number) => {
+      setIsNarrow(width < activeBreakpoint);
+    };
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        setIsNarrow(entry.contentRect.width < breakpoint);
+        updateWidth(entry.contentRect.width);
       }
     });
+    updateWidth(el.getBoundingClientRect().width);
     observer.observe(el);
 
     return () => observer.disconnect();
-  }, [breakpoint]);
+  }, [breakpoint, coarsePointer, coarsePointerBreakpoint]);
 
   return [ref, isNarrow] as const;
 }

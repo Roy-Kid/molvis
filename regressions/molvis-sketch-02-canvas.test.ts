@@ -1,6 +1,7 @@
 /**
  * Public-API regression for SketchBoard canvas layer.
- * Goldens: water topology + bond-chain step 1.2 (2026-07-29).
+ * Hard-coded golden: analytic 120° alkyl geometry, Rstest 0.10.6,
+ * `npm run test:regressions -w core`, 2026-07-30.
  */
 import { describe, expect, it } from "@rstest/core";
 import {
@@ -42,13 +43,21 @@ describe("molvis-sketch-02-canvas regression", () => {
       bonds: [],
     });
     const h = new SketchHistory();
-    h.execute(
-      new PlaceChainCommand(board2.graph, 0, 2.4, 0, 1.2, 1),
-    );
+    h.execute(new PlaceChainCommand(board2.graph, 0, 2.4, 0, 1.2, 1));
     const chain = board2.getMoleculeData();
     expect(chain.atoms).toHaveLength(3);
     expect(chain.bonds).toHaveLength(2);
-    expect(chain.atoms[1].x - chain.atoms[0].x).toBeCloseTo(1.2, 6);
+    expect(chain.atoms[1].x).toBeCloseTo(1.0392304845413265, 8);
+    expect(chain.atoms[1].y).toBeCloseTo(0.6, 8);
+    expect(chain.atoms[2].x).toBeCloseTo(2.078460969082653, 8);
+    expect(chain.atoms[2].y).toBeCloseTo(0, 8);
+    const ax = chain.atoms[0].x - chain.atoms[1].x;
+    const ay = chain.atoms[0].y - chain.atoms[1].y;
+    const bx = chain.atoms[2].x - chain.atoms[1].x;
+    const by = chain.atoms[2].y - chain.atoms[1].y;
+    const cosine =
+      (ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by));
+    expect((Math.acos(cosine) * 180) / Math.PI).toBeCloseTo(120, 6);
     h.undo();
     expect(board2.getMoleculeData().atoms).toHaveLength(1);
   });

@@ -22,5 +22,10 @@ describe("resolveKeymap", () => {
       type: "element",
       symbol: "C",
     });
+    expect(resolveKeymap({ key: "b" })).toEqual({
+      type: "element",
+      symbol: "B",
+    });
+    expect(resolveKeymap({ key: "t" })).toBeNull();
   });
 });

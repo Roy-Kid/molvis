@@ -1,8 +1,8 @@
 import type {
   DataSourceModifier as CoreDataSourceModifier,
   Molvis,
-} from "@molvis/core";
-import { getAllAcceptExtensions, type LoadMode } from "@molvis/core/io";
+} from "@molvis/stage";
+import { getAllAcceptExtensions, type LoadMode } from "@molvis/stage/io";
 import { ChevronDown, FileUp } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -15,7 +15,6 @@ import {
   loadFileSmart,
   useFormatPicker,
 } from "@/components/format-picker-dialog";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -23,6 +22,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
+import { ViewerAction } from "@/components/viewer/ViewerAction";
+import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 
 interface DataSourceModifierProps {
   modifier: CoreDataSourceModifier;
@@ -64,11 +66,24 @@ function readFrameStats(modifier: CoreDataSourceModifier): FrameStats {
   };
 }
 
+const FILE_LOAD_COPY = {
+  running: "Loading the data source…",
+  success: "Data source loaded",
+  error: "Could not load the data source",
+};
+
+const VISIBILITY_COPY = {
+  running: "Updating scene visibility…",
+  success: "Scene visibility updated",
+  error: "Could not update scene visibility",
+};
+
 export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   modifier,
   app,
   onUpdate,
 }) => {
+  const { run, running } = usePipelineOperation();
   const pickFormat = useFormatPicker();
   const pickBondMapping = useBondMappingPicker();
   const [pendingFileLoad, setPendingFileLoad] = useState<{
@@ -102,14 +117,17 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   const showBox = app?.styleManager.getShowBox() ?? true;
 
   const redraw = () => {
-    app?.applyPipeline({ fullRebuild: true });
     onUpdate();
+    if (!app) return;
+    void run(() => app.applyPipeline({ fullRebuild: true }), VISIBILITY_COPY);
   };
 
   // ── File loading ──
   const loadFile = async (file: File, mode: LoadMode) => {
     if (!app) return;
-    try {
+    await run(async () => {
+      // loadFileSmart throws with the molrs/WASM parse message on failure —
+      // do not wrap as "Failed to load <name>" or that detail is lost.
       const result = await loadFileSmart(
         app,
         file,
@@ -117,13 +135,12 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
         mode,
         pickBondMapping,
       );
-      if (result === "started") onUpdate();
-    } catch (err) {
-      app.events.emit("status-message", {
-        text: `Failed to load file: ${err instanceof Error ? err.message : String(err)}`,
-        type: "error",
-      });
-    }
+      if (result === "cancelled") {
+        throw new DOMException("File loading cancelled", "AbortError");
+      }
+      onUpdate();
+      return result;
+    }, FILE_LOAD_COPY);
   };
 
   const pickAndLoad = (mode: LoadMode) => {
@@ -150,15 +167,19 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
   };
 
   return (
-    <div className="space-y-2">
+    <fieldset
+      disabled={!app || running}
+      aria-busy={running}
+      className="m-0 min-w-0 space-y-2 border-0 p-0"
+    >
       {/* ── 1. File details (first item) ── */}
       {isEmpty ? (
-        <div className="rounded-md border bg-background px-2 py-2.5 text-[10px] text-muted-foreground text-center">
+        <div className="rounded-md border bg-background px-2 py-3 text-micro text-muted-foreground text-center">
           No file loaded
         </div>
       ) : (
         <>
-          <div className="rounded-md border bg-background px-2 py-1.5 text-[10px] space-y-0.5">
+          <div className="rounded-md border bg-background px-2 py-2 text-micro space-y-1">
             {filename && (
               <div className="truncate font-mono text-foreground">
                 {filename}
@@ -175,7 +196,7 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
           </div>
 
           {/* ── 2. Visibility toggles ── */}
-          <div className="border rounded-md overflow-hidden bg-background text-[10px]">
+          <div className="border rounded-md overflow-hidden bg-background text-micro">
             <VisibilityRow
               label="Atoms"
               count={stats.atomCount}
@@ -211,11 +232,10 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
       )}
 
       {/* ── 3. New button (split: main = replace, dropdown = extend / add source) ── */}
-      <div className="flex">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 flex-1 px-2 justify-center gap-1.5 text-xs rounded-r-none border-r-0"
+      <div className="flex gap-1">
+        <ViewerAction
+          purpose="dismiss"
+          className="flex-1"
           onClick={() => pickAndLoad("replace")}
           title={
             isEmpty
@@ -225,19 +245,15 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
         >
           <FileUp className="h-3.5 w-3.5" />
           New
-        </Button>
+        </ViewerAction>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 w-7 px-0 rounded-l-none shrink-0"
-              title="More load options"
-            >
-              <ChevronDown className="h-3 w-3" />
-            </Button>
+            <ViewerIconAction
+              icon={<ChevronDown />}
+              label="More load options"
+            />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[140px]">
+          <DropdownMenuContent align="end" className="min-w-menu-compact">
             <DropdownMenuItem
               className="text-xs"
               onSelect={() => pickAndLoad("replace")}
@@ -265,12 +281,13 @@ export const DataSourceModifier: React.FC<DataSourceModifierProps> = ({
       <FileLoadConfirmDialog
         open={pendingFileLoad !== null}
         filename={pendingFileLoad?.file.name ?? ""}
+        busy={running}
         onCancel={() => setPendingFileLoad(null)}
         onAddSource={() => void resolvePendingFileLoad("augment")}
         onReplace={() => void resolvePendingFileLoad("replace")}
         onExtend={() => void resolvePendingFileLoad("extend")}
       />
-    </div>
+    </fieldset>
   );
 };
 
@@ -281,7 +298,7 @@ const VisibilityRow: React.FC<{
   disabled?: boolean;
   onChange: (checked: boolean) => void;
 }> = ({ label, count, checked, disabled, onChange }) => (
-  <div className="flex items-center gap-1.5 px-2 py-1 border-b last:border-b-0 hover:bg-muted/50 transition-colors">
+  <div className="flex items-center gap-2 px-2 py-1 border-b last:border-b-0 hover:bg-muted/50 transition-colors duration-(--motion-fast) ease-standard">
     <Checkbox
       checked={checked}
       disabled={disabled}

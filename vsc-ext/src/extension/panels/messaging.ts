@@ -1,4 +1,4 @@
-import { FILE_FORMAT_REGISTRY } from "@molvis/core/io/formats";
+import { FILE_FORMAT_REGISTRY } from "@molvis/stage/io/formats";
 import * as vscode from "vscode";
 import { resolveFileFormat } from "../loading/formatResolver";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
@@ -82,12 +82,7 @@ export async function handleSaveFile(
 
     const uri = await vscode.window.showSaveDialog({
       defaultUri,
-      filters: {
-        // Every extension molrs can write, straight from the format registry.
-        "Molecular files": FILE_FORMAT_REGISTRY.filter(
-          (d) => d.writable,
-        ).flatMap((d) => d.extensions),
-      },
+      filters: saveDialogFilters(suggestedName),
     });
     if (!uri) return;
 
@@ -96,6 +91,18 @@ export async function handleSaveFile(
   } catch (error) {
     logger.error(`MolVis: Failed to save file: ${error}`);
   }
+}
+
+function saveDialogFilters(suggestedName: string): Record<string, string[]> {
+  const extension = suggestedName.split(".").pop()?.toLowerCase();
+  if (extension === "svg") return { "SVG image": ["svg"] };
+  if (extension === "png") return { "PNG image": ["png"] };
+  return {
+    // Every extension molrs can write, straight from the format registry.
+    "Molecular files": FILE_FORMAT_REGISTRY.filter(
+      (descriptor) => descriptor.writable,
+    ).flatMap((descriptor) => descriptor.extensions),
+  };
 }
 
 /**

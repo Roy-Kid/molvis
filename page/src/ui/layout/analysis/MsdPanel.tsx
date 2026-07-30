@@ -4,7 +4,7 @@ import {
   type FrameRange,
   type Molvis,
   type MsdTrajectoryResult,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,12 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { AnalysisAlert } from "./AnalysisAlert";
 import { AnalysisChart, type AnalysisChartController } from "./AnalysisChart";
 import { AnalysisPanelShell } from "./AnalysisPanelShell";
 import { AnalysisRunBar } from "./AnalysisRunBar";
-import { ParamStack } from "./ParamStack";
 import { ResultSection } from "./ResultSection";
 import {
   ALL_ATOMS_OPTION_ID,
@@ -45,7 +43,12 @@ function MsdChart({ result }: { result: MsdTrajectoryResult }) {
           yAxis: { label: "MSD (Å²)", rangemode: "tozero" },
           showLegend: true,
         });
-        return { dispose: () => chart.dispose() };
+        return {
+          ready: async () => {
+            await chart.ready();
+          },
+          dispose: () => chart.dispose(),
+        };
       },
     };
   }, [result]);
@@ -174,48 +177,48 @@ export function MsdPanel({
   return (
     <AnalysisPanelShell
       footer={
-        <AnalysisRunBar
-          onRun={handleCompute}
-          running={computing}
-          progress={progress}
-          disabled={computeDisabled}
-          label="Compute MSD"
-          summary={
-            trajectoryLength < 2
-              ? "Needs at least 2 frames"
-              : `${trajectoryLength} frames available`
-          }
-        />
+        <div className="shrink-0 space-y-2 border-t border-border/70 bg-background/95 px-2 py-2 backdrop-blur">
+          {children}
+          <AnalysisRunBar
+            className="border-0 p-0"
+            onRun={handleCompute}
+            running={computing}
+            progress={progress}
+            disabled={computeDisabled}
+            label="Compute MSD"
+            summary={
+              trajectoryLength < 2
+                ? "Needs at least 2 frames"
+                : `${trajectoryLength} frames`
+            }
+          />
+        </div>
       }
     >
-      {children}
-      <SidebarSection
-        title="MSD"
-        subtitle={`${trajectoryLength} frame${trajectoryLength === 1 ? "" : "s"} available`}
-        defaultOpen={true}
-      >
-        <ParamStack label="Atoms">
-          <Select value={selectionId} onValueChange={setSelectionId}>
-            <SelectTrigger className="h-7 w-full min-w-0 px-2 text-xs">
-              <SelectValue placeholder="Choose atoms" />
-            </SelectTrigger>
-            <SelectContent>
-              {modifiers.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  <span className="text-xs">
-                    {m.label}
-                    <span className="ml-1 text-muted-foreground">
-                      ({m.count})
-                    </span>
+      <div className="flex flex-col gap-2 p-2">
+        <Select value={selectionId} onValueChange={setSelectionId}>
+          <SelectTrigger
+            aria-label="MSD atom selection"
+            className="h-control-compact w-full min-w-0 px-2 text-xs"
+          >
+            <SelectValue placeholder="Atoms" />
+          </SelectTrigger>
+          <SelectContent>
+            {modifiers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                <span className="text-xs">
+                  {m.label}
+                  <span className="ml-1 text-muted-foreground">
+                    ({m.count})
                   </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ParamStack>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {error && <AnalysisAlert tone="error">{error}</AnalysisAlert>}
-      </SidebarSection>
+      </div>
 
       {!result && !computing && (
         <EmptyState

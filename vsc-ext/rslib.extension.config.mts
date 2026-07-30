@@ -29,9 +29,13 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@molvis/core/io/formats": path.resolve(
+      "@molvis/stage/io/formats": path.resolve(
         import.meta.dirname,
-        "../core/src/io/formats.ts",
+        "../stage/src/io/formats.ts",
+      ),
+      "@molcrafts/molvis-core/molrs": path.resolve(
+        import.meta.dirname,
+        "../core/src/molrs.ts",
       ),
     },
   },

@@ -1,4 +1,4 @@
-import type { Modifier, Molvis } from "@molvis/core";
+import type { Modifier, Molvis } from "@molvis/stage";
 import type React from "react";
 import { Label } from "@/components/ui/label";
 import {
@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { getAvailableParents, getSelectionLabel } from "./tree_utils";
 
 const NONE_VALUE = "__none__";
@@ -19,12 +20,23 @@ interface ParentSelectorProps {
   onUpdate: () => void;
 }
 
+const PIPELINE_COPY = {
+  running: "Updating the selection scope…",
+  success: "Selection scope updated",
+  error: "Could not update the selection scope",
+};
+
 export const ParentSelector: React.FC<ParentSelectorProps> = ({
   modifier,
   allModifiers,
   app,
   onUpdate,
 }) => {
+  const { applyPipeline, pipelineRunning } = useApplyPipelineOperation(
+    app,
+    onUpdate,
+    PIPELINE_COPY,
+  );
   const parents = getAvailableParents(modifier.id, allModifiers);
   const currentValue = modifier.selectionScopeId ?? NONE_VALUE;
 
@@ -36,16 +48,24 @@ export const ParentSelector: React.FC<ParentSelectorProps> = ({
       selectionScopeId,
     );
     if (success) {
-      onUpdate();
-      void app.applyPipeline({ fullRebuild: true });
+      applyPipeline({ fullRebuild: true });
     }
   };
 
   return (
-    <div className="space-y-2 mb-4 pb-4 border-b">
-      <Label className="text-xs">Selection scope</Label>
+    <fieldset
+      disabled={!app || pipelineRunning}
+      aria-busy={pipelineRunning}
+      className="m-0 mb-4 min-w-0 space-y-2 border-0 border-b p-0 pb-4"
+    >
+      <Label htmlFor={`${modifier.id}-selection-scope`} className="text-xs">
+        Selection scope
+      </Label>
       <Select value={currentValue} onValueChange={handleChange}>
-        <SelectTrigger size="sm" className="w-full text-xs">
+        <SelectTrigger
+          id={`${modifier.id}-selection-scope`}
+          className="w-full text-xs"
+        >
           <SelectValue placeholder="All atoms" />
         </SelectTrigger>
         <SelectContent>
@@ -57,6 +77,6 @@ export const ParentSelector: React.FC<ParentSelectorProps> = ({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </fieldset>
   );
 };

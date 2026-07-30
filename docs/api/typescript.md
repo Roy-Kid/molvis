@@ -1,23 +1,24 @@
 # TypeScript API Reference
 
-`@molcrafts/molvis-core` is the TypeScript package that powers every
+`@molcrafts/molvis-stage` is the TypeScript package that powers every
 MolVis frontend. This page documents its public surface. For a guided
 introduction see [Development → Extending](../development/extending.md).
 
 ## Install
 
 ```bash
-npm install @molcrafts/molvis-core
+npm install @molcrafts/molvis-stage
 ```
 
 ```typescript
-import { mountMolvis, Molvis } from "@molcrafts/molvis-core";
+import { mountMolvis, Molvis } from "@molcrafts/molvis-stage";
 ```
 
 MolVis targets modern browsers (ES2022, WebGL2). The Babylon.js engine
 is imported as a peer dependency in source; the published bundle
-vendors its own copy of `@babylonjs/core` and `@molcrafts/molrs`
-(WebAssembly kernels).
+vendors its own copy of `@babylonjs/*` and reaches `@molcrafts/molrs`
+(WebAssembly kernels) only through workspace-private
+`@molcrafts/molvis-core/molrs`.
 
 ## Entry point
 
@@ -65,7 +66,7 @@ directly — `mountMolvis()` does that for you.
 first, otherwise the render loop is not active and nothing appears.
 
 ```typescript
-import { readFrame } from "@molcrafts/molvis-core";
+import { readFrame } from "@molcrafts/molvis-stage";
 
 const app = mountMolvis(document.getElementById("viewer")!);
 await app.start();                       // start() must come first
@@ -276,7 +277,7 @@ across frames.
 ### `Box`
 
 ```typescript
-import { Box } from "@molcrafts/molvis-core";
+import { Box } from "@molcrafts/molvis-stage";
 
 const cubic     = Box.cube(10.0, [0, 0, 0], true, true, true);
 const ortho     = Box.ortho(
@@ -336,7 +337,7 @@ Built-in commands:
 Annotate a class with `@command(name)`:
 
 ```typescript
-import { command } from "@molcrafts/molvis-core";
+import { command } from "@molcrafts/molvis-stage";
 
 @command("my_action")
 class MyActionCommand implements Command<MyArgs> {
@@ -363,18 +364,28 @@ app.pipeline.setEnabled(id, false);
 | Class | Category | What it does |
 |---|---|---|
 | `DataSourceModifier` | Data | Selects which trajectory slice feeds the pipeline. |
-| `SliceModifier` | Geometry | Keeps atoms inside a half-space. |
 | `ExpressionSelectionModifier` | Selection | VMD-style selection expression. |
-| `HideSelectionModifier` | Selection | Drops selected atoms from the render. |
-| `TransparentSelectionModifier` | Selection | Renders selection with alpha. |
-| `ColorByPropertyModifier` | Color | Maps a column to a color ramp. |
-| `AssignColorModifier` | Selection | Fixed color on selected atoms. |
-| `WrapPBCModifier` | Geometry | Wraps atoms into the primary cell. |
+| `SliceModifier` | Modification | Keeps atoms inside a half-space. |
+| `WrapPBCModifier` | Modification | Wraps atoms into the primary cell. |
+| `HideSelectionModifier` | Modification | Drops selected atoms from the render. |
+| `DeleteSelectedModifier` | Modification | Removes selected atoms from the frame. |
+| `ColorByPropertyModifier` | Coloring | Maps a column to a color ramp. |
+| `AssignColorModifier` | Coloring | Fixed color on selected atoms. |
+| `SteinhardtOrderModifier` | Coloring | Writes `steinhardt_q{l}`; optional scene color. |
+| `SolidLiquidModifier` | Coloring | Writes `solid_liquid` / `solid_liquid_n_bonds`; optional color. |
+| `ComputeBondsModifier` | Visualization | Create bonds (perceive topology). |
+| `DrawBondModifier` | Visualization | **Bonds** visual element (user-addable). |
+| `DrawBoxModifier` | Visualization | **Simulation cell** (user-addable). |
+| `HideSelectionModifier` | Selection | Hide atoms in the current selection. |
+
+Auto-attach visual elements (`Particles`, `Ribbon`, `Create isosurface`) and
+`TransparentSelectionModifier` remain registered for load / programmatic use
+but are not listed in the Add-modifier menu.
 
 ### `ModifierRegistry`
 
 ```typescript
-import { ModifierRegistry } from "@molcrafts/molvis-core";
+import { ModifierRegistry } from "@molcrafts/molvis-stage";
 
 ModifierRegistry.register("my-modifier", () => new MyModifier());
 ModifierRegistry.list();   // all registered factories
@@ -389,7 +400,7 @@ import {
   readFrame, readPDBFrame, readXYZFrame, readLAMMPSData,
   exportFrame, writePDBFrame, writeXYZFrame, writeLAMMPSData,
   inferFormatFromFilename,
-} from "@molcrafts/molvis-core";
+} from "@molcrafts/molvis-stage";
 
 const frame  = readFrame(content, "a.pdb");
 const format = inferFormatFromFilename("a.pdb"); // "pdb"
@@ -399,7 +410,7 @@ const text   = writeXYZFrame(frame);
 For trajectories:
 
 ```typescript
-import { TrajectoryReader } from "@molcrafts/molvis-core";
+import { TrajectoryReader } from "@molcrafts/molvis-stage";
 
 const reader = new TrajectoryReader(dumpText, "lammps-dump");
 const n      = reader.getFrameCount();
@@ -410,7 +421,7 @@ reader.free();
 For Zarr directories:
 
 ```typescript
-import { MolRecReader, processZarrFrame } from "@molcrafts/molvis-core";
+import { MolRecReader, processZarrFrame } from "@molcrafts/molvis-stage";
 
 const reader = new MolRecReader(fileMap);
 const raw    = reader.readFrame(0);
@@ -446,9 +457,12 @@ extend the alias maps there.
 
 Non-obvious behaviors you should know about:
 
-- **`WrapPBCModifier`** validates its input and returns the original
-  frame unchanged. The actual PBC wrap is implemented but gated
-  pending 0.0.3.
+- **Manual `DrawBoxModifier`** writes the user-defined cell onto
+  `frame.box` (frame data, not just a wireframe). Pipeline execution
+  runs it before pure geometry transforms.
+- **`WrapPBCModifier`** wraps atom coordinates into `frame.box`. Pure
+  geometry transforms always run before Draw modifiers so the visual
+  sees wrapped positions.
 - **`DataSourceModifier`** visibility toggles are UI state only — the
   modifier itself always passes data through.
 - **`SetFrameMetaCommand`** is registered but a no-op; it will persist

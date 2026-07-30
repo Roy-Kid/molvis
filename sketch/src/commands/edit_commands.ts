@@ -29,8 +29,6 @@ export class AddAtomCommand extends SketchCommand {
 }
 
 export class RemoveAtomCommand extends SketchCommand {
-  private removed: Atom2D | null = null;
-  private removedBonds: Bond2D[] = [];
   private snapshot: ReturnType<MoleculeGraph["getMoleculeData"]> | null = null;
 
   constructor(
@@ -43,7 +41,6 @@ export class RemoveAtomCommand extends SketchCommand {
   do(): void {
     // Snapshot full graph so undo restores bonds + indices exactly.
     this.snapshot = this.graph.getMoleculeData();
-    this.removed = this.graph.getAtom(this.index);
     this.graph.removeAtomInternal(this.index);
   }
 
@@ -51,7 +48,6 @@ export class RemoveAtomCommand extends SketchCommand {
     if (this.snapshot) {
       this.graph.replaceAll(this.snapshot);
       this.snapshot = null;
-      this.removed = null;
     }
   }
 }

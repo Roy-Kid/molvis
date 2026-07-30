@@ -1,7 +1,13 @@
-import type { ViewportCoords } from "./coords";
+import {
+  DEFAULT_BOND_SCREEN_PX,
+  MAX_SCALE,
+  MIN_SCALE,
+  type ViewportCoords,
+} from "./coords";
 
 /**
- * Pan/zoom helpers operating on ViewportCoords.
+ * Pan/zoom helpers. Fit never blows a small molecule up past MAX_SCALE
+ * (ChemDraw-like on-screen bond size).
  */
 export class ViewportController {
   constructor(private readonly coords: ViewportCoords) {}
@@ -9,16 +15,15 @@ export class ViewportController {
   panByScreen(dxCss: number, dyCss: number): void {
     const scale = this.coords.getScale();
     const pan = this.coords.getPan();
-    // screen +x → doc -?  doc x increases to the right on screen via scale
     this.coords.setPan(pan.x - dxCss / scale, pan.y + dyCss / scale);
   }
 
-  /**
-   * Zoom about a screen (CSS) point so that world point under cursor stays fixed.
-   */
   zoomAtScreen(sx: number, sy: number, factor: number): void {
     const before = this.coords.screenToDoc(sx, sy);
-    this.coords.setScale(this.coords.getScale() * factor);
+    const next = this.coords.getScale() * factor;
+    this.coords.setScale(
+      Math.min(MAX_SCALE * 1.5, Math.max(MIN_SCALE * 0.5, next)),
+    );
     const after = this.coords.screenToDoc(sx, sy);
     const pan = this.coords.getPan();
     this.coords.setPan(
@@ -27,11 +32,16 @@ export class ViewportController {
     );
   }
 
-  fitToAtoms(
-    atoms: Array<{ x: number; y: number }>,
-    paddingCss = 40,
-  ): void {
-    if (atoms.length === 0) return;
+  /**
+   * Frame the molecule with generous margin; cap scale so benzene stays
+   * roughly ~30px/bond, not wall-to-wall.
+   */
+  fitToAtoms(atoms: Array<{ x: number; y: number }>, paddingCss = 48): void {
+    if (atoms.length === 0) {
+      this.coords.setScale(DEFAULT_BOND_SCREEN_PX);
+      this.coords.setPan(0, 0);
+      return;
+    }
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -42,12 +52,22 @@ export class ViewportController {
       maxX = Math.max(maxX, a.x);
       maxY = Math.max(maxY, a.y);
     }
+    // Pad by half a bond so labels/halos aren't clipped
+    minX -= 0.5;
+    minY -= 0.5;
+    maxX += 0.5;
+    maxY += 0.5;
+
     const { width, height } = this.coords.getCssSize();
-    const dx = Math.max(maxX - minX, 0.5);
-    const dy = Math.max(maxY - minY, 0.5);
-    const sx = (width - 2 * paddingCss) / dx;
-    const sy = (height - 2 * paddingCss) / dy;
-    this.coords.setScale(Math.max(10, Math.min(sx, sy)));
+    const dx = Math.max(maxX - minX, 1e-3);
+    const dy = Math.max(maxY - minY, 1e-3);
+    // Aim for ~55% of the short axis (not 100%) so rings look small on paper
+    const usableW = Math.max(1, width - 2 * paddingCss) * 0.55;
+    const usableH = Math.max(1, height - 2 * paddingCss) * 0.55;
+    const fitted = Math.min(usableW / dx, usableH / dy);
+    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, fitted));
+    // Prefer default bond screen size when molecule is tiny
+    this.coords.setScale(Math.min(scale, DEFAULT_BOND_SCREEN_PX));
     this.coords.setPan((minX + maxX) / 2, (minY + maxY) / 2);
   }
 }

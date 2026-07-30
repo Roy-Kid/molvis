@@ -1,29 +1,47 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  AssignColorModifier,
+  ColorByPropertyModifier,
+  ComputeBondsModifier,
+  DrawAtomModifier,
+  DrawBondModifier,
+  DrawBoxModifier,
+  DrawIsosurfaceModifier,
+  DrawRibbonModifier,
   ExpressionSelectionModifier,
   FileDataSource,
+  HideHydrogensModifier,
+  HideSelectionModifier,
   MemoryDataSource,
   type Modifier,
   ModifierCapability,
   primaryCapabilityLabel,
   SelectModifier,
-} from "@molvis/core";
+  SliceModifier,
+} from "@molvis/stage";
 import {
+  Box,
   ChevronDown,
   ChevronRight,
   Circle,
   Database,
+  Droplets,
   Eye,
   Filter,
   GripVertical,
+  Layers,
+  Link2,
   type LucideIcon,
+  Palette,
+  Scissors,
   SquareDashed,
   Trash2,
   Wand2,
+  Waves,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { cn } from "@/lib/utils";
 
 interface SortableModifierItemProps {
@@ -40,13 +58,12 @@ interface SortableModifierItemProps {
 
 function getDisplayName(modifier: Modifier): string {
   if (modifier instanceof FileDataSource) {
-    if (modifier.sourceType === "empty") return "Empty Scene";
-    const label = modifier.filename || modifier.name;
+    const label = modifier.filename || modifier.name || "Empty Scene";
     return `${label} · ${modifier.frameCount} frame${modifier.frameCount === 1 ? "" : "s"}`;
   }
   if (modifier instanceof MemoryDataSource) {
-    if (modifier.sourceType === "empty") return "Empty Scene";
-    const label = modifier.filename || modifier.name;
+    // Boot primary uses filename "Empty Scene"; demo/sketch may rename it.
+    const label = modifier.filename || modifier.name || "Empty Scene";
     return `${label} · 1 frame`;
   }
   if (modifier instanceof SelectModifier) {
@@ -61,10 +78,8 @@ function getDisplayName(modifier: Modifier): string {
 }
 
 /**
- * Pick a glyph for a pipeline row. Data sources get their own mark; every
- * other modifier is grouped by its primary capability so a long stack scans
- * at a glance (select · transform · draw) instead of a column of identical
- * checkboxes.
+ * Prefer type-specific glyphs; fall back to capability family so a long
+ * stack scans at a glance without reading every label.
  */
 function getModifierIcon(modifier: Modifier): LucideIcon {
   if (
@@ -72,6 +87,25 @@ function getModifierIcon(modifier: Modifier): LucideIcon {
     modifier instanceof MemoryDataSource
   )
     return Database;
+  if (modifier instanceof DrawAtomModifier) return Circle;
+  if (modifier instanceof DrawBondModifier) return Link2;
+  if (modifier instanceof DrawBoxModifier) return Box;
+  if (modifier instanceof DrawRibbonModifier) return Waves;
+  if (modifier instanceof DrawIsosurfaceModifier) return Layers;
+  if (
+    modifier instanceof ColorByPropertyModifier ||
+    modifier instanceof AssignColorModifier
+  )
+    return Palette;
+  if (modifier instanceof HideHydrogensModifier) return Droplets;
+  if (modifier instanceof HideSelectionModifier) return Eye;
+  if (modifier instanceof SliceModifier) return Scissors;
+  if (modifier instanceof ComputeBondsModifier) return Link2;
+  if (
+    modifier instanceof SelectModifier ||
+    modifier instanceof ExpressionSelectionModifier
+  )
+    return SquareDashed;
   switch (primaryCapabilityLabel(modifier.capabilities)) {
     case ModifierCapability.Draws:
       return Eye;
@@ -86,31 +120,11 @@ function getModifierIcon(modifier: Modifier): LucideIcon {
   }
 }
 
-const SCOPE_COLORS = [
-  "#2563EB",
-  "#DC2626",
-  "#16A34A",
-  "#D97706",
-  "#7C3AED",
-  "#0891B2",
-  "#DB2777",
-  "#4D7C0F",
-];
-
-function colorForId(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return SCOPE_COLORS[hash % SCOPE_COLORS.length];
-}
-
-function selectionRailColor(modifier: Modifier): string | null {
-  if (modifier.capabilities.has(ModifierCapability.ProducesSelection)) {
-    return colorForId(modifier.id);
-  }
-  if (modifier.selectionScopeId) return colorForId(modifier.selectionScopeId);
-  return null;
+function hasSelectionScope(modifier: Modifier): boolean {
+  return (
+    modifier.capabilities.has(ModifierCapability.ProducesSelection) ||
+    modifier.selectionScopeId !== null
+  );
 }
 
 export function SortableModifierItem({
@@ -131,7 +145,13 @@ export function SortableModifierItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: modifier.id });
+  } = useSortable({
+    id: modifier.id,
+    transition: {
+      duration: 150,
+      easing: "cubic-bezier(0.2, 0, 0, 1)",
+    },
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -142,26 +162,23 @@ export function SortableModifierItem({
 
   const Icon = getModifierIcon(modifier);
   const dimmed = !modifier.enabled;
-  const scopeColor = selectionRailColor(modifier);
+  const showScopeRail = hasSelectionScope(modifier);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center gap-1.5 py-1 pr-1 border-b last:border-0 text-xs select-none transition-colors",
-        selected ? "bg-accent/70" : "hover:bg-accent/30",
+        "group relative flex items-center gap-2 py-1 pr-1 border-b last:border-0 text-xs select-none transition-colors duration-(--motion-fast) ease-standard",
+        selected ? "bg-accent/15" : "hover:bg-interactive",
         isDragging && "opacity-60",
       )}
     >
-      {scopeColor && (
-        <span
-          className="pointer-events-none absolute left-0 inset-y-0 w-1"
-          style={{ backgroundColor: scopeColor }}
-        />
+      {showScopeRail && (
+        <span className="pointer-events-none absolute inset-y-0 left-0 w-1 bg-scope-rail" />
       )}
       {selected && (
-        <span className="pointer-events-none absolute left-1 inset-y-0 w-0.5 bg-primary" />
+        <span className="pointer-events-none absolute inset-y-0 left-1 w-1 bg-accent" />
       )}
 
       {hasChildren ? (
@@ -188,7 +205,7 @@ export function SortableModifierItem({
         type="button"
         {...attributes}
         {...listeners}
-        className="flex h-4 w-4 items-center justify-center cursor-grab text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex h-4 w-4 items-center justify-center cursor-grab text-subtle-foreground group-hover:text-muted-foreground shrink-0 transition-colors duration-(--motion-fast) ease-standard focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         aria-label="Drag to reorder"
         onClick={(event) => {
           event.stopPropagation();
@@ -199,6 +216,7 @@ export function SortableModifierItem({
 
       <div className="flex items-center justify-center shrink-0">
         <Checkbox
+          aria-label={`${getDisplayName(modifier)} enabled`}
           checked={modifier.enabled}
           onCheckedChange={() => onToggle()}
           onClick={(event) => {
@@ -210,22 +228,22 @@ export function SortableModifierItem({
       <button
         type="button"
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-1.5 rounded-sm border-0 bg-transparent p-0 text-left text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "flex min-w-0 flex-1 items-center gap-2 rounded-sm border-0 bg-transparent p-0 text-left text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           selected && "font-medium",
         )}
         onClick={onSelect}
       >
         <Icon
           className={cn(
-            "h-3.5 w-3.5 shrink-0 transition-colors",
-            dimmed ? "text-muted-foreground/40" : "text-muted-foreground",
+            "h-3.5 w-3.5 shrink-0 transition-colors duration-(--motion-fast) ease-standard",
+            dimmed ? "text-subtle-foreground" : "text-muted-foreground",
           )}
         />
         <span
           className={cn(
             "min-w-0 flex-1 truncate",
             dimmed
-              ? "text-muted-foreground/60 line-through decoration-1"
+              ? "text-subtle-foreground line-through decoration-1"
               : "text-foreground",
           )}
         >
@@ -233,24 +251,15 @@ export function SortableModifierItem({
         </span>
       </button>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive transition-opacity",
-          selected
-            ? "opacity-100"
-            : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-        )}
+      <ViewerIconAction
+        icon={<Trash2 />}
+        label="Remove modifier"
+        tooltipSide="left"
         onClick={(event) => {
           event.stopPropagation();
           onRemove();
         }}
-        title="Remove modifier"
-        aria-label="Remove modifier"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
+      />
     </div>
   );
 }

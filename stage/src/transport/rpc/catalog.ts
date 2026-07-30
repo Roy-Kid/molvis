@@ -1,0 +1,63 @@
+/**
+ * Single source of truth for JSON-RPC method names exposed by
+ * {@link RPCRouter}. Python `FrontendCommands` and any host tooling
+ * must stay aligned with this list (see `rpc.list_methods`).
+ *
+ * Bump {@link RPC_PROTOCOL_VERSION} when removing or renaming a method.
+ * Additive methods may keep the same major.minor and only add names.
+ */
+export const RPC_PROTOCOL_VERSION = "1.1.0";
+
+/** Ordered catalog of methods the core router implements. */
+export const RPC_METHODS = [
+  "scene.new_frame",
+  "scene.draw_frame",
+  "scene.draw_box",
+  "scene.clear",
+  "scene.export_frame",
+  "scene.set_trajectory",
+  "scene.set_frame_labels",
+  "scene.apply_state",
+  "scene.add_data_source",
+  "scene.remove_data_source",
+  "scene.list_data_sources",
+  "selection.get",
+  "selection.select_atoms",
+  "selection.clear",
+  "selection.select_by_expression",
+  "pipeline.list",
+  "pipeline.available_modifiers",
+  "pipeline.add_modifier",
+  "pipeline.remove_modifier",
+  "pipeline.reorder_modifier",
+  "pipeline.set_enabled",
+  "pipeline.set_selection_scope",
+  "pipeline.set_source_owner",
+  "pipeline.clear",
+  "snapshot.take",
+  "overlay.mark_atom",
+  "overlay.unmark_atom",
+  "view.set_style",
+  "view.set_theme",
+  "view.set_mode",
+  "state.get",
+  "rpc.list_methods",
+] as const;
+
+export type RpcMethodName = (typeof RPC_METHODS)[number];
+
+const METHOD_SET = new Set<string>(RPC_METHODS);
+
+export function isRpcMethodName(method: string): method is RpcMethodName {
+  return METHOD_SET.has(method);
+}
+
+export function listRpcMethods(): {
+  version: string;
+  methods: readonly string[];
+} {
+  return {
+    version: RPC_PROTOCOL_VERSION,
+    methods: RPC_METHODS,
+  };
+}

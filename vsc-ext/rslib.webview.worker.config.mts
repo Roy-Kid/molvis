@@ -34,7 +34,7 @@ export default defineConfig({
         entry: {
           "chunks/worker": path.resolve(
             import.meta.dirname,
-            "../core/src/transport/trajectory_worker/worker.ts",
+            "../stage/src/transport/trajectory_worker/worker.ts",
           ),
         },
         define: sharedDefine,

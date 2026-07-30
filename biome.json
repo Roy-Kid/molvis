@@ -6,12 +6,15 @@
       "!**/dist",
       "!**/examples-dist",
       "!**/docs/assets/molvis-core",
+      "!**/docs/assets/molvis-stage",
       "!**/node_modules",
       "!**/.venv",
       "!**/.rslib",
       "!**/out",
       "!**/out-test",
+      "!**/.vscode-test",
       "!**/.claude",
+      "!**/.pw-debug",
       "!**/site",
       "!**/*.css"
     ]

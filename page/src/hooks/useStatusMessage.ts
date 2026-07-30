@@ -1,26 +1,51 @@
-import type { Molvis } from "@molvis/core";
-import { useEffect, useRef, useState } from "react";
+import type { Molvis } from "@molvis/stage";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type StatusReportType, subscribeStatus } from "@/lib/status-report";
 
 const DEFAULT_STATUS_MESSAGE = "Ready";
-type StatusType = "info" | "error";
+
+/** How long info/success messages stay before returning to Ready. */
+const AUTO_CLEAR_MS = 5000;
 
 /**
- * Manages status bar text/type from both app events and global browser errors.
+ * Manages status bar text/type from app events, the page status bus, and
+ * global browser errors. Success flashes green in the bar; no toast cards.
  */
 export function useStatusMessage(app: Molvis | null): {
   statusMessage: string;
-  statusType: StatusType;
+  statusType: StatusReportType;
+  /** Monotonic key so the bar can re-flash on repeated identical messages. */
+  statusPulse: number;
 } {
   const [statusMessage, setStatusMessage] = useState<string>(
     DEFAULT_STATUS_MESSAGE,
   );
-  const [statusType, setStatusType] = useState<StatusType>("info");
+  const [statusType, setStatusType] = useState<StatusReportType>("info");
+  const [statusPulse, setStatusPulse] = useState(0);
   const statusResetTimer = useRef<number | null>(null);
+
+  const applyStatus = useCallback((text: string, type: StatusReportType) => {
+    setStatusMessage(text);
+    setStatusType(type);
+    setStatusPulse((n) => n + 1);
+
+    if (statusResetTimer.current) {
+      window.clearTimeout(statusResetTimer.current);
+      statusResetTimer.current = null;
+    }
+
+    if (type === "info" || type === "success") {
+      statusResetTimer.current = window.setTimeout(() => {
+        setStatusMessage(DEFAULT_STATUS_MESSAGE);
+        setStatusType("info");
+        statusResetTimer.current = null;
+      }, AUTO_CLEAR_MS);
+    }
+  }, []);
 
   useEffect(() => {
     const handleGlobalError = (event: ErrorEvent) => {
-      setStatusMessage(`Error: ${event.message}`);
-      setStatusType("error");
+      applyStatus(`Error: ${event.message}`, "error");
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
@@ -30,8 +55,7 @@ export function useStatusMessage(app: Molvis | null): {
       } else if (typeof event.reason === "string") {
         msg = event.reason;
       }
-      setStatusMessage(`Async Error: ${msg}`);
-      setStatusType("error");
+      applyStatus(`Async Error: ${msg}`, "error");
     };
 
     window.addEventListener("error", handleGlobalError);
@@ -41,28 +65,24 @@ export function useStatusMessage(app: Molvis | null): {
       window.removeEventListener("error", handleGlobalError);
       window.removeEventListener("unhandledrejection", handleRejection);
     };
-  }, []);
+  }, [applyStatus]);
+
+  useEffect(() => {
+    return subscribeStatus(({ text, type }) => {
+      applyStatus(text, type);
+    });
+  }, [applyStatus]);
 
   useEffect(() => {
     if (!app) {
       return;
     }
 
-    const handleStatus = (event: { text: string; type: StatusType }) => {
-      setStatusMessage(event.text);
-      setStatusType(event.type);
-
-      if (statusResetTimer.current) {
-        window.clearTimeout(statusResetTimer.current);
-        statusResetTimer.current = null;
-      }
-
-      if (event.type === "info") {
-        statusResetTimer.current = window.setTimeout(() => {
-          setStatusMessage(DEFAULT_STATUS_MESSAGE);
-          statusResetTimer.current = null;
-        }, 5000);
-      }
+    const handleStatus = (event: {
+      text: string;
+      type: "info" | "error" | "success";
+    }) => {
+      applyStatus(event.text, event.type);
     };
 
     app.events.on("status-message", handleStatus);
@@ -74,7 +94,7 @@ export function useStatusMessage(app: Molvis | null): {
         statusResetTimer.current = null;
       }
     };
-  }, [app]);
+  }, [app, applyStatus]);
 
-  return { statusMessage, statusType };
+  return { statusMessage, statusType, statusPulse };
 }

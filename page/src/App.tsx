@@ -1,17 +1,21 @@
-import type { Molvis } from "@molvis/core";
-import { Minimize, PanelLeft, PanelRight } from "lucide-react";
+import type { Molvis } from "@molvis/stage";
+import { PanelLeft, PanelRight, X } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
-import { TimelineControl } from "@/components/TimelineControl";
-import { Button } from "@/components/ui/button";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import { ExitFullscreenAction } from "@/components/viewer/ExitFullscreenAction";
+import { StructureInspector } from "@/components/viewer/StructureInspector";
+import { TrajectoryTimeline } from "@/components/viewer/TrajectoryTimeline";
+import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
+import { ViewerSidePanel } from "@/components/viewer/ViewerSidePanel";
+import { ViewerToolbar } from "@/components/viewer/ViewerToolbar";
 import { useDevDemo } from "@/dev/useDevDemo";
 import { BackendConnectionProvider } from "@/hooks/useBackendConnection";
 import { useBackendStateSync } from "@/hooks/useBackendStateSync";
@@ -20,13 +24,19 @@ import { useIsNarrow } from "@/hooks/useIsNarrow";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
 import { resolveChrome, useMountOpts } from "@/lib/mount-opts";
+import {
+  isAnalysisPanelOpen,
+  resolveViewerPanelLayout,
+} from "./lib/viewer-layout";
 import MolvisWrapper from "./MolvisWrapper";
 import { KeyboardShortcutsDialog } from "./ui/layout/KeyboardShortcutsDialog";
+import { LeftShellProvider } from "./ui/layout/LeftShellContext";
 import { LeftSidebar } from "./ui/layout/LeftSidebar";
-import { RightSidebar } from "./ui/layout/RightSidebar";
 import { StateSyncDialog } from "./ui/layout/StateSyncDialog";
-import { TopBar } from "./ui/layout/TopBar";
 import { CameraTrajectoryOverlay } from "./ui/modes/view/CameraTrajectoryOverlay";
+
+const INLINE_PANEL_BREAKPOINT = 1280;
+const COARSE_POINTER_INLINE_PANEL_BREAKPOINT = 1580;
 
 /**
  * Main page application shell for the MolVis viewer.
@@ -47,27 +57,64 @@ const App: React.FC = () => {
   const [app, setApp] = useState<Molvis | null>(null);
   const { currentMode, setCurrentMode, trajectoryLength } =
     useMolvisUiState(app);
-  const { statusMessage, statusType } = useStatusMessage(app);
+  const { statusMessage, statusType, statusPulse } = useStatusMessage(app);
+
+  // Bind plugin runtime once the engine is ready; restore Settings plugins
+  // and host-injected sources (VSCode molvis.plugins / Python plugins=).
+  useEffect(() => {
+    if (!app) return;
+    let cancelled = false;
+    const hostPlugins = opts.plugins ?? [];
+    void import("@/plugins").then(
+      ({ pluginManager, registerBuiltinModifierPanels }) => {
+        if (cancelled) return;
+        registerBuiltinModifierPanels();
+        pluginManager.bindApp(app);
+        void pluginManager.restore(hostPlugins);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [app, opts.plugins]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // "Fullscreen" = hide all chrome (top bar, sidebars, status, timeline),
   // leaving only the 3D canvas. The canvas panel stays mounted so the engine
   // is never torn down; exit via the floating button or Esc.
   const [uiHidden, setUiHidden] = useState(false);
-  // Narrow layout: below the breakpoint the three inline panels give way to a
-  // full-width canvas with the sidebars available as overlay drawers. The
-  // canvas stays mounted across the breakpoint (only sibling panels appear /
-  // disappear), so the WebGL + WASM engine is never torn down.
-  const [rootRef, isNarrow] = useIsNarrow<HTMLDivElement>();
+  // Wide layouts restore the original three-region work surface: Analysis on
+  // the left, canvas in the center, and mode tools on the right. Narrow hosts
+  // keep the same two panels as edge drawers so the WebGL surface stays useful.
+  const [rootRef, isNarrow] = useIsNarrow<HTMLDivElement>(
+    INLINE_PANEL_BREAKPOINT,
+    COARSE_POINTER_INLINE_PANEL_BREAKPOINT,
+  );
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  // The analysis panel is open on load. It used to start at 0% width with the
-  // only way back a drag on the resize handle, which read as "missing".
-  const [analysisOpen, setAnalysisOpen] = useState(true);
+  const [analysisInlineOpen, setAnalysisInlineOpen] = useState(false);
+  const openLeftAdvancedPanel = useCallback(() => {
+    setLeftDrawerOpen(true);
+    setAnalysisInlineOpen(true);
+  }, []);
+  const analysisPanelRef = useRef<HTMLElement>(null);
+  const toolsPanelRef = useRef<HTMLElement>(null);
   const stateSync = useBackendStateSync(app);
-  /** The inline analysis panel; below the breakpoint it becomes a drawer. */
-  const showAnalysisPanel =
-    !uiHidden && chrome.leftSidebar && !isNarrow && analysisOpen;
+  const showInlineAnalysis = !uiHidden && !isNarrow && chrome.leftSidebar;
+  const showInlineTools = !uiHidden && !isNarrow && chrome.rightSidebar;
+  const hasInlineSidePanel = showInlineAnalysis || showInlineTools;
+  const {
+    defaultLayout: defaultPanelLayout,
+    analysisSize: defaultAnalysisSize,
+    canvasSize: defaultCanvasSize,
+    toolsSize: defaultToolsSize,
+  } = resolveViewerPanelLayout({
+    showAnalysis: showInlineAnalysis,
+    showTools: showInlineTools,
+  });
+  const showTimeline =
+    !uiHidden && chrome.timeline && app !== null && trajectoryLength > 1;
+  const showBottomBar = !uiHidden && (chrome.statusBar || showTimeline);
 
   useHostFileBridge(app);
   useDevDemo(app, setCurrentMode, opts);
@@ -93,8 +140,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Collapse any open drawer as soon as the layout is wide enough for the
-  // inline sidebars again, so the two mechanisms never coexist.
   useEffect(() => {
     if (!isNarrow) {
       setLeftDrawerOpen(false);
@@ -102,12 +147,26 @@ const App: React.FC = () => {
     }
   }, [isNarrow]);
 
-  const handleModeSwitch = (mode: string) => {
-    if (!app) {
-      return;
+  const handleModeChange = (mode: string) => {
+    if (currentMode !== mode) {
+      if (app) {
+        app.setMode(mode);
+      }
+      setCurrentMode(mode);
     }
-    app.setMode(mode);
-    setCurrentMode(mode);
+  };
+
+  const handlePanelLayout = (layout: Record<string, number>) => {
+    if (layout.analysis !== undefined && analysisPanelRef.current) {
+      analysisPanelRef.current.style.width = `${layout.analysis}%`;
+      const nextOpen = isAnalysisPanelOpen(layout.analysis);
+      setAnalysisInlineOpen((current) =>
+        current === nextOpen ? current : nextOpen,
+      );
+    }
+    if (layout.tools !== undefined && toolsPanelRef.current) {
+      toolsPanelRef.current.style.width = `${layout.tools}%`;
+    }
   };
 
   if (canvasOnly) {
@@ -123,17 +182,20 @@ const App: React.FC = () => {
         >
           <FormatPickerProvider>
             <BondMappingPickerProvider>
-              <div
+              <section
+                aria-label="MolVis molecular viewer"
                 className="h-full w-full bg-background overflow-hidden"
                 onContextMenu={(e) => e.preventDefault()}
               >
                 <MolvisWrapper onMount={setApp} />
-              </div>
+              </section>
               <StateSyncDialog
                 open={stateSync.pending !== null}
                 summary={stateSync.pending?.summary ?? null}
+                feedback={stateSync.feedback}
                 onKeepLocal={stateSync.keepLocal}
                 onApplyBackend={() => void stateSync.applyBackend()}
+                onDismissFeedback={stateSync.dismissFeedback}
               />
             </BondMappingPickerProvider>
           </FormatPickerProvider>
@@ -154,197 +216,248 @@ const App: React.FC = () => {
       >
         <FormatPickerProvider>
           <BondMappingPickerProvider>
-            <div
-              ref={rootRef}
-              className="h-full w-full flex flex-col bg-background text-foreground overflow-hidden"
-              onContextMenu={(e) => e.preventDefault()}
-            >
-              {!uiHidden && chrome.topBar && (
-                <TopBar
-                  app={app}
-                  currentMode={currentMode}
-                  onToggleFullscreen={() => setUiHidden((v) => !v)}
-                  narrow={isNarrow}
-                  analysisOpen={chrome.leftSidebar ? analysisOpen : undefined}
-                  onToggleAnalysis={
-                    chrome.leftSidebar
-                      ? () => setAnalysisOpen((v) => !v)
-                      : undefined
-                  }
-                />
-              )}
-
-              <ResizablePanelGroup
-                orientation="horizontal"
-                className="flex-1"
-                defaultLayout={{ left: 18, canvas: 69, right: 13 }}
-                resizeTargetMinimumSize={{ fine: 20, coarse: 36 }}
+            <LeftShellProvider onOpen={openLeftAdvancedPanel}>
+              <section
+                ref={rootRef}
+                aria-label="MolVis molecular viewer"
+                className="relative h-full w-full flex flex-col bg-background text-foreground overflow-hidden"
+                onContextMenu={(e) => e.preventDefault()}
               >
-                {showAnalysisPanel && (
-                  <ResizablePanel
-                    key="left"
-                    id="left"
-                    defaultSize="18%"
-                    minSize="14%"
-                    maxSize="38%"
-                    className="bg-background flex flex-col min-w-0"
+                {!uiHidden && chrome.topBar && (
+                  <ViewerToolbar
+                    app={app}
+                    onToggleFullscreen={() => setUiHidden((v) => !v)}
+                    narrow={isNarrow}
+                  />
+                )}
+
+                <div className="relative min-h-0 flex-1">
+                  <ResizablePanelGroup
+                    orientation="horizontal"
+                    className="h-full"
+                    defaultLayout={defaultPanelLayout}
+                    onLayoutChange={handlePanelLayout}
+                    resizeTargetMinimumSize={{ fine: 20, coarse: 44 }}
                   >
-                    <LeftSidebar app={app} />
-                  </ResizablePanel>
-                )}
-
-                {showAnalysisPanel && (
-                  <ResizableHandle key="handle-left" withHandle />
-                )}
-
-                <ResizablePanel
-                  key="canvas"
-                  id="canvas"
-                  defaultSize="87%"
-                  minSize={uiHidden || isNarrow ? "100%" : "35%"}
-                  className="flex flex-col min-w-0"
-                >
-                  <div className="flex-1 relative bg-muted/20 overflow-hidden">
-                    <MolvisWrapper onMount={setApp} />
-                    {uiHidden && <CameraTrajectoryOverlay app={app} />}
-                    {uiHidden && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setUiHidden(false)}
-                        title="Exit fullscreen (Esc)"
-                        className="absolute top-2 right-2 z-20 bg-background/70 hover:bg-background/90 backdrop-blur-sm"
-                      >
-                        <Minimize className="h-3.5 w-3.5" />
-                      </Button>
+                    {showInlineAnalysis && (
+                      <ResizablePanel
+                        key="analysis"
+                        id="analysis"
+                        defaultSize={defaultAnalysisSize}
+                        collapsible
+                        collapsedSize="0%"
+                        minSize="12%"
+                        maxSize="30%"
+                        aria-hidden="true"
+                      />
                     )}
 
-                    {isNarrow && !uiHidden && (
-                      <>
-                        {chrome.leftSidebar && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              setRightDrawerOpen(false);
-                              setLeftDrawerOpen((v) => !v);
-                            }}
-                            title="Analysis panel"
-                            aria-label="Toggle analysis panel"
-                            className="absolute top-2 left-2 z-10 bg-background/70 hover:bg-background/90 backdrop-blur-sm"
-                          >
-                            <PanelLeft className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        {chrome.rightSidebar && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              setLeftDrawerOpen(false);
-                              setRightDrawerOpen((v) => !v);
-                            }}
-                            title="Mode panel"
-                            aria-label="Toggle mode panel"
-                            className="absolute top-2 right-2 z-10 bg-background/70 hover:bg-background/90 backdrop-blur-sm"
-                          >
-                            <PanelRight className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
+                    {showInlineAnalysis && (
+                      <ResizableHandle
+                        key="handle-analysis"
+                        aria-label="Resize analysis panel"
+                        className="z-20"
+                        withHandle
+                      />
+                    )}
 
-                        {(leftDrawerOpen || rightDrawerOpen) && (
-                          <button
-                            type="button"
-                            aria-label="Close panel"
-                            onClick={() => {
-                              setLeftDrawerOpen(false);
-                              setRightDrawerOpen(false);
-                            }}
-                            className="absolute inset-0 z-20 bg-black/40 cursor-default"
+                    <ResizablePanel
+                      key="canvas"
+                      id="canvas"
+                      defaultSize={defaultCanvasSize}
+                      minSize={hasInlineSidePanel ? "70%" : "100%"}
+                      className="flex min-w-0 flex-col"
+                    >
+                      <div className="relative flex-1 overflow-hidden bg-canvas">
+                        <MolvisWrapper onMount={setApp} />
+                        {uiHidden && <CameraTrajectoryOverlay app={app} />}
+                        {uiHidden && (
+                          <ExitFullscreenAction
+                            onExit={() => setUiHidden(false)}
                           />
                         )}
 
-                        {chrome.leftSidebar && leftDrawerOpen && (
-                          <div className="absolute inset-y-0 left-0 z-30 w-[min(85%,320px)] bg-background border-r shadow-xl flex flex-col">
-                            <LeftSidebar app={app} />
-                          </div>
+                        {isNarrow && !uiHidden && (
+                          <>
+                            {chrome.leftSidebar && (
+                              <ViewerIconAction
+                                icon={<PanelLeft />}
+                                label="Toggle analysis panel"
+                                selected={leftDrawerOpen}
+                                tooltipSide="right"
+                                onClick={() => {
+                                  setRightDrawerOpen(false);
+                                  setLeftDrawerOpen((open) => !open);
+                                }}
+                                className="motion-fade-in absolute left-2 top-2 z-10 bg-background/80 backdrop-blur"
+                              />
+                            )}
+                            {chrome.rightSidebar && (
+                              <ViewerIconAction
+                                icon={<PanelRight />}
+                                label="Toggle tool panel"
+                                selected={rightDrawerOpen}
+                                tooltipSide="left"
+                                onClick={() => {
+                                  setLeftDrawerOpen(false);
+                                  setRightDrawerOpen((open) => !open);
+                                }}
+                                className="motion-fade-in absolute right-2 top-2 z-10 bg-background/80 backdrop-blur"
+                              />
+                            )}
+                          </>
                         )}
+                      </div>
+                    </ResizablePanel>
 
-                        {chrome.rightSidebar && rightDrawerOpen && (
-                          <div className="absolute inset-y-0 right-0 z-30 w-[min(85%,320px)] bg-background border-l shadow-xl flex flex-col">
-                            <RightSidebar
-                              app={app}
-                              currentMode={currentMode}
-                              onModeChange={handleModeSwitch}
-                            />
-                          </div>
-                        )}
-                      </>
+                    {showInlineTools && (
+                      <ResizableHandle
+                        key="handle-tools"
+                        aria-label="Resize tool panel"
+                        className="z-20"
+                        withHandle
+                      />
                     )}
-                  </div>
 
-                  {app &&
-                    trajectoryLength > 1 &&
-                    !uiHidden &&
-                    chrome.timeline && (
-                      <div className="h-9 border-t bg-muted/20 shrink-0 z-10">
-                        <TimelineControl
+                    {showInlineTools && (
+                      <ResizablePanel
+                        key="tools"
+                        id="tools"
+                        defaultSize={defaultToolsSize}
+                        minSize="12%"
+                        maxSize="30%"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </ResizablePanelGroup>
+
+                  {isNarrow && (leftDrawerOpen || rightDrawerOpen) && (
+                    <button
+                      type="button"
+                      aria-label="Close side panel"
+                      onClick={() => {
+                        setLeftDrawerOpen(false);
+                        setRightDrawerOpen(false);
+                      }}
+                      className="motion-fade-in absolute inset-0 z-20 cursor-default bg-scrim"
+                    />
+                  )}
+
+                  {chrome.leftSidebar && (
+                    <ViewerSidePanel
+                      drawer={isNarrow}
+                      inlineWidth={defaultAnalysisSize}
+                      label="Advanced panel"
+                      onClose={() => setLeftDrawerOpen(false)}
+                      open={
+                        !uiHidden &&
+                        (isNarrow ? leftDrawerOpen : analysisInlineOpen)
+                      }
+                      panelRef={analysisPanelRef}
+                      side="left"
+                    >
+                      <LeftSidebar
+                        app={app}
+                        headerAction={
+                          isNarrow ? (
+                            <ViewerIconAction
+                              icon={<X />}
+                              label="Close advanced panel"
+                              tooltipSide="left"
+                              data-drawer-close
+                              onClick={() => setLeftDrawerOpen(false)}
+                              className="shrink-0"
+                            />
+                          ) : undefined
+                        }
+                      />
+                    </ViewerSidePanel>
+                  )}
+
+                  {chrome.rightSidebar && (
+                    <ViewerSidePanel
+                      drawer={isNarrow}
+                      inlineWidth={defaultToolsSize}
+                      label="Tool panel"
+                      onClose={() => setRightDrawerOpen(false)}
+                      open={!uiHidden && (!isNarrow || rightDrawerOpen)}
+                      panelRef={toolsPanelRef}
+                      side="right"
+                    >
+                      <StructureInspector
+                        app={app}
+                        currentMode={currentMode}
+                        onModeChange={handleModeChange}
+                        headerAction={
+                          isNarrow ? (
+                            <ViewerIconAction
+                              icon={<X />}
+                              label="Close tool panel"
+                              tooltipSide="left"
+                              data-drawer-close
+                              onClick={() => setRightDrawerOpen(false)}
+                              className="shrink-0"
+                            />
+                          ) : undefined
+                        }
+                      />
+                    </ViewerSidePanel>
+                  )}
+                </div>
+
+                {showBottomBar && (
+                  <div className="motion-enter-bottom flex h-statusbar shrink-0 items-center border-t border-border/70 bg-background">
+                    {chrome.statusBar && (
+                      <div
+                        key={statusPulse}
+                        role="status"
+                        aria-live={
+                          statusType === "error" ? "assertive" : "polite"
+                        }
+                        className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap px-2 font-mono text-xs tabular-nums transition-colors duration-(--motion-base) ease-standard ${
+                          statusType === "error"
+                            ? "bg-status-failed-soft font-medium text-status-failed-foreground"
+                            : statusType === "success"
+                              ? "status-bar-flash-success font-medium text-status-completed-foreground"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {statusMessage}
+                      </div>
+                    )}
+                    {showTimeline && (
+                      <div
+                        className={`h-full min-w-0 ${
+                          chrome.statusBar
+                            ? "flex-[2] border-l border-border/70"
+                            : "flex-1"
+                        }`}
+                      >
+                        <TrajectoryTimeline
                           app={app}
                           totalFrames={trajectoryLength}
                           compact={isNarrow}
                         />
                       </div>
                     )}
-                </ResizablePanel>
-
-                {!uiHidden && chrome.rightSidebar && !isNarrow && (
-                  <ResizableHandle key="handle-right" withHandle />
+                  </div>
                 )}
 
-                {!uiHidden && chrome.rightSidebar && !isNarrow && (
-                  <ResizablePanel
-                    key="right"
-                    id="right"
-                    defaultSize="13%"
-                    minSize="10%"
-                    maxSize="40%"
-                    collapsible={true}
-                    collapsedSize="0%"
-                    className="bg-background flex flex-col min-w-0"
-                  >
-                    <RightSidebar
-                      app={app}
-                      currentMode={currentMode}
-                      onModeChange={handleModeSwitch}
-                    />
-                  </ResizablePanel>
-                )}
-              </ResizablePanelGroup>
+                <KeyboardShortcutsDialog
+                  open={shortcutsOpen}
+                  onOpenChange={setShortcutsOpen}
+                />
 
-              {!uiHidden && chrome.statusBar && (
-                <div
-                  className={`h-5 border-t border-border/70 flex items-center px-2 text-[10px] shrink-0 ${
-                    statusType === "error"
-                      ? "text-destructive font-medium bg-destructive/10"
-                      : "text-muted-foreground bg-muted/40"
-                  }`}
-                >
-                  {statusMessage}
-                </div>
-              )}
-
-              <KeyboardShortcutsDialog
-                open={shortcutsOpen}
-                onOpenChange={setShortcutsOpen}
-              />
-
-              <StateSyncDialog
-                open={stateSync.pending !== null}
-                summary={stateSync.pending?.summary ?? null}
-                onKeepLocal={stateSync.keepLocal}
-                onApplyBackend={() => void stateSync.applyBackend()}
-              />
-            </div>
+                <StateSyncDialog
+                  open={stateSync.pending !== null}
+                  summary={stateSync.pending?.summary ?? null}
+                  feedback={stateSync.feedback}
+                  onKeepLocal={stateSync.keepLocal}
+                  onApplyBackend={() => void stateSync.applyBackend()}
+                  onDismissFeedback={stateSync.dismissFeedback}
+                />
+              </section>
+            </LeftShellProvider>
           </BondMappingPickerProvider>
         </FormatPickerProvider>
       </BackendConnectionProvider>

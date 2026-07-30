@@ -2,14 +2,13 @@ import { BarChart, type BarPoint } from "@molcrafts/molplot";
 import {
   type ClusterResult,
   type ConnectivityMode,
+  categoricalColorAt,
   computeClusters,
-  getCategoricalPalette,
   type Molvis,
   type SelectionMask,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -21,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ViewerToggleAction } from "@/components/viewer/ViewerToggleAction";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { AnalysisAlert } from "./analysis/AnalysisAlert";
 import { AnalysisChart } from "./analysis/AnalysisChart";
@@ -57,7 +57,12 @@ function ClusterSizeChart({ result }: { result: ClusterResult }) {
       }));
     return {
       mount: (el: HTMLElement) => {
-        if (points.length === 0) return { dispose: () => undefined };
+        if (points.length === 0) {
+          return {
+            ready: () => Promise.resolve(),
+            dispose: () => undefined,
+          };
+        }
         const chart = new BarChart(el, {
           series: [{ id: "sizes", label: "clusters", points }],
           orientation: "v",
@@ -65,7 +70,12 @@ function ClusterSizeChart({ result }: { result: ClusterResult }) {
           yAxis: { label: "count", rangemode: "tozero" },
           showLegend: true,
         });
-        return { dispose: () => chart.dispose() };
+        return {
+          ready: async () => {
+            await chart.ready();
+          },
+          dispose: () => chart.dispose(),
+        };
       },
     };
   }, [result]);
@@ -130,9 +140,9 @@ function ClusterTable({ rows }: { rows: ClusterRow[] }) {
       className="flex flex-col"
       style={{ height: Math.min(rows.length * TABLE_ROW_HEIGHT + 24, 260) }}
     >
-      <div className="flex shrink-0 border-b border-border/70 bg-muted/30 text-[10px] font-semibold text-muted-foreground">
-        <div className="w-12 shrink-0 px-1 py-0.5 text-right">Cluster</div>
-        <div className="min-w-[52px] flex-1 px-1 py-0.5 text-right">Size</div>
+      <div className="flex shrink-0 border-b border-border/70 bg-muted/30 text-micro font-semibold text-muted-foreground">
+        <div className="w-12 shrink-0 px-1 py-1 text-right">Cluster</div>
+        <div className="min-w-data-count flex-1 px-1 py-1 text-right">Size</div>
       </div>
       <div
         ref={containerRef}
@@ -149,13 +159,13 @@ function ClusterTable({ rows }: { rows: ClusterRow[] }) {
               return (
                 <div
                   key={row.id}
-                  className="flex border-b border-border/50 font-mono text-[10px] tabular-nums hover:bg-muted/40"
+                  className="flex border-b border-border/50 font-mono text-micro tabular-nums hover:bg-muted/40"
                   style={{ height: TABLE_ROW_HEIGHT }}
                 >
                   <div className="flex w-12 shrink-0 items-center justify-end px-1 text-muted-foreground">
                     {row.id}
                   </div>
-                  <div className="flex min-w-[52px] flex-1 items-center justify-end px-1">
+                  <div className="flex min-w-data-count flex-1 items-center justify-end px-1">
                     {row.size}
                   </div>
                 </div>
@@ -178,13 +188,13 @@ function colorAtomsByCluster(app: Molvis, result: ClusterResult) {
   const { clusterIdx, numClusters, nParticles } = result;
   const total = atomState.frameOffset + atomState.count;
 
-  const palette = getCategoricalPalette();
   const clusterColors = new Array<[number, number, number]>(numClusters);
   for (let c = 0; c < numClusters; c++) {
-    clusterColors[c] = palette[c % palette.length];
+    const rgb = categoricalColorAt(c);
+    clusterColors[c] = [rgb[0], rgb[1], rgb[2]];
   }
-
-  const unassignedColor: [number, number, number] = [0.3, 0.3, 0.3];
+  // Unassigned: dim but still visible (not near-black).
+  const unassignedColor: [number, number, number] = [0.55, 0.55, 0.58];
 
   const count = Math.min(nParticles, total);
   for (let i = 0; i < count; i++) {
@@ -371,20 +381,23 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
   return (
     <AnalysisPanelShell
       footer={
-        <AnalysisRunBar
-          onRun={handleCompute}
-          running={computing}
-          disabled={computing || selectionBlocked || !app}
-          label="Compute clusters"
-          summary={
-            mode === "bonds"
-              ? "Connectivity: bonds"
-              : `Connectivity: cutoff ${rMax || "auto"} Å`
-          }
-        />
+        <div className="shrink-0 space-y-2 border-t border-border/70 bg-background/95 px-2 py-2 backdrop-blur">
+          {children}
+          <AnalysisRunBar
+            className="border-0 p-0"
+            onRun={handleCompute}
+            running={computing}
+            disabled={computing || selectionBlocked || !app}
+            label="Compute clusters"
+            summary={
+              mode === "bonds"
+                ? "Connectivity: bonds"
+                : `Connectivity: cutoff ${rMax || "auto"} Å`
+            }
+          />
+        </div>
       }
     >
-      {children}
       <SidebarSection
         title="Cluster"
         subtitle={
@@ -394,32 +407,28 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
       >
         <div className="flex flex-col gap-2">
           <ParamStack label="Mode">
-            <div className="grid grid-cols-2 gap-0.5 rounded-md bg-muted/40 p-0.5">
-              <Button
-                size="sm"
-                variant={mode === "cutoff" ? "secondary" : "ghost"}
-                className={`h-7 text-xs ${mode === "cutoff" ? "ring-1 ring-ring" : ""}`}
+            <div className="grid grid-cols-2 gap-1 rounded-md bg-muted/40 p-1">
+              <ViewerToggleAction
+                selected={mode === "cutoff"}
                 onClick={() => setMode("cutoff")}
               >
                 Cutoff
-              </Button>
-              <Button
-                size="sm"
-                variant={mode === "bonds" ? "secondary" : "ghost"}
-                className={`h-7 text-xs ${mode === "bonds" ? "ring-1 ring-ring" : ""}`}
+              </ViewerToggleAction>
+              <ViewerToggleAction
+                selected={mode === "bonds"}
                 onClick={() => setMode("bonds")}
                 disabled={!hasBonds}
                 title={hasBonds ? "Use bond topology" : "Frame has no bonds"}
               >
                 Bonds
-              </Button>
+              </ViewerToggleAction>
             </div>
           </ParamStack>
 
           {mode === "cutoff" && (
             <ParamStack label="r_max">
               <Input
-                className="h-7 min-w-0 font-mono text-xs tabular-nums"
+                className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
                 value={rMax}
                 onChange={(e) => setRMax(e.target.value)}
                 placeholder="auto"
@@ -430,7 +439,7 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
 
           <ParamStack label="Min size">
             <Input
-              className="h-7 min-w-0 font-mono text-xs tabular-nums"
+              className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
               value={minSize}
               onChange={(e) => setMinSize(e.target.value)}
               placeholder="1"
@@ -438,7 +447,7 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
             />
           </ParamStack>
 
-          <div className="space-y-1.5 pt-0.5">
+          <div className="space-y-2 pt-1">
             <CheckboxRow
               id="cl-sort"
               checked={sortBySize}
@@ -464,7 +473,10 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
                   value={selectionModId}
                   onValueChange={setSelectionModId}
                 >
-                  <SelectTrigger className="h-7 w-full min-w-0 px-2 text-xs">
+                  <SelectTrigger
+                    aria-label="Cluster atom selection"
+                    className="h-control-compact w-full min-w-0 px-2 text-xs"
+                  >
                     <SelectValue
                       placeholder={
                         modifiers.length === 0
@@ -540,7 +552,7 @@ function CheckboxRow({
   label: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <Checkbox
         id={id}
         checked={checked}
@@ -549,7 +561,7 @@ function CheckboxRow({
       />
       <Label
         htmlFor={id}
-        className="cursor-pointer text-[11px] leading-none font-normal"
+        className="cursor-pointer text-micro leading-none font-normal"
       >
         {label}
       </Label>

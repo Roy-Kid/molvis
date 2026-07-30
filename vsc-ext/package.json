@@ -38,6 +38,11 @@
           "id": "molvis",
           "title": "MolVis",
           "icon": "image/molvis-activitybar.svg"
+        },
+        {
+          "id": "molvisSketch",
+          "title": "MolVis Sketch",
+          "icon": "image/molvis-sketch-activitybar.svg"
         }
       ]
     },
@@ -46,6 +51,19 @@
         {
           "id": "molvis.launcher",
           "name": "Home",
+          "visibility": "visible"
+        },
+        {
+          "id": "molvis.outline",
+          "name": "Structure",
+          "visibility": "visible"
+        }
+      ],
+      "molvisSketch": [
+        {
+          "id": "molvis.sketch",
+          "name": "Sketch",
+          "type": "webview",
           "visibility": "visible"
         }
       ]
@@ -60,6 +78,15 @@
         "command": "molvis.openEditor",
         "title": "MolVis: Open Workspace",
         "icon": "$(window)"
+      },
+      {
+        "command": "molvis.loadInWorkspace",
+        "title": "MolVis: Load in Workspace",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "molvis.outline.select",
+        "title": "MolVis: Select Outline Node"
       },
       {
         "command": "molvis.openStructure",
@@ -294,14 +321,19 @@
       ],
       "explorer/context": [
         {
+          "command": "molvis.loadInWorkspace",
+          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
+          "group": "navigation@1"
+        },
+        {
           "command": "molvis.quickView",
           "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "molvis.openEditor",
           "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ]
     },
@@ -311,7 +343,7 @@
         "molvis.config": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Overrides passed to `@molvis/core` config (`mountMolvis(container, config, settings)`).",
+          "markdownDescription": "Overrides passed to `@molcrafts/molvis-stage` config (`mountMolvis(container, config, settings)`).",
           "properties": {
             "showUI": {
               "type": "boolean",
@@ -371,7 +403,7 @@
         "molvis.settings": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Runtime overrides for `@molvis/core` settings (`app.settings`).",
+          "markdownDescription": "Runtime overrides for `@molcrafts/molvis-stage` settings (`app.settings`).",
           "properties": {
             "cameraPanSpeed": {
               "type": "number"
@@ -456,6 +488,15 @@
             }
           },
           "additionalProperties": true
+        },
+        "molvis.plugins": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Plugin sources loaded when a MolVis viewer starts (`owner/repo[@tag]`, GitHub URL, or HTTPS ESM package). Same trust model as the in-app Plugins settings — remote code runs in the webview.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }

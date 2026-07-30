@@ -4,13 +4,13 @@ import {
   type MolvisConfig,
   type MolvisSetting,
   mountMolvis,
-} from "@molvis/core";
+} from "@molvis/stage";
 import {
   exportFrame,
   type FileFormat,
   loadFileContent,
   loadFileStream,
-} from "@molvis/core/io";
+} from "@molvis/stage/io";
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
@@ -134,7 +134,7 @@ export function bootstrapWebview(
       }
       case "triggerSave":
         try {
-          app.save();
+          app.commitScene();
         } catch (error) {
           reportError(vscode, "Failed to save", error);
         }

@@ -31,13 +31,22 @@ wireframe to spacefill does not insert a modifier.
 
 ## Common modifier categories
 
+Aligned with OVITO’s Add-modifier groups:
+
 | Category | Examples | Effect |
 |---|---|---|
-| Filter | Slice, Hide selection | Remove atoms from downstream output |
-| Selection | Expression select | Create/update a named target set |
-| Appearance data | Color by property, Assign color | Add per-atom color information |
-| Coordinates | Wrap PBC | Produce transformed positions |
-| Source composition | Data source | Choose or combine input data |
+| Selection | Expression Select, Hide Selection | Create or act on a selection set |
+| Modification | Slice, Wrap PBC, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
+| Coloring | Color by Property, Assign Color, Steinhardt order, Solid-liquid | Per-atom color / structure-order → color |
+| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density surface | Scene-changing visual helpers |
+
+**Iron law:** only steps that change the canvas belong in the pipeline. Charts
+and pure numerical analyses (RDF, MSD, spectra, …) live in the **left Analysis
+panel**, driven by the molrs compute catalog.
+
+Visual elements such as **Particles** and **Ribbon** auto-attach when a file
+loads. Complex visual modifiers (isosurface, vector field, surfaces) open a
+**left config page** when selected in the pipeline.
 
 Use the eye control to mute a modifier without deleting its configuration.
 Drag to reorder. Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z to undo and redo command

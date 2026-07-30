@@ -28,6 +28,15 @@ const SECTIONS: { title: string; shortcuts: Shortcut[] }[] = [
     ],
   },
   {
+    title: "File",
+    shortcuts: [
+      {
+        keys: "Ctrl+S",
+        description: "Save scene (commit canvas → structure, any mode)",
+      },
+    ],
+  },
+  {
     title: "Edit",
     shortcuts: [
       { keys: "Ctrl+Z", description: "Undo" },
@@ -63,7 +72,7 @@ export const KeyboardShortcutsDialog: React.FC<
 > = ({ open, onOpenChange }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[480px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-h-dialog-scroll max-w-dialog-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Keyboard Shortcuts</DialogTitle>
         </DialogHeader>
@@ -82,7 +91,7 @@ export const KeyboardShortcutsDialog: React.FC<
                     <span className="text-xs text-foreground">
                       {shortcut.description}
                     </span>
-                    <kbd className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded border text-muted-foreground">
+                    <kbd className="text-micro font-mono bg-muted px-2 py-1 rounded-control border text-muted-foreground">
                       {shortcut.keys}
                     </kbd>
                   </div>

@@ -1,10 +1,13 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
     "paths": {
       "@molcrafts/molvis-sketch": ["./src/index.ts"],
-      "@molcrafts/molvis-sketch/*": ["./src/*"]
+      "@molcrafts/molvis-sketch/*": ["./src/*"],
+      "@molcrafts/molvis-core": ["../core/src/index.ts"],
+      "@molcrafts/molvis-core/molrs": ["../core/src/molrs.ts"],
+      "@molcrafts/molvis-core/elements": ["../core/src/elements.ts"],
+      "@molcrafts/molvis-core/element-picker": ["../core/src/element_picker.ts"]
     }
   },
   "include": ["src"]

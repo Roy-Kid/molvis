@@ -1,7 +1,7 @@
 import {
   FILE_FORMAT_REGISTRY,
   inferFormatFromFilename,
-} from "@molvis/core/io/formats";
+} from "@molvis/stage/io/formats";
 import * as vscode from "vscode";
 import type { MolecularFileFormat } from "../types";
 

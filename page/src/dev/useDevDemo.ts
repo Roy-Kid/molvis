@@ -1,13 +1,12 @@
-import type { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/stage";
 import { useEffect } from "react";
 import type { MountOpts } from "@/lib/mount-opts";
 
 /**
- * Seed a Dopamine demo frame when the pipeline is empty. Opt-in only:
- * enabled in `npm run dev:page` via `NODE_ENV=development`, or for any
- * deployment that passes `?demo=1` (or `opts.demo: true` to a mount
- * call). Every other embed — VSCode webview, Python/Jupyter, custom
- * `mountMolvisApp` calls — starts with an empty canvas.
+ * Seed a Dopamine demo frame onto the boot Empty Scene primary.
+ * Opt-in only: `npm run dev:page` via `NODE_ENV=development`, or
+ * `?demo=1` / `opts.demo: true`. Does **not** invent a second load path —
+ * mutates the existing primary trajectory then auto-attaches Draws.
  */
 export function useDevDemo(
   app: Molvis | null,
@@ -33,12 +32,19 @@ export function useDevDemo(
     let disposed = false;
 
     const initDemo = async () => {
-      const { MemoryDataSource, Frame, Block, Trajectory } = await import(
-        "@molvis/core"
-      );
+      const { Frame, Block, DataSourceModifier, applyAutoAttach } =
+        await import("@molvis/stage");
       if (disposed) return;
+
       const pipeline = app.modifierPipeline;
-      if (pipeline.getModifiers().length > 0) return;
+      const primary = pipeline
+        .getModifiers()
+        .find((m) => m instanceof DataSourceModifier);
+      if (!primary) return;
+
+      // Already has real content (file / prior seed) — leave it alone.
+      const existingAtoms = app.system.frame?.getBlock("atoms")?.nrows() ?? 0;
+      if (existingAtoms > 0) return;
 
       // Dopamine molecule (C₈H₁₁NO₂)
       const atomsBlock = new Block();
@@ -89,7 +95,6 @@ export function useDevDemo(
         "H",
         "H",
         "H",
-        "H",
       ]);
 
       const bondsBlock = new Block();
@@ -117,12 +122,19 @@ export function useDevDemo(
       frame.insertBlock("atoms", atomsBlock);
       frame.insertBlock("bonds", bondsBlock);
 
-      const sourceMod = new MemoryDataSource(frame, {
-        sourceType: "empty",
-        filename: "Dopamine",
-      });
-      pipeline.addModifier(sourceMod);
-      await app.setTrajectory(new Trajectory([frame]));
+      // Single path: write HEAD on the boot primary, attach Draws, pipeline.
+      app.system.updateCurrentFrame(frame);
+      if (
+        primary.kind === "memory" &&
+        primary.trajectory !== app.system.trajectory
+      ) {
+        primary.trajectory.replaceFrame(0, frame);
+      }
+      primary.filename = "Dopamine";
+      primary.sourceType = "empty";
+
+      applyAutoAttach(pipeline, frame, undefined, primary);
+      await app.applyPipeline({ fullRebuild: true });
       app.setMode("view");
       setCurrentMode("view");
 

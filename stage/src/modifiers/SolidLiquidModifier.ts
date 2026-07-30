@@ -1,0 +1,176 @@
+/**
+ * Solid–liquid classification (Steinhardt-based) → per-atom columns + color.
+ *
+ * Writes:
+ * - `solid_liquid` — 1 solid / 0 liquid
+ * - `solid_liquid_n_bonds` — number of solid-like neighbor bonds
+ *
+ * When `colorScene` is true, colors atoms categorically by `solid_liquid`.
+ */
+
+import { type Frame, WasmSolidLiquid } from "@molcrafts/molvis-core/molrs";
+import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
+import type { PipelineContext } from "../pipeline/types";
+import { logger } from "../utils/logger";
+import {
+  applyColumnColors,
+  buildNeighborList,
+  cloneFrameWithAtoms,
+  SOLID_LIQUID_COLUMN,
+  SOLID_LIQUID_N_BONDS_COLUMN,
+  writeAtomF64Column,
+} from "./structure_order_shared";
+
+interface SolidLiquidOut {
+  l: number;
+  nSolidBonds: number[];
+  isSolid: boolean[];
+}
+
+function isSolidLiquidOut(v: unknown): v is SolidLiquidOut {
+  if (!v || typeof v !== "object") return false;
+  const o = v as SolidLiquidOut;
+  return Array.isArray(o.nSolidBonds) && Array.isArray(o.isSolid);
+}
+
+export class SolidLiquidModifier extends BaseModifier {
+  static readonly NAME = "Solid-liquid";
+
+  private _l = 6;
+  private _cutoff = 3.0;
+  private _qThreshold: number | null = null;
+  private _nThreshold: number | null = null;
+  private _normalizeQ = true;
+  private _colorScene = true;
+
+  constructor(id = "solid-liquid") {
+    super(
+      id,
+      SolidLiquidModifier.NAME,
+      new Set([ModifierCapability.TransformsData]),
+    );
+  }
+
+  get l(): number {
+    return this._l;
+  }
+  get cutoff(): number {
+    return this._cutoff;
+  }
+  get qThreshold(): number | null {
+    return this._qThreshold;
+  }
+  get nThreshold(): number | null {
+    return this._nThreshold;
+  }
+  get normalizeQ(): boolean {
+    return this._normalizeQ;
+  }
+  get colorScene(): boolean {
+    return this._colorScene;
+  }
+
+  get primaryColumn(): string {
+    return SOLID_LIQUID_COLUMN;
+  }
+
+  setL(l: number): void {
+    this._l = Math.max(0, Math.min(20, Math.floor(l)));
+  }
+
+  setCutoff(cutoff: number): void {
+    this._cutoff = Math.max(0.1, cutoff);
+  }
+
+  setQThreshold(v: number | null): void {
+    this._qThreshold = v !== null && Number.isFinite(v) ? v : null;
+  }
+
+  setNThreshold(v: number | null): void {
+    this._nThreshold =
+      v !== null && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : null;
+  }
+
+  setNormalizeQ(on: boolean): void {
+    this._normalizeQ = on;
+  }
+
+  setColorScene(on: boolean): void {
+    this._colorScene = on;
+  }
+
+  matches(frame: Frame): boolean {
+    const atoms = frame.getBlock("atoms");
+    return atoms !== undefined && atoms.nrows() > 0;
+  }
+
+  isApplicable(frame: Frame): boolean {
+    return this.matches(frame);
+  }
+
+  getCacheKey(): string {
+    return `${super.getCacheKey()}:l=${this._l}:c=${this._cutoff}:q=${this._qThreshold ?? "def"}:n=${this._nThreshold ?? "def"}:nq=${this._normalizeQ}:color=${this._colorScene}`;
+  }
+
+  apply(input: Frame, _ctx: PipelineContext): Frame {
+    if (!this.matches(input)) return input;
+    const n = input.getBlock("atoms")?.nrows() ?? 0;
+    if (n === 0) return input;
+
+    let calc: WasmSolidLiquid | null = null;
+    let cell: ReturnType<typeof buildNeighborList>["cell"] | null = null;
+    let neighbors: ReturnType<typeof buildNeighborList>["neighbors"] | null =
+      null;
+
+    try {
+      const nl = buildNeighborList(input, this._cutoff);
+      cell = nl.cell;
+      neighbors = nl.neighbors;
+
+      calc = new WasmSolidLiquid(
+        this._l,
+        this._qThreshold,
+        this._nThreshold,
+        this._normalizeQ,
+      );
+      const raw = calc.compute(input, neighbors);
+      if (!isSolidLiquidOut(raw)) {
+        logger.warn("[Solid-liquid] unexpected compute payload");
+        return input;
+      }
+      if (raw.isSolid.length < n || raw.nSolidBonds.length < n) {
+        logger.warn(
+          `[Solid-liquid] result length ${raw.isSolid.length} < n=${n}`,
+        );
+        return input;
+      }
+
+      const result = cloneFrameWithAtoms(input);
+      if (!result) return input;
+      const atoms = result.getBlock("atoms");
+      if (!atoms) return input;
+
+      const solid = new Float64Array(n);
+      const bonds = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        solid[i] = raw.isSolid[i] ? 1 : 0;
+        bonds[i] = raw.nSolidBonds[i];
+      }
+      writeAtomF64Column(atoms, SOLID_LIQUID_COLUMN, solid);
+      writeAtomF64Column(atoms, SOLID_LIQUID_N_BONDS_COLUMN, bonds);
+
+      if (this._colorScene) {
+        applyColumnColors(atoms, SOLID_LIQUID_COLUMN, { categorical: true });
+      }
+
+      return result;
+    } catch (err) {
+      logger.warn("[Solid-liquid] compute failed", err as Error);
+      return input;
+    } finally {
+      calc?.free();
+      neighbors?.free();
+      cell?.free();
+    }
+  }
+}

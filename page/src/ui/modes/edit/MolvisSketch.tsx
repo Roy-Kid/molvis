@@ -1,235 +1,196 @@
+import type { Frame } from "@molcrafts/molvis-core/molrs";
 import {
-  SketchBoard,
   type MoleculeData,
-  type SketchTool,
+  type SketchBoardState,
+  SketchComposer,
 } from "@molcrafts/molvis-sketch";
-import type { Frame } from "@molcrafts/molrs";
-import {
-  Atom,
-  Eraser,
-  Hexagon,
-  Link2,
-  MousePointer2,
-  Redo2,
-  Trash2,
-  Undo2,
-} from "lucide-react";
+import { ExternalLink, Minimize2 } from "lucide-react";
 import {
   forwardRef,
+  type ReactNode,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
-import { ViewerToggleAction } from "@/components/viewer/ViewerToggleAction";
+import { createPortal } from "react-dom";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { ViewerToolButton } from "@/components/viewer/ViewerToolButton";
 import { cn } from "@/lib/utils";
-
-const ELEMENTS = ["C", "N", "O", "H", "P", "S", "F", "Cl", "Br", "I"];
 
 export interface MolvisSketchRef {
   getMoleculeData(): MoleculeData | null;
   toFrame(): Frame | null;
+  getState(): SketchBoardState | null;
+  toSvg(): string | null;
+  toPng(): Promise<Blob | null>;
 }
 
-interface MolvisSketchProps {
+export interface MolvisSketchProps {
   minHeight?: number;
   disabled?: boolean;
+  /**
+   * Host-only icon actions injected into the sketch common rail `extraSlot`
+   * (layout slot — never overlaid on top of chem tools). e.g. generate-3D.
+   */
+  extraActions?: ReactNode;
+  /** Host-specific file sink. Browser downloads are used when omitted. */
+  onExportFile?: (blob: Blob, filename: string) => void | Promise<void>;
+  /** Whether the editor can move into a page-level modal. Default true. */
+  allowPopout?: boolean;
+  className?: string;
 }
 
 /**
- * React host for `@molcrafts/molvis-sketch` SketchBoard.
- * Imperative ref exposes getMoleculeData / toFrame for Builder generate path.
+ * React host for `@molcrafts/molvis-sketch` {@link SketchComposer}.
+ *
+ * - Chrome lives in sketch (`gui: true`); page does not reimplement rails.
+ * - Product look: Tailwind maps tokens → `--msk-*` via `.molvis-sketch-host`.
+ * - Pop-out / generate-3D: portal into `composer.extraSlot` (common rail end).
+ * - Pop-out reparents a stable shell node (no remount, no cover overlay).
  */
 export const MolvisSketch = forwardRef<MolvisSketchRef, MolvisSketchProps>(
-  ({ minHeight = 220, disabled = false }, ref) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const boardRef = useRef<SketchBoard | null>(null);
-    const [tool, setTool] = useState<SketchTool>("atom");
-    const [element, setElement] = useState("C");
-    const [bondOrder, setBondOrder] = useState<1 | 2 | 3>(1);
+  (
+    {
+      minHeight = 240,
+      disabled = false,
+      extraActions,
+      onExportFile,
+      allowPopout = true,
+      className,
+    },
+    ref,
+  ) => {
+    const inlineAnchorRef = useRef<HTMLDivElement>(null);
+    const dialogAnchorRef = useRef<HTMLDivElement>(null);
+    const onExportFileRef = useRef(onExportFile);
+    onExportFileRef.current = onExportFile;
 
-    useImperativeHandle(ref, () => ({
-      getMoleculeData() {
-        const data = boardRef.current?.getMoleculeData();
-        if (!data || data.atoms.length === 0) return null;
-        return data;
-      },
-      toFrame() {
-        const board = boardRef.current;
-        if (!board) return null;
-        const data = board.getMoleculeData();
-        if (data.atoms.length === 0) return null;
-        return board.toFrame();
-      },
-    }));
+    // Imperative shell so pop-out can reparent without React unmounting the board.
+    const shellRef = useRef<HTMLDivElement | null>(null);
+    if (shellRef.current === null && typeof document !== "undefined") {
+      const shell = document.createElement("div");
+      shell.className = "molvis-sketch-host h-full min-h-0 w-full min-w-0";
+      shellRef.current = shell;
+    }
+
+    const [composer] = useState(
+      () =>
+        new SketchComposer({
+          gui: true,
+          onExportFile: (blob, filename) =>
+            onExportFileRef.current?.(blob, filename),
+        }),
+    );
+    const [poppedOut, setPoppedOut] = useState(false);
+    const [extraSlot, setExtraSlot] = useState<HTMLElement | null>(null);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        getMoleculeData() {
+          const data = composer.board.getMoleculeData();
+          if (data.atoms.length === 0) return null;
+          return data;
+        },
+        toFrame() {
+          if (composer.board.getMoleculeData().atoms.length === 0) return null;
+          return composer.board.toFrame();
+        },
+        getState() {
+          return composer.board.getState();
+        },
+        toSvg() {
+          if (composer.board.getMoleculeData().atoms.length === 0) return null;
+          return composer.board.toSvg();
+        },
+        async toPng() {
+          if (composer.board.getMoleculeData().atoms.length === 0) return null;
+          return composer.board.toPng();
+        },
+      }),
+      [composer],
+    );
 
     useEffect(() => {
-      const canvas = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) return;
-
-      const board = new SketchBoard();
-      boardRef.current = board;
-      board.mount(canvas);
-
-      const applyTheme = () => {
-        const styles = getComputedStyle(container);
-        const bg =
-          styles.getPropertyValue("--molvis-panel").trim() ||
-          styles.getPropertyValue("--background").trim() ||
-          "#f7f8fa";
-        const fg =
-          styles.getPropertyValue("--molvis-foreground").trim() ||
-          styles.getPropertyValue("--foreground").trim() ||
-          "#111";
-        board.setTheme({
-          background: bg.startsWith("oklch") ? "#f7f8fa" : bg || "#f7f8fa",
-          labelFill: fg.startsWith("oklch") ? "#111111" : fg || "#111",
-          bondStroke: fg.startsWith("oklch") ? "#222222" : fg || "#222",
-          selectionStroke: "#2563eb",
-        });
-      };
-      applyTheme();
-
-      const ro = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (!entry) return;
-        const { width, height } = entry.contentRect;
-        board.resize(Math.max(1, width), Math.max(1, height));
-      });
-      ro.observe(container);
-
+      const shell = shellRef.current;
+      if (!shell) return;
+      composer.mount(shell);
+      setExtraSlot(composer.extraSlot);
       return () => {
-        ro.disconnect();
-        board.unmount();
-        boardRef.current = null;
+        composer.unmount();
+        setExtraSlot(null);
       };
-    }, []);
+    }, [composer]);
+
+    // Keep shell under the active anchor (inline panel vs modal).
+    useLayoutEffect(() => {
+      const shell = shellRef.current;
+      const target = poppedOut
+        ? dialogAnchorRef.current
+        : inlineAnchorRef.current;
+      if (!shell || !target) return;
+      if (shell.parentElement !== target) {
+        target.appendChild(shell);
+      }
+    }, [poppedOut]);
 
     useEffect(() => {
-      boardRef.current?.setTool(tool);
-    }, [tool]);
+      composer.setDisabled(disabled);
+    }, [composer, disabled]);
 
-    useEffect(() => {
-      boardRef.current?.setElement(element);
-    }, [element]);
-
-    useEffect(() => {
-      boardRef.current?.setBondOrder(bondOrder);
-    }, [bondOrder]);
-
-    const tools: Array<{ id: SketchTool; label: string; icon: ReactNode }> = [
-
-        { id: "atom", label: "Atom", icon: <Atom className="h-3.5 w-3.5" /> },
-        { id: "bond", label: "Bond", icon: <Link2 className="h-3.5 w-3.5" /> },
-        {
-          id: "select",
-          label: "Select",
-          icon: <MousePointer2 className="h-3.5 w-3.5" />,
-        },
-        {
-          id: "erase",
-          label: "Erase",
-          icon: <Eraser className="h-3.5 w-3.5" />,
-        },
-        {
-          id: "ring",
-          label: "Ring",
-          icon: <Hexagon className="h-3.5 w-3.5" />,
-        },
-      ];
+    const hostActions =
+      extraSlot &&
+      (allowPopout || extraActions) &&
+      createPortal(
+        <>
+          {allowPopout && (
+            <ViewerToolButton
+              label={poppedOut ? "Return sketch to panel" : "Pop out sketch"}
+              disabled={disabled}
+              className="[&_svg]:shrink-0"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setPoppedOut((open) => !open);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {poppedOut ? <Minimize2 /> : <ExternalLink />}
+            </ViewerToolButton>
+          )}
+          {extraActions}
+        </>,
+        extraSlot,
+      );
 
     return (
-      <div
-        aria-disabled={disabled}
-        className={cn(
-          "flex min-h-0 w-full flex-1 flex-col gap-1",
-          disabled && "pointer-events-none opacity-60",
-        )}
-        style={{ minHeight }}
-      >
-        <div className="flex flex-wrap items-center gap-1 px-0.5">
-          {tools.map((t) => (
-            <ViewerToggleAction
-              key={t.id}
-              selected={tool === t.id}
-              onClick={() => {
-                setTool(t.id);
-                if (t.id === "ring") {
-                  boardRef.current?.setRingTemplate(6, "benzene");
-                }
-              }}
-              title={t.label}
-              aria-label={t.label}
-            >
-              {t.icon}
-            </ViewerToggleAction>
-          ))}
-          <Select value={element} onValueChange={setElement}>
-            <SelectTrigger
-              className="h-control-compact w-14 px-1 text-xs"
-              aria-label="Element"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ELEMENTS.map((el) => (
-                <SelectItem key={el} value={el}>
-                  <span className="font-mono">{el}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex gap-0.5">
-            {([1, 2, 3] as const).map((o) => (
-              <ViewerToggleAction
-                key={o}
-                selected={bondOrder === o}
-                onClick={() => setBondOrder(o)}
-                title={`Bond order ${o}`}
-                aria-label={`Bond order ${o}`}
-              >
-                <span className="font-mono text-xs">{o}</span>
-              </ViewerToggleAction>
-            ))}
-          </div>
-          <ViewerIconAction
-            icon={<Undo2 />}
-            label="Undo"
-            onClick={() => boardRef.current?.undo()}
-          />
-          <ViewerIconAction
-            icon={<Redo2 />}
-            label="Redo"
-            onClick={() => boardRef.current?.redo()}
-          />
-          <ViewerIconAction
-            icon={<Trash2 />}
-            label="Clear"
-            onClick={() => boardRef.current?.clear()}
-          />
-        </div>
+      <Dialog open={poppedOut} onOpenChange={setPoppedOut}>
+        {hostActions}
         <div
-          ref={containerRef}
-          className="molvis-sketch-container relative min-h-0 w-full flex-1 overflow-hidden rounded-md border bg-background"
-        >
-          <canvas
-            ref={canvasRef}
+          ref={inlineAnchorRef}
+          className={cn(
+            "molvis-sketch-container min-h-0 w-full flex-1 overflow-visible",
+            poppedOut && "hidden",
+            className,
+          )}
+          style={{ minHeight: poppedOut ? undefined : minHeight }}
+        />
+        {poppedOut && (
+          <DialogContent
             aria-label="2D molecule sketch"
-            className="absolute inset-0 h-full w-full"
-          />
-        </div>
-      </div>
+            className="h-[min(92vh,900px)] w-[min(94vw,1400px)] max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
+            showCloseButton={false}
+          >
+            <DialogTitle className="sr-only">2D molecule sketch</DialogTitle>
+            <div
+              ref={dialogAnchorRef}
+              className="molvis-sketch-container h-full min-h-0 w-full overflow-visible"
+            />
+          </DialogContent>
+        )}
+      </Dialog>
     );
   },
 );

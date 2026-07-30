@@ -6,12 +6,11 @@ import {
   type FrameRange,
   type Molvis,
   runAnalysis,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Slider } from "@/components/ui/slider";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { AnalysisAlert } from "./AnalysisAlert";
 import { AnalysisPanelShell } from "./AnalysisPanelShell";
 import { AnalysisParamsForm } from "./AnalysisParamsForm";
@@ -136,22 +135,25 @@ export const GenericAnalysisPanel: React.FC<GenericAnalysisPanelProps> = ({
   return (
     <AnalysisPanelShell
       footer={
-        <AnalysisRunBar
-          onRun={() => void execute()}
-          running={run.status === "running"}
-          disabled={!app || blockedReason !== undefined}
-          label={`Run ${definition.label}`}
-          summary={scopeSummary}
-          hint={
-            blockedReason ? (
-              <span>Fix requirements above to enable run.</span>
-            ) : undefined
-          }
-        />
+        <div className="shrink-0 space-y-2 border-t border-border/70 bg-background/95 px-2 py-2 backdrop-blur">
+          {children}
+          <AnalysisRunBar
+            className="border-0 p-0"
+            onRun={() => void execute()}
+            running={run.status === "running"}
+            disabled={!app || blockedReason !== undefined}
+            label={`Run ${definition.label}`}
+            summary={scopeSummary}
+            hint={
+              blockedReason ? (
+                <span>Fix requirements above to enable run.</span>
+              ) : undefined
+            }
+          />
+        </div>
       }
     >
-      {children}
-      <SidebarSection title="Parameters" defaultOpen={true}>
+      <div className="flex flex-col gap-2 p-2">
         <AnalysisParamsForm
           params={definition.params}
           values={params}
@@ -168,7 +170,7 @@ export const GenericAnalysisPanel: React.FC<GenericAnalysisPanelProps> = ({
         {run.status === "error" && (
           <AnalysisAlert tone="error">{run.message}</AnalysisAlert>
         )}
-      </SidebarSection>
+      </div>
 
       {run.status === "idle" && !blockedReason && (
         <EmptyState
@@ -185,8 +187,8 @@ export const GenericAnalysisPanel: React.FC<GenericAnalysisPanelProps> = ({
           failures={run.failures ?? 0}
         >
           {run.perFrame && frames.length > 1 && (
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="shrink-0 text-micro tabular-nums text-muted-foreground">
                 Frame {frames[shownFrame]}
               </span>
               <Slider

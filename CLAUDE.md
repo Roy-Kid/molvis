@@ -29,16 +29,18 @@ mol_project:
 ## What this repo is
 
 MolVis — an interactive, WASM-accelerated molecular visualization library,
-web-first with VSCode and Jupyter integration. Monorepo: a TypeScript core
-engine, a React 19 web app that is the single frontend for every host, a VSCode
+web-first with VSCode and Jupyter integration. Monorepo: a shared TypeScript
+core, peer 2D sketch and 3D stage engines, a React 19 product shell, a VSCode
 extension, and a Python package that drives the page bundle over WebSocket.
 
 ## Where things live
 
-- Source code: `core/src/` (engine, TS), `page/src/` (React 19 web app),
+- Source code: `core/src/` (shared molrs/data/browser primitives),
+  `sketch/src/` (2D), `stage/src/` (3D), `page/src/` (React 19 product shell),
   `vsc-ext/src/` (VSCode extension), `python/src/` (Python package)
-- Tests: `core/tests/` (+ `integration/`), `page/tests/`, `vsc-ext/tests/`,
-  `python/tests/` (+ `integration/`); public-API goldens → `regressions/`
+- Tests: `core/tests/`, `sketch/tests/`, `stage/tests/` (+ `integration/`),
+  `page/tests/`, `vsc-ext/tests/`, `python/tests/` (+ `integration/`);
+  public-API goldens → `regressions/`
 - Public documentation: `docs/` (incl. `docs/specs/` public design docs)
 - Passive project knowledge (notes, decisions, debt, blueprint): `.claude/notes/`
 - Active runtime specs (alive, deleted on completion): `.claude/specs/`
@@ -145,6 +147,11 @@ history (the commit immediately before the harness rebuild).
 - **Pipeline is the single scene-data ingress** — never bypass the head
   `DataSourceModifier` when loading; both GUI and RPC paths funnel through it, or
   downstream modifiers (selection, hide, color) never see the new frame.
+- **Single scene path** — open/reset always has a length-1 `System.trajectory`
+  and ≥1 primary `DataSourceModifier` (Empty Scene). Never a zero-DS pipeline.
+  Load / sketch commit / box / wrap all operate on that path
+  (`DataSource → compose → transforms → draws`). See
+  `.claude/notes/notes.md` and `stage/src/pipeline/empty_scene.ts`.
 - **`UpdateFrameCommand` is buffer-update-only** — it must never call
   `sceneIndex.registerFrame()` or recreate `ImpostorState`. Full scene rebuilds
   are `DrawFrameCommand`'s job. Never mix the two.

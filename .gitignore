@@ -160,6 +160,7 @@ Untitled*.ipynb
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 .playwright-mcp/
+sketch/.pw-debug/
 package-lock.json
 
 .tox/

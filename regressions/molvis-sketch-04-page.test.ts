@@ -1,6 +1,6 @@
 /**
  * Page host surface goldens (browser-safe).
- * Package dep / zero-kekule source scan is covered by sketch package
+ * Package dependency and in-house editor surface are covered by sketch package
  * `tests/page_surface.test.ts` (reads JSON + sources via rspack).
  * Provenance: 2026-07-29.
  */

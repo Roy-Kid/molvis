@@ -12,13 +12,22 @@ import {
   sendToWebview,
 } from "./messaging";
 
+export type OpenEditorPanelOptions = {
+  /** Called when the webview posts a structure outline snapshot. */
+  onStructureOutline?: (
+    outline: import("../types").StructureOutlinePayload | null,
+  ) => void;
+};
+
 export function openEditorPanel(
   context: vscode.ExtensionContext,
   panelRegistry: PanelRegistry,
   logger: Logger,
   fileLoader: MolecularFileLoader,
   uri?: vscode.Uri,
-): void {
+  options?: OpenEditorPanelOptions,
+): vscode.WebviewPanel {
+  const onStructureOutline = options?.onStructureOutline;
   const title = uri ? `MolVis: ${getDisplayName(uri)}` : "MolVis Editor";
   // ViewColumn.One (not Active): when the user clicks the activity-bar
   // launcher the active group is often the sidebar, and Active can fail to
@@ -53,6 +62,9 @@ export function openEditorPanel(
         case "dropUri":
           await handleDropUri(message.uri, panel.webview, fileLoader, logger);
           break;
+        case "structureOutline":
+          onStructureOutline?.(message.outline);
+          break;
         case "error":
           logger.error(`MolVis: ${message.message}`);
           break;
@@ -69,10 +81,14 @@ export function openEditorPanel(
         context.extensionUri,
         getMolvisWebviewOptions("full"),
       ),
+    viewType: "molvis.workspace",
   });
 
   panel.onDidDispose(() => {
     panelRegistry.unregister(panel);
     messageDisposable.dispose();
+    onStructureOutline?.(null);
   });
+
+  return panel;
 }

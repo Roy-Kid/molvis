@@ -23,8 +23,8 @@ height:
 ## Mount the application
 
 ```typescript
-import { mountMolvis } from "@molcrafts/molvis-core";
-import { loadFileContent } from "@molcrafts/molvis-core/io";
+import { mountMolvis } from "@molcrafts/molvis-stage";
+import { loadFileContent } from "@molcrafts/molvis-stage/io";
 
 const host = document.querySelector<HTMLElement>("#viewer")!;
 const app = mountMolvis(host, {

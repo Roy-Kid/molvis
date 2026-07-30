@@ -56,7 +56,7 @@ export type MolecularFilePayload = string | Uint8Array | Record<string, string>;
 
 /**
  * String identifier for a molecular file format. Mirrors `FileFormat`
- * from `@molvis/core/io/formats`; we re-declare it here so the
+ * from `@molvis/stage/io/formats`; we re-declare it here so the
  * extension host doesn't depend on core's type exports transitively.
  */
 export type MolecularFileFormat =
@@ -69,7 +69,7 @@ export type MolecularFileFormat =
 
 /**
  * How a `loadFile` combines with the scene already in the webview. Mirrors
- * `LoadMode` from `@molvis/core/io`. Omitted ⇒ `"replace"` (first open).
+ * `LoadMode` from `@molvis/stage/io`. Omitted ⇒ `"replace"` (first open).
  */
 export type MolecularLoadMode = "replace" | "augment" | "extend";
 
@@ -92,14 +92,30 @@ export type HostToWebviewMessage =
       stream?: boolean;
     }
   | { type: "triggerSave" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "selectAtoms"; indices: number[] };
+
+/** Hierarchy node for the native Structure Outline tree. */
+export type StructureOutlineNode = {
+  id: string;
+  label: string;
+  kind: "chain" | "residue" | "atom" | "source";
+  atomIndices?: number[];
+  children?: StructureOutlineNode[];
+};
+
+export type StructureOutlinePayload = {
+  filename?: string;
+  roots: StructureOutlineNode[];
+};
 
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "saveFile"; data: string; suggestedName: string }
   | { type: "dropUri"; uri: string }
   | { type: "dirtyStateChanged"; isDirty: boolean }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "structureOutline"; outline: StructureOutlinePayload };
 
 // --- Panel (was types/panel.ts) ---
 

@@ -1,4 +1,4 @@
-import type { Modifier, Molvis } from "@molvis/core";
+import type { Modifier, Molvis } from "@molvis/stage";
 import type React from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ModifierProperties } from "../ModifierProperties";
@@ -8,8 +8,10 @@ interface PipelinePropertiesPaneProps {
   selectedModifier: Modifier | undefined;
   allModifiers: readonly Modifier[];
   propertiesHeight: number;
+  propertiesMaxHeight: number;
   isResizing: boolean;
-  onResizeStart: (event: React.MouseEvent) => void;
+  onResizeStart: (event: React.PointerEvent) => void;
+  onResizeBy: (delta: number) => void;
   onUpdate: () => void;
 }
 
@@ -18,20 +20,37 @@ export function PipelinePropertiesPane({
   selectedModifier,
   allModifiers,
   propertiesHeight,
+  propertiesMaxHeight,
   isResizing,
   onResizeStart,
+  onResizeBy,
   onUpdate,
 }: PipelinePropertiesPaneProps) {
   return (
     <>
-      <div
-        className={`h-1 hover:h-1.5 transition-all bg-border hover:bg-primary/50 cursor-row-resize shrink-0 z-10 -mt-[2px] ${isResizing ? "bg-primary h-1.5" : ""}`}
-        onMouseDown={onResizeStart}
+      <hr
+        aria-label="Resize modifier properties"
+        aria-orientation="horizontal"
+        aria-valuemin={100}
+        aria-valuemax={Math.round(propertiesMaxHeight)}
+        aria-valuenow={Math.round(propertiesHeight)}
+        tabIndex={0}
+        className={`pipeline-resize-handle relative z-10 -mt-px h-1 shrink-0 touch-none cursor-row-resize border-0 bg-border transition-colors duration-(--motion-fast) ease-standard after:absolute after:inset-x-0 after:-inset-y-2 hover:bg-accent/50 ${isResizing ? "bg-accent" : ""}`}
+        onPointerDown={onResizeStart}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            onResizeBy(16);
+          } else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            onResizeBy(-16);
+          }
+        }}
       />
 
       <div
         style={{ height: propertiesHeight }}
-        className="shrink-0 bg-background flex flex-col border-t transition-[height] duration-0 ease-linear"
+        className="shrink-0 bg-background flex flex-col border-t"
       >
         {selectedModifier ? (
           <ScrollArea className="flex-1">
@@ -43,7 +62,7 @@ export function PipelinePropertiesPane({
             />
           </ScrollArea>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground bg-muted/10 px-2 text-center">
+          <div className="flex-1 flex items-center justify-center text-micro text-muted-foreground bg-muted/10 px-2 text-center">
             Select an item to view properties
           </div>
         )}

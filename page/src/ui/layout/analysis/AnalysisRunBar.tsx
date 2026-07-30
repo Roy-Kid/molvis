@@ -1,11 +1,11 @@
 import { Loader2, Play } from "lucide-react";
 import type React from "react";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { cn } from "@/lib/utils";
 
 export interface AnalysisProgress {
@@ -55,20 +55,19 @@ export const AnalysisRunBar: React.FC<AnalysisRunBarProps> = ({
   return (
     <div
       className={cn(
-        "shrink-0 border-t border-border/70 bg-background/95 px-2 py-1.5 space-y-1 backdrop-blur",
+        "shrink-0 border-t border-border/70 bg-background/95 px-2 py-2 space-y-1 backdrop-blur",
         className,
       )}
     >
       {summary && (
-        <p className="truncate px-0.5 text-[10px] tabular-nums text-muted-foreground">
+        <p className="truncate px-1 text-micro tabular-nums text-muted-foreground">
           {summary}
         </p>
       )}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            size="sm"
-            className="h-7 w-full gap-1.5 border-0 px-0 text-xs"
+          <ViewerAction
+            className="w-full"
             onClick={onRun}
             disabled={disabled || running}
             aria-busy={running}
@@ -79,17 +78,22 @@ export const AnalysisRunBar: React.FC<AnalysisRunBarProps> = ({
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-          </Button>
+          </ViewerAction>
         </TooltipTrigger>
         <TooltipContent side="top">{tip}</TooltipContent>
       </Tooltip>
       {running && progress && progress.total > 0 && (
         <div
-          className="h-0.5 overflow-hidden rounded-full bg-muted"
-          aria-hidden
+          role="progressbar"
+          aria-label="Analysis progress"
+          aria-valuemin={0}
+          aria-valuemax={progress.total}
+          aria-valuenow={progress.completed}
+          aria-valuetext={progressLabel ?? undefined}
+          className="h-1 overflow-hidden rounded-full bg-muted"
         >
           <div
-            className="h-full bg-primary transition-[width] duration-150"
+            className="h-full bg-status-running transition-[width] duration-(--motion-base) ease-linear"
             style={{
               width: `${Math.min(100, (progress.completed / progress.total) * 100)}%`,
             }}
@@ -97,7 +101,7 @@ export const AnalysisRunBar: React.FC<AnalysisRunBarProps> = ({
         </div>
       )}
       {hint && (
-        <div className="px-0.5 text-[10px] leading-snug text-muted-foreground">
+        <div className="px-1 text-micro leading-snug text-muted-foreground">
           {hint}
         </div>
       )}

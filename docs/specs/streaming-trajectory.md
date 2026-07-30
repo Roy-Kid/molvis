@@ -62,10 +62,10 @@ format-specific semantics anyway — those belong in the modifier pipeline.
   SDF.
 - New `WasmTrajStream` family in `molrs-wasm` (one class per format) exposing
   a uniform buffer-oriented API.
-- `core/src/io/sources/`: `TrajectorySource` interface + `BlobRangeSource`
+- `stage/src/io/sources/`: `TrajectorySource` interface + `BlobRangeSource`
   implementation. (`OPFSSyncRangeSource` is a follow-up phase, not part of
   this spec's MVP.)
-- `core/src/transport/trajectory_worker/{worker.ts, runtime.ts}`: dedicated
+- `stage/src/transport/trajectory_worker/{worker.ts, runtime.ts}`: dedicated
   worker that owns one source + one wasm stream per `Trajectory`; bridge on
   the main thread.
 - Async extension to `Trajectory`: `Trajectory.fromAsyncProvider({ length,
@@ -108,14 +108,14 @@ format-specific semantics anyway — those belong in the modifier pipeline.
 |-------|--------|-------|
 | molrs-io (Rust) | New trait + 5 impls | `molrs-io/src/streaming.rs` (new); `molrs-io/src/{lammps_dump,xyz,pdb,lammps_data,sdf}.rs` (extend) |
 | molrs-wasm | 5 new wasm classes + reusable buffers | `molrs-wasm/src/io/streaming.rs` (new) |
-| core sources | New | `core/src/io/sources/{trajectory_source.ts,blob_range_source.ts}` |
-| core worker | New | `core/src/transport/trajectory_worker/{worker.ts,runtime.ts,protocol.ts,frame_codec.ts}` |
-| core trajectory | Extend | `core/src/system/trajectory.ts` (`fromAsyncProvider`); `core/src/system.ts` (`seekFrame` async, `_currentFrame`); `core/src/io/index.ts` (`loadFileContent` switches to streaming) |
-| core io | Remove | `core/src/io/reader.ts::decorateFrame`, `core/src/io/reader.ts::loadTextTrajectory` (legacy path retired in Phase 3); the `writeBackboneBlock` import in `reader.ts` goes with it |
-| core pipeline | New auto-modifier | `core/src/pipeline/auto_modifiers/backbone_ribbon.ts` (Task #12 — referenced by this spec but specced separately) |
+| core sources | New | `stage/src/io/sources/{trajectory_source.ts,blob_range_source.ts}` |
+| core worker | New | `stage/src/transport/trajectory_worker/{worker.ts,runtime.ts,protocol.ts,frame_codec.ts}` |
+| core trajectory | Extend | `stage/src/system/trajectory.ts` (`fromAsyncProvider`); `stage/src/system.ts` (`seekFrame` async, `_currentFrame`); `stage/src/io/index.ts` (`loadFileContent` switches to streaming) |
+| core io | Remove | `stage/src/io/reader.ts::decorateFrame`, `stage/src/io/reader.ts::loadTextTrajectory` (legacy path retired in Phase 3); the `writeBackboneBlock` import in `reader.ts` goes with it |
+| core pipeline | New auto-modifier | `stage/src/pipeline/auto_modifiers/backbone_ribbon.ts` (Task #12 — referenced by this spec but specced separately) |
 | Artist / SceneIndex / Mode / Command | None | unchanged |
 | page | UI hook + status | `page/src/ui/modes/view/modifiers/DataSourceModifier.tsx`; `page/src/ui/status/IndexingStatus.tsx` (or reuse `status-message` event) |
-| vsc-ext | None expected | webview already loads `@molvis/core`; the worker URL must resolve through rsbuild's `new Worker(new URL(…))` pattern (verify CSP) |
+| vsc-ext | None expected | webview already loads `@molvis/stage`; the worker URL must resolve through rsbuild's `new Worker(new URL(…))` pattern (verify CSP) |
 
 ### Events
 
@@ -407,7 +407,7 @@ all `ArrayBuffer` views. Therefore:
 ## Worker ↔ main protocol
 
 ```typescript
-// core/src/transport/trajectory_worker/protocol.ts
+// stage/src/transport/trajectory_worker/protocol.ts
 
 export type Format =
     | "lammps-dump"
@@ -571,7 +571,7 @@ final `index-ready` as a one-line `status-message: "Indexed 14 002 frames"`.
 ## Main-thread Frame reconstitution
 
 ```typescript
-// core/src/transport/trajectory_worker/frame_codec.ts
+// stage/src/transport/trajectory_worker/frame_codec.ts
 
 import { Frame, Box, Grid } from "@molcrafts/molrs";
 import type { FrameMessage } from "./protocol";
@@ -644,7 +644,7 @@ calls (its `output: Option<Frame>` is dropped on `releaseFrame`).
 ### `Trajectory` extension
 
 ```typescript
-// core/src/system/trajectory.ts
+// stage/src/system/trajectory.ts
 
 export interface AsyncFrameProvider {
     readonly length: number;
@@ -745,7 +745,7 @@ trips and zero parses.
 
 ## Auto-detecting modifiers (replaces `decorateFrame`)
 
-`core/src/io/loadFileContent` previously called `decorateFrame` to attach
+`stage/src/io/loadFileContent` previously called `decorateFrame` to attach
 the PDB backbone. After this spec, that side-effect is gone. Replacement
 flow:
 

@@ -28,7 +28,7 @@ describe("MoleculeGraph", () => {
     expect(g.getMoleculeData().atoms[0].element).toBe("O");
   });
 
-  it("toFrame writes BuilderTab columns element atomi atomj order", () => {
+  it("toFrame writes element + atomi/atomj (u32) + order (F) for generate3D", () => {
     const g = new MoleculeGraph();
     g.loadMoleculeData(H2O);
     const frame = g.toFrame();
@@ -40,7 +40,35 @@ describe("MoleculeGraph", () => {
       expect(bonds).toBeDefined();
       expect(Array.from(bonds?.copyColU32("atomi") ?? [])).toEqual([0, 0]);
       expect(Array.from(bonds?.copyColU32("atomj") ?? [])).toEqual([1, 2]);
-      expect(Array.from(bonds?.copyColU32("order") ?? [])).toEqual([1, 1]);
+      // order must be F — u32 is mis-read by generate3D as 0
+      expect(Array.from(bonds?.copyColF("order") ?? [])).toEqual([1, 1]);
+    } finally {
+      frame.free();
+    }
+  });
+
+  it("toFrame preserves Kekulé double-bond orders as float", () => {
+    const g = new MoleculeGraph();
+    g.loadMoleculeData({
+      atoms: Array.from({ length: 6 }, (_, i) => ({
+        element: "C",
+        x: i,
+        y: 0,
+      })),
+      bonds: [
+        { i: 0, j: 1, order: 2 },
+        { i: 1, j: 2, order: 1 },
+        { i: 2, j: 3, order: 2 },
+        { i: 3, j: 4, order: 1 },
+        { i: 4, j: 5, order: 2 },
+        { i: 5, j: 0, order: 1 },
+      ],
+    });
+    const frame = g.toFrame();
+    try {
+      expect(
+        Array.from(frame.getBlock("bonds")?.copyColF("order") ?? []),
+      ).toEqual([2, 1, 2, 1, 2, 1]);
     } finally {
       frame.free();
     }
@@ -91,6 +119,97 @@ describe("MoleculeGraph", () => {
         bonds: [{ i: 0, j: 1, order: 1 }],
       }),
     ).toThrow();
+  });
+
+  it("rejects invalid topology transactionally", () => {
+    const g = new MoleculeGraph();
+    g.loadMoleculeData(H2O);
+    const before = g.getMoleculeData();
+
+    expect(() =>
+      g.loadMoleculeData({
+        atoms: [
+          { element: "C", x: 0, y: 0 },
+          { element: "C", x: 1, y: 0 },
+        ],
+        bonds: [
+          { i: 0, j: 1, order: 1 },
+          { i: 1, j: 0, order: 1 },
+        ],
+      }),
+    ).toThrow(/duplicate bond/);
+    expect(g.getMoleculeData()).toEqual(before);
+
+    expect(() =>
+      g.loadMoleculeData({
+        atoms: [{ element: "C", x: Number.NaN, y: 0 }],
+        bonds: [],
+      }),
+    ).toThrow(/coordinates must be finite/);
+    expect(g.getMoleculeData()).toEqual(before);
+  });
+
+  it("round-trips custom colors without leaking references", () => {
+    const g = new MoleculeGraph();
+    g.loadMoleculeData({
+      atoms: [
+        { element: "N", x: 0, y: 0, color: "#7c3aed" },
+        { element: "O", x: 1, y: 0 },
+      ],
+      bonds: [{ i: 0, j: 1, order: 1, color: "#008000" }],
+    });
+    const first = g.getMoleculeData();
+    const second = g.getMoleculeData();
+    expect(first).toEqual({
+      atoms: [
+        { element: "N", x: 0, y: 0, color: "#7c3aed" },
+        { element: "O", x: 1, y: 0 },
+      ],
+      bonds: [{ i: 0, j: 1, order: 1, color: "#008000" }],
+    });
+    expect(first.atoms).not.toBe(second.atoms);
+    expect(first.bonds).not.toBe(second.bonds);
+    first.atoms[0].color = "#ffffff";
+    expect(g.getAtom(0).color).toBe("#7c3aed");
+  });
+
+  it("rejects invalid custom colors transactionally", () => {
+    const g = new MoleculeGraph();
+    g.loadMoleculeData(H2O);
+    const before = g.getMoleculeData();
+    expect(() =>
+      g.loadMoleculeData({
+        atoms: [{ element: "C", x: 0, y: 0, color: "red" }],
+        bonds: [],
+      }),
+    ).toThrow(/invalid color/);
+    expect(g.getMoleculeData()).toEqual(before);
+  });
+
+  it("rejects self-bonds, unsupported orders, and stereo on multiple bonds", () => {
+    const g = new MoleculeGraph();
+    const atoms = [
+      { element: "C", x: 0, y: 0 },
+      { element: "C", x: 1, y: 0 },
+    ];
+    expect(() =>
+      g.loadMoleculeData({
+        atoms,
+        bonds: [{ i: 0, j: 0, order: 1 }],
+      }),
+    ).toThrow(/distinct/);
+    expect(() =>
+      g.loadMoleculeData({
+        atoms,
+        bonds: [{ i: 0, j: 1, order: 4 }],
+      }),
+    ).toThrow(/1, 2, or 3/);
+    expect(() =>
+      g.loadMoleculeData({
+        atoms,
+        bonds: [{ i: 0, j: 1, order: 2, stereo: "up" }],
+      }),
+    ).toThrow(/single bonds/);
   });
 
   it("empty molecule has zero atoms", () => {

@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/core";
+import type { Molvis } from "@molvis/stage";
 import type React from "react";
 import { PipelineTab } from "./PipelineTab";
 

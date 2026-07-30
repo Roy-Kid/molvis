@@ -17,7 +17,7 @@ hero:
     align: left
     methods:
       - { label: Python, command: pip install molcrafts-molvis }
-      - { label: TypeScript, command: npm install @molcrafts/molvis-core }
+      - { label: TypeScript, command: npm install @molcrafts/molvis-stage }
 ---
 
 <h1 class="molcrafts-sr-only">MolVis manual</h1>

@@ -1,4 +1,4 @@
-import type { Molvis, SelectionState } from "@molvis/core";
+import type { Molvis, SelectionState } from "@molvis/stage";
 import { useEffect, useMemo, useState } from "react";
 
 export interface SelectionSnapshot {

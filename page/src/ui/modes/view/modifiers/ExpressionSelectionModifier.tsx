@@ -1,17 +1,24 @@
 import type {
   ExpressionSelectionModifier as CoreExpressionModifier,
   Molvis,
-} from "@molvis/core";
+} from "@molvis/stage";
 import type React from "react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 
 interface ModifierProps {
   modifier: CoreExpressionModifier;
   app: Molvis | null;
   onUpdate: () => void;
 }
+
+const PIPELINE_COPY = {
+  running: "Applying the selection expression…",
+  success: "Selection expression applied",
+  error: "Could not apply the selection expression",
+};
 
 export const ExpressionSelectionModifier: React.FC<ModifierProps> = ({
   modifier,
@@ -20,17 +27,25 @@ export const ExpressionSelectionModifier: React.FC<ModifierProps> = ({
 }) => {
   const [expression, setExpression] = useState(modifier.expression);
   const [name, setName] = useState(modifier.selectionName || "");
+  const { applyPipeline, pipelineRunning } = useApplyPipelineOperation(
+    app,
+    onUpdate,
+    PIPELINE_COPY,
+  );
 
   const handleApply = () => {
-    if (!app) return;
+    if (!app || pipelineRunning) return;
     modifier.expression = expression;
     modifier.selectionName = name || undefined;
-    app.applyPipeline();
-    onUpdate();
+    applyPipeline();
   };
 
   return (
-    <div className="space-y-4">
+    <fieldset
+      disabled={!app || pipelineRunning}
+      aria-busy={pipelineRunning}
+      className="m-0 min-w-0 space-y-4 border-0 p-0"
+    >
       <div className="grid gap-2">
         <Label htmlFor="expr-input">Expression</Label>
         <Input
@@ -47,7 +62,7 @@ export const ExpressionSelectionModifier: React.FC<ModifierProps> = ({
           }}
           onBlur={handleApply}
         />
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-micro text-muted-foreground">
           Variables: x, y, z, element, id, index
         </p>
       </div>
@@ -67,10 +82,10 @@ export const ExpressionSelectionModifier: React.FC<ModifierProps> = ({
           }}
           onBlur={handleApply}
         />
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-micro text-muted-foreground">
           Save selection for later use
         </p>
       </div>
-    </div>
+    </fieldset>
   );
 };

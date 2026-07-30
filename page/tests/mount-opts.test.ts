@@ -65,6 +65,24 @@ describe("readMountOptsFromHost", () => {
     expect(result).toEqual({});
   });
 
+  it("reads plugins from mount.plugins", () => {
+    const saved = (globalThis as Record<string, unknown>)
+      .__MOLVIS_VSCODE_INIT__;
+    (globalThis as Record<string, unknown>).__MOLVIS_VSCODE_INIT__ = {
+      mount: { plugins: ["alice/p@v1", " bob/q "] },
+    };
+    try {
+      const result = readMountOptsFromHost();
+      expect(result.plugins).toEqual(["alice/p@v1", "bob/q"]);
+    } finally {
+      if (saved !== undefined) {
+        (globalThis as Record<string, unknown>).__MOLVIS_VSCODE_INIT__ = saved;
+      } else {
+        delete (globalThis as Record<string, unknown>).__MOLVIS_VSCODE_INIT__;
+      }
+    }
+  });
+
   it("returns empty object when mount key is missing", () => {
     // Simulate an init object without mount — the function reads
     // __MOLVIS_VSCODE_INIT__.mount specifically.

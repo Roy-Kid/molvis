@@ -1,19 +1,28 @@
 import { buildRingTemplate, type RingKind } from "../geometry/ring_template";
-import { findAtom, SNAP_RADIUS } from "../geometry/snap";
+import { DEFAULT_BOND_LENGTH, findAtom, SNAP_RADIUS } from "../geometry/snap";
 import type { MoleculeGraph } from "../molecule_graph";
 import { SketchCommand } from "../sketch_command";
-import type { MoleculeData } from "../types";
+import type { Bond2D, MoleculeData } from "../types";
 
 export class PlaceRingCommand extends SketchCommand {
   private before: MoleculeData | null = null;
 
+  /**
+   * @param bondLength - edge length (document units). Same as sketcher bond
+   *   length; ring circumradius is derived (RDKit/OpenBabel), not free-form.
+   *   The 5th ctor arg was previously misused as circumradius — call sites
+   *   must pass bond length or omit for DEFAULT_BOND_LENGTH.
+   */
   constructor(
     private readonly graph: MoleculeGraph,
     private readonly size: number,
     private readonly cx: number,
     private readonly cy: number,
-    private readonly radius: number | undefined,
+    private readonly bondLength: number | undefined,
     private readonly kind: RingKind,
+    private readonly rotationRad = -Math.PI / 2,
+    private readonly clockwise = false,
+    private readonly color?: string,
   ) {
     super();
   }
@@ -24,34 +33,51 @@ export class PlaceRingCommand extends SketchCommand {
       this.size,
       this.cx,
       this.cy,
-      this.radius,
+      this.bondLength ?? DEFAULT_BOND_LENGTH,
       this.kind,
+      this.rotationRad,
+      this.clockwise,
     );
+    const mergeRadius = Math.min(SNAP_RADIUS, ring.bondLength * 0.42);
     const indexMap: number[] = [];
     for (const v of ring.vertices) {
-      const snap = findAtom(this.graph, v.x, v.y, SNAP_RADIUS);
+      const snap = findAtom(this.graph, v.x, v.y, mergeRadius);
       if (snap !== null) {
         indexMap.push(snap);
       } else {
         indexMap.push(
-          this.graph.addAtomInternal({ element: "C", x: v.x, y: v.y }),
+          this.graph.addAtomInternal({
+            element: "C",
+            x: v.x,
+            y: v.y,
+            ...(this.color ? { color: this.color } : {}),
+          }),
         );
       }
     }
-    for (const [a, b] of ring.edges) {
+    // Benzene = Kekulé alternating single/double (edge 0,2,4 → double).
+    // Aliphatic rings = all single.
+    ring.edges.forEach(([a, b], edgeIdx) => {
       const i = indexMap[a];
       const j = indexMap[b];
-      const data = this.graph.getMoleculeData();
-      const exists = data.bonds.some(
-        (bond) =>
-          (bond.i === i && bond.j === j) || (bond.i === j && bond.j === i),
-      );
-      if (!exists) {
-        this.graph.addBondInternal({ i, j, order: 1 });
+      const order = this.kind === "benzene" ? (edgeIdx % 2 === 0 ? 2 : 1) : 1;
+      const existingBond = this.graph.findBondIndex(i, j);
+      if (existingBond !== null) {
+        if (this.color) {
+          this.graph.setBondInternal(existingBond, {
+            ...this.graph.getBond(existingBond),
+            color: this.color,
+          });
+        }
+        return;
       }
-    }
-    // store benzene flag on graph via atom charge? use a side map on board later.
-    // For data export we don't need kind on graph for generate3D.
+      this.graph.addBondInternal({
+        i,
+        j,
+        order,
+        ...(this.color ? { color: this.color } : {}),
+      });
+    });
   }
 
   undo(): void {
@@ -95,8 +121,72 @@ export class CycleBondOrderCommand extends SketchCommand {
   }
 }
 
+/** Replace one atom's element symbol without changing its topology. */
+export class SetAtomElementCommand extends SketchCommand {
+  private previous = "";
+
+  constructor(
+    private readonly graph: MoleculeGraph,
+    private readonly atomIndex: number,
+    private readonly element: string,
+  ) {
+    super();
+  }
+
+  do(): void {
+    const atom = this.graph.getAtom(this.atomIndex);
+    this.previous = atom.element;
+    this.graph.setAtomInternal(this.atomIndex, {
+      ...atom,
+      element: this.element,
+    });
+  }
+
+  undo(): void {
+    const atom = this.graph.getAtom(this.atomIndex);
+    this.graph.setAtomInternal(this.atomIndex, {
+      ...atom,
+      element: this.previous,
+    });
+  }
+}
+
+/** Set an existing bond to the active order, clearing invalid stereo. */
+export class SetBondOrderCommand extends SketchCommand {
+  private previousOrder = 1;
+  private previousStereo: "none" | "up" | "down" | undefined;
+
+  constructor(
+    private readonly graph: MoleculeGraph,
+    private readonly bondIndex: number,
+    private readonly order: 1 | 2 | 3,
+  ) {
+    super();
+  }
+
+  do(): void {
+    const bond = this.graph.getBond(this.bondIndex);
+    this.previousOrder = bond.order;
+    this.previousStereo = bond.stereo;
+    this.graph.setBondInternal(this.bondIndex, {
+      ...bond,
+      order: this.order,
+      stereo: this.order === 1 ? bond.stereo : "none",
+    });
+  }
+
+  undo(): void {
+    const bond = this.graph.getBond(this.bondIndex);
+    this.graph.setBondInternal(this.bondIndex, {
+      ...bond,
+      order: this.previousOrder,
+      stereo: this.previousStereo,
+    });
+  }
+}
+
 export class SetBondStereoCommand extends SketchCommand {
-  private prev: "none" | "up" | "down" | undefined;
+  private previous: Bond2D | null = null;
 
   constructor(
     private readonly graph: MoleculeGraph,
@@ -108,14 +198,20 @@ export class SetBondStereoCommand extends SketchCommand {
 
   do(): void {
     const b = this.graph.getBond(this.bondIndex);
-    this.prev = b.stereo;
+    this.previous = b;
     if (b.order !== 1) return;
-    this.graph.setBondInternal(this.bondIndex, { ...b, stereo: this.stereo });
+    this.graph.setBondInternal(
+      this.bondIndex,
+      b.stereo === this.stereo && this.stereo !== "none"
+        ? { ...b, i: b.j, j: b.i }
+        : { ...b, stereo: this.stereo },
+    );
   }
 
   undo(): void {
-    const b = this.graph.getBond(this.bondIndex);
-    this.graph.setBondInternal(this.bondIndex, { ...b, stereo: this.prev });
+    if (!this.previous) return;
+    this.graph.setBondInternal(this.bondIndex, this.previous);
+    this.previous = null;
   }
 }
 
@@ -146,26 +242,37 @@ export class AdjustAtomChargeCommand extends SketchCommand {
 }
 
 export class MoveSelectionCommand extends SketchCommand {
+  private readonly atomIndices: number[];
+
   constructor(
     private readonly graph: MoleculeGraph,
-    private readonly atomIndices: number[],
+    atomIndices: number[],
     private readonly dx: number,
     private readonly dy: number,
   ) {
     super();
+    this.atomIndices = [...new Set(atomIndices)].sort((a, b) => a - b);
   }
 
   do(): void {
     for (const i of this.atomIndices) {
       const a = this.graph.getAtom(i);
-      this.graph.setAtomInternal(i, { ...a, x: a.x + this.dx, y: a.y + this.dy });
+      this.graph.setAtomInternal(i, {
+        ...a,
+        x: a.x + this.dx,
+        y: a.y + this.dy,
+      });
     }
   }
 
   undo(): void {
     for (const i of this.atomIndices) {
       const a = this.graph.getAtom(i);
-      this.graph.setAtomInternal(i, { ...a, x: a.x - this.dx, y: a.y - this.dy });
+      this.graph.setAtomInternal(i, {
+        ...a,
+        x: a.x - this.dx,
+        y: a.y - this.dy,
+      });
     }
   }
 }

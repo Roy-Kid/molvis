@@ -1,7 +1,7 @@
 # Development
 
 The MolVis engine is published as the npm package
-[`@molcrafts/molvis-core`](../api/typescript.md). This section is for
+[`@molcrafts/molvis-stage`](../api/typescript.md). This section is for
 developers who want to **embed** MolVis in their own application or
 **extend** it with custom behavior. If you're a user trying to visualize
 molecules, begin with the [Tutorial](../tutorial/index.md)
@@ -54,7 +54,7 @@ layer cheatsheet.
 ## Related reading
 
 - [TypeScript API Reference](../api/typescript.md) — every public
-  export of `@molcrafts/molvis-core`.
+  export of `@molcrafts/molvis-stage`.
 - [Python API Reference](../api/python.md) — the Jupyter widget
   surface.
 - [MolVis on GitHub](https://github.com/molcrafts/molvis) — source,
