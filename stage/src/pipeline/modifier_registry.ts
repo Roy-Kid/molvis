@@ -9,12 +9,14 @@ import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionMod
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
+import { ReplicateModifier } from "../modifiers/ReplicateModifier";
 import { ClearSelectionModifier } from "../modifiers/SelectModifier";
 import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
 import { SolidLiquidModifier } from "../modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "../modifiers/SteinhardtOrderModifier";
 import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
+import { UnwrapTrajectoriesModifier } from "../modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "../modifiers/VectorFieldModifier";
 import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { DrawAtomModifier } from "./draw_atom";
@@ -181,6 +183,16 @@ export class ModifierRegistry {
       "Modification",
       () =>
         new AffineTransformationModifier(nextModifierId("affine-transform")),
+    );
+    ModifierRegistry.register(
+      ReplicateModifier.NAME,
+      "Modification",
+      () => new ReplicateModifier(nextModifierId("replicate")),
+    );
+    ModifierRegistry.register(
+      UnwrapTrajectoriesModifier.NAME,
+      "Modification",
+      () => new UnwrapTrajectoriesModifier(nextModifierId("unwrap-traj")),
     );
     ModifierRegistry.register(
       "Delete Selected",

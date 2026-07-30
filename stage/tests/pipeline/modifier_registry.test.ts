@@ -92,6 +92,8 @@ describe("ModifierRegistry — OVITO-aligned menu", () => {
     expect(byName.get("Slice")).toBe("Modification");
     expect(byName.get("Wrap PBC")).toBe("Modification");
     expect(byName.get("Affine transformation")).toBe("Modification");
+    expect(byName.get("Replicate")).toBe("Modification");
+    expect(byName.get("Unwrap trajectories")).toBe("Modification");
     expect(byName.get("Delete Selected")).toBe("Modification");
     expect(byName.get("Hide Hydrogens")).toBe("Modification");
     expect(byName.get("Color by Property")).toBe("Coloring");

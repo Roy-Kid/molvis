@@ -295,6 +295,7 @@ export { ExpressionSelectionModifier } from "./modifiers/ExpressionSelectionModi
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 export { InvertSelectionModifier } from "./modifiers/InvertSelectionModifier";
+export { ReplicateModifier } from "./modifiers/ReplicateModifier";
 export {
   ClearSelectionModifier,
   SelectModifier,
@@ -312,6 +313,7 @@ export {
   steinhardtWColumn,
 } from "./modifiers/structure_order_shared";
 export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
+export { UnwrapTrajectoriesModifier } from "./modifiers/UnwrapTrajectoriesModifier";
 export type { VectorFieldModifierConfig } from "./modifiers/VectorFieldModifier";
 export { VectorFieldModifier } from "./modifiers/VectorFieldModifier";
 export { Arrow2DOverlay } from "./overlays/arrow2d";

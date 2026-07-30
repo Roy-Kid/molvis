@@ -20,6 +20,7 @@ export { ExpressionSelectionModifier } from "./ExpressionSelectionModifier";
 export { HideHydrogensModifier } from "./HideHydrogensModifier";
 export { HideSelectionModifier } from "./HideSelectionModifier";
 export { InvertSelectionModifier } from "./InvertSelectionModifier";
+export { ReplicateModifier } from "./ReplicateModifier";
 export { ClearSelectionModifier, SelectModifier } from "./SelectModifier";
 export { SelectTypeModifier } from "./SelectTypeModifier";
 export { type GuideLine, SliceModifier } from "./SliceModifier";
@@ -34,4 +35,5 @@ export {
   steinhardtWColumn,
 } from "./structure_order_shared";
 export { TransparentSelectionModifier } from "./TransparentSelectionModifier";
+export { UnwrapTrajectoriesModifier } from "./UnwrapTrajectoriesModifier";
 export { WrapPBCModifier } from "./WrapPBCModifier";

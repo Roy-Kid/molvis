@@ -36,7 +36,7 @@ Aligned with OVITO’s Add-modifier groups:
 | Category | Examples | Effect |
 |---|---|---|
 | Selection | Expression Select, Clear / Invert / Select Type / Expand Selection, Hide Selection | Create or act on a selection set |
-| Modification | Slice, Wrap PBC, Affine transformation, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
+| Modification | Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
 | Coloring | Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid | Per-atom color / structure-order → color |
 | Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density surface | Scene-changing visual helpers |
 
@@ -50,6 +50,9 @@ panel for algorithm parameters when added or selected. The pipeline bottom pane
 shows **drawing** parameters only (colors, isovalue, opacity, scale). Pure
 Analysis tools that can also paint the scene (e.g. Cluster) expose a button to
 **add a right-side** Color by Property (or similar) modifier.
+
+Full OVITO ↔ MolVis gap table (and backlog):
+[OVITO parity](../development/ovito-parity.md).
 
 Visual elements such as **Particles** and **Ribbon** auto-attach when a file
 loads.

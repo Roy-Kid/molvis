@@ -19,12 +19,14 @@ import {
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   GaussianDensitySurfaceModifier as CoreGaussianDensitySurfaceModifier,
   HideSelectionModifier as CoreHideModifier,
+  ReplicateModifier as CoreReplicateModifier,
   SelectModifier as CoreSelectModifier,
   SelectTypeModifier as CoreSelectTypeModifier,
   SliceModifier as CoreSliceModifier,
   SolidLiquidModifier as CoreSolidLiquidModifier,
   SteinhardtOrderModifier as CoreSteinhardtOrderModifier,
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
+  UnwrapTrajectoriesModifier as CoreUnwrapTrajectoriesModifier,
   VectorFieldModifier as CoreVectorFieldModifier,
   type Modifier,
 } from "@molvis/stage";
@@ -42,12 +44,14 @@ import { ExpandSelectionModifier } from "@/ui/modes/view/modifiers/ExpandSelecti
 import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/ExpressionSelectionModifier";
 import { GaussianDensitySurfaceModifier } from "@/ui/modes/view/modifiers/GaussianDensitySurfaceModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
+import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
 import { SelectModifierProps } from "@/ui/modes/view/modifiers/SelectModifierProps";
 import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier";
 import { SliceModifier } from "@/ui/modes/view/modifiers/SliceModifier";
 import { SolidLiquidModifier } from "@/ui/modes/view/modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "@/ui/modes/view/modifiers/SteinhardtOrderModifier";
 import { TransparentSelectionModifier } from "@/ui/modes/view/modifiers/TransparentSelectionModifier";
+import { UnwrapTrajectoriesModifier } from "@/ui/modes/view/modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "@/ui/modes/view/modifiers/VectorFieldModifier";
 import type { ModifierPanelComponent } from "../types";
 import { registerModifierPanelMatcher } from "./modifier_panels";
@@ -104,6 +108,16 @@ export function registerBuiltinModifierPanels(): void {
       id: "builtin:AffineTransformation",
       match: (m) => m instanceof CoreAffineTransformationModifier,
       component: asPanel(AffineTransformationModifier),
+    },
+    {
+      id: "builtin:Replicate",
+      match: (m) => m instanceof CoreReplicateModifier,
+      component: asPanel(ReplicateModifier),
+    },
+    {
+      id: "builtin:UnwrapTrajectories",
+      match: (m) => m instanceof CoreUnwrapTrajectoriesModifier,
+      component: asPanel(UnwrapTrajectoriesModifier),
     },
     {
       id: "builtin:ColorByProperty",

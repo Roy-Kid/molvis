@@ -15,6 +15,11 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 ## Shipped batches
 
+### 2026-07-30 — OVITO parity matrix
+
+- **ovito-parity-01-matrix** — full OVITO↔MolVis gap matrix (no Python/Voronoi) + inventory test
+- **ovito-parity-02-replicate-unwrap** — P0 Replicate + Unwrap trajectories
+
 ### 2026-07-30 — OVITO Selection parity
 
 - **ovito-modifier-align** — Clear / Invert / Select Type / Expand Selection (+ registry, regression)

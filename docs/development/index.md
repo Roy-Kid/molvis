@@ -13,6 +13,8 @@ instead.
   the viewport, load a frame.
 - [**Extending**](extending.md) — write a custom modifier, register a
   new command, add a mode, plug a renderer into the scene.
+- [**OVITO parity**](ovito-parity.md) — capability matrix vs OVITO modifiers
+  (gaps, placement iron law, P0/P1 backlog).
 - [**Headless rendering**](headless-rendering.md) — run the WebGL2 visual
   smoke suite or author deterministic representation and surface captures.
 
