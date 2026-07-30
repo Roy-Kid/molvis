@@ -13,6 +13,7 @@ const DONE_USER_ADDABLE = new Set([
   "Invert Selection",
   "Select Type",
   "Expand Selection",
+  "Select overlapping",
   "Hide Selection",
   // Modification
   "Slice",
@@ -20,6 +21,10 @@ const DONE_USER_ADDABLE = new Set([
   "Affine transformation",
   "Replicate",
   "Unwrap trajectories",
+  "Compute property",
+  "Freeze property",
+  "Edit types",
+  "Displacement vectors",
   "Delete Selected",
   "Hide Hydrogens",
   // Coloring

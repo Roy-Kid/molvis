@@ -19,6 +19,9 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 - **ovito-parity-01-matrix** — full OVITO↔MolVis gap matrix (no Python/Voronoi) + inventory test
 - **ovito-parity-02-replicate-unwrap** — P0 Replicate + Unwrap trajectories
+- **ovito-parity-03-compute-freeze** — Compute property + Freeze property
+- **ovito-parity-04-edit-types-overlap** — Edit types + Select overlapping
+- **ovito-parity-05-displacement** — Displacement vectors columns
 
 ### 2026-07-30 — OVITO Selection parity
 

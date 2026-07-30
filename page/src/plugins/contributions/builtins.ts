@@ -9,18 +9,23 @@ import {
   AssignColorModifier as CoreAssignColorModifier,
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   ComputeBondsModifier as CoreComputeBondsModifier,
+  ComputePropertyModifier as CoreComputePropertyModifier,
   DataSourceModifier as CoreDataSourceModifier,
+  DisplacementVectorsModifier as CoreDisplacementVectorsModifier,
   DrawAtomModifier as CoreDrawAtomModifier,
   DrawBondModifier as CoreDrawBondModifier,
   DrawBoxModifier as CoreDrawBoxModifier,
   DrawIsosurfaceModifier as CoreDrawIsosurfaceModifier,
   DrawRibbonModifier as CoreDrawRibbonModifier,
+  EditTypesModifier as CoreEditTypesModifier,
   ExpandSelectionModifier as CoreExpandSelectionModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
+  FreezePropertyModifier as CoreFreezePropertyModifier,
   GaussianDensitySurfaceModifier as CoreGaussianDensitySurfaceModifier,
   HideSelectionModifier as CoreHideModifier,
   ReplicateModifier as CoreReplicateModifier,
   SelectModifier as CoreSelectModifier,
+  SelectOverlappingModifier as CoreSelectOverlappingModifier,
   SelectTypeModifier as CoreSelectTypeModifier,
   SliceModifier as CoreSliceModifier,
   SolidLiquidModifier as CoreSolidLiquidModifier,
@@ -34,18 +39,23 @@ import { AffineTransformationModifier } from "@/ui/modes/view/modifiers/AffineTr
 import { AssignColorModifier } from "@/ui/modes/view/modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "@/ui/modes/view/modifiers/ColorByPropertyModifier";
 import { ComputeBondsModifier } from "@/ui/modes/view/modifiers/ComputeBondsModifier";
+import { ComputePropertyModifier } from "@/ui/modes/view/modifiers/ComputePropertyModifier";
 import { DataSourceModifier } from "@/ui/modes/view/modifiers/DataSourceModifier";
+import { DisplacementVectorsModifier } from "@/ui/modes/view/modifiers/DisplacementVectorsModifier";
 import { DrawAtomModifier } from "@/ui/modes/view/modifiers/DrawAtomModifier";
 import { DrawBondModifier } from "@/ui/modes/view/modifiers/DrawBondModifier";
 import { DrawBoxModifier } from "@/ui/modes/view/modifiers/DrawBoxModifier";
 import { DrawIsosurfaceModifier } from "@/ui/modes/view/modifiers/DrawIsosurfaceModifier";
 import { DrawRibbonModifier } from "@/ui/modes/view/modifiers/DrawRibbonModifier";
+import { EditTypesModifier } from "@/ui/modes/view/modifiers/EditTypesModifier";
 import { ExpandSelectionModifier } from "@/ui/modes/view/modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/ExpressionSelectionModifier";
+import { FreezePropertyModifier } from "@/ui/modes/view/modifiers/FreezePropertyModifier";
 import { GaussianDensitySurfaceModifier } from "@/ui/modes/view/modifiers/GaussianDensitySurfaceModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
 import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
 import { SelectModifierProps } from "@/ui/modes/view/modifiers/SelectModifierProps";
+import { SelectOverlappingModifier } from "@/ui/modes/view/modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier";
 import { SliceModifier } from "@/ui/modes/view/modifiers/SliceModifier";
 import { SolidLiquidModifier } from "@/ui/modes/view/modifiers/SolidLiquidModifier";
@@ -100,6 +110,11 @@ export function registerBuiltinModifierPanels(): void {
       component: asPanel(ExpandSelectionModifier),
     },
     {
+      id: "builtin:SelectOverlapping",
+      match: (m) => m instanceof CoreSelectOverlappingModifier,
+      component: asPanel(SelectOverlappingModifier),
+    },
+    {
       id: "builtin:HideSelection",
       match: (m) => m instanceof CoreHideModifier,
       component: asPanel(HideSelectionModifier),
@@ -118,6 +133,26 @@ export function registerBuiltinModifierPanels(): void {
       id: "builtin:UnwrapTrajectories",
       match: (m) => m instanceof CoreUnwrapTrajectoriesModifier,
       component: asPanel(UnwrapTrajectoriesModifier),
+    },
+    {
+      id: "builtin:ComputeProperty",
+      match: (m) => m instanceof CoreComputePropertyModifier,
+      component: asPanel(ComputePropertyModifier),
+    },
+    {
+      id: "builtin:FreezeProperty",
+      match: (m) => m instanceof CoreFreezePropertyModifier,
+      component: asPanel(FreezePropertyModifier),
+    },
+    {
+      id: "builtin:EditTypes",
+      match: (m) => m instanceof CoreEditTypesModifier,
+      component: asPanel(EditTypesModifier),
+    },
+    {
+      id: "builtin:DisplacementVectors",
+      match: (m) => m instanceof CoreDisplacementVectorsModifier,
+      component: asPanel(DisplacementVectorsModifier),
     },
     {
       id: "builtin:ColorByProperty",

@@ -28,7 +28,7 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | Select type | `Select Type` | done | element + type columns |
 | Manual selection | Select mode → `SelectModifier` | partial | Interactive only; not Add-menu (intentional) |
 | Hide selected (via delete/hide) | `Hide Selection` | done | Under Selection |
-| Select overlapping particles | — | **gap** | Neighbor + radius; pattern Expand |
+| Select overlapping particles | `Select overlapping` | done | Fixed cutoff neighbor pairs |
 | Select type (particle type UI) | Select Type | partial | Multi-select text; no type-checkbox UI |
 
 ## Modification
@@ -42,10 +42,10 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | — | `Hide Hydrogens` | n/a | MolVis-only convenience |
 | Replicate (periodic images) | `Replicate` | done | Integer images along cell vectors |
 | Unwrap trajectories | `Unwrap trajectories` | done | MIC accumulate; scrub-back re-seeds |
-| Compute property | — | **gap** | P1; generalize ExpressionSelector → column write |
+| Compute property | `Compute property` | done | Expression → F64 column |
 | Edit simulation cell | `Simulation cell` / DrawBox | partial | Manual box exists; no dedicated “edit lattice” menu item |
-| Edit types | — | **gap** | P1; write element/type |
-| Freeze Property | — | **gap** | P1; freeze column across frames |
+| Edit types | `Edit types` | done | Selection → element/type |
+| Freeze Property | `Freeze property` | done | Snapshot column, reapply later frames |
 | Combine datasets | Multi–DataSource compose | partial | Different model (multiple DS), not OVITO modifier |
 | Load trajectory | File / DS ingress | n/a | Not a pipeline modifier by design |
 | Smooth trajectory | — | gap | P2 |
@@ -95,7 +95,7 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 | Cluster analysis | Cluster left panel | partial | + button → Color by Property |
 | Time series / histogram / scatter | molrs catalog / GenericAnalysis | partial | Catalog-driven |
 | Find rings | `detectRings` helper | partial | Not first-class Analysis entry UX |
-| Displacement vectors | MSD + Vector field | partial | Need producer → vector columns + draw |
+| Displacement vectors | `Displacement vectors` + Vector field | done | Writes Displacement.X/Y/Z; draw via Vector field |
 | Atomic strain / elastic / DXA / Wigner–Seitz / grain | — | oos / gap | Need molrs; DXA/grain likely oos |
 | Bond order / angle / length distributions | molrs / analysis | partial | Charts only |
 | Voronoi analysis | — | oos | Excluded |
@@ -107,8 +107,9 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 
 | Priority | Items | Target slug / wave |
 |----------|--------|-------------------|
-| P0 | Replicate; Unwrap trajectories | **shipped** `ovito-parity-02-replicate-unwrap` |
-| P1 | Compute property; Freeze property; Edit types; Select overlapping; Coordination polyhedra; Trajectory lines; Surface mesh polish; Displacement→vector bridge | future specs |
+| P0 | Replicate; Unwrap trajectories | **shipped** |
+| P1a | Compute/Freeze/Edit types/Select overlapping/Displacement | **shipped** `ovito-parity-03..05` |
+| P1b | Coordination polyhedra; Trajectory lines; Surface mesh polish | future specs |
 | P2 | Smooth trajectory; Ambient occlusion (settings); Edit-cell UX rename/polish | future |
 | OOS | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs | never without deliberate note |
 
@@ -118,9 +119,9 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 
 ## Current Add-menu inventory (registry)
 
-Selection: Expression Select, Clear Selection, Invert Selection, Select Type, Expand Selection, Hide Selection  
+Selection: Expression Select, Clear Selection, Invert Selection, Select Type, Expand Selection, Select overlapping, Hide Selection  
 
-Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Delete Selected, Hide Hydrogens  
+Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Compute property, Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens  
 
 Coloring: Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid  
 

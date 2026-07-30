@@ -35,8 +35,8 @@ Aligned with OVITO’s Add-modifier groups:
 
 | Category | Examples | Effect |
 |---|---|---|
-| Selection | Expression Select, Clear / Invert / Select Type / Expand Selection, Hide Selection | Create or act on a selection set |
-| Modification | Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
+| Selection | Expression Select, Clear / Invert / Select Type / Expand / Select overlapping, Hide Selection | Create or act on a selection set |
+| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Compute/Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
 | Coloring | Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid | Per-atom color / structure-order → color |
 | Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density surface | Scene-changing visual helpers |
 

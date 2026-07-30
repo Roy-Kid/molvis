@@ -28,12 +28,10 @@ product decision.
 
 | Priority | Gaps |
 |----------|------|
-| **P0** | ~~Replicate; Unwrap trajectories~~ (shipped) |
-| **P1** | Compute property; Freeze property; Edit types; Select overlapping; Coordination polyhedra; Trajectory lines; Surface-mesh polish; Displacement → vector bridge |
+| **P0** | ~~Replicate; Unwrap~~ (shipped) |
+| **P1a** | ~~Compute property; Freeze; Edit types; Select overlapping; Displacement vectors~~ (shipped) |
+| **P1b** | Coordination polyhedra; Trajectory lines; Surface-mesh polish |
 | **P2** | Smooth trajectory; Ambient occlusion wiring; Edit-cell UX polish |
 | **OOS** | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs |
 
-Active runtime specs under `.claude/specs/`:
-
-- `ovito-parity-01-matrix` — matrix + inventory test  
-- `ovito-parity-02-replicate-unwrap` — P0 implementation  
+Shipped parity batches: `ovito-parity-01` … `05` (see `.claude/specs/INDEX.md` shipped section).

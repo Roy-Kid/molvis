@@ -3,14 +3,19 @@ import { AssignColorModifier } from "../modifiers/AssignColorModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
+import { ComputePropertyModifier } from "../modifiers/ComputePropertyModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
+import { DisplacementVectorsModifier } from "../modifiers/DisplacementVectorsModifier";
+import { EditTypesModifier } from "../modifiers/EditTypesModifier";
 import { ExpandSelectionModifier } from "../modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
+import { FreezePropertyModifier } from "../modifiers/FreezePropertyModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
 import { ReplicateModifier } from "../modifiers/ReplicateModifier";
 import { ClearSelectionModifier } from "../modifiers/SelectModifier";
+import { SelectOverlappingModifier } from "../modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
 import { SolidLiquidModifier } from "../modifiers/SolidLiquidModifier";
@@ -162,6 +167,11 @@ export class ModifierRegistry {
       () => new ExpandSelectionModifier(nextModifierId("expand-sel")),
     );
     ModifierRegistry.register(
+      SelectOverlappingModifier.NAME,
+      "Selection",
+      () => new SelectOverlappingModifier(nextModifierId("select-overlap")),
+    );
+    ModifierRegistry.register(
       "Hide Selection",
       "Selection",
       () => new HideSelectionModifier(),
@@ -193,6 +203,26 @@ export class ModifierRegistry {
       UnwrapTrajectoriesModifier.NAME,
       "Modification",
       () => new UnwrapTrajectoriesModifier(nextModifierId("unwrap-traj")),
+    );
+    ModifierRegistry.register(
+      ComputePropertyModifier.NAME,
+      "Modification",
+      () => new ComputePropertyModifier(nextModifierId("compute-prop")),
+    );
+    ModifierRegistry.register(
+      FreezePropertyModifier.NAME,
+      "Modification",
+      () => new FreezePropertyModifier(nextModifierId("freeze-prop")),
+    );
+    ModifierRegistry.register(
+      EditTypesModifier.NAME,
+      "Modification",
+      () => new EditTypesModifier(nextModifierId("edit-types")),
+    );
+    ModifierRegistry.register(
+      DisplacementVectorsModifier.NAME,
+      "Modification",
+      () => new DisplacementVectorsModifier(nextModifierId("displacement")),
     );
     ModifierRegistry.register(
       "Delete Selected",

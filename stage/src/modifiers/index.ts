@@ -11,17 +11,27 @@ export {
   type BondCriterion,
   ComputeBondsModifier,
 } from "./ComputeBondsModifier";
+export { ComputePropertyModifier } from "./ComputePropertyModifier";
 export { DeleteSelectedModifier } from "./DeleteSelectedModifier";
+export {
+  DISPLACEMENT_X,
+  DISPLACEMENT_Y,
+  DISPLACEMENT_Z,
+  DisplacementVectorsModifier,
+} from "./DisplacementVectorsModifier";
+export { EditTypesModifier } from "./EditTypesModifier";
 export {
   type ExpandSelectionMode,
   ExpandSelectionModifier,
 } from "./ExpandSelectionModifier";
 export { ExpressionSelectionModifier } from "./ExpressionSelectionModifier";
+export { FreezePropertyModifier } from "./FreezePropertyModifier";
 export { HideHydrogensModifier } from "./HideHydrogensModifier";
 export { HideSelectionModifier } from "./HideSelectionModifier";
 export { InvertSelectionModifier } from "./InvertSelectionModifier";
 export { ReplicateModifier } from "./ReplicateModifier";
 export { ClearSelectionModifier, SelectModifier } from "./SelectModifier";
+export { SelectOverlappingModifier } from "./SelectOverlappingModifier";
 export { SelectTypeModifier } from "./SelectTypeModifier";
 export { type GuideLine, SliceModifier } from "./SliceModifier";
 export { SolidLiquidModifier } from "./SolidLiquidModifier";
