@@ -1,7 +1,14 @@
 import { useMemo, useSyncExternalStore } from "react";
 import {
+  getOpenPluginDialogId,
+  subscribePluginDialogHost,
+} from "./contributions/dialog_host";
+import {
   analysisStore,
+  dialogStore,
   modePanelStore,
+  modeTabStore,
+  panelStore,
   settingsSectionStore,
   sidebarPanelStore,
   toolbarActionStore,
@@ -9,7 +16,10 @@ import {
 import { pluginManager } from "./manager";
 import type {
   ModePanelSpec,
+  ModeTabSpec,
   PluginAnalysisSpec,
+  PluginDialogSpec,
+  PluginPanelSpec,
   PluginRuntimeState,
   SettingsSectionSpec,
   SidebarPanelSpec,
@@ -78,5 +88,42 @@ export function usePluginModePanels(
         .slice()
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [items, mode],
+  );
+}
+
+export function usePluginModeTabs(): ModeTabSpec[] {
+  const items = useContributionList(modeTabStore);
+  return useMemo(
+    () => items.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [items],
+  );
+}
+
+export function usePluginDialogs(): PluginDialogSpec[] {
+  const items = useContributionList(dialogStore);
+  return useMemo(
+    () => items.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [items],
+  );
+}
+
+export function usePluginBottomPanels(): PluginPanelSpec[] {
+  const items = useContributionList(panelStore);
+  return useMemo(
+    () =>
+      items
+        .filter((p) => p.position === "bottom")
+        .slice()
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [items],
+  );
+}
+
+/** Currently open plugin dialog id (namespaced), or null. */
+export function useOpenPluginDialogId(): string | null {
+  return useSyncExternalStore(
+    subscribePluginDialogHost,
+    getOpenPluginDialogId,
+    getOpenPluginDialogId,
   );
 }

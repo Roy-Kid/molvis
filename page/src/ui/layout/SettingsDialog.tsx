@@ -1,6 +1,5 @@
 import type { Molvis } from "@molvis/stage";
 import {
-  Box,
   Camera,
   Grid3x3,
   Monitor,
@@ -20,13 +19,12 @@ import {
 } from "@/components/ui/dialog";
 import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { cn } from "@/lib/utils";
-import { PluginsSection, usePluginSettingsSections } from "@/plugins";
+import { PluginsSection } from "@/plugins";
 import { AppearanceSection } from "./AppearanceSection";
 import { BackendSection } from "./BackendSection";
 import { CameraSection } from "./CameraSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { GridSection } from "./GridSection";
-import { SettingsSection } from "./SettingsSection";
 
 interface SettingsDialogProps {
   app: Molvis | null;
@@ -77,22 +75,15 @@ const CORE_CATEGORIES: SettingsCategory[] = [
  * updates the active category (scroll-spy).
  */
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
-  const pluginSections = usePluginSettingsSections();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeId, setActiveId] = useState(CORE_CATEGORIES[0].id);
   /** Suppress scroll-spy briefly after a nav click so active state stays put. */
   const navLockUntil = useRef(0);
 
-  const categories = useMemo<SettingsCategory[]>(() => {
-    const extras = pluginSections.map((section) => ({
-      id: `plugin-${section.id}`,
-      label: section.title,
-      icon: <Box className="size-3.5" aria-hidden />,
-    }));
-    return [...CORE_CATEGORIES, ...extras];
-  }, [pluginSections]);
-
-  const categoryIds = useMemo(() => categories.map((c) => c.id), [categories]);
+  // Host settings only — plugin settings must not inject into native chrome.
+  // Use the command palette for plugin actions.
+  const categories = CORE_CATEGORIES;
+  const categoryIds = useMemo(() => CORE_CATEGORIES.map((c) => c.id), []);
 
   const scrollToCategory = useCallback((id: string) => {
     const root = scrollRef.current;
@@ -220,32 +211,9 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
               <div className="border-b border-border/60 py-5">
                 <BackendSection sectionId="backend" />
               </div>
-              <div
-                className={cn(
-                  "py-5",
-                  pluginSections.length > 0 && "border-b border-border/60",
-                )}
-              >
+              <div className="py-5 last:pb-8">
                 <PluginsSection sectionId="plugins" />
               </div>
-              {pluginSections.map((section, index) => {
-                const Section = section.render;
-                const id = `plugin-${section.id}`;
-                const isLast = index === pluginSections.length - 1;
-                return (
-                  <div
-                    key={section.id}
-                    className={cn(
-                      "py-5 last:pb-8",
-                      !isLast && "border-b border-border/60",
-                    )}
-                  >
-                    <SettingsSection id={id} title={section.title}>
-                      <Section app={app} />
-                    </SettingsSection>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>

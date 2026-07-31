@@ -1,6 +1,9 @@
 import type {
   ModePanelSpec,
+  ModeTabSpec,
   PluginAnalysisSpec,
+  PluginDialogSpec,
+  PluginPanelSpec,
   SettingsSectionSpec,
   SidebarPanelSpec,
   ToolbarActionSpec,
@@ -12,6 +15,9 @@ export const toolbarActionStore = new ContributionStore<ToolbarActionSpec>();
 export const settingsSectionStore =
   new ContributionStore<SettingsSectionSpec>();
 export const analysisStore = new ContributionStore<PluginAnalysisSpec>();
+export const modeTabStore = new ContributionStore<ModeTabSpec>();
+export const dialogStore = new ContributionStore<PluginDialogSpec>();
+export const panelStore = new ContributionStore<PluginPanelSpec>();
 
 /** Keyed as `${mode}::${panelId}`. */
 export const modePanelStore = new ContributionStore<
@@ -42,11 +48,38 @@ export function registerModePanel(
   return modePanelStore.set(key, { ...spec, mode });
 }
 
+export function registerModeTab(spec: ModeTabSpec): () => void {
+  return modeTabStore.set(spec.mode, spec);
+}
+
+export function registerDialog(spec: PluginDialogSpec): () => void {
+  return dialogStore.set(spec.id, spec);
+}
+
+export function registerPanel(spec: PluginPanelSpec): () => void {
+  return panelStore.set(spec.id, spec);
+}
+
 export function listModePanels(
   mode: string,
 ): Array<ModePanelSpec & { mode: string }> {
   return modePanelStore
     .list()
     .filter((p) => p.mode === mode)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+export function listModeTabs(): ModeTabSpec[] {
+  return modeTabStore
+    .list()
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+export function listBottomPanels(): PluginPanelSpec[] {
+  return panelStore
+    .list()
+    .filter((p) => p.position === "bottom")
+    .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }

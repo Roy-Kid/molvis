@@ -11,7 +11,6 @@ import React from "react";
 // Same brand mark as vsc-ext marketplace icon (vsc-ext/image/molvis-icon.png).
 import molvisLogoUrl from "@/assets/molvis-logo-48.png";
 import { Separator } from "@/components/ui/separator";
-import { usePluginToolbarActions } from "@/plugins";
 import { ExportDialog } from "@/ui/layout/ExportDialog";
 import { ScreenshotDialog } from "@/ui/layout/ScreenshotDialog";
 import { SettingsDialog } from "@/ui/layout/SettingsDialog";
@@ -44,7 +43,6 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
   const [sceneDirty, setSceneDirty] = React.useState(false);
-  const pluginActions = usePluginToolbarActions();
 
   React.useEffect(() => {
     if (!app) {
@@ -223,23 +221,6 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
           label="Fullscreen (hide UI)"
           onClick={onToggleFullscreen}
         />
-
-        {pluginActions.length > 0 && app && (
-          <>
-            <Separator orientation="vertical" className="h-4 mx-1" />
-            {pluginActions.map((action) => {
-              if (action.isVisible && !action.isVisible(app)) return null;
-              return (
-                <ViewerIconAction
-                  key={action.id}
-                  icon={action.icon ?? action.label.slice(0, 1)}
-                  label={action.label}
-                  onClick={() => action.onClick(app)}
-                />
-              );
-            })}
-          </>
-        )}
 
         <Separator orientation="vertical" className="h-4 mx-1" />
 

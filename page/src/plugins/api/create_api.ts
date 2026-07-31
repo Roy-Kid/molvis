@@ -7,13 +7,17 @@ import {
   type PluginModeFactory,
   registerRpcExtensionHandler,
 } from "@molvis/stage";
+import { openPluginDialog } from "../contributions/dialog_host";
 import {
   PLUGIN_MODIFIER_TYPE_ID,
   registerModifierPanel,
 } from "../contributions/modifier_panels";
 import {
   registerAnalysis,
+  registerDialog,
   registerModePanel,
+  registerModeTab,
+  registerPanel,
   registerSettingsSection,
   registerToolbarAction,
 } from "../contributions/ui";
@@ -25,7 +29,9 @@ import type {
   PluginAnalysisSpec,
   PluginAPI,
   PluginCommandFn,
+  PluginDialogSpec,
   PluginLogger,
+  PluginPanelSpec,
   PluginRpcHandler,
   SettingsSectionSpec,
 } from "../types";
@@ -102,6 +108,16 @@ export function createPluginAPI(
             registerModePanel(namespaced, { ...options.panel, id: panelId }),
           );
         }
+        if (options?.tab) {
+          track(
+            registerModeTab({
+              mode: namespaced,
+              label: options.tab.label,
+              icon: options.tab.icon,
+              order: options.tab.order,
+            }),
+          );
+        }
       },
       registerToolsPanel(mode: string, spec: ModePanelSpec) {
         const id = spec.id.includes(".") ? spec.id : ns(pluginId, spec.id);
@@ -131,6 +147,12 @@ export function createPluginAPI(
           const tb = options.toolbar;
           const toolbarId = tb.id ? ns(pluginId, tb.id) : `${fullName}.toolbar`;
           const args = tb.args;
+          const opensDialog = tb.opensDialog
+            ? tb.opensDialog.includes(".") ||
+              tb.opensDialog.startsWith("plugin.")
+              ? tb.opensDialog
+              : ns(pluginId, tb.opensDialog)
+            : undefined;
           track(
             registerToolbarAction({
               id: toolbarId,
@@ -140,10 +162,32 @@ export function createPluginAPI(
               isVisible: tb.isVisible,
               onClick: (a) => {
                 void fn(a, args as A);
+                if (opensDialog) {
+                  openPluginDialog(opensDialog);
+                }
               },
             }),
           );
         }
+      },
+    },
+
+    dialogs: {
+      register(spec: PluginDialogSpec) {
+        const id = ns(pluginId, spec.id);
+        track(registerDialog({ ...spec, id }));
+      },
+    },
+
+    panels: {
+      register(spec: PluginPanelSpec) {
+        if (spec.position !== "bottom") {
+          throw new Error(
+            `Plugin panel position '${String(spec.position)}' is not supported (v1: bottom only)`,
+          );
+        }
+        const id = ns(pluginId, spec.id);
+        track(registerPanel({ ...spec, id }));
       },
     },
 

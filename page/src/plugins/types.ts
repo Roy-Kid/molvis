@@ -77,16 +77,28 @@ export type ModifierPanelComponent = React.FC<{
   surface?: ModifierPanelSurface;
 }>;
 
-/** Optional toolbar chrome for a command (lives under `api.commands`). */
+/**
+ * Command palette metadata for a command (lives under `api.commands`).
+ *
+ * Host does **not** inject plugin chrome into the native toolbar. These
+ * options only register an entry in the VS Code–style command palette
+ * (`Ctrl/Cmd+Shift+P`).
+ */
 export interface CommandToolbarOptions {
   /** Defaults to the command name suffix. */
   id?: string;
+  /** Palette label. */
   label: string;
   icon?: React.ReactNode;
   order?: number;
   isVisible?: (app: Molvis) => boolean;
-  /** Args passed when the toolbar button is clicked (default `{}`). */
+  /** Args passed when the command is run (default `{}`). */
   args?: unknown;
+  /**
+   * Open a plugin dialog registered via `api.dialogs` (relative id or
+   * already-namespaced id). Host owns focus trap / overlay.
+   */
+  opensDialog?: string;
 }
 
 /** Tools pane body when a mode is active (lives under `api.modes`). */
@@ -94,6 +106,40 @@ export interface ModePanelSpec {
   id: string;
   title?: string;
   order?: number;
+  render: React.FC<{ app: Molvis | null }>;
+}
+
+/** Tab chrome for a plugin mode in the right StructureInspector strip. */
+export interface ModeTabSpec {
+  /** Namespaced mode id (e.g. `plugin.com.example.python`). */
+  mode: string;
+  label: string;
+  icon?: React.ReactNode;
+  order?: number;
+}
+
+export type PluginDialogSize = "md" | "lg" | "xl" | "full";
+
+/** Host-owned modal dialog contribution (`api.dialogs`). */
+export interface PluginDialogSpec {
+  id: string;
+  title: string;
+  order?: number;
+  size?: PluginDialogSize;
+  render: React.FC<{ app: Molvis | null; close: () => void }>;
+}
+
+export type PluginPanelPosition = "bottom";
+
+/** Host shell panel contribution (`api.panels`). v1: bottom only. */
+export interface PluginPanelSpec {
+  id: string;
+  position: PluginPanelPosition;
+  title: string;
+  order?: number;
+  defaultOpen?: boolean;
+  /** Initial height ratio 0–1 when expanded (bottom panels). */
+  defaultSize?: number;
   render: React.FC<{ app: Molvis | null }>;
 }
 
@@ -187,9 +233,11 @@ export type PluginRpcHandler = (
  * | Domain | Logic | UI |
  * |--------|-------|-----|
  * | `modifiers` | pipeline factory | property panel |
- * | `modes` | interaction mode | tools panel |
+ * | `modes` | interaction mode | tools tab + panel |
  * | `analysis` | compute | picker entry + params + result |
- * | `commands` | do/undo-style action | optional toolbar button |
+ * | `commands` | palette entry (Ctrl/Cmd+Shift+P); optional open dialog |
+ * | `dialogs` | modal content | host PluginDialogHost (via palette) |
+ * | `panels` | bottom slot | host BottomPanelHost (via palette) |
  * | `overlays` | scene decoration | — |
  * | `settings` | plugin prefs | Settings section |
  * | `rpc` | JSON-RPC | — |
@@ -215,13 +263,16 @@ export interface PluginAPI {
 
   modes: {
     /**
-     * Register a plugin interaction mode + optional tools panel shown
-     * while that mode is active.
+     * Register a plugin interaction mode + optional tools panel / tab chrome
+     * shown while that mode is active.
      */
     register(
       id: string,
       factory: PluginModeFactory,
-      options?: { panel?: ModePanelSpec },
+      options?: {
+        panel?: ModePanelSpec;
+        tab?: Omit<ModeTabSpec, "mode">;
+      },
     ): void;
     /**
      * Attach a tools panel under an existing mode id (`view`, `select`, …
@@ -237,14 +288,27 @@ export interface PluginAPI {
 
   commands: {
     /**
-     * Register a named command. Optional `toolbar` places a button that
-     * runs this command (command owns its chrome).
+     * Register a named command. Optional `toolbar` is command-palette
+     * metadata only (label / opensDialog) — no native toolbar chrome.
      */
     register<A = unknown, R = unknown>(
       name: string,
       fn: PluginCommandFn<A, R>,
       options?: { toolbar?: CommandToolbarOptions },
     ): void;
+  };
+
+  dialogs: {
+    /** Register a modal dialog rendered by the host dialog shell. */
+    register(spec: PluginDialogSpec): void;
+  };
+
+  panels: {
+    /**
+     * Register a shell panel. v1 supports `position: "bottom"` only
+     * (VS Code–style bottom drawer).
+     */
+    register(spec: PluginPanelSpec): void;
   };
 
   overlays: {

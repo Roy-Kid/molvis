@@ -62,6 +62,15 @@ const SECTIONS: { title: string; shortcuts: Shortcut[] }[] = [
     ],
   },
   {
+    title: "Plugins",
+    shortcuts: [
+      {
+        keys: "Ctrl/⌘+Shift+P",
+        description: "Command palette (plugin commands)",
+      },
+    ],
+  },
+  {
     title: "Other",
     shortcuts: [{ keys: "?", description: "Show this help" }],
   },

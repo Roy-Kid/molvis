@@ -25,6 +25,12 @@ import { useMolvisUiState } from "@/hooks/useMolvisUiState";
 import { useStatusMessage } from "@/hooks/useStatusMessage";
 import { resolveChrome, useMountOpts } from "@/lib/mount-opts";
 import {
+  BottomPanelHost,
+  CommandPalette,
+  PluginDialogHost,
+  useCommandPaletteHotkey,
+} from "@/plugins";
+import {
   isAnalysisPanelOpen,
   resolveViewerPanelLayout,
 } from "./lib/viewer-layout";
@@ -79,6 +85,11 @@ const App: React.FC = () => {
   }, [app, opts.plugins]);
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const openCommandPalette = useCallback(() => {
+    setCommandPaletteOpen(true);
+  }, []);
+  useCommandPaletteHotkey(openCommandPalette, !canvasOnly);
   // "Fullscreen" = hide all chrome (top bar, sidebars, status, timeline),
   // leaving only the 3D canvas. The canvas panel stays mounted so the engine
   // is never torn down; exit via the floating button or Esc.
@@ -405,6 +416,8 @@ const App: React.FC = () => {
                   )}
                 </div>
 
+                <BottomPanelHost app={app} hidden={uiHidden} />
+
                 {showBottomBar && (
                   <div className="motion-enter-bottom flex h-statusbar shrink-0 items-center border-t border-border/70 bg-background">
                     {chrome.statusBar && (
@@ -442,6 +455,15 @@ const App: React.FC = () => {
                     )}
                   </div>
                 )}
+
+                <PluginDialogHost app={app} />
+
+                <CommandPalette
+                  app={app}
+                  open={commandPaletteOpen}
+                  onOpenChange={setCommandPaletteOpen}
+                  onModeChange={handleModeChange}
+                />
 
                 <KeyboardShortcutsDialog
                   open={shortcutsOpen}

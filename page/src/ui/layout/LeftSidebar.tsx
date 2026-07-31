@@ -20,7 +20,7 @@ import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { ViewerOperationState } from "@/components/viewer/ViewerOperationState";
 import { useSelectedAtoms } from "@/hooks/useSelectedAtoms";
-import { resolveModifierPanel, usePluginSidebarPanels } from "@/plugins";
+import { resolveModifierPanel } from "@/plugins";
 import {
   getPluginAnalysisSpec,
   isPluginAnalysisId,
@@ -104,7 +104,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const trajectoryLength = useTrajectoryLength(app);
   const selectedAtoms = useSelectedAtoms(app);
   const catalog = useAnalysisCatalog(app, selectedAtoms.length > 0);
-  const pluginPanels = usePluginSidebarPanels();
   const isPluginAnalysis = isPluginAnalysisId(analysisType);
 
   useEffect(() => {
@@ -427,25 +426,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       >
         <StructureOptimizePanel app={app} />
       </div>
-
-      {pluginPanels.length > 0 && (
-        <div className="shrink-0 border-t border-border/70 max-h-[40%] overflow-y-auto">
-          {pluginPanels.map((panel) => {
-            const Panel = panel.render;
-            return (
-              <div
-                key={panel.id}
-                className="border-b border-border/50 last:border-b-0"
-              >
-                <div className="px-2 py-1.5 text-micro font-semibold uppercase tracking-wide text-muted-foreground">
-                  {panel.title}
-                </div>
-                <Panel app={app} />
-              </div>
-            );
-          })}
-        </div>
-      )}
     </section>
   );
 };
