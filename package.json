@@ -13,11 +13,11 @@
     "vsc-ext"
   ],
   "scripts": {
+    "dev": "npm run dev:page",
     "dev:core": "npm run typecheck -w @molcrafts/molvis-core",
     "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
     "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
     "dev:page": "npm run dev -w page",
-
     "build:core": "npm run build -w @molcrafts/molvis-core",
     "build:stage": "npm run build -w @molcrafts/molvis-stage",
     "build:sketch": "npm run build -w @molcrafts/molvis-sketch",
