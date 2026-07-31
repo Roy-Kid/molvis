@@ -52,6 +52,13 @@ export function ensurePluginHostModules(): void {
   for (const [spec, mod] of Object.entries(pluginHostModules)) {
     buildModuleBlob(spec, mod as unknown as Record<string, unknown>);
   }
+  // Back-compat: classic-JSX plugin builds call free `React.createElement`
+  // without `import React from "react"`. Keep host React on globalThis so
+  // re-renders (e.g. resizing the console) do not throw "React is not defined".
+  const g = globalThis as typeof globalThis & { React?: unknown };
+  if (g.React == null) {
+    g.React = pluginHostModules.react;
+  }
   importMapReady = true;
 }
 
