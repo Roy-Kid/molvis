@@ -5,15 +5,16 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 | Spec | Status | Summary |
 |------|--------|---------|
-| [scene-modifier-iron-law](scene-modifier-iron-law.md) | in-progress | Scene-changing modifiers vs left Analysis; left config for surfaces/voids; molrs visual sync |
-| [stage-commit-scene](stage-commit-scene.md) | code-complete | Git-like working tree vs molrs HEAD; commitScene/discardScene; analysis waits for commit |
-| [package-split-core-stage](package-split-core-stage.md) | code-complete | Split shared `core` (molrs face) / `stage` 3D / sketch 2D / umbrella `@molcrafts/molvis` |
-| [shared-element-picker-01-core](shared-element-picker-01-core.md) | code-complete | Add the single native periodic-table picker and layout catalog to shared core |
-| [shared-element-picker-02-sketch](shared-element-picker-02-sketch.md) | code-complete | Reuse the core picker in the standalone Sketch surface |
-| [shared-element-picker-03-page](shared-element-picker-03-page.md) | code-complete | Reuse the core picker in both 2D and 3D page edit surfaces |
-| [shared-element-picker-04-stage](shared-element-picker-04-stage.md) | code-complete | Reuse the core picker in Stage's native edit context menu |
+| _(none)_ | — | All prior specs closed; open new ones via `/mol:spec` |
 
 ## Shipped batches
+
+### 2026-07-31 — close backlog + product polish
+
+- **scene-modifier-iron-law** — closed (A6 agent-auto: analyses stay left catalog)
+- **stage-commit-scene** — closed (criteria verified)
+- **package-split-core-stage** — closed
+- **shared-element-picker-01..04** — closed
 
 ### 2026-07-30 — OVITO parity matrix
 
@@ -28,7 +29,6 @@ spec's tasks off and prunes the entry (and file) on completion.
 ### 2026-07-30 — OVITO Selection parity
 
 - **ovito-modifier-align** — Clear / Invert / Select Type / Expand Selection (+ registry, regression)
-
 
 ### 2026-07-29 — molvis-sketch chain
 

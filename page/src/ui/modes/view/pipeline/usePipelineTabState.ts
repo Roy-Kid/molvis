@@ -3,7 +3,6 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   DataSourceModifier,
   isSelectionProducer,
-  isTopologyChanging,
   type Modifier,
   ModifierCapability,
   type Molvis,
@@ -211,23 +210,20 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
       const consumesSelection = modifier.capabilities.has(
         ModifierCapability.ConsumesSelection,
       );
-      const isSelProducer = isSelectionProducer(modifier);
-      const isTopChange = isTopologyChanging(modifier);
 
-      // For selection-consuming, non-producer, non-topology modifiers:
-      // attach to an existing SelectModifier if one exists, otherwise auto-create
-      if (consumesSelection && !isSelProducer && !isTopChange) {
-        // Find the last selection-producing modifier in the pipeline
+      // Auto-bind selection scope for every consumer (Hide/Delete/Edit types,
+      // Invert/Expand, Assign Color, Vector field, …). Previously skipped
+      // dual consume+produce and topology-changing steps, which broke OVITO-like
+      // Expression Select → Invert / Expand → Hide chains.
+      if (consumesSelection) {
         const existingScope = [...pipeline.getModifiers()]
           .reverse()
           .find((m) => isSelectionProducer(m));
 
         if (existingScope) {
-          // Reuse existing SelectModifier as selection scope.
           modifier.selectionScopeId = existingScope.id;
           setExpandedIds((prev) => new Set([...prev, existingScope.id]));
         } else {
-          // No select modifier exists — auto-create one from current selection
           const selectedAtomIndices = getSelectedAtomIndices(app);
           if (selectedAtomIndices.length > 0) {
             const selectMod = new SelectModifier(

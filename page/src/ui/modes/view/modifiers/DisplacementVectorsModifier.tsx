@@ -1,8 +1,14 @@
-import type {
-  DisplacementVectorsModifier as Core,
-  Molvis,
+import {
+  type DisplacementVectorsModifier as Core,
+  DISPLACEMENT_X,
+  DISPLACEMENT_Y,
+  DISPLACEMENT_Z,
+  type Molvis,
+  nextModifierId,
+  VectorFieldModifier,
 } from "@molvis/stage";
 import type React from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
@@ -27,14 +33,36 @@ export const DisplacementVectorsModifier: React.FC<Props> = ({
       error: "Could not compute displacements",
     },
   );
+
+  const addVectorField = () => {
+    if (!app) return;
+    const existing = app.modifierPipeline
+      .getModifiers()
+      .find(
+        (m) =>
+          m instanceof VectorFieldModifier && m.config.vxCol === DISPLACEMENT_X,
+      );
+    if (!existing) {
+      const vf = new VectorFieldModifier(nextModifierId("vf-disp"), {
+        vxCol: DISPLACEMENT_X,
+        vyCol: DISPLACEMENT_Y,
+        vzCol: DISPLACEMENT_Z,
+        colorMode: "magnitude",
+        scale: 1,
+      });
+      app.modifierPipeline.addModifier(vf);
+    }
+    void applyPipeline({ fullRebuild: true });
+  };
+
   return (
     <fieldset
       disabled={!app || pipelineRunning}
       className="m-0 space-y-3 border-0 p-0"
     >
       <p className="text-micro text-muted-foreground">
-        Writes Displacement.X/Y/Z vs a reference trajectory frame. Use Vector
-        field to draw.
+        Writes {DISPLACEMENT_X}/Y/Z vs a reference trajectory frame. Add a
+        Vector field step to draw arrows.
       </p>
       <div className="space-y-1.5">
         <Label className="text-micro">Reference frame index</Label>
@@ -51,6 +79,16 @@ export const DisplacementVectorsModifier: React.FC<Props> = ({
           onBlur={() => void applyPipeline()}
         />
       </div>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-control-compact w-full text-xs"
+        disabled={!app || pipelineRunning}
+        onClick={addVectorField}
+      >
+        Add Vector field (Displacement.*)
+      </Button>
     </fieldset>
   );
 };

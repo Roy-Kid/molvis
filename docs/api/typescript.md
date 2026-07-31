@@ -369,9 +369,17 @@ app.pipeline.setEnabled(id, false);
 | `InvertSelectionModifier` | Selection | Complement of current selection. |
 | `SelectTypeModifier` | Selection | Multi-select by `element` / `type` columns. |
 | `ExpandSelectionModifier` | Selection | Grow selection by bonds and/or cutoff neighbors. |
+| `SelectOverlappingModifier` | Selection | Atoms with a neighbor within cutoff. |
 | `SliceModifier` | Modification | Keeps atoms inside a half-space. |
 | `WrapPBCModifier` | Modification | Wraps atoms into the primary cell. |
 | `AffineTransformationModifier` | Modification | x′ = M·x + t; optional cell transform. |
+| `ReplicateModifier` | Modification | Tile images along cell vectors. |
+| `UnwrapTrajectoriesModifier` | Modification | Remove PBC jumps across frames. |
+| `SmoothTrajectoryModifier` | Modification | Sliding-window coordinate average. |
+| `ComputePropertyModifier` | Modification | Expression → per-atom float column. |
+| `FreezePropertyModifier` | Modification | Freeze a column across frames. |
+| `EditTypesModifier` | Modification | Set element/type on selection. |
+| `DisplacementVectorsModifier` | Modification | Displacement.X/Y/Z vs reference frame. |
 | `HideSelectionModifier` | Modification | Drops selected atoms from the render. |
 | `DeleteSelectedModifier` | Modification | Removes selected atoms from the frame. |
 | `ColorByPropertyModifier` | Coloring | Maps a column to a color ramp. |

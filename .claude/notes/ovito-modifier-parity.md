@@ -29,7 +29,7 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | Manual selection | Select mode → `SelectModifier` | partial | Interactive only; not Add-menu (intentional) |
 | Hide selected (via delete/hide) | `Hide Selection` | done | Under Selection |
 | Select overlapping particles | `Select overlapping` | done | Fixed cutoff neighbor pairs |
-| Select type (particle type UI) | Select Type | partial | Multi-select text; no type-checkbox UI |
+| Select type (particle type UI) | Select Type | done | Frame element/type chips + free text |
 
 ## Modification
 

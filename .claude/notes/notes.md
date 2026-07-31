@@ -3,6 +3,14 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+## 2026-07-31 — selection scope auto-bind + producer capability
+
+- `isSelectionProducer` is **capability-based** (`ProducesSelection`): Invert,
+  Expand, Select Type, Select overlapping, Clear, Expression Select, etc.
+- Adding any `ConsumesSelection` modifier auto-binds `selectionScopeId` to the
+  latest producer (or auto-creates a SelectModifier from the live pick).
+- Parent selector shows for **all** consumers (including dual consume+produce).
+
 ## 2026-07-30 — left compute / right draw (analysis-nature modifiers)
 
 **UX iron law (extends scene-modifier placement):**

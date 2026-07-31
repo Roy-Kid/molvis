@@ -1,9 +1,7 @@
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
-import { ExpressionSelectionModifier } from "../modifiers/ExpressionSelectionModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
-import { SelectModifier } from "../modifiers/SelectModifier";
-import type { Modifier } from "./modifier";
+import { type Modifier, ModifierCapability } from "./modifier";
 
 export const NATO_ALPHABET = [
   "Alpha",
@@ -62,12 +60,12 @@ export function generateNatoId(existingIds: ReadonlySet<string>): string {
 
 /**
  * Returns true if the modifier produces a named selection
- * (i.e., it sets context.currentSelection / context.selectionSet).
+ * (writes `context.currentSelection` / selectionCache entry).
+ * Capability-based so Invert / Expand / Select Type / Select overlapping
+ * participate in parent-scope chaining like Expression Select.
  */
 export function isSelectionProducer(mod: Modifier): boolean {
-  return (
-    mod instanceof SelectModifier || mod instanceof ExpressionSelectionModifier
-  );
+  return mod.capabilities.has(ModifierCapability.ProducesSelection);
 }
 
 /**

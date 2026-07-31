@@ -1,5 +1,4 @@
 import {
-  isSelectionProducer,
   type Modifier,
   ModifierCapability,
   type Molvis,
@@ -22,9 +21,11 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
   app,
   onUpdate,
 }) => {
-  const showParentSelector =
-    modifier.capabilities.has(ModifierCapability.ConsumesSelection) &&
-    !isSelectionProducer(modifier);
+  // Any selection consumer (incl. Invert/Expand which also produce) can
+  // pick which upstream producer scopes its input.
+  const showParentSelector = modifier.capabilities.has(
+    ModifierCapability.ConsumesSelection,
+  );
 
   // Analysis-nature / mesh modifiers: left = compute, right = draw params.
   const usesLeft = modifierUsesLeftConfig(modifier);
