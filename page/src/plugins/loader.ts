@@ -63,8 +63,10 @@ function rewriteBareImports(source: string): string {
     const blobUrl = moduleBlobUrls.get(spec);
     if (!blobUrl) continue;
     const escaped = spec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Minified ESM often uses `from"pkg"` (no space). Allow zero whitespace
+    // after `from` / before dynamic `import(`.
     out = out.replace(
-      new RegExp(`(from\\s+|import\\s*\\()(['"])${escaped}\\2`, "g"),
+      new RegExp(`(from\\s*|import\\s*\\(\\s*)(['"])${escaped}\\2`, "g"),
       `$1$2${blobUrl}$2`,
     );
   }
@@ -104,7 +106,7 @@ export async function fetchPluginManifest(
   return m;
 }
 
-const REL_IMPORT_RE = /(from\s+|import\s*\()(['"])(\.[^'"]+)\2/g;
+const REL_IMPORT_RE = /(from\s*|import\s*\(\s*)(['"])(\.[^'"]+)\2/g;
 
 /**
  * Fetch a module graph starting at `url`, rewrite bare host imports to
