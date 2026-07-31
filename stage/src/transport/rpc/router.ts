@@ -13,6 +13,12 @@ import {
   REPRESENTATION_IDS,
   type RepresentationId,
 } from "../../artist/representation";
+import {
+  fitCameraView,
+  lookAtCamera,
+  readCameraPose,
+  setCameraPose,
+} from "../../camera/control";
 import type { MarkAtomOverlay } from "../../overlays/mark_atom";
 import type { MarkAtomProps } from "../../overlays/types";
 import {
@@ -294,6 +300,10 @@ export class RPCRouter {
       ["view.set_style", this.handleSetStyle],
       ["view.set_theme", this.handleSetTheme],
       ["view.set_mode", this.handleSetMode],
+      ["camera.get_pose", this.handleCameraGetPose],
+      ["camera.set_pose", this.handleCameraSetPose],
+      ["camera.look_at", this.handleCameraLookAt],
+      ["camera.fit_view", this.handleCameraFitView],
       ["state.get", this.handleStateGet],
       ["rpc.list_methods", this.handleListMethods],
     ]);
@@ -780,6 +790,55 @@ export class RPCRouter {
       frame_index: this.app.currentFrame,
       total_frames: this.app.system.trajectory?.length ?? 0,
     };
+  };
+
+  private handleCameraGetPose: RPCHandler = () => {
+    return readCameraPose(this.app.world.camera);
+  };
+
+  private handleCameraSetPose: RPCHandler = (params) => {
+    const p = asRecord(params);
+    const target = toNumberArray(p.target);
+    const pose = setCameraPose(this.app.world.camera, {
+      alpha:
+        typeof p.alpha === "number"
+          ? ensureFiniteNumber(p.alpha, "alpha")
+          : undefined,
+      beta:
+        typeof p.beta === "number"
+          ? ensureFiniteNumber(p.beta, "beta")
+          : undefined,
+      radius:
+        typeof p.radius === "number"
+          ? ensureFiniteNumber(p.radius, "radius")
+          : undefined,
+      target: target ?? undefined,
+    });
+    this.app.world.renderOnce();
+    return { pose };
+  };
+
+  private handleCameraLookAt: RPCHandler = (params) => {
+    const p = asRecord(params);
+    const position = toNumberArray(p.position);
+    const target = toNumberArray(p.target);
+    const up = toNumberArray(p.up);
+    if (!position || !target) {
+      throw invalidParams("position and target must be length-3 number arrays");
+    }
+    const pose = lookAtCamera(this.app.world.camera, {
+      position,
+      target,
+      up: up ?? undefined,
+    });
+    this.app.world.renderOnce();
+    return { pose };
+  };
+
+  private handleCameraFitView: RPCHandler = () => {
+    const pose = fitCameraView(this.app);
+    this.app.world.renderOnce();
+    return { pose };
   };
 
   private handleListMethods: RPCHandler = () => {

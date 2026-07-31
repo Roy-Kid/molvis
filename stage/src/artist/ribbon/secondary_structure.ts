@@ -1,167 +1,191 @@
 /**
- * Geometric secondary-structure assignment from CA-only backbone
- * coordinates ("DSSP-lite").
+ * Secondary-structure assignment for cartoon / ribbon — **policy aligned
+ * with Mol\*** (`mol-model-props/computed/secondary-structure.ts`).
  *
- * Real DSSP uses backbone hydrogen-bond patterns to distinguish 3_10,
- * α, π helices and parallel/antiparallel sheets. We don't have the
- * full backbone (only CA, optionally O), so we use a simpler local
- * geometry test on consecutive Cα positions:
+ * ## Mol\* `auto` (default)
  *
- * - Cα(i-1)–Cα(i)–Cα(i+1) bond angle θ
- * - Cα(i-1)–Cα(i)–Cα(i+1)–Cα(i+2) virtual torsion τ
+ * 1. **Model SS** — depositor records when present:
+ *    - PDB `HELIX` / `SHEET`
+ *    - mmCIF `struct_conf` / `struct_sheet_range`
+ * 2. Else **DSSP** for atomic models with backbone N/C/O
+ *    (Mol\* `dssp/*`, Kabsch & Sander H-bonds).
+ * 3. Else **Zhang–Skolnick** CA-distance geometry
+ *    (Mol\* `zhang-skolnik.ts`, TM-align NAR 2005).
  *
- * Assignment per Rohl & Doolittle / Kabsch & Sander references:
- *
- * | Class | θ (deg) | τ (deg)        |
- * |-------|---------|----------------|
- * | helix | 80–105  | 30–70          |
- * | sheet | 110–145 | abs(τ) >= 130  |
- * | coil  | else                     |
- *
- * Single-residue helix/sheet "noise" is filtered by requiring runs
- * of at least 4 consecutive helix or 3 consecutive sheet residues —
- * shorter stretches are demoted to coil. Boundary residues (no
- * neighbour pair to compute θ/τ) default to coil.
+ * Sources (MIT, molstar/molstar) — do not invent alternate rules.
  */
-import type { Residue, SecondaryStructureType } from "./pdb_backbone";
+import { assignDssp, canRunDssp } from "./dssp";
+import type {
+  Residue,
+  SecondaryStructureRange,
+  SecondaryStructureType,
+} from "./pdb_backbone";
 
-const MIN_HELIX_RUN = 4;
-const MIN_SHEET_RUN = 3;
+// ── Zhang–Skolnick constants (verbatim from Mol\* zhang-skolnik.ts) ──────
+const HELIX_DISTANCES = [5.45, 5.18, 6.37] as const;
+const HELIX_DELTA = 2.1;
+const SHEET_DISTANCES = [6.1, 10.4, 13.0] as const;
+const SHEET_DELTA = 1.42;
 
-interface Vec3 {
-  x: number;
-  y: number;
-  z: number;
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return {
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  };
-}
-
-function norm(v: Vec3): number {
-  return Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-}
-
-const RAD2DEG = 180 / Math.PI;
-
-function bondAngleDeg(p1: Vec3, p2: Vec3, p3: Vec3): number {
-  const a = sub(p1, p2);
-  const b = sub(p3, p2);
-  const c = dot(a, b) / (norm(a) * norm(b) || 1);
-  return Math.acos(Math.max(-1, Math.min(1, c))) * RAD2DEG;
-}
+export type SsMethod = "model" | "dssp" | "zhang-skolnick";
 
 /**
- * Standard IUPAC dihedral angle: τ = atan2(|b2|·b1·(b2×b3), (b1×b2)·(b2×b3))
- * with b1 = p2-p1, b2 = p3-p2, b3 = p4-p3. Returns degrees in (-180, 180].
- * Right-handed α helix gives τ ≈ +49°, antiparallel sheet gives τ ≈ ±170°.
+ * Mol\* `auto` for a residue list that already has CA positions.
  */
-function torsionDeg(p1: Vec3, p2: Vec3, p3: Vec3, p4: Vec3): number {
-  const b1 = sub(p2, p1);
-  const b2 = sub(p3, p2);
-  const b3 = sub(p4, p3);
-  const b2n = norm(b2) || 1;
-  const y = b2n * dot(b1, cross(b2, b3));
-  const x = dot(cross(b1, b2), cross(b2, b3));
-  return Math.atan2(y, x) * RAD2DEG;
-}
-
-function classifyOne(
-  prev: Vec3,
-  curr: Vec3,
-  next: Vec3,
-  next2: Vec3,
-): SecondaryStructureType {
-  const theta = bondAngleDeg(prev, curr, next);
-  const tau = Math.abs(torsionDeg(prev, curr, next, next2));
-  if (theta >= 80 && theta <= 105 && tau >= 30 && tau <= 70) return "helix";
-  if (theta >= 110 && theta <= 145 && tau >= 130) return "sheet";
-  return "coil";
-}
-
-/**
- * Demote runs of `target` shorter than `minRun` to coil. `marks` is
- * mutated in place; chain boundaries are passed in `chainStarts` so
- * we never extend a run across them.
- */
-function smoothRuns(
-  marks: SecondaryStructureType[],
-  target: SecondaryStructureType,
-  minRun: number,
-  chainStarts: ReadonlySet<number>,
-): void {
-  let i = 0;
-  while (i < marks.length) {
-    if (marks[i] !== target) {
-      i++;
-      continue;
-    }
-    let j = i;
-    while (
-      j < marks.length &&
-      marks[j] === target &&
-      (j === i || !chainStarts.has(j))
-    ) {
-      j++;
-    }
-    if (j - i < minRun) {
-      for (let k = i; k < j; k++) marks[k] = "coil";
-    }
-    i = j;
+export function assignSecondaryStructureAuto(
+  rows: Residue[],
+  modelRanges?: readonly SecondaryStructureRange[],
+): SsMethod {
+  if (modelRanges && modelRanges.length > 0) {
+    applySsRanges(rows, modelRanges);
+    return "model";
   }
+  if (canRunDssp(rows) && assignDssp(rows)) {
+    return "dssp";
+  }
+  assignZhangSkolnick(rows);
+  return "zhang-skolnick";
+}
+
+/** @deprecated Prefer {@link assignSecondaryStructureAuto}. */
+export function assignSecondaryStructure(rows: Residue[]): void {
+  if (canRunDssp(rows) && assignDssp(rows)) return;
+  assignZhangSkolnick(rows);
 }
 
 /**
- * Mutate `rows[i].ss` for every residue based on local CA geometry.
- * `rows` must be ordered by `(chainId, resSeq)` — the same order
- * `BackboneRibbonModifier.apply()` produces.
+ * Zhang–Skolnick secondary-structure assignment (Mol\* `computeUnitZhangSkolnik`).
  */
-export function assignSecondaryStructure(rows: Residue[]): void {
+export function assignZhangSkolnick(rows: Residue[]): void {
   const n = rows.length;
   if (n === 0) return;
 
-  // Boundary residues stay coil; mid-chain ones get classified.
-  const marks: SecondaryStructureType[] = new Array(n).fill("coil");
-  const chainStarts = new Set<number>([0]);
-  for (let i = 1; i < n; i++) {
-    if (rows[i].chainId !== rows[i - 1].chainId) chainStarts.add(i);
-  }
-
-  for (let i = 1; i < n - 2; i++) {
-    if (
-      chainStarts.has(i) ||
-      chainStarts.has(i + 1) ||
-      chainStarts.has(i + 2)
-    ) {
-      continue;
+  let segStart = 0;
+  while (segStart < n) {
+    let segEnd = segStart + 1;
+    while (segEnd < n && rows[segEnd].chainId === rows[segStart].chainId) {
+      segEnd++;
     }
-    // biome-ignore lint/style/noNonNullAssertion: rows are pre-filtered to have ca
-    const prev = rows[i - 1].ca!;
-    // biome-ignore lint/style/noNonNullAssertion: same
-    const curr = rows[i].ca!;
-    // biome-ignore lint/style/noNonNullAssertion: same
-    const next = rows[i + 1].ca!;
-    // biome-ignore lint/style/noNonNullAssertion: same
-    const next2 = rows[i + 2].ca!;
-    marks[i] = classifyOne(prev, curr, next, next2);
+    assignZhangSkolnickSegment(rows, segStart, segEnd);
+    segStart = segEnd;
+  }
+}
+
+function caPos(
+  rows: Residue[],
+  i: number,
+): { x: number; y: number; z: number } | null {
+  const ca = rows[i].ca;
+  return ca ? { x: ca.x, y: ca.y, z: ca.z } : null;
+}
+
+function dist(
+  a: { x: number; y: number; z: number },
+  b: { x: number; y: number; z: number },
+): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const dz = a.z - b.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+function zhangSkolnickMatch(
+  rows: Residue[],
+  segStart: number,
+  segEnd: number,
+  iLocal: number,
+  distances: readonly number[],
+  delta: number,
+): boolean {
+  const len = segEnd - segStart;
+  for (let jLocal = Math.max(0, iLocal - 2); jLocal <= iLocal; jLocal++) {
+    for (let k = 2; k < 5; k++) {
+      if (jLocal + k >= len) return false;
+      const a = caPos(rows, segStart + jLocal);
+      const b = caPos(rows, segStart + jLocal + k);
+      if (!a || !b) return false;
+      const d = dist(a, b);
+      if (Math.abs(d - distances[k - 2]) >= delta) return false;
+    }
+  }
+  return true;
+}
+
+function assignZhangSkolnickSegment(
+  rows: Residue[],
+  segStart: number,
+  segEnd: number,
+): void {
+  for (let i = segStart; i < segEnd; i++) {
+    const iLocal = i - segStart;
+    let ss: SecondaryStructureType = "coil";
+    if (
+      zhangSkolnickMatch(
+        rows,
+        segStart,
+        segEnd,
+        iLocal,
+        HELIX_DISTANCES,
+        HELIX_DELTA,
+      )
+    ) {
+      ss = "helix";
+    } else if (
+      zhangSkolnickMatch(
+        rows,
+        segStart,
+        segEnd,
+        iLocal,
+        SHEET_DISTANCES,
+        SHEET_DELTA,
+      )
+    ) {
+      ss = "sheet";
+    }
+    rows[i].ss = ss;
+  }
+}
+
+function baseChainId(chainId: string): string {
+  const i = chainId.indexOf("__brk");
+  return i >= 0 ? chainId.slice(0, i) : chainId;
+}
+
+/**
+ * Apply depositor HELIX/SHEET (Mol\* model SS) onto residue rows.
+ */
+export function applySsRanges(
+  rows: Residue[],
+  ranges: readonly SecondaryStructureRange[],
+): number {
+  if (rows.length === 0 || ranges.length === 0) return 0;
+
+  for (const r of rows) r.ss = "coil";
+
+  const byChain = new Map<string, SecondaryStructureRange[]>();
+  for (const range of ranges) {
+    if (range.type === "coil") continue;
+    const list = byChain.get(range.chainId);
+    if (list) list.push(range);
+    else byChain.set(range.chainId, [range]);
   }
 
-  smoothRuns(marks, "helix", MIN_HELIX_RUN, chainStarts);
-  smoothRuns(marks, "sheet", MIN_SHEET_RUN, chainStarts);
-
-  for (let i = 0; i < n; i++) {
-    rows[i].ss = marks[i];
+  let assigned = 0;
+  for (const r of rows) {
+    const list = byChain.get(baseChainId(r.chainId));
+    if (!list) continue;
+    let ss: SecondaryStructureType = "coil";
+    for (const range of list) {
+      if (r.resSeq >= range.startResSeq && r.resSeq <= range.endResSeq) {
+        if (range.type === "sheet") {
+          ss = "sheet";
+          break;
+        }
+        if (range.type === "helix") ss = "helix";
+      }
+    }
+    r.ss = ss;
+    if (ss !== "coil") assigned++;
   }
+  return assigned;
 }

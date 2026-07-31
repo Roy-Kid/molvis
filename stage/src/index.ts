@@ -209,6 +209,13 @@ export {
   type TurntableSpec,
 } from "./camera/animator";
 export { pickViewDirection } from "./camera/auto_view";
+export type { CameraPosePayload } from "./camera/control";
+export {
+  fitCameraView,
+  lookAtCamera,
+  readCameraPose,
+  setCameraPose,
+} from "./camera/control";
 export {
   aabbToObb,
   type BoxFit,

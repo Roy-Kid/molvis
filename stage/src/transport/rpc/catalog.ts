@@ -40,6 +40,10 @@ export const RPC_METHODS = [
   "view.set_style",
   "view.set_theme",
   "view.set_mode",
+  "camera.get_pose",
+  "camera.set_pose",
+  "camera.look_at",
+  "camera.fit_view",
   "state.get",
   "rpc.list_methods",
 ] as const;
