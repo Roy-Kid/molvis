@@ -15,6 +15,7 @@ import * as MolvisElements from "@molcrafts/molvis-core/elements";
 import * as Molrs from "@molcrafts/molvis-core/molrs";
 import * as MolvisStage from "@molvis/stage";
 import * as React from "react";
+import * as JsxDevRuntime from "react/jsx-dev-runtime";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
@@ -24,6 +25,7 @@ export const pluginHostModules = {
   "react-dom": ReactDOM,
   "react-dom/client": ReactDOMClient,
   "react/jsx-runtime": JsxRuntime,
+  "react/jsx-dev-runtime": JsxDevRuntime,
   "@molvis/stage": MolvisStage,
   "@molcrafts/molvis-stage": MolvisStage,
   "@molcrafts/molvis-core/molrs": Molrs,
