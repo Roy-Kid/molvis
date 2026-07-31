@@ -287,6 +287,8 @@ export {
   ComputeBondsModifier,
 } from "./modifiers/ComputeBondsModifier";
 export { ComputePropertyModifier } from "./modifiers/ComputePropertyModifier";
+export { ConstructSurfaceMeshModifier } from "./modifiers/ConstructSurfaceMeshModifier";
+export { CoordinationPolyhedraModifier } from "./modifiers/CoordinationPolyhedraModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export {
   DISPLACEMENT_X,
@@ -322,12 +324,14 @@ export {
   steinhardtQColumn,
   steinhardtWColumn,
 } from "./modifiers/structure_order_shared";
+export { TrajectoryLinesModifier } from "./modifiers/TrajectoryLinesModifier";
 export { TransparentSelectionModifier } from "./modifiers/TransparentSelectionModifier";
 export { UnwrapTrajectoriesModifier } from "./modifiers/UnwrapTrajectoriesModifier";
 export type { VectorFieldModifierConfig } from "./modifiers/VectorFieldModifier";
 export { VectorFieldModifier } from "./modifiers/VectorFieldModifier";
 export { Arrow2DOverlay } from "./overlays/arrow2d";
 export { Arrow3DOverlay } from "./overlays/arrow3d";
+export { LineSystemOverlay } from "./overlays/line_system";
 export { MarkAtomOverlay } from "./overlays/mark_atom";
 // Overlay system
 export { OverlayManager } from "./overlays/overlay_manager";

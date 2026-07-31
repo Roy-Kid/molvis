@@ -29,8 +29,8 @@ product decision.
 | Priority | Gaps |
 |----------|------|
 | **P0** | ~~Replicate; Unwrap~~ (shipped) |
-| **P1a** | ~~Compute property; Freeze; Edit types; Select overlapping; Displacement vectors~~ (shipped) |
-| **P1b** | Coordination polyhedra; Trajectory lines; Surface-mesh polish |
+| **P1a** | ~~Compute / Freeze / Edit types / Select overlapping / Displacement~~ (shipped) |
+| **P1b** | ~~Coordination polyhedra; Trajectory lines; Construct surface mesh~~ (shipped) |
 | **P2** | Smooth trajectory; Ambient occlusion wiring; Edit-cell UX polish |
 | **OOS** | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs |
 

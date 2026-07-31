@@ -10,6 +10,8 @@ import {
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   ComputeBondsModifier as CoreComputeBondsModifier,
   ComputePropertyModifier as CoreComputePropertyModifier,
+  ConstructSurfaceMeshModifier as CoreConstructSurfaceMeshModifier,
+  CoordinationPolyhedraModifier as CoreCoordinationPolyhedraModifier,
   DataSourceModifier as CoreDataSourceModifier,
   DisplacementVectorsModifier as CoreDisplacementVectorsModifier,
   DrawAtomModifier as CoreDrawAtomModifier,
@@ -30,6 +32,7 @@ import {
   SliceModifier as CoreSliceModifier,
   SolidLiquidModifier as CoreSolidLiquidModifier,
   SteinhardtOrderModifier as CoreSteinhardtOrderModifier,
+  TrajectoryLinesModifier as CoreTrajectoryLinesModifier,
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
   UnwrapTrajectoriesModifier as CoreUnwrapTrajectoriesModifier,
   VectorFieldModifier as CoreVectorFieldModifier,
@@ -40,6 +43,7 @@ import { AssignColorModifier } from "@/ui/modes/view/modifiers/AssignColorModifi
 import { ColorByPropertyModifier } from "@/ui/modes/view/modifiers/ColorByPropertyModifier";
 import { ComputeBondsModifier } from "@/ui/modes/view/modifiers/ComputeBondsModifier";
 import { ComputePropertyModifier } from "@/ui/modes/view/modifiers/ComputePropertyModifier";
+import { CoordinationPolyhedraModifier } from "@/ui/modes/view/modifiers/CoordinationPolyhedraModifier";
 import { DataSourceModifier } from "@/ui/modes/view/modifiers/DataSourceModifier";
 import { DisplacementVectorsModifier } from "@/ui/modes/view/modifiers/DisplacementVectorsModifier";
 import { DrawAtomModifier } from "@/ui/modes/view/modifiers/DrawAtomModifier";
@@ -60,6 +64,7 @@ import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier
 import { SliceModifier } from "@/ui/modes/view/modifiers/SliceModifier";
 import { SolidLiquidModifier } from "@/ui/modes/view/modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "@/ui/modes/view/modifiers/SteinhardtOrderModifier";
+import { TrajectoryLinesModifier } from "@/ui/modes/view/modifiers/TrajectoryLinesModifier";
 import { TransparentSelectionModifier } from "@/ui/modes/view/modifiers/TransparentSelectionModifier";
 import { UnwrapTrajectoriesModifier } from "@/ui/modes/view/modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "@/ui/modes/view/modifiers/VectorFieldModifier";
@@ -213,8 +218,28 @@ export function registerBuiltinModifierPanels(): void {
     },
     {
       id: "builtin:GaussianDensitySurface",
-      match: (m) => m instanceof CoreGaussianDensitySurfaceModifier,
+      match: (m) =>
+        m instanceof CoreGaussianDensitySurfaceModifier &&
+        !(m instanceof CoreConstructSurfaceMeshModifier),
       component: asPanel(GaussianDensitySurfaceModifier),
+      usesLeftConfig: true,
+    },
+    {
+      id: "builtin:ConstructSurfaceMesh",
+      match: (m) => m instanceof CoreConstructSurfaceMeshModifier,
+      component: asPanel(GaussianDensitySurfaceModifier),
+      usesLeftConfig: true,
+    },
+    {
+      id: "builtin:CoordinationPolyhedra",
+      match: (m) => m instanceof CoreCoordinationPolyhedraModifier,
+      component: asPanel(CoordinationPolyhedraModifier),
+      usesLeftConfig: true,
+    },
+    {
+      id: "builtin:TrajectoryLines",
+      match: (m) => m instanceof CoreTrajectoryLinesModifier,
+      component: asPanel(TrajectoryLinesModifier),
       usesLeftConfig: true,
     },
     {

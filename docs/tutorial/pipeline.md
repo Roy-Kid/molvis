@@ -38,7 +38,7 @@ Aligned with OVITO’s Add-modifier groups:
 | Selection | Expression Select, Clear / Invert / Select Type / Expand / Select overlapping, Hide Selection | Create or act on a selection set |
 | Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Compute/Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
 | Coloring | Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid | Per-atom color / structure-order → color |
-| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density surface | Scene-changing visual helpers |
+| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density / Construct surface mesh, Coordination polyhedra, Generate trajectory lines | Scene-changing visual helpers |
 
 **Iron law:** only steps that change the canvas belong in the pipeline. Charts
 and pure numerical analyses (RDF, MSD, spectra, …) live in the **left Analysis

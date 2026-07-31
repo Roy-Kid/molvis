@@ -39,6 +39,9 @@ const DONE_USER_ADDABLE = new Set([
   "Simulation cell",
   "Vector field",
   "Gaussian density surface",
+  "Construct surface mesh",
+  "Coordination polyhedra",
+  "Generate trajectory lines",
   "Create isosurface",
 ]);
 

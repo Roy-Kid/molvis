@@ -1,5 +1,6 @@
 export { Arrow2DOverlay } from "./arrow2d";
 export { Arrow3DOverlay } from "./arrow3d";
+export { LineSystemOverlay, type LineSystemProps } from "./line_system";
 export { MarkAtomOverlay } from "./mark_atom";
 export { OverlayManager } from "./overlay_manager";
 export {

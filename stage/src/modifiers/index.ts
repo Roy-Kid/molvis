@@ -12,6 +12,8 @@ export {
   ComputeBondsModifier,
 } from "./ComputeBondsModifier";
 export { ComputePropertyModifier } from "./ComputePropertyModifier";
+export { ConstructSurfaceMeshModifier } from "./ConstructSurfaceMeshModifier";
+export { CoordinationPolyhedraModifier } from "./CoordinationPolyhedraModifier";
 export { DeleteSelectedModifier } from "./DeleteSelectedModifier";
 export {
   DISPLACEMENT_X,
@@ -44,6 +46,7 @@ export {
   steinhardtQColumn,
   steinhardtWColumn,
 } from "./structure_order_shared";
+export { TrajectoryLinesModifier } from "./TrajectoryLinesModifier";
 export { TransparentSelectionModifier } from "./TransparentSelectionModifier";
 export { UnwrapTrajectoriesModifier } from "./UnwrapTrajectoriesModifier";
 export { WrapPBCModifier } from "./WrapPBCModifier";

@@ -4,6 +4,8 @@ import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
 import { ComputePropertyModifier } from "../modifiers/ComputePropertyModifier";
+import { ConstructSurfaceMeshModifier } from "../modifiers/ConstructSurfaceMeshModifier";
+import { CoordinationPolyhedraModifier } from "../modifiers/CoordinationPolyhedraModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { DisplacementVectorsModifier } from "../modifiers/DisplacementVectorsModifier";
 import { EditTypesModifier } from "../modifiers/EditTypesModifier";
@@ -20,6 +22,7 @@ import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
 import { SolidLiquidModifier } from "../modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "../modifiers/SteinhardtOrderModifier";
+import { TrajectoryLinesModifier } from "../modifiers/TrajectoryLinesModifier";
 import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
 import { UnwrapTrajectoriesModifier } from "../modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "../modifiers/VectorFieldModifier";
@@ -292,6 +295,23 @@ export class ModifierRegistry {
         new GaussianDensitySurfaceModifier(
           nextModifierId("gaussian-density-surface"),
         ),
+    );
+    ModifierRegistry.register(
+      ConstructSurfaceMeshModifier.DISPLAY_NAME,
+      "Visualization",
+      () =>
+        new ConstructSurfaceMeshModifier(nextModifierId("construct-surface")),
+    );
+    ModifierRegistry.register(
+      CoordinationPolyhedraModifier.NAME,
+      "Visualization",
+      () =>
+        new CoordinationPolyhedraModifier(nextModifierId("coord-polyhedra")),
+    );
+    ModifierRegistry.register(
+      TrajectoryLinesModifier.NAME,
+      "Visualization",
+      () => new TrajectoryLinesModifier(nextModifierId("traj-lines")),
     );
 
     // ── Auto-attach only (visual elements; not in Add menu) ─────────

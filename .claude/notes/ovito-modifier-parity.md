@@ -73,9 +73,9 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | — | `Ribbon` | n/a | Auto-attach protein path |
 | — | `Vector field` | n/a | MolVis; also displacement draw path |
 | — | `Gaussian density surface` | n/a | Closest to Construct surface mesh |
-| Construct surface mesh | Gaussian density / MC | partial | Extend Gaussian/MC; P1 |
-| Coordination polyhedra | — | **gap** | P1; Visualization + usesLeftConfig |
-| Generate trajectory lines | — | **gap** | P1; overlays pattern |
+| Construct surface mesh | `Construct surface mesh` | done | Gaussian denser grid → MC; left compute / right draw |
+| Coordination polyhedra | `Coordination polyhedra` | done | Neighbor wireframes; overlay |
+| Generate trajectory lines | `Generate trajectory lines` | done | Multi-frame polylines; overlay |
 
 ## Structure identification
 
@@ -108,8 +108,8 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 | Priority | Items | Target slug / wave |
 |----------|--------|-------------------|
 | P0 | Replicate; Unwrap trajectories | **shipped** |
-| P1a | Compute/Freeze/Edit types/Select overlapping/Displacement | **shipped** `ovito-parity-03..05` |
-| P1b | Coordination polyhedra; Trajectory lines; Surface mesh polish | future specs |
+| P1a | Compute/Freeze/Edit types/Select overlapping/Displacement | **shipped** |
+| P1b | Coordination polyhedra; Trajectory lines; Construct surface mesh | **shipped** |
 | P2 | Smooth trajectory; Ambient occlusion (settings); Edit-cell UX rename/polish | future |
 | OOS | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs | never without deliberate note |
 
@@ -125,6 +125,6 @@ Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajecto
 
 Coloring: Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid  
 
-Visualization: Create bonds, Bonds, Simulation cell, Vector field, Gaussian density surface, Create isosurface  
+Visualization: Create bonds, Bonds, Simulation cell, Vector field, Gaussian density surface, Construct surface mesh, Coordination polyhedra, Generate trajectory lines, Create isosurface  
 
 Auto-attach only: Particles, Ribbon, Transparent  

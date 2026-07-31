@@ -22,6 +22,7 @@ spec's tasks off and prunes the entry (and file) on completion.
 - **ovito-parity-03-compute-freeze** — Compute property + Freeze property
 - **ovito-parity-04-edit-types-overlap** — Edit types + Select overlapping
 - **ovito-parity-05-displacement** — Displacement vectors columns
+- **ovito-parity-06-viz-p1b** — Coordination polyhedra, trajectory lines, construct surface mesh
 
 ### 2026-07-30 — OVITO Selection parity
 
