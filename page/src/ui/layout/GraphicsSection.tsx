@@ -12,6 +12,7 @@ interface GraphicsSectionProps {
 
 interface GraphicsState {
   fxaa: boolean;
+  ssao: boolean;
   hardwareScaling: number;
 }
 
@@ -29,6 +30,7 @@ export const GraphicsSection: React.FC<GraphicsSectionProps> = ({
     const gfx = app.settings.getGraphics();
     setState({
       fxaa: gfx.fxaa ?? true,
+      ssao: gfx.ssao ?? false,
       hardwareScaling: gfx.hardwareScaling ?? 1.0,
     });
   }, [app]);
@@ -37,6 +39,12 @@ export const GraphicsSection: React.FC<GraphicsSectionProps> = ({
     if (!app) return;
     setState((prev) => (prev ? { ...prev, fxaa: c } : prev));
     app.settings.setGraphics({ ...app.settings.getGraphics(), fxaa: c });
+  };
+
+  const onSsao = (c: boolean) => {
+    if (!app) return;
+    setState((prev) => (prev ? { ...prev, ssao: c } : prev));
+    app.settings.setGraphics({ ...app.settings.getGraphics(), ssao: c });
   };
 
   const onHwScaling = (v: number) => {
@@ -52,7 +60,7 @@ export const GraphicsSection: React.FC<GraphicsSectionProps> = ({
     <SettingsSection
       id={sectionId}
       title="Graphics"
-      description="FXAA is a post-process anti-alias pass. Render Scale multiplies the device pixel ratio (1.0 = native, 2.0 = supersampling)."
+      description="FXAA anti-aliases edges. SSAO adds contact shadows (costlier). Render Scale multiplies device pixel ratio (1.0 = native)."
     >
       {!app || !state ? (
         <p className="text-micro text-muted-foreground">
@@ -65,6 +73,13 @@ export const GraphicsSection: React.FC<GraphicsSectionProps> = ({
               aria-label="Enable FXAA"
               checked={state.fxaa}
               onCheckedChange={onFxaa}
+            />
+          </SettingsRow>
+          <SettingsRow label="Ambient occlusion (SSAO)">
+            <Switch
+              aria-label="Enable ambient occlusion"
+              checked={state.ssao}
+              onCheckedChange={onSsao}
             />
           </SettingsRow>
           <SettingsRow label="Render Scale">

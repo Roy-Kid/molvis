@@ -6,6 +6,7 @@ import {
   FxaaPostProcess,
   HemisphericLight,
   Scene,
+  SSAO2RenderingPipeline,
   Tools,
   Vector3,
 } from "@babylonjs/core";
@@ -43,6 +44,7 @@ export class World {
   private _camera: ArcRotateCamera;
   private _canvas: HTMLCanvasElement | null = null;
   private _fxaa?: FxaaPostProcess;
+  private _ssao?: SSAO2RenderingPipeline;
   private _modeManager?: ModeManager;
   private _lastRadius = 10;
   private readonly _renderLoop = () => {
@@ -440,7 +442,33 @@ export class World {
       }
     }
 
-    // 3. Shadows & Post-Processing
-    // Currently we don't use ShadowGenerator or Pipeline
+    // 3. SSAO2 (screen-space ambient occlusion)
+    if (config.ssao) {
+      if (!this._ssao) {
+        try {
+          const ssao = new SSAO2RenderingPipeline(
+            "molvis_ssao2",
+            this._scene,
+            { ssaoRatio: 0.5, blurRatio: 0.5 },
+            [this._camera],
+          );
+          ssao.radius = 2.0;
+          ssao.totalStrength = 1.2;
+          ssao.base = 0.4;
+          ssao.expensiveBlur = true;
+          ssao.samples = 16;
+          this._ssao = ssao;
+        } catch (err) {
+          logger.warn("[World] SSAO2 init failed", err as Error);
+        }
+      }
+    } else if (this._ssao) {
+      this._scene.postProcessRenderPipelineManager.detachCamerasFromRenderPipeline(
+        "molvis_ssao2",
+        [this._camera],
+      );
+      this._ssao.dispose();
+      this._ssao = undefined;
+    }
   }
 }

@@ -36,6 +36,7 @@ export { ClearSelectionModifier, SelectModifier } from "./SelectModifier";
 export { SelectOverlappingModifier } from "./SelectOverlappingModifier";
 export { SelectTypeModifier } from "./SelectTypeModifier";
 export { type GuideLine, SliceModifier } from "./SliceModifier";
+export { SmoothTrajectoryModifier } from "./SmoothTrajectoryModifier";
 export { SolidLiquidModifier } from "./SolidLiquidModifier";
 export { SteinhardtOrderModifier } from "./SteinhardtOrderModifier";
 export {

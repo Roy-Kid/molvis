@@ -31,7 +31,7 @@ product decision.
 | **P0** | ~~Replicate; Unwrap~~ (shipped) |
 | **P1a** | ~~Compute / Freeze / Edit types / Select overlapping / Displacement~~ (shipped) |
 | **P1b** | ~~Coordination polyhedra; Trajectory lines; Construct surface mesh~~ (shipped) |
-| **P2** | Smooth trajectory; Ambient occlusion wiring; Edit-cell UX polish |
+| **P2** | ~~Smooth trajectory; SSAO; Edit lattice UX~~ (shipped) |
 | **OOS** | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs |
 
 Shipped parity batches: `ovito-parity-01` … `05` (see `.claude/specs/INDEX.md` shipped section).

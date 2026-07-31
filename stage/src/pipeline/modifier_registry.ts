@@ -20,6 +20,7 @@ import { ClearSelectionModifier } from "../modifiers/SelectModifier";
 import { SelectOverlappingModifier } from "../modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 import { SliceModifier } from "../modifiers/SliceModifier";
+import { SmoothTrajectoryModifier } from "../modifiers/SmoothTrajectoryModifier";
 import { SolidLiquidModifier } from "../modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "../modifiers/SteinhardtOrderModifier";
 import { TrajectoryLinesModifier } from "../modifiers/TrajectoryLinesModifier";
@@ -206,6 +207,11 @@ export class ModifierRegistry {
       UnwrapTrajectoriesModifier.NAME,
       "Modification",
       () => new UnwrapTrajectoriesModifier(nextModifierId("unwrap-traj")),
+    );
+    ModifierRegistry.register(
+      SmoothTrajectoryModifier.NAME,
+      "Modification",
+      () => new SmoothTrajectoryModifier(nextModifierId("smooth-traj")),
     );
     ModifierRegistry.register(
       ComputePropertyModifier.NAME,

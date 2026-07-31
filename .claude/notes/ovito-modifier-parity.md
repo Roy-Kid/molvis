@@ -43,12 +43,12 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | Replicate (periodic images) | `Replicate` | done | Integer images along cell vectors |
 | Unwrap trajectories | `Unwrap trajectories` | done | MIC accumulate; scrub-back re-seeds |
 | Compute property | `Compute property` | done | Expression → F64 column |
-| Edit simulation cell | `Simulation cell` / DrawBox | partial | Manual box exists; no dedicated “edit lattice” menu item |
+| Edit simulation cell | `Simulation cell` Edit lattice panel | done | lengths / origin / PBC on DrawBox panel |
 | Edit types | `Edit types` | done | Selection → element/type |
 | Freeze Property | `Freeze property` | done | Snapshot column, reapply later frames |
 | Combine datasets | Multi–DataSource compose | partial | Different model (multiple DS), not OVITO modifier |
 | Load trajectory | File / DS ingress | n/a | Not a pipeline modifier by design |
-| Smooth trajectory | — | gap | P2 |
+| Smooth trajectory | `Smooth trajectory` | done | Sliding-window average of coords |
 | Python script | — | oos | Excluded |
 
 ## Coloring
@@ -58,7 +58,7 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | Assign color | `Assign Color` | done | |
 | Color coding | `Color by Property` | done | Continuous / categorical |
 | Color by type | `Color by Type` | done | element categorical preset |
-| Ambient occlusion | `graphics.ssao` stub | **gap** | Settings, not modifier; wire World/FX |
+| Ambient occlusion | Settings → SSAO2 | done | World.applyGraphicsSettings + GraphicsSection |
 | Structure → color | Steinhardt / Solid–liquid | partial | Molrs structure-order, not OVITO PTM/CNA |
 
 ## Visualization
@@ -110,7 +110,7 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 | P0 | Replicate; Unwrap trajectories | **shipped** |
 | P1a | Compute/Freeze/Edit types/Select overlapping/Displacement | **shipped** |
 | P1b | Coordination polyhedra; Trajectory lines; Construct surface mesh | **shipped** |
-| P2 | Smooth trajectory; Ambient occlusion (settings); Edit-cell UX rename/polish | future |
+| P2 | Smooth trajectory; SSAO; Edit lattice UX | **shipped** |
 | OOS | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs | never without deliberate note |
 
 \* Voronoi voids / analysis / VoroTop explicitly excluded.
@@ -121,7 +121,7 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 
 Selection: Expression Select, Clear Selection, Invert Selection, Select Type, Expand Selection, Select overlapping, Hide Selection  
 
-Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Compute property, Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens  
+Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Smooth trajectory, Compute property, Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens  
 
 Coloring: Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid  
 

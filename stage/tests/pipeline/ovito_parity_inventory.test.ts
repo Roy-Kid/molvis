@@ -21,6 +21,7 @@ const DONE_USER_ADDABLE = new Set([
   "Affine transformation",
   "Replicate",
   "Unwrap trajectories",
+  "Smooth trajectory",
   "Compute property",
   "Freeze property",
   "Edit types",

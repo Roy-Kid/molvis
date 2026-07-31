@@ -314,6 +314,7 @@ export {
 export { SelectOverlappingModifier } from "./modifiers/SelectOverlappingModifier";
 export { SelectTypeModifier } from "./modifiers/SelectTypeModifier";
 export { SliceModifier } from "./modifiers/SliceModifier";
+export { SmoothTrajectoryModifier } from "./modifiers/SmoothTrajectoryModifier";
 export { SolidLiquidModifier } from "./modifiers/SolidLiquidModifier";
 export { SteinhardtOrderModifier } from "./modifiers/SteinhardtOrderModifier";
 export {

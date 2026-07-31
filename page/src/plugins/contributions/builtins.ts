@@ -30,6 +30,7 @@ import {
   SelectOverlappingModifier as CoreSelectOverlappingModifier,
   SelectTypeModifier as CoreSelectTypeModifier,
   SliceModifier as CoreSliceModifier,
+  SmoothTrajectoryModifier as CoreSmoothTrajectoryModifier,
   SolidLiquidModifier as CoreSolidLiquidModifier,
   SteinhardtOrderModifier as CoreSteinhardtOrderModifier,
   TrajectoryLinesModifier as CoreTrajectoryLinesModifier,
@@ -62,6 +63,7 @@ import { SelectModifierProps } from "@/ui/modes/view/modifiers/SelectModifierPro
 import { SelectOverlappingModifier } from "@/ui/modes/view/modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier";
 import { SliceModifier } from "@/ui/modes/view/modifiers/SliceModifier";
+import { SmoothTrajectoryModifier } from "@/ui/modes/view/modifiers/SmoothTrajectoryModifier";
 import { SolidLiquidModifier } from "@/ui/modes/view/modifiers/SolidLiquidModifier";
 import { SteinhardtOrderModifier } from "@/ui/modes/view/modifiers/SteinhardtOrderModifier";
 import { TrajectoryLinesModifier } from "@/ui/modes/view/modifiers/TrajectoryLinesModifier";
@@ -158,6 +160,11 @@ export function registerBuiltinModifierPanels(): void {
       id: "builtin:DisplacementVectors",
       match: (m) => m instanceof CoreDisplacementVectorsModifier,
       component: asPanel(DisplacementVectorsModifier),
+    },
+    {
+      id: "builtin:SmoothTrajectory",
+      match: (m) => m instanceof CoreSmoothTrajectoryModifier,
+      component: asPanel(SmoothTrajectoryModifier),
     },
     {
       id: "builtin:ColorByProperty",
