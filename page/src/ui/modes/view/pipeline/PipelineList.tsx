@@ -15,6 +15,7 @@ import {
 import {
   DrawBoxModifier,
   type DrawBoxSpec,
+  MODIFIER_CATEGORIES,
   type Modifier,
   ModifierRegistry,
   type Molvis,
@@ -22,6 +23,8 @@ import {
 } from "@molvis/stage";
 import { getAllAcceptExtensions, type LoadMode } from "@molvis/stage/io";
 import {
+  Atom,
+  ChartColumn,
   Eye,
   FilePlus2,
   Filter,
@@ -78,14 +81,8 @@ type RegistryEntry = ReturnType<
 >[number];
 type AvailableEntry = { entry: RegistryEntry; applicable: boolean };
 
-/** OVITO-aligned Add-menu groups (see ModifierRegistry categories). */
-const MODIFIER_MENU_GROUPS = [
-  "Selection",
-  "Modification",
-  "Coloring",
-  "Visualization",
-  "Other",
-] as const;
+/** OVITO Add-menu groups (same order as OVITO; plus Other for plugins). */
+const MODIFIER_MENU_GROUPS = [...MODIFIER_CATEGORIES, "Other"] as const;
 
 type ModifierMenuGroup = (typeof MODIFIER_MENU_GROUPS)[number];
 
@@ -96,7 +93,9 @@ const GROUP_ICONS: Record<
   Selection: Filter,
   Modification: Shapes,
   Coloring: Palette,
+  "Structure identification": Atom,
   Visualization: Eye,
+  Analysis: ChartColumn,
   Other: Wand2,
 };
 
@@ -341,13 +340,9 @@ export function PipelineList({
   }, [app, frameVersion]);
 
   const groupedEntries = useMemo(() => {
-    const groups: Record<ModifierMenuGroup, AvailableEntry[]> = {
-      Selection: [],
-      Modification: [],
-      Coloring: [],
-      Visualization: [],
-      Other: [],
-    };
+    const groups = Object.fromEntries(
+      MODIFIER_MENU_GROUPS.map((g) => [g, [] as AvailableEntry[]]),
+    ) as Record<ModifierMenuGroup, AvailableEntry[]>;
     for (const item of availableEntries) {
       groups[modifierMenuGroup(item.entry)].push(item);
     }

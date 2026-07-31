@@ -40,23 +40,33 @@ import type { Modifier } from "./modifier";
 export type ModifierFactory = () => Modifier;
 
 /**
- * Add-menu functional groups (OVITO-shaped, MolVis-complete).
+ * Add-menu groups — **same folders as OVITO** (minus Python).
  *
  * | Group | Who belongs |
  * |-------|-------------|
- * | Selection | *selection* ops: produce or act on a selection set |
- * | Modification | topology / coordinate / filter edits |
- * | Coloring | write per-atom color data |
- * | Visualization | create visual data or attach visual elements |
+ * | Selection | produce / act on a selection set |
+ * | Modification | topology / coordinate / filter / property edits |
+ * | Coloring | per-atom color writers |
+ * | Structure identification | local structure / order → columns (molrs) |
+ * | Visualization | bonds, cell, surfaces, polyhedra, trajectory lines, … |
+ * | Analysis | pipeline property compute that feeds viz (e.g. displacements) |
+ *
+ * Chart-only analyses (RDF, MSD, histograms, …) stay in the **left Analysis
+ * panel**, not here — they do not change the scene by themselves.
  *
  * Auto-attach visual elements stay registered (`userAddable: false`) so load
  * paths and RPC still resolve them; they are omitted from the Add menu.
  */
-export type ModifierCategory =
-  | "Selection"
-  | "Modification"
-  | "Coloring"
-  | "Visualization";
+export const MODIFIER_CATEGORIES = [
+  "Selection",
+  "Modification",
+  "Coloring",
+  "Structure identification",
+  "Visualization",
+  "Analysis",
+] as const;
+
+export type ModifierCategory = (typeof MODIFIER_CATEGORIES)[number];
 
 export interface RegisterModifierOptions {
   /**
@@ -229,11 +239,6 @@ export class ModifierRegistry {
       () => new EditTypesModifier(nextModifierId("edit-types")),
     );
     ModifierRegistry.register(
-      DisplacementVectorsModifier.NAME,
-      "Modification",
-      () => new DisplacementVectorsModifier(nextModifierId("displacement")),
-    );
-    ModifierRegistry.register(
       "Delete Selected",
       "Modification",
       () => new DeleteSelectedModifier(),
@@ -260,17 +265,26 @@ export class ModifierRegistry {
       "Coloring",
       () => new AssignColorModifier(),
     );
-    // Structure order → per-atom columns → scene color (molrs).
-    // Bond-order (environment) is a θ/φ histogram — analysis-only, not here.
+
+    // ── Structure identification (OVITO group; molrs backends only) ──
+    // Chart-only bond-order θ/φ stays left Analysis, not here.
     ModifierRegistry.register(
       SteinhardtOrderModifier.NAME,
-      "Coloring",
+      "Structure identification",
       () => new SteinhardtOrderModifier(nextModifierId("steinhardt")),
     );
     ModifierRegistry.register(
       SolidLiquidModifier.NAME,
-      "Coloring",
+      "Structure identification",
       () => new SolidLiquidModifier(nextModifierId("solid-liquid")),
+    );
+
+    // ── Analysis (OVITO group — scene-feeding property compute) ─────
+    // Pure charts (RDF/MSD/…) remain left Analysis panel only.
+    ModifierRegistry.register(
+      DisplacementVectorsModifier.NAME,
+      "Analysis",
+      () => new DisplacementVectorsModifier(nextModifierId("displacement")),
     );
 
     // ── Visualization (user-addable; OVITO names, not "Draw …") ─────

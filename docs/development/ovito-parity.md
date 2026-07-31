@@ -19,10 +19,12 @@ product decision.
 
 | Where | What |
 |-------|------|
-| Pipeline | Changes frame data or the canvas |
-| Left Analysis | Charts / tables / series; optional “Add pipeline modifier” when results can paint |
-| Left compute / right draw | Analysis-nature pipeline steps (`usesLeftConfig`) |
+| Pipeline Add menu | **OVITO folders**: Selection, Modification, Coloring, Structure identification, Visualization, Analysis |
+| Left Analysis panel | Chart-only RDF/MSD/histograms (not Add-menu); optional “Add pipeline modifier” when results can paint |
+| Left compute / right draw | Structure ID / mesh steps (`usesLeftConfig`) |
 | Settings | Viewport graphics (e.g. ambient occlusion) |
+
+Python folder is intentionally omitted.
 
 ## Priority backlog (from the matrix)
 

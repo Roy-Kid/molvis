@@ -47,7 +47,11 @@ export type {
   RegisterModifierOptions,
 } from "./modifier_registry";
 // Modifier registry
-export { ModifierRegistry, nextModifierId } from "./modifier_registry";
+export {
+  MODIFIER_CATEGORIES,
+  ModifierRegistry,
+  nextModifierId,
+} from "./modifier_registry";
 // NATO IDs and DAG utilities
 export {
   generateNatoId,

@@ -396,6 +396,7 @@ export type {
   RegisterModifierOptions,
 } from "./pipeline/modifier_registry";
 export {
+  MODIFIER_CATEGORIES,
   ModifierRegistry,
   nextModifierId,
   registerDefaultModifiers,

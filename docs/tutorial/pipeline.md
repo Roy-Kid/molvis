@@ -33,12 +33,16 @@ wireframe to spacefill does not insert a modifier.
 
 Aligned with OVITO’s Add-modifier groups:
 
-| Category | Examples | Effect |
+| Category (OVITO) | Examples | Effect |
 |---|---|---|
 | Selection | Expression Select, Clear / Invert / Select Type / Expand / Select overlapping, Hide Selection | Create or act on a selection set |
-| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute/Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
-| Coloring | Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid | Per-atom color / structure-order → color |
-| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density / Construct surface mesh, Coordination polyhedra, Generate trajectory lines | Scene-changing visual helpers |
+| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute/Freeze property, Edit types, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
+| Coloring | Color by Property, Color by Type, Assign Color | Per-atom color |
+| Structure identification | Steinhardt order, Solid–liquid | Local structure → atom columns (molrs) |
+| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density / Construct surface mesh, Coordination polyhedra, Generate trajectory lines | Scene visuals |
+| Analysis | Displacement vectors | Pipeline property compute that feeds viz |
+
+Chart-only analyses (RDF, MSD, histograms, …) stay in the **left Analysis** panel — same iron law as before; they are not Add-menu items.
 
 **Iron law:** only steps that change the canvas belong in the pipeline. Charts
 and pure numerical analyses (RDF, MSD, spectra, …) live in the **left Analysis

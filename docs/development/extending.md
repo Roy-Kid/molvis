@@ -68,17 +68,18 @@ ModifierRegistry.register("scale-x", () => new ScaleXModifier());
 
 Now it shows up in the pipeline's *Add modifier* menu. The registry
 decides the **functional group** rendered in the Add menu from the
-`category` field (OVITO-aligned):
+`category` field — **same folders as OVITO** (Python folder omitted):
 
-- `Selection` — selection ops (Expression Select, Hide Selection, …).
-- `Modification` — topology / geometry edits (Slice, Wrap PBC, Delete Selected, …).
-- `Coloring` — appearance-data writers (Color by Property, Assign Color).
-- `Visualization` — scene-changing helpers (Create bonds, Bonds, Simulation cell,
-  Create isosurface, Vector field, …).
+- `Selection` — Expression Select, Invert, Expand, Select type, …
+- `Modification` — Slice, Wrap PBC, Affine, Replicate, Compute property, …
+- `Coloring` — Color by Property, Color by Type, Assign Color
+- `Structure identification` — Steinhardt, Solid–liquid (molrs); CNA/PTM later
+- `Visualization` — Bonds, Simulation cell, isosurface, surface mesh, polyhedra, …
+- `Analysis` — Displacement vectors (scene-feeding property compute)
 
-**Iron law:** if it does not change the canvas, it is not a pipeline modifier —
-put it in the left Analysis panel (`molrsComputeCatalog`). Pure visual elements
-that auto-attach on load (Particles, Ribbon) use `{ userAddable: false }`.
+**Iron law:** chart-only RDF/MSD/… stay in the **left Analysis panel**
+(`molrsComputeCatalog`), not the Add menu. Pure visual auto-attach elements
+(Particles, Ribbon) use `{ userAddable: false }`.
 
 Analysis-nature / mesh-building modifiers register `usesLeftConfig: true` so
 **adding or selecting** them opens the left panel with `surface="compute"`

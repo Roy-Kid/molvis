@@ -379,14 +379,15 @@ app.pipeline.setEnabled(id, false);
 | `ComputePropertyModifier` | Modification | Expression → per-atom float column. |
 | `FreezePropertyModifier` | Modification | Freeze a column across frames. |
 | `EditTypesModifier` | Modification | Set element/type on selection. |
-| `DisplacementVectorsModifier` | Modification | Displacement.X/Y/Z vs reference frame. |
+
 | `HideSelectionModifier` | Modification | Drops selected atoms from the render. |
 | `DeleteSelectedModifier` | Modification | Removes selected atoms from the frame. |
 | `ColorByPropertyModifier` | Coloring | Maps a column to a color ramp. |
 | `ColorByTypeModifier` | Coloring | Categorical color by `element` (OVITO Color by Type). |
 | `AssignColorModifier` | Coloring | Fixed color on selected atoms. |
-| `SteinhardtOrderModifier` | Coloring | Writes `steinhardt_q{l}`; optional scene color. |
-| `SolidLiquidModifier` | Coloring | Writes `solid_liquid` / `solid_liquid_n_bonds`; optional color. |
+| `SteinhardtOrderModifier` | Structure identification | Writes `steinhardt_q{l}`; optional scene color. |
+| `SolidLiquidModifier` | Structure identification | Writes `solid_liquid` / `solid_liquid_n_bonds`; optional color. |
+| `DisplacementVectorsModifier` | Analysis | Displacement.X/Y/Z vs reference frame. |
 | `ComputeBondsModifier` | Visualization | Create bonds (perceive topology). |
 | `DrawBondModifier` | Visualization | **Bonds** visual element (user-addable). |
 | `DrawBoxModifier` | Visualization | **Simulation cell** (user-addable). |

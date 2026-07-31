@@ -8,10 +8,11 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 
 | Placement | Criterion |
 |-----------|-----------|
-| Pipeline modifier | Changes frame data and/or canvas (geometry, color, meshes, selection, cell, vectors) |
-| Left Analysis | Charts/tables/series only — no automatic scene change; optional **Add pipeline modifier** when results can paint |
-| Left compute / right draw | Analysis-nature pipeline steps: left = compute params; pipeline bottom = draw params (`usesLeftConfig`) |
-| Settings | Viewport graphics (e.g. ambient occlusion / SSAO) — not a pipeline step |
+| Pipeline Add menu | **OVITO categories**: Selection, Modification, Coloring, Structure identification, Visualization, Analysis (no Python folder) |
+| Pipeline modifier | Changes frame data and/or canvas |
+| Left Analysis panel | Chart-only series (RDF/MSD/…); optional **Add pipeline modifier** when results can paint |
+| Left compute / right draw | Structure ID / mesh steps: left = compute; pipeline bottom = draw (`usesLeftConfig`) |
+| Settings | Viewport graphics (e.g. SSAO) — not a pipeline step |
 
 **Status legend:** `done` · `partial` · `gap` · `oos` (out of scope / no molrs) · `n/a` (different product model)
 
@@ -121,10 +122,16 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 
 Selection: Expression Select, Clear Selection, Invert Selection, Select Type, Expand Selection, Select overlapping, Hide Selection  
 
-Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Smooth trajectory, Compute property, Freeze property, Edit types, Displacement vectors, Delete Selected, Hide Hydrogens  
+Modification: Slice, Wrap PBC, Affine transformation, Replicate, Unwrap trajectories, Smooth trajectory, Compute property, Freeze property, Edit types, Delete Selected, Hide Hydrogens  
 
-Coloring: Color by Property, Color by Type, Assign Color, Steinhardt order, Solid-liquid  
+Coloring: Color by Property, Color by Type, Assign Color  
+
+Structure identification: Steinhardt order, Solid-liquid  
 
 Visualization: Create bonds, Bonds, Simulation cell, Vector field, Gaussian density surface, Construct surface mesh, Coordination polyhedra, Generate trajectory lines, Create isosurface  
 
+Analysis: Displacement vectors  
+
 Auto-attach only: Particles, Ribbon, Transparent  
+
+Modification also: … (no Displacement — that is Analysis)
