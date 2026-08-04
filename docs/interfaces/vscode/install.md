@@ -29,6 +29,6 @@ After installation:
 5. check that the channel reports activation without an exception.
 
 The Home view remains lightweight and native; it does not allocate a WebGL
-canvas until you open Quick View or the Workspace.
+canvas until you open Quick View or the Workbench.
 
 Continue with [Quick View](quick-view.md).

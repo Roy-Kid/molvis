@@ -392,10 +392,9 @@ function concatBonds(
     if (bonds) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
-      const orderCol =
-        bonds.dtype("order") === DType.U32
-          ? bonds.viewColU32("order")
-          : undefined;
+      const orderCol = bonds.dtype("order")
+        ? bonds.viewColF("order")
+        : undefined;
       if (iCol && jCol) {
         any = true;
         for (let row = 0; row < bonds.nrows(); row++) {
@@ -412,6 +411,6 @@ function concatBonds(
   const block = new Block();
   block.setColU32("atomi", Uint32Array.from(atomi));
   block.setColU32("atomj", Uint32Array.from(atomj));
-  block.setColU32("order", Uint32Array.from(order));
+  block.setColF("order", Float64Array.from(order));
   return block;
 }

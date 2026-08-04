@@ -14,17 +14,30 @@ function atomsInBox(): Frame {
 }
 
 describe("GaussianDensitySurfaceModifier", () => {
-  it("matches frames with atoms and a box", () => {
+  it("never auto-attaches (matches is always false)", () => {
     const mod = new GaussianDensitySurfaceModifier();
     const frame = atomsInBox();
-    expect(mod.matches(frame)).toBe(true);
+    expect(mod.matches(frame)).toBe(false);
     expect(mod.isApplicable(frame)).toBe(true);
     frame.free();
   });
 
-  it("does not match atomsless frames", () => {
+  it("isApplicable is false without atoms (box optional — domain is AABB)", () => {
     const mod = new GaussianDensitySurfaceModifier();
     const frame = new Frame();
+    expect(mod.matches(frame)).toBe(false);
+    expect(mod.isApplicable(frame)).toBe(false);
+    frame.free();
+  });
+
+  it("isApplicable with atoms only (no simulation cell)", () => {
+    const mod = new GaussianDensitySurfaceModifier();
+    const frame = new Frame();
+    const atoms = frame.createBlock("atoms");
+    atoms.setColF("x", new Float64Array([1]));
+    atoms.setColF("y", new Float64Array([2]));
+    atoms.setColF("z", new Float64Array([3]));
+    expect(mod.isApplicable(frame)).toBe(true);
     expect(mod.matches(frame)).toBe(false);
     frame.free();
   });

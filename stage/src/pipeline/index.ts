@@ -39,7 +39,6 @@ export type { Modifier } from "./modifier";
 export {
   BaseModifier,
   ModifierCapability,
-  primaryCapabilityLabel,
 } from "./modifier";
 export type {
   ModifierCategory,

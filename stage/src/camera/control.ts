@@ -43,15 +43,7 @@ export function setCameraPose(
     target?: number[];
   },
 ): CameraPosePayload {
-  if (typeof params.alpha === "number" && Number.isFinite(params.alpha)) {
-    camera.alpha = params.alpha;
-  }
-  if (typeof params.beta === "number" && Number.isFinite(params.beta)) {
-    camera.beta = params.beta;
-  }
-  if (typeof params.radius === "number" && Number.isFinite(params.radius)) {
-    camera.radius = Math.max(0.01, params.radius);
-  }
+  // Target first so subsequent α/β/r are relative to the new look-at center.
   if (Array.isArray(params.target) && params.target.length >= 3) {
     camera.setTarget(
       new Vector3(
@@ -61,7 +53,39 @@ export function setCameraPose(
       ),
     );
   }
-  camera.rebuildAnglesAndRadius();
+
+  const hasSpherical =
+    (typeof params.alpha === "number" && Number.isFinite(params.alpha)) ||
+    (typeof params.beta === "number" && Number.isFinite(params.beta)) ||
+    (typeof params.radius === "number" && Number.isFinite(params.radius));
+
+  if (typeof params.alpha === "number" && Number.isFinite(params.alpha)) {
+    camera.alpha = params.alpha;
+  }
+  if (typeof params.beta === "number" && Number.isFinite(params.beta)) {
+    camera.beta = params.beta;
+  }
+  if (typeof params.radius === "number" && Number.isFinite(params.radius)) {
+    camera.radius = Math.max(0.01, params.radius);
+  }
+
+  // Kill inertial leftover from pointer drag so the next render lands exactly.
+  camera.inertialAlphaOffset = 0;
+  camera.inertialBetaOffset = 0;
+  camera.inertialRadiusOffset = 0;
+
+  // CRITICAL: do NOT call rebuildAnglesAndRadius() after writing α/β/r.
+  // That helper recomputes angles FROM the current world position and
+  // silently undoes every alpha/beta/radius assignment — which is why
+  // `camera.set_pose(alpha=…)` used to "succeed" with no visible motion.
+  // ArcRotateCamera derives position from α/β/r inside getViewMatrix.
+  if (hasSpherical) {
+    camera.getViewMatrix();
+  } else if (Array.isArray(params.target) && params.target.length >= 3) {
+    // Target-only update: keep world position, re-derive spherical coords.
+    camera.rebuildAnglesAndRadius();
+  }
+
   return readCameraPose(camera);
 }
 
@@ -104,7 +128,18 @@ export function lookAtCamera(
   return readCameraPose(camera);
 }
 
+/**
+ * Fit the interactive camera to the current scene.
+ *
+ * Empty canvas falls back to the default home pose (via {@link World.fit}).
+ */
 export function fitCameraView(app: MolvisApp): CameraPosePayload {
-  app.world.resetCamera({ viewDirection: "iso" });
+  app.world.fit({ viewDirection: "iso" });
+  return readCameraPose(app.world.camera);
+}
+
+/** Park the interactive camera at the empty-scene home pose. */
+export function resetCameraView(app: MolvisApp): CameraPosePayload {
+  app.world.reset();
   return readCameraPose(app.world.camera);
 }

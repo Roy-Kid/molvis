@@ -72,6 +72,7 @@ export const MOLVIS_UI_THEME_VARS = [
   "--molvis-ui-font",
   "--molvis-ui-font-size",
   "--molvis-ui-fg",
+  "--molvis-ui-panel-fg",
   "--molvis-ui-surface",
   "--molvis-ui-hover",
   "--molvis-ui-accent",

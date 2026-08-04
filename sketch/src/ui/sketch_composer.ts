@@ -2,6 +2,7 @@ import {
   defineMolvisElementPicker,
   type MolvisElementPickerElement,
 } from "@molcrafts/molvis-core/element-picker";
+import { saveBlob } from "@molcrafts/molvis-core/save-file";
 import {
   SketchBoard,
   type SketchBoardOptions,
@@ -836,16 +837,7 @@ export class SketchComposer {
     if (this.onExportFile) {
       await this.onExportFile(blob, filename);
     } else {
-      downloadBlob(blob, filename);
+      await saveBlob(blob, filename);
     }
   }
-}
-
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

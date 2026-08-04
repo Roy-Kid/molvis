@@ -57,32 +57,35 @@ export const GraphicsSection: React.FC<GraphicsSectionProps> = ({
   };
 
   return (
-    <SettingsSection
-      id={sectionId}
-      title="Graphics"
-      description="FXAA anti-aliases edges. SSAO adds contact shadows (costlier). Render Scale multiplies device pixel ratio (1.0 = native)."
-    >
+    <SettingsSection id={sectionId} title="Graphics">
       {!app || !state ? (
-        <p className="text-micro text-muted-foreground">
-          Graphics settings will appear once the viewer initializes.
-        </p>
+        <p className="text-micro text-muted-foreground">Viewer not ready.</p>
       ) : (
         <>
-          <SettingsRow label="FXAA">
+          <SettingsRow
+            label="FXAA"
+            tooltip="Smooth jagged edges with fast approximate anti-aliasing."
+          >
             <Switch
               aria-label="Enable FXAA"
               checked={state.fxaa}
               onCheckedChange={onFxaa}
             />
           </SettingsRow>
-          <SettingsRow label="Ambient occlusion (SSAO)">
+          <SettingsRow
+            label="SSAO"
+            tooltip="Add contact shadows with ambient occlusion."
+          >
             <Switch
-              aria-label="Enable ambient occlusion"
+              aria-label="SSAO"
               checked={state.ssao}
               onCheckedChange={onSsao}
             />
           </SettingsRow>
-          <SettingsRow label="Render Scale">
+          <SettingsRow
+            label="Scale"
+            tooltip="Adjust render resolution relative to the display."
+          >
             <NumberField
               aria-label="Render scale"
               value={state.hardwareScaling}

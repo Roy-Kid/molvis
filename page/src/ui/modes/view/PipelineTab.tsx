@@ -21,6 +21,8 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ app }) => {
     pendingDelete,
     pipelineRunning,
     setSelectedId,
+    setContainerEl,
+    setPropertiesEl,
     startResizing,
     resizePropertiesBy,
     handleAddModifier,
@@ -35,9 +37,10 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ app }) => {
 
   return (
     <fieldset
+      ref={setContainerEl}
       disabled={!app || pipelineRunning}
       aria-busy={pipelineRunning}
-      className="m-0 flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-0 p-0"
+      className="m-0 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-0 p-0"
     >
       <PipelineList
         app={app}
@@ -57,6 +60,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ app }) => {
         selectedModifier={selectedModifier}
         allModifiers={modifiers}
         propertiesHeight={propertiesHeight}
+        onPropertiesEl={setPropertiesEl}
         propertiesMaxHeight={propertiesMaxHeight}
         isResizing={isResizing}
         onResizeStart={startResizing}

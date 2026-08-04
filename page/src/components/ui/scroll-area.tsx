@@ -9,10 +9,16 @@ const ScrollArea = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     ref={ref}
-    className={cn("relative overflow-hidden", className)}
+    className={cn("relative min-h-0 min-w-0 overflow-hidden", className)}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
+    {/*
+      Radix wraps children in `display: table; min-width: 100%` so it can
+      measure scroll size. That table box refuses to shrink in narrow side
+      panels (w-full buttons / truncate labels break). Force block + min-w-0
+      so workbench rails reflow with the panel.
+    */}
+    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit] [&>div]:!block [&>div]:!min-w-0 [&>div]:w-full">
       {children}
     </ScrollAreaPrimitive.Viewport>
     <ScrollBar />

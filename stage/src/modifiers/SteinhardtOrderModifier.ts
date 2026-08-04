@@ -119,13 +119,19 @@ export class SteinhardtOrderModifier extends BaseModifier {
     if (this._lValues.includes(li)) this._colorL = li;
   }
 
-  matches(frame: Frame): boolean {
-    const atoms = frame.getBlock("atoms");
-    return atoms !== undefined && atoms.nrows() > 0;
+  /**
+   * Auto-attach predicate — always false. Order analysis is user-added
+   * only; a truthy `matches` would fire on every atom frame and, with
+   * default `colorScene`, stamp viridis `__color_*` over CPK element
+   * colors (the "all atoms one color" bug on protein load).
+   */
+  matches(_frame: Frame): boolean {
+    return false;
   }
 
   isApplicable(frame: Frame): boolean {
-    return this.matches(frame);
+    const atoms = frame.getBlock("atoms");
+    return atoms !== undefined && atoms.nrows() > 0;
   }
 
   getCacheKey(): string {
@@ -133,7 +139,7 @@ export class SteinhardtOrderModifier extends BaseModifier {
   }
 
   apply(input: Frame, _ctx: PipelineContext): Frame {
-    if (!this.matches(input)) return input;
+    if (!this.isApplicable(input)) return input;
     const n = input.getBlock("atoms")?.nrows() ?? 0;
     if (n === 0) return input;
 

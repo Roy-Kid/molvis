@@ -5,10 +5,11 @@ import { SelectionMask } from "../pipeline/types";
 import { DType } from "../utils/dtype";
 
 /**
- * OVITO-style **Select Type**: select atoms by `element` and/or `type`
+ * OVITO-style **Select Type**: select atoms by `element` and/or type
  * column membership. Empty `elements` and `types` selects nothing
  * (does not select-all). Matching is case-sensitive for element strings;
- * type values are stringified for comparison across str/i32/u32 columns.
+ * a numeric `type_id` ordinal is stringified so both spellings compare
+ * against the same `types` list.
  *
  * Does not reimplement the expression evaluator — a dedicated multi-select
  * API for hard-coded unit tests and a future property panel.
@@ -90,32 +91,33 @@ export class SelectTypeModifier extends BaseModifier {
   }
 }
 
-/** Stringify `atoms.type` whether stored as str / i32 / u32. Missing → "". */
+/**
+ * Read the atoms' type as strings. Missing → `""`.
+ *
+ * The schema splits the quantity in two: `type` is always a String (a
+ * force-field label, "what survives a round trip through a force field") and
+ * `type_id` is always a UInt (a LAMMPS ordinal). Reading a numeric `type`
+ * used to be the path for LAMMPS frames, but molrs rejects that column
+ * outright now — so the ordinal is read from `type_id` and stringified,
+ * letting one `types` list match either spelling.
+ */
 function readTypeColumnAsStrings(
   atoms: {
     dtype: (name: string) => string | undefined;
     copyColStr: (name: string) => string[] | undefined;
-    viewColI32: (name: string) => Int32Array | undefined;
     viewColU32: (name: string) => Uint32Array | undefined;
   },
   n: number,
 ): string[] {
-  const dtype = atoms.dtype("type");
-  if (!dtype) return Array.from({ length: n }, () => "");
-  if (dtype === DType.String) {
+  const blank = () => Array.from({ length: n }, () => "");
+
+  if (atoms.dtype("type") === DType.String) {
     const src = atoms.copyColStr("type") as string[] | undefined;
-    if (!src) return Array.from({ length: n }, () => "");
-    return src.map((v) => String(v));
+    if (src) return src.map((v) => String(v));
   }
-  if (dtype === DType.I32) {
-    const src = atoms.viewColI32("type");
-    if (!src) return Array.from({ length: n }, () => "");
-    return Array.from(src, (v) => String(v));
+  if (atoms.dtype("type_id") === DType.U32) {
+    const src = atoms.viewColU32("type_id");
+    if (src) return Array.from(src, (v) => String(v));
   }
-  if (dtype === DType.U32) {
-    const src = atoms.viewColU32("type");
-    if (!src) return Array.from({ length: n }, () => "");
-    return Array.from(src, (v) => String(v));
-  }
-  return Array.from({ length: n }, () => "");
+  return blank();
 }

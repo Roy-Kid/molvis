@@ -25,6 +25,19 @@ export function mountMolvis(
 }
 
 export {
+  type CropBounds,
+  type CropOptions,
+  cropToContent,
+  cropToRect,
+  findAlphaBounds,
+  reencodeImage,
+} from "@molcrafts/molvis-core/image-crop";
+export {
+  clearOpfsCache,
+  type OpfsCacheUsage,
+  readOpfsCacheUsage,
+} from "@molcrafts/molvis-core/opfs";
+export {
   type ClusterParams,
   type ClusterResult,
   type ConnectivityMode,
@@ -214,6 +227,7 @@ export {
   fitCameraView,
   lookAtCamera,
   readCameraPose,
+  resetCameraView,
   setCameraPose,
 } from "./camera/control";
 export {
@@ -272,6 +286,7 @@ export {
 export { exportFrameToGLB, type GltfExportOptions } from "./export/gltf";
 export {
   intersectRayWithPlane,
+  type ModeId,
   ModeManager,
   ModeType,
   type PluginModeFactory,
@@ -281,7 +296,7 @@ export {
   screenAlignedPlaneOrigin,
 } from "./mode";
 export { CommonMenuItems } from "./mode/menu_items";
-export type { HitResult, MenuItem } from "./mode/types";
+export type { MenuItem, SceneHit } from "./mode/types";
 export {
   type AffineMatrix3,
   AffineTransformationModifier,
@@ -396,7 +411,6 @@ export type { Modifier } from "./pipeline/modifier";
 export {
   BaseModifier,
   ModifierCapability,
-  primaryCapabilityLabel,
 } from "./pipeline/modifier";
 export type {
   ModifierCategory,
@@ -414,6 +428,13 @@ export {
 } from "./pipeline/nato_ids";
 export type { PipelineContext } from "./pipeline/types";
 export { SelectionMask } from "./pipeline/types";
+export {
+  isNamespacedPluginId,
+  namespacePluginId,
+  PLUGIN_ID_PREFIX,
+  PLUGIN_ID_SEPARATOR,
+  pluginIdLeaf,
+} from "./plugin_id";
 export {
   type AnimationOptions,
   MolvisRenderer,
@@ -491,9 +512,13 @@ export {
   type AttachWebSocketBridgeOpts,
   applyBackendState,
   attachWebSocketBridge,
-  type BinaryBufferRef,
+  BinaryResult,
   type BridgeConnectResult,
+  decodeBox,
+  decodeFrame,
   EventForwarder,
+  encodeFrame,
+  FramePayloadError,
   isRpcMethodName,
   type JsonRPCRequest,
   type JsonRPCResponse,
@@ -505,17 +530,6 @@ export {
   RPCRouter,
   type RpcMethodName,
   registerRpcExtensionHandler,
-  type SerializedBoxData,
-  type SerializedFrameData,
   WebSocketBridge,
 } from "./transport";
-
-export {
-  type CropBounds,
-  type CropOptions,
-  cropToContent,
-  cropToRect,
-  findAlphaBounds,
-  reencodeImage,
-} from "./utils/image_crop";
 export { World } from "./world";

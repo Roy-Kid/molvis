@@ -12,15 +12,17 @@
       "@molcrafts/molvis-core": ["../core/src/index.ts"],
       "@molcrafts/molvis-core/molrs": ["../core/src/molrs.ts"],
       "@molcrafts/molvis-core/elements": ["../core/src/elements.ts"],
+      "@molcrafts/molvis-core/element-picker": [
+        "../core/src/element_picker.ts"
+      ],
+      "@molcrafts/molvis-core/save-file": ["../core/src/save_file.ts"],
+      "@molcrafts/molvis-core/platform": ["../core/src/platform.ts"],
+      "@molcrafts/molvis-core/opfs": ["../core/src/opfs.ts"],
+      "@molcrafts/molvis-core/image-crop": ["../core/src/image_crop.ts"],
       "@molcrafts/molvis-sketch": ["../sketch/src/index.ts"],
       "@/*": ["../page/src/*"]
     }
   },
-  "include": [
-    "src/**/*",
-    "../stage/src/types/**/*",
-    "../page/src/**/*.d.ts",
-    "../sketch/src/**/*.ts"
-  ],
-  "exclude": ["rslib.*.config.ts"]
+  "include": ["src/**/*", "../stage/src/types/**/*", "../page/src/**/*.d.ts"],
+  "exclude": ["rslib.*.config.ts", "rslib.*.config.mts"]
 }

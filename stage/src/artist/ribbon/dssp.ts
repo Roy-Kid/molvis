@@ -118,8 +118,6 @@ function buildHbonds(rows: Residue[]): number[][] {
       if (!caJ || !nPos) continue;
       if (vdistSq(caPos, caJ) > CA_MAX_DIST_SQ) continue;
 
-      // Approximate H if no amide H: H ≈ N + (C_prev − O_prev)/|C−O|
-      let hPos: Vec3;
       if (j === 0 || rows[j - 1].chainId !== rows[j].chainId) continue;
       const oPrev = O[j - 1];
       const cPrev = C[j - 1];
@@ -128,7 +126,8 @@ function buildHbonds(rows: Residue[]): number[][] {
       const dy = cPrev.y - oPrev.y;
       const dz = cPrev.z - oPrev.z;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-      hPos = {
+      // Approximate H if no amide H: H ≈ N + (C_prev − O_prev)/|C−O|
+      const hPos: Vec3 = {
         x: nPos.x + dx / dist,
         y: nPos.y + dy / dist,
         z: nPos.z + dz / dist,

@@ -11,16 +11,28 @@ import {
   SelectModifier,
 } from "@molvis/stage";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
+import { usePointerDrag } from "@/hooks/usePointerDrag";
+import {
+  RESIZE_MAX_HEIGHT_RATIO,
+  RESIZE_MIN_HEIGHT_PX,
+} from "@/lib/viewer-layout";
 import { modifierUsesLeftConfig } from "@/plugins";
 import { useLeftShellOptional } from "@/ui/layout/LeftShellContext";
 import { getSelectedAtomIndices } from "../modifiers/selectionUtils";
 import { getDescendants } from "./tree_utils";
 
-const DEFAULT_PROPERTIES_HEIGHT = 250;
-const MIN_PROPERTIES_HEIGHT = 100;
-const MAX_PROPERTIES_RATIO = 0.8;
+/** Default share of the pipeline column for the properties pane. */
+const DEFAULT_PROPERTIES_RATIO = 0.38;
+/** Floor when a modifier is selected (px). */
+const MIN_PROPERTIES_HEIGHT = RESIZE_MIN_HEIGHT_PX;
+/** Compact empty state when nothing is selected (px). */
+const EMPTY_PROPERTIES_HEIGHT = 40;
+/** Cap properties vs. list so the tree always keeps room. */
+const MAX_PROPERTIES_RATIO = RESIZE_MAX_HEIGHT_RATIO;
+/** List column keeps at least this much height (px). */
+const MIN_LIST_HEIGHT = 120;
 
 interface PendingDelete {
   modifier: Modifier;
@@ -31,6 +43,7 @@ interface PipelineState {
   modifiers: Modifier[];
   selectedId: string | null;
   selectedModifier: Modifier | undefined;
+  /** Resolved px height for the properties pane (container-relative). */
   propertiesHeight: number;
   propertiesMaxHeight: number;
   isResizing: boolean;
@@ -38,6 +51,10 @@ interface PipelineState {
   pendingDelete: PendingDelete | null;
   pipelineRunning: boolean;
   setSelectedId: (id: string | null) => void;
+  /** Bind the pipeline column element so height adapts to the side rail. */
+  setContainerEl: (el: HTMLElement | null) => void;
+  /** Bind the properties pane so a drag can paint it without re-rendering. */
+  setPropertiesEl: (el: HTMLElement | null) => void;
   startResizing: (event: React.PointerEvent) => void;
   resizePropertiesBy: (delta: number) => void;
   handleAddModifier: (factory: () => Modifier) => void;
@@ -48,6 +65,27 @@ interface PipelineState {
   handleConfirmDelete: () => void;
   handleCancelDelete: () => void;
   refreshModifiers: () => void;
+}
+
+function clampPropertiesHeight(
+  desired: number,
+  containerH: number,
+  hasSelection: boolean,
+): number {
+  if (containerH <= 0) {
+    return hasSelection ? MIN_PROPERTIES_HEIGHT : EMPTY_PROPERTIES_HEIGHT;
+  }
+  if (!hasSelection) {
+    return Math.min(EMPTY_PROPERTIES_HEIGHT, Math.max(0, containerH - 8));
+  }
+  const maxByRatio = Math.floor(containerH * MAX_PROPERTIES_RATIO);
+  const maxByList = Math.max(
+    MIN_PROPERTIES_HEIGHT,
+    containerH - MIN_LIST_HEIGHT,
+  );
+  const maxH = Math.min(maxByRatio, maxByList);
+  const minH = Math.min(MIN_PROPERTIES_HEIGHT, maxH);
+  return Math.max(minH, Math.min(desired, maxH));
 }
 
 const ADD_COPY = {
@@ -91,14 +129,34 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     },
     [app, leftShell],
   );
-  const [propertiesHeight, setPropertiesHeight] = useState(
-    DEFAULT_PROPERTIES_HEIGHT,
+  /** Fraction of the pipeline column; converted to px via container height. */
+  const [propertiesRatio, setPropertiesRatio] = useState(
+    DEFAULT_PROPERTIES_RATIO,
   );
-  const [isResizing, setIsResizing] = useState(false);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [containerEl, setContainerEl] = useState<HTMLElement | null>(null);
+  /** Properties pane element, painted directly while a drag is in flight. */
+  const propertiesElRef = useRef<HTMLElement | null>(null);
+  /** Latest dragged height (px); committed to React state on pointer-up. */
+  const dragHeightRef = useRef<number | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
     null,
   );
+
+  useEffect(() => {
+    if (!containerEl) {
+      setContainerHeight(0);
+      return;
+    }
+    const measure = () => {
+      setContainerHeight(containerEl.getBoundingClientRect().height);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(containerEl);
+    return () => ro.disconnect();
+  }, [containerEl]);
 
   const refreshModifiers = useCallback(() => {
     if (!app) {
@@ -142,49 +200,68 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     }
   }, [modifiers, selectedId, setSelectedId]);
 
+  const { onPointerDown: startResizing, dragging: isResizing } = usePointerDrag(
+    {
+      onMove: (event) => {
+        if (!containerEl) return;
+        const rect = containerEl.getBoundingClientRect();
+        if (rect.height <= 0) return;
+        // Properties sit at the bottom of the column: height = bottom - cursor.
+        const next = clampPropertiesHeight(
+          rect.bottom - event.clientY,
+          rect.height,
+          true,
+        );
+        // Paint straight to the DOM instead of committing React state on every
+        // pointer event. A state commit here re-renders PipelineTab, and with
+        // it the whole unmemoized PipelineList (one SortableModifierItem +
+        // dnd-kit useSortable per modifier) at pointer-event rate.
+        dragHeightRef.current = next;
+        const pane = propertiesElRef.current;
+        if (pane) pane.style.height = `${next}px`;
+      },
+      onEnd: () => {
+        const pending = dragHeightRef.current;
+        dragHeightRef.current = null;
+        if (pending === null || !containerEl) return;
+        const rect = containerEl.getBoundingClientRect();
+        if (rect.height > 0) setPropertiesRatio(pending / rect.height);
+      },
+    },
+  );
+
+  // A render triggered mid-drag (a pipeline event firing refreshModifiers,
+  // say) would restore the stale `propertiesHeight` from JSX and make the
+  // pane jump under the cursor. Re-apply the live drag height after every
+  // render while a drag is in flight. No dep array on purpose.
   useEffect(() => {
-    if (!isResizing) {
-      return;
+    if (!isResizing) return;
+    const pending = dragHeightRef.current;
+    const pane = propertiesElRef.current;
+    if (pending !== null && pane) {
+      pane.style.height = `${pending}px`;
     }
+  });
 
-    const handlePointerMove = (event: PointerEvent) => {
-      const nextHeight = window.innerHeight - event.clientY;
-      const clampedHeight = Math.max(
-        MIN_PROPERTIES_HEIGHT,
-        Math.min(nextHeight, window.innerHeight * MAX_PROPERTIES_RATIO),
-      );
-      setPropertiesHeight(clampedHeight);
-    };
-
-    const handlePointerUp = () => {
-      setIsResizing(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [isResizing]);
-
-  const startResizing = useCallback((event: React.PointerEvent) => {
-    setIsResizing(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();
+  const setPropertiesEl = useCallback((el: HTMLElement | null) => {
+    propertiesElRef.current = el;
   }, []);
 
-  const resizePropertiesBy = useCallback((delta: number) => {
-    setPropertiesHeight((current) =>
-      Math.max(
-        MIN_PROPERTIES_HEIGHT,
-        Math.min(current + delta, window.innerHeight * MAX_PROPERTIES_RATIO),
-      ),
-    );
-  }, []);
+  const resizePropertiesBy = useCallback(
+    (delta: number) => {
+      if (containerHeight <= 0) return;
+      setPropertiesRatio((ratio) => {
+        const current = ratio * containerHeight;
+        const next = clampPropertiesHeight(
+          current + delta,
+          containerHeight,
+          true,
+        );
+        return next / containerHeight;
+      });
+    },
+    [containerHeight],
+  );
 
   const handleToggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -299,12 +376,16 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
   const handleToggleModifier = useCallback(
     (modifier: Modifier) => {
       if (pipelineRunning) return;
-      modifier.enabled = !modifier.enabled;
-      setModifiers((current) => [...current]);
+      const next = !modifier.enabled;
       if (!app) {
+        modifier.enabled = next;
+        setModifiers((current) => [...current]);
         return;
       }
-      void run(() => app.applyPipeline({ fullRebuild: true }), UPDATE_COPY);
+      // Optimistic UI: checkbox flips immediately. Visual layers only call
+      // applyVisibility (instant); data modifiers still full-rebuild.
+      void run(() => app.setModifierEnabled(modifier, next), UPDATE_COPY);
+      setModifiers((current) => [...current]);
     },
     [app, pipelineRunning, run],
   );
@@ -346,17 +427,36 @@ export function usePipelineTabState(app: Molvis | null): PipelineState {
     [modifiers, selectedId],
   );
 
+  const hasSelection = selectedModifier !== undefined;
+  const propertiesHeight = useMemo(() => {
+    const desired = propertiesRatio * (containerHeight || 1);
+    return clampPropertiesHeight(desired, containerHeight, hasSelection);
+  }, [propertiesRatio, containerHeight, hasSelection]);
+
+  const propertiesMaxHeight = useMemo(() => {
+    if (containerHeight <= 0) return MIN_PROPERTIES_HEIGHT;
+    return Math.max(
+      MIN_PROPERTIES_HEIGHT,
+      Math.min(
+        Math.floor(containerHeight * MAX_PROPERTIES_RATIO),
+        containerHeight - MIN_LIST_HEIGHT,
+      ),
+    );
+  }, [containerHeight]);
+
   return {
     modifiers,
     selectedId,
     selectedModifier,
     propertiesHeight,
-    propertiesMaxHeight: window.innerHeight * MAX_PROPERTIES_RATIO,
+    propertiesMaxHeight,
     isResizing,
     expandedIds,
     pendingDelete,
     pipelineRunning,
     setSelectedId,
+    setContainerEl,
+    setPropertiesEl,
     startResizing,
     resizePropertiesBy,
     handleAddModifier,

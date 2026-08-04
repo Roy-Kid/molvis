@@ -78,13 +78,6 @@ function compareOptionalElement(
   return equalStringArray(left, right);
 }
 
-function getBondOrder(
-  orders: Uint32Array | null | undefined,
-  index: number,
-): number {
-  return orders ? orders[index] : 1;
-}
-
 function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   const leftI = leftBonds.viewColU32("atomi");
   const leftJ = leftBonds.viewColU32("atomj");
@@ -97,24 +90,20 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   if (!equalNumberArray(leftI, rightI)) return false;
   if (!equalNumberArray(leftJ, rightJ)) return false;
 
-  const leftOrder =
-    leftBonds.dtype("order") === DType.U32
-      ? leftBonds.viewColU32("order")
-      : undefined;
-  const rightOrder =
-    rightBonds.dtype("order") === DType.U32
-      ? rightBonds.viewColU32("order")
-      : undefined;
-
-  // With no order column on either side every bond is implicitly order 1, so
-  // the per-bond comparison is vacuously true — skip the linear scan entirely.
-  if (!leftOrder && !rightOrder) return true;
+  // `order` is required here, not defaulted. Substituting 1 for a missing
+  // column would call an aromatic frame (1.5) identical to a single-bonded one
+  // and skip the redraw; a bonds block without orders is simply not comparable.
+  const leftOrder = leftBonds.dtype("order")
+    ? leftBonds.viewColF("order")
+    : undefined;
+  const rightOrder = rightBonds.dtype("order")
+    ? rightBonds.viewColF("order")
+    : undefined;
+  if (!leftOrder || !rightOrder) return false;
 
   const count = leftBonds.nrows();
   for (let i = 0; i < count; i++) {
-    if (getBondOrder(leftOrder, i) !== getBondOrder(rightOrder, i)) {
-      return false;
-    }
+    if (leftOrder[i] !== rightOrder[i]) return false;
   }
   return true;
 }

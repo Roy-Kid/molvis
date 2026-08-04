@@ -4,7 +4,7 @@ import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { HitResult, MenuItem } from "./types";
+import type { MenuItem, SceneHit } from "./types";
 
 /**
  * =============================
@@ -21,13 +21,13 @@ class ManipulateModeContextMenu extends ContextMenuController {
   }
 
   protected shouldShowMenu(
-    _hit: HitResult | null,
+    _hit: SceneHit | null,
     isDragging: boolean,
   ): boolean {
     return !isDragging;
   }
 
-  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+  protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
     if (header) {
@@ -38,7 +38,7 @@ class ManipulateModeContextMenu extends ContextMenuController {
     if (this.app.world.sceneIndex.hasUnsavedChanges) {
       items.push(
         CommonMenuItems.button("Save", () => {
-          this.app.commitScene();
+          void this.app.commitScene();
         }),
         CommonMenuItems.button("Discard", () => {
           this.app.discardScene();
@@ -209,6 +209,7 @@ class ManipulateMode extends BaseMode {
         placeholderColor,
         placeholderColor,
         0,
+        this.app.world.camera.getForwardRay().direction,
       );
 
       const updates = new Map<string, Float32Array>();
@@ -332,17 +333,7 @@ class ManipulateMode extends BaseMode {
     return this.app.world.sceneIndex.hasUnsavedChanges;
   }
 
-  /** @deprecated Prefer {@link MolvisApp.commitScene}. */
-  public async saveChanges(): Promise<void> {
-    this.app.commitScene();
-  }
-
   // Ctrl+S → BaseMode._on_press_ctrl_s (global commitScene)
-
-  /** @deprecated Prefer {@link MolvisApp.discardScene}. */
-  public async discardChanges(): Promise<void> {
-    this.app.discardScene();
-  }
 
   protected override _on_press_escape(): void {
     this.clearSelection();

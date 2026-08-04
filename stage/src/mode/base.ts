@@ -10,12 +10,12 @@ import {
   Vector2,
   Vector3,
 } from "@babylonjs/core";
+import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
-import { isCtrlOrMeta } from "../utils/platform";
-import type { ModeType } from "./mode_type";
+import type { ModeId } from "./mode_type";
 import { resolvePointerSpacePosition } from "./placement_position";
-import type { HitResult } from "./types";
+import type { SceneHit } from "./types";
 
 /**
  * Base class for all interaction modes.
@@ -34,7 +34,8 @@ import type { HitResult } from "./types";
  * - onRightClickNotConsumed(): Handle right-click when menu doesn't consume it
  */
 abstract class BaseMode {
-  name: ModeType;
+  /** Built-in {@link ModeType} or a plugin-registered id. */
+  name: ModeId;
 
   private _app: Molvis;
   private _pointer_observer: Observer<PointerInfo>;
@@ -62,7 +63,7 @@ abstract class BaseMode {
   // Context menu controller (mode-specific)
   protected contextMenuController!: ContextMenuController;
 
-  constructor(name: ModeType, app: Molvis) {
+  constructor(name: ModeId, app: Molvis) {
     this._app = app;
     this.name = name;
     this._pointer_observer = this.register_pointer_events();
@@ -82,7 +83,7 @@ abstract class BaseMode {
     return this._app.world;
   }
 
-  get type(): ModeType {
+  get type(): ModeId {
     return this.name;
   }
 
@@ -110,7 +111,7 @@ abstract class BaseMode {
    */
   protected onRightClickNotConsumed(
     _pointerInfo: PointerInfo,
-    _hit: HitResult | null,
+    _hit: SceneHit | null,
   ): void {
     // Default: do nothing
   }
@@ -221,10 +222,10 @@ abstract class BaseMode {
   };
 
   /**
-   * Pick and create a HitResult from the current pointer position.
+   * Pick and create a SceneHit from the current pointer position.
    * Returns hit information about what's under the cursor.
    */
-  protected async pickHit(): Promise<HitResult | null> {
+  protected async pickHit(): Promise<SceneHit | null> {
     return this.app.pickAtPointer(this.scene.pointerX, this.scene.pointerY);
   }
 
@@ -312,22 +313,58 @@ abstract class BaseMode {
     this.queueHoverPick(this.scene.pointerX, this.scene.pointerY);
   }
 
-  protected formatHitInfo(hit: HitResult | null): string {
-    if (!hit || (hit.type !== "atom" && hit.type !== "bond")) {
+  protected formatHitInfo(hit: SceneHit | null): string {
+    if (!hit || hit.type === "empty") {
       return "";
     }
+    if (hit.type === "ribbon") {
+      return `Residue ${hit.resName} ${hit.resSeq} · chain ${hit.chainId}`;
+    }
     if (hit.type === "atom") {
-      const { element, position } = hit.metadata;
-      const xyz = `xyz: ${position.x.toFixed(4)}, ${position.y.toFixed(4)}, ${position.z.toFixed(4)}`;
-      if (!element) return `[Atom] ${xyz} | `;
-      return `[Atom] element: ${element} | ${xyz} | `;
+      const { element, position, atomId } = hit.metadata;
+      const residue = this.residueLabelForAtom(atomId);
+      const el = element?.trim() || "Atom";
+      const xyz = `(${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) Å`;
+      const atomPart = `Atom ${el} · ID ${atomId} · ${xyz}`;
+      return residue ? `${residue} · ${atomPart}` : atomPart;
     }
     const { start, end, atomId1, atomId2, order } = hit.metadata;
     const length = Vector3.Distance(
       new Vector3(start.x, start.y, start.z),
       new Vector3(end.x, end.y, end.z),
     );
-    return `[Bond] ${atomId1}-${atomId2} | length: ${length.toFixed(2)}${order ? ` | order: ${order}` : ""}`;
+    const bond = `Bond ${atomId1}–${atomId2} · ${length.toFixed(2)} Å`;
+    return order ? `${bond} · order ${order}` : bond;
+  }
+
+  /** `THR 222 · chain A` when the atoms block carries residue columns. */
+  private residueLabelForAtom(atomId: number): string | null {
+    const frame = this.app.system.frame;
+    const atoms = frame?.getBlock("atoms");
+    if (!atoms || atomId < 0 || atomId >= atoms.nrows()) return null;
+    try {
+      if (
+        atoms.dtype("res_name") !== "string" ||
+        atoms.dtype("chain_id") !== "string"
+      ) {
+        return null;
+      }
+      const resName = (atoms.copyColStr("res_name") as string[])[
+        atomId
+      ]?.trim();
+      const chainId =
+        (atoms.copyColStr("chain_id") as string[])[atomId]?.trim() || "A";
+      let resSeq: number | null = null;
+      if (atoms.dtype("res_seq") === "i32") {
+        resSeq = atoms.copyColI32("res_seq")[atomId];
+      } else if (atoms.dtype("res_seq") === "u32") {
+        resSeq = atoms.copyColU32("res_seq")[atomId];
+      }
+      if (!resName || resSeq === null || !Number.isFinite(resSeq)) return null;
+      return `${resName} ${resSeq} · chain ${chainId}`;
+    } catch {
+      return null;
+    }
   }
 
   _on_pointer_wheel(_pointerInfo: PointerInfo): void {}
@@ -362,7 +399,9 @@ abstract class BaseMode {
    * tree into system HEAD + primary DataSource. Modes must not gate this.
    */
   protected _on_press_ctrl_s(): void {
-    this.app.commitScene();
+    void this.app.commitScene().catch((err) => {
+      console.error("[Molvis] commitScene failed:", err);
+    });
   }
   protected _on_press_ctrl_z(): void {}
   protected _on_press_ctrl_y(): void {}
@@ -489,5 +528,6 @@ abstract class BaseMode {
   }
 }
 
+export type { ModeId } from "./mode_type";
 export { ModeType } from "./mode_type";
 export { BaseMode };

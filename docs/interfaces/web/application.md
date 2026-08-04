@@ -47,7 +47,7 @@ if (!response.ok) throw new Error(`HTTP ${response.status}`);
 const sdf = await response.text();
 await loadFileContent(app, sdf, "aspirin.sdf", "sdf");
 await app.setRepresentation("ball-and-stick");
-app.resetCamera();
+app.world.fit();
 ```
 
 The loader constructs a trajectory/data source, attaches the default drawing

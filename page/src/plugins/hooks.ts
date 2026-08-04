@@ -10,7 +10,6 @@ import {
   modeTabStore,
   panelStore,
   settingsSectionStore,
-  sidebarPanelStore,
   toolbarActionStore,
 } from "./contributions/ui";
 import { pluginManager } from "./manager";
@@ -22,7 +21,6 @@ import type {
   PluginPanelSpec,
   PluginRuntimeState,
   SettingsSectionSpec,
-  SidebarPanelSpec,
   ToolbarActionSpec,
 } from "./types";
 
@@ -42,14 +40,6 @@ function useContributionList<T>(store: {
     (cb) => store.subscribe(cb),
     () => store.list(),
     () => store.list(),
-  );
-}
-
-export function usePluginSidebarPanels(): SidebarPanelSpec[] {
-  const items = useContributionList(sidebarPanelStore);
-  return useMemo(
-    () => items.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [items],
   );
 }
 

@@ -5,7 +5,7 @@
   &nbsp;MolVis
 </h1>
 
-<p><strong>Interactive molecular visualization for the web, VSCode, and Jupyter</strong></p>
+<p><strong>A visual workspace where people and agents inspect molecular data together</strong></p>
 
 <p>
   <a href="https://github.com/molcrafts/molvis/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/MolCrafts/molvis/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
@@ -21,7 +21,11 @@
 
 </div>
 
-MolVis renders molecules, simulation boxes, and trajectories straight in the browser, with one product surface shared across a web viewer, a VSCode editor, and a Jupyter widget. It reads the common chemistry formats (PDB, XYZ, LAMMPS, Zarr), plays back dynamics frame-by-frame, and lets you select, edit, measure, and annotate structures interactively.
+MolVis renders molecules, simulation boxes, and trajectories in the browser, with
+one product surface shared across the web, VS Code, and Jupyter. Its bidirectional
+RPC layer lets an agent operate the live scene while the user inspects every
+result, selects the relevant atoms or bonds, and sends that precise visual context
+back to the agent.
 
 > **Under active development.** Public APIs may change between minor releases.
 
@@ -32,6 +36,28 @@ Molecular visualization tools have long made you choose: a powerful desktop appl
 We want looking at a structure to be frictionless. Drag a file onto a page, open it in your editor next to its input deck, or display it inline in a notebook cell — the viewport, the modes, and the shortcuts are identical everywhere, so the muscle memory you build transfers across every context you work in.
 
 And we want visualization to be more than a picture. MolVis treats editing, measurement, pipeline transforms, and analysis as first-class, fully reversible operations on live molecular data — so the viewer becomes a place where you actually do the work, not just admire the result.
+
+## Human-in-the-loop agent workflow
+
+MolVis is designed to be the visual boundary between an agent and molecular
+data:
+
+1. An agent uses JSON-RPC commands to load data, move the camera, change the
+   representation, select atoms, edit the scene, or run pipeline operations.
+2. The user reviews the exact result in the shared viewer instead of auditing a
+   textual description of it.
+3. The user selects atoms or bonds that need attention. MolVis emits the
+   selection, active frame, and interaction state back to the host.
+4. The agent receives a structured subset with `get_selected()`, acts on the
+   feedback, and presents the next visible result.
+
+RPC requests and responses are structured and snapshots can capture the visible
+state, making the workflow straightforward for an agent host to record and
+audit. MolVis provides the observable interaction boundary; durable audit-log
+storage remains the responsibility of the host application.
+
+See [Agent workflows](https://docs.molcrafts.org/molvis/interfaces/python/agents/)
+for a complete selection-feedback loop.
 
 ## Packages
 
@@ -58,7 +84,7 @@ npm install @molcrafts/molvis-sketch
 npm install @molcrafts/molvis
 ```
 
-Requires Node.js 22+. The Python package (`pip install molcrafts-molvis`) needs Python 3.10+; the VSCode extension installs from the Marketplace.
+Requires Node.js 22+. The Python package (`pip install molcrafts-molvis`) needs Python 3.12+; the VS Code extension installs from the Marketplace.
 
 ## Quick start
 
@@ -81,6 +107,7 @@ See the [documentation](https://docs.molcrafts.org/molvis/) for the web viewer, 
 ## Documentation
 
 - [Tutorial](https://docs.molcrafts.org/molvis/tutorial/) — frames, camera, representations, selection, pipeline, trajectories, export
+- [Agent workflows](https://docs.molcrafts.org/molvis/interfaces/python/agents/) — RPC control, visual review, selection feedback, and audit records
 - [Interfaces](https://docs.molcrafts.org/molvis/interfaces/web/) — Web/TypeScript, Python/Jupyter, and VS Code guides
 - [Development](https://docs.molcrafts.org/molvis/development/) — embed MolVis and write custom modifiers and commands
 - [API Reference](https://docs.molcrafts.org/molvis/api/typescript/) — TypeScript library and Python package

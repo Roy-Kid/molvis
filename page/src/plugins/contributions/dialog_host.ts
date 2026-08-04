@@ -7,32 +7,22 @@
  * and renders the matching contribution.
  */
 
-import type { ContributionListener } from "./store";
+import { type ContributionListener, Emitter } from "./emitter";
 
 let openDialogId: string | null = null;
-const listeners = new Set<ContributionListener>();
-
-function emit(): void {
-  for (const listener of listeners) {
-    try {
-      listener();
-    } catch (err) {
-      console.error("[molvis-plugins] dialog host listener failed", err);
-    }
-  }
-}
+const events = new Emitter("dialog host");
 
 export function openPluginDialog(id: string): void {
   if (!id) return;
   if (openDialogId === id) return;
   openDialogId = id;
-  emit();
+  events.emit();
 }
 
 export function closePluginDialog(): void {
   if (openDialogId === null) return;
   openDialogId = null;
-  emit();
+  events.emit();
 }
 
 export function getOpenPluginDialogId(): string | null {
@@ -42,8 +32,5 @@ export function getOpenPluginDialogId(): string | null {
 export function subscribePluginDialogHost(
   listener: ContributionListener,
 ): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+  return events.subscribe(listener);
 }

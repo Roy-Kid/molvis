@@ -30,7 +30,7 @@ import {
   WasmXyzStream,
   wasmMemory,
 } from "@molcrafts/molvis-core/molrs";
-import { OpfsBlobCache } from "../../io/cache/opfs_blob_cache";
+import { OpfsBlobCache } from "@molcrafts/molvis-core/opfs";
 import { OpfsIndexCache } from "../../io/cache/opfs_index_cache";
 import { OPFSSyncRangeSource } from "../../io/sources/opfs_sync_range_source";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";

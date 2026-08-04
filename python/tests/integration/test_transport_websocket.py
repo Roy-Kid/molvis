@@ -11,15 +11,13 @@ import asyncio
 import contextlib
 import json
 import threading
-import time
 from typing import Any
 
 import pytest
-
-pytestmark = pytest.mark.integration
-
 from molvis.events import EventBus
 from molvis.transport import WebSocketTransport
+
+pytestmark = pytest.mark.integration
 
 websockets = pytest.importorskip("websockets")
 import functools  # noqa: E402
@@ -92,9 +90,7 @@ def test_handshake_with_good_token_succeeds() -> None:
         uri = f"ws://localhost:{tport.port}/ws"
         async with ws_connect(uri) as ws:
             await ws.send(
-                json.dumps(
-                    {"type": "hello", "token": "test-token", "session": "s"}
-                )
+                json.dumps({"type": "hello", "token": "test-token", "session": "s"})
             )
             msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
         return msg
@@ -109,9 +105,7 @@ def test_handshake_with_bad_token_is_closed_with_1008() -> None:
         uri = f"ws://localhost:{tport.port}/ws"
         async with ws_connect(uri) as ws:
             await ws.send(
-                json.dumps(
-                    {"type": "hello", "token": "wrong-token", "session": "s"}
-                )
+                json.dumps({"type": "hello", "token": "wrong-token", "session": "s"})
             )
             try:
                 await asyncio.wait_for(ws.recv(), timeout=2.0)
@@ -154,9 +148,7 @@ def test_notification_dispatches_to_event_bus() -> None:
         uri = f"ws://localhost:{tport.port}/ws"
         async with ws_connect(uri) as ws:
             await ws.send(
-                json.dumps(
-                    {"type": "hello", "token": "test-token", "session": "s"}
-                )
+                json.dumps({"type": "hello", "token": "test-token", "session": "s"})
             )
             await asyncio.wait_for(ws.recv(), timeout=2.0)  # ready ack
             await ws.send(
@@ -184,9 +176,7 @@ def test_send_request_rpc_round_trip() -> None:
         uri = f"ws://localhost:{tport.port}/ws"
         async with ws_connect(uri) as ws:
             await ws.send(
-                json.dumps(
-                    {"type": "hello", "token": "test-token", "session": "s"}
-                )
+                json.dumps({"type": "hello", "token": "test-token", "session": "s"})
             )
             await asyncio.wait_for(ws.recv(), timeout=2.0)
 

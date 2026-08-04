@@ -4,12 +4,9 @@
  *
  * All three secondary-structure types share a single rounded-rectangle
  * cross-section parameterization — only the (width, height, cornerRadius)
- * triple changes. Coil degenerates to a circle (radius = min/2), sheet
- * to an almost-flat strap with a tiny fillet (so its edges still catch
- * light), and helix sits in between as a thick ribbon with prominent
- * fillets. This gives every SS type a continuously curved surface with
- * the same vertex topology, which keeps the strip indices fixed and
- * lets us blend profile parameters smoothly across SS boundaries.
+ * triple changes. Coil is a near-circle tube; helix/sheet use a sharp
+ * rectangular plank (tiny fillets) so edges catch light the way
+ * PyMOL/ChimeraX cartoons do, not a soft play-dough stadium.
  *
  * Sheet runs end with the Richardson-style arrowhead taper: the last
  * `SHEET_ARROW_POINTS` spline points fan out to `SHEET_ARROW_HEAD_SCALE`
@@ -37,27 +34,23 @@ interface CrossSectionProfile {
 }
 
 const SS_PROFILES: Record<SecondaryStructureType, CrossSectionProfile> = {
-  // Helix: classic PyMOL-style flat ribbon with a near-stadium cross
-  // section (fillets eat almost the full short side), so the silhouette
-  // reads as "thick rounded plank" rather than a sharp slab.
-  helix: { width: 1.8, height: 0.5, cornerRadius: 0.22 },
-  // Sheet: wide thin strap with very small fillets — sharp enough to
-  // read as paper-flat, fileted just enough that the edges don't shade
-  // identically to the faces (so the sheet has visible thickness).
-  sheet: { width: 2.0, height: 0.22, cornerRadius: 0.025 },
-  // Coil: round wire — full fillet (radius = min/2 → circle).
-  coil: { width: 0.42, height: 0.42, cornerRadius: 0.21 },
+  // Soft publication cartoon (ChimeraX / RCSB style): rounded helix
+  // plank, thin sheet, round coil — not toy-thick, not razor-slab.
+  helix: { width: 1.6, height: 0.4, cornerRadius: 0.14 },
+  sheet: { width: 1.85, height: 0.18, cornerRadius: 0.02 },
+  coil: { width: 0.32, height: 0.32, cornerRadius: 0.16 },
 };
 
 /** Cross-section vertex count. 16 keeps tubes visibly smooth without
  * blowing out the vertex budget; sheets need this density too because
  * the fillet curves consume ~6 of the 16 verts. */
-const CROSS_SECTION_SEGMENTS = 16;
+export const RIBBON_CROSS_SECTION_SEGMENTS = 16;
+const CROSS_SECTION_SEGMENTS = RIBBON_CROSS_SECTION_SEGMENTS;
 
 /** Number of trailing sheet spline points that form the arrowhead. */
 const SHEET_ARROW_POINTS = 6;
 /** Width multiplier at the *base* of the arrowhead (widest). */
-const SHEET_ARROW_HEAD_SCALE = 1.7;
+const SHEET_ARROW_HEAD_SCALE = 1.5;
 
 /**
  * Compute per-spline-point cross-section parameters after applying:

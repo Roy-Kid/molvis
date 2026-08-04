@@ -331,7 +331,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       className="flex h-full w-full flex-col bg-background"
       onPointerDown={stopPointerPropagation}
     >
-      <div className="z-20 flex h-toolbar shrink-0 items-center gap-2 border-b border-border/70 bg-background/95 px-2 backdrop-blur">
+      <div className="z-20 flex h-7 shrink-0 items-center gap-1 px-1">
         {showModifierConfig ? (
           <>
             <ViewerIconAction
@@ -341,7 +341,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               onClick={() => leftShell?.closeLeftToAnalysis()}
               className="shrink-0"
             />
-            <span className="min-w-0 flex-1 truncate text-xs font-medium">
+            <span className="min-w-0 flex-1 truncate px-1 text-xs font-normal">
               {configModifier.name}
             </span>
           </>
@@ -402,7 +402,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         }
         aria-hidden={showModifierConfig || feature !== "analysis"}
       >
-        <div className="z-10 flex h-toolbar shrink-0 items-center gap-2 border-b border-border/60 bg-background/90 px-2">
+        <div className="z-10 flex h-7 shrink-0 items-center gap-1 px-1">
           <AnalysisPicker
             groups={catalog.groups}
             selected={hasData ? selectedAnalysis : undefined}

@@ -11,6 +11,7 @@ import {
 import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { ViewerOperationState } from "@/components/viewer/ViewerOperationState";
+import { usePointerDrag } from "@/hooks/usePointerDrag";
 import { cn } from "@/lib/utils";
 
 /**
@@ -190,10 +191,9 @@ export const AnalysisChart: React.FC<AnalysisChartProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [size, setSize] = useState(MODAL_DEFAULT);
+  /** Which edge is being dragged and the size the drag started from. */
   const dragRef = useRef<{
     edge: ResizeEdge;
-    startX: number;
-    startY: number;
     startW: number;
     startH: number;
   } | null>(null);
@@ -203,51 +203,38 @@ export const AnalysisChart: React.FC<AnalysisChartProps> = ({
     if (next) setSize(MODAL_DEFAULT);
   }, []);
 
-  const onResizePointerDown = useCallback(
-    (edge: ResizeEdge) => (e: React.PointerEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const target = e.currentTarget as HTMLElement;
-      target.setPointerCapture(e.pointerId);
-      dragRef.current = {
-        edge,
-        startX: e.clientX,
-        startY: e.clientY,
-        startW: size.w,
-        startH: size.h,
-      };
+  const { onPointerDown: beginResize } = usePointerDrag({
+    onMove: (event, origin) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const dx = event.clientX - origin.x;
+      const dy = event.clientY - origin.y;
+      const maxW = Math.min(window.innerWidth - 32, window.innerWidth * 0.96);
+      const maxH = Math.min(window.innerHeight - 32, window.innerHeight * 0.92);
+      setSize({
+        w:
+          drag.edge === "s"
+            ? drag.startW
+            : Math.min(maxW, Math.max(MODAL_MIN.w, drag.startW + dx)),
+        h:
+          drag.edge === "e"
+            ? drag.startH
+            : Math.min(maxH, Math.max(MODAL_MIN.h, drag.startH + dy)),
+      });
     },
-    [size.h, size.w],
+    onEnd: () => {
+      dragRef.current = null;
+    },
+  });
+
+  const onResizePointerDown = useCallback(
+    (edge: ResizeEdge) => (event: React.PointerEvent) => {
+      event.stopPropagation();
+      dragRef.current = { edge, startW: size.w, startH: size.h };
+      beginResize(event);
+    },
+    [beginResize, size.h, size.w],
   );
-
-  const onResizePointerMove = useCallback((e: React.PointerEvent) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    const maxW = Math.min(window.innerWidth - 32, window.innerWidth * 0.96);
-    const maxH = Math.min(window.innerHeight - 32, window.innerHeight * 0.92);
-    setSize({
-      w:
-        drag.edge === "s"
-          ? drag.startW
-          : Math.min(maxW, Math.max(MODAL_MIN.w, drag.startW + dx)),
-      h:
-        drag.edge === "e"
-          ? drag.startH
-          : Math.min(maxH, Math.max(MODAL_MIN.h, drag.startH + dy)),
-    });
-  }, []);
-
-  const onResizePointerUp = useCallback((e: React.PointerEvent) => {
-    if (!dragRef.current) return;
-    dragRef.current = null;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      // capture may already be released
-    }
-  }, []);
 
   const resizeByKeyboard = useCallback(
     (edge: ResizeEdge, event: React.KeyboardEvent) => {
@@ -344,9 +331,6 @@ export const AnalysisChart: React.FC<AnalysisChartProps> = ({
             tabIndex={0}
             className="absolute top-3 right-0 bottom-3 w-2 cursor-ew-resize touch-none border-0"
             onPointerDown={onResizePointerDown("e")}
-            onPointerMove={onResizePointerMove}
-            onPointerUp={onResizePointerUp}
-            onPointerCancel={onResizePointerUp}
             onKeyDown={(event) => resizeByKeyboard("e", event)}
           />
           <hr
@@ -362,9 +346,6 @@ export const AnalysisChart: React.FC<AnalysisChartProps> = ({
             tabIndex={0}
             className="absolute right-3 bottom-0 left-3 h-2 cursor-ns-resize touch-none border-0"
             onPointerDown={onResizePointerDown("s")}
-            onPointerMove={onResizePointerMove}
-            onPointerUp={onResizePointerUp}
-            onPointerCancel={onResizePointerUp}
             onKeyDown={(event) => resizeByKeyboard("s", event)}
           />
           <button
@@ -372,9 +353,6 @@ export const AnalysisChart: React.FC<AnalysisChartProps> = ({
             aria-label="Resize chart width and height"
             className="absolute right-0 bottom-0 h-4 w-4 cursor-nwse-resize touch-none border-0 bg-transparent p-0"
             onPointerDown={onResizePointerDown("se")}
-            onPointerMove={onResizePointerMove}
-            onPointerUp={onResizePointerUp}
-            onPointerCancel={onResizePointerUp}
             onKeyDown={(event) => resizeByKeyboard("se", event)}
           >
             {/* Grip mark: two diagonal ticks at the SE corner */}

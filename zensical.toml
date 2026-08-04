@@ -44,6 +44,7 @@ nav = [
       "interfaces/python/scripts.md",
       "interfaces/python/data.md",
       "interfaces/python/events.md",
+      "interfaces/python/agents.md",
       "interfaces/python/video.md",
     ]},
     { "VS Code" = [

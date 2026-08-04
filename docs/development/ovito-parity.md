@@ -5,16 +5,6 @@ Coloring / Visualization), but not every OVITO modifier is implemented, and
 some capabilities live under **left Analysis** or **Settings** instead of the
 pipeline (iron law: only scene-changing steps are modifiers).
 
-## Authoritative matrix
-
-The full row-by-row comparison lives in the project notes (kept in git, updated
-when a parity wave ships):
-
-[`.claude/notes/ovito-modifier-parity.md`](../../.claude/notes/ovito-modifier-parity.md)
-
-That file excludes **Python** modifiers and **Voronoi**-related features by
-product decision.
-
 ## Placement rules (short)
 
 | Where | What |

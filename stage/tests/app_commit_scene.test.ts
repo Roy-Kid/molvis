@@ -34,13 +34,13 @@ function seedEditAtom(app: MolvisApp, atomId = 0, element = "C"): void {
 }
 
 describe("commitScene / discardScene", () => {
-  it("ac-001: commitScene dumps edit pool into system.frame + MemoryDataSource", () => {
+  it("ac-001: commitScene dumps edit pool into system.frame + MemoryDataSource", async () => {
     const engine = new NullEngine();
     const app = makeHeadlessApp(engine);
     try {
       expect(frameHasStructure(app.system.frame)).toBe(false);
       seedEditAtom(app);
-      app.commitScene();
+      await app.commitScene();
 
       expect(frameHasStructure(app.system.frame)).toBe(true);
       expect(app.system.frame.getBlock("atoms")?.nrows()).toBe(1);
@@ -69,14 +69,14 @@ describe("commitScene / discardScene", () => {
     }
   });
 
-  it("subsequent commits update HEAD without duplicating data sources", () => {
+  it("subsequent commits update HEAD without duplicating data sources", async () => {
     const engine = new NullEngine();
     const app = makeHeadlessApp(engine);
     try {
       seedEditAtom(app, 0, "C");
-      app.commitScene();
+      await app.commitScene();
       seedEditAtom(app, 1, "O");
-      app.commitScene();
+      await app.commitScene();
 
       expect(
         app.modifierPipeline
@@ -89,12 +89,12 @@ describe("commitScene / discardScene", () => {
     }
   });
 
-  it("ac-003: discardScene restores working tree dirty flag after commit", () => {
+  it("ac-003: discardScene restores working tree dirty flag after commit", async () => {
     const engine = new NullEngine();
     const app = makeHeadlessApp(engine);
     try {
       seedEditAtom(app, 0, "C");
-      app.commitScene();
+      await app.commitScene();
       expect(app.world.sceneIndex.hasUnsavedChanges).toBe(false);
 
       // Dirt without changing HEAD
@@ -106,18 +106,6 @@ describe("commitScene / discardScene", () => {
       expect(app.world.sceneIndex.hasUnsavedChanges).toBe(false);
       // HEAD still one atom
       expect(app.system.frame.getBlock("atoms")?.nrows()).toBe(1);
-    } finally {
-      app.destroy();
-    }
-  });
-
-  it("save() aliases commitScene", () => {
-    const engine = new NullEngine();
-    const app = makeHeadlessApp(engine);
-    try {
-      seedEditAtom(app);
-      app.save();
-      expect(frameHasStructure(app.system.frame)).toBe(true);
     } finally {
       app.destroy();
     }

@@ -28,36 +28,51 @@ export const MOLVIS_UI_CSS = `
     sans-serif
   );
   font-size: var(--molvis-ui-font-size, 0.8125rem);
-  color: var(--molvis-ui-fg, oklch(0.93 0.008 255));
+  /* Tracks host chrome: light → dark ink / accent; dark → near-white. */
+  color: var(--molvis-ui-panel-fg, var(--molvis-ui-fg, oklch(0.22 0.015 255)));
 }
 
+/*
+ * Canvas HUD labels (view / mode / info / perf) — text only, no chrome box.
+ * Color: product shells set --molvis-ui-panel-fg (light: brand teal/green,
+ * dark: near-white). Font size inherits from .molvis-ui-overlay
+ * (--molvis-ui-font-size); never hardcode px here.
+ */
 .molvis-panel {
   position: absolute;
-  color: rgba(255, 255, 255, 0.9);
-  padding: 6px 12px;
-  font-size: 12px;
+  color: var(--molvis-ui-panel-fg, var(--molvis-ui-fg, oklch(0.52 0.12 195)));
+  padding: 0.375rem 0.75rem;
+  font-size: inherit;
   line-height: 1.4;
   pointer-events: auto;
   user-select: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: none;
 }
 
 .molvis-view-panel {
-  top: 12px;
-  left: 12px;
+  top: 0.75rem;
+  left: 0.75rem;
 }
 
 .molvis-mode-panel {
-  top: 12px;
-  right: 12px;
+  top: 0.75rem;
+  right: 0.75rem;
 }
+
 .molvis-info-panel {
-  bottom: 12px;
-  left: 12px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 11px;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   display: none;
+  max-width: min(28rem, calc(100% - 1.5rem));
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .molvis-info-panel.visible {
@@ -65,9 +80,8 @@ export const MOLVIS_UI_CSS = `
 }
 
 .molvis-perf-panel {
-  bottom: 12px;
-  right: 12px;
-  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-  font-size: 11px;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 `;

@@ -143,8 +143,7 @@ export function extractBondRows(frame: Frame): BondRow[] {
   const iCol = bonds.viewColU32("atomi");
   const jCol = bonds.viewColU32("atomj");
 
-  const orderCol =
-    bonds.dtype("order") === DType.U32 ? bonds.viewColU32("order") : undefined;
+  const orderCol = bonds.dtype("order") ? bonds.viewColF("order") : undefined;
   const rows: BondRow[] = [];
 
   for (let b = 0; b < bonds.nrows(); b++) {

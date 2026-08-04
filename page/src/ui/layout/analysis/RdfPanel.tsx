@@ -746,7 +746,6 @@ export function RdfPanel({
 
       {result && (
         <ResultSection
-          subtitle={`${result.average.yLabel} · ${result.perFrame.length} frame${result.perFrame.length === 1 ? "" : "s"} · ${result.average.nBins} bins · r_max=${result.average.rMax.toFixed(1)}`}
           stale={stale}
           onExport={() => downloadCsv(result.average)}
           chart={<PairChart result={result.average} />}

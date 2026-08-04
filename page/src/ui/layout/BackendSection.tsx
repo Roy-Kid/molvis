@@ -2,7 +2,6 @@ import { AlertCircle, Link2, Link2Off, Loader2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ViewerAction } from "@/components/viewer/ViewerAction";
 import {
   type BackendStatus,
@@ -134,24 +133,13 @@ export const BackendSection: React.FC<BackendSectionProps> = ({
       id={sectionId}
       title="Backend"
       trailing={<StatusBadge status={conn.status} />}
-      description={
-        <>
-          Run a Python script with <code>WebSocketTransport</code>; paste the
-          printed <code>ws://…</code> URL below and press Connect.
-        </>
-      }
     >
       <div className="space-y-1">
-        <Label
-          htmlFor="backend-url"
-          className="text-micro text-muted-foreground"
-        >
-          Connection URL
-        </Label>
         <Input
           id="backend-url"
           className="h-control-compact text-xs font-mono"
-          placeholder="ws://localhost:8765/ws?token=…&session=…"
+          placeholder="ws://…/ws?token=…&session=…"
+          aria-label="Backend WebSocket URL"
           value={urlText}
           onChange={(e) => {
             setUrlText(e.target.value);
@@ -161,11 +149,11 @@ export const BackendSection: React.FC<BackendSectionProps> = ({
             if (e.key === "Enter") onConnect();
           }}
         />
-        {conn.session && (
-          <p className="text-micro text-muted-foreground truncate">
-            session: <span className="font-mono">{conn.session}</span>
+        {conn.session ? (
+          <p className="truncate font-mono text-micro text-muted-foreground">
+            {conn.session}
           </p>
-        )}
+        ) : null}
       </div>
 
       {shownError && (

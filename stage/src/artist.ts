@@ -16,6 +16,7 @@ import {
   buildSubBondInstanceBuffers,
   clampBondOrder,
   refreshBondPositions,
+  subBondCount,
 } from "./artist/bond_buffer";
 import {
   DEFAULT_ISOSURFACE_STYLE,
@@ -45,7 +46,6 @@ import type { AtomMeta, BondMeta } from "./entity_source";
 import type { ImpostorState } from "./scene_index";
 import { registerImpostorShaders } from "./shaders/impostor";
 import { isMetalElement } from "./system/elements";
-import { DType } from "./utils/dtype";
 
 /**
  * Artist options for initialization
@@ -248,21 +248,21 @@ export class Artist {
     const iAtoms = bondsBlock.viewColU32("atomi");
     const jAtoms = bondsBlock.viewColU32("atomj");
     if (!iAtoms || !jAtoms) return;
-    const orderCol =
-      bondsBlock.dtype("order") === DType.U32
-        ? bondsBlock.viewColU32("order")
-        : undefined;
-    if (!iAtoms || !jAtoms) return;
+    const orderCol = bondsBlock.dtype("order")
+      ? bondsBlock.viewColF("order")
+      : undefined;
 
     const logicalCount = bondsBlock.nrows();
     let renderIdx = 0;
     for (let b = 0; b < logicalCount; b++) {
-      const order =
+      // Must match buildBondBuffers' per-bond instance count exactly, or the
+      // running renderIdx drifts and opacity lands on the wrong sticks.
+      const sticks =
         this.app.styleManager.getRepresentation().bondOrderMode === "multiple"
-          ? (orderCol?.[b] ?? 1)
+          ? subBondCount(orderCol?.[b] ?? 1)
           : 1;
       const hit = atomIndices.has(iAtoms[b]) || atomIndices.has(jAtoms[b]);
-      for (let s = 0; s < order && renderIdx < bondState.frameOffset; s++) {
+      for (let s = 0; s < sticks && renderIdx < bondState.frameOffset; s++) {
         if (hit) {
           c0.data[renderIdx * 4 + 3] = clamped;
           c1.data[renderIdx * 4 + 3] = clamped;
@@ -829,6 +829,7 @@ export class Artist {
       c0,
       c1,
       splitOffset,
+      this.app.world.camera.getForwardRay().direction,
     );
 
     const values = new Map<string, Float32Array>(subBuffers);
@@ -1126,22 +1127,21 @@ export class Artist {
 
     const iAtoms = bondsBlock.viewColU32("atomi");
     const jAtoms = bondsBlock.viewColU32("atomj");
-    const orderCol =
-      bondsBlock.dtype("order") === DType.U32
-        ? bondsBlock.viewColU32("order")
-        : undefined;
+    const orderCol = bondsBlock.dtype("order")
+      ? bondsBlock.viewColF("order")
+      : undefined;
 
     // Iterate with a running render index that advances by the bond's order,
     // because multi-order bonds expand to multiple GPU instances.
     const logicalCount = bondsBlock.nrows();
     let renderIdx = 0;
     for (let b = 0; b < logicalCount; b++) {
-      const order =
+      const sticks =
         this.app.styleManager.getRepresentation().bondOrderMode === "multiple"
-          ? (orderCol?.[b] ?? 1)
+          ? subBondCount(orderCol?.[b] ?? 1)
           : 1;
       const alpha = !visMask[iAtoms[b]] || !visMask[jAtoms[b]] ? 0.0 : 1.0;
-      for (let s = 0; s < order && renderIdx < bondState.frameOffset; s++) {
+      for (let s = 0; s < sticks && renderIdx < bondState.frameOffset; s++) {
         bondColor0.data[renderIdx * 4 + 3] = alpha;
         bondColor1.data[renderIdx * 4 + 3] = alpha;
         renderIdx++;

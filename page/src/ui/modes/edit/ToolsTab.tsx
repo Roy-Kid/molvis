@@ -108,9 +108,10 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
   if (!app || !isEditMode) return null;
 
   return (
-    <div className="flex items-center gap-1.5 pointer-events-auto">
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto">
+      <div className="shrink-0">
         <molvis-element-picker
+          compact
           value={activeElement}
           onInput={(event) =>
             updateEditMode({ element: event.currentTarget.value })
@@ -118,7 +119,7 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
         />
       </div>
 
-      <fieldset className="m-0 flex h-control-compact shrink-0 items-stretch overflow-hidden rounded-control border border-border/70 p-0">
+      <fieldset className="m-0 ml-auto flex h-control-compact shrink-0 items-stretch overflow-hidden rounded-control border border-border/70 p-0">
         <legend className="sr-only">Bond order</legend>
         {BOND_ORDERS.map(({ value, label }) => {
           const active = activeBondOrder === value;

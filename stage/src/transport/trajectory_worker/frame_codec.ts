@@ -2,10 +2,12 @@
  * Reconstruct a real molrs `Frame` from a `FrameMessage` payload received
  * from the trajectory worker.
  *
- * This is the *only* place in the codebase that builds a `Frame` from
- * pre-parsed typed arrays. Everywhere else, `Frame` instances flow from
- * either an in-process molrs reader or this codec — never both at once
- * for the same trajectory.
+ * This is the worker-boundary counterpart to `transport/rpc/wire.ts`, which
+ * does the same job for the RPC envelope. The two differ in what they are
+ * handed: a `FrameMessage` arrives structured-cloned, so its columns are
+ * already typed arrays and there is no buffer-ref indirection, no carrier
+ * checking, and no encode direction to mirror. Schema judgment belongs to
+ * neither — `Validator::canonical` runs molrs-side.
  *
  * The returned `Frame` owns its WASM memory. Disposal is the caller's
  * responsibility (the `Trajectory` LRU cache calls `frame.free()` on
@@ -35,6 +37,22 @@ export function rehydrateFrame(msg: FrameMessage): Frame {
         case "string":
           handle.setColStr(col.name, col.data);
           break;
+        default: {
+          // `ColumnPayload` is a closed union, so this is unreachable today and
+          // the `never` binding makes adding a variant a compile error. It
+          // still throws rather than falling through: dropping the column
+          // would hand back a Frame that is silently missing data, and the
+          // caller (`runtime.onFrame`) already turns a throw into a rejected
+          // frame request.
+          const unknown: never = col;
+          throw new Error(
+            `rehydrateFrame: unknown column dtype ${JSON.stringify(
+              (unknown as { dtype?: unknown }).dtype,
+            )} for column ${JSON.stringify(
+              (unknown as { name?: unknown }).name,
+            )} in block ${JSON.stringify(block.name)}`,
+          );
+        }
       }
     }
   }

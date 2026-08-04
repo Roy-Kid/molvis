@@ -1,6 +1,18 @@
 import type { MoleculeGraph } from "../molecule_graph";
 
-export type HitResult =
+/**
+ * What the pointer is over on the 2D board, right now.
+ *
+ * A hit is transient and singular — hover, the target a click would act on,
+ * what a context menu is about. It is not a selection: the board's committed
+ * multi-select lives in its `selectedAtoms` / `selectedBonds` sets, survives
+ * pointer movement, and is what highlighting renders. A hit may *lead* to a
+ * selection; it never is one.
+ *
+ * Named for its surface so it never collides with the 3D scene's
+ * `SceneHit`, which describes the same idea over Babylon meshes.
+ */
+export type BoardHit =
   | { kind: "atom"; index: number }
   | { kind: "bond"; index: number }
   | { kind: "none" };
@@ -14,7 +26,7 @@ export class HitTester {
     private readonly bondHalfWidthDoc: number,
   ) {}
 
-  hit(graph: MoleculeGraph, x: number, y: number): HitResult {
+  hit(graph: MoleculeGraph, x: number, y: number): BoardHit {
     const data = graph.getMoleculeData();
     let bestAtom = -1;
     let bestAtomDist = Infinity;

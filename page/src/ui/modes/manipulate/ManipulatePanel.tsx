@@ -9,8 +9,7 @@ export const ManipulatePanel: React.FC<ManipulatePanelProps> = ({
   app: _app,
 }) => {
   return (
-    <div
-      role="region"
+    <section
       className="flex h-full flex-col px-2 py-2"
       aria-label="Manipulate tools"
     >
@@ -21,6 +20,6 @@ export const ManipulatePanel: React.FC<ManipulatePanelProps> = ({
         <div>Drag in viewport to move selection</div>
         <div>Ctrl/Cmd + Click in Select mode first to multi-select</div>
       </div>
-    </div>
+    </section>
   );
 };

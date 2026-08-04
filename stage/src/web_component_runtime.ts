@@ -276,7 +276,7 @@ export async function mountMolvisStyleGallery(
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       await app.setRepresentation(representationId);
       if (options.background) app.setBackgroundColor(options.background);
-      app.world.resetCamera({ viewDirection: "iso" });
+      app.world.fit({ viewDirection: "iso" });
       // ArcRotateCamera.beta is the polar angle measured down from +Z, so
       // subtracting 30° raises the gallery view toward +Z. Keep this local to
       // the gallery; ordinary viewers retain MolVis's standard isometric pose.

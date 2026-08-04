@@ -181,11 +181,7 @@ export const GenericAnalysisPanel: React.FC<GenericAnalysisPanelProps> = ({
       )}
 
       {run.status === "done" && (
-        <ResultSection
-          subtitle={`${frames.length} frame${frames.length === 1 ? "" : "s"}`}
-          stale={stale}
-          failures={run.failures ?? 0}
-        >
+        <ResultSection stale={stale} failures={run.failures ?? 0}>
           {run.perFrame && frames.length > 1 && (
             <div className="mb-2 flex items-center gap-2">
               <span className="shrink-0 text-micro tabular-nums text-muted-foreground">

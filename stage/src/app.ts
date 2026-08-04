@@ -1,4 +1,8 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
+import {
+  cropToContent,
+  reencodeImage,
+} from "@molcrafts/molvis-core/image-crop";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { frameHasStructure } from "./analysis/requirements";
 import { Artist } from "./artist";
@@ -24,7 +28,7 @@ import { disposeLoadedFile } from "./io";
 import { viewAtomCoords } from "./io/atom_coords";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
-import type { HitResult, MenuItem } from "./mode/types";
+import type { MenuItem, SceneHit } from "./mode/types";
 import { OverlayManager } from "./overlays/overlay_manager";
 import type { AtomAnchored, Overlay } from "./overlays/types";
 import { ModifierPipeline, PipelineEvents } from "./pipeline";
@@ -34,7 +38,7 @@ import {
   type DataSourceOptions,
 } from "./pipeline/data_source_modifier";
 import { primaryDataSource } from "./pipeline/empty_scene";
-import { ModifierCapability } from "./pipeline/modifier";
+import { type Modifier, ModifierCapability } from "./pipeline/modifier";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import type {
   FrameChangeKind,
@@ -58,7 +62,6 @@ import {
 import type { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
 import { DType } from "./utils/dtype";
-import { cropToContent, reencodeImage } from "./utils/image_crop";
 import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
@@ -395,13 +398,13 @@ export class MolvisApp {
   public async pickAtPointer(
     pointerX: number,
     pointerY: number,
-  ): Promise<HitResult> {
+  ): Promise<SceneHit> {
     return this._world.picker.pick(pointerX, pointerY);
   }
 
   public resolveContextMenuItems(context: {
     menuId: string;
-    hit: HitResult | null;
+    hit: SceneHit | null;
     items: readonly MenuItem[];
   }): MenuItem[] {
     const builder = this._config.ui?.contextMenu?.buildItems;
@@ -470,20 +473,17 @@ export class MolvisApp {
     this.resize();
   }
 
-  public resetCamera(): void {
-    this._world.resetCamera();
-  }
-
   /**
    * Commit the working tree (SceneIndex edit pool) into molrs HEAD
-   * ({@link System.frame} + pipeline primary DataSource). Like `git commit`:
-   * dump only — does **not** rebuild the scene via {@link applyPipeline}.
+   * ({@link System.frame} + pipeline primary DataSource). Like `git commit`.
    *
    * Primary DataSource always exists (Empty Scene at boot). Writes the
-   * built frame into the shared trajectory and auto-attaches Draw
-   * modifiers when structure appears for the first time.
+   * built frame into the shared trajectory, rebinds meta to the committed
+   * frame (so hover / pick keep resolving atom info), auto-attaches Draw
+   * modifiers when structure appears for the first time, and rebuilds the
+   * GPU scene from HEAD so pick IDs match the dense frame layout.
    */
-  public commitScene(): void {
+  public async commitScene(): Promise<void> {
     const sourceFrame = this._system.frame;
     if (!sourceFrame) return;
     const saved = buildFrameFromScene(this._world.sceneIndex, { sourceFrame });
@@ -491,6 +491,9 @@ export class MolvisApp {
     this._system.updateCurrentFrame(saved);
 
     const primary = primaryDataSource(this._modifierPipeline);
+    // When System already shares the primary DS trajectory (Empty Scene
+    // boot path), updateCurrentFrame already mutated that trajectory.
+    // Only rewrite a *separate* memory primary (e.g. after load swap).
     if (
       primary &&
       primary.trajectory !== this._system.trajectory &&
@@ -500,14 +503,26 @@ export class MolvisApp {
       primary.trajectory.replaceFrame(0, saved);
     }
 
+    // Point meta at the committed frame and drop the edit overlay so
+    // hover/pick resolve through the dense HEAD layout (0..N-1). Without
+    // this, edit-pool IDs and GPU thin-instance indices can drift after
+    // the next pipeline rebuild and atom info goes blank.
+    this._world.sceneIndex.metaRegistry.atoms.setFrame(saved);
+    this._world.sceneIndex.metaRegistry.atoms.edits.clear();
+    this._world.sceneIndex.metaRegistry.bonds.setFrame(saved);
+    this._world.sceneIndex.metaRegistry.bonds.edits.clear();
+
     const atomCount = saved.getBlock("atoms")?.nrows() ?? 0;
     if (atomCount > 0 && primary) {
-      const hasDraw = this._modifierPipeline
+      const hadDraw = this._modifierPipeline
         .getModifiers()
         .some((m) => m.capabilities.has(ModifierCapability.Draws));
-      if (!hasDraw) {
+      if (!hadDraw) {
         applyAutoAttach(this._modifierPipeline, saved, undefined, primary);
       }
+      // Rebuild GPU from HEAD so impostor pick IDs + frameOffset match the
+      // committed frame.
+      await this.applyPipeline({ changeKind: "full" });
     }
   }
 
@@ -524,18 +539,14 @@ export class MolvisApp {
         logger.error("discardScene applyPipeline failed", error);
       });
     } else {
+      // artist.clear() already clears the scene index and re-registers
+      // empty atom/bond layers. A second sceneIndex.clear() would leave
+      // getAtomState() null so progressive draws fail until the next
+      // full replaceScene.
       this.artist.clear();
-      this._world.sceneIndex.clear();
     }
     this.commandManager.clearHistory();
     this._world.sceneIndex.markAllSaved();
-  }
-
-  /**
-   * @deprecated Use {@link commitScene}. Kept as a thin alias for hosts.
-   */
-  public save(): void {
-    this.commitScene();
   }
 
   /**
@@ -751,7 +762,7 @@ export class MolvisApp {
       mode === "measure" ||
       mode === "manipulate"
     ) {
-      this._modeManager.switch_mode(mode as ModeType);
+      this._modeManager.switch_mode(mode);
       return;
     }
     if (this._modeManager.listPluginModes().includes(mode)) {
@@ -826,9 +837,11 @@ export class MolvisApp {
 
   public setTheme(theme: Theme): void {
     this._styleManager.setTheme(theme);
-    if (this._system.frame) {
-      this.renderFrame(this._system.frame);
-    }
+    // Full pipeline rebuild so Draw modifiers re-sample element colours
+    // (position-only path would leave stale impostor instanceColor buffers).
+    void this.applyPipeline({ changeKind: "full" }).catch((error) => {
+      logger.error("setTheme applyPipeline failed", error);
+    });
   }
 
   public setBackgroundColor(color: string): void {
@@ -1013,6 +1026,43 @@ export class MolvisApp {
    * position-only `traj.lammpstrj`) merge into a single frame for downstream
    * modifiers; a single DS is a zero-config passthrough.
    */
+  /**
+   * Whether toggling `modifier.enabled` can be a visibility-only update
+   * (no pipeline recompute). True for any Draws layer that does not
+   * produce selection. False for pure data/selection modifiers (Slice,
+   * Wrap PBC, Color by Property, Select, …).
+   */
+  public static modifierToggleIsVisibilityOnly(modifier: {
+    capabilities: ReadonlySet<ModifierCapability>;
+  }): boolean {
+    const caps = modifier.capabilities;
+    if (!caps.has(ModifierCapability.Draws)) return false;
+    if (caps.has(ModifierCapability.ProducesSelection)) return false;
+    return true;
+  }
+
+  /**
+   * Set a modifier's enabled flag. Visual layers only flip mesh
+   * visibility (instant). Data/selection modifiers re-run the pipeline.
+   */
+  public async setModifierEnabled(
+    modifier: Modifier,
+    enabled: boolean,
+  ): Promise<Frame | null> {
+    if (modifier.enabled === enabled) {
+      return this.system.frame ?? null;
+    }
+    modifier.enabled = enabled;
+
+    if (MolvisApp.modifierToggleIsVisibilityOnly(modifier)) {
+      // Same hook applyPipeline uses after compute — no recompose / GPU rebuild.
+      modifier.applyVisibility(this, enabled);
+      return this.system.frame ?? null;
+    }
+
+    return this.applyPipeline({ fullRebuild: true });
+  }
+
   public async applyPipeline(options?: {
     fullRebuild?: boolean;
     changeKind?: FrameChangeKind;

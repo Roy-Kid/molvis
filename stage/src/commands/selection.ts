@@ -1,7 +1,10 @@
 import { type Mesh, type Scene, Vector3 } from "@babylonjs/core";
+import * as keys from "@molcrafts/molvis-core/keys";
+import type { Frame } from "@molcrafts/molvis-core/molrs";
+import { type Block, Frame as MolrsFrame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import type { SceneIndex } from "../scene_index";
-import type { GetSelectedResponse, SelectedEntity } from "../selection_manager";
+import type { SelectedEntity } from "../selection_manager";
 import { logger } from "../utils/logger";
 import { Command, command } from "./base";
 import { commands } from "./registry";
@@ -517,13 +520,121 @@ export class PasteSelectionCommand extends Command<void> {
 }
 
 /**
- * Get metadata for all currently selected entities.
+ * Copy the rows at `indices` out of `source` into `target`, column by column.
  *
- * @param app - MolvisApp instance
- * @returns Object with arrays of selected atom and bond metadata
+ * Dispatches on each column's own dtype, so every column the source carries —
+ * `charge`, `mol_id`, a force vector, anything — comes along. Row indices that
+ * fall outside the block are skipped.
  */
-export function getSelectedCommand(app: MolvisApp): GetSelectedResponse {
-  return app.world.selectionManager.getSelectedMeta();
+function gatherRows(source: Block, target: Block, indices: number[]): void {
+  const nrows = source.nrows();
+  const rows = indices.filter(
+    (i) => Number.isInteger(i) && i >= 0 && i < nrows,
+  );
+
+  for (const rawKey of source.keys()) {
+    const key = String(rawKey);
+    switch (source.dtype(key)) {
+      case "f32":
+      case "f64": {
+        const column = source.viewColF(key);
+        target.setColF(
+          key,
+          Float64Array.from(rows, (i) => column[i]),
+        );
+        break;
+      }
+      case "i32": {
+        const column = source.viewColI32(key);
+        target.setColI32(
+          key,
+          Int32Array.from(rows, (i) => column[i]),
+        );
+        break;
+      }
+      case "u32": {
+        const column = source.viewColU32(key);
+        target.setColU32(
+          key,
+          Uint32Array.from(rows, (i) => column[i]),
+        );
+        break;
+      }
+      case "string": {
+        const column = source.copyColStr(key) as string[];
+        target.setColStr(
+          key,
+          rows.map((i) => String(column[i])),
+        );
+        break;
+      }
+      // Any other dtype has no molrs-wasm accessor pair; leaving the column
+      // out is better than inventing values for it.
+    }
+  }
+}
+
+/**
+ * Build a Frame holding just the selected atoms and bonds.
+ *
+ * A real subset of the live frame, sliced by row index — so every column the
+ * scene was built from survives, not only the handful the renderer happens to
+ * draw. Bond endpoints are renumbered into the emitted atom subset so the
+ * returned Frame stands on its own.
+ */
+export function getSelectedCommand(app: MolvisApp): { frame: Frame } {
+  const selected = new MolrsFrame();
+  const source = app.frame;
+  if (!source) return { frame: selected };
+
+  const sm = app.world.selectionManager;
+  const atomRows = [...sm.getSelectedAtomIds()].sort((a, b) => a - b);
+  const bondRows = [...sm.getSelectedBondIds()].sort((a, b) => a - b);
+
+  const sourceAtoms = source.getBlock("atoms");
+  if (sourceAtoms && atomRows.length > 0) {
+    gatherRows(sourceAtoms, selected.createBlock("atoms"), atomRows);
+  }
+
+  const sourceBonds = source.getBlock("bonds");
+  if (sourceBonds && bondRows.length > 0) {
+    // Endpoints index the full frame, so a bond is only meaningful in the
+    // subset when both of its atoms came along. Decide which rows survive
+    // *before* gathering, or the remapped endpoint columns would end up
+    // shorter than the bond block's other columns.
+    const remap = new Map(atomRows.map((row, i) => [row, i]));
+    const sourceI = sourceBonds.viewColU32(keys.ATOMI);
+    const sourceJ = sourceBonds.viewColU32(keys.ATOMJ);
+    const keptRows =
+      sourceI && sourceJ
+        ? bondRows.filter(
+            (row) => remap.has(sourceI[row]) && remap.has(sourceJ[row]),
+          )
+        : bondRows;
+
+    if (keptRows.length > 0) {
+      const bonds = selected.createBlock("bonds");
+      gatherRows(sourceBonds, bonds, keptRows);
+      if (sourceI && sourceJ) {
+        bonds.setColU32(
+          keys.ATOMI,
+          Uint32Array.from(
+            keptRows,
+            (row) => remap.get(sourceI[row]) as number,
+          ),
+        );
+        bonds.setColU32(
+          keys.ATOMJ,
+          Uint32Array.from(
+            keptRows,
+            (row) => remap.get(sourceJ[row]) as number,
+          ),
+        );
+      }
+    }
+  }
+
+  return { frame: selected };
 }
 
 /**

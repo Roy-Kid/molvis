@@ -230,7 +230,6 @@ export function MsdPanel({
 
       {result && (
         <ResultSection
-          subtitle={`${result.frameIndices.length} sampled frames`}
           stale={stale}
           onExport={() => downloadMsdCsv(result)}
           failures={result.failures.length}

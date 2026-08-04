@@ -1,7 +1,7 @@
 import type { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import type { DatasetExploration } from "./analysis/exploration";
 import type { RepresentationStyle } from "./artist/representation";
-import type { ModeType } from "./mode/base";
+import type { ModeId } from "./mode/mode_type";
 import type { Overlay } from "./overlays/types";
 import type { Trajectory } from "./system/trajectory";
 
@@ -15,12 +15,16 @@ export interface MolvisEventMap {
   "frame-load-end": { frameId: number; requestId: number; success: boolean };
   "frame-rendered": { frame: Frame; box?: Box };
   "trajectory-change": Trajectory;
-  "mode-change": ModeType;
+  "mode-change": ModeId;
   "info-text-change": string;
   "fps-change": number;
+  "show-fps-change": boolean;
   "history-change": { canUndo: boolean; canRedo: boolean };
   "dirty-change": boolean;
-  "status-message": { text: string; type: "info" | "error" | "success" };
+  "status-message": {
+    text: string;
+    type: "info" | "error" | "success" | "warning";
+  };
   "representation-change": RepresentationStyle;
   "fence-select-change": boolean;
   "pending-selection-change": {

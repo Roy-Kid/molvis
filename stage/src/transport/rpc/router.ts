@@ -4,6 +4,7 @@
  * accessors. The single frontend router — no parallel anywidget copy.
  */
 
+import { Vector3 } from "@babylonjs/core";
 import { type Box, Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../../app";
 import { ClassicTheme } from "../../artist/presets/classic";
@@ -17,8 +18,12 @@ import {
   fitCameraView,
   lookAtCamera,
   readCameraPose,
+  resetCameraView,
   setCameraPose,
 } from "../../camera/control";
+import { DrawAtomCommand, DrawBondCommand } from "../../commands/draw";
+import { PlaceMoleculeCommand } from "../../commands/place_molecule";
+import { viewAtomCoords } from "../../io/atom_coords";
 import type { MarkAtomOverlay } from "../../overlays/mark_atom";
 import type { MarkAtomProps } from "../../overlays/types";
 import {
@@ -30,13 +35,13 @@ import type { Modifier } from "../../pipeline/modifier";
 import { ModifierRegistry } from "../../pipeline/modifier_registry";
 import { Trajectory } from "../../system/trajectory";
 import { listRpcMethods, RPC_METHODS, RPC_PROTOCOL_VERSION } from "./catalog";
-import { buildBox, buildFrame, decodeBinaryPayload } from "./serialization";
-import type {
-  JsonRPCRequest,
-  RPCResponseEnvelope,
-  SerializedBoxData,
-  SerializedFrameData,
-} from "./types";
+import {
+  decodeBox,
+  decodeFrame,
+  encodeFrame,
+  FramePayloadError,
+} from "./serialization";
+import type { JsonRPCRequest, RPCResponseEnvelope } from "./types";
 import { createErrorResponse, createSuccessResponse } from "./types";
 
 enum JsonRPCErrorCode {
@@ -64,6 +69,19 @@ type RPCHandler = (
   buffers: DataView[],
 ) => Promise<unknown> | unknown;
 
+/**
+ * A handler result that carries binary buffers alongside the JSON.
+ *
+ * Returning one is how a response uses the same buffer channel inbound
+ * requests do, instead of inflating dense columns into JSON number arrays.
+ */
+export class BinaryResult {
+  constructor(
+    readonly result: unknown,
+    readonly buffers: ArrayBuffer[],
+  ) {}
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
@@ -83,10 +101,26 @@ function parseError(message: string, data?: unknown): RPCError {
 }
 
 function ensureFiniteNumber(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw invalidParams(`${label} must be a finite number`);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
   }
-  return value;
+  // Pyodide / JSON sometimes hand us numeric strings; accept them.
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  throw invalidParams(`${label} must be a finite number`);
+}
+
+/** Coerce optional finite number; undefined when absent / non-numeric. */
+function optionalFiniteNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
 }
 
 function toRepresentationId(style: unknown): RepresentationId | null {
@@ -103,12 +137,50 @@ function toNumberArray(value: unknown): number[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  if (
-    !value.every((item) => typeof item === "number" && Number.isFinite(item))
-  ) {
+  const out: number[] = [];
+  for (const item of value) {
+    if (typeof item === "number" && Number.isFinite(item)) {
+      out.push(item);
+      continue;
+    }
+    if (typeof item === "string" && item.trim() !== "") {
+      const n = Number(item);
+      if (Number.isFinite(n)) {
+        out.push(n);
+        continue;
+      }
+    }
     return null;
   }
-  return value as number[];
+  return out;
+}
+
+/**
+ * One `scene.set_frame_labels` column: a wire `f64` column, same as any Frame
+ * column, so a caller that can build a Frame can build this without a second
+ * encoding to learn.
+ */
+function decodeLabelColumn(
+  name: string,
+  value: unknown,
+  buffers: readonly DataView[],
+): Float64Array {
+  const column = asRecord(value);
+  if (column.dtype !== "f64") {
+    throw invalidParams(
+      `labels['${name}'] must be an f64 column ({dtype: "f64", data}), received ${JSON.stringify(column.dtype)}`,
+    );
+  }
+  const block = decodeFrame(
+    { blocks: { labels: { columns: { [name]: column } } } },
+    buffers,
+    "scene.set_frame_labels",
+  );
+  try {
+    return block.getBlock("labels")?.copyColF(name) ?? new Float64Array();
+  } finally {
+    block.free?.();
+  }
 }
 
 function toIntegerIdList(value: unknown, label: string): number[] {
@@ -269,11 +341,15 @@ export class RPCRouter {
     this.handlers = new Map<string, RPCHandler>([
       ["scene.new_frame", this.handleNewFrame],
       ["scene.draw_frame", this.handleDrawFrame],
+      ["scene.draw_atom", this.handleDrawAtom],
+      ["scene.draw_bond", this.handleDrawBond],
       ["scene.draw_box", this.handleDrawBox],
+      ["scene.commit", this.handleCommit],
       ["scene.clear", this.handleClear],
       ["scene.export_frame", this.handleExportFrame],
       ["scene.set_trajectory", this.handleSetTrajectory],
       ["scene.set_frame_labels", this.handleSetFrameLabels],
+      ["scene.seek_frame", this.handleSeekFrame],
       ["scene.apply_state", this.handleApplyState],
       ["selection.get", this.handleSelectionGet],
       ["selection.select_atoms", this.handleSelectionSelectAtoms],
@@ -303,7 +379,8 @@ export class RPCRouter {
       ["camera.get_pose", this.handleCameraGetPose],
       ["camera.set_pose", this.handleCameraSetPose],
       ["camera.look_at", this.handleCameraLookAt],
-      ["camera.fit_view", this.handleCameraFitView],
+      ["camera.fit", this.handleCameraFit],
+      ["camera.reset", this.handleCameraReset],
       ["state.get", this.handleStateGet],
       ["rpc.list_methods", this.handleListMethods],
     ]);
@@ -368,10 +445,28 @@ export class RPCRouter {
 
     try {
       const result = await handler(asRecord(parsed.params), buffers);
+      if (result instanceof BinaryResult) {
+        return {
+          content: createSuccessResponse(parsed.id, result.result),
+          buffers: result.buffers,
+        };
+      }
       return {
         content: createSuccessResponse(parsed.id, result),
       };
     } catch (error) {
+      if (error instanceof FramePayloadError) {
+        // A malformed molecular payload is the producer's bug; report it as
+        // invalid params with the block.column path the codec identified.
+        return {
+          content: createErrorResponse(
+            parsed.id,
+            JsonRPCErrorCode.InvalidParams,
+            error.message,
+            error.path ? { path: error.path } : undefined,
+          ),
+        };
+      }
       if (error instanceof RPCError) {
         return {
           content: createErrorResponse(
@@ -441,78 +536,145 @@ export class RPCRouter {
       filename: "",
     });
     await this.app.applyPipeline({ fullRebuild: true });
-    this.app.world.resetCamera();
+    this.app.world.fit();
     return { success: true };
   };
 
+  /**
+   * Place a structure into the **edit working tree** (same path as Edit mode
+   * stamp / PlaceMoleculeCommand). Does **not** write molrs HEAD — that is
+   * {@link handleCommit} / Ctrl+S only. Does **not** move the camera —
+   * callers that want framing use `camera.fit` / {@link World.fit}.
+   */
   private handleDrawFrame: RPCHandler = async (params, buffers) => {
-    let frame: Frame;
-    let box: Box | undefined;
-    const sessionLabel = this.sessionLabel();
-
-    try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<
-        string,
-        unknown
-      >;
-      const rawFrame = decoded.frame;
-      if (!rawFrame) {
-        throw invalidParams("scene.draw_frame requires a 'frame' payload");
-      }
-      const frameData = asRecord(rawFrame) as unknown as SerializedFrameData;
-      const rawBox = decoded.box;
-      const boxData = rawBox
-        ? (asRecord(rawBox) as unknown as SerializedBoxData)
-        : null;
-      const options = asRecord(decoded.options);
-      if (Object.keys(options).length > 0) {
-        throw invalidParams(
-          "scene.draw_frame accepts data only; use dedicated view commands for global visual settings",
-        );
-      }
-      frame = buildFrame(frameData);
-      box = boxData ? buildBox(boxData) : undefined;
-    } catch (error) {
-      if (error instanceof RPCError) {
-        throw error;
-      }
+    if (!params.frame) {
+      throw invalidParams("scene.draw_frame requires a 'frame' payload");
+    }
+    if (Object.keys(asRecord(params.options)).length > 0) {
       throw invalidParams(
-        error instanceof Error ? error.message : String(error),
+        "scene.draw_frame accepts data only; use dedicated view commands for global visual settings",
+      );
+    }
+    // The box rides on the frame (molrs `Frame.box`). A top-level `box` is the
+    // pre-wire spelling and is refused rather than silently ignored.
+    if (params.box !== undefined) {
+      throw invalidParams(
+        "scene.draw_frame no longer takes a top-level 'box'; put it on the frame payload",
+      );
+    }
+    const frame = decodeFrame(params.frame, buffers, "scene.draw_frame frame");
+    const atoms = frame.getBlock("atoms");
+    const nAtoms = atoms?.nrows() ?? 0;
+    if (nAtoms === 0) {
+      throw invalidParams(
+        "scene.draw_frame: frame has no atoms (nothing to place in the working tree)",
       );
     }
 
-    // draw_frame replaces the scene with one source. Source composition then
-    // passes that single source through unchanged.
-    await this.app.setTrajectory(new Trajectory([frame], [box]), {
-      sourceType: "backend",
-      filename: sessionLabel,
-    });
-    await this.app.applyPipeline({ fullRebuild: true });
-    this.app.world.resetCamera();
+    // PlaceMoleculeCommand centers the template on `target`. Pass the
+    // molecule centroid so absolute coordinates are preserved (offset = 0).
+    const target = moleculeCentroid(frame);
+    const baseAtomId = this.app.world.sceneIndex.getNextAtomId();
+    await this.app.commandManager.execute(
+      new PlaceMoleculeCommand(this.app, frame, target),
+    );
+    this.app.world.renderOnce();
 
+    const atomIds = Array.from({ length: nAtoms }, (_, i) => baseAtomId + i);
+    return { success: true, atomIds };
+  };
+
+  /**
+   * Place one atom in the edit working tree (DrawAtomCommand). HEAD unchanged
+   * until scene.commit / Ctrl+S.
+   */
+  private handleDrawAtom: RPCHandler = async (params) => {
+    const x = Number(params.x);
+    const y = Number(params.y);
+    const z = Number(params.z);
+    if (![x, y, z].every((v) => Number.isFinite(v))) {
+      throw invalidParams(
+        "scene.draw_atom requires finite numeric x, y, z coordinates",
+      );
+    }
+    const elementRaw = params.element ?? params.symbol;
+    if (typeof elementRaw !== "string" || elementRaw.length === 0) {
+      throw invalidParams(
+        "scene.draw_atom requires a non-empty 'element' (or 'symbol') string",
+      );
+    }
+    const element = elementRaw;
+    const result = await this.app.commandManager.execute(
+      new DrawAtomCommand(this.app, new Vector3(x, y, z), { element }),
+    );
+    this.app.world.renderOnce();
+    return { success: true, atomId: result.atomId };
+  };
+
+  /**
+   * Place one bond in the edit working tree (DrawBondCommand). Atom indices
+   * are **scene atom ids** (as returned by scene.draw_atom / draw_frame).
+   */
+  private handleDrawBond: RPCHandler = async (params) => {
+    const atomi = params.atomi;
+    const atomj = params.atomj;
+    if (
+      typeof atomi !== "number" ||
+      typeof atomj !== "number" ||
+      !Number.isInteger(atomi) ||
+      !Number.isInteger(atomj) ||
+      atomi < 0 ||
+      atomj < 0
+    ) {
+      throw invalidParams(
+        "scene.draw_bond requires non-negative integer atomi and atomj (scene atom ids)",
+      );
+    }
+    const meta1 = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomi);
+    const meta2 = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomj);
+    if (!meta1 || !meta2) {
+      throw invalidParams(
+        `scene.draw_bond: atom ids (${atomi}, ${atomj}) not in the working tree — draw atoms first`,
+      );
+    }
+    const order =
+      typeof params.order === "number" && Number.isFinite(params.order)
+        ? params.order
+        : 1;
+    const start = new Vector3(
+      meta1.position.x,
+      meta1.position.y,
+      meta1.position.z,
+    );
+    const end = new Vector3(
+      meta2.position.x,
+      meta2.position.y,
+      meta2.position.z,
+    );
+    const result = await this.app.commandManager.execute(
+      new DrawBondCommand(this.app, start, end, {
+        order,
+        atomId1: atomi,
+        atomId2: atomj,
+      }),
+    );
+    this.app.world.renderOnce();
+    return { success: true, bondId: result.bondId };
+  };
+
+  /**
+   * Commit the edit working tree into molrs HEAD (same as Ctrl+S).
+   */
+  private handleCommit: RPCHandler = async () => {
+    await this.app.commitScene();
     return { success: true };
   };
 
   private handleDrawBox: RPCHandler = (params, buffers) => {
-    let box: Box;
-    try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<
-        string,
-        unknown
-      >;
-      const rawBox = decoded.box;
-      if (!rawBox) {
-        throw invalidParams("scene.draw_box requires a 'box' payload");
-      }
-      box = buildBox(asRecord(rawBox) as unknown as SerializedBoxData);
-    } catch (error) {
-      if (error instanceof RPCError) {
-        throw error;
-      }
-      throw invalidParams(
-        error instanceof Error ? error.message : String(error),
-      );
+    if (!params.box) {
+      throw invalidParams("scene.draw_box requires a 'box' payload");
     }
+    const box = decodeBox(params.box, buffers, "scene.draw_box box");
 
     this.app.artist.drawBox(box);
 
@@ -531,41 +693,29 @@ export class RPCRouter {
       filename: "",
     });
     await this.app.applyPipeline({ fullRebuild: true });
-    this.app.world.resetCamera();
+    this.app.world.fit();
     return { success: true };
   };
 
   private handleSetTrajectory: RPCHandler = async (params, buffers) => {
-    const decoded = decodeBinaryPayload(params, buffers) as Record<
-      string,
-      unknown
-    >;
-    const rawFrames = decoded.frames;
+    const rawFrames = params.frames;
     if (!Array.isArray(rawFrames) || rawFrames.length === 0) {
       throw invalidParams(
         "scene.set_trajectory requires a non-empty 'frames' array",
       );
     }
-    const rawBoxes = Array.isArray(decoded.boxes) ? decoded.boxes : [];
+    if (params.boxes !== undefined) {
+      // A parallel boxes array could not be length-checked against frames and
+      // silently padded with undefined. Each frame carries its own box now.
+      throw invalidParams(
+        "scene.set_trajectory no longer takes a parallel 'boxes' array; put each box on its frame",
+      );
+    }
 
-    const frames: Frame[] = rawFrames.map((raw, i) => {
-      try {
-        return buildFrame(asRecord(raw) as unknown as SerializedFrameData);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw invalidParams(`frames[${i}]: ${message}`);
-      }
-    });
-
-    const boxes: (Box | undefined)[] = rawBoxes.map((raw, i) => {
-      if (raw == null) return undefined;
-      try {
-        return buildBox(asRecord(raw) as unknown as SerializedBoxData);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw invalidParams(`boxes[${i}]: ${message}`);
-      }
-    });
+    const frames: Frame[] = rawFrames.map((raw, i) =>
+      decodeFrame(raw, buffers, `scene.set_trajectory frames[${i}]`),
+    );
+    const boxes: (Box | undefined)[] = frames.map((frame) => frame.box);
 
     const sessionLabel = this.sessionLabel(frames.length);
     await this.app.setTrajectory(new Trajectory(frames, boxes), {
@@ -573,7 +723,7 @@ export class RPCRouter {
       filename: sessionLabel,
     });
     await this.app.applyPipeline({ fullRebuild: true });
-    this.app.world.resetCamera();
+    this.app.world.fit();
     return { success: true, nFrames: frames.length };
   };
 
@@ -586,10 +736,7 @@ export class RPCRouter {
    * the user to choose between the two.
    */
   private handleApplyState: RPCHandler = (params, buffers) => {
-    const decoded = decodeBinaryPayload(params, buffers) as Record<
-      string,
-      unknown
-    >;
+    const decoded = params;
 
     const rawPipeline = Array.isArray(decoded.pipeline) ? decoded.pipeline : [];
     const pipeline = rawPipeline.map((raw, i) => {
@@ -648,25 +795,12 @@ export class RPCRouter {
     });
 
     const rawFrames = Array.isArray(decoded.frames) ? decoded.frames : [];
-    const frames: Frame[] = rawFrames.map((raw, i) => {
-      try {
-        return buildFrame(asRecord(raw) as unknown as SerializedFrameData);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw invalidParams(`scene.apply_state frames[${i}]: ${message}`);
-      }
-    });
-
-    const rawBoxes = Array.isArray(decoded.boxes) ? decoded.boxes : [];
-    const boxes: (Box | undefined)[] = rawBoxes.map((raw, i) => {
-      if (raw == null) return undefined;
-      try {
-        return buildBox(asRecord(raw) as unknown as SerializedBoxData);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw invalidParams(`scene.apply_state boxes[${i}]: ${message}`);
-      }
-    });
+    const frames: Frame[] = rawFrames.map((raw, i) =>
+      decodeFrame(raw, buffers, `scene.apply_state frames[${i}]`),
+    );
+    // Each frame carries its own box, exactly as on the draw_frame path — the
+    // snapshot no longer replays a separate parallel array.
+    const boxes: (Box | undefined)[] = frames.map((frame) => frame.box);
 
     this.app.events.emit("backend-state-sync", {
       pipeline,
@@ -678,11 +812,7 @@ export class RPCRouter {
   };
 
   private handleSetFrameLabels: RPCHandler = (params, buffers) => {
-    const decoded = decodeBinaryPayload(params, buffers) as Record<
-      string,
-      unknown
-    >;
-    const rawLabels = decoded.labels;
+    const rawLabels = params.labels;
     const trajectory = this.app.system.trajectory;
     const nFrames = trajectory.length;
 
@@ -703,28 +833,19 @@ export class RPCRouter {
     for (const [name, value] of Object.entries(
       rawLabels as Record<string, unknown>,
     )) {
-      let column: Float64Array;
-      if (value instanceof Float64Array) {
-        column = value;
-      } else if (ArrayBuffer.isView(value)) {
-        column = Float64Array.from(value as unknown as ArrayLike<number>);
-      } else if (Array.isArray(value)) {
-        column = Float64Array.from(value, (v) =>
-          typeof v === "number" ? v : Number.NaN,
-        );
-      } else {
-        throw invalidParams(`labels['${name}'] must be an array of numbers`);
-      }
+      // One column per label, in the wire's own shape — a caller that already
+      // knows how to build a Frame column knows how to build this.
+      const column = decodeLabelColumn(name, value, buffers);
       if (nFrames > 0 && column.length !== nFrames) {
         throw invalidParams(
           `labels['${name}'] has length ${column.length}, expected ${nFrames}`,
         );
       }
-      // Frame meta is the single source of truth — write per-frame via
-      // molrs's setMeta. PCATool (and other consumers) walk the trajectory
-      // at read time; no separate aggregation layer is stored.
+      // Frame meta is the single source of truth. `setMetaScalar` keeps the
+      // value a float64; the old `setMeta(name, String(v))` round-tripped every
+      // per-frame descriptor through decimal text and lost precision.
       for (let i = 0; i < column.length; i++) {
-        trajectory.get(i)?.setMeta(name, String(column[i]));
+        trajectory.get(i)?.setMetaScalar(name, column[i]);
       }
       nLabels++;
     }
@@ -733,25 +854,60 @@ export class RPCRouter {
     return { success: true, nLabels };
   };
 
-  private handleExportFrame: RPCHandler = () => {
-    const result = this.app.execute<
-      Record<string, never>,
-      {
-        frameData: {
-          blocks: Record<string, Record<string, unknown>>;
-          metadata: Record<string, unknown>;
-        };
-      }
-    >("export_frame", {});
-    const resolved =
-      result instanceof Promise ? result : Promise.resolve(result);
-    return resolved.then((value) => ({
-      frame: value.frameData,
-    }));
+  /**
+   * Seek the trajectory to `index`.
+   *
+   * The frontend has had `MolvisApp.seekFrame` and a timeline control all
+   * along; there was simply no RPC reaching it, so every Python-side playback
+   * helper called a `frame.seek` method that did not exist.
+   */
+  private handleSeekFrame: RPCHandler = async (params) => {
+    const index = params.index;
+    if (typeof index !== "number" || !Number.isInteger(index) || index < 0) {
+      throw invalidParams(
+        "scene.seek_frame 'index' must be a non-negative integer",
+      );
+    }
+    const total = this.app.system.trajectory?.length ?? 0;
+    if (index >= total) {
+      throw invalidParams(
+        `scene.seek_frame index ${index} is out of range (${total} frame(s))`,
+      );
+    }
+    await this.app.seekFrame(index);
+    return { index: this.app.currentFrame, total };
   };
 
-  private handleSelectionGet: RPCHandler = () =>
-    this.app.execute("get_selected", {});
+  private handleExportFrame: RPCHandler = async () => {
+    const { frame } = await Promise.resolve(
+      this.app.execute<Record<string, never>, { frame: Frame }>(
+        "export_frame",
+        {},
+      ),
+    );
+    try {
+      const encoded = encodeFrame(frame, "scene.export_frame");
+      return new BinaryResult({ frame: encoded.frame }, encoded.buffers);
+    } finally {
+      // The command hands over a temporary frame built from the live scene.
+      frame.free?.();
+    }
+  };
+
+  private handleSelectionGet: RPCHandler = async () => {
+    const { frame } = await Promise.resolve(
+      this.app.execute<Record<string, never>, { frame: Frame }>(
+        "get_selected",
+        {},
+      ),
+    );
+    try {
+      const encoded = encodeFrame(frame, "selection.get");
+      return new BinaryResult({ frame: encoded.frame }, encoded.buffers);
+    } finally {
+      frame.free?.();
+    }
+  };
 
   private handleSelectionSelectAtoms: RPCHandler = (params) => {
     const ids = toIntegerIdList(params.ids ?? [], "ids");
@@ -786,7 +942,12 @@ export class RPCRouter {
         atom_ids: meta.atoms.atomId,
         bond_ids: meta.bonds.bondId,
       },
-      mode: this.app.mode,
+      // `app.mode` is the live Mode instance, which reaches the Babylon scene,
+      // the canvas element and its React fiber — serializing it throws
+      // "Converting circular structure to JSON" and the reply is never sent,
+      // so the caller only ever sees a timeout. Send the ModeId, matching what
+      // `event.mode_changed` already puts on the wire.
+      mode: this.app.mode?.name ?? null,
       frame_index: this.app.currentFrame,
       total_frames: this.app.system.trajectory?.length ?? 0,
     };
@@ -799,19 +960,23 @@ export class RPCRouter {
   private handleCameraSetPose: RPCHandler = (params) => {
     const p = asRecord(params);
     const target = toNumberArray(p.target);
+    const alpha = optionalFiniteNumber(p.alpha);
+    const beta = optionalFiniteNumber(p.beta);
+    const radius = optionalFiniteNumber(p.radius);
+    if (
+      alpha === undefined &&
+      beta === undefined &&
+      radius === undefined &&
+      target === null
+    ) {
+      throw invalidParams(
+        "camera.set_pose needs at least one of alpha, beta, radius, target",
+      );
+    }
     const pose = setCameraPose(this.app.world.camera, {
-      alpha:
-        typeof p.alpha === "number"
-          ? ensureFiniteNumber(p.alpha, "alpha")
-          : undefined,
-      beta:
-        typeof p.beta === "number"
-          ? ensureFiniteNumber(p.beta, "beta")
-          : undefined,
-      radius:
-        typeof p.radius === "number"
-          ? ensureFiniteNumber(p.radius, "radius")
-          : undefined,
+      alpha,
+      beta,
+      radius,
       target: target ?? undefined,
     });
     this.app.world.renderOnce();
@@ -835,8 +1000,14 @@ export class RPCRouter {
     return { pose };
   };
 
-  private handleCameraFitView: RPCHandler = () => {
+  private handleCameraFit: RPCHandler = () => {
     const pose = fitCameraView(this.app);
+    this.app.world.renderOnce();
+    return { pose };
+  };
+
+  private handleCameraReset: RPCHandler = () => {
+    const pose = resetCameraView(this.app);
     this.app.world.renderOnce();
     return { pose };
   };
@@ -884,13 +1055,9 @@ export class RPCRouter {
     return { success: true };
   };
 
-  private handleSetStyle: RPCHandler = async (params, buffers) => {
+  private handleSetStyle: RPCHandler = async (params) => {
     try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<
-        string,
-        unknown
-      >;
-      await applyGlobalStyle(this.app, decoded);
+      await applyGlobalStyle(this.app, params);
     } catch (error) {
       if (error instanceof RPCError) {
         throw error;
@@ -977,8 +1144,7 @@ export class RPCRouter {
     const modifier = entry.factory();
     this.app.modifierPipeline.addModifier(modifier);
 
-    const scopeRaw =
-      params.selection_scope_id ?? params.selectionScopeId ?? null;
+    const scopeRaw = params.selection_scope_id ?? null;
     if (scopeRaw !== null && scopeRaw !== undefined) {
       const selectionScopeId = requireString(scopeRaw, "selection_scope_id");
       if (
@@ -994,7 +1160,7 @@ export class RPCRouter {
       }
     }
 
-    const ownerRaw = params.source_owner_id ?? params.sourceOwnerId ?? null;
+    const ownerRaw = params.source_owner_id ?? null;
     if (ownerRaw !== null && ownerRaw !== undefined) {
       const sourceOwnerId = requireString(ownerRaw, "source_owner_id");
       if (
@@ -1030,10 +1196,7 @@ export class RPCRouter {
 
   private handlePipelineReorderModifier: RPCHandler = async (params) => {
     const id = requireString(params.id, "id");
-    const newIndex = requireInteger(
-      params.new_index ?? params.newIndex,
-      "new_index",
-    );
+    const newIndex = requireInteger(params.new_index, "new_index");
     if (!id) {
       throw invalidParams("pipeline.reorder_modifier requires an 'id'");
     }
@@ -1065,7 +1228,7 @@ export class RPCRouter {
 
   private handlePipelineSetSelectionScope: RPCHandler = async (params) => {
     const id = requireString(params.id, "id");
-    const raw = params.selection_scope_id ?? params.selectionScopeId;
+    const raw = params.selection_scope_id;
     const selectionScopeId = requireString(raw, "selection_scope_id", {
       allowNull: true,
     });
@@ -1083,7 +1246,7 @@ export class RPCRouter {
 
   private handlePipelineSetSourceOwner: RPCHandler = async (params) => {
     const id = requireString(params.id, "id");
-    const raw = params.source_owner_id ?? params.sourceOwnerId;
+    const raw = params.source_owner_id;
     const sourceOwnerId = requireString(raw, "source_owner_id", {
       allowNull: true,
     });
@@ -1115,22 +1278,18 @@ export class RPCRouter {
     let contributedBlocks: string[] | undefined;
 
     try {
-      const decoded = decodeBinaryPayload(params, buffers) as Record<
-        string,
-        unknown
-      >;
+      const decoded = params;
       const rawFrame = decoded.frame;
       if (!rawFrame) {
         throw invalidParams("scene.add_data_source requires a 'frame' payload");
       }
-      const frameData = asRecord(rawFrame) as unknown as SerializedFrameData;
-      frame = buildFrame(frameData);
+      frame = decodeFrame(rawFrame, buffers, "scene.add_data_source frame");
 
       filename =
         requireString(decoded.filename, "filename", { allowNull: true }) ??
         this.sessionLabel();
 
-      const rawBlocks = decoded.contributed_blocks ?? decoded.contributedBlocks;
+      const rawBlocks = decoded.contributed_blocks;
       if (Array.isArray(rawBlocks)) {
         contributedBlocks = rawBlocks
           .filter((b): b is string => typeof b === "string")
@@ -1212,4 +1371,25 @@ export class RPCRouter {
     if (n > 1) return `backend · ${n} frames`;
     return "backend";
   }
+}
+
+/**
+ * Geometric centroid of a frame's atoms (for PlaceMolecule absolute placement).
+ * Coordinates come from molrs atom columns only — no frame surgery in molvis.
+ */
+function moleculeCentroid(frame: Frame): Vector3 {
+  const atoms = frame.getBlock("atoms");
+  if (!atoms || atoms.nrows() === 0) return Vector3.Zero();
+  const coords = viewAtomCoords(atoms);
+  if (!coords) return Vector3.Zero();
+  const n = atoms.nrows();
+  let cx = 0;
+  let cy = 0;
+  let cz = 0;
+  for (let i = 0; i < n; i++) {
+    cx += coords.x[i];
+    cy += coords.y[i];
+    cz += coords.z[i];
+  }
+  return new Vector3(cx / n, cy / n, cz / n);
 }

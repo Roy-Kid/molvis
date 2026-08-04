@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import type { MolvisApp } from "../../../src/app";
 import { registerWebComponents } from "../../../src/dom_helpers";
-import type { HitResult, MenuItem } from "../../../src/mode/types";
+import type { MenuItem, SceneHit } from "../../../src/mode/types";
 import { ContextMenuHost } from "../../../src/ui/menus/host";
 
 type StubApp = Pick<
@@ -13,7 +13,7 @@ function createStubApp(overrides?: {
   showContextMenu?: boolean;
   buildItems?: (ctx: {
     menuId: string;
-    hit: HitResult | null;
+    hit: SceneHit | null;
     items: readonly MenuItem[];
   }) => MenuItem[];
 }): StubApp {
@@ -214,7 +214,7 @@ describe("ContextMenuHost", () => {
 
   it("forwards menuId and hit into resolveContextMenuItems", () => {
     let seenMenuId = "";
-    let seenHit: HitResult | null = null;
+    let seenHit: SceneHit | null = null;
     const app = track(
       createStubApp({
         buildItems: ({ menuId, hit, items }) => {
@@ -225,7 +225,7 @@ describe("ContextMenuHost", () => {
       }),
     );
     const host = new ContextMenuHost(asApp(app), "test-menu-a");
-    const hit: HitResult = { type: "empty" };
+    const hit: SceneHit = { type: "empty" };
     host.show(0, 0, [{ type: "button", title: "Y", action: () => {} }], {
       hit,
     });

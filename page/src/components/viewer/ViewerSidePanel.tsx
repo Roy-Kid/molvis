@@ -13,6 +13,11 @@ const FOCUSABLE_SELECTOR = [
 export interface ViewerSidePanelProps {
   children: React.ReactNode;
   drawer: boolean;
+  /**
+   * Committed inline width (e.g. `"18%"`). Applied imperatively so live
+   * resize can update `style.width` via `panelRef` without React re-render
+   * clobbering the drag position.
+   */
   inlineWidth: string;
   label: string;
   onClose: () => void;
@@ -39,6 +44,14 @@ export const ViewerSidePanel: React.FC<ViewerSidePanelProps> = ({
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
   const wasModalOpenRef = React.useRef(false);
   const modalOpen = drawer && open;
+
+  // Committed width only — never put width in JSX `style`, or every React
+  // commit overwrites the live value written during drag by App.
+  React.useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || drawer) return;
+    panel.style.width = inlineWidth;
+  }, [drawer, inlineWidth, panelRef]);
 
   React.useEffect(() => {
     const panel = panelRef.current;
@@ -114,14 +127,12 @@ export const ViewerSidePanel: React.FC<ViewerSidePanelProps> = ({
       inert={!open ? true : undefined}
       tabIndex={modalOpen ? -1 : undefined}
       onKeyDown={handleKeyDown}
-      style={drawer ? undefined : { width: inlineWidth }}
       className={cn(
+        // Flat VS Code-style workbench panel: no card elevation / outer frame.
         "absolute inset-y-0 z-10 flex min-w-0 flex-col bg-background",
         side === "left" ? "left-0" : "right-0",
         drawer &&
           "z-30 w-inspector-overlay shadow-overlay motion-reduce:transform-none",
-        drawer && side === "left" && "border-r border-border/70",
-        drawer && side === "right" && "border-l border-border/70",
         drawer && open && side === "left" && "motion-enter-left",
         drawer && open && side === "right" && "motion-enter-right",
         !open && "invisible pointer-events-none",

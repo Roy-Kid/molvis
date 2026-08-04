@@ -16,7 +16,6 @@ import {
   MemoryDataSource,
   type Modifier,
   ModifierCapability,
-  primaryCapabilityLabel,
   SelectModifier,
   SliceModifier,
 } from "@molvis/stage";
@@ -106,18 +105,13 @@ function getModifierIcon(modifier: Modifier): LucideIcon {
     modifier instanceof ExpressionSelectionModifier
   )
     return SquareDashed;
-  switch (primaryCapabilityLabel(modifier.capabilities)) {
-    case ModifierCapability.Draws:
-      return Eye;
-    case ModifierCapability.ProducesSelection:
-      return SquareDashed;
-    case ModifierCapability.ConsumesSelection:
-      return Filter;
-    case ModifierCapability.TransformsData:
-      return Wand2;
-    default:
-      return Circle;
-  }
+  // Fallback for unknown / plugin modifiers: family icon only, no text badge.
+  const caps = modifier.capabilities;
+  if (caps.has(ModifierCapability.Draws)) return Eye;
+  if (caps.has(ModifierCapability.ProducesSelection)) return SquareDashed;
+  if (caps.has(ModifierCapability.ConsumesSelection)) return Filter;
+  if (caps.has(ModifierCapability.TransformsData)) return Wand2;
+  return Circle;
 }
 
 function hasSelectionScope(modifier: Modifier): boolean {
@@ -169,7 +163,7 @@ export function SortableModifierItem({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center gap-2 py-1 pr-1 border-b last:border-0 text-xs select-none transition-colors duration-(--motion-fast) ease-standard",
+        "group relative flex min-w-0 items-center gap-1.5 border-b py-1 pr-1 text-xs last:border-0 select-none transition-colors duration-(--motion-fast) ease-standard",
         selected ? "bg-accent/15" : "hover:bg-interactive",
         isDragging && "opacity-60",
       )}

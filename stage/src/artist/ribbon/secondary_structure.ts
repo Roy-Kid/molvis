@@ -47,12 +47,6 @@ export function assignSecondaryStructureAuto(
   return "zhang-skolnick";
 }
 
-/** @deprecated Prefer {@link assignSecondaryStructureAuto}. */
-export function assignSecondaryStructure(rows: Residue[]): void {
-  if (canRunDssp(rows) && assignDssp(rows)) return;
-  assignZhangSkolnick(rows);
-}
-
 /**
  * Zhang–Skolnick secondary-structure assignment (Mol\* `computeUnitZhangSkolnik`).
  */
@@ -100,6 +94,10 @@ function zhangSkolnickMatch(
   const len = segEnd - segStart;
   for (let jLocal = Math.max(0, iLocal - 2); jLocal <= iLocal; jLocal++) {
     for (let k = 2; k < 5; k++) {
+      // Incomplete window → unclassified, never a vacuous match. Skipping
+      // the out-of-range pair instead would let the last residue of a
+      // segment satisfy *any* distance profile, and since helix is tested
+      // first it would be labelled helix on geometry that was never checked.
       if (jLocal + k >= len) return false;
       const a = caPos(rows, segStart + jLocal);
       const b = caPos(rows, segStart + jLocal + k);

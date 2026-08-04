@@ -7,8 +7,7 @@ interface MeasurePanelProps {
 
 export const MeasurePanel: React.FC<MeasurePanelProps> = ({ app: _app }) => {
   return (
-    <div
-      role="region"
+    <section
       className="flex h-full flex-col px-2 py-2"
       aria-label="Measure tools"
     >
@@ -20,6 +19,6 @@ export const MeasurePanel: React.FC<MeasurePanelProps> = ({ app: _app }) => {
         <div>3 atoms — angle</div>
         <div>4 atoms — dihedral</div>
       </div>
-    </div>
+    </section>
   );
 };

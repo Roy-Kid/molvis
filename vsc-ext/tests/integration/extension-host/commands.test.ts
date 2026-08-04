@@ -49,7 +49,10 @@ suite("extension host commands", () => {
   test("registers expected commands", async () => {
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes("molvis.quickView"));
-    assert.ok(commands.includes("molvis.openEditor"));
+    assert.ok(commands.includes("molvis.openWorkbench"));
+    assert.ok(commands.includes("molvis.openStage"));
+    assert.ok(commands.includes("molvis.openSketch"));
+    assert.ok(commands.includes("molvis.openPage"));
     assert.ok(commands.includes("molvis.openStructure"));
     assert.ok(commands.includes("molvis.clearRecent"));
     assert.ok(commands.includes("molvis.openDocs"));
@@ -57,9 +60,9 @@ suite("extension host commands", () => {
     assert.ok(commands.includes("molvis.reload"));
   });
 
-  test("openEditor creates molvis editor webview", async () => {
-    await vscode.commands.executeCommand("molvis.openEditor");
-    await waitForRegisteredPanel("molvis.workspace");
+  test("openWorkbench creates molvis.workbench webview", async () => {
+    await vscode.commands.executeCommand("molvis.openWorkbench");
+    await waitForRegisteredPanel("molvis.workbench");
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
   });
 
@@ -108,9 +111,12 @@ suite("extension host commands", () => {
       "Launcher needs Open Structure command",
     );
     assert.ok(
-      commandIds.has("molvis.openEditor"),
-      "Launcher needs Open Workspace command",
+      commandIds.has("molvis.openWorkbench"),
+      "Launcher needs Open Workbench command",
     );
+    assert.ok(commandIds.has("molvis.openStage"));
+    assert.ok(commandIds.has("molvis.openSketch"));
+    assert.ok(commandIds.has("molvis.openPage"));
 
     const menus = ext.packageJSON?.contributes?.menus as
       | Record<string, Array<{ command: string; when?: string }>>

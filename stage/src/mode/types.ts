@@ -2,9 +2,20 @@ import type { AbstractMesh } from "@babylonjs/core";
 import type { AtomMeta, BondMeta } from "../entity_source";
 
 /**
- * Result of a pick/raycast operation
+ * What the pointer is over in the 3D scene, right now — the result of one
+ * pick/raycast.
+ *
+ * A hit is transient and singular: hover, the target a click would act on,
+ * what a context menu is about. It is not a selection. The committed
+ * multi-select is `SelectionManager` / `SelectionMask` / `currentSelection`,
+ * it survives pointer movement, and `highlighter` is what draws it — which
+ * is why highlighting can be suppressed while the selection stays. A hit may
+ * *lead* to a selection; it never is one.
+ *
+ * Named for its surface so it never collides with the 2D board's
+ * `BoardHit`, which describes the same idea over graph indices.
  */
-export type HitResult =
+export type SceneHit =
   | {
       type: "atom";
       mesh: AbstractMesh;
@@ -16,6 +27,14 @@ export type HitResult =
       mesh: AbstractMesh;
       metadata: BondMeta;
       thinInstanceIndex: number;
+    }
+  | {
+      type: "ribbon";
+      mesh: AbstractMesh;
+      chainId: string;
+      resName: string;
+      resSeq: number;
+      residueIndex: number;
     }
   | {
       type: "empty";

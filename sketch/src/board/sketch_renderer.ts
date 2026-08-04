@@ -1,6 +1,6 @@
 import type { MoleculeGraph } from "../molecule_graph";
 import { colorForElement, isLabeledElement } from "../style/element_colors";
-import { defaultCanvasTheme, SKETCH_TOKEN_DEFAULTS } from "../style/tokens";
+import { defaultCanvasTheme } from "../style/tokens";
 import type { MoleculeData } from "../types";
 import type { ViewportCoords } from "./coords";
 
@@ -14,9 +14,6 @@ export interface SketchRenderTheme {
   /** Fallback label fill — token `--msk-ink`. */
   labelFill: string;
 }
-
-/** @deprecated Prefer {@link SKETCH_TOKEN_DEFAULTS.activeInk}; kept for exports. */
-export const DEFAULT_SELECTION_STROKE = SKETCH_TOKEN_DEFAULTS.activeInk;
 
 /**
  * Token fallbacks for headless / pre-mount. Hosts override via `--msk-*`

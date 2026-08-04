@@ -55,6 +55,11 @@ export class SceneSession {
    * sources. Clears prior sources/modifiers, installs one primary DS that
    * owns `trajectory`, and binds System to the same trajectory.
    *
+   * Auto-attaches default Draw modifiers (Particles / Bonds / Box / …)
+   * from frame 0 so file load / set_trajectory actually paint meshes.
+   * RPC progressive draws (`scene.draw_atom` / `draw_frame`) go through
+   * Edit commands (working tree) and only hit HEAD on `scene.commit`.
+   *
    * Emits 'trajectory-change' through System.
    */
   async replaceScene(
@@ -80,6 +85,12 @@ export class SceneSession {
     this.host.pipeline.addModifier(newDS);
     // Invariant: ≥1 DS after replace.
     ensurePrimaryDataSource(this.host.system, this.host.pipeline);
+
+    // Nest Draws under the primary DS (same as addDataSource / file load).
+    const frame0 = this.host.system.frame;
+    if (frame0) {
+      applyAutoAttach(this.host.pipeline, frame0, undefined, newDS);
+    }
 
     if (this.host.isRunning()) {
       await this.host.renderActiveTrajectoryFrame(true);

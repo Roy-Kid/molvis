@@ -53,6 +53,11 @@ export class PlaceMoleculeCommand extends Command<void> {
     // older molrs builds that still use the atomistic-layer column name.
     const elements =
       atomBlock.copyColStr("element") ?? atomBlock.copyColStr("symbol");
+    if (!elements || elements.length < nAtoms) {
+      throw new Error(
+        "Frame atoms are missing element/symbol column (required to place)",
+      );
+    }
 
     // Compute molecule center so the template is centered on the click target
     // (same click projection as a single DrawAtomCommand).
@@ -98,18 +103,14 @@ export class PlaceMoleculeCommand extends Command<void> {
       const is = bondBlock.copyColU32("atomi");
       const js = bondBlock.copyColU32("atomj");
 
-      // molrs stores bond order as float; read f32 first, fall back to u32
+      // Keep the order as molrs stores it — float, so an aromatic 1.5 survives
+      // into BondMeta and back out on commit. Rounding to a stick count is the
+      // renderer's job (clampBondOrder), not the model's.
       let orderValues: number[];
       try {
-        const f = bondBlock.copyColF("order");
-        orderValues = Array.from(f, (v) => Math.round(v));
+        orderValues = Array.from(bondBlock.copyColF("order"));
       } catch {
-        try {
-          const u = bondBlock.copyColU32("order");
-          orderValues = Array.from(u);
-        } catch {
-          orderValues = Array.from({ length: nBonds }, () => 1);
-        }
+        orderValues = Array.from({ length: nBonds }, () => 1);
       }
 
       for (let b = 0; b < nBonds; b++) {

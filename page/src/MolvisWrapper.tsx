@@ -95,6 +95,9 @@ function applyMolvisSettings(
   app: Molvis,
   settings: Partial<MolvisSetting>,
 ): void {
+  if (typeof settings.showFps === "boolean") {
+    app.settings.setShowFps(settings.showFps);
+  }
   if (typeof settings.cameraPanSpeed === "number") {
     app.settings.setCameraPanSpeed(settings.cameraPanSpeed);
   }
@@ -360,7 +363,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({ onMount }) => {
         onMount?.(app);
       },
       START_COPY,
-      { successDurationMs: 1800 },
+      { feedbackMode: "errors", paintRunning: false },
     );
 
     // Resize is owned by MolvisApp (container ResizeObserver). Hosts only

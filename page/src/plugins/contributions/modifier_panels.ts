@@ -1,5 +1,6 @@
 import type { Modifier } from "@molvis/stage";
 import type { ModifierPanelComponent } from "../types";
+import { Emitter } from "./emitter";
 import { ContributionStore } from "./store";
 
 export type ModifierPanelMatcher = {
@@ -18,16 +19,10 @@ export type ModifierPanelMatcher = {
 
 const byTypeId = new ContributionStore<ModifierPanelComponent>();
 const matchers: ModifierPanelMatcher[] = [];
-const matcherListeners = new Set<() => void>();
+const matcherEvents = new Emitter("modifier panel matcher");
 
 function emitMatchers(): void {
-  for (const l of matcherListeners) {
-    try {
-      l();
-    } catch (err) {
-      console.error("[molvis-plugins] matcher listener failed", err);
-    }
-  }
+  matcherEvents.emit();
 }
 
 /**
@@ -96,10 +91,10 @@ export function modifierUsesLeftConfig(modifier: Modifier): boolean {
 }
 
 export function subscribeModifierPanels(listener: () => void): () => void {
-  const a = byTypeId.subscribe(listener);
-  matcherListeners.add(listener);
+  const unsubscribeById = byTypeId.subscribe(listener);
+  const unsubscribeMatchers = matcherEvents.subscribe(listener);
   return () => {
-    a();
-    matcherListeners.delete(listener);
+    unsubscribeById();
+    unsubscribeMatchers();
   };
 }

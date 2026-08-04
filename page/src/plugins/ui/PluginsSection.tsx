@@ -1,23 +1,28 @@
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  Circle,
+  Loader2,
+  Plus,
+  Power,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import type React from "react";
 import { useCallback, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { SettingsSection } from "@/ui/layout/SettingsSection";
 import { usePluginRuntimeStates } from "../hooks";
 import { pluginManager } from "../manager";
 
-/**
- * Settings section: install plugins from GitHub / URL and manage lifecycle.
- *
- * Trust model (product decision): any source is accepted without audit;
- * remote code runs in the page. The UI states this explicitly.
- */
 interface PluginsSectionProps {
   sectionId?: string;
 }
 
+/**
+ * Settings → Plugins: underline field + borderless icon actions only.
+ */
 export const PluginsSection: React.FC<PluginsSectionProps> = ({
   sectionId,
 }) => {
@@ -42,107 +47,76 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
   }, [source]);
 
   return (
-    <SettingsSection
-      id={sectionId}
-      title="Plugins"
-      description={
-        <>
-          Add a GitHub location (<code className="text-micro">owner/repo</code>{" "}
-          pins to the <strong>latest release</strong>; use{" "}
-          <code className="text-micro">owner/repo@tag</code> to pin) or any
-          HTTPS plugin URL. Remote code runs in this page with full access to
-          the viewer — only install sources you trust.
-        </>
-      }
-    >
-      <div className="flex gap-2">
+    <SettingsSection id={sectionId} title="Plugins">
+      <div className="flex items-end gap-0.5">
         <Input
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          placeholder="owner/repo  or  owner/repo@v1.0.0"
-          className="h-8 text-sm"
+          placeholder="plugin url"
+          className="h-control-compact min-w-0 flex-1 rounded-none border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:border-accent focus-visible:ring-0"
           onKeyDown={(e) => {
             if (e.key === "Enter") void onInstall();
           }}
           disabled={busy}
+          aria-label="Plugin source"
         />
-        <Button
-          type="button"
-          size="sm"
-          className="shrink-0 h-8"
-          onClick={() => void onInstall()}
+        <ViewerIconAction
+          icon={busy ? <Loader2 className="animate-spin" /> : <Plus />}
+          label="Add"
           disabled={busy || !source.trim()}
-        >
-          {busy ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Plus className="size-3.5" />
-          )}
-          <span className="ml-1">Add</span>
-        </Button>
+          onClick={() => void onInstall()}
+        />
       </div>
 
-      {formError && <p className="text-micro text-destructive">{formError}</p>}
-
-      {plugins.length === 0 ? (
-        <p className="text-micro text-muted-foreground">
-          No plugins installed.
+      {formError ? (
+        <p className="truncate text-micro text-destructive" title={formError}>
+          {formError}
         </p>
-      ) : (
-        <ul className="space-y-2">
+      ) : null}
+
+      {plugins.length === 0 ? null : (
+        <ul className="divide-y divide-border">
           {plugins.map((p) => (
             <li
               key={p.source}
-              className="rounded-control border border-border/70 px-2 py-2 space-y-1"
+              className="flex items-center gap-1 py-1.5 first:pt-0 last:pb-0"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">
-                    {p.name ?? p.id ?? p.source}
-                    {p.version ? (
-                      <span className="ml-1 text-micro text-muted-foreground font-normal">
-                        v{p.version}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="text-micro text-muted-foreground truncate">
-                    {p.source}
-                  </div>
+              <StatusIcon status={p.status} error={p.error} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium">
+                  {p.name ?? p.id ?? p.source}
+                  {p.version ? (
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      {p.version}
+                    </span>
+                  ) : null}
                 </div>
-                <Switch
-                  checked={p.enabled}
-                  onCheckedChange={(checked) => {
-                    void pluginManager.setEnabled(p.source, checked);
-                  }}
-                  aria-label={`Enable ${p.source}`}
-                />
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <StatusLine status={p.status} error={p.error} />
-                <div className="flex gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-1.5"
-                    title="Reload"
-                    onClick={() => void pluginManager.reload(p.source)}
-                  >
-                    <RefreshCw className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-1.5 text-destructive"
-                    title="Remove"
-                    onClick={() => void pluginManager.uninstall(p.source)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
+                <div
+                  className="truncate font-mono text-micro text-muted-foreground"
+                  title={p.source}
+                >
+                  {p.source}
                 </div>
               </div>
+              <ViewerIconAction
+                icon={<Power />}
+                label={p.enabled ? "Disable" : "Enable"}
+                selected={p.enabled}
+                onClick={() => {
+                  void pluginManager.setEnabled(p.source, !p.enabled);
+                }}
+              />
+              <ViewerIconAction
+                icon={<RefreshCw />}
+                label="Reload"
+                onClick={() => void pluginManager.reload(p.source)}
+              />
+              <ViewerIconAction
+                icon={<Trash2 />}
+                label="Remove"
+                className="text-destructive hover:text-destructive"
+                onClick={() => void pluginManager.uninstall(p.source)}
+              />
             </li>
           ))}
         </ul>
@@ -151,33 +125,45 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
   );
 };
 
-const StatusLine: React.FC<{
-  status: string;
-  error?: string;
-}> = ({ status, error }) => {
+function StatusIcon({ status, error }: { status: string; error?: string }) {
   if (status === "error") {
     return (
-      <p className="text-micro text-destructive truncate min-w-0" title={error}>
-        {error ?? "Error"}
-      </p>
+      <span
+        className="flex size-control-compact shrink-0 items-center justify-center text-destructive"
+        title={error ?? "Error"}
+      >
+        <AlertCircle className="size-3.5" aria-hidden />
+        <span className="sr-only">{error ?? "Error"}</span>
+      </span>
     );
   }
   if (status === "loading") {
     return (
-      <p className="text-micro text-muted-foreground flex items-center gap-1">
-        <Loader2 className="size-3 animate-spin" /> Loading…
-      </p>
+      <span
+        className="flex size-control-compact shrink-0 items-center justify-center text-muted-foreground"
+        title="Loading"
+      >
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+      </span>
     );
   }
   if (status === "active") {
     return (
-      <p className="text-micro text-emerald-600 dark:text-emerald-400">
-        Active
-      </p>
+      <span
+        className="flex size-control-compact shrink-0 items-center justify-center text-accent"
+        title="Active"
+      >
+        <Check className="size-3.5" aria-hidden />
+      </span>
     );
   }
-  if (status === "disabled") {
-    return <p className="text-micro text-muted-foreground">Disabled</p>;
-  }
-  return <p className="text-micro text-muted-foreground">{status}</p>;
-};
+  // idle / disabled — hollow circle (not PowerOff)
+  return (
+    <span
+      className="flex size-control-compact shrink-0 items-center justify-center text-muted-foreground"
+      title={status === "disabled" ? "Disabled" : "Idle"}
+    >
+      <Circle className="size-3.5 opacity-50" aria-hidden />
+    </span>
+  );
+}

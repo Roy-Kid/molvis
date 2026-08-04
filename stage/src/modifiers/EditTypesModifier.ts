@@ -33,11 +33,11 @@ export class EditTypesModifier extends BaseModifier {
   }
 
   setElement(v: string | null): void {
-    this._element = v && v.trim() ? v.trim() : null;
+    this._element = v?.trim() ? v.trim() : null;
   }
 
   setTypeValue(v: string | null): void {
-    this._typeValue = v && v.trim() ? v.trim() : null;
+    this._typeValue = v?.trim() ? v.trim() : null;
   }
 
   getCacheKey(): string {

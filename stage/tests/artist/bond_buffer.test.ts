@@ -1,3 +1,4 @@
+import { Vector3 } from "@babylonjs/core";
 import { Block, Box, WasmArray } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
@@ -38,7 +39,7 @@ function makeBlocks(
   const bondsBlock = new Block();
   bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b.i)));
   bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b.j)));
-  bondsBlock.setColU32("order", new Uint32Array(bonds.map((b) => b.order)));
+  bondsBlock.setColF("order", new Float64Array(bonds.map((b) => b.order)));
 
   return { atoms, bonds: bondsBlock };
 }
@@ -86,6 +87,24 @@ describe("countBondInstances", () => {
   it("should clamp order to max 3", () => {
     const { bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 5 }]);
     expect(countBondInstances(bonds)).toBe(3);
+  });
+
+  it("renders an aromatic 1.5 bond as two sticks", () => {
+    // molrs writes 1.5 for a perceived aromatic bond. A fractional order must
+    // resolve to a whole stick count here, or the instance total goes
+    // non-integer and every downstream renderIdx walk drifts.
+    const { bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 1.5 }]);
+    expect(countBondInstances(bonds)).toBe(2);
+  });
+
+  it("keeps a benzene ring's instance count integral", () => {
+    const ring = Array.from({ length: 6 }, (_, k) => ({
+      i: k,
+      j: (k + 1) % 6,
+      order: 1.5,
+    }));
+    const { bonds } = makeBlocks(6, ring);
+    expect(countBondInstances(bonds)).toBe(12);
   });
 
   it("collapses bond orders for tube and graph representations", () => {
@@ -163,16 +182,51 @@ describe("buildBondBuffers with bond order", () => {
     expect(result?.instanceMap[3]).toBe(2);
   });
 
-  it("double bond sub-instances should have smaller radius", () => {
+  it("keeps double-bond strokes as thick as a single bond", () => {
     const { atoms, bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 2 }]);
     const atomColor = makeAtomColor(2);
     const result = buildBondBuffers(bonds, atoms, atomColor, 42, {
       radius: 0.1,
     });
     const data0 = getBuffer(result, "instanceData0");
-    // Sub-bond radius should be 0.1 * 0.7 = 0.07
-    expect(data0[3]).toBeCloseTo(0.07, 3);
-    expect(data0[7]).toBeCloseTo(0.07, 3);
+    expect(data0[3]).toBeCloseTo(0.1, 3);
+    expect(data0[7]).toBeCloseTo(0.1, 3);
+  });
+
+  it("keeps triple-bond strokes compact and centered", () => {
+    const { atoms, bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 3 }]);
+    atoms.setColF("x", new Float64Array([0, 10]));
+    const result = buildBondBuffers(bonds, atoms, makeAtomColor(2), 42, {
+      radius: 0.1,
+    });
+    const data0 = getBuffer(result, "instanceData0");
+
+    expect(data0[3]).toBeCloseTo(0.1, 3);
+    expect(data0[7]).toBeCloseTo(0.1, 3);
+    expect(data0[11]).toBeCloseTo(0.1, 3);
+    // Center stroke remains on-axis; side strokes have enough clearance not to
+    // merge visually with the full-radius center stroke.
+    expect(data0[1]).toBeCloseTo(0, 3);
+    expect(data0[2]).toBeCloseTo(0, 3);
+    expect(data0[5]).toBeCloseTo(-data0[9], 3);
+    expect(data0[6]).toBeCloseTo(-data0[10], 3);
+    const sideOffset = Math.hypot(data0[5], data0[6]);
+    expect(sideOffset).toBeCloseTo(0.18, 3);
+  });
+
+  it("orients multiple-bond spacing into the camera plane", () => {
+    const { atoms, bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 2 }]);
+    atoms.setColF("x", new Float64Array([0, 10]));
+    const result = buildBondBuffers(bonds, atoms, makeAtomColor(2), 42, {
+      viewDirection: new Vector3(0, 1, 0),
+    });
+    const data0 = getBuffer(result, "instanceData0");
+
+    // X-axis bond viewed along Y spreads along screen-space Z, not depth Y.
+    expect(data0[1]).toBeCloseTo(0, 3);
+    expect(data0[5]).toBeCloseTo(0, 3);
+    expect(data0[2]).toBeCloseTo(-data0[6], 3);
+    expect(Math.abs(data0[2])).toBeCloseTo(0.09, 3);
   });
 
   it("double bond sub-instances should be offset from center", () => {
@@ -325,7 +379,7 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("order", new Uint32Array([1]));
+    bondsBlock.setColF("order", new Float64Array([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -352,7 +406,7 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("order", new Uint32Array([1]));
+    bondsBlock.setColF("order", new Float64Array([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -375,7 +429,7 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("order", new Uint32Array([1]));
+    bondsBlock.setColF("order", new Float64Array([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.ortho(
       new Float64Array([10, 10, 10]),
@@ -434,7 +488,7 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("order", new Uint32Array([1]));
+    bondsBlock.setColF("order", new Float64Array([1]));
     const atomColor = makeAtomColor(2);
 
     const disp = miDisplacementsViaBox(box, atoms, bondsBlock);

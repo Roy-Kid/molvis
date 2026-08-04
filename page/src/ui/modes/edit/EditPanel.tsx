@@ -13,6 +13,7 @@ import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { useReportOperationStatus } from "@/hooks/useReportOperationStatus";
 import { useViewerOperation } from "@/hooks/useViewerOperation";
 import { cn } from "@/lib/utils";
+import { usePluginModePanels } from "@/plugins";
 import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { DownloadStructureSection } from "./DownloadStructureSection";
 import { MolvisSketch, type MolvisSketchRef } from "./MolvisSketch";
@@ -23,7 +24,7 @@ interface EditPanelProps {
   app: Molvis | null;
 }
 
-type EditSection = "draw" | "smiles" | "download" | "sketch";
+type EditSection = string;
 
 interface EditModeWithPending {
   type: ModeType.Edit;
@@ -63,12 +64,13 @@ const GENERATE_COPY = {
 };
 
 /**
- * Edit mode inspector: exclusive accordion of four sections.
+ * Edit mode inspector: exclusive accordion of native and plugin sections.
  * Only one section is open at a time. Sections use flat divider chrome
  * (SidebarSection default border-b) — no nested cards.
  */
 export const EditPanel: React.FC<EditPanelProps> = ({ app }) => {
   const sketchRef = useRef<MolvisSketchRef>(null);
+  const pluginPanels = usePluginModePanels("edit");
   const [isEdit, setIsEdit] = useState(false);
   /** Exclusive accordion: at most one open; null = all collapsed. */
   const [openSection, setOpenSection] = useState<EditSection | null>("draw");
@@ -204,6 +206,19 @@ export const EditPanel: React.FC<EditPanelProps> = ({ app }) => {
             }
           />
         </SidebarSection>
+
+        {pluginPanels.map((panel) => {
+          const Panel = panel.render;
+          return (
+            <SidebarSection
+              key={panel.id}
+              title={panel.title ?? "Plugin"}
+              {...sectionProps(panel.id)}
+            >
+              <Panel app={app} />
+            </SidebarSection>
+          );
+        })}
       </div>
     </fieldset>
   );

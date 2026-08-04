@@ -108,10 +108,9 @@ export class DeleteSelectedModifier extends BaseModifier {
     if (bonds) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
-      const orderCol =
-        bonds.dtype("order") === DType.U32
-          ? bonds.viewColU32("order")
-          : undefined;
+      const orderCol = bonds.dtype("order")
+        ? bonds.viewColF("order")
+        : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -138,11 +137,11 @@ export class DeleteSelectedModifier extends BaseModifier {
           newBonds.setColU32("atomi", newI);
           newBonds.setColU32("atomj", newJ);
           if (orderCol) {
-            const newOrder = new Uint32Array(nb);
+            const newOrder = new Float64Array(nb);
             for (let k = 0; k < nb; k++) {
               newOrder[k] = orderCol[validBonds[k]];
             }
-            newBonds.setColU32("order", newOrder);
+            newBonds.setColF("order", newOrder);
           }
         }
       }

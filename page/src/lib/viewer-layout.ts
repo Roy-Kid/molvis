@@ -55,6 +55,58 @@ export function resolveViewerPanelLayout({
   };
 }
 
-export function isAnalysisPanelOpen(size: number): boolean {
-  return size > 0;
+/**
+ * Minimum open width (% of workbench). Dragging below this snaps the panel
+ * fully closed (collapsible + collapsedSize 0%).
+ */
+export const SIDE_PANEL_MIN_PCT = 12;
+
+/** Default width % when a closed side panel is reopened from chrome. */
+export const SIDE_PANEL_OPEN_DEFAULT_PCT = 18;
+
+/** Side panels are "open" only at/above the minimum open width. */
+export function isSidePanelOpen(size: number): boolean {
+  return size >= SIDE_PANEL_MIN_PCT - 0.25;
+}
+
+// ---------------------------------------------------------------------------
+// Drag-resized horizontal splits
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared limits for panels the user drags to resize.
+ *
+ * The pipeline properties pane and the workbench bottom panel keep separate
+ * interaction models (window listeners vs pointer capture, snap-close vs
+ * not), but they had also each re-typed these three numbers. One drifting
+ * copy is enough for two panels to stop agreeing on how small "too small" is.
+ */
+export const RESIZE_MIN_HEIGHT_PX = 100;
+
+/** Fraction of the container a drag-resized panel may occupy. */
+export const RESIZE_MAX_HEIGHT_RATIO = 0.55;
+
+/** Height step for ArrowUp / ArrowDown on a resize handle. */
+export const RESIZE_KEYBOARD_STEP_PX = 16;
+
+/**
+ * Largest height a drag-resized panel may take inside `containerHeight`.
+ * Never below {@link RESIZE_MIN_HEIGHT_PX}, so a short container still
+ * yields a usable panel rather than a zero-height sliver.
+ */
+export function maxResizeHeight(containerHeight: number): number {
+  return Math.max(
+    RESIZE_MIN_HEIGHT_PX,
+    Math.floor(containerHeight * RESIZE_MAX_HEIGHT_RATIO),
+  );
+}
+
+/** Clamp a dragged height into `[min, maxResizeHeight(containerHeight)]`. */
+export function clampResizeHeight(
+  desired: number,
+  containerHeight: number,
+  minHeight: number = RESIZE_MIN_HEIGHT_PX,
+): number {
+  const maxH = maxResizeHeight(containerHeight);
+  return Math.max(Math.min(minHeight, maxH), Math.min(desired, maxH));
 }

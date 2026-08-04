@@ -18,17 +18,24 @@ export {
   type RpcMethodName,
 } from "./rpc/catalog";
 export {
+  BinaryResult,
   listRpcExtensionHandlers,
   RPCRouter,
   registerRpcExtensionHandler,
 } from "./rpc/router";
+// The molecular payload codec, re-exported so page plugins registering their
+// own RPC methods decode Frames the same way the built-in handlers do instead
+// of hand-rolling it. Shapes live in `@molcrafts/molvis-core/wire`.
+export {
+  decodeBox,
+  decodeFrame,
+  encodeFrame,
+  FramePayloadError,
+} from "./rpc/serialization";
 export type {
-  BinaryBufferRef,
   JsonRPCRequest,
   JsonRPCResponse,
   RPCResponseEnvelope,
-  SerializedBoxData,
-  SerializedFrameData,
 } from "./rpc/types";
 export { applyBackendState } from "./state_sync";
 export { type BridgeConnectResult, WebSocketBridge } from "./ws_bridge";

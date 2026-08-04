@@ -3,6 +3,36 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+## 2026-08-03 — vsc-ext: Quick View is the standard; no dual host bridge
+
+**Product / host constraints (locked):**
+
+1. **Refactor, not compatibility** — old dual stacks, viewTypes, and message
+   forks may be deleted; no alias shims for deprecated paths.
+2. **Dynamic loading** — VS Code webviews must not pay for the full page tree
+   up front. L0 shell → L1 engine (`import()`) → L2 named capabilities.
+3. **Only Quick View is sacred** — stage-only + deferred entry + stream load.
+   Workspace / Sketch / Outline / Home may be redesigned freely.
+
+**Implementation:**
+
+- Single protocol: `vsc-ext/src/protocol/` (`HostToWebviewMessage` /
+  `WebviewToHostMessage`, stage `FileFormat`, no format subsets).
+- Normative bridge: `vsc-ext/src/webview/attachQuickViewHost.ts`.
+- **Deleted** `page/src/hooks/useHostFileBridge.ts` — page is not a VS Code
+  host adapter. Web/Python stay URL/WS; VS Code file IO is extension-owned.
+- **Workbench hosts peer engines:** Stage | Sketch tabs, lazy L1 mount each.
+  Commands: `openWorkbench` / `openStage` / `openSketch` / `openPage` /
+  `quickView` (stage only; no sketch Quick View yet) / `loadInWorkbench`.
+- **Open Page** is optional (`page/` React shell, separate rslib config so
+  engines stay free of page). Default daily path is engines, not page.
+- Shared bridge: `attachStageHost`; Workbench window router +
+  `setWorkbenchSurface`. QV = stage-only message subset.
+- **Host ↛ page for engines.** `page → sketch|stage`. Engine webviews import
+  engines only; page entry is isolated (`rslib.webview.page.config.mts`).
+- Supersedes unfinished activity-bar full-page design in
+  `docs/specs/vsc-ext-surfaces.md`.
+
 ## 2026-07-31 — selection scope auto-bind + producer capability
 
 - `isSelectionProducer` is **capability-based** (`ProducesSelection`): Invert,

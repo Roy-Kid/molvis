@@ -1,29 +1,35 @@
 /**
  * Lightweight status bus for UI tips that should land in the bottom status bar
- * without requiring an app reference (e.g. pipeline toasts outside the engine).
+ * without requiring an app reference (e.g. pipeline feedback outside the engine).
  *
  * Prefer `app.events.emit("status-message", …)` when a Molvis instance is
  * available so host bridges still see the event. This bus is the dual path for
  * React-only surfaces; {@link useStatusMessage} listens to both.
  */
 
-export type StatusReportType = "info" | "error" | "success";
+export type StatusReportType = "info" | "error" | "success" | "warning";
 
 export interface StatusReport {
   text: string;
   type: StatusReportType;
+  /** Optional 0–100 progress for long-running work. */
+  progress?: number;
 }
 
 type StatusListener = (report: StatusReport) => void;
 
 const listeners = new Set<StatusListener>();
 
-/** Publish a one-line tip for the bottom status bar. */
+/** Publish a one-line tip for the bottom status bar activity region. */
 export function reportStatus(
   text: string,
   type: StatusReportType = "info",
+  progress?: number,
 ): void {
   const report: StatusReport = { text, type };
+  if (progress !== undefined && Number.isFinite(progress)) {
+    report.progress = Math.max(0, Math.min(100, progress));
+  }
   for (const listener of listeners) {
     listener(report);
   }
@@ -50,4 +56,10 @@ export function statusTypeFromPhase(
 export function formatStatusLine(message: string, detail?: string): string {
   if (detail?.trim()) return `${message} — ${detail}`;
   return message;
+}
+
+/** Format optional progress as a compact suffix, e.g. ` 42%`. */
+export function formatProgressSuffix(progress?: number): string {
+  if (progress === undefined || !Number.isFinite(progress)) return "";
+  return ` ${Math.round(Math.max(0, Math.min(100, progress)))}%`;
 }

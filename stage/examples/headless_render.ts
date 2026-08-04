@@ -57,7 +57,7 @@ interface CameraSpec {
   beta?: number;
   /** Look-at target. Default: scene/auto. */
   target?: [number, number, number];
-  /** Distance = bounding radius × this factor. Default: keep resetCamera value. */
+  /** Distance = bounding radius × this factor. Default: keep fit value. */
   radiusScale?: number;
   /** Absolute camera distance from the target (Å). Overrides radiusScale. */
   radius?: number;
@@ -254,7 +254,7 @@ async function renderScene(spec: RenderSceneSpec): Promise<string> {
 
     // Frame the scene, then apply any explicit camera overrides. The camera is
     // an ArcRotateCamera; alpha/beta/radius give a fully deterministic pose.
-    renderer.resetCamera();
+    renderer.fit();
     applyCamera(renderer, spec);
     const dcam = renderer.app.world.camera;
     console.log(

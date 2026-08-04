@@ -1,8 +1,14 @@
 import type { Molvis } from "@molvis/stage";
 import { createPluginAPI } from "./api/create_api";
+import { HOST_LOG_TAG } from "./constants";
 import { registerBuiltinModifierPanels } from "./contributions/builtins";
-import { fetchPluginManifest, loadPluginModule } from "./loader";
-import { resolvePluginSource } from "./resolve";
+import { type ContributionListener, Emitter } from "./contributions/emitter";
+import {
+  fetchPluginManifest,
+  loadPluginModule,
+  releasePluginModuleGraph,
+} from "./loader";
+import { resolvePluginEntryUrl, resolvePluginSource } from "./resolve";
 import {
   loadPluginStore,
   removeInstallRecord,
@@ -16,13 +22,13 @@ import type {
   PluginRuntimeState,
 } from "./types";
 
-type Listener = () => void;
-
 interface ActivePlugin {
   state: PluginRuntimeState;
   module?: MolvisPluginModule;
   api?: PluginAPI;
   disposeApi?: Disposer;
+  /** Entry the module graph was loaded from; needed to free its blobs. */
+  entryUrl?: string;
 }
 
 /**
@@ -31,7 +37,7 @@ interface ActivePlugin {
 export class PluginManager {
   private app: Molvis | null = null;
   private plugins = new Map<string, ActivePlugin>();
-  private listeners = new Set<Listener>();
+  private events = new Emitter("plugin manager");
   private restorePromise: Promise<void> | null = null;
   /** Stable list snapshot for useSyncExternalStore. */
   private listSnapshot: PluginRuntimeState[] = [];
@@ -41,24 +47,15 @@ export class PluginManager {
     registerBuiltinModifierPanels();
   }
 
-  subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+  subscribe(listener: ContributionListener): () => void {
+    return this.events.subscribe(listener);
   }
 
   private emit(): void {
     this.listSnapshot = Array.from(this.plugins.values())
       .map((p) => p.state)
       .sort((a, b) => a.source.localeCompare(b.source));
-    for (const l of this.listeners) {
-      try {
-        l();
-      } catch (err) {
-        console.error("[molvis-plugins] listener failed", err);
-      }
-    }
+    this.events.emit();
   }
 
   /** Stable until the next install/enable/status change. */
@@ -111,7 +108,7 @@ export class PluginManager {
         });
         upsertInstallRecord({ source, enabled: true, installedAt });
       } else if (!existing.state.enabled) {
-        existing.state.enabled = true;
+        this.patchState(source, { enabled: true });
         setInstallEnabled(source, true);
       }
     }
@@ -177,15 +174,17 @@ export class PluginManager {
 
     if (!enabled) {
       await this.deactivate(source);
-      active.state.enabled = false;
-      active.state.status = "disabled";
-      active.state.error = undefined;
+      this.patchState(source, {
+        enabled: false,
+        status: "disabled",
+        error: undefined,
+      });
       setInstallEnabled(source, false);
       this.emit();
       return;
     }
 
-    active.state.enabled = true;
+    this.patchState(source, { enabled: true });
     setInstallEnabled(source, true);
     await this.loadAndActivate(source);
   }
@@ -213,13 +212,17 @@ export class PluginManager {
         await active.module.deactivate(active.api);
       }
     } catch (err) {
-      console.error(`[molvis-plugins] deactivate failed for ${source}`, err);
+      console.error(`${HOST_LOG_TAG} deactivate failed for ${source}`, err);
     }
 
     try {
       active.disposeApi?.();
     } catch (err) {
-      console.error(`[molvis-plugins] dispose failed for ${source}`, err);
+      console.error(`${HOST_LOG_TAG} dispose failed for ${source}`, err);
+    }
+    if (active.entryUrl) {
+      releasePluginModuleGraph(active.entryUrl);
+      active.entryUrl = undefined;
     }
     active.disposeApi = undefined;
     active.api = undefined;
@@ -235,19 +238,20 @@ export class PluginManager {
     const active = this.plugins.get(source);
     if (!active) return;
 
-    active.state.status = "loading";
-    active.state.error = undefined;
+    this.patchState(source, { status: "loading", error: undefined });
     this.emit();
 
     try {
       const resolved = await resolvePluginSource(source);
       const manifest = await fetchPluginManifest(resolved.manifestUrl);
-      const entryUrl = new URL(manifest.entry, resolved.baseUrl).href;
+      const entryUrl = resolvePluginEntryUrl(manifest.entry, resolved.baseUrl);
       const mod = await loadPluginModule(entryUrl);
 
       if (mod.id !== manifest.id) {
-        console.warn(
-          `[molvis-plugins] module id '${mod.id}' !== manifest id '${manifest.id}'`,
+        throw new Error(
+          `Plugin module id '${mod.id}' does not match manifest id '${manifest.id}'. ` +
+            "Contribution ids are namespaced by the manifest id, so a mismatch " +
+            "would let this plugin register under another plugin's namespace.",
         );
       }
 
@@ -260,15 +264,16 @@ export class PluginManager {
       active.module = mod;
       active.api = api;
       active.disposeApi = disposeAll;
-      active.state = {
-        ...active.state,
+      active.entryUrl = entryUrl;
+      this.patchState(source, {
         id: manifest.id,
         name: manifest.name || mod.name || manifest.id,
         version: manifest.version || mod.version,
+        resolvedRef: resolved.resolvedRef,
         status: "active",
         error: undefined,
         enabled: true,
-      };
+      });
       upsertInstallRecord({
         source,
         enabled: true,
@@ -282,11 +287,26 @@ export class PluginManager {
     }
   }
 
-  private setError(source: string, message: string): void {
+  /**
+   * Replace a plugin's runtime state with a patched copy.
+   *
+   * `PluginRuntimeState` is read by React through `useSyncExternalStore`, and
+   * the project's immutability invariant applies: mutating `state` in place
+   * leaves subscribers holding an object whose fields changed underneath
+   * them, so a re-render can be skipped or show stale values.
+   */
+  private patchState(
+    source: string,
+    patch: Partial<PluginRuntimeState>,
+  ): boolean {
     const active = this.plugins.get(source);
-    if (!active) return;
-    active.state.status = "error";
-    active.state.error = message;
+    if (!active) return false;
+    active.state = { ...active.state, ...patch };
+    return true;
+  }
+
+  private setError(source: string, message: string): void {
+    if (!this.patchState(source, { status: "error", error: message })) return;
     this.emit();
   }
 }

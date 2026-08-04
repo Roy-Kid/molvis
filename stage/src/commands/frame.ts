@@ -1,27 +1,13 @@
 import * as BABYLON from "@babylonjs/core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
-import { viewAtomCoords } from "../io/atom_coords";
 import { buildFrameFromScene } from "../scene_sync";
-import { DType } from "../utils/dtype";
 import { Command, command } from "./base";
 
 export interface UpdateFrameResult {
   success: boolean;
   reason?: string;
 }
-
-interface FrameDataBlock {
-  x?: number[];
-  y?: number[];
-  z?: number[];
-  element?: string[];
-  atomi?: number[];
-  atomj?: number[];
-  order?: number[];
-}
-
-type FrameDataBlocks = Record<string, FrameDataBlock>;
 
 // Reusable scratch variables from update_frame.ts
 const TMP_VEC_0 = new BABYLON.Vector3();
@@ -340,67 +326,24 @@ export class UpdateFrameCommand extends Command<UpdateFrameResult> {
 }
 
 /**
- * Command to export current staged scene data as a plain frame-data payload.
- * Intended for external clients (e.g. python) to reconstruct frame objects.
+ * Export the current staged scene as a Frame.
+ *
+ * Returns the frame itself rather than a hand-copied subset of it. The old
+ * implementation emitted a fixed `{x, y, z, element}` / `{atomi, atomj, order}`
+ * whitelist, so a `charge`, `mol_id`, force or grid column the caller had put
+ * in was silently dropped on the way back out.
+ *
+ * Ownership passes to the caller, which must `free()` the frame once it has
+ * serialized it.
  */
 @command("export_frame")
-export class ExportFrameCommand extends Command<{
-  frameData: { blocks: FrameDataBlocks; metadata: Record<string, unknown> };
-}> {
-  do(): {
-    frameData: { blocks: FrameDataBlocks; metadata: Record<string, unknown> };
-  } {
-    const tempFrame = buildFrameFromScene(this.app.world.sceneIndex, {
-      markSaved: false,
-    });
-
-    const blocks: FrameDataBlocks = {};
-
-    const atomsBlock = tempFrame.getBlock("atoms");
-    if (atomsBlock) {
-      const coords = viewAtomCoords(atomsBlock);
-      const x = coords?.x;
-      const y = coords?.y;
-      const z = coords?.z;
-      const elements =
-        atomsBlock.dtype("element") === DType.String
-          ? (atomsBlock.copyColStr("element") as string[])
-          : undefined;
-
-      if (x && y && z) {
-        blocks.atoms = {
-          x: Array.from(x),
-          y: Array.from(y),
-          z: Array.from(z),
-          element: elements,
-        };
-      }
-    }
-
-    const bondsBlock = tempFrame.getBlock("bonds");
-    if (bondsBlock) {
-      const atomi = bondsBlock.viewColU32("atomi");
-      const atomj = bondsBlock.viewColU32("atomj");
-      const order =
-        bondsBlock.dtype("order") === DType.U32
-          ? bondsBlock.viewColU32("order")
-          : undefined;
-
-      if (atomi && atomj) {
-        blocks.bonds = {
-          atomi: Array.from(atomi),
-          atomj: Array.from(atomj),
-          order: order ? Array.from(order) : undefined,
-        };
-      }
-    }
-
-    // Free the temporary WASM Frame to prevent memory leaks
-    if (typeof (tempFrame as { free?: () => void }).free === "function") {
-      (tempFrame as { free: () => void }).free();
-    }
-
-    return { frameData: { blocks, metadata: {} } };
+export class ExportFrameCommand extends Command<{ frame: Frame }> {
+  do(): { frame: Frame } {
+    return {
+      frame: buildFrameFromScene(this.app.world.sceneIndex, {
+        markSaved: false,
+      }),
+    };
   }
 
   undo(): Command {

@@ -1,7 +1,6 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molvis-core/molrs";
 import { encodePickingColorInto } from "../picker";
-import { DType } from "../utils/dtype";
 import type { BondColorMode, BondOrderMode } from "./representation";
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
@@ -33,6 +32,8 @@ export interface BondBufferOptions {
    * and triclinic cell geometry are honored natively by WASM.
    */
   miDisplacements?: Float64Array;
+  /** Current camera forward direction; keeps multiple-bond strokes face-on. */
+  viewDirection?: Vector3;
 }
 
 export interface BondBufferResult {
@@ -43,36 +44,49 @@ export interface BondBufferResult {
   instanceMap: Uint32Array;
 }
 
-// Sub-bond radius multipliers and offset factors per bond order
+// Every stroke in a multiple bond carries the same visual weight as a single
+// bond. Bond order is expressed only through a compact symmetric offset.
 const ORDER_CONFIG: Record<
   number,
   { radiusScale: number; offsets: number[][] }
 > = {
   1: { radiusScale: 1.0, offsets: [[0, 0]] },
   2: {
-    radiusScale: 0.7,
+    radiusScale: 1.0,
     offsets: [
       [1, 0],
       [-1, 0],
     ],
   },
   3: {
-    radiusScale: 0.4,
+    radiusScale: 1.0,
     offsets: [
       [0, 0],
-      [1, 0],
-      [-1, 0],
+      [2, 0],
+      [-2, 0],
     ], // coplanar: center + two sides
   },
 };
 
-const MULTI_BOND_SPACING = 0.08; // base offset distance between sub-bonds
+// Fixed center-line offset in world units. Do not multiply by bond order: that
+// makes triple bonds fan outward and read as three unrelated connections.
+const MULTI_BOND_SPACING = 0.09;
 
 /**
  * Compute a perpendicular frame (perp1, perp2) for a bond direction.
  * perp1 and perp2 are orthogonal to dir and to each other.
  */
-function computePerpFrame(dir: Vector3): void {
+function computePerpFrame(dir: Vector3, viewDirection?: Vector3): void {
+  if (viewDirection) {
+    Vector3.CrossToRef(dir, viewDirection, TMP_PERP1);
+    const viewLen = TMP_PERP1.length();
+    if (viewLen > 1e-8) {
+      TMP_PERP1.scaleInPlace(1 / viewLen);
+      Vector3.CrossToRef(dir, TMP_PERP1, TMP_PERP2);
+      TMP_PERP2.normalize();
+      return;
+    }
+  }
   // Cross with Z-up; if too parallel, use X
   const ref = Math.abs(Vector3.Dot(dir, REF_UP)) > 0.9 ? REF_ALT : REF_UP;
   Vector3.CrossToRef(dir, ref, TMP_PERP1);
@@ -114,6 +128,7 @@ export function buildSubBondInstanceBuffers(
   color0: Float32Array,
   color1: Float32Array,
   splitOffset: number,
+  viewDirection?: Vector3,
 ): { buffers: Map<string, Float32Array>; subCount: number } {
   const clamped = clampBondOrder(order);
   const config = ORDER_CONFIG[clamped];
@@ -127,11 +142,11 @@ export function buildSubBondInstanceBuffers(
   if (distance > 1e-8) TMP_DIR.scaleInPlace(1 / distance);
   else TMP_DIR.set(0, 1, 0);
 
-  if (clamped > 1) computePerpFrame(TMP_DIR);
+  if (clamped > 1) computePerpFrame(TMP_DIR, viewDirection);
 
   const subRadius = baseRadius * config.radiusScale;
   const scale = distance + subRadius * 2;
-  const offsetDist = MULTI_BOND_SPACING * clamped;
+  const offsetDist = MULTI_BOND_SPACING;
 
   const matrix = new Float32Array(16 * subCount);
   const data0 = new Float32Array(4 * subCount);
@@ -194,21 +209,20 @@ export function countBondInstances(
   orderMode: BondOrderMode = "multiple",
 ): number {
   if (orderMode === "single") return bondsBlock.nrows();
-  const orderCol =
-    bondsBlock.dtype("order") === DType.U32
-      ? bondsBlock.viewColU32("order")
-      : undefined;
+  const orderCol = bondsBlock.dtype("order")
+    ? bondsBlock.viewColF("order")
+    : undefined;
   if (!orderCol) return bondsBlock.nrows();
   let total = 0;
   for (let b = 0; b < bondsBlock.nrows(); b++) {
-    total += Math.max(1, Math.min(orderCol[b], 3));
+    total += subBondCount(orderCol[b]);
   }
   return total;
 }
 
 /**
  * Build GPU buffers for all bonds in a frame block.
- * Emits multiple thin instances per bond when order > 1.
+ * Emits multiple equal-weight instances per bond when order > 1.
  */
 export function buildBondBuffers(
   bondsBlock: Block,
@@ -229,10 +243,9 @@ export function buildBondBuffers(
   const zCoords = atomsBlock.viewColF("z");
   if (!xCoords || !yCoords || !zCoords) return undefined;
 
-  const orderCol =
-    bondsBlock.dtype("order") === DType.U32
-      ? bondsBlock.viewColU32("order")
-      : undefined;
+  const orderCol = bondsBlock.dtype("order")
+    ? bondsBlock.viewColF("order")
+    : undefined;
 
   // Size buffers exactly. Without an order column every bond is one instance;
   // with one, countBondInstances() sums the per-bond instance counts in a
@@ -268,9 +281,7 @@ export function buildBondBuffers(
     const atomsVisible = isVisible(i) && isVisible(j);
     const bondVisible = isBondVisible(b, i, j);
     const order =
-      orderMode === "multiple" && orderCol
-        ? Math.max(1, Math.min(orderCol[b], 3))
-        : 1;
+      orderMode === "multiple" && orderCol ? clampBondOrder(orderCol[b]) : 1;
     const config = ORDER_CONFIG[order] ?? ORDER_CONFIG[1];
 
     TMP_P1.set(xCoords[i], yCoords[i], zCoords[i]);
@@ -293,7 +304,7 @@ export function buildBondBuffers(
 
     // Compute perpendicular frame for multi-bond offset
     if (order > 1) {
-      computePerpFrame(TMP_DIR);
+      computePerpFrame(TMP_DIR, options?.viewDirection);
     }
 
     const subRadius = baseBondRadius * config.radiusScale;
@@ -308,7 +319,7 @@ export function buildBondBuffers(
       let cz = TMP_CENTER.z;
 
       if (order > 1) {
-        const offsetDist = MULTI_BOND_SPACING * order;
+        const offsetDist = MULTI_BOND_SPACING;
         cx += (TMP_PERP1.x * ox + TMP_PERP2.x * oy) * offsetDist;
         cy += (TMP_PERP1.y * ox + TMP_PERP2.y * oy) * offsetDist;
         cz += (TMP_PERP1.z * ox + TMP_PERP2.z * oy) * offsetDist;
@@ -417,14 +428,9 @@ export function refreshBondPositions(
 ): void {
   const iAtoms = bondsBlock.viewColU32("atomi");
   const jAtoms = bondsBlock.viewColU32("atomj");
-  // Prefer U32; also accept float order (generate3D / molrs convention).
-  const orderDtype = bondsBlock.dtype("order");
-  const orderU =
-    orderDtype === DType.U32 ? bondsBlock.viewColU32("order") : undefined;
-  const orderF =
-    orderDtype === DType.F64 || orderDtype === "f32" || orderDtype === "f64"
-      ? bondsBlock.viewColF("order")
-      : undefined;
+  const orderCol = bondsBlock.dtype("order")
+    ? bondsBlock.viewColF("order")
+    : undefined;
   if (!iAtoms || !jAtoms) return;
 
   const logicalCount = bondsBlock.nrows();
@@ -447,12 +453,8 @@ export function refreshBondPositions(
 
     const i = iAtoms[b];
     const j = jAtoms[b];
-    let rawOrder = 1;
-    if (orderMode === "multiple") {
-      if (orderU) rawOrder = orderU[b];
-      else if (orderF) rawOrder = Math.round(orderF[b]);
-    }
-    const order = Math.max(1, Math.min(rawOrder, 3));
+    const order =
+      orderMode === "multiple" && orderCol ? clampBondOrder(orderCol[b]) : 1;
     const config = ORDER_CONFIG[order] ?? ORDER_CONFIG[1];
 
     TMP_P1.set(x[i], y[i], z[i]);
@@ -485,7 +487,7 @@ export function refreshBondPositions(
       let cz = TMP_CENTER.z;
 
       if (order > 1) {
-        const offsetDist = MULTI_BOND_SPACING * order;
+        const offsetDist = MULTI_BOND_SPACING;
         cx += (TMP_PERP1.x * ox + TMP_PERP2.x * oy) * offsetDist;
         cy += (TMP_PERP1.y * ox + TMP_PERP2.y * oy) * offsetDist;
         cz += (TMP_PERP1.z * ox + TMP_PERP2.z * oy) * offsetDist;

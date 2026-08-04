@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import App from "@/App";
 import { PipelineOperationProvider } from "@/components/viewer/PipelineOperationProvider";
+import { registerThemeRoot, unregisterThemeRoot } from "@/hooks/useTheme";
 import { type MountOpts, MountOptsProvider } from "@/lib/mount-opts";
 
 /** Extra options for the host integration (not consumed by React tree). */
@@ -100,11 +101,13 @@ export function mountMolvisApp(
       host.style.position = "relative";
     }
 
-    if (opts.theme === "dark") {
-      host.classList.add("dark");
-    } else {
-      host.classList.remove("dark");
-    }
+    // Shadow-scoped CSS inherits tokens from the host, not documentElement.
+    // Register so Settings → Appearance light/dark toggles the host class.
+    // opts.theme seeds only when the user has no stored preference yet.
+    registerThemeRoot(
+      host,
+      opts.theme === "light" || opts.theme === "dark" ? opts.theme : undefined,
+    );
 
     for (const url of opts.cssUrls ?? []) {
       const link = document.createElement("link");
@@ -139,6 +142,9 @@ export function mountMolvisApp(
     dispose() {
       mountedApps.delete(host);
       host.removeAttribute(HOST_ATTR);
+      if (useShadow) {
+        unregisterThemeRoot(host);
+      }
       root.unmount();
       if (useShadow && host.shadowRoot) {
         host.shadowRoot.replaceChildren();

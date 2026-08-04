@@ -1,4 +1,4 @@
-import type { Vector3 } from "@babylonjs/core";
+import { Color3, Vector3 } from "@babylonjs/core";
 import type { MolvisApp } from "../app";
 import type { DrawAtomOptions, DrawBondOptions } from "../artist";
 import { Command } from "./base";
@@ -55,6 +55,113 @@ export class DrawAtomCommand extends Command<{ atomId: number }> {
     }
     this.executed = false;
     return new NoOpCommand(this.app);
+  }
+}
+
+/** Change an atom's element in place, preserving its id and topology. */
+export class SetAtomElementCommand extends Command<void> {
+  private previousElement: string | null = null;
+
+  constructor(
+    app: MolvisApp,
+    private atomId: number,
+    private element: string,
+  ) {
+    super(app);
+  }
+
+  do(): void {
+    const meta = this.app.world.sceneIndex.metaRegistry.atoms.getMeta(
+      this.atomId,
+    );
+    if (!meta) return;
+    if (this.previousElement === null) this.previousElement = meta.element;
+    this.apply(this.element);
+  }
+
+  undo(): Command {
+    if (this.previousElement !== null) this.apply(this.previousElement);
+    return new NoOpCommand(this.app);
+  }
+
+  private apply(element: string): void {
+    const index = this.app.world.sceneIndex;
+    const meta = index.metaRegistry.atoms.getMeta(this.atomId);
+    const state = index.meshRegistry.getAtomState();
+    if (!meta || !state) return;
+
+    const style = this.app.styleManager.getAtomStyle(element);
+    const radius = style.radius;
+    const scale = radius * 2;
+    const color = Color3.FromHexString(style.color).toLinearSpace();
+    const p = meta.position;
+    const matrix = new Float32Array(16);
+    matrix[0] = scale;
+    matrix[5] = scale;
+    matrix[10] = scale;
+    matrix[15] = 1;
+    matrix[12] = p.x;
+    matrix[13] = p.y;
+    matrix[14] = p.z;
+
+    index.updateAtom(
+      state.mesh.uniqueId,
+      this.atomId,
+      { element },
+      new Map([
+        ["matrix", matrix],
+        ["instanceData", new Float32Array([p.x, p.y, p.z, radius])],
+        [
+          "instanceColor",
+          new Float32Array([color.r, color.g, color.b, style.alpha ?? 1]),
+        ],
+      ]),
+    );
+    this.app.artist.applySceneIndexToMeshes();
+  }
+}
+
+/** Change a bond order without creating a duplicate bond at the same ids. */
+export class SetBondOrderCommand extends Command<void> {
+  private previousOrder: number | null = null;
+
+  constructor(
+    app: MolvisApp,
+    private bondId: number,
+    private order: number,
+  ) {
+    super(app);
+  }
+
+  async do(): Promise<void> {
+    const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(
+      this.bondId,
+    );
+    if (!meta) return;
+    if (this.previousOrder === null) this.previousOrder = meta.order;
+    await this.replace(meta.order, this.order);
+  }
+
+  async undo(): Promise<Command> {
+    if (this.previousOrder === null) return new NoOpCommand(this.app);
+    await this.replace(this.order, this.previousOrder);
+    return new NoOpCommand(this.app);
+  }
+
+  private async replace(_from: number, to: number): Promise<void> {
+    const index = this.app.world.sceneIndex;
+    const meta = index.metaRegistry.bonds.getMeta(this.bondId);
+    const state = index.meshRegistry.getBondState();
+    if (!meta || !state) return;
+    const start = new Vector3(meta.start.x, meta.start.y, meta.start.z);
+    const end = new Vector3(meta.end.x, meta.end.y, meta.end.z);
+    this.app.artist.deleteBond(state.mesh.uniqueId, this.bondId);
+    await this.app.artist.drawBond(start, end, {
+      bondId: this.bondId,
+      atomId1: meta.atomId1,
+      atomId2: meta.atomId2,
+      order: to,
+    });
   }
 }
 

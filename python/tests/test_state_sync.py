@@ -10,7 +10,6 @@ scene the old page had.
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any
 
 import molpy as mp
@@ -61,7 +60,6 @@ def test_empty_payload_when_nothing_pushed() -> None:
     assert calls[0]["params"] == {
         "pipeline": [],
         "frames": None,
-        "boxes": None,
     }
 
 
@@ -99,7 +97,12 @@ def test_payload_carries_pipeline_and_frames() -> None:
     assert params["pipeline"][1]["enabled"] is False
     assert isinstance(params["frames"], list) and len(params["frames"]) == 1
     assert "blocks" in params["frames"][0]
-    assert params["boxes"] is None
+    # State sync goes through the same encoder as draw_frame, so the
+    # columns state their dtypes here too.
+    first_block = next(iter(params["frames"][0]["blocks"].values()))
+    assert all("dtype" in c for c in first_block["columns"].values())
+    # No parallel boxes array any more — each frame carries its own box.
+    assert "boxes" not in params
 
 
 def test_event_bus_dispatch_triggers_send(monkeypatch: pytest.MonkeyPatch) -> None:

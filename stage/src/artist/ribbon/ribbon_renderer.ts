@@ -24,20 +24,42 @@ import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { readBackboneBlock } from "./backbone_block";
 import { computeSideVectors } from "./orientation";
 import type { ChainTrace, SecondaryStructureType } from "./pdb_backbone";
-import { buildRibbonGeometry } from "./ribbon_geometry";
+import {
+  buildRibbonGeometry,
+  RIBBON_CROSS_SECTION_SEGMENTS,
+} from "./ribbon_geometry";
 import {
   chainColor,
   DEFAULT_RIBBON_STYLE,
-  hueToRgb,
   type RibbonStyle,
+  spectrumColor,
+  ssColor,
 } from "./ribbon_style";
 import { catmullRomSpline } from "./spline";
 
-const SS_COLORS: Record<SecondaryStructureType, [number, number, number]> = {
-  helix: [0.9, 0.2, 0.3],
-  sheet: [0.95, 0.85, 0.1],
-  coil: [0.6, 0.6, 0.6],
-};
+/** Metadata attached to each ribbon chain mesh for picking / info. */
+export interface RibbonMeshMeta {
+  type: "ribbon";
+  chainId: string;
+  chainIndex: number;
+  /** Residue name per residue along this chain. */
+  resNames: string[];
+  /** Residue sequence number per residue. */
+  resSeqs: number[];
+  /** Residue index for each spline sample point. */
+  residueOfPoint: number[];
+  /** Triangles between consecutive spline rings. */
+  trisPerStep: number;
+}
+
+export function isRibbonMeshMeta(v: unknown): v is RibbonMeshMeta {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    (v as RibbonMeshMeta).type === "ribbon" &&
+    typeof (v as RibbonMeshMeta).chainId === "string"
+  );
+}
 
 export class RibbonRenderer {
   private meshes: Mesh[] = [];
@@ -130,19 +152,27 @@ export class RibbonRenderer {
     // residue order. The side-vector field is derived from CA-only
     // geometry (Carson-Bugg) — see `orientation.ts` for why the old
     // `O − CA` approach was scientifically wrong on β-strands.
-    const positions = new Float64Array(n * 3);
+    const caResidues = residues.filter((r) => r.ca);
+    const m = caResidues.length;
+    if (m < 2) return null;
+
+    const positions = new Float64Array(m * 3);
     const ssTypes: SecondaryStructureType[] = [];
+    const resNames: string[] = [];
+    const resSeqs: number[] = [];
     const residueColors: [number, number, number][] = [];
 
-    for (let i = 0; i < n; i++) {
-      const r = residues[i];
+    for (let i = 0; i < m; i++) {
+      const r = caResidues[i];
       const ca = r.ca;
       if (!ca) continue;
       positions[i * 3 + 0] = ca.x;
       positions[i * 3 + 1] = ca.y;
       positions[i * 3 + 2] = ca.z;
       ssTypes.push(r.ss);
-      residueColors.push(this.colorFor(r.ss, i, n, chainIdx, style));
+      resNames.push(r.resName);
+      resSeqs.push(r.resSeq);
+      residueColors.push(this.colorFor(r.ss, i, m, chainIdx, style));
     }
 
     const sides = computeSideVectors(positions);
@@ -150,18 +180,17 @@ export class RibbonRenderer {
     if (splinePoints.length < 2) return null;
 
     // Resample SS + color from per-residue arrays into per-spline-point
-    // arrays. Spline parameter `pt.t` is in [0, n-1]; floor gives the
-    // upstream residue index — close enough for a discrete attribute
-    // like SS, and fine for color since we want sharp residue
-    // boundaries (no per-spline-point interpolation).
-    const ssPerPoint: SecondaryStructureType[] = splinePoints.map((pt) => {
-      const idx = Math.min(Math.floor(pt.t), n - 1);
-      return ssTypes[idx];
-    });
-    const colorPerPoint: [number, number, number][] = splinePoints.map((pt) => {
-      const idx = Math.min(Math.floor(pt.t), n - 1);
-      return residueColors[idx];
-    });
+    // arrays. Spline parameter `pt.t` is in [0, m-1]; floor gives the
+    // upstream residue index.
+    const residueOfPoint: number[] = splinePoints.map((pt) =>
+      Math.min(Math.floor(pt.t), m - 1),
+    );
+    const ssPerPoint: SecondaryStructureType[] = residueOfPoint.map(
+      (idx) => ssTypes[idx],
+    );
+    const colorPerPoint: [number, number, number][] = residueOfPoint.map(
+      (idx) => residueColors[idx],
+    );
 
     const geo = buildRibbonGeometry(
       splinePoints,
@@ -189,19 +218,30 @@ export class RibbonRenderer {
     );
 
     mesh.material = material;
-    mesh.isPickable = false;
+    mesh.isPickable = true;
     // Long, often concave ribbon — bounding box can miss the frustum
     // at oblique angles even when the visible portion is on screen.
     // Skip frustum culling; raster cost is unaffected.
     mesh.alwaysSelectAsActiveMesh = true;
+
+    const meta: RibbonMeshMeta = {
+      type: "ribbon",
+      chainId: chain.chainId,
+      chainIndex: chainIdx,
+      resNames,
+      resSeqs,
+      residueOfPoint,
+      trisPerStep: RIBBON_CROSS_SECTION_SEGMENTS * 2,
+    };
+    mesh.metadata = meta;
 
     return mesh;
   }
 
   /**
    * Resolve the RGB triple for residue `i` of `n` in chain `chainIdx`
-   * under `style`. SS colors stay the same as before; the new modes
-   * delegate to {@link hueToRgb} / {@link chainColor}.
+   * under `style`. All modes draw from the stage palette
+   * (`ss` / `chain` → tableau-soft, `spectrum` → viridis).
    */
   private colorFor(
     ss: SecondaryStructureType,
@@ -212,7 +252,7 @@ export class RibbonRenderer {
   ): [number, number, number] {
     switch (style.colorMode) {
       case "ss":
-        return SS_COLORS[ss];
+        return ssColor(ss);
       case "uniform":
         return [
           style.uniformColor[0],
@@ -222,32 +262,27 @@ export class RibbonRenderer {
       case "chain":
         return chainColor(chainIdx);
       case "spectrum": {
-        // Hue cycles 0 (red) → 0.78 (purple) along the chain, leaving
-        // a small gap so the start and end aren't visually identical.
+        // Full viridis ramp N→C (tame scientific continuum, not rainbow).
         const t = n <= 1 ? 0 : i / (n - 1);
-        return hueToRgb(t * 0.78);
+        return spectrumColor(t);
       }
     }
   }
 
   private getOrCreateMaterial(): StandardMaterial {
     const name = "__molvis_ribbon_mat__";
-    const existing = this.scene.getMaterialByName(
-      name,
-    ) as StandardMaterial | null;
-    if (existing) return existing;
-
-    // Classic protein-cartoon look: per-vertex color × white diffuse,
-    // a very subtle specular for soft top-edge highlights, lifted
-    // ambient so shadowed faces don't go black. No Fresnel rim — the
-    // silhouette stays as a clean colored edge instead of glowing,
-    // which is what reads as "PyMOL/ChimeraX cartoon".
-    const mat = new StandardMaterial(name, this.scene);
-    mat.backFaceCulling = false;
-    mat.diffuseColor.set(1, 1, 1);
-    mat.specularColor.set(0.08, 0.08, 0.08);
-    mat.specularPower = 64;
-    mat.ambientColor.set(0.36, 0.36, 0.38);
+    let mat = this.scene.getMaterialByName(name) as StandardMaterial | null;
+    if (!mat) {
+      mat = new StandardMaterial(name, this.scene);
+      mat.backFaceCulling = false;
+      mat.diffuseColor.set(1, 1, 1);
+    }
+    // Soft publication cartoon (aligns with RCSB / ChimeraX stills):
+    // gentle specular, lifted ambient, no emissive glow.
+    mat.specularColor.set(0.28, 0.28, 0.3);
+    mat.specularPower = 48;
+    mat.ambientColor.set(0.3, 0.3, 0.32);
+    mat.emissiveColor.set(0, 0, 0);
     return mat;
   }
 }

@@ -77,7 +77,7 @@ export class DisplacementVectorsModifier extends BaseModifier {
       !refCoords?.x ||
       !refCoords.y ||
       !refCoords.z ||
-      refAtoms!.nrows() !== n
+      refAtoms?.nrows() !== n
     ) {
       logger.warn("Displacement vectors: reference frame mismatch");
       return writeDisplacement(

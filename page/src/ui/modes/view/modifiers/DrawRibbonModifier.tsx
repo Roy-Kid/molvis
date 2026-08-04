@@ -22,9 +22,9 @@ interface DrawRibbonModifierProps {
 }
 
 const COLOR_MODES: ReadonlyArray<{ value: RibbonColorMode; label: string }> = [
-  { value: "spectrum", label: "Spectrum (N→C)" },
-  { value: "ss", label: "Secondary Structure" },
   { value: "chain", label: "By Chain" },
+  { value: "ss", label: "Secondary Structure" },
+  { value: "spectrum", label: "Spectrum (N→C)" },
   { value: "uniform", label: "Uniform" },
 ];
 

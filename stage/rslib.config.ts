@@ -18,6 +18,10 @@ const RUNTIME_EXTERNALS = [
   "@molcrafts/molvis-core/molrs",
   "@molcrafts/molvis-core/elements",
   "@molcrafts/molvis-core/element-picker",
+  "@molcrafts/molvis-core/opfs",
+  "@molcrafts/molvis-core/platform",
+  "@molcrafts/molvis-core/save-file",
+  "@molcrafts/molvis-core/image-crop",
   "tslog",
 ] as const;
 
@@ -40,6 +44,10 @@ export default defineConfig({
           "@molcrafts/molvis-core/elements": "../core/dist/elements.d.ts",
           "@molcrafts/molvis-core/element-picker":
             "../core/dist/element_picker.d.ts",
+          "@molcrafts/molvis-core/opfs": "../core/dist/opfs.d.ts",
+          "@molcrafts/molvis-core/platform": "../core/dist/platform.d.ts",
+          "@molcrafts/molvis-core/save-file": "../core/dist/save_file.d.ts",
+          "@molcrafts/molvis-core/image-crop": "../core/dist/image_crop.d.ts",
         },
       },
       source: {

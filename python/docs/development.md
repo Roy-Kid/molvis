@@ -62,7 +62,8 @@ python/
     __init__.py            # Public API: Molvis, WebSocketTransport, Selection, …
     scene.py               # Molvis class — transport-agnostic
     events.py              # EventBus, ViewerState, Selection
-    transport_base.py      # Transport Protocol
+    transport/
+      base.py              # Transport Protocol
     transport/
       __init__.py          # Package entry
       _codec.py            # BinaryPayloadEncoder/Decoder + binary frame codec

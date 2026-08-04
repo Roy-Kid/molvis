@@ -15,6 +15,17 @@ export enum ModeType {
 }
 
 /**
+ * Any mode identifier the app accepts: a built-in {@link ModeType} or a
+ * plugin-registered id such as `plugin.com.example.python`.
+ *
+ * The mode domain is open — plugins add members at runtime — so this is the
+ * type to use anywhere a mode crosses an API boundary. `string & {}` keeps
+ * editor completion for the built-ins while still admitting plugin ids,
+ * which is what the `as ModeType` casts used to paper over.
+ */
+export type ModeId = ModeType | (string & {});
+
+/**
  * Every mode, in documented keyboard / UI order.
  * Prefer this over `Object.values(ModeType)` — safer under bundler cycles.
  */

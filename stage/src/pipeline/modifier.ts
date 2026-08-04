@@ -7,9 +7,9 @@ import type {
 import { SelectionMask } from "./types";
 
 /**
- * Capability tags describing what a modifier does. A modifier may
- * declare any subset — capabilities are independent and can co-occur
- * (e.g. BackboneRibbon both transforms data and draws).
+ * Runtime capability flags for a modifier. Independent and can co-occur
+ * (e.g. DrawRibbon both transforms data and draws). Used by the pipeline
+ * for auto-positioning, selection scoping, and visibility — not UI labels.
  */
 export enum ModifierCapability {
   /** Reads context.currentSelection. Drives default selection scoping. */
@@ -20,27 +20,6 @@ export enum ModifierCapability {
   TransformsData = "transforms-data",
   /** Performs render side-effects via ctx.app.artist. */
   Draws = "draws",
-}
-
-/** Stable display ordering of capability labels (used for UI badges). */
-const CAPABILITY_DISPLAY_ORDER: ReadonlyArray<ModifierCapability> = [
-  ModifierCapability.Draws,
-  ModifierCapability.ProducesSelection,
-  ModifierCapability.ConsumesSelection,
-  ModifierCapability.TransformsData,
-];
-
-/**
- * Pick a single label for compact UI / RPC display. Returns the
- * first capability in the canonical display order; never throws.
- */
-export function primaryCapabilityLabel(
-  caps: ReadonlySet<ModifierCapability>,
-): ModifierCapability | null {
-  for (const cap of CAPABILITY_DISPLAY_ORDER) {
-    if (caps.has(cap)) return cap;
-  }
-  return null;
 }
 
 /**
@@ -56,7 +35,7 @@ export interface Modifier {
   /** Whether this modifier is currently enabled. */
   enabled: boolean;
 
-  /** Capability tags. See {@link ModifierCapability}. */
+  /** Runtime capabilities. See {@link ModifierCapability}. */
   readonly capabilities: ReadonlySet<ModifierCapability>;
 
   /**
@@ -72,12 +51,18 @@ export interface Modifier {
   sourceOwnerId: string | null;
 
   /**
-   * Auto-attach predicate. When a frame is loaded and a probe of this
-   * class returns `true`, the modifier is automatically inserted into
-   * the pipeline.
+   * **Auto-attach-only** predicate. When a frame is loaded and a probe
+   * of this class returns `true`, the modifier is automatically inserted
+   * into the pipeline. Default is `false`.
    *
-   * - Auto-attaching modifiers (Draw*, BackboneRibbon) override to return
-   *   true based on frame contents (e.g., `frame.box` defined).
+   * This is NOT "can the user add this step". Use {@link isApplicable}
+   * for menu enablement. Analysis / optional viz must keep `matches`
+   * false or they will fire on every load (and can overwrite colors /
+   * spawn surfaces).
+   *
+   * - Auto-attaching modifiers (Particles, Ribbon, Simulation cell,
+   *   Create isosurface) override to return true based on frame contents
+   *   (e.g., `frame.box` defined).
    * - User-opt-in modifiers (Slice, WrapPBC, ExpressionSelect, ...)
    *   inherit the BaseModifier default of `false`.
    *

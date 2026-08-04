@@ -203,14 +203,32 @@ export class World {
   }
 
   /**
+   * Park the camera at the default empty-scene home pose (iso angles, radius
+   * 10, origin target). Does not inspect scene geometry.
+   *
+   * Python / RPC: `camera.reset`. Framing content is {@link fit}.
+   */
+  public reset(): void {
+    this.camera.setTarget(Vector3.Zero());
+    this.camera.radius = 10;
+    this.camera.alpha = ISO_ALPHA;
+    this.camera.beta = ISO_BETA;
+  }
+
+  /**
    * Frame the scene.
    *
    * Builds a radius-aware oriented bounding box of the atoms (optionally
    * including the PBC cell corners), then fits it per-axis to the viewport.
    * `viewDirection: "auto"` looks down the structure's minor axis for the
    * largest silhouette; the default `"iso"` keeps the stable α=45°/β=60° view.
+   *
+   * When there is no framable geometry (no atoms / box corners), falls back
+   * to {@link reset}. Does not draw or clear scene content.
+   *
+   * Python / RPC: `camera.fit`.
    */
-  public resetCamera(options?: {
+  public fit(options?: {
     viewDirection?: "iso" | "auto";
     frameBox?: boolean;
   }): void {
@@ -218,26 +236,22 @@ export class World {
     const merged = this.collectFramingPoints(options?.frameBox ?? false);
 
     if (!merged) {
-      // Fallback if no data
-      this.camera.setTarget(Vector3.Zero());
-      this.camera.radius = 10;
-      this.camera.alpha = ISO_ALPHA;
-      this.camera.beta = ISO_BETA;
+      this.reset();
       return;
     }
 
     const obb = computeObb(merged.points, merged.radii);
-    const fit = fitBoxToView(
+    const result = fitBoxToView(
       obb,
       this.camera.fov,
       this._engine.getAspectRatio(this.camera),
       { viewDirection },
     );
 
-    this.camera.setTarget(fit.center);
-    this.camera.radius = fit.radius;
-    this.camera.alpha = fit.direction.alpha;
-    this.camera.beta = fit.direction.beta;
+    this.camera.setTarget(result.center);
+    this.camera.radius = result.radius;
+    this.camera.alpha = result.direction.alpha;
+    this.camera.beta = result.direction.beta;
 
     // Grow the clip planes so the framed scene is never culled. The default
     // `farClipPlane` (1000 Å, tuned for ordinary molecules) is smaller than
@@ -249,7 +263,7 @@ export class World {
     // proportionally to preserve depth-buffer precision.
     const maxExtent =
       2 * Math.max(obb.halfExtents[0], obb.halfExtents[1], obb.halfExtents[2]);
-    const needFar = (fit.radius + maxExtent) * 2;
+    const needFar = (result.radius + maxExtent) * 2;
     if (needFar > this.camera.maxZ) {
       this.camera.maxZ = needFar;
       this.camera.minZ = Math.max(this.camera.minZ, needFar / 50000);

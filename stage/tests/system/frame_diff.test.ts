@@ -13,13 +13,15 @@ interface AtomSpec {
 interface BondSpec {
   i: number;
   j: number;
-  order?: number;
+  /** Required — frame_diff refuses to default a missing order to 1. */
+  order: number;
 }
 
 interface MockBlock {
   nrows(): number;
   dtype(name: string): string | undefined;
   viewColU32(name: string): Uint32Array;
+  viewColF?(name: string): Float64Array | undefined;
   copyColStr(name: string): string[];
   copyColI32(name: string): Int32Array;
   copyColU32(name: string): Uint32Array;
@@ -108,10 +110,14 @@ function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
 }
 
 function buildBondBlock(bonds: BondSpec[]): MockBlock {
+  // Endpoints are u32 indices; `order` is float per the Frame schema, so an
+  // aromatic 1.5 survives the diff instead of collapsing onto 1 or 2.
   const columnsU32 = new Map<string, Uint32Array>([
     ["atomi", new Uint32Array(bonds.map((bond) => bond.i))],
     ["atomj", new Uint32Array(bonds.map((bond) => bond.j))],
-    ["order", new Uint32Array(bonds.map((bond) => bond.order ?? 1))],
+  ]);
+  const columnsF = new Map<string, Float64Array>([
+    ["order", new Float64Array(bonds.map((bond) => bond.order))],
   ]);
 
   return {
@@ -120,12 +126,16 @@ function buildBondBlock(bonds: BondSpec[]): MockBlock {
     },
     dtype(name: string) {
       if (columnsU32.has(name)) return "u32";
+      if (columnsF.has(name)) return "f64";
       return undefined;
     },
     viewColU32(name: string): Uint32Array {
       const col = columnsU32.get(name);
       if (!col) throw new Error(`Column '${name}' not found`);
       return col;
+    },
+    viewColF(name: string): Float64Array | undefined {
+      return columnsF.get(name);
     },
     copyColStr(_name: string): string[] {
       throw new Error("No string columns in bond block");

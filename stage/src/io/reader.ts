@@ -17,6 +17,7 @@ import {
 } from "@molcrafts/molvis-core/molrs";
 import { type FrameProvider, Trajectory } from "../system/trajectory";
 import { logger } from "../utils/logger";
+import { normalizeFrameBox } from "./box_presence";
 import {
   describeFormat,
   type FileFormat,
@@ -226,6 +227,8 @@ function buildLazyTrajectory(
         // read canonical x/y/z. Alias before any analysis or render path.
         normalizeAtomCoords(frame);
         normalizeAtomElements(frame);
+        // Zero-size cells → no box (Simulation cell does not auto-attach).
+        normalizeFrameBox(frame);
       } catch (e) {
         throw toIoError(e, `${label} (${format}) normalize frame ${index}`);
       }
@@ -380,6 +383,7 @@ export function readFrames(
       }
       normalizeAtomCoords(frame);
       normalizeAtomElements(frame);
+      normalizeFrameBox(frame);
       frames.push(frame);
     }
   } finally {

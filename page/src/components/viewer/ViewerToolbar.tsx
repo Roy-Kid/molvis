@@ -123,7 +123,7 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
 
   const handleResetCamera = () => {
     if (app?.world) {
-      app.world.resetCamera();
+      app.world.fit();
     }
   };
 
@@ -132,7 +132,7 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   };
 
   return (
-    <div className="motion-enter-top flex h-toolbar shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-background px-2">
+    <div className="flex h-toolbar shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-2">
       <div className="flex items-center gap-2 min-w-0">
         <img
           src={molvisLogoUrl}

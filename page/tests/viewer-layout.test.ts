@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
-import appSource from "../src/App.tsx?raw";
 import {
-  isAnalysisPanelOpen,
+  isSidePanelOpen,
   resolveViewerPanelLayout,
+  SIDE_PANEL_MIN_PCT,
 } from "../src/lib/viewer-layout";
 
 describe("wide viewer panel layout", () => {
@@ -22,20 +22,10 @@ describe("wide viewer panel layout", () => {
     expect(layout.toolsSize).toBe("15%");
   });
 
-  it("treats a dragged Analysis panel with any positive width as open", () => {
-    expect(isAnalysisPanelOpen(0)).toBe(false);
-    expect(isAnalysisPanelOpen(12)).toBe(true);
-  });
-
-  it("wires the shared contract into App and keeps a collapsible resize rail", () => {
-    expect(appSource).toMatch(
-      /import\s*\{[^}]*isAnalysisPanelOpen[^}]*resolveViewerPanelLayout[^}]*\}\s*from\s*["']\.\/lib\/viewer-layout["']/s,
-    );
-    expect(appSource).toContain("resolveViewerPanelLayout({");
-    expect(appSource).toContain("isAnalysisPanelOpen(layout.analysis)");
-    expect(appSource).toMatch(
-      /<ResizablePanel[\s\S]*?id="analysis"[\s\S]*?collapsible[\s\S]*?collapsedSize="0%"/,
-    );
-    expect(appSource).toContain('aria-label="Resize analysis panel"');
+  it("treats widths below the minimum as closed", () => {
+    expect(isSidePanelOpen(0)).toBe(false);
+    expect(isSidePanelOpen(SIDE_PANEL_MIN_PCT - 1)).toBe(false);
+    expect(isSidePanelOpen(SIDE_PANEL_MIN_PCT)).toBe(true);
+    expect(isSidePanelOpen(18)).toBe(true);
   });
 });

@@ -5,7 +5,7 @@
 import type { Engine } from "@babylonjs/core";
 import type { MolvisApp } from "./app";
 import type { ModeType } from "./mode/mode_type";
-import type { HitResult, MenuItem } from "./mode/types";
+import type { MenuItem, SceneHit } from "./mode/types";
 
 // Canvas settings
 export interface CanvasConfig {
@@ -29,7 +29,7 @@ export interface UIConfig {
 export interface ContextMenuBuildContext {
   app: MolvisApp;
   menuId: string;
-  hit: HitResult | null;
+  hit: SceneHit | null;
   items: readonly MenuItem[];
 }
 

@@ -5,6 +5,11 @@ import {
   type Molvis,
 } from "@molvis/stage";
 import { useCallback, useEffect, useState } from "react";
+import {
+  formatStatusLine,
+  reportStatus,
+  statusTypeFromPhase,
+} from "@/lib/status-report";
 
 /**
  * Track ``backend-state-sync`` events emitted when the Python controller
@@ -15,6 +20,8 @@ import { useCallback, useEffect, useState } from "react";
  * the backend snapshot silently. Otherwise we surface the pending
  * snapshot so the UI can prompt the user to keep local or use the
  * backend.
+ *
+ * Operation tips always go to the bottom status bar (never floating cards).
  */
 export interface PendingStateSync {
   state: BackendStateSync;
@@ -29,10 +36,10 @@ export interface BackendStateSyncFeedback {
 
 export interface UseBackendStateSyncResult {
   pending: PendingStateSync | null;
+  /** Dialog-only apply progress/error while a conflict prompt is open. */
   feedback: BackendStateSyncFeedback | null;
   applyBackend(): Promise<void>;
   keepLocal(): void;
-  dismissFeedback(): void;
 }
 
 function isLocalEffectivelyEmpty(app: Molvis): boolean {
@@ -58,6 +65,14 @@ function summarizeState(state: BackendStateSync): PendingStateSync["summary"] {
   };
 }
 
+function pushBar(
+  phase: BackendStateSyncFeedback["phase"],
+  message: string,
+  detail?: string,
+): void {
+  reportStatus(formatStatusLine(message, detail), statusTypeFromPhase(phase));
+}
+
 export function useBackendStateSync(
   app: Molvis | null,
 ): UseBackendStateSyncResult {
@@ -80,24 +95,24 @@ export function useBackendStateSync(
         return;
       }
       if (isLocalEffectivelyEmpty(app)) {
-        setFeedback({
-          phase: "running",
-          message: "Applying backend state…",
-        });
+        pushBar("running", "Applying backend state…");
         try {
           await applyBackendState(app, state);
-          setFeedback({
-            phase: "success",
-            message: "Backend state applied",
-            detail: "The molecular scene now matches the Python controller.",
-          });
+          pushBar(
+            "success",
+            "Backend state applied",
+            "The molecular scene now matches the Python controller.",
+          );
+          setFeedback(null);
         } catch (err) {
           console.error("[molvis] auto-apply backend state failed:", err);
           setPending({ state, summary: summarizeState(state) });
+          const detail = err instanceof Error ? err.message : String(err);
+          pushBar("error", "Backend state could not be applied", detail);
           setFeedback({
             phase: "error",
             message: "Backend state could not be applied",
-            detail: err instanceof Error ? err.message : String(err),
+            detail,
           });
         }
         return;
@@ -117,25 +132,31 @@ export function useBackendStateSync(
 
   const applyBackend = useCallback(async () => {
     if (!app || !pending) return;
-    setFeedback({
+    const running: BackendStateSyncFeedback = {
       phase: "running",
       message: "Applying backend state…",
-    });
+    };
+    setFeedback(running);
+    pushBar(running.phase, running.message);
     try {
       await applyBackendState(app, pending.state);
       setPending(null);
-      setFeedback({
-        phase: "success",
-        message: "Backend state applied",
-        detail: "The local scene was replaced by the Python controller state.",
-      });
+      setFeedback(null);
+      pushBar(
+        "success",
+        "Backend state applied",
+        "The local scene was replaced by the Python controller state.",
+      );
     } catch (err) {
       console.error("[molvis] apply backend state failed:", err);
-      setFeedback({
+      const detail = err instanceof Error ? err.message : String(err);
+      const next: BackendStateSyncFeedback = {
         phase: "error",
         message: "Backend state could not be applied",
-        detail: err instanceof Error ? err.message : String(err),
-      });
+        detail,
+      };
+      setFeedback(next);
+      pushBar(next.phase, next.message, detail);
     }
   }, [app, pending]);
 
@@ -144,15 +165,10 @@ export function useBackendStateSync(
     setFeedback(null);
   }, []);
 
-  const dismissFeedback = useCallback(() => {
-    setFeedback(null);
-  }, []);
-
   return {
     pending,
     feedback,
     applyBackend,
     keepLocal,
-    dismissFeedback,
   };
 }

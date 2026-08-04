@@ -10,6 +10,7 @@ import type { Molvis } from "@molvis/stage";
 import { Search } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cacheGroups, clearGroups } from "@/lib/molvis-storage";
 import { cn } from "@/lib/utils";
 import { openBottomPanel } from "../contributions/bottom_panel_host";
 import { openPluginDialog } from "../contributions/dialog_host";
@@ -20,12 +21,50 @@ import {
   toolbarActionStore,
 } from "../contributions/ui";
 
+/**
+ * The palette must paint above plugin-supplied chrome, and plugins pick
+ * their own z-indices with no host-imposed scale. Until the host publishes
+ * one, this sits just below the int32 ceiling so nothing can outbid it by
+ * accident.
+ */
+const PALETTE_Z_CLASS = "z-[2147483000]";
+
+/**
+ * Drop the host's cached files plus every cache the active plugins
+ * declared — Python cells and scripts included, because the pyodide
+ * plugin opts them in itself.
+ */
+async function clearCache(app: Molvis | null): Promise<void> {
+  try {
+    const groups = cacheGroups();
+    const before = await Promise.all(groups.map((g) => g.describe()));
+    await clearGroups(groups);
+    const emptied = before.filter((d) => d !== "empty");
+    app?.events.emit("status-message", {
+      text:
+        emptied.length === 0
+          ? "Nothing cached to clear"
+          : `Cleared ${emptied.join(", ")}`,
+      type: "success",
+    });
+  } catch (err) {
+    app?.events.emit("status-message", {
+      text: `Could not clear the cache: ${err instanceof Error ? err.message : String(err)}`,
+      type: "error",
+    });
+  }
+}
+
 export interface CommandPaletteProps {
   app: Molvis | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Switch viewer mode (built-in or plugin). */
   onModeChange?: (mode: string) => void;
+  /** Restart the viewer in place. */
+  onReload?: () => void;
+  /** Open the reset dialog (it owns the destructive choice). */
+  onReset?: () => void;
 }
 
 export interface PaletteItem {
@@ -61,10 +100,23 @@ function useStoreTick(subscribe: (l: () => void) => () => void): number {
 export function buildPaletteItems(
   app: Molvis | null,
   onModeChange?: (mode: string) => void,
+  onReload?: () => void,
+  onReset?: () => void,
 ): PaletteItem[] {
   const items: PaletteItem[] = [];
 
-  for (const action of toolbarActionStore.list()) {
+  // Primary plugin discovery: commands with toolbar metadata.
+  // A command that opens a dialog (opensDialog) or switches a mode (label
+  // shares the mode tab name) is the single palette row — do not also list
+  // that dialog/mode. That was producing two entries for every plugin action.
+  const toolbarActions = toolbarActionStore.list();
+  const dialogsOpenedByCommand = new Set(
+    toolbarActions
+      .map((a) => a.opensDialog)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+
+  for (const action of toolbarActions) {
     if (app && action.isVisible && !action.isVisible(app)) continue;
     items.push({
       id: `cmd:${action.id}`,
@@ -78,6 +130,7 @@ export function buildPaletteItems(
   }
 
   for (const d of dialogStore.list()) {
+    if (dialogsOpenedByCommand.has(d.id)) continue;
     items.push({
       id: `dialog:${d.id}`,
       label: d.title,
@@ -87,7 +140,19 @@ export function buildPaletteItems(
     });
   }
 
+  // Plugin modes also live in the StructureInspector strip. Skip a mode
+  // tab when any palette command already covers it (shared name / mode id).
   for (const tab of modeTabStore.list()) {
+    const label = tab.label.toLowerCase();
+    const covered = toolbarActions.some((a) => {
+      const al = a.label.toLowerCase();
+      return (
+        a.id.includes(tab.mode) ||
+        al.includes(label) ||
+        label.includes(al.replace(/^mode:\s*/, ""))
+      );
+    });
+    if (covered) continue;
     items.push({
       id: `mode:${tab.mode}`,
       label: `Mode: ${tab.label}`,
@@ -149,6 +214,29 @@ export function buildPaletteItems(
         category: "Built-in",
         run: () => onModeChange?.("edit"),
       },
+      {
+        id: "builtin:reload",
+        label: "Reload MolVis",
+        detail: "Restart the viewer without touching stored data",
+        category: "Built-in",
+        run: () => onReload?.(),
+      },
+      {
+        id: "builtin:clear-cache",
+        label: "Clear cache",
+        detail: "Cached files plus plugin caches (Python cells, scripts)",
+        category: "Built-in",
+        run: () => {
+          void clearCache(app);
+        },
+      },
+      {
+        id: "builtin:reset",
+        label: "Reset MolVis…",
+        detail: "Choose what stored data to erase, then restart",
+        category: "Built-in",
+        run: () => onReset?.(),
+      },
     );
   }
 
@@ -160,6 +248,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   open,
   onOpenChange,
   onModeChange,
+  onReload,
+  onReset,
 }) => {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -175,8 +265,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   const allItems = useMemo(() => {
     void storeTick; // recompute when contribution stores emit
-    return buildPaletteItems(app, onModeChange);
-  }, [app, onModeChange, storeTick]);
+    return buildPaletteItems(app, onModeChange, onReload, onReset);
+  }, [app, onModeChange, onReload, onReset, storeTick]);
 
   const filtered = useMemo(() => {
     const scored = allItems
@@ -250,16 +340,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   if (!open) return null;
 
   return (
+    // Backdrop is a click target only — it carries no role and is not
+    // focusable. Escape is handled by the window listener above, so exposing
+    // the scrim as a tabbable "button" only added a phantom stop for
+    // keyboard and screen-reader users.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: click-outside scrim; the window Escape listener is the keyboard path.
+    // biome-ignore lint/a11y/noStaticElementInteractions: giving the scrim a role would put a phantom stop in the tab order.
     <div
-      className="fixed inset-0 z-[2147483000] flex items-start justify-center bg-black/40 pt-[12vh] px-4"
-      role="button"
-      tabIndex={0}
-      aria-label="Dismiss command palette"
+      className={`fixed inset-0 ${PALETTE_Z_CLASS} flex items-start justify-center bg-black/40 pt-[12vh] px-4`}
       onClick={(e) => {
         if (e.target === e.currentTarget) onOpenChange(false);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onOpenChange(false);
       }}
     >
       <div
@@ -327,12 +417,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               </button>
             ))
           )}
-        </div>
-        <div className="border-t border-border/50 px-3 py-1.5 text-micro text-muted-foreground">
-          Plugins expose commands here — not as extra toolbar buttons.{" "}
-          <kbd className="rounded border border-border/60 px-1 font-mono">
-            Ctrl/⌘+Shift+P
-          </kbd>
         </div>
       </div>
     </div>

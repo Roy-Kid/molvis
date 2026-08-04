@@ -24,7 +24,7 @@ export interface CameraKeyframe {
 }
 
 const DEFAULT_REVOLUTIONS = 1;
-/** Polar angle from +Z (the orbit axis), matching `resetCamera`'s elevated view. */
+/** Polar angle from +Z (the orbit axis), matching `fit`'s elevated view. */
 const DEFAULT_POLAR_ANGLE = Math.PI / 3;
 const DEFAULT_UP: Vec3 = [0, 0, 1];
 

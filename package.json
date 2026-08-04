@@ -1,6 +1,6 @@
 {
   "name": "molvis",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "interactive molecule visulization package",
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
@@ -13,7 +13,6 @@
     "vsc-ext"
   ],
   "scripts": {
-    "dev": "npm run dev:page",
     "dev:core": "npm run typecheck -w @molcrafts/molvis-core",
     "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
     "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
@@ -46,7 +45,11 @@
     "release:stage:check": "npm run release:check -w @molcrafts/molvis-stage",
     "check:pack": "npm run check:pack -w @molcrafts/molvis-stage",
     "lint": "biome check --write",
-    "check:molrs-gateway": "node scripts/check-molrs-gateway.mjs"
+    "check:molrs-gateway": "node scripts/check-molrs-gateway.mjs",
+    "sync:plugin-contract": "node scripts/sync-plugin-contract.mjs",
+    "check:plugin-contract": "node scripts/sync-plugin-contract.mjs --check",
+    "version:sync": "node scripts/sync-version.mjs",
+    "prepare": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

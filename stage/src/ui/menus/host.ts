@@ -1,5 +1,5 @@
 import type { MolvisApp as Molvis } from "../../app";
-import type { HitResult, MenuItem } from "../../mode/types";
+import type { MenuItem, SceneHit } from "../../mode/types";
 import type { MolvisButton } from "../components/button";
 import type { MolvisFolder } from "../components/folder";
 import type { MolvisContextMenu } from "./context_menu";
@@ -11,7 +11,7 @@ export interface ContextMenuHostOptions {
 }
 
 export interface ContextMenuShowOptions {
-  hit?: HitResult | null;
+  hit?: SceneHit | null;
 }
 
 /**

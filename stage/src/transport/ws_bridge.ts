@@ -321,14 +321,37 @@ export class WebSocketBridge {
       return;
     }
 
-    if (response.buffers && response.buffers.length > 0) {
-      const frame = encodeBinaryFrame(
-        response.content as unknown as Record<string, unknown>,
-        response.buffers,
-      );
-      this.ws.send(frame);
-    } else {
-      this.ws.send(JSON.stringify(response.content));
+    try {
+      if (response.buffers && response.buffers.length > 0) {
+        const frame = encodeBinaryFrame(
+          response.content as unknown as Record<string, unknown>,
+          response.buffers,
+        );
+        this.ws.send(frame);
+      } else {
+        this.ws.send(JSON.stringify(response.content));
+      }
+    } catch (error) {
+      // A result that cannot be encoded (circular structure, BigInt, detached
+      // buffer) must still produce a reply. Without this the exception escapes
+      // the async message listener as an unhandled rejection, no frame is ever
+      // sent, and the caller can only observe a timeout — which says nothing
+      // about what actually went wrong. Mirrors the inbound parse-error guard.
+      const message = error instanceof Error ? error.message : String(error);
+      const id = (response.content as { id?: number | null }).id ?? null;
+      try {
+        this.ws.send(
+          JSON.stringify(
+            createErrorResponse(
+              id,
+              -32603,
+              `Response serialization failed: ${message}`,
+            ),
+          ),
+        );
+      } catch {
+        // The socket itself is unusable; the peer's timeout is all that's left.
+      }
     }
   }
 }

@@ -146,10 +146,14 @@ describe("categorical palettes", () => {
     expect(categoricalColorAt(0)).not.toEqual(categoricalColorAt(1));
   });
 
-  it("uses bright grey for element C in cpk", () => {
-    const cpk = getPaletteDefinition("cpk");
-    const c = cpk.entries.find((e) => e.label === "C");
-    expect(c?.color).toBe("#C8CDD6");
+  it("uses Jmol medium grey for element C (cpk / vivid / ovito)", () => {
+    for (const name of ["cpk", "vivid", "ovito"] as const) {
+      const def = getPaletteDefinition(name);
+      const c = def.entries.find((e) => e.label === "C");
+      const h = def.entries.find((e) => e.label === "H");
+      expect(c?.color).toBe("#909090");
+      expect(h?.color).toBe("#FFFFFF");
+    }
   });
 });
 

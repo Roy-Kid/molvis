@@ -1,9 +1,16 @@
 /**
  * Gaussian density surface — scene-changing Visualization modifier.
  *
- * Runs molrs `WasmGaussianDensity` on the current frame, packs the result
- * into an ephemeral grid Frame, and draws it via the shared isosurface
- * artist path (marching cubes). Does not mutate the pipeline frame.
+ * Runs molrs `WasmGaussianDensity` on a frame whose **density domain**
+ * is the atom AABB (+ pad), not the crystallographic primary cell.
+ * That keeps the isosurface co-located with Particles / Ribbon: freud-
+ * style GaussianDensity always deposits on the simbox grid with PBC
+ * wrap-around, which folds ASU atoms (outside the cell) into the
+ * primary cell while atoms still draw at deposited Cartn — the
+ * "surface wrapped, protein not" bug.
+ *
+ * Does not mutate the pipeline frame. Does not auto-attach
+ * (`matches` is false): density is user-added Visualization.
  */
 
 import {
@@ -16,6 +23,7 @@ import {
   DEFAULT_ISOSURFACE_STYLE,
   type IsosurfaceStyle,
 } from "../artist/isosurface/isosurface_renderer";
+import { viewAtomCoords } from "../io/atom_coords";
 import { logger } from "../utils/logger";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
@@ -33,6 +41,51 @@ function isGrid3Out(v: unknown): v is Grid3Out {
     Array.isArray(o.shape) &&
     o.shape.length === 3
   );
+}
+
+/**
+ * Orthorhombic, **non-periodic** box covering atom AABB + `pad` Å on
+ * each side. Used as the GaussianDensity / isosurface domain so the
+ * surface sits with the drawn atoms, not folded into `frame.box`.
+ */
+export function densityDomainFromAtoms(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  z: ArrayLike<number>,
+  n: number,
+  pad: number,
+): { origin: Float64Array; h: Float64Array } {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < n; i++) {
+    const xi = x[i];
+    const yi = y[i];
+    const zi = z[i];
+    if (xi < minX) minX = xi;
+    if (yi < minY) minY = yi;
+    if (zi < minZ) minZ = zi;
+    if (xi > maxX) maxX = xi;
+    if (yi > maxY) maxY = yi;
+    if (zi > maxZ) maxZ = zi;
+  }
+  if (!Number.isFinite(minX)) {
+    minX = minY = minZ = 0;
+    maxX = maxY = maxZ = 0;
+  }
+  const p = Math.max(0, pad);
+  // Minimum edge so a single atom still gets a usable grid.
+  const minEdge = Math.max(2 * p, 1.0);
+  const lx = Math.max(maxX - minX + 2 * p, minEdge);
+  const ly = Math.max(maxY - minY + 2 * p, minEdge);
+  const lz = Math.max(maxZ - minZ + 2 * p, minEdge);
+  const origin = new Float64Array([minX - p, minY - p, minZ - p]);
+  // Column-major 3×3 H (same layout as Box.hMatrix / wire).
+  const h = new Float64Array([lx, 0, 0, 0, ly, 0, 0, 0, lz]);
+  return { origin, h };
 }
 
 export class GaussianDensitySurfaceModifier extends BaseModifier {
@@ -102,13 +155,18 @@ export class GaussianDensitySurfaceModifier extends BaseModifier {
     this._style = { ...this._style, ...patch, channel: "density" };
   }
 
-  matches(frame: Frame): boolean {
-    const atoms = frame.getBlock("atoms");
-    return atoms !== undefined && atoms.nrows() > 0 && frame.box !== undefined;
+  /**
+   * Auto-attach only for default visual layers under the file loader.
+   * Density is opt-in Visualization — never auto-attach.
+   */
+  matches(_frame: Frame): boolean {
+    return false;
   }
 
+  /** Needs atoms; domain is derived from atom AABB (simulation cell optional). */
   isApplicable(frame: Frame): boolean {
-    return this.matches(frame);
+    const atoms = frame.getBlock("atoms");
+    return atoms !== undefined && atoms.nrows() > 0;
   }
 
   getCacheKey(): string {
@@ -117,11 +175,39 @@ export class GaussianDensitySurfaceModifier extends BaseModifier {
   }
 
   apply(input: Frame, ctx: PipelineContext): Frame {
-    if (!this.matches(input)) return input;
+    if (!this.isApplicable(input)) return input;
+
+    const atoms = input.getBlock("atoms");
+    if (!atoms) return input;
+    const coords = viewAtomCoords(atoms);
+    if (!coords?.x || !coords.y || !coords.z) {
+      logger.warn("[Gaussian density surface] missing x/y/z; skip draw");
+      return input;
+    }
+
+    const n = atoms.nrows();
+    const pad = Math.max(3 * this._sigma, this._rMax ?? 0, 1.0);
+    const { origin, h } = densityDomainFromAtoms(
+      coords.x,
+      coords.y,
+      coords.z,
+      n,
+      pad,
+    );
 
     let gd: WasmGaussianDensity | null = null;
-    let ephemeral: Frame | null = null;
+    let computeFrame: Frame | null = null;
+    let drawFrame: Frame | null = null;
     try {
+      // Compute frame: same atom positions as Particles, domain = AABB
+      // with pbc=false so kernels never fold into the crystal cell.
+      computeFrame = new MolrsFrame();
+      computeFrame.box = new Box(h, origin, false, false, false);
+      const cAtoms = computeFrame.createBlock("atoms");
+      cAtoms.setColF("x", Float64Array.from(coords.x));
+      cAtoms.setColF("y", Float64Array.from(coords.y));
+      cAtoms.setColF("z", Float64Array.from(coords.z));
+
       gd = new WasmGaussianDensity(
         this._nx,
         this._ny,
@@ -129,7 +215,7 @@ export class GaussianDensitySurfaceModifier extends BaseModifier {
         this._sigma,
         this._rMax,
       );
-      const raw = gd.compute(input);
+      const raw = gd.compute(computeFrame);
       if (!isGrid3Out(raw)) {
         logger.warn(
           "[Gaussian density surface] unexpected compute payload; skip draw",
@@ -154,34 +240,21 @@ export class GaussianDensitySurfaceModifier extends BaseModifier {
         };
       }
 
-      // Ephemeral frame: only box + grid density for the isosurface path.
-      // Clone the simulation box so free() does not touch the pipeline frame.
-      ephemeral = new MolrsFrame();
-      const srcBox = input.box;
-      if (srcBox) {
-        const h = srcBox.hMatrix();
-        const o = srcBox.origin();
-        try {
-          const cell = h.toCopy();
-          const origin = o.toCopy();
-          const pbc = srcBox.pbc();
-          ephemeral.box = new Box(
-            cell,
-            origin,
-            pbc[0] !== 0,
-            pbc[1] !== 0,
-            pbc[2] !== 0,
-          );
-        } finally {
-          h.free();
-          o.free();
-        }
-      }
-      const grid = ephemeral.createBlock("grid");
+      // Draw frame: same non-periodic domain so isosurface MC stays
+      // "general" (no periodic seam) and co-located with atoms.
+      drawFrame = new MolrsFrame();
+      drawFrame.box = new Box(
+        new Float64Array(h),
+        new Float64Array(origin),
+        false,
+        false,
+        false,
+      );
+      const grid = drawFrame.createBlock("grid");
       grid.setColF("density", data);
       grid.setShape(new Uint32Array([nx, ny, nz]));
 
-      ctx.app.artist.drawIsosurface(ephemeral, this._style);
+      ctx.app.artist.drawIsosurface(drawFrame, this._style);
     } catch (err) {
       logger.warn(
         "[Gaussian density surface] compute/draw failed",
@@ -189,7 +262,8 @@ export class GaussianDensitySurfaceModifier extends BaseModifier {
       );
     } finally {
       gd?.free();
-      ephemeral?.free();
+      computeFrame?.free();
+      drawFrame?.free();
     }
     return input;
   }

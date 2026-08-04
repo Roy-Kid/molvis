@@ -4,7 +4,7 @@ export {
   MIN_SCALE,
   ViewportCoords,
 } from "./board/coords";
-export { type HitResult, HitTester } from "./board/hit_test";
+export { type BoardHit, HitTester } from "./board/hit_test";
 export { resolveKeymap, type SketchAction } from "./board/keymap";
 export {
   SketchBoard,
@@ -13,7 +13,6 @@ export {
   type SketchTool,
 } from "./board/sketch_board";
 export {
-  DEFAULT_SELECTION_STROKE,
   DEFAULT_THEME,
   SketchRenderer,
   type SketchRenderState,

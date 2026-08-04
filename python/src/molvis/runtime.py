@@ -55,7 +55,6 @@ __all__ = [
     "display_surface",
     "is_notebook_host",
     "supports_browser",
-    "supports_rich_display",
 ]
 
 
@@ -203,11 +202,6 @@ def is_notebook_host() -> bool:
     and ``HEADLESS`` matters.
     """
     return detect_runtime() in _INLINE_RUNTIMES
-
-
-def supports_rich_display() -> bool:
-    """Alias of :func:`is_notebook_host` for readability at call sites."""
-    return is_notebook_host()
 
 
 def supports_browser() -> bool:

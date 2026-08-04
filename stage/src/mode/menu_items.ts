@@ -1,6 +1,6 @@
 import type { MolvisApp } from "../app";
 import { FILE_FORMAT_REGISTRY } from "../io/formats";
-import type { HitResult, MenuItem } from "./types";
+import type { MenuItem, SceneHit } from "./types";
 
 /**
  * Context-menu factories. Titles: at most two words (readable on small canvas).
@@ -52,13 +52,13 @@ export class CommonMenuItems {
     };
   }
 
-  /** Fit camera to scene. */
-  static resetCamera(app: MolvisApp): MenuItem {
+  /** Fit camera to scene (empty → default home pose). */
+  static fitCamera(app: MolvisApp): MenuItem {
     return {
       type: "button",
       title: "Fit View",
       action: () => {
-        app.world.resetCamera();
+        app.world.fit();
       },
     };
   }
@@ -117,7 +117,7 @@ export class CommonMenuItems {
   /**
    * Hit header (disabled). Atom: "Atom N" or "C N"; bond: "Bond N".
    */
-  static hitLabel(hit: HitResult): MenuItem | null {
+  static hitLabel(hit: SceneHit): MenuItem | null {
     if (hit.type === "atom") {
       const el = hit.metadata.element?.trim();
       const id = hit.metadata.atomId;
@@ -132,6 +132,14 @@ export class CommonMenuItems {
       return {
         type: "button",
         title: `Bond ${hit.metadata.bondId}`,
+        disabled: true,
+        action: () => {},
+      };
+    }
+    if (hit.type === "ribbon") {
+      return {
+        type: "button",
+        title: `${hit.chainId} | ${hit.resName} ${hit.resSeq}`,
         disabled: true,
         action: () => {},
       };

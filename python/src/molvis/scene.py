@@ -53,11 +53,11 @@ from .commands import (
     FrameCommandsMixin,
     ModifierInfo,
     OverlayCommandsMixin,
-    PaletteCommandsMixin,
     PipelineCommandsMixin,
     SelectionCommandsMixin,
     SnapshotCommandsMixin,
 )
+from .control import ControlMixin
 from .errors import MolvisRPCError
 from .events import EventBus, EventHandle, Selection, ViewerState
 from .runtime import (
@@ -66,7 +66,7 @@ from .runtime import (
     detect_runtime,
     display_surface as _detect_display_surface,
 )
-from .transport import Transport, WebSocketTransport
+from .transport import Transport
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -99,15 +99,15 @@ _UNSET: Final[_Unset] = _Unset()
 
 
 class Molvis(
+    ControlMixin,
     DrawingCommandsMixin,
     SelectionCommandsMixin,
     FrameCommandsMixin,
     SnapshotCommandsMixin,
     OverlayCommandsMixin,
-    PaletteCommandsMixin,
     PipelineCommandsMixin,
 ):
-    """A MolVis viewer driven by JSON-RPC over WebSocket.
+    """A MolVis viewer driven by JSON-RPC (WebSocket or in-process).
 
     Parameters
     ----------
@@ -197,6 +197,7 @@ class Molvis(
         plugins: list[str] | None = None,
     ) -> None:
         if getattr(self, "_initialised", False):
+            # Reuse path: the registry already holds this instance.
             return
         self._initialised = True
 
@@ -204,9 +205,7 @@ class Molvis(
         self.width: int = 1200 if isinstance(width, _Unset) else width
         self.height: int = 800 if isinstance(height, _Unset) else height
         self.gui: bool = True if isinstance(gui, _Unset) else gui
-        self.serve_page: bool = (
-            True if isinstance(serve_page, _Unset) else serve_page
-        )
+        self.serve_page: bool = True if isinstance(serve_page, _Unset) else serve_page
         # Page plugins (owner/repo[@tag] or URL) injected on mount.
         self._plugins: list[str] = list(plugins or [])
         self._created_at: float = time.time()
@@ -234,9 +233,11 @@ class Molvis(
             # the page and (b) are not already embedding inline. Inline
             # hosts mount the bundle straight into the cell output; a
             # second standalone tab would duplicate the display.
+            # Lazy import: WebSocket stack needs ``websockets`` (not on Pyodide).
+            from .transport.websocket import WebSocketTransport
+
             want_browser = (
-                self.serve_page
-                and self._display_surface is DisplaySurface.BROWSER
+                self.serve_page and self._display_surface is DisplaySurface.BROWSER
             )
             transport = WebSocketTransport(
                 open_browser=want_browser,
@@ -258,13 +259,13 @@ class Molvis(
         # so the reloaded page can rebuild the same pipeline/scene the
         # old page had. Updated only from the pipeline + drawing mixins.
         self._mirror_pipeline: list[ModifierInfo] = []
-        self._mirror_trajectory: list[mp.Frame] | None = None
-        self._mirror_boxes: list[mp.Box | None] | None = None
+        self._mirror_trajectory: list[Any] | None = None
         self._mirror_lock = threading.Lock()
+        # Session atom ids returned by scene.draw_atom / draw_frame (edit
+        # working tree). draw_bond maps progressive 0-based indices through this.
+        self._atom_ids: list[int] = []
 
-        self._events.on(
-            "request_state_sync", self._handle_state_sync_request
-        )
+        self._events.on("request_state_sync", self._handle_state_sync_request)
 
         Molvis._scene_registry[self.name] = self
         Molvis._instances.add(self)
@@ -284,9 +285,7 @@ class Molvis(
             url = self.connection_url
             if url:
                 logger.info("")
-                logger.info(
-                    "  >>> Paste into MolVis Settings → Backend:"
-                )
+                logger.info("  >>> Paste into MolVis Settings → Backend:")
                 logger.info("      %s", url)
                 logger.info("")
 
@@ -324,20 +323,12 @@ class Molvis(
         if not isinstance(gui, _Unset) and gui != self.gui:
             mismatches.append(f"gui: cached={self.gui!r}, requested={gui!r}")
         if not isinstance(width, _Unset) and width != self.width:
-            mismatches.append(
-                f"width: cached={self.width!r}, requested={width!r}"
-            )
+            mismatches.append(f"width: cached={self.width!r}, requested={width!r}")
         if not isinstance(height, _Unset) and height != self.height:
+            mismatches.append(f"height: cached={self.height!r}, requested={height!r}")
+        if not isinstance(serve_page, _Unset) and serve_page != self.serve_page:
             mismatches.append(
-                f"height: cached={self.height!r}, requested={height!r}"
-            )
-        if (
-            not isinstance(serve_page, _Unset)
-            and serve_page != self.serve_page
-        ):
-            mismatches.append(
-                f"serve_page: cached={self.serve_page!r}, "
-                f"requested={serve_page!r}"
+                f"serve_page: cached={self.serve_page!r}, requested={serve_page!r}"
             )
         if (
             not isinstance(display_surface, _Unset)
@@ -357,6 +348,40 @@ class Molvis(
             f"  - pass a different name=  to open a new viewer\n"
             f"  - Molvis.replace({self.name!r}, ...)  to close & recreate\n"
             f"  - Molvis.get_scene({self.name!r})     to fetch the existing one"
+        )
+
+    @classmethod
+    def from_inprocess(
+        cls,
+        invoke: Any,
+        *,
+        name: str | None = None,
+        gui: bool = True,
+    ) -> "Molvis":
+        """Stage wired to an in-process RPC invoker (Pyodide page plugin).
+
+        An alternate constructor rather than a free helper function:
+        construction belongs to the type being constructed.
+
+        Args:
+            invoke: ``(method, params) -> result | Promise``, supplied by the
+                page plugin as ``molvis_rpc.call``.
+            name: Scene registry name. Defaults to the same name a bare
+                ``Stage()`` uses, so the two return one instance.
+            gui: Passed through; the page chrome is already the host shell.
+
+        Returns:
+            The stage. Keep the reference — commands are methods on it.
+        """
+        from .runtime import DisplaySurface
+        from .transport.inprocess import InProcessTransport
+
+        return cls(
+            name=name or cls._DEFAULT_NAME,
+            transport=InProcessTransport(invoke),
+            serve_page=False,
+            display_surface=DisplaySurface.HEADLESS,
+            gui=gui,
         )
 
     # ------------------------------------------------------------------
@@ -424,8 +449,12 @@ class Molvis(
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def close(self) -> None:
-        """Stop the transport and drop this instance from the registry."""
+    def close(self) -> "Molvis":
+        """Stop the transport and drop this instance from the registry.
+
+        Returns ``self`` for chaining (further commands will re-start only if
+        the transport supports it — usually this is terminal).
+        """
         stop = getattr(self._transport, "stop", None)
         if callable(stop):
             try:
@@ -435,8 +464,9 @@ class Molvis(
         Molvis._scene_registry.pop(self.name, None)
         self._initialised = False
         logger.debug("Molvis '%s' closed", self.name)
+        return self
 
-    def wait(self, timeout: float | None = None) -> None:
+    def wait(self, timeout: float | None = None) -> "Molvis":
         """Block the calling thread until the browser closes or Ctrl+C.
 
         Scripts that push data and then want to keep the viewer alive for
@@ -452,9 +482,7 @@ class Molvis(
             Maximum seconds to block. ``None`` (default) waits
             indefinitely.
         """
-        wait_for_disconnect = getattr(
-            self._transport, "wait_for_disconnection", None
-        )
+        wait_for_disconnect = getattr(self._transport, "wait_for_disconnection", None)
         try:
             if callable(wait_for_disconnect):
                 wait_for_disconnect(timeout)
@@ -464,6 +492,7 @@ class Molvis(
             pass
         finally:
             self.close()
+        return self
 
     @property
     def connected(self) -> bool:
@@ -585,9 +614,7 @@ class Molvis(
         predicate: "Callable[[dict[str, Any]], bool] | None" = None,
     ) -> dict[str, Any]:
         """Block until an event matching *event* (and *predicate*) fires."""
-        return self._events.wait_for(
-            event, timeout=timeout, predicate=predicate
-        )
+        return self._events.wait_for(event, timeout=timeout, predicate=predicate)
 
     def refresh_state(self, *, timeout: float = 10.0) -> ViewerState:
         """Force a roundtrip to rebuild the local cache from the canvas."""
@@ -627,32 +654,35 @@ class Molvis(
         with self._mirror_lock:
             self._mirror_pipeline = list(entries)
 
-    def _record_trajectory(
-        self,
-        frames: Iterable[mp.Frame],
-        boxes: Iterable[mp.Box | None] | None,
-    ) -> None:
+    def _record_trajectory(self, frames: Iterable[Any]) -> None:
         """Cache what we just handed to :meth:`draw_frame` / :meth:`set_trajectory`.
 
-        Keeps frames and boxes as live objects; ``_build_state_payload``
-        re-serializes on demand when the frontend asks for sync.
+        Keeps the frames as live objects; ``_build_state_payload`` re-serializes
+        on demand when the frontend asks for sync. Each frame carries its own
+        box, so there is no parallel box list to keep in step.
         """
         with self._mirror_lock:
             self._mirror_trajectory = list(frames)
-            if boxes is None:
-                self._mirror_boxes = None
-            else:
-                self._mirror_boxes = list(boxes)
 
     def _clear_mirror(self) -> None:
         """Drop everything — called from ``clear()`` / ``clear_pipeline()``."""
         with self._mirror_lock:
             self._mirror_pipeline = []
             self._mirror_trajectory = None
-            self._mirror_boxes = None
+        self._atom_ids = []
 
-    def _build_state_payload(self) -> dict[str, Any]:
-        """Serialize mirror state for a ``scene.apply_state`` RPC."""
+    def _build_state_payload(self) -> tuple[dict[str, Any], list[Any]]:
+        """Serialize mirror state for a ``scene.apply_state`` RPC.
+
+        Frames go through the same encoder ``draw_frame`` uses. They used to be
+        passed as raw ``to_dict()`` blocks here, which skipped dtype
+        canonicalization — so the very same Frame reached the browser with
+        different column types depending on whether it arrived by draw or by
+        reconnect replay.
+        """
+        from .commands.frame import _rebase_buffer_refs
+        from .structure import frame_payload
+
         with self._mirror_lock:
             pipeline = [
                 {
@@ -668,23 +698,18 @@ class Molvis(
                 }
                 for m in self._mirror_pipeline
             ]
-            frames: list[dict[str, Any]] | None = None
-            if self._mirror_trajectory is not None:
-                frames = [
-                    {"blocks": f.to_dict().get("blocks", {})}
-                    for f in self._mirror_trajectory
-                ]
-            boxes: list[dict[str, Any] | None] | None = None
-            if self._mirror_boxes is not None:
-                boxes = [
-                    b.to_dict() if b is not None else None
-                    for b in self._mirror_boxes
-                ]
-        return {
-            "pipeline": pipeline,
-            "frames": frames,
-            "boxes": boxes,
-        }
+            mirrored = list(self._mirror_trajectory or ())
+
+        frames: list[dict[str, Any]] | None = None
+        buffers: list[Any] = []
+        if self._mirror_trajectory is not None:
+            frames = []
+            for frame in mirrored:
+                payload, frame_buffers = frame_payload(frame)
+                frames.append(_rebase_buffer_refs(payload, len(buffers)))
+                buffers.extend(frame_buffers)
+
+        return {"pipeline": pipeline, "frames": frames}, buffers
 
     def _handle_state_sync_request(self, params: dict[str, Any]) -> None:
         """Fire-and-forget reply to ``event.request_state_sync``.
@@ -702,10 +727,11 @@ class Molvis(
 
     def _send_state_sync_snapshot(self) -> None:
         try:
-            payload = self._build_state_payload()
+            payload, buffers = self._build_state_payload()
             self._transport.send_request(
                 "scene.apply_state",
                 payload,
+                buffers=buffers,
                 wait_for_response=False,
             )
         except Exception:

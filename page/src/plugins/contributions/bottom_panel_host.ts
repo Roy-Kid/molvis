@@ -3,26 +3,16 @@
  * BottomPanelHost subscribes and expands + selects the requested panel.
  */
 
-type Listener = () => void;
+import { type ContributionListener, Emitter } from "./emitter";
 
 let requestSeq = 0;
 let lastRequest: { id: string; seq: number } | null = null;
-const listeners = new Set<Listener>();
-
-function emit(): void {
-  for (const l of listeners) {
-    try {
-      l();
-    } catch {
-      /* ignore */
-    }
-  }
-}
+const events = new Emitter("bottom panel host");
 
 /** Open/focus a bottom panel by namespaced id (e.g. `plugin.com….console`). */
 export function openBottomPanel(id: string): void {
   lastRequest = { id, seq: ++requestSeq };
-  emit();
+  events.emit();
 }
 
 export function getBottomPanelOpenRequest(): {
@@ -32,9 +22,8 @@ export function getBottomPanelOpenRequest(): {
   return lastRequest;
 }
 
-export function subscribeBottomPanelHost(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
+export function subscribeBottomPanelHost(
+  listener: ContributionListener,
+): () => void {
+  return events.subscribe(listener);
 }

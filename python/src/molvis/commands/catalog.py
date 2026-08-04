@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 # Keep in lockstep with core `RPC_PROTOCOL_VERSION` / `rpc.list_methods`.
-RPC_PROTOCOL_VERSION = "1.1.0"
+RPC_PROTOCOL_VERSION = "1.3.0"
 
 
 class FrontendCommandGroup(str, Enum):
@@ -20,7 +20,6 @@ class FrontendCommandGroup(str, Enum):
     VIEW = "view"
     SELECTION = "selection"
     SNAPSHOT = "snapshot"
-    SESSION = "session"
     OVERLAY = "overlay"
     PIPELINE = "pipeline"
     RPC = "rpc"
@@ -39,34 +38,21 @@ class FrontendCommand:
 class FrontendCommands:
     NEW_FRAME = FrontendCommand(FrontendCommandGroup.SCENE, "new_frame")
     DRAW_FRAME = FrontendCommand(FrontendCommandGroup.SCENE, "draw_frame")
+    DRAW_ATOM = FrontendCommand(FrontendCommandGroup.SCENE, "draw_atom")
+    DRAW_BOND = FrontendCommand(FrontendCommandGroup.SCENE, "draw_bond")
     DRAW_BOX = FrontendCommand(FrontendCommandGroup.SCENE, "draw_box")
+    COMMIT = FrontendCommand(FrontendCommandGroup.SCENE, "commit")
     CLEAR = FrontendCommand(FrontendCommandGroup.SCENE, "clear")
     EXPORT_FRAME = FrontendCommand(FrontendCommandGroup.SCENE, "export_frame")
     SET_TRAJECTORY = FrontendCommand(FrontendCommandGroup.SCENE, "set_trajectory")
-    SET_FRAME_LABELS = FrontendCommand(
-        FrontendCommandGroup.SCENE, "set_frame_labels"
-    )
+    SET_FRAME_LABELS = FrontendCommand(FrontendCommandGroup.SCENE, "set_frame_labels")
+    SEEK_FRAME = FrontendCommand(FrontendCommandGroup.SCENE, "seek_frame")
     GET_SELECTED = FrontendCommand(FrontendCommandGroup.SELECTION, "get")
     SELECT_ATOMS = FrontendCommand(FrontendCommandGroup.SELECTION, "select_atoms")
     SNAPSHOT = FrontendCommand(FrontendCommandGroup.SNAPSHOT, "take")
     SET_STYLE = FrontendCommand(FrontendCommandGroup.VIEW, "set_style")
     SET_THEME = FrontendCommand(FrontendCommandGroup.VIEW, "set_theme")
     SET_VIEW_MODE = FrontendCommand(FrontendCommandGroup.VIEW, "set_mode")
-    SET_BACKGROUND = FrontendCommand(FrontendCommandGroup.VIEW, "set_background")
-    SESSION_COUNT = FrontendCommand(
-        FrontendCommandGroup.SESSION, "get_session_count"
-    )
-    LIST_SESSIONS = FrontendCommand(FrontendCommandGroup.SESSION, "list_sessions")
-    CLEAR_ALL_SESSIONS = FrontendCommand(
-        FrontendCommandGroup.SESSION, "clear_all_sessions"
-    )
-    CLEAR_ALL_CONTENT = FrontendCommand(
-        FrontendCommandGroup.SESSION, "clear_all_content"
-    )
-    ADD_OVERLAY = FrontendCommand(FrontendCommandGroup.OVERLAY, "add")
-    REMOVE_OVERLAY = FrontendCommand(FrontendCommandGroup.OVERLAY, "remove")
-    UPDATE_OVERLAY = FrontendCommand(FrontendCommandGroup.OVERLAY, "update")
-    CLEAR_OVERLAYS = FrontendCommand(FrontendCommandGroup.OVERLAY, "clear")
     MARK_ATOM = FrontendCommand(FrontendCommandGroup.OVERLAY, "mark_atom")
     UNMARK_ATOM = FrontendCommand(FrontendCommandGroup.OVERLAY, "unmark_atom")
     PIPELINE_LIST = FrontendCommand(FrontendCommandGroup.PIPELINE, "list")
@@ -82,9 +68,7 @@ class FrontendCommands:
     PIPELINE_REORDER_MODIFIER = FrontendCommand(
         FrontendCommandGroup.PIPELINE, "reorder_modifier"
     )
-    PIPELINE_SET_ENABLED = FrontendCommand(
-        FrontendCommandGroup.PIPELINE, "set_enabled"
-    )
+    PIPELINE_SET_ENABLED = FrontendCommand(FrontendCommandGroup.PIPELINE, "set_enabled")
     PIPELINE_SET_SELECTION_SCOPE = FrontendCommand(
         FrontendCommandGroup.PIPELINE, "set_selection_scope"
     )
@@ -94,15 +78,11 @@ class FrontendCommands:
     PIPELINE_CLEAR = FrontendCommand(FrontendCommandGroup.PIPELINE, "clear")
     # Scene multi-source + state (core router)
     APPLY_STATE = FrontendCommand(FrontendCommandGroup.SCENE, "apply_state")
-    ADD_DATA_SOURCE = FrontendCommand(
-        FrontendCommandGroup.SCENE, "add_data_source"
-    )
+    ADD_DATA_SOURCE = FrontendCommand(FrontendCommandGroup.SCENE, "add_data_source")
     REMOVE_DATA_SOURCE = FrontendCommand(
         FrontendCommandGroup.SCENE, "remove_data_source"
     )
-    LIST_DATA_SOURCES = FrontendCommand(
-        FrontendCommandGroup.SCENE, "list_data_sources"
-    )
+    LIST_DATA_SOURCES = FrontendCommand(FrontendCommandGroup.SCENE, "list_data_sources")
     CLEAR_SELECTION = FrontendCommand(FrontendCommandGroup.SELECTION, "clear")
     SELECT_BY_EXPRESSION = FrontendCommand(
         FrontendCommandGroup.SELECTION, "select_by_expression"
@@ -118,4 +98,3 @@ def rpc_method_names() -> list[str]:
         if isinstance(value, FrontendCommand):
             names.append(value.method)
     return sorted(set(names))
-

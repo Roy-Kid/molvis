@@ -111,9 +111,9 @@ export function useDevDemo(
           10, 10, 17,
         ]),
       );
-      bondsBlock.setColU32(
+      bondsBlock.setColF(
         "order",
-        new Uint32Array([
+        new Float64Array([
           1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1,
         ]),
       );
@@ -139,7 +139,8 @@ export function useDevDemo(
       setCurrentMode("view");
 
       cameraResetTimer = window.setTimeout(() => {
-        app.world.resetCamera();
+        if (disposed) return;
+        app.world.fit();
       }, 100);
     };
 

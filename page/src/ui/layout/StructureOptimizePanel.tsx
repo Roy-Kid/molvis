@@ -220,9 +220,7 @@ export const StructureOptimizePanel: React.FC<StructureOptimizePanelProps> = ({
     ? progress
       ? `Step ${progress.completed}/${progress.total}`
       : "Relaxing…"
-    : sceneDirty
-      ? "Unsaved scene *"
-      : `${methodLabel}${fixedCount > 0 ? ` · ${fixedCount} fixed` : ""}`;
+    : `${methodLabel}${fixedCount > 0 ? ` · ${fixedCount} fixed` : ""}`;
 
   return (
     <>
@@ -251,13 +249,6 @@ export const StructureOptimizePanel: React.FC<StructureOptimizePanelProps> = ({
         }
       >
         <div className="space-y-3 p-2">
-          {sceneDirty && (
-            <p className="text-micro text-muted-foreground">
-              Unsaved canvas edits (*). Optimization will ask to save before
-              running.
-            </p>
-          )}
-
           <ParamStack label="Method">
             <Select
               value={method}

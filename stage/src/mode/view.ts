@@ -8,7 +8,7 @@ import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { HitResult, MenuItem } from "./types";
+import type { MenuItem, SceneHit } from "./types";
 
 /**
  * Context menu controller for View mode.
@@ -23,14 +23,14 @@ class ViewModeContextMenu extends ContextMenuController {
   }
 
   protected shouldShowMenu(
-    _hit: HitResult | null,
+    _hit: SceneHit | null,
     isDragging: boolean,
   ): boolean {
     // Show menu on any right-click (if not dragging)
     return !isDragging;
   }
 
-  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+  protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
 
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
@@ -62,7 +62,7 @@ class ViewModeContextMenu extends ContextMenuController {
       );
     }
 
-    items.push(CommonMenuItems.resetCamera(this.app));
+    items.push(CommonMenuItems.fitCamera(this.app));
 
     const bondingOn = this.mode.isDynamicBondingEnabled();
     const criterion = this.mode.getBondingCriterion();

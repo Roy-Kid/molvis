@@ -7,7 +7,45 @@ import {
   ShaderMaterial,
 } from "@babylonjs/core";
 import type { MolvisApp } from "./app";
-import type { HitResult } from "./mode/types";
+import { isRibbonMeshMeta } from "./artist/ribbon/ribbon_renderer";
+import type { EntityMeta } from "./entity_source";
+import type { SceneHit } from "./mode/types";
+
+/**
+ * Standard ray pick for protein cartoon meshes. Face → residue via the
+ * metadata stamped by {@link RibbonRenderer}.
+ */
+function pickRibbonAt(
+  scene: Scene,
+  pointerX: number,
+  pointerY: number,
+): SceneHit {
+  const hit = scene.pick(
+    pointerX,
+    pointerY,
+    (mesh) => isRibbonMeshMeta(mesh.metadata),
+    false,
+  );
+  if (!hit?.hit || hit.faceId === undefined || hit.faceId < 0) {
+    return { type: "empty" };
+  }
+  const meta = hit.pickedMesh?.metadata;
+  if (!isRibbonMeshMeta(meta)) return { type: "empty" };
+  const step = Math.floor(hit.faceId / Math.max(1, meta.trisPerStep));
+  const resIdx =
+    meta.residueOfPoint[
+      Math.min(Math.max(0, step), meta.residueOfPoint.length - 1)
+    ];
+  const ri = Math.min(Math.max(0, resIdx), meta.resNames.length - 1);
+  return {
+    type: "ribbon",
+    mesh: hit.pickedMesh!,
+    chainId: meta.chainId,
+    resName: meta.resNames[ri] ?? "UNK",
+    resSeq: meta.resSeqs[ri] ?? 0,
+    residueIndex: ri,
+  };
+}
 
 /**
  * ID Encoder/Decoder Constants
@@ -23,7 +61,7 @@ export interface NormalizedPickPoint {
 }
 
 interface PickerBackend {
-  pick(point: NormalizedPickPoint): Promise<HitResult>;
+  pick(point: NormalizedPickPoint): Promise<SceneHit>;
   readonly isPicking: boolean;
 }
 
@@ -33,12 +71,16 @@ class PickCoordinator {
     private readonly backend: PickerBackend,
   ) {}
 
-  public async pick(pointerX: number, pointerY: number): Promise<HitResult> {
+  public async pick(pointerX: number, pointerY: number): Promise<SceneHit> {
     if (!Number.isFinite(pointerX) || !Number.isFinite(pointerY)) {
       return { type: "empty" };
     }
     const point = this.normalizePointer(pointerX, pointerY);
-    return this.backend.pick(point);
+    const impostorHit = await this.backend.pick(point);
+    if (impostorHit.type !== "empty") return impostorHit;
+    // Ribbon meshes are ordinary Babylon meshes (not impostors); ray-pick them
+    // when the ID pass hits nothing.
+    return pickRibbonAt(this.scene, pointerX, pointerY);
   }
 
   public get isPicking(): boolean {
@@ -86,9 +128,9 @@ class IdPassPickerBackend implements PickerBackend {
 
   /**
    * Pick top-most object at normalized render-space coordinates.
-   * Returns HitResult with type 'empty' if nothing hit.
+   * Returns SceneHit with type 'empty' if nothing hit.
    */
-  public async pick(point: NormalizedPickPoint): Promise<HitResult> {
+  public async pick(point: NormalizedPickPoint): Promise<SceneHit> {
     if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
       return { type: "empty" };
     }
@@ -160,7 +202,9 @@ class IdPassPickerBackend implements PickerBackend {
       const mesh = this.findMeshByShortId(meshId);
       if (!mesh) return { type: "empty" };
 
-      const meta = this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinId);
+      const meta =
+        this.app.world.sceneIndex.getMeta(mesh.uniqueId, thinId) ??
+        this.synthesizeMetaFromBuffers(mesh.uniqueId, thinId);
       if (!meta) return { type: "empty" };
 
       if (meta.type === "atom") {
@@ -339,6 +383,61 @@ class IdPassPickerBackend implements PickerBackend {
 
     return undefined;
   }
+
+  /**
+   * Last-resort meta when the registry lookup misses (e.g. edit-pool /
+   * post-commit index drift). Reads the GPU instance buffer so hover
+   * still shows *something* rather than silently going blank.
+   */
+  private synthesizeMetaFromBuffers(
+    meshUniqueId: number,
+    thinId: number,
+  ): EntityMeta | null {
+    const registry = this.app.world.sceneIndex.meshRegistry;
+    const atomState = registry.getAtomState();
+    if (atomState && atomState.mesh.uniqueId === meshUniqueId) {
+      const total = atomState.getTotalCount();
+      if (thinId < 0 || thinId >= total) return null;
+      const data = atomState.buffers.get("instanceData")?.data;
+      if (!data) return null;
+      const o = thinId * 4;
+      const atomId = atomState.getIdByIndex(thinId) ?? thinId;
+      return {
+        type: "atom",
+        atomId,
+        element: "",
+        position: { x: data[o], y: data[o + 1], z: data[o + 2] },
+      };
+    }
+
+    const bondState = registry.getBondState();
+    if (bondState && bondState.mesh.uniqueId === meshUniqueId) {
+      const total = bondState.getTotalCount();
+      if (thinId < 0 || thinId >= total) return null;
+      const d0 = bondState.buffers.get("instanceData0")?.data;
+      const d1 = bondState.buffers.get("instanceData1")?.data;
+      if (!d0 || !d1) return null;
+      const o = thinId * 4;
+      const cx = d0[o];
+      const cy = d0[o + 1];
+      const cz = d0[o + 2];
+      const dx = d1[o];
+      const dy = d1[o + 1];
+      const dz = d1[o + 2];
+      const half = d1[o + 3] * 0.5;
+      const bondId = bondState.getIdByIndex(thinId) ?? thinId;
+      return {
+        type: "bond",
+        bondId,
+        atomId1: -1,
+        atomId2: -1,
+        order: 1,
+        start: { x: cx - dx * half, y: cy - dy * half, z: cz - dz * half },
+        end: { x: cx + dx * half, y: cy + dy * half, z: cz + dz * half },
+      };
+    }
+    return null;
+  }
 }
 
 export class Picker {
@@ -349,7 +448,7 @@ export class Picker {
     this.coordinator = new PickCoordinator(scene, backend);
   }
 
-  public async pick(pointerX: number, pointerY: number): Promise<HitResult> {
+  public async pick(pointerX: number, pointerY: number): Promise<SceneHit> {
     return this.coordinator.pick(pointerX, pointerY);
   }
 

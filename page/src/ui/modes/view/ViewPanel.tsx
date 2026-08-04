@@ -7,5 +7,9 @@ interface ViewPanelProps {
 }
 
 export const ViewPanel: React.FC<ViewPanelProps> = ({ app }) => {
-  return <PipelineTab app={app} />;
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <PipelineTab app={app} />
+    </div>
+  );
 };

@@ -2,16 +2,16 @@ import type {
   ModePanelSpec,
   ModeTabSpec,
   PluginAnalysisSpec,
+  PluginCacheSpec,
   PluginDialogSpec,
   PluginPanelSpec,
   SettingsSectionSpec,
-  SidebarPanelSpec,
   ToolbarActionSpec,
 } from "../types";
 import { ContributionStore } from "./store";
 
-export const sidebarPanelStore = new ContributionStore<SidebarPanelSpec>();
 export const toolbarActionStore = new ContributionStore<ToolbarActionSpec>();
+export const pluginCacheStore = new ContributionStore<PluginCacheSpec>();
 export const settingsSectionStore =
   new ContributionStore<SettingsSectionSpec>();
 export const analysisStore = new ContributionStore<PluginAnalysisSpec>();
@@ -24,12 +24,12 @@ export const modePanelStore = new ContributionStore<
   ModePanelSpec & { mode: string }
 >();
 
-export function registerSidebarPanel(spec: SidebarPanelSpec): () => void {
-  return sidebarPanelStore.set(spec.id, spec);
-}
-
 export function registerToolbarAction(spec: ToolbarActionSpec): () => void {
   return toolbarActionStore.set(spec.id, spec);
+}
+
+export function registerPluginCache(spec: PluginCacheSpec): () => void {
+  return pluginCacheStore.set(spec.id, spec);
 }
 
 export function registerSettingsSection(spec: SettingsSectionSpec): () => void {

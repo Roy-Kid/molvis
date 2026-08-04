@@ -1,5 +1,12 @@
 # Spec: vsc-ext-surfaces
 
+> **SUPERSEDED (2026-08-03).** Product direction changed:
+> - Quick View (stage-only) is the only frozen surface.
+> - Full React page in activity-bar / as default Workspace is **rejected**.
+> - Workbench = thin shell + dynamic capabilities (not `mountMolvisApp` full tree).
+> - See `.claude/notes/notes.md` → "vsc-ext: Quick View is the standard".
+> Historical text below is kept for archaeology only.
+
 ## Summary
 Redesign the VSCode extension's webview entry points into three clearly-named
 surfaces — a lightweight **Quick View** (molvis-stage canvas) for peeking at a

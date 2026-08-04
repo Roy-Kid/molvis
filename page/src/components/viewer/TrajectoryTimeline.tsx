@@ -2,8 +2,7 @@ import type { Molvis } from "@molvis/stage";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
-import { ViewerAction } from "@/components/viewer/ViewerAction";
-import { ViewerOperationState } from "@/components/viewer/ViewerOperationState";
+import { useReportOperationStatus } from "@/hooks/useReportOperationStatus";
 import { useViewerOperation } from "@/hooks/useViewerOperation";
 import { TrajectoryPlaybackControls } from "./TrajectoryPlaybackControls";
 
@@ -37,6 +36,7 @@ export const TrajectoryTimeline: React.FC<TrajectoryTimelineProps> = ({
   const lastTimeRef = useRef<number | null>(null);
   const speedRef = useRef(1);
   const seekOperation = useViewerOperation();
+  useReportOperationStatus(seekOperation.feedback);
 
   useEffect(() => {
     currentFrameRef.current = currentFrame;
@@ -168,23 +168,6 @@ export const TrajectoryTimeline: React.FC<TrajectoryTimelineProps> = ({
       aria-busy={isPlaying || seekOperation.running}
       className="relative flex h-full w-full min-w-0 items-center gap-1 bg-transparent px-1"
     >
-      {seekOperation.feedback && (
-        <div className="absolute right-1 bottom-full z-40 mb-1 w-overlay-viewport max-w-dialog-sm">
-          <ViewerOperationState
-            {...seekOperation.feedback}
-            action={
-              seekOperation.feedback.phase === "error" ? (
-                <ViewerAction
-                  purpose="dismiss"
-                  onClick={() => void seekOperation.retry()}
-                >
-                  Retry
-                </ViewerAction>
-              ) : undefined
-            }
-          />
-        </div>
-      )}
       {/* Progress Bar Area (Left) */}
       <div className="flex-1 px-1 min-w-0">
         <Slider

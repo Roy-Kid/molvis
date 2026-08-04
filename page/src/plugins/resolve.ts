@@ -1,4 +1,42 @@
+import {
+  GITHUB_API_BASE,
+  GITHUB_HOST,
+  HOST_LOG_TAG,
+  JSDELIVR_GH_BASE,
+  MANIFEST_FILENAME,
+} from "./constants";
 import type { ResolvedPluginSource } from "./types";
+
+/**
+ * Resolve a manifest's `entry` against its package base.
+ *
+ * `new URL(entry, base)` ignores `base` entirely when `entry` is itself
+ * absolute, so an unchecked manifest could point the loader at any origin —
+ * defeating the ref pinning the user asked for. Entry must stay inside the
+ * package the manifest was fetched from.
+ */
+export function resolvePluginEntryUrl(entry: string, baseUrl: string): string {
+  const trimmed = entry.trim();
+  if (!trimmed) {
+    throw new Error("Plugin manifest 'entry' is empty");
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) || trimmed.startsWith("//")) {
+    throw new Error(
+      `Plugin manifest 'entry' must be a relative path inside the package, got '${entry}'`,
+    );
+  }
+  const resolved = new URL(trimmed, baseUrl);
+  const base = new URL(baseUrl);
+  if (
+    resolved.origin !== base.origin ||
+    !resolved.pathname.startsWith(base.pathname)
+  ) {
+    throw new Error(
+      `Plugin manifest 'entry' escapes its package root: '${entry}' resolves outside ${baseUrl}`,
+    );
+  }
+  return resolved.href;
+}
 
 export interface ResolvePluginSourceOptions {
   /** Injectable fetch (tests). Defaults to global `fetch`. */
@@ -13,7 +51,11 @@ export interface ResolvePluginSourceOptions {
  * - `owner/repo@ref`
  * - `https://github.com/owner/repo`
  * - `https://github.com/owner/repo/tree/ref`
- * - absolute HTTPS URL to package root, manifest, or entry
+ * - absolute **http(s)** URL to package root, manifest, or entry
+ *   (includes **local debug**: `http://127.0.0.1:4173/` after `npm run serve`)
+ *
+ * Not accepted: bare filesystem paths / `file://` (browsers cannot fetch them).
+ * Serve the plugin folder over HTTP and paste that URL instead.
  */
 export async function resolvePluginSource(
   input: string,
@@ -24,12 +66,24 @@ export async function resolvePluginSource(
     throw new Error("Plugin source is empty");
   }
 
-  // Direct manifest URL
-  if (/^https?:\/\//i.test(raw) && raw.endsWith("molvis.plugin.json")) {
+  if (
+    /^file:\/\//i.test(raw) ||
+    /^[A-Za-z]:[\\/]/.test(raw) ||
+    raw.startsWith("/")
+  ) {
+    throw new Error(
+      "Local filesystem paths are not loadable in the browser. " +
+        "Serve the plugin over HTTP (e.g. `npm run serve` in the plugin repo) " +
+        "and install `http://127.0.0.1:4173/` (or the dist/plugin.js URL).",
+    );
+  }
+
+  // Direct manifest URL (http or https — localhost allowed for debug)
+  if (/^https?:\/\//i.test(raw) && raw.endsWith(MANIFEST_FILENAME)) {
     const manifestUrl = raw;
     const baseUrl = manifestUrl.slice(
       0,
-      manifestUrl.length - "molvis.plugin.json".length,
+      manifestUrl.length - MANIFEST_FILENAME.length,
     );
     return { sourceKey: raw, baseUrl, manifestUrl };
   }
@@ -41,17 +95,18 @@ export async function resolvePluginSource(
     return {
       sourceKey: raw,
       baseUrl,
-      manifestUrl: new URL("molvis.plugin.json", baseUrl).href,
+      manifestUrl: new URL(MANIFEST_FILENAME, baseUrl).href,
     };
   }
 
-  // Absolute package base URL
-  if (/^https?:\/\//i.test(raw) && !raw.includes("github.com")) {
+  // Absolute package base URL. Compare hostnames — a substring test misroutes
+  // any URL that merely contains "github.com" in its path.
+  if (/^https?:\/\//i.test(raw) && !isGithubUrl(raw)) {
     const baseUrl = raw.endsWith("/") ? raw : `${raw}/`;
     return {
       sourceKey: raw,
       baseUrl,
-      manifestUrl: new URL("molvis.plugin.json", baseUrl).href,
+      manifestUrl: new URL(MANIFEST_FILENAME, baseUrl).href,
     };
   }
 
@@ -69,11 +124,11 @@ export async function resolvePluginSource(
         )) ?? undefined;
     }
     const refPart = ref ? `@${ref}` : "";
-    const baseUrl = `https://cdn.jsdelivr.net/gh/${gh.owner}/${gh.repo}${refPart}/`;
+    const baseUrl = `${JSDELIVR_GH_BASE}/${gh.owner}/${gh.repo}${refPart}/`;
     return {
       sourceKey: raw,
       baseUrl,
-      manifestUrl: `${baseUrl}molvis.plugin.json`,
+      manifestUrl: `${baseUrl}${MANIFEST_FILENAME}`,
       resolvedRef: ref,
     };
   }
@@ -92,21 +147,47 @@ export async function fetchLatestGithubReleaseTag(
   repo: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
+  const url = `${GITHUB_API_BASE}/repos/${owner}/${repo}/releases/latest`;
+  let res: Response;
   try {
-    const url = `https://api.github.com/repos/${owner}/${repo}/releases/latest`;
-    const res = await fetchImpl(url, {
-      headers: {
-        Accept: "application/vnd.github+json",
-      },
+    res = await fetchImpl(url, {
+      headers: { Accept: "application/vnd.github+json" },
     });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { tag_name?: unknown };
-    if (typeof data.tag_name === "string" && data.tag_name.trim()) {
-      return data.tag_name.trim();
-    }
+  } catch (err) {
+    // Offline / DNS / CORS. Distinct from "this repo has no release" — the
+    // caller falls back to the moving default-branch tip either way, so say
+    // so rather than letting a network blip look like a deliberate choice.
+    console.warn(
+      `${HOST_LOG_TAG} could not reach GitHub to pin ${owner}/${repo}; ` +
+        "installing from the default branch instead",
+      err,
+    );
     return null;
+  }
+  // 404 is the expected "no releases published" answer; anything else (403
+  // rate limit, 5xx) is a failure the user should be able to see.
+  if (res.status !== 404 && !res.ok) {
+    console.warn(
+      `${HOST_LOG_TAG} GitHub release lookup for ${owner}/${repo} failed ` +
+        `(HTTP ${res.status}); installing from the default branch instead`,
+    );
+    return null;
+  }
+  if (!res.ok) return null;
+  const data = (await res.json()) as { tag_name?: unknown };
+  if (typeof data.tag_name === "string" && data.tag_name.trim()) {
+    return data.tag_name.trim();
+  }
+  return null;
+}
+
+/** Hostname-based GitHub check (a substring test misroutes mirror URLs). */
+function isGithubUrl(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    return host === GITHUB_HOST || host === `www.${GITHUB_HOST}`;
   } catch {
-    return null;
+    return false;
   }
 }
 

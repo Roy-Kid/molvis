@@ -108,10 +108,9 @@ export class HideSelectionModifier extends BaseModifier {
     if (bonds) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
-      const orderCol =
-        bonds.dtype("order") === DType.U32
-          ? bonds.viewColU32("order")
-          : undefined;
+      const orderCol = bonds.dtype("order")
+        ? bonds.viewColF("order")
+        : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -130,7 +129,7 @@ export class HideSelectionModifier extends BaseModifier {
           const newNb = validBonds.length;
           const newI = new Uint32Array(newNb);
           const newJ = new Uint32Array(newNb);
-          const newOrder = new Uint32Array(newNb);
+          const newOrder = new Float64Array(newNb);
 
           for (let k = 0; k < newNb; k++) {
             const originalIdx = validBonds[k];
@@ -142,7 +141,7 @@ export class HideSelectionModifier extends BaseModifier {
 
           newBonds.setColU32("atomi", newI);
           newBonds.setColU32("atomj", newJ);
-          if (orderCol) newBonds.setColU32("order", newOrder);
+          if (orderCol) newBonds.setColF("order", newOrder);
         }
       }
     }

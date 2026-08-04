@@ -562,7 +562,6 @@ export const ClusterPanel: React.FC<ClusterPanelProps> = ({
 
       {result && result.numClusters > 0 && (
         <ResultSection
-          subtitle={`${result.numClusters} cluster${result.numClusters === 1 ? "" : "s"}`}
           stale={stale}
           onExport={() => downloadClusterCsv(result)}
           chart={<ClusterSizeChart result={result} />}

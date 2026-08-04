@@ -1,5 +1,4 @@
 import path from "node:path";
-import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rslib/core";
 import { rspack } from "@rspack/core";
 
@@ -8,9 +7,9 @@ import { rspack } from "@rspack/core";
  * =====================================
  *
  * Entries:
- *   - `webview/index` — Quick View / custom-editor preview
- *   - `viewer/index`  — full React workspace
- *   - `sketch/index`  — standalone 2D structure editor
+ *   - `webview/index`    — Quick View / custom-editor preview (stage only)
+ *   - `workbench/index`  — Workbench thin shell (dynamic stage + capabilities)
+ *   - `sketch/index`     — standalone 2D structure editor
  *
  * The trajectory worker is a **separate** build
  * (`rslib.webview.worker.config.mts`) so it never shares a module graph
@@ -25,9 +24,9 @@ import { rspack } from "@rspack/core";
  *    `f[e] is not a function` / `Object.values(undefined)` /
  *    `X is not iterable` failures at module init.
  *
- * 2. **One sync shared chunk** (`chunks/shared`) for all of `stage/src`,
- *    `core/src`, `page/src`, and sync `node_modules` (babylon, react, molrs, …).
- *    No per-package allowlist to maintain when deps change.
+ * 2. **One sync shared chunk** (`chunks/shared`) for engines + core +
+ *    node_modules used by webview entries. **Never** pull `page/src`
+ *    (page depends on sketch/stage; hosts must not reverse that).
  *
  * 3. **Async-only heavies** — plotly / babylon-serializers.
  *
@@ -39,12 +38,14 @@ import { rspack } from "@rspack/core";
  *
  * ```
  * out/
- *   webview/index.js  viewer/index.js  sketch/index.js  controller.js
+ *   webview/index.js  workbench/index.js  sketch/index.js
  *   chunks/runtime.js chunks/shared.js chunks/styles.css
  *   chunks/worker.js                  ← from worker config
  *   chunks/babylon-serializers.js
  *   static/wasm/*.module.wasm
  * ```
+ *
+ * Quick View / Workbench must not statically import `page/src` (React product).
  */
 
 const sharedDefine = {
@@ -52,7 +53,7 @@ const sharedDefine = {
 };
 
 const sharedModulesPattern =
-  /[\\/](node_modules|core[\\/](src|dist)|stage[\\/](src|dist)|page[\\/]src|sketch[\\/]src)[\\/]/;
+  /[\\/](node_modules|core[\\/](src|dist)|stage[\\/](src|dist)|sketch[\\/]src)[\\/]/;
 
 const spawnWrapper = path.resolve(
   import.meta.dirname,
@@ -69,8 +70,8 @@ export default defineConfig({
       source: {
         entry: {
           "webview/index": "./src/webview/index.ts",
-          "viewer/index": "./src/viewer/index.tsx",
-          "sketch/index": "./src/sketch/index.tsx",
+          "workbench/index": "./src/workbench/index.ts",
+          "sketch/index": "./src/sketch/index.ts",
         },
         define: sharedDefine,
       },
@@ -90,7 +91,8 @@ export default defineConfig({
     },
   ],
 
-  plugins: [pluginReact()],
+  // No React in webview entries (QV/Workbench = stage; Sketch = sketch package).
+  plugins: [],
 
   resolve: {
     alias: {
@@ -122,7 +124,26 @@ export default defineConfig({
         import.meta.dirname,
         "../core/src/elements.ts",
       ),
-      "@": path.resolve(import.meta.dirname, "../page/src"),
+      "@molcrafts/molvis-core/element-picker": path.resolve(
+        import.meta.dirname,
+        "../core/src/element_picker.ts",
+      ),
+      "@molcrafts/molvis-core/save-file": path.resolve(
+        import.meta.dirname,
+        "../core/src/save_file.ts",
+      ),
+      "@molcrafts/molvis-core/platform": path.resolve(
+        import.meta.dirname,
+        "../core/src/platform.ts",
+      ),
+      "@molcrafts/molvis-core/opfs": path.resolve(
+        import.meta.dirname,
+        "../core/src/opfs.ts",
+      ),
+      "@molcrafts/molvis-core/image-crop": path.resolve(
+        import.meta.dirname,
+        "../core/src/image_crop.ts",
+      ),
       "@molcrafts/molvis-sketch": path.resolve(
         import.meta.dirname,
         "../sketch/src/index.ts",

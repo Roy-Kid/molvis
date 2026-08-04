@@ -203,15 +203,13 @@ function tileBondsBlock(
   }
   out.setColU32("atomi", outI);
   out.setColU32("atomj", outJ);
-  if (bonds.dtype("order") === DType.U32) {
-    const order = bonds.viewColU32("order");
-    if (order) {
-      const outO = new Uint32Array(nb * images);
-      for (let g = 0; g < images; g++) {
-        outO.set(order.subarray(0, nb), g * nb);
-      }
-      out.setColU32("order", outO);
+  const order = bonds.dtype("order") ? bonds.viewColF("order") : undefined;
+  if (order) {
+    const outO = new Float64Array(nb * images);
+    for (let g = 0; g < images; g++) {
+      outO.set(order.subarray(0, nb), g * nb);
     }
+    out.setColF("order", outO);
   }
   return out;
 }

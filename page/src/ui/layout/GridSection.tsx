@@ -51,18 +51,12 @@ export const GridSection: React.FC<GridSectionProps> = ({ app, sectionId }) => {
   };
 
   return (
-    <SettingsSection
-      id={sectionId}
-      title="Grid"
-      description="Reference ground plane under the structure."
-    >
+    <SettingsSection id={sectionId} title="Grid">
       {!app || !state ? (
-        <p className="text-micro text-muted-foreground">
-          Grid settings will appear once the viewer initializes.
-        </p>
+        <p className="text-micro text-muted-foreground">Viewer not ready.</p>
       ) : (
         <>
-          <SettingsRow label="Show Grid">
+          <SettingsRow label="Show" tooltip="Show or hide the scene grid.">
             <Switch
               aria-label="Show grid"
               checked={state.enabled}
@@ -71,7 +65,7 @@ export const GridSection: React.FC<GridSectionProps> = ({ app, sectionId }) => {
           </SettingsRow>
           {state.enabled ? (
             <>
-              <SettingsRow label="Opacity">
+              <SettingsRow label="Opacity" tooltip="Set grid transparency.">
                 <NumberField
                   aria-label="Grid opacity"
                   value={state.opacity}
@@ -81,7 +75,10 @@ export const GridSection: React.FC<GridSectionProps> = ({ app, sectionId }) => {
                   onChange={onOpacity}
                 />
               </SettingsRow>
-              <SettingsRow label="Size">
+              <SettingsRow
+                label="Size"
+                tooltip="Set the grid's world-space size."
+              >
                 <NumberField
                   aria-label="Grid size"
                   value={state.size}

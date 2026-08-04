@@ -10,14 +10,14 @@ _Generated 2026-07-30 by /mol:map._
 
 ### Module list
 
-- `./` — `molvis@0.1.1`; npm workspace/build orchestrator for `core`, `stage`, `sketch`, `umbrella`, `page`, and `vsc-ext`; root dependencies provide molrs, molplot, Vega, React, and shared build tooling.
-- `core/` — private `@molcrafts/molvis-core@0.1.1`; entries `src/index.ts`, `src/molrs.ts`, `src/elements.ts`; dev alias `@molvis/core`; sole dependency/import face for `@molcrafts/molrs`.
-- `sketch/` — published `@molcrafts/molvis-sketch@0.1.0`; `src/index.ts` over board, commands, geometry, graph, export, and style groups; depends only on `@molcrafts/molvis-core`.
-- `stage/` — published `@molcrafts/molvis-stage@0.1.1`; entries `src/index.ts`, `src/element.ts`, bundled `src/element_entry.ts`, `src/io/index.ts`, and `src/io/formats.ts`; dev alias `@molvis/stage`; depends on core, Babylon, and tslog.
-- `umbrella/` — published `@molcrafts/molvis@0.1.1`; entries `src/index.ts`, `src/sketch.ts`, `src/stage.ts`; depends on and re-exports sketch and stage.
-- `page/` — `page@0.1.1`; React product application rooted at `src/index.tsx`, with mount, plugin, hook, component, and mode/layout groups; source aliases stage, core, and sketch and consumes molplot.
-- `vsc-ext/` — VSCode extension `molvis@0.1.1`; Node activation entry plus Quick View, full viewer, sketch, and isolated trajectory-worker webview entries; bundles page/stage/sketch/core source aliases.
-- `python/` — hatchling package `molcrafts-molvis@0.1.1`, import name `molvis`; `src/molvis/__init__.py`, `scene.py`, command mixins, event/runtime, transport, and CLI groups; depends on molpy, NumPy, and websockets and ships the built page bundle.
+- `./` — `molvis`; npm workspace/build orchestrator for `core`, `stage`, `sketch`, `umbrella`, `page`, and `vsc-ext`; root dependencies provide molrs, molplot, Vega, React, and shared build tooling.
+- `core/` — private `@molcrafts/molvis-core`; entries `src/index.ts`, `src/molrs.ts`, `src/elements.ts`; dev alias `@molvis/core`; sole dependency/import face for `@molcrafts/molrs`.
+- `sketch/` — published `@molcrafts/molvis-sketch`; `src/index.ts` over board, commands, geometry, graph, export, and style groups; depends only on `@molcrafts/molvis-core`.
+- `stage/` — published `@molcrafts/molvis-stage`; entries `src/index.ts`, `src/element.ts`, bundled `src/element_entry.ts`, `src/io/index.ts`, and `src/io/formats.ts`; dev alias `@molvis/stage`; depends on core, Babylon, and tslog.
+- `umbrella/` — published `@molcrafts/molvis`; entries `src/index.ts`, `src/sketch.ts`, `src/stage.ts`; depends on and re-exports sketch and stage.
+- `page/` — `page`; React product application rooted at `src/index.tsx`, with mount, plugin, hook, component, and mode/layout groups; source aliases stage, core, and sketch and consumes molplot.
+- `vsc-ext/` — VSCode extension `molvis`; Node activation + Quick View / Workbench / Sketch webviews and trajectory worker; depends on stage/sketch/core only (**never page**).
+- `python/` — hatchling package `molcrafts-molvis`, import name `molvis`; `src/molvis/__init__.py`, `scene.py`, command mixins, event/runtime, transport, and CLI groups; depends on molpy, NumPy, and websockets and ships the built page bundle.
 
 ### Public surface
 
@@ -27,7 +27,7 @@ _Generated 2026-07-30 by /mol:map._
 - `stage/` — `.` exports `mountMolvis`, `MolvisApp`/`Molvis`, renderer/system/world, analysis, palette and representation APIs, commands, modifiers, pipeline/data-source primitives, overlays, selection, transport/RPC, and selected molrs types; `./element` exports viewer/gallery custom-element APIs; `./viewer` registers those elements; `./io` and `./io/formats` are public file-ingress and format-registry subpaths.
 - `umbrella/` — `.` re-exports both engine barrels; `./sketch` and `./stage` expose the individual peer surfaces.
 - `page/` — host-facing bundle exposes `window.MolvisApp.mount`; its mount boundary is `mountMolvisApp`, `MountHostOpts`, `MountedApp`, `MountOpts`, surface/chrome settings, WebSocket/session options, and plugin sources.
-- `vsc-ext/` — exports `activate`/`deactivate`; contributes Quick View/workspace/file-loading commands, launcher/outline/sketch views, text and binary custom editors, and bundled viewer/sketch webviews.
+- `vsc-ext/` — exports `activate`/`deactivate`; contributes Quick View / Workbench / file-loading commands, launcher/outline/sketch views, custom editors, and stage/sketch webview bundles.
 - `python/` — top-level exports `Molvis`, transport classes, event/state types, runtime detection, palette helpers, `MolvisRPCError`, and `NumpyEncoder`; `Molvis` composes drawing, frame, overlay, palette, pipeline, selection, and snapshot methods; CLI entry is `molvis`.
 
 ### Style summary
@@ -49,7 +49,7 @@ _Generated 2026-07-30 by /mol:map._
 - `stage/` — public React-free 3D Babylon engine peer; depends inward on core and neither imports sketch nor accesses molrs directly. It owns the command/pipeline/rendering stack: `DataSourceModifier` remains the single scene-data ingress, `UpdateFrameCommand` is buffer-only, and full rebuilds belong to draw-frame flow.
 - `umbrella/` — public convenience facade above sketch and stage; re-exports both peers while relying on their shared core transitively.
 - `page/` — product/frontend composition layer; owns React, shadcn/Radix, host chrome, plugins, and chart presentation, and composes stage plus sketch through core-backed aliases.
-- `vsc-ext/` — VSCode host/tooling layer; activates editors and views and packages the shared page/engine source graph without becoming an engine implementation.
+- `vsc-ext/` — VSCode host layer; activates editors/views and packages stage+sketch webviews. Hosts never import `page/` (page depends on engines, not the reverse).
 - `python/` — Python driver/host layer; controls the page over WebSocket, ships its static bundle, and does not import TypeScript engine internals or own WebGL rendering.
 
 <!-- mol:map:managed end -->

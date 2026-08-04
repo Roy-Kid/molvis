@@ -174,9 +174,7 @@ def test_send_cmd_routes_through_transport() -> None:
     fake = FakeTransport()
     scene = Molvis(name="route-test", transport=fake)
 
-    result = scene.send_cmd(
-        "scene.clear", {}, wait_for_response=True, timeout=3.5
-    )
+    result = scene.send_cmd("scene.clear", {}, wait_for_response=True, timeout=3.5)
 
     assert fake.started is True
     assert result == {"ok": True}
@@ -234,8 +232,8 @@ def test_repr_mimebundle_emits_inline_mount() -> None:
     html_body = bundle["text/html"]
     assert "<iframe" not in html_body
     assert 'class="molvis-cell"' in html_body
-    assert 'width:1200px' in html_body
-    assert 'height:800px' in html_body
+    assert "width:1200px" in html_body
+    assert "height:800px" in html_body
     # Loader script ships the assets and the mount opts inline:
     assert "MolvisApp.mount" in html_body
     assert "useShadowDOM" in html_body

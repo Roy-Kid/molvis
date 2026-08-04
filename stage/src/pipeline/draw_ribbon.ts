@@ -6,7 +6,8 @@ import {
   type RibbonColorMode,
   type RibbonStyle,
 } from "../artist/ribbon/ribbon_style";
-import { assignSecondaryStructure } from "../artist/ribbon/secondary_structure";
+import { assignSecondaryStructureAuto } from "../artist/ribbon/secondary_structure";
+import { hasUsableBox } from "../io/box_presence";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
 
@@ -71,15 +72,15 @@ function splitChainsAtBreaks(rows: Residue[], box: Box | undefined): void {
     bBuf[k + 2] = cca.z;
   }
 
-  // Minimum-image displacements only when a box is present. The
-  // gap-distance check below works in either regime — without a box,
-  // the raw distance *is* the physical distance.
+  // Minimum-image only with a *usable* box. EM placeholder cells
+  // (1×1×1 Å) make every peptide bond look like a PBC jump and
+  // fragment the ribbon into single-residue chains → no geometry.
   let miBuf: Float64Array | null = null;
-  if (box) {
+  if (hasUsableBox(box)) {
     const a = WasmArray.from(aBuf, new Uint32Array([pairCount, 3]));
     const b = WasmArray.from(bBuf, new Uint32Array([pairCount, 3]));
     try {
-      const mi = box.delta(a, b, true);
+      const mi = box!.delta(a, b, true);
       try {
         miBuf = mi.toCopy() as Float64Array;
       } finally {
@@ -306,7 +307,7 @@ export class DrawRibbonModifier extends BaseModifier {
     );
 
     splitChainsAtBreaks(rows, input.box);
-    assignSecondaryStructure(rows);
+    assignSecondaryStructureAuto(rows);
     writeResidueRows(input, rows);
 
     ctx.app.artist.drawRibbon(input, this.currentStyle());

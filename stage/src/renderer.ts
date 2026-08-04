@@ -4,8 +4,6 @@ import { MolvisApp } from "./app";
 import type { RepresentationId } from "./artist/representation";
 import type { Theme } from "./artist/theme";
 import type { MolvisConfig } from "./config";
-import { applyAutoAttach } from "./pipeline/auto_attach";
-import { DataSourceModifier } from "./pipeline/data_source_modifier";
 import type { MolvisSetting } from "./settings";
 import { Trajectory } from "./system/trajectory";
 
@@ -53,7 +51,7 @@ export interface MolvisRendererOptions {
  * ```ts
  * const renderer = new MolvisRenderer(hiddenCanvas);
  * await renderer.load(trajectory);
- * renderer.resetCamera();
+ * renderer.fit();
  * const png = await renderer.snapshot({ width: 1920, height: 1080 });
  * ```
  */
@@ -86,18 +84,9 @@ export class MolvisRenderer {
    * interactive render loop.
    */
   async load(input: RenderInput): Promise<void> {
+    // setTrajectory → replaceScene installs the primary DS and auto-attaches
+    // default Draws (Particles / Bonds / …). applyAutoAttach is idempotent.
     await this._app.setTrajectory(toTrajectory(input));
-    // setTrajectory is a low-level primitive that installs the data source but
-    // not the Draw modifiers. Mirror the file-loader path: auto-attach default
-    // decoration (DrawAtom/DrawBond/DrawBox) for the loaded blocks, nested
-    // under the head data source, so the scene actually renders headlessly.
-    const frame0 = this._app.frame;
-    if (frame0) {
-      const headDS = this._app.modifierPipeline
-        .getModifiers()
-        .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);
-      applyAutoAttach(this._app.modifierPipeline, frame0, undefined, headDS);
-    }
     await this._app.applyPipeline({ changeKind: "full" });
   }
 
@@ -121,14 +110,14 @@ export class MolvisRenderer {
     this._app.setTheme(theme);
   }
 
-  /** Frame the whole scene in view (radius + target from scene bounds). */
-  resetCamera(): void {
-    this._app.resetCamera();
+  /** Frame the whole scene in view (empty → home pose). */
+  fit(): void {
+    this._app.world.fit();
   }
 
-  /** Alias for {@link resetCamera}. */
-  fitCamera(): void {
-    this._app.resetCamera();
+  /** Park the camera at the empty-scene home pose. */
+  reset(): void {
+    this._app.world.reset();
   }
 
   /** Set the display size, in CSS pixels. */

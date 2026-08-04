@@ -12,3 +12,7 @@ pytest tests -m 'not integration'
 ```
 
 Default `npm run test:python` still runs both lanes.
+
+`__pycache__/`, `.pyc`, coverage output, and temporary media are generated
+artifacts, not fixtures. Keep committed fixtures explicit and place them in a
+named `fixtures/` directory next to the tests that own them.

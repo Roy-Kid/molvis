@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 import type { Residue } from "../../../src/artist/ribbon/pdb_backbone";
-import { assignSecondaryStructure } from "../../../src/artist/ribbon/secondary_structure";
+import { assignSecondaryStructureAuto } from "../../../src/artist/ribbon/secondary_structure";
 
 /**
  * Build a Residue array from CA coordinates only — `o` and other
@@ -62,22 +62,46 @@ function idealBetaStrandCAs(n: number): Array<[number, number, number]> {
   return out;
 }
 
-describe("assignSecondaryStructure", () => {
+describe("assignSecondaryStructureAuto", () => {
+  // Zhang-Skolnick needs the pairs (i..i+2, i+3, i+4) for every j in
+  // [i-2, i], so residue i is classifiable only while `i + 4 < n`. The last
+  // four residues of a segment therefore stay coil by construction — they
+  // are not "unclassified noise", they are outside the window.
+  const lastClassifiable = (n: number) => n - 5;
+
   it("classifies an idealised α helix as helix in the interior", () => {
     const rows = rowsFromCA(idealAlphaHelixCAs(12));
-    assignSecondaryStructure(rows);
+    assignSecondaryStructureAuto(rows);
 
-    // Boundary residues (first 1, last 2) stay coil because the
-    // window can't be completed; the inner residues should be helix.
-    const interior = rows.slice(2, 9).map((r) => r.ss);
+    const interior = rows.slice(2, lastClassifiable(12) + 1).map((r) => r.ss);
+    expect(interior.length).toBeGreaterThan(0);
     expect(interior.every((s) => s === "helix")).toBe(true);
+  });
+
+  it("leaves the trailing residues of a helix unclassified", () => {
+    const rows = rowsFromCA(idealAlphaHelixCAs(12));
+    assignSecondaryStructureAuto(rows);
+
+    // A short window must not vacuously match the first profile tested.
+    const tail = rows.slice(lastClassifiable(12) + 1).map((r) => r.ss);
+    expect(tail).toEqual(["coil", "coil", "coil", "coil"]);
   });
 
   it("classifies an extended β strand as sheet in the interior", () => {
     const rows = rowsFromCA(idealBetaStrandCAs(8));
-    assignSecondaryStructure(rows);
-    const interior = rows.slice(2, 6).map((r) => r.ss);
+    assignSecondaryStructureAuto(rows);
+    const interior = rows.slice(2, lastClassifiable(8) + 1).map((r) => r.ss);
+    expect(interior.length).toBeGreaterThan(0);
     expect(interior.every((s) => s === "sheet")).toBe(true);
+  });
+
+  it("never labels an unconstrained tail residue as helix", () => {
+    // Regression: skipping out-of-range pairs instead of failing the match
+    // made the last β residue come back as helix, because helix is the
+    // first profile tested and nothing in its window was actually checked.
+    const rows = rowsFromCA(idealBetaStrandCAs(8));
+    assignSecondaryStructureAuto(rows);
+    expect(rows.at(-1)?.ss).not.toBe("helix");
   });
 
   it("demotes single-residue helix noise to coil (run < MIN_HELIX_RUN)", () => {
@@ -88,7 +112,7 @@ describe("assignSecondaryStructure", () => {
       ([x, y, z]) => [x + 100, y, z] as [number, number, number],
     );
     const rows = rowsFromCA([...strand, ...helix3, ...strand]);
-    assignSecondaryStructure(rows);
+    assignSecondaryStructureAuto(rows);
     // No row should be marked helix.
     expect(rows.find((r) => r.ss === "helix")).toBeUndefined();
   });
@@ -140,7 +164,7 @@ describe("assignSecondaryStructure", () => {
         ss: "coil",
       });
     }
-    assignSecondaryStructure(rows);
+    assignSecondaryStructureAuto(rows);
     expect(rows.every((r) => r.ss === "coil")).toBe(true);
   });
 });

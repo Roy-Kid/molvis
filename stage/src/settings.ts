@@ -31,6 +31,9 @@ export interface GraphicsConfig {
  * User settings that can be adjusted at runtime
  */
 export interface MolvisSetting {
+  // Viewport information
+  showFps: boolean;
+
   // Camera Controls
   cameraPanSpeed: number;
   cameraRotateSpeed: number;
@@ -62,6 +65,7 @@ export interface LightingSettings {
  * Default user settings
  */
 export const DEFAULT_SETTING: MolvisSetting = {
+  showFps: true,
   cameraPanSpeed: 500,
   cameraRotateSpeed: 500,
   cameraZoomSpeed: 10,
@@ -231,6 +235,15 @@ export class Settings {
     return this.values.cameraMaxRadius;
   }
 
+  setShowFps(show: boolean): void {
+    this.values.showFps = show;
+    this.app.events.emit("show-fps-change", show);
+  }
+
+  getShowFps(): boolean {
+    return this.values.showFps;
+  }
+
   setLighting(config: Partial<LightingSettings>): void {
     this.values.lighting = { ...this.values.lighting, ...config };
     // Materials read getLighting() per-frame via onBind callbacks — no push needed.
@@ -279,6 +292,7 @@ export class Settings {
    * Reset all settings to defaults
    */
   reset(): void {
+    this.setShowFps(this.defaults.showFps);
     this.setCameraPanSpeed(this.defaults.cameraPanSpeed);
     this.setCameraRotateSpeed(this.defaults.cameraRotateSpeed);
     this.setCameraZoomSpeed(this.defaults.cameraZoomSpeed);
@@ -292,6 +306,7 @@ export class Settings {
   }
 
   private applyAll(): void {
+    this.setShowFps(this.values.showFps);
     this.setCameraRotateSpeed(this.values.cameraRotateSpeed);
     this.setCameraPanSpeed(this.values.cameraPanSpeed);
     this.setCameraZoomSpeed(this.values.cameraZoomSpeed);
@@ -389,6 +404,7 @@ export function defaultMolvisSettings(
     base.graphics = { ...base.graphics, ...settings.graphics };
 
   // Copy other scalar props
+  if (settings.showFps !== undefined) base.showFps = settings.showFps;
   if (settings.cameraPanSpeed !== undefined)
     base.cameraPanSpeed = settings.cameraPanSpeed;
   if (settings.cameraRotateSpeed !== undefined)

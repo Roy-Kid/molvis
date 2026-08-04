@@ -1,0 +1,147 @@
+#!/usr/bin/env node
+/**
+ * Vendor the plugin contract into the template and every plugin repo.
+ *
+ * `page/src/plugins/contract.ts` is the single source of truth. Each consumer
+ * keeps a byte-identical copy at `src/types/contract.ts` plus its own
+ * `src/types/engine.ts` binding (the one line that differs between the host
+ * and a plugin package).
+ *
+ *   node scripts/sync-plugin-contract.mjs           # write copies
+ *   node scripts/sync-plugin-contract.mjs --check   # fail on drift (CI)
+ *
+ * Extra target roots may be passed as positional args; otherwise the sibling
+ * checkouts listed in DEFAULT_TARGETS are used when they exist.
+ */
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** Host path → path inside each consumer, relative to its package root. */
+const VENDORED = [
+  ["page/src/plugins/contract.ts", "src/types/contract.ts"],
+  ["page/src/plugins/contract_testing.ts", "src/types/contract_testing.ts"],
+  ["page/src/plugins/contract_tokens.ts", "src/types/contract_tokens.ts"],
+  [
+    "scripts/vendored/check-vendored-contract.mjs",
+    "scripts/check-vendored-contract.mjs",
+  ],
+];
+
+/** Written alongside the copies so consumers can self-check offline. */
+const LOCK_PATH = "src/types/contract.lock.json";
+
+/** Sibling checkouts that vendor the contract. Missing ones are skipped. */
+const DEFAULT_TARGETS = [
+  "../molvis-plugin-template",
+  // The collection repo is itself a plugin (the "meta" package) with its own
+  // vendored copy and lock. Leaving it out let its contract drift away from the
+  // three children it ships alongside.
+  "../molvis-plugins-official",
+  "../molvis-plugins-official/plugins/alchemist",
+  "../molvis-plugins-official/plugins/carbon-tube-builder",
+  "../molvis-plugins-official/plugins/lammps-input-generator",
+  "../molvis-plugins-official/plugins/pyodide-molpy",
+];
+
+/**
+ * Plugin-side binding for `./engine`. Written once if absent, then left
+ * alone — a repo may need to point somewhere else while the contract itself
+ * stays identical everywhere.
+ */
+const ENGINE_BINDING = `/**
+ * Engine types the plugin contract refers to — **plugin binding**.
+ *
+ * \`contract.ts\` is vendored verbatim from the molvis monorepo and must not
+ * name a package only the host can resolve, so it imports these four names
+ * from here. This file is the one place a plugin repo decides where they
+ * come from; \`sync-plugin-contract.mjs\` never overwrites it.
+ *
+ * Today that is the published \`@molcrafts/molvis-core\` surface. When
+ * \`@molcrafts/molvis-plugin-api\` ships, only this file changes.
+ */
+import type { Modifier, Molvis, Overlay } from "@molcrafts/molvis-core";
+
+export type { Modifier, Molvis, Overlay };
+
+/**
+ * Factory for a plugin interaction mode.
+ *
+ * The host's real signature returns \`BaseMode\`, which is not reachable from
+ * a plugin package. Returning \`unknown\` here is deliberate: a *narrower*
+ * local guess would be a second copy of the engine contract, which is the
+ * drift this vendoring exists to stop.
+ */
+export type PluginModeFactory = (app: Molvis) => unknown;
+`;
+
+const checkOnly = process.argv.includes("--check");
+const explicit = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+const targets = (explicit.length > 0 ? explicit : DEFAULT_TARGETS)
+  .map((t) => resolve(repoRoot, t))
+  .filter((t) => {
+    if (existsSync(t)) return true;
+    console.log(`skip (not checked out): ${t}`);
+    return false;
+  });
+
+const sources = VENDORED.map(([from, to]) => {
+  const text = readFileSync(join(repoRoot, from), "utf8");
+  const hash = createHash("sha256").update(text).digest("hex").slice(0, 12);
+  console.log(`${from} sha256:${hash}`);
+  return { to, text, hash };
+});
+
+let drifted = 0;
+for (const target of targets) {
+  const label = relative(resolve(repoRoot, ".."), target);
+
+  for (const { to, text } of sources) {
+    const dest = join(target, to);
+    const current = existsSync(dest) ? readFileSync(dest, "utf8") : null;
+    if (current === text) {
+      console.log(`  ok    ${label}/${to}`);
+      continue;
+    }
+    drifted += 1;
+    if (checkOnly) {
+      const how = current === null ? "missing" : "differs from";
+      console.error(`  DRIFT ${label}/${to} — ${how} the host copy`);
+    } else {
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, text);
+      console.log(`  wrote ${label}/${to}`);
+    }
+  }
+
+  const enginePath = join(target, "src/types/engine.ts");
+  if (!existsSync(enginePath) && !checkOnly) {
+    mkdirSync(dirname(enginePath), { recursive: true });
+    writeFileSync(enginePath, ENGINE_BINDING);
+    console.log(`  wrote ${label}/src/types/engine.ts (binding, edit freely)`);
+  }
+
+  if (!checkOnly) {
+    const lock = {
+      note: "Generated by molvis scripts/sync-plugin-contract.mjs — do not edit.",
+      contractVersion: sources[0].hash,
+      files: Object.fromEntries(sources.map((s) => [s.to, s.hash])),
+    };
+    writeFileSync(
+      join(target, LOCK_PATH),
+      `${JSON.stringify(lock, null, 2)}\n`,
+    );
+  }
+}
+
+if (drifted > 0 && checkOnly) {
+  console.error(
+    "\nVendored plugin contracts are stale. From the molvis repo run:\n" +
+      "  node scripts/sync-plugin-contract.mjs",
+  );
+  process.exit(1);
+}
+if (drifted === 0) console.log("all vendored contracts in sync");

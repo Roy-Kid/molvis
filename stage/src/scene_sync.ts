@@ -96,7 +96,8 @@ export function buildFrameFromScene(
     const bondBlock = new Block();
     const iArr = new Uint32Array(bondCount);
     const jArr = new Uint32Array(bondCount);
-    const orderArr = new Uint32Array(bondCount);
+    // `order` is a float column in the Frame schema — an aromatic bond is 1.5.
+    const orderArr = new Float64Array(bondCount);
 
     for (let idx = 0; idx < bonds.length; idx++) {
       const bond = bonds[idx];
@@ -107,7 +108,7 @@ export function buildFrameFromScene(
 
     bondBlock.setColU32("atomi", iArr);
     bondBlock.setColU32("atomj", jArr);
-    bondBlock.setColU32("order", orderArr);
+    bondBlock.setColF("order", orderArr);
 
     frame.insertBlock("bonds", bondBlock);
   }

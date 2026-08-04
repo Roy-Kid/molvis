@@ -10,11 +10,8 @@
  * Centralizing here keeps each test file focused on its own assertions.
  */
 
+import { getOpfsBucket, type OpfsBucket } from "@molcrafts/molvis-core/opfs";
 import { it } from "@rstest/core";
-import {
-  getOpfsBucket,
-  type OpfsBucket,
-} from "../../../src/io/cache/opfs_root";
 
 export const opfsAvailable =
   typeof navigator !== "undefined" &&

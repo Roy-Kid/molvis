@@ -1,5 +1,6 @@
 import type { MolvisApp } from "../../app";
-import type { ModeType } from "../../mode";
+import type { ModeId } from "../../mode";
+import { pluginIdLeaf } from "../../plugin_id";
 import type { GUIComponent } from "../types";
 
 /**
@@ -28,10 +29,9 @@ export class ModePanel implements GUIComponent {
     this.element.remove();
   }
 
-  public update(mode: ModeType): void {
-    // Capitalize first letter and show only current mode
-    const modeName = mode.charAt(0).toUpperCase() + mode.slice(1);
-    this.element.textContent = modeName;
+  public update(mode: ModeId): void {
+    const leaf = pluginIdLeaf(mode);
+    this.element.textContent = leaf.charAt(0).toUpperCase() + leaf.slice(1);
   }
 
   public show(): void {

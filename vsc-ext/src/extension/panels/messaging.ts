@@ -1,14 +1,14 @@
 import { FILE_FORMAT_REGISTRY } from "@molvis/stage/io/formats";
 import * as vscode from "vscode";
+import type {
+  HostToWebviewMessage,
+  LoadMode,
+  WebviewToHostMessage,
+} from "../../protocol";
 import { resolveFileFormat } from "../loading/formatResolver";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
-import type {
-  HostToWebviewMessage,
-  Logger,
-  MolecularLoadMode,
-  WebviewToHostMessage,
-} from "../types";
+import type { Logger } from "../types";
 
 /**
  * Send a message from extension host to webview.
@@ -25,7 +25,7 @@ export async function sendLoadedFile(
   uri: vscode.Uri,
   fileLoader: MolecularFileLoader,
   logger: Logger,
-  mode?: MolecularLoadMode,
+  mode?: LoadMode,
 ): Promise<void> {
   try {
     const loaded = await fileLoader.load(uri);

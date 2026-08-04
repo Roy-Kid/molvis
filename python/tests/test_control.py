@@ -3,17 +3,30 @@ from __future__ import annotations
 import importlib
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 
 
 def import_control_module():
-    src_root = Path(__file__).resolve().parents[1] / "src"
-    if str(src_root) not in sys.path:
-        sys.path.insert(0, str(src_root))
-    sys.modules.pop("molvis.control", None)
-    return importlib.import_module("molvis.control")
+    """Load control.py by path — avoid molvis/__init__ (pulls molpy/molrs)."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "src" / "molvis" / "control.py"
+    if "molvis" not in sys.modules:
+        pkg = type(sys)("molvis")
+        pkg.__path__ = [str(path.parent)]  # type: ignore[attr-defined]
+        pkg.__package__ = "molvis"
+        sys.modules["molvis"] = pkg
+    name = "molvis.control"
+    sys.modules.pop(name, None)
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class FakeViewer:
@@ -91,7 +104,8 @@ def test_camera_set_pose_omits_unset_fields():
     )
 
     cam = control.Camera(viewer)
-    cam.set_pose(alpha=1.5, target=(0.0, 0.0, 0.0))
+    out = cam.set_pose(alpha=1.5, target=(0.0, 0.0, 0.0))
+    assert out is cam
 
     sent = viewer.calls[0]["params"]
     assert sent == {"alpha": 1.5, "target": [0.0, 0.0, 0.0]}
@@ -118,7 +132,8 @@ def test_camera_look_at_serializes_vectors():
     )
 
     cam = control.Camera(viewer)
-    cam.look_at(position=(10, 0, 0), target=(0, 0, 0), up=(0, 0, 1))
+    out = cam.look_at(position=(10, 0, 0), target=(0, 0, 0), up=(0, 0, 1))
+    assert out is cam
 
     sent = viewer.calls[0]["params"]
     assert sent["position"] == [10.0, 0.0, 0.0]
@@ -128,7 +143,7 @@ def test_camera_look_at_serializes_vectors():
 
 def test_control_mixin_seek_frame_passes_index():
     control = import_control_module()
-    viewer = FakeViewer(responses={"frame.seek": {"current": 5, "total": 100}})
+    viewer = FakeViewer(responses={"scene.seek_frame": {"current": 5, "total": 100}})
 
     class Host(control.ControlMixin, FakeViewer):
         pass
@@ -136,85 +151,20 @@ def test_control_mixin_seek_frame_passes_index():
     host = Host(responses=viewer.responses)
     result = host.seek_frame(5)
 
-    assert result == {"current": 5, "total": 100}
-    assert host.calls[0]["method"] == "frame.seek"
+    assert result is host
+    assert host.calls[0]["method"] == "scene.seek_frame"
     assert host.calls[0]["params"] == {"index": 5}
 
 
-def test_control_mixin_n_frames_uses_frame_info():
+def test_control_mixin_n_frames_reads_viewer_state():
+    """`n_frames` comes from the state snapshot, not a `frame.info` RPC."""
     control = import_control_module()
 
     class Host(control.ControlMixin, FakeViewer):
-        pass
+        def refresh_state(self, *, timeout: float = 10.0):
+            return SimpleNamespace(frame_index=3, total_frames=100)
 
-    host = Host(responses={"frame.info": {"current": 0, "total": 42}})
-
-    assert host.n_frames == 42
-    assert host.calls[0]["method"] == "frame.info"
-
-
-def test_snapshot_decodes_ndarray_png_ref():
-    control = import_control_module()
-    png_bytes = b"\x89PNG\r\n\x1a\nFAKEDATA"
-    arr = np.frombuffer(png_bytes, dtype=np.uint8)
-
-    class Host(control.ControlMixin, FakeViewer):
-        pass
-
-    host = Host(
-        responses={
-            "capture.snapshot": {
-                "format": "png",
-                "width": 640,
-                "height": 480,
-                "png_ref": arr,
-            }
-        }
-    )
-
-    result = host.snapshot(width=640, height=480)
-    assert result == png_bytes
-
-    sent = host.calls[0]["params"]
-    assert sent["width"] == 640
-    assert sent["height"] == 480
-    assert sent["transparent"] is False
-    assert sent["autoCrop"] is False
-
-
-def test_snapshot_decodes_raw_bytes_fallback():
-    control = import_control_module()
-    png_bytes = b"\x89PNG\r\n\x1a\nFAKE"
-
-    class Host(control.ControlMixin, FakeViewer):
-        pass
-
-    host = Host(
-        responses={
-            "capture.snapshot": {
-                "format": "png",
-                "width": None,
-                "height": None,
-                "png_ref": png_bytes,
-            }
-        }
-    )
-
-    assert host.snapshot() == png_bytes
-
-
-def test_snapshot_decodes_legacy_data_url():
-    control = import_control_module()
-    import base64
-
-    png_bytes = b"\x89PNG\r\n\x1a\nLEGACY"
-    data_url = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
-
-    class Host(control.ControlMixin, FakeViewer):
-        pass
-
-    host = Host(responses={"capture.snapshot": {"data": data_url}})
-    assert host.snapshot() == png_bytes
+    assert Host().n_frames == 100
 
 
 def test_render_animation_orchestrates_seek_pose_snapshot(tmp_path: Path, monkeypatch):
@@ -222,7 +172,8 @@ def test_render_animation_orchestrates_seek_pose_snapshot(tmp_path: Path, monkey
     png_bytes = b"\x89PNG\r\n\x1a\nFRAME"
 
     class Host(control.ControlMixin, FakeViewer):
-        pass
+        def snapshot(self, timeout: float = 5.0) -> bytes:
+            return png_bytes
 
     pose_response = {
         "success": True,
@@ -237,9 +188,8 @@ def test_render_animation_orchestrates_seek_pose_snapshot(tmp_path: Path, monkey
     }
     host = Host(
         responses={
-            "frame.info": {"current": 0, "total": 3},
+            "scene.seek_frame": {"index": 0, "total": 3},
             "camera.set_pose": pose_response,
-            "capture.snapshot": {"png_ref": png_bytes},
         }
     )
 
@@ -281,7 +231,8 @@ def test_render_animation_orchestrates_seek_pose_snapshot(tmp_path: Path, monkey
 
     methods = [c["method"] for c in host.calls]
     assert methods.count("camera.set_pose") == 3
-    assert methods.count("capture.snapshot") == 3
+    # Seek is its own round-trip now; the capture itself is snapshot.take.
+    assert methods.count("scene.seek_frame") == 3
 
 
 def test_render_animation_rejects_mismatched_lengths():
@@ -298,3 +249,92 @@ def test_render_animation_rejects_mismatched_lengths():
         host.render_animation(
             "out.mp4", frame_indices=[0, 1, 2], camera_path=[None, None]
         )
+
+
+def test_camera_track_interpolates_keypoints_and_look_at(monkeypatch):
+    """track() is the one API: key points + look-at → look_at samples."""
+    control = import_control_module()
+    pose_response = {
+        "pose": {
+            "alpha": 0.0,
+            "beta": 1.0,
+            "radius": 10.0,
+            "target": [0.0, 0.0, 0.0],
+            "position": [10.0, 0.0, 0.0],
+            "up": [0.0, 0.0, 1.0],
+        },
+    }
+    viewer = FakeViewer(responses={"camera.look_at": pose_response})
+    cam = control.Camera(viewer)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(control, "_sleep", lambda dt: sleeps.append(dt))
+
+    final = cam.track(
+        [(10, 0, 0), (0, 10, 0), (-10, 0, 0)],
+        target=(0, 0, 0),
+        duration=1.0,
+        fps=4,
+        rate=1.0,
+    )
+    assert final is cam
+    look_calls = [c for c in viewer.calls if c["method"] == "camera.look_at"]
+    assert len(look_calls) >= 4
+    assert look_calls[0]["params"]["position"] == [10.0, 0.0, 0.0]
+    assert look_calls[0]["params"]["target"] == [0.0, 0.0, 0.0]
+    assert all(c["params"]["target"] == [0.0, 0.0, 0.0] for c in look_calls)
+    # duration=1, fps=4 → n_frames = int(4.999…)+1 = 5; dt = 1/4 = 0.25
+    assert len(sleeps) == len(look_calls) - 1
+    assert all(abs(dt - 0.25) < 1e-9 for dt in sleeps)
+
+
+def test_camera_track_rate_scales_wall_clock_not_sample_count(monkeypatch):
+    """rate speeds up / slows down wall time; fps still sets path samples."""
+    control = import_control_module()
+    pose_response = {
+        "pose": {
+            "alpha": 0.0,
+            "beta": 1.0,
+            "radius": 10.0,
+            "target": [0.0, 0.0, 0.0],
+            "position": [10.0, 0.0, 0.0],
+            "up": [0.0, 0.0, 1.0],
+        },
+    }
+    viewer = FakeViewer(responses={"camera.look_at": pose_response})
+    cam = control.Camera(viewer)
+    sleeps: list[float] = []
+    monkeypatch.setattr(control, "_sleep", lambda dt: sleeps.append(dt))
+
+    cam.track(
+        [(10, 0, 0), (0, 10, 0)],
+        target=(0, 0, 0),
+        duration=2.0,
+        fps=10,
+        rate=2.0,
+    )
+    # content samples: n_frames = int(2*10 + 0.999…)+1 = 21
+    # wall dt = (2/2) / 20 = 0.05
+    look_calls = [c for c in viewer.calls if c["method"] == "camera.look_at"]
+    assert len(look_calls) == 21
+    assert len(sleeps) == 20
+    assert all(abs(dt - 0.05) < 1e-9 for dt in sleeps)
+
+
+def test_camera_track_defaults_fps_to_60():
+    """Signature default for fps is 60 (playback-rate parameter is rate)."""
+    control = import_control_module()
+    import inspect
+
+    sig = inspect.signature(control.Camera.track)
+    assert sig.parameters["fps"].default == 60.0
+    assert sig.parameters["rate"].default == 1.0
+
+
+def test_camera_set_pose_requires_at_least_one_field():
+    control = import_control_module()
+    cam = control.Camera(FakeViewer())
+    import pytest
+
+    with pytest.raises(TypeError, match="at least one"):
+        cam.set_pose()

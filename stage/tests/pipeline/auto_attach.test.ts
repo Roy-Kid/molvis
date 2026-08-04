@@ -78,6 +78,17 @@ describe("applyAutoAttach", () => {
     const ids = applyAutoAttach(pipeline, frame, new Set(["Ribbon"]));
     expect(ids).not.toContain("Ribbon");
   });
+
+  it("is idempotent: a second call does not stack another Particles layer", () => {
+    const pipeline = new ModifierPipeline();
+    const frame = xyzShapedFrame();
+    const first = applyAutoAttach(pipeline, frame);
+    expect(first).toContain("Particles");
+    const sizeAfterFirst = pipelineSize(pipeline);
+    const second = applyAutoAttach(pipeline, frame);
+    expect(second).not.toContain("Particles");
+    expect(pipelineSize(pipeline)).toBe(sizeAfterFirst);
+  });
 });
 
 function pipelineSize(pipeline: ModifierPipeline): number {

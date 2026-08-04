@@ -147,25 +147,14 @@ function materializeWorkingFromSource(source: Frame): {
     const jCol =
       bondBlock.viewColU32("atomj") ?? bondBlock.viewColU32("j") ?? null;
     if (iCol && jCol) {
-      // order optional — missing → single bond. Check dtype; never blind viewCol*.
-      const orderDtype = bondBlock.dtype("order");
-      let orderF: Float64Array | null = null;
-      let orderU: Uint32Array | null = null;
-      if (orderDtype === "f64" || orderDtype === "f32") {
-        orderF = bondBlock.viewColF("order");
-      } else if (orderDtype === "u32") {
-        orderU = bondBlock.viewColU32("order");
-      }
+      // order optional — missing → single bond.
+      const orderCol = bondBlock.dtype("order")
+        ? bondBlock.viewColF("order")
+        : undefined;
       for (let b = 0; b < bondBlock.nrows(); b++) {
         bonds.push([iCol[b], jCol[b]]);
-        if (orderF) {
-          const o = orderF[b];
-          orders.push(Number.isFinite(o) && o > 0 ? o : 1);
-        } else if (orderU) {
-          orders.push(orderU[b] > 0 ? orderU[b] : 1);
-        } else {
-          orders.push(1);
-        }
+        const o = orderCol?.[b];
+        orders.push(o !== undefined && Number.isFinite(o) && o > 0 ? o : 1);
       }
     }
   }

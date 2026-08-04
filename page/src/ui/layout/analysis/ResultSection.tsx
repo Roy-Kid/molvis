@@ -6,11 +6,6 @@ import { SidebarSection } from "@/ui/layout/SidebarSection";
 import { AnalysisAlert } from "./AnalysisAlert";
 
 interface ResultSectionProps {
-  /**
-   * @deprecated Ignored — result meta is not shown under the title.
-   * Kept so existing call sites keep typechecking.
-   */
-  subtitle?: string;
   /** When true, show an "outdated" alert — params/scope changed since last run. */
   stale?: boolean;
   /** Optional CSV/export handler shown in the header row. */

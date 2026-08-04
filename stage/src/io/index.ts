@@ -34,6 +34,14 @@ import { BlobRangeSource } from "./sources";
 import { loadZarrFiles } from "./zarr";
 
 export {
+  BOX_MIN_DRAW_LENGTH,
+  BOX_ZERO_EPS,
+  hasPresentBox,
+  hasUsableBox,
+  normalizeFrameBox,
+  shouldDrawBox,
+} from "./box_presence";
+export {
   canStream,
   describeFormat,
   extractMessage,
@@ -320,9 +328,9 @@ async function installPrimaryTrajectory(
 
   await app.replaceScene(trajectory, { sourceType: "file", filename });
 
-  // Auto-attach format-specific decoration modifiers (e.g. backbone ribbon)
-  // based on the columns the freshly loaded frame carries, nested under the
-  // DS that setTrajectory installed at pipeline head.
+  // replaceScene already auto-attaches default Draws (Particles/Bonds/…).
+  // Re-run is idempotent and still useful if a future load path mutates the
+  // frame after replace; keep the head DS for bond-mapping nesting.
   const frame0 = app.system.frame;
   const headDS = app.modifierPipeline
     .getModifiers()
@@ -343,7 +351,7 @@ async function installPrimaryTrajectory(
   }
 
   await app.applyPipeline({ fullRebuild: true });
-  app.world.resetCamera();
+  app.world.fit();
   app.setMode("view");
 }
 
@@ -453,7 +461,7 @@ export async function loadFileContent(
       dispose();
       throw err;
     }
-    app.world.resetCamera();
+    app.world.fit();
     app.setMode("view");
     return;
   }
@@ -575,7 +583,7 @@ export async function loadFileStream(
       text: `Loaded ${frameCount} frame(s) from ${filename}`,
       type: "info",
     });
-    app.world.resetCamera();
+    app.world.fit();
     app.setMode("view");
     return { runtime };
   }

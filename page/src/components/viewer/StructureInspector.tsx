@@ -1,5 +1,5 @@
 import type { Molvis } from "@molvis/stage";
-import { Edit3, MousePointer2, Move, Ruler, Video } from "lucide-react";
+import { Code2, Edit3, MousePointer2, Move, Ruler, Video } from "lucide-react";
 import type React from "react";
 import { useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { usePluginModePanels, usePluginModeTabs } from "@/plugins";
 import { EditPanel } from "@/ui/modes/edit/EditPanel";
 import { ManipulatePanel } from "@/ui/modes/manipulate/ManipulatePanel";
@@ -38,9 +39,9 @@ const BUILTIN_MODE_ITEMS: Array<{
 /**
  * Right-side tool inspector.
  *
- * Tab strip is **built-in modes only**. Plugin modes are activated from the
- * command palette (Ctrl/Cmd+Shift+P) and render in this panel without adding
- * chrome to the native tab strip.
+ * Mode tabs = built-in modes **plus** plugin modes from
+ * `api.modes.register(..., { tab, panel })`. Plugin modes extend the same
+ * strip as View/Select/… — not a separate overlay with a Back button.
  */
 export const StructureInspector: React.FC<StructureInspectorProps> = ({
   app,
@@ -49,79 +50,35 @@ export const StructureInspector: React.FC<StructureInspectorProps> = ({
   headerAction,
 }) => {
   const pluginTabs = usePluginModeTabs();
-  const pluginPanels = usePluginModePanels(currentMode);
 
-  const isBuiltin = BUILTIN_MODE_ITEMS.some((m) => m.value === currentMode);
-  const pluginModeLabel = useMemo(() => {
-    if (isBuiltin) return null;
-    return (
-      pluginTabs.find((t) => t.mode === currentMode)?.label ??
-      currentMode.replace(/^plugin\./, "")
-    );
-  }, [isBuiltin, pluginTabs, currentMode]);
+  const modeItems = useMemo(() => {
+    const pluginItems = pluginTabs.map((tab) => ({
+      value: tab.mode,
+      label: tab.label,
+      icon: null as React.ComponentType<{ className?: string }> | null,
+      customIcon: tab.icon as React.ReactNode | undefined,
+      order: tab.order ?? 100,
+    }));
+    const builtin = BUILTIN_MODE_ITEMS.map((item) => ({
+      ...item,
+      customIcon: undefined as React.ReactNode | undefined,
+    }));
+    return [...builtin, ...pluginItems].sort((a, b) => a.order - b.order);
+  }, [pluginTabs]);
 
-  const colCount = Math.min(Math.max(BUILTIN_MODE_ITEMS.length, 1), 8);
+  // Controlled value must match a trigger; fall back if mode unregistered.
+  const tabValue = useMemo(() => {
+    if (modeItems.some((m) => m.value === currentMode)) return currentMode;
+    return "view";
+  }, [currentMode, modeItems]);
+
+  const colCount = Math.min(Math.max(modeItems.length, 1), 10);
 
   const handlePointerDown = (event: React.PointerEvent) => {
     const target = event.target as HTMLElement | null;
     if (target?.closest(".molvis-sketch-container")) return;
     event.stopPropagation();
   };
-
-  // Plugin workbench: no plugin tabs in the strip — full panel + back.
-  if (!isBuiltin) {
-    return (
-      <section
-        aria-label="Plugin tools"
-        className="flex h-full min-h-0 w-full flex-col bg-background"
-        onPointerDown={handlePointerDown}
-      >
-        <div className="flex h-toolbar shrink-0 items-center gap-2 border-b border-border/70 bg-background/95 px-2 backdrop-blur">
-          <div className="min-w-0 flex-1 truncate text-xs font-semibold tracking-tight">
-            {pluginModeLabel}
-          </div>
-          <button
-            type="button"
-            className="shrink-0 rounded-control px-2 py-1 text-micro text-muted-foreground hover:bg-interactive hover:text-foreground"
-            onClick={() => onModeChange("view")}
-          >
-            Back
-          </button>
-          {headerAction}
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {pluginPanels.length === 0 ? (
-            <div className="p-3 text-xs text-muted-foreground">
-              No tools for this mode. Use the command palette (
-              <kbd className="rounded border border-border/60 px-1 font-mono">
-                Ctrl/⌘+Shift+P
-              </kbd>
-              ).
-            </div>
-          ) : (
-            pluginPanels.map((panel) => {
-              const Panel = panel.render;
-              return (
-                <div
-                  key={panel.id}
-                  className="flex min-h-0 flex-1 flex-col overflow-hidden"
-                >
-                  {panel.title ? (
-                    <div className="shrink-0 border-b border-border/50 px-2 py-1.5 text-micro font-semibold uppercase tracking-wide text-muted-foreground">
-                      {panel.title}
-                    </div>
-                  ) : null}
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    <Panel app={app} />
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section
@@ -130,21 +87,21 @@ export const StructureInspector: React.FC<StructureInspectorProps> = ({
       onPointerDown={handlePointerDown}
     >
       <Tabs
-        value={currentMode}
+        value={tabValue}
         onValueChange={onModeChange}
-        className="h-full min-h-0 gap-0"
+        className="flex h-full min-h-0 flex-col gap-0"
       >
-        <div className="flex h-toolbar shrink-0 items-center gap-1 border-b border-border/70 bg-background/95 px-2 backdrop-blur">
+        <div className="flex h-7 shrink-0 items-center gap-0.5 px-1">
           <TabsList
             variant="line"
             aria-label="Viewer modes"
-            className="grid h-full min-w-0 flex-1 gap-0 rounded-none p-0"
+            className="grid h-full min-w-0 flex-1 gap-0 rounded-none border-0 bg-transparent p-0"
             style={{
               gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
             }}
           >
-            {BUILTIN_MODE_ITEMS.map((item) => {
-              const Icon = item.icon;
+            {modeItems.map((item) => {
+              const BuiltinIcon = item.icon;
               return (
                 <Tooltip key={item.value}>
                   <TooltipTrigger asChild>
@@ -152,9 +109,29 @@ export const StructureInspector: React.FC<StructureInspectorProps> = ({
                       value={item.value}
                       aria-label={`${item.label} tool`}
                       disabled={app === null}
-                      className="h-full min-w-0 rounded-none px-0 after:bottom-0"
+                      className={cn(
+                        "h-full min-w-0 rounded-none border-0 bg-transparent px-0 shadow-none",
+                        // Active mode: accent green icon (no fill card).
+                        "text-muted-foreground hover:text-foreground",
+                        "data-[state=active]:bg-transparent data-[state=active]:text-accent",
+                        "group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent",
+                        "group-data-[variant=line]/tabs-list:data-[state=active]:text-accent",
+                        // Hairline underline in accent when selected.
+                        "after:bottom-0 after:bg-accent",
+                      )}
                     >
-                      <Icon aria-hidden="true" />
+                      {item.customIcon ? (
+                        <span
+                          className="flex size-4 items-center justify-center [&_svg]:size-4"
+                          aria-hidden
+                        >
+                          {item.customIcon}
+                        </span>
+                      ) : BuiltinIcon ? (
+                        <BuiltinIcon aria-hidden="true" />
+                      ) : (
+                        <Code2 aria-hidden="true" className="size-4" />
+                      )}
                       <span className="sr-only">{item.label}</span>
                     </TabsTrigger>
                   </TooltipTrigger>
@@ -166,22 +143,92 @@ export const StructureInspector: React.FC<StructureInspectorProps> = ({
           {headerAction}
         </div>
 
-        <TabsContent value="view" className="min-h-0 overflow-y-auto">
+        {/*
+          overflow-hidden + flex column so mode bodies get a bounded height
+          and can split list/properties. overflow-y-auto here broke the chain
+          (children with h-full never constrained → no adaptive split).
+        */}
+        <TabsContent
+          value="view"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
           <ViewPanel app={app} />
         </TabsContent>
-        <TabsContent value="select" className="min-h-0 overflow-y-auto">
-          <SelectPanel app={app} />
+        <TabsContent
+          value="select"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SelectPanel app={app} />
+          </div>
         </TabsContent>
-        <TabsContent value="edit" className="min-h-0 overflow-y-auto">
-          <EditPanel app={app} />
+        <TabsContent
+          value="edit"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <EditPanel app={app} />
+          </div>
         </TabsContent>
-        <TabsContent value="measure" className="min-h-0 overflow-y-auto">
-          <MeasurePanel app={app} />
+        <TabsContent
+          value="measure"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <MeasurePanel app={app} />
+          </div>
         </TabsContent>
-        <TabsContent value="manipulate" className="min-h-0 overflow-y-auto">
-          <ManipulatePanel app={app} />
+        <TabsContent
+          value="manipulate"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ManipulatePanel app={app} />
+          </div>
         </TabsContent>
+
+        {pluginTabs.map((tab) => (
+          <TabsContent
+            key={tab.mode}
+            value={tab.mode}
+            className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden data-[state=inactive]:hidden"
+          >
+            <PluginModePane app={app} mode={tab.mode} />
+          </TabsContent>
+        ))}
       </Tabs>
     </section>
   );
 };
+
+/** Per-plugin-mode body; keeps hooks valid under a stable component identity. */
+function PluginModePane({ app, mode }: { app: Molvis | null; mode: string }) {
+  const panels = usePluginModePanels(mode);
+
+  if (panels.length === 0) {
+    return (
+      <div className="p-3 text-xs text-muted-foreground">
+        No tools for this mode.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {panels.map((panel) => {
+        const Panel = panel.render;
+        return (
+          <div
+            key={panel.id}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            {/* Mode tab already names the workbench — no extra section chrome. */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <Panel app={app} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

@@ -1,3 +1,4 @@
+import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 export type SketchAction =
   | { type: "undo" }
   | { type: "redo" }
@@ -30,7 +31,10 @@ export function resolveKeymap(e: {
   shiftKey?: boolean;
   altKey?: boolean;
 }): SketchAction | null {
-  const mod = !!(e.metaKey || e.ctrlKey);
+  const mod = isCtrlOrMeta({
+    ctrlKey: !!e.ctrlKey,
+    metaKey: !!e.metaKey,
+  });
   if (mod && e.key.toLowerCase() === "z" && e.shiftKey) return { type: "redo" };
   if (mod && e.key.toLowerCase() === "z") return { type: "undo" };
   if (mod && e.key.toLowerCase() === "y") return { type: "redo" };

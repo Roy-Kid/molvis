@@ -7,9 +7,17 @@ import {
   Puzzle,
   Server,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,73 +25,146 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { cn } from "@/lib/utils";
-import { PluginsSection } from "@/plugins";
+import {
+  PluginsSection,
+  usePluginRuntimeStates,
+  usePluginSettingsSections,
+} from "@/plugins";
 import { AppearanceSection } from "./AppearanceSection";
 import { BackendSection } from "./BackendSection";
 import { CameraSection } from "./CameraSection";
 import { GraphicsSection } from "./GraphicsSection";
 import { GridSection } from "./GridSection";
+import { SettingsSection } from "./SettingsSection";
+import { StageStyleSection } from "./StageStyleSection";
 
 interface SettingsDialogProps {
   app: Molvis | null;
 }
 
-interface SettingsCategory {
+interface SettingsNavItem {
   id: string;
   label: string;
   icon: React.ReactNode;
 }
 
-const CORE_CATEGORIES: SettingsCategory[] = [
-  {
-    id: "appearance",
-    label: "Appearance",
-    icon: <Palette className="size-3.5" aria-hidden />,
-  },
-  {
-    id: "graphics",
-    label: "Graphics",
-    icon: <Monitor className="size-3.5" aria-hidden />,
-  },
-  {
-    id: "grid",
-    label: "Grid",
-    icon: <Grid3x3 className="size-3.5" aria-hidden />,
-  },
-  {
-    id: "camera",
-    label: "Camera",
-    icon: <Camera className="size-3.5" aria-hidden />,
-  },
-  {
-    id: "backend",
-    label: "Backend",
-    icon: <Server className="size-3.5" aria-hidden />,
-  },
-  {
-    id: "plugins",
-    label: "Plugins",
-    icon: <Puzzle className="size-3.5" aria-hidden />,
-  },
-];
+type SettingsEntry = SettingsNavItem & {
+  group: string;
+  groupLabel?: string;
+  order?: number;
+  content: React.ReactNode;
+};
 
-/**
- * Settings dialog: left category rail + continuous right-hand page.
- * Clicking a category scrolls the page to that section; scroll position
- * updates the active category (scroll-spy).
- */
+/** Centered group label between two shadcn Separators. */
+function NavSeparator({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-1.5 pt-2.5 pb-1">
+      <Separator className="min-w-0 flex-1" />
+      <span className="shrink-0 text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <Separator className="min-w-0 flex-1" />
+    </div>
+  );
+}
+
 export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
+  const pluginSections = usePluginSettingsSections();
+  const pluginStates = usePluginRuntimeStates();
+  const sections = useMemo<SettingsEntry[]>(() => {
+    const builtIns: SettingsEntry[] = [
+      {
+        id: "appearance",
+        label: "Appearance",
+        group: "general",
+        icon: <Palette className="size-3.5" aria-hidden />,
+        content: <AppearanceSection app={app} sectionId="appearance" />,
+      },
+      {
+        id: "backend",
+        label: "Backend",
+        group: "general",
+        icon: <Server className="size-3.5" aria-hidden />,
+        content: <BackendSection sectionId="backend" />,
+      },
+      {
+        id: "plugins",
+        label: "Plugins",
+        group: "general",
+        icon: <Puzzle className="size-3.5" aria-hidden />,
+        content: <PluginsSection sectionId="plugins" />,
+      },
+      {
+        id: "style",
+        label: "Style",
+        group: "stage",
+        icon: <Sparkles className="size-3.5" aria-hidden />,
+        content: <StageStyleSection app={app} sectionId="style" />,
+      },
+      {
+        id: "graphics",
+        label: "Graphics",
+        group: "stage",
+        icon: <Monitor className="size-3.5" aria-hidden />,
+        content: <GraphicsSection app={app} sectionId="graphics" />,
+      },
+      {
+        id: "grid",
+        label: "Grid",
+        group: "stage",
+        icon: <Grid3x3 className="size-3.5" aria-hidden />,
+        content: <GridSection app={app} sectionId="grid" />,
+      },
+      {
+        id: "camera",
+        label: "Camera",
+        group: "stage",
+        icon: <Camera className="size-3.5" aria-hidden />,
+        content: <CameraSection app={app} sectionId="camera" />,
+      },
+    ];
+    const contributed = pluginSections.map((section) => {
+      const PluginSettings = section.render;
+      const owner = pluginStates.find(
+        (state) => state.id && section.id.startsWith(`plugin.${state.id}.`),
+      );
+      const groupLabel = section.group ?? owner?.name ?? "Plugin";
+      return {
+        id: section.id,
+        label: section.title,
+        group: `plugin:${groupLabel}`,
+        groupLabel,
+        order: section.order,
+        icon: <Puzzle className="size-3.5" aria-hidden />,
+        content: (
+          <SettingsSection id={section.id} title={section.title}>
+            <PluginSettings app={app} />
+            {owner?.version ? (
+              <div className="mt-6 text-right font-mono text-micro text-muted-foreground">
+                v{owner.version}
+              </div>
+            ) : null}
+          </SettingsSection>
+        ),
+      };
+    });
+    contributed.sort(
+      (a, b) =>
+        (a.groupLabel ?? "").localeCompare(b.groupLabel ?? "") ||
+        (a.order ?? 0) - (b.order ?? 0),
+    );
+    return builtIns.concat(contributed);
+  }, [app, pluginSections, pluginStates]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeId, setActiveId] = useState(CORE_CATEGORIES[0].id);
-  /** Suppress scroll-spy briefly after a nav click so active state stays put. */
+  const [activeId, setActiveId] = useState("appearance");
   const navLockUntil = useRef(0);
-
-  // Host settings only — plugin settings must not inject into native chrome.
-  // Use the command palette for plugin actions.
-  const categories = CORE_CATEGORIES;
-  const categoryIds = useMemo(() => CORE_CATEGORIES.map((c) => c.id), []);
+  const categoryIds = useMemo(
+    () => sections.map((section) => section.id),
+    [sections],
+  );
 
   const scrollToCategory = useCallback((id: string) => {
     const root = scrollRef.current;
@@ -103,7 +184,6 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
     root.scrollTo({ top: Math.max(0, top - 8), behavior: "smooth" });
   }, []);
 
-  // Scroll-spy: highlight the section nearest the top of the viewport.
   useEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
@@ -120,7 +200,6 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
       if (performance.now() < navLockUntil.current) return;
 
       const rootTop = root.getBoundingClientRect().top;
-      // Prefer the last section whose top has crossed ~1/4 of the pane.
       const threshold = rootTop + root.clientHeight * 0.28;
       let current = nodes[0].dataset.settingsSection ?? nodes[0].id;
 
@@ -156,64 +235,60 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ app }) => {
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1">
-          {/* Category rail */}
           <nav
             aria-label="Settings categories"
             className="flex w-[9.5rem] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border/70 bg-panel/40 p-2 sm:w-44"
           >
-            {categories.map((cat) => {
-              const isActive = activeId === cat.id;
+            {sections.map((item, index) => {
+              const isActive = activeId === item.id;
               return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => scrollToCategory(cat.id)}
-                  aria-current={isActive ? "true" : undefined}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-control border-l-2 px-2.5 py-1.5 text-left text-micro transition-colors duration-(--motion-fast) ease-standard",
-                    isActive
-                      ? "border-accent bg-accent/12 font-medium text-foreground"
-                      : "border-transparent text-muted-foreground hover:bg-interactive hover:text-foreground",
-                  )}
-                >
-                  <span
+                <Fragment key={item.id}>
+                  {item.group !== "general" &&
+                  sections[index - 1]?.group !== item.group ? (
+                    <NavSeparator label={item.groupLabel ?? item.group} />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => scrollToCategory(item.id)}
+                    aria-current={isActive ? "true" : undefined}
                     className={cn(
-                      "shrink-0",
-                      isActive ? "text-accent" : "text-muted-foreground",
+                      "flex w-full items-center gap-2 rounded-control border-l-2 px-2.5 py-1.5 text-left text-micro transition-colors duration-(--motion-fast) ease-standard",
+                      isActive
+                        ? "border-accent bg-accent/12 font-medium text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-interactive hover:text-foreground",
                     )}
                   >
-                    {cat.icon}
-                  </span>
-                  <span className="truncate">{cat.label}</span>
-                </button>
+                    <span
+                      className={cn(
+                        "shrink-0",
+                        isActive ? "text-accent" : "text-muted-foreground",
+                      )}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                </Fragment>
               );
             })}
           </nav>
 
-          {/* Continuous settings page */}
           <div
             ref={scrollRef}
             className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
           >
             <div className="space-y-0 px-5 py-4 sm:px-6">
-              <div className="border-b border-border/60 py-5 first:pt-1">
-                <AppearanceSection app={app} sectionId="appearance" />
-              </div>
-              <div className="border-b border-border/60 py-5">
-                <GraphicsSection app={app} sectionId="graphics" />
-              </div>
-              <div className="border-b border-border/60 py-5">
-                <GridSection app={app} sectionId="grid" />
-              </div>
-              <div className="border-b border-border/60 py-5">
-                <CameraSection app={app} sectionId="camera" />
-              </div>
-              <div className="border-b border-border/60 py-5">
-                <BackendSection sectionId="backend" />
-              </div>
-              <div className="py-5 last:pb-8">
-                <PluginsSection sectionId="plugins" />
-              </div>
+              {sections.map((section, index) => (
+                <div
+                  key={section.id}
+                  className={cn(
+                    "py-5 first:pt-1 last:pb-8",
+                    index < sections.length - 1 && "border-b border-border/60",
+                  )}
+                >
+                  {section.content}
+                </div>
+              ))}
             </div>
           </div>
         </div>

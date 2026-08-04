@@ -16,12 +16,14 @@ import {
   DeleteBondCommand,
   DrawAtomCommand,
   DrawBondCommand,
+  SetAtomElementCommand,
+  SetBondOrderCommand,
 } from "../commands/draw";
 import { PlaceMoleculeCommand } from "../commands/place_molecule";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { BindingEvent, HitResult, MenuItem } from "./types";
+import type { BindingEvent, MenuItem, SceneHit } from "./types";
 
 /**
  * =============================
@@ -156,7 +158,7 @@ class EditModeContextMenu extends ContextMenuController {
   }
 
   protected shouldShowMenu(
-    _hit: HitResult | null,
+    _hit: SceneHit | null,
     isDragging: boolean,
   ): boolean {
     // Menu on any non-drag right-click; atom/bond Delete lives in the menu
@@ -164,7 +166,7 @@ class EditModeContextMenu extends ContextMenuController {
     return !isDragging;
   }
 
-  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+  protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
     if (header) {
@@ -239,8 +241,10 @@ class EditMode extends BaseMode {
   private hoverAtom: AbstractMesh | null = null;
   private hoverAtomIndex = -1; // Track thin instance index
   private pendingAtom = false;
+  private pendingAtomStart: Vector3 | null = null;
   private clickedAtom: AbstractMesh | null = null;
   private clickedBond: AbstractMesh | null = null;
+  private clickedBondIndex = -1;
 
   private element_ = "C";
   private bondOrder_ = 1;
@@ -331,6 +335,7 @@ class EditMode extends BaseMode {
     const isLeft = pointerInfo.event.button === 0;
     this.clickedAtom = null;
     this.clickedBond = null;
+    this.clickedBondIndex = -1;
 
     if (isLeft) {
       // Stamp template (SMILES / sketch / download): same empty-click arm as a
@@ -358,15 +363,34 @@ class EditMode extends BaseMode {
 
       if (hit && hit.type === "bond" && hit.mesh) {
         this.clickedBond = hit.mesh;
+        this.clickedBondIndex = hit.thinInstanceIndex ?? -1;
         return;
       }
 
       this.pendingAtom = true;
+      this.pendingAtomStart = this.projectPointerOnScreenPlane();
+      this.world.camera.detachControl();
     }
   }
 
   override async _on_pointer_move(pointerInfo: PointerInfo) {
     await super._on_pointer_move(pointerInfo);
+
+    if (this.pendingAtom && this.pendingAtomStart) {
+      const moved = this.get_pointer_xy()
+        .subtract(this._pointer_down_xy)
+        .length();
+      if (moved > 0.2) {
+        const xyz = this.projectPointerOnScreenPlane(this.pendingAtomStart);
+        if (xyz) {
+          this.previews.showAtom(xyz, 0.5, 0.5);
+          const style = this.app.styleManager.getAtomStyle(this.element);
+          const color = Color3.FromHexString(style.color);
+          this.previews.showBond([this.pendingAtomStart, xyz], color, color);
+        }
+      }
+      return;
+    }
 
     if (!this.startAtom) return;
 
@@ -456,6 +480,15 @@ class EditMode extends BaseMode {
       !this._is_dragging &&
       this.startAtom === this.clickedAtom
     ) {
+      const meta = this.world.sceneIndex.getMeta(
+        this.clickedAtom.uniqueId,
+        this.startAtomIndex !== -1 ? this.startAtomIndex : undefined,
+      );
+      if (meta?.type === "atom" && meta.element !== this.element) {
+        void this.app.commandManager.execute(
+          new SetAtomElementCommand(this.app, meta.atomId, this.element),
+        );
+      }
       this.world.camera.attachControl(
         this.world.scene.getEngine().getRenderingCanvas(),
         false,
@@ -467,7 +500,17 @@ class EditMode extends BaseMode {
     }
 
     if (isLeft && this.clickedBond && !this._is_dragging) {
+      const meta = this.world.sceneIndex.getMeta(
+        this.clickedBond.uniqueId,
+        this.clickedBondIndex !== -1 ? this.clickedBondIndex : undefined,
+      );
+      if (meta?.type === "bond" && meta.order !== this.bondOrder) {
+        void this.app.commandManager.execute(
+          new SetBondOrderCommand(this.app, meta.bondId, this.bondOrder),
+        );
+      }
       this.clickedBond = null;
+      this.clickedBondIndex = -1;
       return;
     }
 
@@ -578,12 +621,59 @@ class EditMode extends BaseMode {
       // Shared with lone-atom placement: screen-plane hit under the pointer.
       this.placeAtPointer();
       this.pendingAtom = false;
+      this.pendingAtomStart = null;
+      this.world.camera.attachControl(
+        this.world.scene.getEngine().getRenderingCanvas(),
+        false,
+      );
       return;
     }
 
+    if (isLeft && this.pendingAtom && this.pendingAtomStart) {
+      const end = this.projectPointerOnScreenPlane(this.pendingAtomStart);
+      if (end) {
+        const startId = this.app.world.sceneIndex.getNextAtomId();
+        const endId = startId + 1;
+        void this.app.commandManager.execute(
+          new CompositeCommand(this.app, [
+            new DrawAtomCommand(this.app, this.pendingAtomStart.clone(), {
+              element: this.element,
+              name: makeId("atom"),
+              atomId: startId,
+            }),
+            new DrawAtomCommand(this.app, end, {
+              element: this.element,
+              name: makeId("atom"),
+              atomId: endId,
+            }),
+            new DrawBondCommand(this.app, this.pendingAtomStart, end, {
+              order: this.bondOrder,
+              atomId1: startId,
+              atomId2: endId,
+            }),
+          ]),
+        );
+      }
+      this.pendingAtom = false;
+      this.pendingAtomStart = null;
+      this.previews.clear();
+      this.world.camera.attachControl(
+        this.world.scene.getEngine().getRenderingCanvas(),
+        false,
+      );
+      return;
+    }
+
+    // Projection can fail transiently (for example while the camera has no
+    // usable forward ray). Always release an empty-canvas gesture cleanly.
     if (isLeft && this.pendingAtom) {
       this.pendingAtom = false;
-      return;
+      this.pendingAtomStart = null;
+      this.previews.clear();
+      this.world.camera.attachControl(
+        this.world.scene.getEngine().getRenderingCanvas(),
+        false,
+      );
     }
   }
 
@@ -630,7 +720,7 @@ class EditMode extends BaseMode {
    */
   override onRightClickNotConsumed(
     _pointerInfo: PointerInfo,
-    _hit: HitResult | null,
+    _hit: SceneHit | null,
   ): void {
     // no-op — destructive actions only via menu
   }
@@ -646,17 +736,23 @@ class EditMode extends BaseMode {
   /** Esc cancels the stamp template so further clicks place lone atoms again. */
   protected override _on_press_escape(): void {
     this.pendingAtom = false;
+    this.pendingAtomStart = null;
     if (this.pendingMolecule_) {
       this.pendingMolecule_.free();
       this.pendingMolecule_ = null;
     }
     this.previews.clear();
+    this.world.camera.attachControl(
+      this.world.scene.getEngine().getRenderingCanvas(),
+      false,
+    );
   }
 
   public finish() {
     this.startAtom = null;
     this.startAtomIndex = -1;
     this.pendingAtom = false;
+    this.pendingAtomStart = null;
     if (this.pendingMolecule_) {
       this.pendingMolecule_.free();
       this.pendingMolecule_ = null;

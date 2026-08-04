@@ -1,4 +1,5 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
+import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import {
   SetAtomColorCommand,
   SetBondColorCommand,
@@ -56,7 +57,7 @@ import {
 } from "../style/custom_color";
 import type { MoleculeData } from "../types";
 import { DEFAULT_BOND_SCREEN_PX, ViewportCoords } from "./coords";
-import { type HitResult, HitTester } from "./hit_test";
+import { type BoardHit, HitTester } from "./hit_test";
 import { resolveKeymap } from "./keymap";
 import { SketchRenderer, type SketchRenderTheme } from "./sketch_renderer";
 import { ViewportController } from "./viewport";
@@ -163,7 +164,7 @@ export class SketchBoard {
 
   private activePointerId: number | null = null;
   private pointerDoc: Point | null = null;
-  private hover: HitResult = { kind: "none" };
+  private hover: BoardHit = { kind: "none" };
   private bondGesture: BondGesture | null = null;
   private spacePan = false;
   private panning = false;
@@ -671,7 +672,7 @@ export class SketchBoard {
     return this.viewport.screenToDoc(sx, sy);
   }
 
-  private hitAt(doc: Point): HitResult {
+  private hitAt(doc: Point): BoardHit {
     // Keep hit areas roughly constant in CSS pixels while zooming.
     const zoomRatio = DEFAULT_BOND_SCREEN_PX / this.viewport.getScale();
     return new HitTester(
@@ -1299,7 +1300,7 @@ export class SketchBoard {
     return { x: awayX / awayLength, y: awayY / awayLength };
   }
 
-  private placeFragmentForHit(hit: HitResult, doc: Point): void {
+  private placeFragmentForHit(hit: BoardHit, doc: Point): void {
     if (hit.kind === "atom") {
       const away = this.awayDirectionFromAtom(hit.index);
       this.placeFragmentAt(doc.x, doc.y, hit.index, away);
@@ -1308,7 +1309,7 @@ export class SketchBoard {
     this.placeFragmentAt(doc.x, doc.y);
   }
 
-  private placeRingForHit(hit: HitResult, doc: Point): void {
+  private placeRingForHit(hit: BoardHit, doc: Point): void {
     if (hit.kind === "atom") {
       const data = this.graph.getMoleculeData();
       const anchor = data.atoms[hit.index];
@@ -1412,7 +1413,8 @@ export class SketchBoard {
   private handleKeyDown(e: KeyboardEvent): void {
     if (this.disabled) return;
     const key = e.key.toLowerCase();
-    const hasModifier = e.metaKey || e.ctrlKey || e.altKey;
+    const hasModifier =
+      isCtrlOrMeta({ ctrlKey: e.ctrlKey, metaKey: e.metaKey }) || e.altKey;
     const now = performance.now();
     if (
       !hasModifier &&
@@ -1488,7 +1490,7 @@ export class SketchBoard {
   }
 }
 
-function sameHit(first: HitResult, second: HitResult): boolean {
+function sameHit(first: BoardHit, second: BoardHit): boolean {
   if (first.kind !== second.kind) return false;
   if (first.kind === "none" || second.kind === "none") return true;
   return first.index === second.index;

@@ -9,7 +9,13 @@
  * Width *scale* (uniform multiplier) is exposed because that's a
  * presentation knob — it changes density of ink, not which atoms
  * a given visual shape implies.
+ *
+ * Colors always come from the stage palette (`tableau-soft` categorical
+ * + internal `viridis` ramp) so ribbons match atom/type coloring.
  */
+
+import { categoricalColorAt, getColorMap, type LinearRGB } from "../palette";
+import type { SecondaryStructureType } from "./pdb_backbone";
 
 export type RibbonColorMode = "ss" | "spectrum" | "chain" | "uniform";
 
@@ -26,67 +32,62 @@ export interface RibbonStyle {
   readonly opacity: number;
 }
 
-export const DEFAULT_RIBBON_STYLE: RibbonStyle = {
-  colorMode: "spectrum",
-  uniformColor: [0.55, 0.55, 0.6],
-  widthScale: 1.0,
-  smoothness: 12,
-  opacity: 1.0,
+/**
+ * Secondary-structure → `tableau-soft` ordinal.
+ * Helix coral, sheet gold, coil steel grey — still SS-readable, but
+ * drawn from the same swatches as type/chain coloring.
+ */
+const SS_PALETTE_ORDINAL: Record<SecondaryStructureType, number> = {
+  helix: 2, // #FF6B6B coral
+  sheet: 5, // #FFD93D gold
+  coil: 8, // #B0B8C4 light steel
 };
 
 /**
- * Convert a normalized hue (`h` in [0, 1)) into an RGB triple in
- * [0, 1]. Saturation 0.85, lightness 0.55 — middle of the
- * "high-impact but not garish" zone for cartoon ribbons.
+ * Palette stores linear RGB (same as atom impostor buffers). Ribbon
+ * meshes use StandardMaterial vertex colors, which are treated as
+ * display/sRGB — convert so swatches match the palette UI.
  */
-export function hueToRgb(h: number): [number, number, number] {
-  const s = 0.85;
-  const l = 0.55;
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (h < 1 / 6) {
-    r = c;
-    g = x;
-  } else if (h < 2 / 6) {
-    r = x;
-    g = c;
-  } else if (h < 3 / 6) {
-    g = c;
-    b = x;
-  } else if (h < 4 / 6) {
-    g = x;
-    b = c;
-  } else if (h < 5 / 6) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-  return [r + m, g + m, b + m];
+function linearToDisplay(rgb: LinearRGB): [number, number, number] {
+  const conv = (c: number) => {
+    const x = Math.min(1, Math.max(0, c));
+    return x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
+  };
+  return [conv(rgb[0]), conv(rgb[1]), conv(rgb[2])];
+}
+
+/** Neutral uniform default = coil steel from the categorical palette. */
+const DEFAULT_UNIFORM = linearToDisplay(
+  categoricalColorAt(SS_PALETTE_ORDINAL.coil),
+);
+
+export const DEFAULT_RIBBON_STYLE: RibbonStyle = {
+  // Chain colors match multi-chain figures (e.g. RCSB / ChimeraX defaults).
+  colorMode: "chain",
+  uniformColor: DEFAULT_UNIFORM,
+  widthScale: 0.95,
+  smoothness: 14,
+  opacity: 1.0,
+};
+
+/** SS color from the default categorical palette (display/sRGB). */
+export function ssColor(ss: SecondaryStructureType): [number, number, number] {
+  return linearToDisplay(categoricalColorAt(SS_PALETTE_ORDINAL[ss]));
 }
 
 /**
- * Deterministic palette for `colorMode === "chain"`. Picked from the
- * Okabe-Ito colour-blind safe set so multi-chain figures stay
- * readable for everyone.
+ * Per-chain color — same ordinal path as type rails / legends
+ * (`categoricalColorAt`), in display/sRGB for the ribbon material.
  */
-const CHAIN_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
-  [0.9, 0.6, 0.0], // orange
-  [0.35, 0.7, 0.9], // sky blue
-  [0.0, 0.6, 0.5], // bluish green
-  [0.95, 0.9, 0.25], // yellow
-  [0.0, 0.45, 0.7], // blue
-  [0.8, 0.4, 0.0], // vermillion
-  [0.8, 0.6, 0.7], // reddish purple
-  [0.6, 0.6, 0.6], // gray
-];
-
 export function chainColor(chainIndex: number): [number, number, number] {
-  const c = CHAIN_PALETTE[chainIndex % CHAIN_PALETTE.length];
-  return [c[0], c[1], c[2]];
+  return linearToDisplay(categoricalColorAt(Math.max(0, chainIndex)));
+}
+
+/**
+ * N→C spectrum via the internal continuous `viridis` ramp (same map used
+ * for numeric property coloring). `t` is in [0, 1]. Display/sRGB.
+ */
+export function spectrumColor(t: number): [number, number, number] {
+  const clamped = Math.max(0, Math.min(1, t));
+  return linearToDisplay(getColorMap("viridis").sample(clamped));
 }

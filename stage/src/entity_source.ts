@@ -276,11 +276,6 @@ export class BondSource {
 
     const block = this.frameBlock;
     if (block && id < block.nrows()) {
-      if (key === "order") {
-        const col =
-          block.dtype(key) === DType.U32 ? block.viewColU32(key) : undefined;
-        if (col) return col[id];
-      }
       const col =
         block.dtype(key) === DType.F64 ? block.viewColF(key) : undefined;
       if (col) return col[id];
@@ -314,8 +309,7 @@ export class BondSource {
 
     const iAtoms = bb.viewColU32("atomi");
     const jAtoms = bb.viewColU32("atomj");
-    const orders =
-      bb.dtype("order") === DType.U32 ? bb.viewColU32("order") : undefined;
+    const orders = bb.dtype("order") ? bb.viewColF("order") : undefined;
 
     const coords = viewAtomCoords(ab);
     const ax = coords?.x;

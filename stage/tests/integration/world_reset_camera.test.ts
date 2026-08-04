@@ -6,10 +6,10 @@ import { MolvisRenderer } from "../../src/renderer";
 import { Trajectory } from "../../src/system/trajectory";
 
 /**
- * Integration tests for World.resetCamera's advanced framing. Builds a GUI-less
+ * Integration tests for World.fit's advanced framing. Builds a GUI-less
  * renderer on a NullEngine, loads real atom frames through the pipeline (which
  * populates the instanceData buffer getBounds/getBoundsData read), then frames
- * the scene. resetCamera does not screenshot, so NullEngine is sufficient.
+ * the scene. fit does not screenshot, so NullEngine is sufficient.
  */
 
 function makeAtomFrame(
@@ -35,7 +35,7 @@ function mkRenderer(): MolvisRenderer {
   return new MolvisRenderer(canvas, { engine: new NullEngine() });
 }
 
-describe("World.resetCamera — advanced framing", () => {
+describe("World.fit — advanced framing", () => {
   it("ac-001: getBounds is radius-aware (extends past atom centers)", async () => {
     const r = mkRenderer();
     try {
@@ -66,7 +66,7 @@ describe("World.resetCamera — advanced framing", () => {
     }
   });
 
-  it("ac-008: resetCamera() keeps the stable iso angles", async () => {
+  it("ac-008: fit() keeps the stable iso angles", async () => {
     const r = mkRenderer();
     try {
       await r.load(
@@ -81,7 +81,7 @@ describe("World.resetCamera — advanced framing", () => {
           ),
         ]),
       );
-      r.app.world.resetCamera();
+      r.app.world.fit();
       expect(r.app.world.camera.alpha).toBeCloseTo(Math.PI / 4, 6);
       expect(r.app.world.camera.beta).toBeCloseTo(Math.PI / 3, 6);
     } finally {
@@ -111,9 +111,9 @@ describe("World.resetCamera — advanced framing", () => {
           ),
         ]),
       );
-      r.app.world.resetCamera({ frameBox: false });
+      r.app.world.fit({ frameBox: false });
       const without = r.app.world.camera.radius;
-      r.app.world.resetCamera({ frameBox: true });
+      r.app.world.fit({ frameBox: true });
       const withBox = r.app.world.camera.radius;
       // The 40 Å cell is far larger than the two atoms, so including its
       // corners must push the camera farther back.
@@ -150,7 +150,7 @@ describe("World.resetCamera — advanced framing", () => {
   it("no data → safe fallback (iso angles, finite radius)", () => {
     const r = mkRenderer();
     try {
-      r.app.world.resetCamera();
+      r.app.world.fit();
       expect(Number.isFinite(r.app.world.camera.radius)).toBe(true);
       expect(r.app.world.camera.alpha).toBeCloseTo(Math.PI / 4, 6);
       expect(r.app.world.camera.beta).toBeCloseTo(Math.PI / 3, 6);

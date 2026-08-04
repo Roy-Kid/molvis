@@ -1,5 +1,6 @@
 import { type Box, Frame, WasmArray } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
+import { hasUsableBox } from "../io/box_presence";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { logger } from "../utils/logger";
@@ -13,18 +14,28 @@ import { logger } from "../utils/logger";
  * `wrap(ref) + MI(atom − ref)` so covalent structure stays intact and bonds
  * do not stretch across the box. Isolated atoms (no bonds) wrap alone.
  *
- * Requires `frame.box` (from the data source or a manual Simulation cell that wrote
- * the cell onto the working frame).
+ * Requires a **usable** `frame.box` (non-zero edges). Having a box does
+ * **not** enable this modifier — it is never auto-attached; the user
+ * opts in. Zero-size cells are treated as no box.
  */
 export class WrapPBCModifier extends BaseModifier {
   constructor(id: string) {
     super(id, "Wrap PBC", new Set([ModifierCapability.TransformsData]));
   }
 
+  /** Never auto-attach. Box present ≠ wrap. */
+  matches(_frame: Frame): boolean {
+    return false;
+  }
+
+  isApplicable(frame: Frame): boolean {
+    return hasUsableBox(frame.box);
+  }
+
   apply(input: Frame, _context: PipelineContext): Frame {
     const box = input.box;
-    if (!box) {
-      logger.warn("WrapPBC: Frame has no box, skipping");
+    if (!hasUsableBox(box)) {
+      logger.warn("WrapPBC: Frame has no usable box, skipping");
       return input;
     }
 
@@ -48,7 +59,8 @@ export class WrapPBCModifier extends BaseModifier {
     }
 
     const bonds = input.getBlock("bonds");
-    const wrapped = wrapMoleculeAware(box, x, y, z, atomCount, bonds);
+    // hasUsableBox narrowed logically; box is non-null for wrap.
+    const wrapped = wrapMoleculeAware(box!, x, y, z, atomCount, bonds);
 
     const result = new Frame();
     result.insertBlock("atoms", atoms);

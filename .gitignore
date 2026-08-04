@@ -165,3 +165,15 @@ package-lock.json
 
 .tox/
 .venv/
+
+# Compiled JS emitted next to its TypeScript source.
+#
+# These packages are TypeScript-only: every `src/**/*.js` is build output that
+# escaped an outDir (an editor's compile-on-save, a stray `tsc -w`). They are
+# not harmless clutter — rslib then sees `foo.ts` and `foo.js` as one entry and
+# warns "Duplicate entry ... may lead to the incorrect output", so which of the
+# two ends up in the bundle stops being decided by the source you edited.
+core/src/**/*.js
+stage/src/**/*.js
+sketch/src/**/*.js
+umbrella/src/**/*.js

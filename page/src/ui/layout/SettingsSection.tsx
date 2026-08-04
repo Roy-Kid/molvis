@@ -1,12 +1,15 @@
 import type React from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface SettingsSectionProps {
   /** Anchor id for left-nav scroll targets (optional). */
   id?: string;
   title: string;
-  /** Short helper under the title (trust notes, how-to, etc.). */
-  description?: React.ReactNode;
   /** Right of the title (status badge, count, …). */
   trailing?: React.ReactNode;
   children: React.ReactNode;
@@ -20,7 +23,6 @@ interface SettingsSectionProps {
 export const SettingsSection: React.FC<SettingsSectionProps> = ({
   id,
   title,
-  description,
   trailing,
   children,
   className,
@@ -38,11 +40,6 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
           </h3>
           {trailing}
         </div>
-        {description ? (
-          <p className="text-micro text-muted-foreground leading-snug max-w-prose">
-            {description}
-          </p>
-        ) : null}
       </header>
       <div className="space-y-2.5">{children}</div>
     </section>
@@ -55,8 +52,9 @@ export const SettingsRow: React.FC<{
   htmlFor?: string;
   children: React.ReactNode;
   className?: string;
-}> = ({ label, htmlFor, children, className }) => {
-  return (
+  tooltip?: React.ReactNode;
+}> = ({ label, htmlFor, children, className, tooltip }) => {
+  const row = (
     <div
       className={cn(
         "flex items-center justify-between gap-3 min-h-control-compact rounded-control px-0.5",
@@ -73,5 +71,13 @@ export const SettingsRow: React.FC<{
         {children}
       </div>
     </div>
+  );
+
+  if (!tooltip) return row;
+  return (
+    <Tooltip delayDuration={1000}>
+      <TooltipTrigger asChild>{row}</TooltipTrigger>
+      <TooltipContent side="left">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 };

@@ -51,7 +51,41 @@ describe("buildFrameFromScene", () => {
     expect(x && Array.from(x)).toEqual([1, 4]);
     const b = frame.getBlock("bonds");
     expect(b?.nrows()).toBe(1);
-    expect(b?.viewColU32("order")?.[0]).toBe(2);
+    expect(b?.viewColF("order")?.[0]).toBe(2);
+  });
+
+  it("keeps an aromatic order of 1.5 intact", () => {
+    // The commit path used to write `order` as u32, which both truncated 1.5
+    // to 1 and made molrs reject the frame outright:
+    //   column 'order' is declared 'float' by the Frame schema, got 'uint'
+    const atoms = new AtomSource();
+    atoms.setEdit(0, {
+      type: "atom",
+      atomId: 0,
+      element: "C",
+      position: { x: 0, y: 0, z: 0 },
+    });
+    atoms.setEdit(1, {
+      type: "atom",
+      atomId: 1,
+      element: "C",
+      position: { x: 1.4, y: 0, z: 0 },
+    });
+    const bonds = new BondSource();
+    bonds.setEdit(0, {
+      type: "bond",
+      bondId: 0,
+      atomId1: 0,
+      atomId2: 1,
+      order: 1.5,
+      start: { x: 0, y: 0, z: 0 },
+      end: { x: 1.4, y: 0, z: 0 },
+    });
+
+    const frame = buildFrameFromScene(mockSceneIndex(atoms, bonds));
+    const b = frame.getBlock("bonds");
+    expect(b?.dtype("order")).toBe("f64");
+    expect(b?.viewColF("order")?.[0]).toBe(1.5);
   });
 
   it("preserves the simulation box from the source frame", () => {

@@ -3,6 +3,7 @@ import {
   type Modifier,
   ModifierRegistry,
   type Molvis,
+  namespacePluginId,
   type Overlay,
   type PluginModeFactory,
   registerRpcExtensionHandler,
@@ -18,6 +19,7 @@ import {
   registerModePanel,
   registerModeTab,
   registerPanel,
+  registerPluginCache,
   registerSettingsSection,
   registerToolbarAction,
 } from "../contributions/ui";
@@ -28,6 +30,7 @@ import type {
   ModePanelSpec,
   PluginAnalysisSpec,
   PluginAPI,
+  PluginCacheSpec,
   PluginCommandFn,
   PluginDialogSpec,
   PluginLogger,
@@ -59,9 +62,17 @@ function tagModifier(modifier: Modifier, kind: string): Modifier {
   return modifier;
 }
 
-function ns(pluginId: string, id: string, sep = "."): string {
-  if (id.includes(sep) || id.startsWith("plugin.")) return id;
-  return `plugin.${pluginId}${sep}${id}`;
+/**
+ * Namespace every contribution id under `plugin.<pluginId>.`.
+ *
+ * Delegates to the engine's single implementation so the host and the stage
+ * mode panel cannot disagree about the scheme. Do not reintroduce a local
+ * "already namespaced?" heuristic: the previous one treated any dotted id as
+ * pre-namespaced, so two plugins both registering, say, `settings.about`
+ * silently shared one id.
+ */
+function ns(pluginId: string, id: string): string {
+  return namespacePluginId(pluginId, id);
 }
 
 export function createPluginAPI(
@@ -81,13 +92,17 @@ export function createPluginAPI(
 
     modifiers: {
       register(kind, category, factory, options) {
-        const wrapped = () => tagModifier(factory(), kind);
-        ModifierRegistry.register(kind, category, wrapped);
+        // ModifierRegistry.register silently replaces a same-named entry, so
+        // an un-namespaced `kind` let one plugin clobber another's modifier
+        // and property panel with no warning.
+        const namespaced = ns(pluginId, kind);
+        const wrapped = () => tagModifier(factory(), namespaced);
+        ModifierRegistry.register(namespaced, category, wrapped);
         track(() => {
-          ModifierRegistry.unregister(kind);
+          ModifierRegistry.unregister(namespaced);
         });
         if (options?.panel) {
-          track(registerModifierPanel(kind, options.panel));
+          track(registerModifierPanel(namespaced, options.panel));
         }
       },
     },
@@ -101,9 +116,7 @@ export function createPluginAPI(
         const namespaced = ns(pluginId, id);
         track(mm.registerPluginMode(namespaced, factory));
         if (options?.panel) {
-          const panelId = options.panel.id.includes(".")
-            ? options.panel.id
-            : ns(pluginId, options.panel.id);
+          const panelId = ns(pluginId, options.panel.id);
           track(
             registerModePanel(namespaced, { ...options.panel, id: panelId }),
           );
@@ -120,8 +133,7 @@ export function createPluginAPI(
         }
       },
       registerToolsPanel(mode: string, spec: ModePanelSpec) {
-        const id = spec.id.includes(".") ? spec.id : ns(pluginId, spec.id);
-        track(registerModePanel(mode, { ...spec, id }));
+        track(registerModePanel(mode, { ...spec, id: ns(pluginId, spec.id) }));
       },
     },
 
@@ -148,10 +160,7 @@ export function createPluginAPI(
           const toolbarId = tb.id ? ns(pluginId, tb.id) : `${fullName}.toolbar`;
           const args = tb.args;
           const opensDialog = tb.opensDialog
-            ? tb.opensDialog.includes(".") ||
-              tb.opensDialog.startsWith("plugin.")
-              ? tb.opensDialog
-              : ns(pluginId, tb.opensDialog)
+            ? ns(pluginId, tb.opensDialog)
             : undefined;
           track(
             registerToolbarAction({
@@ -160,6 +169,7 @@ export function createPluginAPI(
               icon: tb.icon,
               order: tb.order,
               isVisible: tb.isVisible,
+              opensDialog,
               onClick: (a) => {
                 void fn(a, args as A);
                 if (opensDialog) {
@@ -211,14 +221,19 @@ export function createPluginAPI(
       },
     },
 
+    caches: {
+      register(spec: PluginCacheSpec) {
+        const id = ns(pluginId, spec.id);
+        track(registerPluginCache({ ...spec, id }));
+      },
+    },
+
     rpc: {
       registerMethod(name: string, handler: PluginRpcHandler) {
-        const fullName = name.startsWith("plugin.")
-          ? name
-          : `plugin.${pluginId}.${name}`;
+        const fullName = ns(pluginId, name);
         track(
-          registerRpcExtensionHandler(fullName, (params, _buffers) =>
-            handler(params, { app }),
+          registerRpcExtensionHandler(fullName, (params, buffers) =>
+            handler(params, { app, buffers }),
           ),
         );
       },

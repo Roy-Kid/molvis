@@ -674,7 +674,7 @@ export function PCATool({
       )}
 
       {exploration && scatterController && (
-        <ResultSection subtitle={`${axes[0]} · ${axes[1]}`} stale={stale}>
+        <ResultSection stale={stale}>
           <div
             aria-busy={computing || seeking}
             aria-disabled={computing || seeking}

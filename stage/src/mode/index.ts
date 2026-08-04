@@ -6,7 +6,7 @@ import type { BaseMode } from "./base";
 import { EditMode } from "./edit";
 import { ManipulateMode } from "./manipulate";
 import { MeasureMode } from "./measure";
-import { ModeType } from "./mode_type";
+import { ALL_MODE_TYPES, type ModeId, ModeType } from "./mode_type";
 import { SelectMode } from "./select";
 import { ViewMode } from "./view";
 
@@ -66,7 +66,7 @@ class ModeManager {
     if (!id || typeof id !== "string") {
       throw new Error("Plugin mode id must be a non-empty string");
     }
-    if (Object.values(ModeType).includes(id as ModeType)) {
+    if (ALL_MODE_TYPES.some((builtIn) => builtIn === id)) {
       throw new Error(
         `Plugin mode id '${id}' collides with a built-in ModeType`,
       );
@@ -74,20 +74,20 @@ class ModeManager {
     this._pluginModes.set(id, factory);
     return () => {
       this._pluginModes.delete(id);
-      if (this._mode?.name === (id as ModeType)) {
+      if (this._mode?.name === id) {
         this.switch_mode(ModeType.View);
       }
     };
   }
 
-  public switch_mode = (mode: ModeType | string) => {
+  public switch_mode = (mode: ModeId) => {
     const pluginFactory = this._pluginModes.get(mode);
     if (pluginFactory) {
-      if (this._mode?.name === (mode as ModeType)) return;
+      if (this._mode?.name === mode) return;
       if (this._mode) this._mode.finish();
       this._mode = pluginFactory(this._app);
       this._mode?.start();
-      this._app.events?.emit("mode-change", mode as ModeType);
+      this._app.events?.emit("mode-change", mode);
       return;
     }
 
@@ -139,7 +139,7 @@ class ModeManager {
   }
 }
 
-export { ALL_MODE_TYPES, ModeType } from "./mode_type";
+export { ALL_MODE_TYPES, type ModeId, ModeType } from "./mode_type";
 export {
   intersectRayWithPlane,
   type PointerSpacePositionInput,

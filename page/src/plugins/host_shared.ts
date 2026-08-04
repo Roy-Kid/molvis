@@ -10,8 +10,8 @@
  * - `@molcrafts/molplot` — Vega-Lite charts (shared singleton; do not bundle)
  */
 
-import * as Molplot from "@molcrafts/molplot";
 import * as MolvisElements from "@molcrafts/molvis-core/elements";
+import * as MolvisKeys from "@molcrafts/molvis-core/keys";
 import * as Molrs from "@molcrafts/molvis-core/molrs";
 import * as MolvisStage from "@molvis/stage";
 import * as React from "react";
@@ -20,7 +20,7 @@ import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
 
-export const pluginHostModules = {
+const eagerPluginHostModules = {
   react: React,
   "react-dom": ReactDOM,
   "react-dom/client": ReactDOMClient,
@@ -30,7 +30,26 @@ export const pluginHostModules = {
   "@molcrafts/molvis-stage": MolvisStage,
   "@molcrafts/molvis-core/molrs": Molrs,
   "@molcrafts/molvis-core/elements": MolvisElements,
-  "@molcrafts/molplot": Molplot,
+  "@molcrafts/molvis-core/keys": MolvisKeys,
 } as const;
 
-export type PluginHostModuleId = keyof typeof pluginHostModules;
+export type PluginHostModules = typeof eagerPluginHostModules & {
+  "@molcrafts/molplot": typeof import("@molcrafts/molplot");
+};
+
+let pluginHostModulesPromise: Promise<PluginHostModules> | undefined;
+
+/**
+ * Resolve optional, heavy plugin peers only when a plugin is actually loaded.
+ * Keeping molplot/Vega out of this module's static graph saves the normal
+ * viewer startup path while preserving a single shared instance for plugins.
+ */
+export function getPluginHostModules(): Promise<PluginHostModules> {
+  pluginHostModulesPromise ??= import("@molcrafts/molplot").then((Molplot) => ({
+    ...eagerPluginHostModules,
+    "@molcrafts/molplot": Molplot,
+  }));
+  return pluginHostModulesPromise;
+}
+
+export type PluginHostModuleId = keyof PluginHostModules;

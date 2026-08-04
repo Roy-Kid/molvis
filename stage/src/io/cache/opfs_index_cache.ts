@@ -13,14 +13,14 @@
  * `navigator.storage` view of OPFS.
  */
 
-import { logger } from "../../utils/logger";
-import { type CachedIndex, decodeMolidx, encodeMolidx } from "./molidx_codec";
 import {
   getFileIfExists,
   getOpfsBucket,
   removeEntryIfExists,
   safeKey,
-} from "./opfs_root";
+} from "@molcrafts/molvis-core/opfs";
+import { logger } from "../../utils/logger";
+import { type CachedIndex, decodeMolidx, encodeMolidx } from "./molidx_codec";
 
 const FILE_SUFFIX = ".molidx";
 

@@ -1,9 +1,4 @@
-import {
-  type Modifier,
-  ModifierCapability,
-  type Molvis,
-  primaryCapabilityLabel,
-} from "@molvis/stage";
+import { type Modifier, ModifierCapability, type Molvis } from "@molvis/stage";
 import type React from "react";
 import { modifierUsesLeftConfig, resolveModifierPanel } from "@/plugins";
 import { ParentSelector } from "./pipeline/ParentSelector";
@@ -50,14 +45,9 @@ export const ModifierProperties: React.FC<ModifierPropertiesProps> = ({
 
   return (
     <div className="p-2 bg-muted/20 border-t">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h4 className="text-micro font-semibold uppercase tracking-wide text-muted-foreground truncate min-w-0">
-          {modifier.name}
-        </h4>
-        <span className="shrink-0 text-micro bg-muted px-1 py-0 rounded-control text-muted-foreground">
-          {primaryCapabilityLabel(modifier.capabilities) ?? "modifier"}
-        </span>
-      </div>
+      <h4 className="mb-2 text-micro font-semibold uppercase tracking-wide text-muted-foreground truncate">
+        {modifier.name}
+      </h4>
       {showParentSelector && (
         <ParentSelector
           modifier={modifier}

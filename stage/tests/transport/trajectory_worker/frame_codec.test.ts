@@ -22,7 +22,12 @@ function atomsBlock(): FrameMessage["blocks"][number] {
     { name: "y", dtype: "f64", data: new Float64Array([3, 4, 5]) },
     { name: "z", dtype: "f64", data: new Float64Array([6, 7, 8]) },
     { name: "id", dtype: "u32", data: new Uint32Array([10, 11, 12]) },
-    { name: "type_id", dtype: "i32", data: new Int32Array([-1, 0, 1]) },
+    // The i32 carrier has to be a key the schema leaves unconstrained: no
+    // canonical column is Int (every identifier is unsigned, every physical
+    // quantity float), so a canonical key like `type_id` (UInt) would be
+    // rejected on insert. `source_id` is the same i32 extension column
+    // source_composition writes.
+    { name: "source_id", dtype: "i32", data: new Int32Array([-1, 0, 1]) },
     { name: "element", dtype: "string", data: ["C", "O", "H"] },
   ];
   return { name: "atoms", columns: cols };
@@ -48,8 +53,26 @@ describe("rehydrateFrame", () => {
     expect(atoms.nrows()).toBe(3);
     expect(Array.from(atoms.copyColF("x"))).toEqual([0, 1, 2]);
     expect(Array.from(atoms.copyColU32("id"))).toEqual([10, 11, 12]);
-    expect(Array.from(atoms.copyColI32("type_id"))).toEqual([-1, 0, 1]);
+    expect(Array.from(atoms.copyColI32("source_id"))).toEqual([-1, 0, 1]);
     expect(atoms.copyColStr("element")).toEqual(["C", "O", "H"]);
+  });
+
+  it("throws on an unknown column dtype instead of dropping the column", () => {
+    // A malformed worker payload must not yield a Frame that is quietly
+    // missing a column — `runtime.onFrame` turns the throw into a rejected
+    // frame request, which is observable.
+    const msg = emptyMessage();
+    msg.blocks.push({
+      name: "atoms",
+      columns: [
+        { name: "x", dtype: "f64", data: new Float64Array([0, 1]) },
+        { name: "flag", dtype: "bool", data: [true, false] },
+      ] as unknown as ColumnPayload[],
+    });
+
+    expect(() => rehydrateFrame(msg)).toThrow(
+      /unknown column dtype "bool" for column "flag" in block "atoms"/,
+    );
   });
 
   it("preserves block ordering and supports multiple blocks", () => {
@@ -58,9 +81,9 @@ describe("rehydrateFrame", () => {
     msg.blocks.push({
       name: "bonds",
       columns: [
-        { name: "i", dtype: "u32", data: new Uint32Array([0, 1]) },
-        { name: "j", dtype: "u32", data: new Uint32Array([1, 2]) },
-        { name: "order", dtype: "i32", data: new Int32Array([1, 1]) },
+        { name: "atomi", dtype: "u32", data: new Uint32Array([0, 1]) },
+        { name: "atomj", dtype: "u32", data: new Uint32Array([1, 2]) },
+        { name: "order", dtype: "f64", data: new Float64Array([1, 1.5]) },
       ],
     });
     const frame = rehydrateFrame(msg);

@@ -4,9 +4,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 pytestmark = pytest.mark.integration
-from PIL import Image
 
 
 def import_video_module():

@@ -148,7 +148,7 @@ export class ViewPanel implements GUIComponent {
         type: "button",
         title: "Fit View",
         action: () => {
-          this.app.world.resetCamera();
+          this.app.world.fit();
           this.updateDisplay();
         },
       },

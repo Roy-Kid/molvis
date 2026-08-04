@@ -28,7 +28,6 @@ export {
   modeTabStore,
   panelStore,
   settingsSectionStore,
-  sidebarPanelStore,
   toolbarActionStore,
 } from "./contributions/ui";
 export {
@@ -40,7 +39,6 @@ export {
   usePluginModeTabs,
   usePluginRuntimeStates,
   usePluginSettingsSections,
-  usePluginSidebarPanels,
   usePluginToolbarActions,
 } from "./hooks";
 export { loadPluginModule, rewriteModuleGraph } from "./loader";
@@ -59,7 +57,6 @@ export type {
   PluginRuntimeState,
   ResolvedPluginSource,
 } from "./types";
-export { BottomPanelHost } from "./ui/BottomPanelHost";
 export {
   CommandPalette,
   useCommandPaletteHotkey,

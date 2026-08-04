@@ -81,6 +81,15 @@ export async function applyBackendState(
       filename: dsEntries[0].filename ?? "backend-sync",
     });
 
+    // setTrajectory auto-attaches default Draws; the snapshot's non-DS list
+    // is authoritative (order, enabled flags, ownership). Strip auto-attach
+    // residue before replaying so we do not double-stack Particles/Bonds.
+    for (const m of [...app.modifierPipeline.getModifiers()]) {
+      if (!(m instanceof DataSourceModifier)) {
+        app.modifierPipeline.removeModifier(m.id);
+      }
+    }
+
     const head = app.modifierPipeline
       .getModifiers()
       .find((m): m is DataSourceModifier => m instanceof DataSourceModifier);

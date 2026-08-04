@@ -1,6 +1,6 @@
 import type { MolvisApp } from "../app";
 import type { MolvisConfig } from "../config";
-import type { ModeType } from "../mode";
+import type { ModeId } from "../mode";
 import type { Trajectory } from "../system/trajectory";
 import { InfoPanel } from "./panels/info_panel";
 import { ModePanel } from "./panels/mode_panel";
@@ -31,10 +31,12 @@ export class GUIManager {
   private playbackSpeed = 100; // ms per frame
   private readonly infoChangeHandler = (text: string) =>
     this.handleInfoChange(text);
-  private readonly modeChangeHandler = (mode: ModeType) =>
+  private readonly modeChangeHandler = (mode: ModeId) =>
     this.handleModeChange(mode);
   private readonly fpsChangeHandler = (fps: number) =>
     this.handleFpsChange(fps);
+  private readonly showFpsChangeHandler = (show: boolean) =>
+    this.handleShowFpsChange(show);
   private readonly trajectoryChangeHandler = (trajectory: Trajectory) =>
     this.handleTrajectoryChange(trajectory);
   private readonly frameChangeHandler = (index: number) =>
@@ -109,18 +111,39 @@ export class GUIManager {
   }
 
   /**
-   * Inject CSS styles into document head
+   * Inject stage UI CSS where the overlay lives.
+   *
+   * Standalone mounts put panels in the light DOM → `document.head`.
+   * Jupyter / notebook embeds mount inside a ShadowRoot (page
+   * `useShadowDOM: true`); styles on `document.head` never pierce the
+   * shadow tree, so the info panel stays `display:none` (or unstyled)
+   * and hover atom text never becomes visible. Always inject into the
+   * container's root node as well.
    */
   private injectStyles(): void {
     const styleId = "molvis-ui-styles";
-    if (document.getElementById(styleId)) {
-      return;
+    const targets: ParentNode[] = [];
+    if (typeof document !== "undefined" && document.head) {
+      targets.push(document.head);
+    }
+    const rootNode = this.container.getRootNode();
+    if (rootNode instanceof ShadowRoot) {
+      targets.push(rootNode);
     }
 
-    const style = document.createElement("style");
-    style.id = styleId;
-    style.textContent = MOLVIS_UI_CSS;
-    document.head.appendChild(style);
+    for (const target of targets) {
+      if (
+        target instanceof Document
+          ? target.getElementById(styleId)
+          : target.querySelector(`#${styleId}`)
+      ) {
+        continue;
+      }
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = MOLVIS_UI_CSS;
+      target.appendChild(style);
+    }
   }
 
   /**
@@ -180,6 +203,7 @@ export class GUIManager {
     if (components.showPerfPanel) {
       this.perfPanel = new PerfPanel(this.app);
       this.perfPanel.mount(this.uiOverlay);
+      this.handleShowFpsChange(this.app.settings.getShowFps());
     }
 
     // TrajectoryPanel (bottom-center, auto-show)
@@ -227,6 +251,7 @@ export class GUIManager {
     this.app.events.on("info-text-change", this.infoChangeHandler);
     this.app.events.on("mode-change", this.modeChangeHandler);
     this.app.events.on("fps-change", this.fpsChangeHandler);
+    this.app.events.on("show-fps-change", this.showFpsChangeHandler);
 
     this.app.events.on("trajectory-change", this.trajectoryChangeHandler);
     this.app.events.on("frame-change", this.frameChangeHandler);
@@ -239,6 +264,7 @@ export class GUIManager {
     this.app.events.off("info-text-change", this.infoChangeHandler);
     this.app.events.off("mode-change", this.modeChangeHandler);
     this.app.events.off("fps-change", this.fpsChangeHandler);
+    this.app.events.off("show-fps-change", this.showFpsChangeHandler);
 
     this.app.events.off("trajectory-change", this.trajectoryChangeHandler);
     this.app.events.off("frame-change", this.frameChangeHandler);
@@ -256,7 +282,7 @@ export class GUIManager {
   /**
    * Handle mode change event
    */
-  private handleModeChange(mode: ModeType): void {
+  private handleModeChange(mode: ModeId): void {
     if (this.modePanel) {
       this.modePanel.update(mode);
     }
@@ -269,6 +295,12 @@ export class GUIManager {
     if (this.perfPanel) {
       this.perfPanel.update(fps);
     }
+  }
+
+  private handleShowFpsChange(show: boolean): void {
+    if (!this.perfPanel) return;
+    if (show) this.perfPanel.show();
+    else this.perfPanel.hide();
   }
 
   private handleTrajectoryChange(traj: Trajectory): void {

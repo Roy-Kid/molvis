@@ -6,17 +6,21 @@
  * Bump {@link RPC_PROTOCOL_VERSION} when removing or renaming a method.
  * Additive methods may keep the same major.minor and only add names.
  */
-export const RPC_PROTOCOL_VERSION = "1.1.0";
+export const RPC_PROTOCOL_VERSION = "1.3.0";
 
 /** Ordered catalog of methods the core router implements. */
 export const RPC_METHODS = [
   "scene.new_frame",
   "scene.draw_frame",
+  "scene.draw_atom",
+  "scene.draw_bond",
   "scene.draw_box",
+  "scene.commit",
   "scene.clear",
   "scene.export_frame",
   "scene.set_trajectory",
   "scene.set_frame_labels",
+  "scene.seek_frame",
   "scene.apply_state",
   "scene.add_data_source",
   "scene.remove_data_source",
@@ -43,7 +47,8 @@ export const RPC_METHODS = [
   "camera.get_pose",
   "camera.set_pose",
   "camera.look_at",
-  "camera.fit_view",
+  "camera.fit",
+  "camera.reset",
   "state.get",
   "rpc.list_methods",
 ] as const;

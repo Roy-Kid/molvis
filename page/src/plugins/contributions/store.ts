@@ -5,11 +5,13 @@
  * React `useSyncExternalStore` can compare snapshots with `Object.is`.
  */
 
-export type ContributionListener = () => void;
+import { type ContributionListener, Emitter } from "./emitter";
+
+export type { ContributionListener };
 
 export class ContributionStore<T> {
   private items = new Map<string, T>();
-  private listeners = new Set<ContributionListener>();
+  private events = new Emitter("contribution");
   private snapshot: T[] = [];
 
   set(id: string, value: T): () => void {
@@ -43,10 +45,7 @@ export class ContributionStore<T> {
   }
 
   subscribe(listener: ContributionListener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return this.events.subscribe(listener);
   }
 
   private refreshSnapshot(): void {
@@ -54,12 +53,6 @@ export class ContributionStore<T> {
   }
 
   private emit(): void {
-    for (const listener of this.listeners) {
-      try {
-        listener();
-      } catch (err) {
-        console.error("[molvis-plugins] contribution listener failed", err);
-      }
-    }
+    this.events.emit();
   }
 }

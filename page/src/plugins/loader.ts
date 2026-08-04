@@ -1,13 +1,25 @@
-import { pluginHostModules } from "./host_shared";
+import { getPluginHostModules, type PluginHostModules } from "./host_shared";
 import type { MolvisPluginModule, PluginManifest } from "./types";
 
-const blobUrls: string[] = [];
 let importMapReady = false;
+let pluginHostModules: PluginHostModules | undefined;
+/**
+ * Bare host specifier → blob URL. These are process-wide singletons shared by
+ * every plugin, created once, and are deliberately never revoked.
+ */
 const moduleBlobUrls = new Map<string, string>();
 /** Absolute source URL → rewritten blob URL (supports multi-chunk graphs). */
 const rewrittenModuleBlobs = new Map<string, string>();
 /** In-flight rewrite promises for cycle-safe parallel loads. */
 const rewriteInFlight = new Map<string, Promise<string>>();
+/**
+ * Entry URL → every chunk URL its graph pulled in, so unload can revoke them.
+ *
+ * Without this the rewritten blobs lived forever: each reload leaked a full
+ * copy of the plugin's chunks, and the stale cache entry meant "Reload" also
+ * re-imported the *old* source instead of re-fetching.
+ */
+const graphChunks = new Map<string, Set<string>>();
 
 function buildModuleBlob(
   spec: string,
@@ -43,38 +55,44 @@ function buildModuleBlob(
   const blob = new Blob([lines.join("\n")], { type: "text/javascript" });
   const url = URL.createObjectURL(blob);
   moduleBlobUrls.set(spec, url);
-  blobUrls.push(url);
   return url;
 }
 
-export function ensurePluginHostModules(): void {
-  if (importMapReady) return;
-  for (const [spec, mod] of Object.entries(pluginHostModules)) {
+export async function ensurePluginHostModules(): Promise<PluginHostModules> {
+  if (!pluginHostModules) {
+    pluginHostModules = await getPluginHostModules();
+  }
+  const modules = pluginHostModules;
+  if (importMapReady) return modules;
+  for (const [spec, mod] of Object.entries(modules)) {
     buildModuleBlob(spec, mod as unknown as Record<string, unknown>);
   }
-  // Back-compat: classic-JSX plugin builds call free `React.createElement`
-  // without `import React from "react"`. Keep host React on globalThis so
-  // re-renders (e.g. resizing the console) do not throw "React is not defined".
-  const g = globalThis as typeof globalThis & { React?: unknown };
-  if (g.React == null) {
-    g.React = pluginHostModules.react;
-  }
   importMapReady = true;
+  return modules;
 }
 
-function rewriteBareImports(source: string): string {
-  ensurePluginHostModules();
-  const specs = Object.keys(pluginHostModules);
+async function rewriteBareImports(source: string): Promise<string> {
+  const modules = await ensurePluginHostModules();
+  const specs = Object.keys(modules);
   let out = source;
   for (const spec of specs) {
     const blobUrl = moduleBlobUrls.get(spec);
     if (!blobUrl) continue;
     const escaped = spec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Minified ESM often uses `from"pkg"` (no space). Allow zero whitespace
-    // after `from` / before dynamic `import(`.
+    // Static: from"pkg" / from "pkg" / from 'pkg'
     out = out.replace(
-      new RegExp(`(from\\s*|import\\s*\\(\\s*)(['"])${escaped}\\2`, "g"),
+      new RegExp(`(from\\s*)(['"])${escaped}\\2`, "g"),
       `$1$2${blobUrl}$2`,
+    );
+    // Dynamic: import("pkg") — allow whitespace *and* block/line comments
+    // between `import(` and the string (TS builds often leave webpackIgnore
+    // comments on their own lines, which broke the old `\\s*`-only pattern).
+    out = out.replace(
+      new RegExp(
+        `import\\s*\\((\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*|\\/\\/[^\\n]*\\n\\s*)*)(['"])${escaped}\\2`,
+        "g",
+      ),
+      `import($1$2${blobUrl}$2`,
     );
   }
   return out;
@@ -120,8 +138,19 @@ const REL_IMPORT_RE = /(from\s*|import\s*\(\s*)(['"])(\.[^'"]+)\2/g;
  * shared blobs, and rewrite relative imports to recursively rewritten
  * chunk blobs. Returns a blob: URL ready for `import()`.
  */
-export async function rewriteModuleGraph(url: string): Promise<string> {
+export async function rewriteModuleGraph(
+  url: string,
+  /** Entry that owns this graph; chunks are revoked together with it. */
+  owner: string = new URL(url).href,
+): Promise<string> {
   const absolute = new URL(url).href;
+  let owned = graphChunks.get(owner);
+  if (!owned) {
+    owned = new Set();
+    graphChunks.set(owner, owned);
+  }
+  owned.add(absolute);
+
   const cached = rewrittenModuleBlobs.get(absolute);
   if (cached) return cached;
 
@@ -134,7 +163,7 @@ export async function rewriteModuleGraph(url: string): Promise<string> {
     rewrittenModuleBlobs.set(absolute, "");
 
     const source = await fetchText(absolute);
-    let rewritten = rewriteBareImports(source);
+    let rewritten = await rewriteBareImports(source);
 
     const relSpecs = new Set<string>();
     for (const match of source.matchAll(REL_IMPORT_RE)) {
@@ -145,7 +174,7 @@ export async function rewriteModuleGraph(url: string): Promise<string> {
     await Promise.all(
       [...relSpecs].map(async (rel) => {
         const childAbs = new URL(rel, absolute).href;
-        const childBlob = await rewriteModuleGraph(childAbs);
+        const childBlob = await rewriteModuleGraph(childAbs, owner);
         relToBlob.set(rel, childBlob);
       }),
     );
@@ -161,7 +190,6 @@ export async function rewriteModuleGraph(url: string): Promise<string> {
 
     const blob = new Blob([rewritten], { type: "text/javascript" });
     const blobUrl = URL.createObjectURL(blob);
-    blobUrls.push(blobUrl);
     rewrittenModuleBlobs.set(absolute, blobUrl);
     return blobUrl;
   })();
@@ -181,8 +209,22 @@ function coercePluginModule(
 ): MolvisPluginModule {
   const exported = mod.default ?? mod;
   if (typeof exported === "function") {
-    const Ctor = exported as new () => MolvisPluginModule;
-    return new Ctor();
+    // Class export (`new`-able) or plain factory (`export default () => ({…})`).
+    // Arrow functions cannot be constructed, so try the call form as well
+    // rather than surfacing a bare "X is not a constructor".
+    const callable = exported as unknown as {
+      (): unknown;
+      new (): unknown;
+    };
+    let produced: unknown;
+    try {
+      produced = new callable();
+    } catch {
+      produced = callable();
+    }
+    return coercePluginModule(
+      produced as Parameters<typeof coercePluginModule>[0],
+    );
   }
   if (
     exported &&
@@ -198,13 +240,31 @@ function coercePluginModule(
 }
 
 /**
+ * Revoke every blob created for `entryUrl`'s module graph and drop it from
+ * the rewrite cache, so the next load re-fetches the plugin's current source.
+ *
+ * Host singleton blobs (`moduleBlobUrls`) are intentionally left alone —
+ * other plugins still import them.
+ */
+export function releasePluginModuleGraph(entryUrl: string): void {
+  const owned = graphChunks.get(new URL(entryUrl).href);
+  if (!owned) return;
+  for (const chunk of owned) {
+    const blobUrl = rewrittenModuleBlobs.get(chunk);
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    rewrittenModuleBlobs.delete(chunk);
+  }
+  graphChunks.delete(new URL(entryUrl).href);
+}
+
+/**
  * Load a plugin ESM entry (and any relative chunk graph it imports).
  * Bare imports of react / molvis-stage / molvis-core/molrs resolve to host singletons.
  */
 export async function loadPluginModule(
   entryUrl: string,
 ): Promise<MolvisPluginModule> {
-  ensurePluginHostModules();
+  await ensurePluginHostModules();
   const blobUrl = await rewriteModuleGraph(entryUrl);
   try {
     const mod = (await import(

@@ -1,4 +1,4 @@
-# core/tests — unit + integration layout
+# stage/tests — unit + integration layout
 
 ## Lanes
 

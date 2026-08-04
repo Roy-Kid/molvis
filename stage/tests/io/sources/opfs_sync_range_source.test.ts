@@ -1,5 +1,5 @@
+import { OpfsBlobCache } from "@molcrafts/molvis-core/opfs";
 import { afterEach, beforeEach, describe, expect } from "@rstest/core";
-import { OpfsBlobCache } from "../../../src/io/cache/opfs_blob_cache";
 import { OPFSSyncRangeSource } from "../../../src/io/sources/opfs_sync_range_source";
 import { clearBucket, opfsIt } from "../cache/opfs_test_helpers";
 

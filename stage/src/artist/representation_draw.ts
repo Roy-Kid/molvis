@@ -141,6 +141,7 @@ export async function drawBondsRepresentation(
         atomsBlock,
         bondsBlock,
       ),
+      viewDirection: host.app.world.camera.getForwardRay().direction,
     },
   );
   if (!bondResult) return;

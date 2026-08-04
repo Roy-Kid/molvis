@@ -88,6 +88,18 @@ varying vec3 vSphereCenter; // View-space center
 varying float vSphereRadius;
 varying float vOuterRadius;
 
+// IEC 61966-2-1 linear → sRGB (per channel). Lighting runs in linear space.
+vec3 linearToSrgb(vec3 c) {
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    bvec3 useLo = lessThanEqual(c, vec3(0.0031308));
+    return vec3(
+        useLo.x ? lo.x : hi.x,
+        useLo.y ? lo.y : hi.y,
+        useLo.z ? lo.z : hi.z
+    );
+}
+
 void main() {
     if (vColor.a < 0.01) discard;
     // Map uv [0,1] -> [-1,1]
@@ -173,7 +185,11 @@ void main() {
             : mix(vColor.rgb, vec3(1.0), 0.72);
         finalColor = mix(finalColor, outlineColor, outlineMask);
     }
-    gl_FragColor = vec4(finalColor, vColor.a);
+    // Lighting is done in linear (palette colors are linear RGB). Encode
+    // to sRGB for the framebuffer so carbon on a light canvas stays a
+    // readable grey rather than near-black (missing gamma was the
+    // "black particles" look).
+    gl_FragColor = vec4(linearToSrgb(finalColor), vColor.a);
 }
 `;
 
@@ -277,6 +293,18 @@ uniform float lightSpecularPower;
 uniform vec3 backgroundColor;
 uniform float bondShadingMode; // 0 = lit, 1 = illustrative, 2 = flat
 uniform float bondOutline;
+
+// IEC 61966-2-1 linear → sRGB (per channel). Lighting runs in linear space.
+vec3 linearToSrgb(vec3 c) {
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    bvec3 useLo = lessThanEqual(c, vec3(0.0031308));
+    return vec3(
+        useLo.x ? lo.x : hi.x,
+        useLo.y ? lo.y : hi.y,
+        useLo.z ? lo.z : hi.z
+    );
+}
 
 bool intersectFiniteCylinder(
     vec3 D,
@@ -425,7 +453,8 @@ void main() {
         finalColor = outlineColor;
     }
 
-    gl_FragColor = vec4(finalColor, vColor.a);
+    // Same linear → sRGB as the atom impostor (see sphere fragment).
+    gl_FragColor = vec4(linearToSrgb(finalColor), vColor.a);
 }
 
 `;

@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "MolVis shared core: molrs gateway, element data, and framework-free shared controls (workspace-private)",
@@ -15,6 +15,11 @@
       "import": "./dist/molrs.js",
       "default": "./src/molrs.ts"
     },
+    "./keys": {
+      "types": "./dist/keys.d.ts",
+      "import": "./dist/keys.js",
+      "default": "./src/keys.ts"
+    },
     "./elements": {
       "types": "./dist/elements.d.ts",
       "import": "./dist/elements.js",
@@ -24,6 +29,26 @@
       "types": "./dist/element_picker.d.ts",
       "import": "./dist/element_picker.js",
       "default": "./src/element_picker.ts"
+    },
+    "./opfs": {
+      "types": "./dist/opfs.d.ts",
+      "import": "./dist/opfs.js",
+      "default": "./src/opfs.ts"
+    },
+    "./platform": {
+      "types": "./dist/platform.d.ts",
+      "import": "./dist/platform.js",
+      "default": "./src/platform.ts"
+    },
+    "./save-file": {
+      "types": "./dist/save_file.d.ts",
+      "import": "./dist/save_file.js",
+      "default": "./src/save_file.ts"
+    },
+    "./image-crop": {
+      "types": "./dist/image_crop.d.ts",
+      "import": "./dist/image_crop.js",
+      "default": "./src/image_crop.ts"
     }
   },
   "files": [
@@ -41,7 +66,7 @@
     "test": "rstest run"
   },
   "dependencies": {
-    "@molcrafts/molrs": "0.10.0"
+    "@molcrafts/molrs": "file:../../molrs/molrs-wasm/pkg"
   },
   "devDependencies": {
     "@rslib/core": "^0.22.0",

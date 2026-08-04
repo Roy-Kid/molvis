@@ -1,19 +1,17 @@
 import { Matrix, type PointerInfo, Vector3 } from "@babylonjs/core";
-
+import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import type { MolvisApp as Molvis } from "../app";
 import { viewAtomCoords } from "../io/atom_coords";
 import { SelectModifier } from "../modifiers/SelectModifier";
-
 import {
   type Point2D,
   pointInPolygon,
   simplifyPolyline,
 } from "../selection/fence";
 import { ContextMenuController } from "../ui/menus/controller";
-import { isCtrlOrMeta } from "../utils/platform";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { HitResult, MenuItem } from "./types";
+import type { MenuItem, SceneHit } from "./types";
 
 /**
  * Context menu controller for Select mode.
@@ -24,13 +22,13 @@ class SelectModeContextMenu extends ContextMenuController {
   }
 
   protected shouldShowMenu(
-    _hit: HitResult | null,
+    _hit: SceneHit | null,
     isDragging: boolean,
   ): boolean {
     return !isDragging;
   }
 
-  protected buildMenuItems(hit: HitResult | null): MenuItem[] {
+  protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
     if (header) {
@@ -70,6 +68,17 @@ class SelectModeContextMenu extends ContextMenuController {
           });
         }),
       );
+    } else if (hit?.type === "ribbon") {
+      items.push(
+        CommonMenuItems.button("Select Residue", () => {
+          const atoms = atomIdsForResidue(this.app, hit.chainId, hit.resSeq);
+          if (atoms.length === 0) return;
+          this.app.world.selectionManager.apply({
+            type: "replace",
+            atoms,
+          });
+        }),
+      );
     }
 
     items.push(CommonMenuItems.clearSelection(this.app));
@@ -83,6 +92,46 @@ function toggleInSet(set: Set<number>, value: number): void {
     set.delete(value);
   } else {
     set.add(value);
+  }
+}
+
+/** Atom indices sharing chain_id + res_seq (ribbon residue pick). */
+function atomIdsForResidue(
+  app: Molvis,
+  chainId: string,
+  resSeq: number,
+): number[] {
+  const frame = app.system.frame;
+  const atoms = frame?.getBlock("atoms");
+  if (!atoms) return [];
+  try {
+    if (
+      atoms.dtype("chain_id") !== "string" ||
+      atoms.dtype("res_seq") === undefined
+    ) {
+      return [];
+    }
+    const chains = atoms.copyColStr("chain_id") as string[];
+    const n = atoms.nrows();
+    const out: number[] = [];
+    if (atoms.dtype("res_seq") === "i32") {
+      const seqs = atoms.copyColI32("res_seq");
+      for (let i = 0; i < n; i++) {
+        if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
+          out.push(i);
+        }
+      }
+    } else if (atoms.dtype("res_seq") === "u32") {
+      const seqs = atoms.copyColU32("res_seq");
+      for (let i = 0; i < n; i++) {
+        if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
+          out.push(i);
+        }
+      }
+    }
+    return out;
+  } catch {
+    return [];
   }
 }
 
@@ -193,10 +242,27 @@ class SelectMode extends BaseMode {
     const isCtrl = isCtrlOrMeta(pointerInfo.event);
     const hit = await this.pickHit();
 
-    if (!hit || (hit.type !== "atom" && hit.type !== "bond")) {
+    if (
+      !hit ||
+      (hit.type !== "atom" && hit.type !== "bond" && hit.type !== "ribbon")
+    ) {
       if (!isCtrl) {
         this._pendingAtomIds.clear();
         this._pendingBondIds.clear();
+      }
+      this._emitPendingChange();
+      return;
+    }
+
+    if (hit.type === "ribbon") {
+      const residueAtoms = atomIdsForResidue(this.app, hit.chainId, hit.resSeq);
+      if (!isCtrl) {
+        this._pendingAtomIds.clear();
+        this._pendingBondIds.clear();
+      }
+      for (const id of residueAtoms) {
+        if (isCtrl) toggleInSet(this._pendingAtomIds, id);
+        else this._pendingAtomIds.add(id);
       }
       this._emitPendingChange();
       return;

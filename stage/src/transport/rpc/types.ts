@@ -1,9 +1,10 @@
 /**
  * RPC type definitions for the WebSocket bridge.
  *
- * JSON-RPC 2.0 with a binary-buffer extension: dense numeric arrays are
- * lifted into separate buffers and referenced in JSON via
- * `BinaryBufferRef`.
+ * JSON-RPC 2.0 with a binary extension: dense numeric columns travel as
+ * separate buffers referenced from the JSON. The shape of a molecular payload
+ * is *not* defined here — it is `WireFrame` / `WireBox` in
+ * `@molcrafts/molvis-core/wire`, the one definition both ends of the seam use.
  */
 
 export interface JsonRPCRequest {
@@ -24,24 +25,6 @@ export interface JsonRPCResponse {
   };
 }
 
-export interface BinaryBufferRef {
-  __molvis_buffer__: true;
-  index: number;
-  dtype: string;
-  shape: number[];
-}
-
-export interface SerializedFrameData {
-  blocks: Record<string, Record<string, unknown>>;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SerializedBoxData {
-  matrix: unknown;
-  origin: unknown;
-  pbc?: boolean[];
-}
-
 export interface RPCResponseEnvelope {
   content: JsonRPCResponse;
   buffers?: ArrayBuffer[];
@@ -53,11 +36,15 @@ export function createSuccessResponse(
 ): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
-    id: id ?? 0,
+    id,
     result,
   };
 }
 
+/**
+ * JSON-RPC 2.0 §5: when the id cannot be determined (parse error, malformed
+ * request) the response id is `null`, not a made-up `0`.
+ */
 export function createErrorResponse(
   id: number | null,
   code: number,
@@ -66,7 +53,7 @@ export function createErrorResponse(
 ): JsonRPCResponse {
   return {
     jsonrpc: "2.0",
-    id: id ?? 0,
+    id,
     error: { code, message, data },
   };
 }

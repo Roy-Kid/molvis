@@ -78,6 +78,27 @@ describe("resolvePluginSource", () => {
   it("rejects empty input", async () => {
     await expect(resolvePluginSource("  ")).rejects.toThrow(/empty/i);
   });
+
+  it("resolves local HTTP base URL for debug serving", async () => {
+    const r = await resolvePluginSource("http://127.0.0.1:4173/");
+    expect(r.baseUrl).toBe("http://127.0.0.1:4173/");
+    expect(r.manifestUrl).toBe("http://127.0.0.1:4173/molvis.plugin.json");
+  });
+
+  it("resolves local HTTP entry URL", async () => {
+    const r = await resolvePluginSource("http://localhost:4174/dist/plugin.js");
+    expect(r.baseUrl).toBe("http://localhost:4174/dist/");
+    expect(r.manifestUrl).toBe("http://localhost:4174/dist/molvis.plugin.json");
+  });
+
+  it("rejects file:// and bare filesystem paths", async () => {
+    await expect(
+      resolvePluginSource("file:///Users/me/plugin/dist/plugin.js"),
+    ).rejects.toThrow(/filesystem|HTTP/i);
+    await expect(resolvePluginSource("/Users/me/plugin")).rejects.toThrow(
+      /filesystem|HTTP/i,
+    );
+  });
 });
 
 describe("fetchLatestGithubReleaseTag", () => {

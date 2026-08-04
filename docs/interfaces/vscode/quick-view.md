@@ -36,4 +36,4 @@ Important boundaries:
 
 Use **MolVis: Reload View** after an external program changes the source file.
 
-Continue with the [MolVis Workspace](workspace.md).
+Continue with the [MolVis Workbench](workspace.md).

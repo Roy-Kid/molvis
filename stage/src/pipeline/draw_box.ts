@@ -1,6 +1,19 @@
 import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { hasPresentBox, shouldDrawBox } from "../io/box_presence";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
+
+/**
+ * Whether a freshly auto-attached Simulation cell should start **enabled**
+ * (checkbox on). Placeholder EM cells (`1×1×1`) still match / attach so the
+ * step exists under the file loader, but default `enabled = false` — same
+ * path as the user unchecking the row (no special "draw skip" branch).
+ */
+export function defaultSimulationCellEnabled(frame: {
+  box?: import("@molcrafts/molvis-core/molrs").Box;
+}): boolean {
+  return shouldDrawBox(frame.box);
+}
 
 export interface DrawBoxSpec {
   lengths: [number, number, number];
@@ -36,7 +49,11 @@ export class DrawBoxModifier extends BaseModifier {
   }
 
   matches(frame: Frame): boolean {
-    return this._manualBox !== null || frame.box !== undefined;
+    // Attach whenever a cell exists (including EM 1×1×1 placeholders).
+    // Auto-attach then sets `enabled` via {@link defaultSimulationCellEnabled}
+    // so placeholder cells land with the checkbox **off** (same path as
+    // the user disabling the modifier — not a separate draw skip).
+    return this._manualBox !== null || hasPresentBox(frame.box);
   }
 
   /**
@@ -93,8 +110,8 @@ export class DrawBoxModifier extends BaseModifier {
 
     // Box geometry can change between frames (NPT trajectories), so
     // we redraw on every change kind including "position".
-    // `drawBox(undefined)` collapses to a clear, so the no-box branch
-    // doesn't need a separate code path.
+    // Visibility of this step is solely `this.enabled` + applyVisibility
+    // (pipeline skips apply when disabled). No parallel "shouldDraw" gate.
     if (!ctx.app.styleManager.getShowBox()) {
       ctx.app.artist.drawBox(undefined);
       return frame;
@@ -106,8 +123,22 @@ export class DrawBoxModifier extends BaseModifier {
   }
 
   applyVisibility(app: import("../app").MolvisApp, visible: boolean): void {
+    if (!visible) {
+      // Same clear path as apply() when the step is off / showBox false.
+      app.artist.drawBox(undefined);
+      return;
+    }
+    // Re-draw if the mesh was never built (e.g. started enabled=false for
+    // an EM 1×1×1 cell, then the user checks the box).
+    const frame = app.system.frame;
+    if (frame?.box && app.styleManager.getShowBox()) {
+      app.artist.drawBox(frame.box, {
+        thicknessScale: this._thicknessScale,
+      });
+      return;
+    }
     const boxMesh = app.world.scene.getMeshByName("sim_box");
-    if (boxMesh) boxMesh.setEnabled(visible);
+    if (boxMesh) boxMesh.setEnabled(true);
   }
 
   private createManualBox(): Box | undefined {

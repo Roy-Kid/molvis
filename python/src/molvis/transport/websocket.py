@@ -39,12 +39,8 @@ from queue import Empty, Queue
 from typing import TYPE_CHECKING, Any
 
 from ..types import JsonRPCRequest
-from ._codec import (
-    BinaryPayloadDecoder,
-    BinaryPayloadEncoder,
-    decode_binary_frame,
-    encode_binary_frame,
-)
+from ..wire import resolve_buffers
+from ._codec import decode_binary_frame, encode_binary_frame
 from ._jupyter_env import resolve_endpoints
 
 if TYPE_CHECKING:
@@ -213,9 +209,7 @@ class WebSocketTransport:
         serve_page: bool = True,
         plugins: list[str] | None = None,
     ) -> None:
-        self._page_base_url = (
-            page_base_url.rstrip("/") + "/" if page_base_url else None
-        )
+        self._page_base_url = page_base_url.rstrip("/") + "/" if page_base_url else None
         self._host = host
         self._port = port
         self._token = token or secrets.token_urlsafe(24)
@@ -223,9 +217,7 @@ class WebSocketTransport:
         self._dist = dist or resolve_dist()
         self._event_bus = event_bus
         if surface not in ("full", "canvas"):
-            raise ValueError(
-                f"surface must be 'full' or 'canvas', got {surface!r}"
-            )
+            raise ValueError(f"surface must be 'full' or 'canvas', got {surface!r}")
         self._surface = surface
         self._handshake_timeout = handshake_timeout
         self._serve_page = serve_page
@@ -233,7 +225,6 @@ class WebSocketTransport:
         # page mount opts / standalone URL. Empty list means none.
         self._plugins: list[str] = list(plugins or [])
 
-        self._decoder = BinaryPayloadDecoder()
         self._response_lock = threading.Lock()
         self._request_counter = 0
         self._responses: dict[int, Queue[dict[str, Any]]] = {}
@@ -292,9 +283,7 @@ class WebSocketTransport:
             ``start()`` has not been called yet.
         """
         if self._bound_port == 0:
-            raise RuntimeError(
-                "Call start() before requesting page endpoints"
-            )
+            raise RuntimeError("Call start() before requesting page endpoints")
         if self._page_base_url is not None:
             base = self._page_base_url
             ws = f"ws://{self._host}:{self._bound_port}/ws"
@@ -348,12 +337,8 @@ class WebSocketTransport:
             ``start()`` has not been called yet.
         """
         if self._bound_port == 0:
-            raise RuntimeError(
-                "Call start() before requesting a connection URL"
-            )
-        query = urllib.parse.urlencode(
-            {"token": self._token, "session": session}
-        )
+            raise RuntimeError("Call start() before requesting a connection URL")
+        query = urllib.parse.urlencode({"token": self._token, "session": session})
         return f"ws://{self._host}:{self._bound_port}/ws?{query}"
 
     @staticmethod
@@ -389,9 +374,7 @@ class WebSocketTransport:
         )
         if self._open_browser:
             try:
-                webbrowser.open(
-                    self.page_endpoints(session="default").standalone_url
-                )
+                webbrowser.open(self.page_endpoints(session="default").standalone_url)
             except Exception:  # pragma: no cover — best-effort UX
                 logger.exception("webbrowser.open failed")
         return self._bound_port
@@ -493,8 +476,10 @@ class WebSocketTransport:
         if self._ws is None or self._loop is None:
             raise RuntimeError("WebSocket transport is not connected")
 
-        encoder = BinaryPayloadEncoder()
-        encoded_params = encoder.encode(params)
+        # Params arrive already wire-encoded: dense columns are buffer
+        # references into `buffers`. Re-encoding here is what used to give the
+        # same Frame two different dtypes depending on which path built it.
+        encoded_params = params
 
         with self._response_lock:
             self._request_counter += 1
@@ -511,17 +496,13 @@ class WebSocketTransport:
             id=request_id,
         )
 
-        payload_buffers: list[Any] = [*encoder.buffers, *(buffers or [])]
+        payload_buffers: list[Any] = list(buffers or [])
         if payload_buffers:
             frame = encode_binary_frame(asdict(request), payload_buffers)
-            future = asyncio.run_coroutine_threadsafe(
-                self._ws.send(frame), self._loop
-            )
+            future = asyncio.run_coroutine_threadsafe(self._ws.send(frame), self._loop)
         else:
             text = json.dumps(asdict(request))
-            future = asyncio.run_coroutine_threadsafe(
-                self._ws.send(text), self._loop
-            )
+            future = asyncio.run_coroutine_threadsafe(self._ws.send(text), self._loop)
 
         try:
             future.result(timeout=timeout)
@@ -588,7 +569,7 @@ class WebSocketTransport:
             return
         raw_params = payload.get("params") or {}
         try:
-            params = self._decoder.decode(raw_params, buffers)
+            params = resolve_buffers(raw_params, buffers)
         except Exception as exc:
             logger.warning("Failed to decode notification '%s': %s", method, exc)
             return
@@ -597,11 +578,11 @@ class WebSocketTransport:
         except Exception:
             logger.exception("Event bus raised while dispatching '%s'", method)
 
-    def _dispatch_response(
-        self, payload: dict[str, Any], buffers: list[Any]
-    ) -> None:
+    def _dispatch_response(self, payload: dict[str, Any], buffers: list[Any]) -> None:
         try:
-            decoded = self._decoder.decode(payload, buffers)
+            # Resolve buffer references using each column's declared dtype, so
+            # callers see plain arrays and never have to carry the buffer list.
+            decoded = resolve_buffers(payload, buffers)
         except Exception as exc:
             logger.warning("Failed to decode response: %s", exc)
             return
@@ -702,9 +683,7 @@ class WebSocketTransport:
             if self._handshake_timeout is None:
                 raw = await ws.recv()
             else:
-                raw = await asyncio.wait_for(
-                    ws.recv(), timeout=self._handshake_timeout
-                )
+                raw = await asyncio.wait_for(ws.recv(), timeout=self._handshake_timeout)
         except asyncio.TimeoutError as exc:
             raise _HandshakeError(1008, "handshake timeout") from exc
         if not isinstance(raw, str):
@@ -726,8 +705,6 @@ class WebSocketTransport:
     # ------------------------------------------------------------------
 
     def _serve_static(self, path: str, response_cls: type) -> Any:
-        from websockets.datastructures import Headers
-
         if path == "/" or path == "":
             path = "/index.html"
 

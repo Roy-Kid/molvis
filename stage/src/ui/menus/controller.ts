@@ -1,5 +1,5 @@
 import type { MolvisApp as Molvis } from "../../app";
-import type { HitResult, MenuItem } from "../../mode/types";
+import type { MenuItem, SceneHit } from "../../mode/types";
 import { ContextMenuHost } from "./host";
 
 interface ContextMenuTriggerEvent {
@@ -37,7 +37,7 @@ export abstract class ContextMenuController {
    * Override in subclasses to implement mode-specific logic.
    */
   protected abstract shouldShowMenu(
-    hit: HitResult | null,
+    hit: SceneHit | null,
     isDragging: boolean,
   ): boolean;
 
@@ -45,7 +45,7 @@ export abstract class ContextMenuController {
    * Build menu items for the current context.
    * Override in subclasses to provide mode-specific menu items.
    */
-  protected abstract buildMenuItems(hit: HitResult | null): MenuItem[];
+  protected abstract buildMenuItems(hit: SceneHit | null): MenuItem[];
 
   /**
    * Handle right-click event.
@@ -54,7 +54,7 @@ export abstract class ContextMenuController {
    */
   public handleRightClick(
     ev: ContextMenuTriggerEvent,
-    hit: HitResult | null,
+    hit: SceneHit | null,
     isDragging: boolean,
   ): boolean {
     // If menu is already open, close it

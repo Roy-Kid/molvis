@@ -136,7 +136,7 @@ second atom/bond representation.
 | Method | Purpose |
 |---|---|
 | `setMode(mode: "view" \| "select" \| "edit" \| "manipulate" \| "measure"): void` | Switch the active mode. |
-| `resetCamera(): void` | Re-fit the camera to the current frame. |
+| `fit(): void` | Fit the camera to the current scene (empty → home pose). |
 | `setConfig(config: Partial<MolvisConfig>): void` | Apply a config delta. |
 | `save(): Promise<void>` | Trigger export. In the browser this downloads; in VSCode it writes through the extension host. |
 

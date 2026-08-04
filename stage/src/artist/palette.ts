@@ -51,7 +51,9 @@ const CPK_RECORD = {
   Bi: "#9E4FB5",
   Bk: "#8A4FE3",
   Br: "#A62929",
-  C: "#C8CDD6",
+  // Jmol CPK carbon — medium neutral grey (not the bright cool silver that
+  // washes out next to white hydrogens on a dark canvas).
+  C: "#909090",
   Ca: "#3DFF00",
   Cd: "#FFD98F",
   Ce: "#FFFFC7",
@@ -172,7 +174,7 @@ const OVITO_RECORD = {
   Bi: "#9E4FB5",
   Bk: "#E3AB35",
   Br: "#A62929",
-  C: "#C8CDD6",
+  C: "#909090",
   Ca: "#3DFF00",
   Cd: "#FFD98F",
   Ce: "#FFFFC7",
@@ -349,12 +351,14 @@ function vividize(hex: string): string {
 }
 
 // Hand-tuned soft-vivid colors for the elements that dominate real structures.
+// H stays pure white; C stays Jmol-grey so organics read as skeleton + white
+// hydrogens rather than two near-identical cool silvers.
 const VIVID_OVERRIDES: Record<string, string> = {
-  H: "#EDF1F7",
+  H: "#FFFFFF",
   He: "#C7F2F2",
   Li: "#D49CFF",
   B: "#FFB0B0",
-  C: "#C5CAD3",
+  C: "#909090",
   N: "#5B7BFF",
   O: "#FF5A5A",
   F: "#8FE36B",

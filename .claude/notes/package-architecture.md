@@ -75,14 +75,37 @@ No backward-compat alias maps the old public engine name to stage.
 
 ## core package surface (shared)
 
-Intended exports (illustrative):
+Exports:
 
 ```
 @molcrafts/molvis-core          # barrel (careful sideEffects)
 @molcrafts/molvis-core/molrs    # Frame, Block, generate3D, parseSMILES, … (wasm)
 @molcrafts/molvis-core/elements # PeriodicTable, normalizeElement, palettes (no wasm)
 @molcrafts/molvis-core/element-picker # native custom element + explicit define()
+@molcrafts/molvis-core/opfs         # /molvis/v1 namespace, blob bucket, fingerprint,
+                                    #   usage + clear (browser-origin storage)
+@molcrafts/molvis-core/platform     # isMac / isCtrlOrMeta / getModifierName
+@molcrafts/molvis-core/save-file    # saveBlob: picker with anchor fallback
+@molcrafts/molvis-core/image-crop   # alpha-trim, crop, re-encode a canvas
 ```
+
+**Browser infrastructure belongs in core.** Anything that talks to a browser
+API but knows nothing about 2D or 3D goes here, because `sketch ↛ stage` makes
+core the only place both engines can reach. Before this rule was applied the
+two engines had already diverged: sketch hand-rolled `metaKey || ctrlKey`
+(wrong on macOS, where Ctrl is the secondary-click modifier) while stage had a
+correct platform check, and each had its own file-save mechanism — stage threw
+where the File System Access API is missing, sketch never offered a picker at
+all.
+
+Engine-specific *contents* stay with their engine even when they sit in a core
+bucket: stage owns the `.molidx` trajectory index sidecar and its codec; core
+owns only the namespace, the byte bucket, and the sweep helpers.
+
+Adding a core subpath means four edits — `core/package.json` exports, plus the
+externals list **and** the dts alias map in both `stage/rslib.config.ts` and
+`sketch/rslib.config.ts`. Miss the externals entry and the engine bundle
+inlines a second copy of core instead of sharing one.
 
 Not in core: Babylon, SketchBoard, React, pipeline, RPC. Shared UI primitives
 may live here only as framework-free Web Components backed by core-owned data;

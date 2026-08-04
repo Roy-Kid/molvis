@@ -1,7 +1,14 @@
 import type { Molvis } from "@molvis/stage";
-import { PanelLeft, PanelRight, X } from "lucide-react";
+import { X } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
@@ -9,37 +16,47 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
+  usePanelRef,
 } from "@/components/ui/resizable";
 import { ExitFullscreenAction } from "@/components/viewer/ExitFullscreenAction";
+import { ResetMolvisDialog } from "@/components/viewer/ResetMolvisDialog";
 import { StructureInspector } from "@/components/viewer/StructureInspector";
 import { TrajectoryTimeline } from "@/components/viewer/TrajectoryTimeline";
 import { ViewerIconAction } from "@/components/viewer/ViewerIconAction";
 import { ViewerSidePanel } from "@/components/viewer/ViewerSidePanel";
+import { ViewerStatusBar } from "@/components/viewer/ViewerStatusBar";
 import { ViewerToolbar } from "@/components/viewer/ViewerToolbar";
+import { WorkbenchBottomPanel } from "@/components/viewer/WorkbenchBottomPanel";
 import { useDevDemo } from "@/dev/useDevDemo";
 import { BackendConnectionProvider } from "@/hooks/useBackendConnection";
 import { useBackendStateSync } from "@/hooks/useBackendStateSync";
-import { useHostFileBridge } from "@/hooks/useHostFileBridge";
 import { useIsNarrow } from "@/hooks/useIsNarrow";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
-import { useStatusMessage } from "@/hooks/useStatusMessage";
 import { resolveChrome, useMountOpts } from "@/lib/mount-opts";
 import {
-  BottomPanelHost,
   CommandPalette,
   PluginDialogHost,
   useCommandPaletteHotkey,
 } from "@/plugins";
 import {
-  isAnalysisPanelOpen,
+  isSidePanelOpen,
   resolveViewerPanelLayout,
+  SIDE_PANEL_MIN_PCT,
+  SIDE_PANEL_OPEN_DEFAULT_PCT,
 } from "./lib/viewer-layout";
 import MolvisWrapper from "./MolvisWrapper";
 import { KeyboardShortcutsDialog } from "./ui/layout/KeyboardShortcutsDialog";
 import { LeftShellProvider } from "./ui/layout/LeftShellContext";
-import { LeftSidebar } from "./ui/layout/LeftSidebar";
 import { StateSyncDialog } from "./ui/layout/StateSyncDialog";
 import { CameraTrajectoryOverlay } from "./ui/modes/view/CameraTrajectoryOverlay";
+
+// Analysis pulls in molplot/Vega and a large catalog of result panels. It is
+// closed by default, so keep that entire graph off the viewer's startup path.
+const LeftSidebar = lazy(() =>
+  import("./ui/layout/LeftSidebar").then((module) => ({
+    default: module.LeftSidebar,
+  })),
+);
 
 const INLINE_PANEL_BREAKPOINT = 1280;
 const COARSE_POINTER_INLINE_PANEL_BREAKPOINT = 1580;
@@ -63,7 +80,6 @@ const App: React.FC = () => {
   const [app, setApp] = useState<Molvis | null>(null);
   const { currentMode, setCurrentMode, trajectoryLength } =
     useMolvisUiState(app);
-  const { statusMessage, statusType, statusPulse } = useStatusMessage(app);
 
   // Bind plugin runtime once the engine is ready; restore Settings plugins
   // and host-injected sources (VSCode molvis.plugins / Python plugins=).
@@ -86,6 +102,19 @@ const App: React.FC = () => {
 
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  /**
+   * Bumped to restart the viewer. Remounting MolvisWrapper disposes the
+   * Babylon engine and builds a fresh one, which is what "reload" has to
+   * mean here — `location.reload()` would reload the *host* page, and
+   * MolVis usually lives inside someone else's (a notebook cell, a VSCode
+   * webview).
+   */
+  const [viewerGeneration, setViewerGeneration] = useState(0);
+  const reloadViewer = useCallback(() => {
+    setApp(null);
+    setViewerGeneration((n) => n + 1);
+  }, []);
   const openCommandPalette = useCallback(() => {
     setCommandPaletteOpen(true);
   }, []);
@@ -103,13 +132,102 @@ const App: React.FC = () => {
   );
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Wide layout: analysis starts closed (0%); tools open by default; both
+  // can fully collapse. Overlay refs size the absolute chrome; panel refs
+  // drive the resizable workbench slots (collapse/expand/resize).
+  //
+  // Overlay width is driven by the live layout during drag via DOM only
+  // (see handlePanelLayout). React state holds the *committed* size so
+  // re-renders never snap the overlay back to a default mid-drag.
   const [analysisInlineOpen, setAnalysisInlineOpen] = useState(false);
-  const openLeftAdvancedPanel = useCallback(() => {
-    setLeftDrawerOpen(true);
-    setAnalysisInlineOpen(true);
-  }, []);
+  // Once requested, keep the lazy panel mounted so analysis inputs/results
+  // survive close/reopen without making the initial page pay its bundle cost.
+  const [analysisPanelLoaded, setAnalysisPanelLoaded] = useState(false);
+  const [toolsInlineOpen, setToolsInlineOpen] = useState(true);
+  const [analysisWidthPct, setAnalysisWidthPct] = useState(0);
+  // Match resolveViewerPanelLayout({ both: true }).tools (15%); first
+  // onLayoutChange corrects if chrome/layout differs.
+  const [toolsWidthPct, setToolsWidthPct] = useState(15);
   const analysisPanelRef = useRef<HTMLElement>(null);
   const toolsPanelRef = useRef<HTMLElement>(null);
+  const analysisSlotRef = usePanelRef();
+  const toolsSlotRef = usePanelRef();
+  /** Last open width restored by chrome open (not the snap-close default). */
+  const lastAnalysisWidthRef = useRef(SIDE_PANEL_OPEN_DEFAULT_PCT);
+  const lastToolsWidthRef = useRef(15);
+
+  useEffect(() => {
+    if (analysisInlineOpen || leftDrawerOpen) {
+      setAnalysisPanelLoaded(true);
+    }
+  }, [analysisInlineOpen, leftDrawerOpen]);
+
+  const applyOverlayWidth = useCallback(
+    (side: "analysis" | "tools", pct: number) => {
+      const el =
+        side === "analysis" ? analysisPanelRef.current : toolsPanelRef.current;
+      if (el) el.style.width = `${pct}%`;
+    },
+    [],
+  );
+
+  const setLeftOpen = useCallback(
+    (open: boolean) => {
+      if (open) setAnalysisPanelLoaded(true);
+      setLeftDrawerOpen(open);
+      setAnalysisInlineOpen(open);
+      const slot = analysisSlotRef.current;
+      if (open) {
+        const width = lastAnalysisWidthRef.current;
+        setAnalysisWidthPct(width);
+        applyOverlayWidth("analysis", width);
+        if (slot) {
+          if (slot.isCollapsed()) slot.expand();
+          slot.resize(`${width}%`);
+        }
+      } else {
+        setAnalysisWidthPct(0);
+        applyOverlayWidth("analysis", 0);
+        if (slot && !slot.isCollapsed()) slot.collapse();
+      }
+    },
+    [analysisSlotRef, applyOverlayWidth],
+  );
+
+  const setRightOpen = useCallback(
+    (open: boolean) => {
+      setRightDrawerOpen(open);
+      setToolsInlineOpen(open);
+      const slot = toolsSlotRef.current;
+      if (open) {
+        const width = lastToolsWidthRef.current;
+        setToolsWidthPct(width);
+        applyOverlayWidth("tools", width);
+        if (slot) {
+          if (slot.isCollapsed()) slot.expand();
+          slot.resize(`${width}%`);
+        }
+      } else {
+        setToolsWidthPct(0);
+        applyOverlayWidth("tools", 0);
+        if (slot && !slot.isCollapsed()) slot.collapse();
+      }
+    },
+    [toolsSlotRef, applyOverlayWidth],
+  );
+
+  const openLeftAdvancedPanel = useCallback(() => {
+    setLeftOpen(true);
+  }, [setLeftOpen]);
+
+  const closeLeftPanel = useCallback(() => {
+    setLeftOpen(false);
+  }, [setLeftOpen]);
+
+  const closeRightPanel = useCallback(() => {
+    setRightOpen(false);
+  }, [setRightOpen]);
+
   const stateSync = useBackendStateSync(app);
   const showInlineAnalysis = !uiHidden && !isNarrow && chrome.leftSidebar;
   const showInlineTools = !uiHidden && !isNarrow && chrome.rightSidebar;
@@ -127,7 +245,7 @@ const App: React.FC = () => {
     !uiHidden && chrome.timeline && app !== null && trajectoryLength > 1;
   const showBottomBar = !uiHidden && (chrome.statusBar || showTimeline);
 
-  useHostFileBridge(app);
+  // VS Code hosts own postMessage IO in vsc-ext (never reverse-depend on page).
   useDevDemo(app, setCurrentMode, opts);
 
   useEffect(() => {
@@ -167,18 +285,71 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePanelLayout = (layout: Record<string, number>) => {
-    if (layout.analysis !== undefined && analysisPanelRef.current) {
-      analysisPanelRef.current.style.width = `${layout.analysis}%`;
-      const nextOpen = isAnalysisPanelOpen(layout.analysis);
-      setAnalysisInlineOpen((current) =>
-        current === nextOpen ? current : nextOpen,
-      );
-    }
-    if (layout.tools !== undefined && toolsPanelRef.current) {
-      toolsPanelRef.current.style.width = `${layout.tools}%`;
-    }
-  };
+  /**
+   * Live layout (every pointermove while dragging).
+   * Width is DOM-only. Open flags may soft-update for visibility, but never
+   * call collapse/expand/resize on the slot here — that fights the library
+   * and makes the hairline separator jump off the cursor.
+   */
+  const handlePanelLayout = useCallback(
+    (layout: Record<string, number>) => {
+      if (layout.analysis !== undefined) {
+        applyOverlayWidth("analysis", layout.analysis);
+        const open = isSidePanelOpen(layout.analysis);
+        setAnalysisInlineOpen((current) => (current === open ? current : open));
+      }
+      if (layout.tools !== undefined) {
+        applyOverlayWidth("tools", layout.tools);
+        const open = isSidePanelOpen(layout.tools);
+        setToolsInlineOpen((current) => (current === open ? current : open));
+      }
+    },
+    [applyOverlayWidth],
+  );
+
+  /**
+   * Committed layout (pointer up / keyboard resize end).
+   * Snap below min → closed; otherwise record open size for reopen.
+   */
+  const handlePanelLayoutChanged = useCallback(
+    (layout: Record<string, number>) => {
+      if (layout.analysis !== undefined) {
+        const size = layout.analysis;
+        applyOverlayWidth("analysis", size);
+        if (size > 0 && size < SIDE_PANEL_MIN_PCT) {
+          setLeftOpen(false);
+        } else {
+          const open = isSidePanelOpen(size);
+          if (open) {
+            lastAnalysisWidthRef.current = size;
+            setAnalysisWidthPct(size);
+          } else {
+            setAnalysisWidthPct(0);
+          }
+          setAnalysisInlineOpen((current) =>
+            current === open ? current : open,
+          );
+        }
+      }
+      if (layout.tools !== undefined) {
+        const size = layout.tools;
+        applyOverlayWidth("tools", size);
+        if (size > 0 && size < SIDE_PANEL_MIN_PCT) {
+          setRightOpen(false);
+        } else {
+          const open = isSidePanelOpen(size);
+          if (open) {
+            lastToolsWidthRef.current = size;
+            setToolsWidthPct(size);
+          } else {
+            setToolsWidthPct(0);
+          }
+          setToolsInlineOpen((current) => (current === open ? current : open));
+        }
+      }
+    },
+    [applyOverlayWidth, setLeftOpen, setRightOpen],
+  );
 
   if (canvasOnly) {
     return (
@@ -195,10 +366,10 @@ const App: React.FC = () => {
             <BondMappingPickerProvider>
               <section
                 aria-label="MolVis molecular viewer"
-                className="h-full w-full bg-background overflow-hidden"
+                className="relative h-full w-full bg-background overflow-hidden"
                 onContextMenu={(e) => e.preventDefault()}
               >
-                <MolvisWrapper onMount={setApp} />
+                <MolvisWrapper key={viewerGeneration} onMount={setApp} />
               </section>
               <StateSyncDialog
                 open={stateSync.pending !== null}
@@ -206,7 +377,6 @@ const App: React.FC = () => {
                 feedback={stateSync.feedback}
                 onKeepLocal={stateSync.keepLocal}
                 onApplyBackend={() => void stateSync.applyBackend()}
-                onDismissFeedback={stateSync.dismissFeedback}
               />
             </BondMappingPickerProvider>
           </FormatPickerProvider>
@@ -248,16 +418,18 @@ const App: React.FC = () => {
                     className="h-full"
                     defaultLayout={defaultPanelLayout}
                     onLayoutChange={handlePanelLayout}
+                    onLayoutChanged={handlePanelLayoutChanged}
                     resizeTargetMinimumSize={{ fine: 20, coarse: 44 }}
                   >
                     {showInlineAnalysis && (
                       <ResizablePanel
                         key="analysis"
                         id="analysis"
+                        panelRef={analysisSlotRef}
                         defaultSize={defaultAnalysisSize}
                         collapsible
                         collapsedSize="0%"
-                        minSize="12%"
+                        minSize={`${SIDE_PANEL_MIN_PCT}%`}
                         maxSize="30%"
                         aria-hidden="true"
                       />
@@ -268,7 +440,6 @@ const App: React.FC = () => {
                         key="handle-analysis"
                         aria-label="Resize analysis panel"
                         className="z-20"
-                        withHandle
                       />
                     )}
 
@@ -280,43 +451,15 @@ const App: React.FC = () => {
                       className="flex min-w-0 flex-col"
                     >
                       <div className="relative flex-1 overflow-hidden bg-canvas">
-                        <MolvisWrapper onMount={setApp} />
+                        <MolvisWrapper
+                          key={viewerGeneration}
+                          onMount={setApp}
+                        />
                         {uiHidden && <CameraTrajectoryOverlay app={app} />}
                         {uiHidden && (
                           <ExitFullscreenAction
                             onExit={() => setUiHidden(false)}
                           />
-                        )}
-
-                        {isNarrow && !uiHidden && (
-                          <>
-                            {chrome.leftSidebar && (
-                              <ViewerIconAction
-                                icon={<PanelLeft />}
-                                label="Toggle analysis panel"
-                                selected={leftDrawerOpen}
-                                tooltipSide="right"
-                                onClick={() => {
-                                  setRightDrawerOpen(false);
-                                  setLeftDrawerOpen((open) => !open);
-                                }}
-                                className="motion-fade-in absolute left-2 top-2 z-10 bg-background/80 backdrop-blur"
-                              />
-                            )}
-                            {chrome.rightSidebar && (
-                              <ViewerIconAction
-                                icon={<PanelRight />}
-                                label="Toggle tool panel"
-                                selected={rightDrawerOpen}
-                                tooltipSide="left"
-                                onClick={() => {
-                                  setLeftDrawerOpen(false);
-                                  setRightDrawerOpen((open) => !open);
-                                }}
-                                className="motion-fade-in absolute right-2 top-2 z-10 bg-background/80 backdrop-blur"
-                              />
-                            )}
-                          </>
                         )}
                       </div>
                     </ResizablePanel>
@@ -326,7 +469,6 @@ const App: React.FC = () => {
                         key="handle-tools"
                         aria-label="Resize tool panel"
                         className="z-20"
-                        withHandle
                       />
                     )}
 
@@ -334,8 +476,11 @@ const App: React.FC = () => {
                       <ResizablePanel
                         key="tools"
                         id="tools"
+                        panelRef={toolsSlotRef}
                         defaultSize={defaultToolsSize}
-                        minSize="12%"
+                        collapsible
+                        collapsedSize="0%"
+                        minSize={`${SIDE_PANEL_MIN_PCT}%`}
                         maxSize="30%"
                         aria-hidden="true"
                       />
@@ -357,9 +502,9 @@ const App: React.FC = () => {
                   {chrome.leftSidebar && (
                     <ViewerSidePanel
                       drawer={isNarrow}
-                      inlineWidth={defaultAnalysisSize}
-                      label="Advanced panel"
-                      onClose={() => setLeftDrawerOpen(false)}
+                      inlineWidth={`${analysisWidthPct}%`}
+                      label="Left panel"
+                      onClose={closeLeftPanel}
                       open={
                         !uiHidden &&
                         (isNarrow ? leftDrawerOpen : analysisInlineOpen)
@@ -367,31 +512,45 @@ const App: React.FC = () => {
                       panelRef={analysisPanelRef}
                       side="left"
                     >
-                      <LeftSidebar
-                        app={app}
-                        headerAction={
-                          isNarrow ? (
-                            <ViewerIconAction
-                              icon={<X />}
-                              label="Close advanced panel"
-                              tooltipSide="left"
-                              data-drawer-close
-                              onClick={() => setLeftDrawerOpen(false)}
-                              className="shrink-0"
-                            />
-                          ) : undefined
-                        }
-                      />
+                      {analysisPanelLoaded && (
+                        <Suspense
+                          fallback={
+                            <div
+                              role="status"
+                              className="flex h-full items-center justify-center px-3 text-label text-muted-foreground"
+                            >
+                              Loading analysis tools…
+                            </div>
+                          }
+                        >
+                          <LeftSidebar
+                            app={app}
+                            headerAction={
+                              <ViewerIconAction
+                                icon={<X />}
+                                label="Close left panel"
+                                tooltipSide="left"
+                                data-drawer-close
+                                onClick={closeLeftPanel}
+                                className="shrink-0"
+                              />
+                            }
+                          />
+                        </Suspense>
+                      )}
                     </ViewerSidePanel>
                   )}
 
                   {chrome.rightSidebar && (
                     <ViewerSidePanel
                       drawer={isNarrow}
-                      inlineWidth={defaultToolsSize}
-                      label="Tool panel"
-                      onClose={() => setRightDrawerOpen(false)}
-                      open={!uiHidden && (!isNarrow || rightDrawerOpen)}
+                      inlineWidth={`${toolsWidthPct}%`}
+                      label="Right panel"
+                      onClose={closeRightPanel}
+                      open={
+                        !uiHidden &&
+                        (isNarrow ? rightDrawerOpen : toolsInlineOpen)
+                      }
                       panelRef={toolsPanelRef}
                       side="right"
                     >
@@ -400,49 +559,30 @@ const App: React.FC = () => {
                         currentMode={currentMode}
                         onModeChange={handleModeChange}
                         headerAction={
-                          isNarrow ? (
-                            <ViewerIconAction
-                              icon={<X />}
-                              label="Close tool panel"
-                              tooltipSide="left"
-                              data-drawer-close
-                              onClick={() => setRightDrawerOpen(false)}
-                              className="shrink-0"
-                            />
-                          ) : undefined
+                          <ViewerIconAction
+                            icon={<X />}
+                            label="Close right panel"
+                            tooltipSide="left"
+                            data-drawer-close
+                            onClick={closeRightPanel}
+                            className="shrink-0"
+                          />
                         }
                       />
                     </ViewerSidePanel>
                   )}
                 </div>
 
-                <BottomPanelHost app={app} hidden={uiHidden} />
+                <WorkbenchBottomPanel app={app} hidden={uiHidden} />
 
                 {showBottomBar && (
-                  <div className="motion-enter-bottom flex h-statusbar shrink-0 items-center border-t border-border/70 bg-background">
-                    {chrome.statusBar && (
-                      <div
-                        key={statusPulse}
-                        role="status"
-                        aria-live={
-                          statusType === "error" ? "assertive" : "polite"
-                        }
-                        className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap px-2 font-mono text-xs tabular-nums transition-colors duration-(--motion-base) ease-standard ${
-                          statusType === "error"
-                            ? "bg-status-failed-soft font-medium text-status-failed-foreground"
-                            : statusType === "success"
-                              ? "status-bar-flash-success font-medium text-status-completed-foreground"
-                              : "text-muted-foreground"
-                        }`}
-                      >
-                        {statusMessage}
-                      </div>
-                    )}
+                  <div className="flex h-statusbar shrink-0 items-center border-t border-border/80 bg-background">
+                    {chrome.statusBar && <ViewerStatusBar app={app} />}
                     {showTimeline && (
                       <div
                         className={`h-full min-w-0 ${
                           chrome.statusBar
-                            ? "flex-[2] border-l border-border/70"
+                            ? "w-[min(42%,22rem)] shrink-0 border-l border-border/80 sm:w-[min(48%,28rem)]"
                             : "flex-1"
                         }`}
                       >
@@ -463,6 +603,14 @@ const App: React.FC = () => {
                   open={commandPaletteOpen}
                   onOpenChange={setCommandPaletteOpen}
                   onModeChange={handleModeChange}
+                  onReload={reloadViewer}
+                  onReset={() => setResetOpen(true)}
+                />
+
+                <ResetMolvisDialog
+                  open={resetOpen}
+                  onOpenChange={setResetOpen}
+                  onCleared={reloadViewer}
                 />
 
                 <KeyboardShortcutsDialog
@@ -476,7 +624,6 @@ const App: React.FC = () => {
                   feedback={stateSync.feedback}
                   onKeepLocal={stateSync.keepLocal}
                   onApplyBackend={() => void stateSync.applyBackend()}
-                  onDismissFeedback={stateSync.dismissFeedback}
                 />
               </section>
             </LeftShellProvider>

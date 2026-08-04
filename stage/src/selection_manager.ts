@@ -313,6 +313,16 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
   }
 
   /**
+   * Get IDs of all selected bonds.
+   *
+   * Like atom ids, these are row indices into the current frame's `bonds`
+   * block (`entity_source` assigns `bondId: index`).
+   */
+  getSelectedBondIds(): Set<number> {
+    return new Set(this.state.bonds);
+  }
+
+  /**
    * Get metadata for all selected entities.
    * Returns data in molpy.Frame compatible format.
    *
