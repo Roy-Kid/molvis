@@ -980,6 +980,87 @@ export class Artist {
     }
   }
 
+  /**
+   * Re-sample atom (and bond) impostor colors from the current theme into
+   * existing SceneIndex buffers. Used by `view.set_theme` so edit-pool
+   * stamps (`scene.draw_frame` without commit) recolor without a DS HEAD.
+   */
+  public recolorFromTheme(): void {
+    const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
+    const atomsMeta = this.app.world.sceneIndex.metaRegistry.atoms;
+    if (atomState) {
+      const colorDesc = atomState.buffers.get("instanceColor");
+      if (colorDesc) {
+        const total = atomState.getTotalCount();
+        for (let abs = 0; abs < total; abs++) {
+          let atomId: number;
+          if (abs < atomState.frameOffset) {
+            // Frame segment is identity-mapped for atoms.
+            atomId = abs;
+          } else {
+            atomId =
+              atomState.indexToId.get(abs - atomState.frameOffset) ?? abs;
+          }
+          const meta = atomsMeta.getMeta(atomId);
+          const element = meta?.element || "C";
+          const style = this.app.styleManager.getAtomStyle(element);
+          const c = Color3.FromHexString(style.color).toLinearSpace();
+          const o = abs * 4;
+          colorDesc.data[o] = c.r;
+          colorDesc.data[o + 1] = c.g;
+          colorDesc.data[o + 2] = c.b;
+          // Preserve alpha (slice / hide masks).
+        }
+        atomState.uploadBuffer("instanceColor");
+      }
+    }
+
+    const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
+    const bondsMeta = this.app.world.sceneIndex.metaRegistry.bonds;
+    if (bondState) {
+      const c0 = bondState.buffers.get("instanceColor0");
+      const c1 = bondState.buffers.get("instanceColor1");
+      if (c0 && c1) {
+        const total = bondState.getTotalCount();
+        for (let abs = 0; abs < total; abs++) {
+          let bondId: number;
+          if (abs < bondState.frameOffset) {
+            bondId = abs;
+          } else {
+            bondId =
+              bondState.indexToId.get(abs - bondState.frameOffset) ?? abs;
+          }
+          const meta = bondsMeta.getMeta(bondId);
+          // Prefer endpoint atom theme colors (split stick); fall back to
+          // bond-order theme style when meta is missing.
+          let col0: Float32Array;
+          let col1: Float32Array;
+          if (meta) {
+            col0 = this.getAtomColor(meta.atomId1);
+            col1 = this.getAtomColor(meta.atomId2);
+          } else {
+            const bs = this.app.styleManager.getBondStyle(1);
+            const c = Color3.FromHexString(bs.color).toLinearSpace();
+            const flat = new Float32Array([c.r, c.g, c.b, bs.alpha ?? 1]);
+            col0 = flat;
+            col1 = flat;
+          }
+          const o = abs * 4;
+          c0.data[o] = col0[0];
+          c0.data[o + 1] = col0[1];
+          c0.data[o + 2] = col0[2];
+          c1.data[o] = col1[0];
+          c1.data[o + 1] = col1[1];
+          c1.data[o + 2] = col1[2];
+        }
+        bondState.uploadBuffer("instanceColor0");
+        bondState.uploadBuffer("instanceColor1");
+      }
+    }
+
+    this.applySceneIndexToMeshes();
+  }
+
   // ============ Private Helpers ============
 
   private registerRuntimeLayers(): void {

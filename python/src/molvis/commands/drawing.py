@@ -45,7 +45,8 @@ STYLE: tuple[str, ...] = (
     "graph",
 )
 
-#: Catalog of color-theme ids accepted by ``view.set_theme``.
+#: Catalog of **color-palette** theme ids accepted by ``view.set_theme``
+#: (atom/bond colours only — not viewport background).
 THEME: tuple[str, ...] = ("classic", "modern", "vivid")
 
 __all__ = ["ColorTheme", "DrawingCommandsMixin", "RepresentationStyle", "STYLE", "THEME"]
@@ -77,7 +78,8 @@ class DrawingCommandsMixin:
 
         for style in stage.STYLE:
             for theme in stage.THEME:
-                stage.set_style(style, theme)
+                stage.set_style(style)
+                stage.set_theme(theme)
     """
 
     #: Iterable of representation style ids (see :data:`STYLE`).
@@ -134,26 +136,17 @@ class DrawingCommandsMixin:
         return self
 
     @frame_arg
-    def draw(
-        self: "Molvis",
-        structure: Any,
-        *,
-        atom_fields: list[str] | None = None,
-    ) -> "Molvis":
-        """Place a Frame or Atomistic / molgraph (first-arg structure).
-
-        ``atom_fields`` is consumed by :func:`frame_arg` when coercing graphs.
-        """
-        return self.draw_frame(structure)
-
-    @frame_arg
     def draw_atomistic(
         self: "Molvis",
         atomistic: Any,
         *,
         atom_fields: list[str] | None = None,
     ) -> "Molvis":
-        """Place an Atomistic / molgraph (alias of :meth:`draw` for clarity)."""
+        """Place an Atomistic / molgraph via :meth:`draw_frame`.
+
+        Prefer the explicit :meth:`draw_frame` + :meth:`commit` pair for
+        structures that should become pipeline HEAD.
+        """
         return self.draw_frame(atomistic)
 
     def draw_box(self: "Molvis", box: mp.Box) -> "Molvis":
@@ -291,68 +284,83 @@ class DrawingCommandsMixin:
     def set_style(
         self: "Molvis",
         style: RepresentationStyle | None = None,
-        theme: ColorTheme | str | None = None,
         *,
         atom_radius: float | None = None,
         bond_radius: float | None = None,
         outline: bool | None = None,
     ) -> "Molvis":
-        """Set global representation style and/or color theme.
+        """Set the global **representation** (geometry), not color theme.
+
+        Color themes are :meth:`set_theme` — keep the two concerns separate.
 
         Parameters
         ----------
         style
-            Representation id (see :attr:`STYLE`). Optional when only
-            radii / outline / theme are changing.
-        theme
-            Color theme id (see :attr:`THEME`). Optional second positional
-            so ``stage.set_style(style, theme)`` works in a double loop
-            over :attr:`STYLE` × :attr:`THEME`.
+            Representation id from :attr:`STYLE` (e.g. ``"spacefill"``).
+            Optional when only radii / outline are changing.
         atom_radius, bond_radius, outline
-            Keyword-only representation tweaks (not themes).
+            Optional representation tweaks.
 
         Examples
         --------
         ::
 
             stage.set_style("spacefill")
-            stage.set_style("ball-and-stick", "modern")
-            stage.set_style(style="graph", outline=False)
+            stage.set_style("graph", outline=False)
             for style in stage.STYLE:
-                for theme in stage.THEME:
-                    stage.set_style(style, theme)
+                stage.set_style(style)
         """
-        if theme is not None:
-            self.set_theme(theme)
         if (
-            style is not None
-            or atom_radius is not None
-            or bond_radius is not None
-            or outline is not None
+            style is None
+            and atom_radius is None
+            and bond_radius is None
+            and outline is None
         ):
-            self.send_cmd(
-                FrontendCommands.SET_STYLE.method,
-                {
-                    "style": style,
-                    "outline": outline,
-                    "atoms": {"radius": atom_radius},
-                    "bonds": {"radius": bond_radius},
-                },
+            raise TypeError(
+                "set_style needs style and/or atom_radius/bond_radius/outline"
             )
+        if style is not None and style not in STYLE:
+            raise ValueError(
+                f"unknown style {style!r}; expected one of {list(STYLE)}"
+            )
+        self.send_cmd(
+            FrontendCommands.SET_STYLE.method,
+            {
+                "style": style,
+                "outline": outline,
+                "atoms": {"radius": atom_radius},
+                "bonds": {"radius": bond_radius},
+            },
+            wait_for_response=True,
+        )
         return self
 
     def set_theme(self: "Molvis", theme: ColorTheme | str) -> "Molvis":
-        """Set color theme for molecular visualization.
+        """Set the global **color palette** (atom/bond colours only).
 
         Accepted values are listed on :attr:`THEME`
-        (``classic`` / ``modern`` / ``vivid``).
+        (``classic`` / ``modern`` / ``vivid``). This does **not** change the
+        viewport background, selection chrome, or representation geometry —
+        use the host/UI for background and :meth:`set_style` for geometry.
+
+        Examples
+        --------
+        ::
+
+            stage.set_theme("modern")
+            for theme in stage.THEME:
+                stage.set_theme(theme)
         """
         name = str(theme).strip().lower()
         if name not in THEME:
             raise ValueError(
                 f"unknown theme {theme!r}; expected one of {list(THEME)}"
             )
-        self.send_cmd(FrontendCommands.SET_THEME.method, {"theme": name})
+        self.send_cmd(
+            FrontendCommands.SET_THEME.method,
+            {"theme": name},
+            wait_for_response=True,
+        )
         return self
 
     def set_view_mode(self: "Molvis", mode: str) -> "Molvis":

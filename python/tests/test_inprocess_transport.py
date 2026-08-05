@@ -138,7 +138,7 @@ def test_molvis_draw_frame_routes_scene_draw_frame() -> None:
                 }
             }
 
-    scene.draw(FakeFrame())  # type: ignore[arg-type]
+    scene.draw_frame(FakeFrame())  # type: ignore[arg-type]
     methods = [m for m, _ in inv.calls]
     assert "scene.draw_frame" in methods
     draw_calls = [p for m, p in inv.calls if m == "scene.draw_frame"]

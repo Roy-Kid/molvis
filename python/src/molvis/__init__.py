@@ -9,7 +9,8 @@ Commands are methods on a stage — there is no module-level shortcut::
     import molvis as mv
 
     stage = mv.Stage()
-    stage.draw(frame)
+    stage.draw_frame(frame)
+    stage.commit()
     stage.camera.fit()
 
 An earlier version forwarded unknown module attributes to a "current"

@@ -2,6 +2,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   DEFAULT_LABEL_CONFIG,
   resolveTemplate,
+  skeletalLabelFontSize,
 } from "../../src/artist/label_renderer";
 
 describe("resolveTemplate", () => {
@@ -68,8 +69,27 @@ describe("DEFAULT_LABEL_CONFIG", () => {
     expect(DEFAULT_LABEL_CONFIG.maxVisible).toBe(200);
   });
 
-  it("should have reasonable fontSize", () => {
-    expect(DEFAULT_LABEL_CONFIG.fontSize).toBeGreaterThan(0);
-    expect(DEFAULT_LABEL_CONFIG.fontSize).toBeLessThanOrEqual(24);
+  it("should have readable default fontSize", () => {
+    expect(DEFAULT_LABEL_CONFIG.fontSize).toBeGreaterThanOrEqual(18);
+    expect(DEFAULT_LABEL_CONFIG.fontSize).toBeLessThanOrEqual(48);
+  });
+
+  it("should default to bold weight for heteroatom symbols", () => {
+    expect(DEFAULT_LABEL_CONFIG.fontWeight).toBe("bold");
+  });
+});
+
+describe("skeletalLabelFontSize", () => {
+  it("floors at 28 for short viewports", () => {
+    expect(skeletalLabelFontSize(400)).toBe(28);
+  });
+
+  it("scales with viewport height", () => {
+    expect(skeletalLabelFontSize(1000)).toBe(32);
+    expect(skeletalLabelFontSize(1600)).toBe(51);
+  });
+
+  it("caps at 56 for huge canvases", () => {
+    expect(skeletalLabelFontSize(4000)).toBe(56);
   });
 });

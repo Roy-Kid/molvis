@@ -16,7 +16,7 @@ import {
   buildAtomColorOnly,
 } from "./atom_buffer";
 import { buildBondBuffers } from "./bond_buffer";
-import type { LabelRenderer } from "./label_renderer";
+import { type LabelRenderer, skeletalLabelFontSize } from "./label_renderer";
 import type { ImpostorTarget } from "./material_spec";
 
 export interface RepresentationDrawHost {
@@ -191,10 +191,12 @@ function syncRepresentationLabels(
   const background = host.app.world.scene.clearColor;
   const luma =
     background.r * 0.2126 + background.g * 0.7152 + background.b * 0.0722;
+  const renderH = host.app.world.scene.getEngine().getRenderHeight();
   host.labelRenderer.setConfig({
     mode: "all",
     template: "{element}",
-    fontSize: 16,
+    fontSize: skeletalLabelFontSize(renderH),
+    fontWeight: "bold",
     maxVisible: 512,
   });
   host.labelRenderer.build({
@@ -206,7 +208,7 @@ function syncRepresentationLabels(
     indices,
     colors,
     outlineColor: luma > 0.42 ? "#111827" : "#FFFFFF",
-    outlineWidth: representation.outlineEnabled ? 3 : 0,
+    outlineWidth: representation.outlineEnabled ? 4 : 2,
   });
 }
 

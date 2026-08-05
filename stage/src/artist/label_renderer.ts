@@ -6,7 +6,7 @@
  */
 
 import { Matrix, type Scene, Vector3 } from "@babylonjs/core";
-import { AdvancedDynamicTexture, TextBlock } from "@babylonjs/gui";
+import { AdvancedDynamicTexture, Control, TextBlock } from "@babylonjs/gui";
 
 export type LabelMode = "none" | "all" | "selected";
 
@@ -14,7 +14,10 @@ export interface LabelConfig {
   mode: LabelMode;
   /** Template string: "{element}", "{atomId}", or a column name */
   template: string;
+  /** GUI font size in texture pixels (not CSS px after ADT scaling). */
   fontSize: number;
+  /** CSS font-weight for TextBlock (e.g. ``"bold"``). */
+  fontWeight: string;
   color: string;
   /** Max visible labels to prevent performance issues */
   maxVisible: number;
@@ -23,10 +26,24 @@ export interface LabelConfig {
 export const DEFAULT_LABEL_CONFIG: Readonly<LabelConfig> = {
   mode: "none",
   template: "{element}",
-  fontSize: 12,
+  // 12 was unreadable on modern canvases; 22 is a sane floor for “all atoms”.
+  fontSize: 22,
+  fontWeight: "bold",
   color: "#FFFFFF",
   maxVisible: 200,
 };
+
+/**
+ * Viewport-relative font size for skeletal (heteroatom) element symbols.
+ *
+ * Hard-coded 16px looked like dust on HiDPI / large canvases. Scale with
+ * render height so labels stay comparable to stick thickness at fit zoom.
+ */
+export function skeletalLabelFontSize(renderHeightPx: number): number {
+  const h = Number.isFinite(renderHeightPx) ? Math.max(1, renderHeightPx) : 720;
+  // ~3.2% of viewport height, clamped for phone vs 4K.
+  return Math.round(Math.min(56, Math.max(28, h * 0.032)));
+}
 
 interface LabelEntry {
   textBlock: TextBlock;
@@ -138,9 +155,13 @@ export class LabelRenderer {
       const tb = new TextBlock(`label_${i}`, text);
       tb.color = atoms.colors?.[i] ?? this._config.color;
       tb.fontSize = this._config.fontSize;
-      tb.outlineWidth = atoms.outlineWidth ?? 2;
+      tb.fontWeight = this._config.fontWeight;
+      tb.outlineWidth = atoms.outlineWidth ?? 3;
       tb.outlineColor = atoms.outlineColor ?? "#000000";
       tb.isHitTestVisible = false;
+      // Center the control on the projected atom (default is top-left origin).
+      tb.horizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+      tb.verticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
 
       this.uiTexture.addControl(tb);
 

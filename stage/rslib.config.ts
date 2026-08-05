@@ -32,6 +32,9 @@ const BABYLON_BANNED = [
   "@babylonjs/loaders",
 ] as const;
 
+/** Watch must not wipe dist — page/hosts resolve exports→dist concurrently. */
+const watching = process.argv.includes("--watch");
+
 export default defineConfig({
   lib: [
     {
@@ -46,6 +49,7 @@ export default defineConfig({
       },
       output: {
         target: "web",
+        cleanDistPath: !watching,
         externals: [...RUNTIME_EXTERNALS, ...BABYLON_BANNED],
       },
     },
@@ -60,7 +64,9 @@ export default defineConfig({
       },
       output: {
         target: "web",
+        cleanDistPath: !watching,
       },
+
       tools: {
         rspack(config) {
           config.experiments = {

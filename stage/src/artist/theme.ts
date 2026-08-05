@@ -22,7 +22,8 @@ export interface Theme {
   getTypeStyle(type: string): AtomStyle;
   getBondStyle(order: number, type?: string): BondStyle;
 
-  // Global properties
+  // Global properties (palette / overlay — not viewport clearColor).
+  // ``backgroundColor`` may feed material contrast; hosts own the canvas bg.
   backgroundColor: string;
   selectionColor: string;
   boxColor: string;

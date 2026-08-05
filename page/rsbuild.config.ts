@@ -7,7 +7,8 @@ const root = import.meta.dirname;
 /**
  * Product host (React). Engines resolve as normal workspace/npm packages
  * (`@molcrafts/molvis-stage`, `@molcrafts/molvis-sketch`, … → package exports
- * → dist). Build core/stage/sketch first.
+ * → dist). Root `npm run dev:page` starts engine watches first (ordered
+ * core → stage+sketch → page); one-shot `build:page` runs `build:engines`.
  *
  * ``MOLVIS_PYTHON_DEV=1`` writes the bundle into the Python package tree.
  */

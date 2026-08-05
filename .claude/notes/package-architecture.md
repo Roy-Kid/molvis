@@ -30,6 +30,13 @@ core/     @molcrafts/molvis-core     shared molrs gateway + pure/browser primiti
    - **Never** `../stage/src/...` or `../core/src/...` from hosts
 5. **Umbrella is the repo root** (`@molcrafts/molvis`), not a separate workspace package.
 6. **Build order for hosts:** `core → stage → sketch → page | vsc-ext`.
+7. **Dev watch order (not concurrent from t=0):** root `npm run dev:page|dev:python|dev:engines`
+   runs `scripts/dev-with-engines.mjs` — start core watch → wait for all core export
+   files → stage+sketch watches → wait for main entries → host. Never preface with
+   a one-shot `build:engines` (that was a race bandage and printed misleading
+   “build” noise). Library `dev` is still `rslib build --watch` (rslib’s compile-to-dist
+   verb); watch mode sets `cleanDistPath: false` so dist is never wiped mid-rebuild
+   while dependents resolve exports.
 
 ## Publish surface
 

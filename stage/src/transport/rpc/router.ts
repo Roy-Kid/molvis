@@ -11,6 +11,7 @@ import { ClassicTheme } from "../../artist/presets/classic";
 import { ModernTheme } from "../../artist/presets/modern";
 import { VividTheme } from "../../artist/presets/vivid";
 import {
+  findRepresentation,
   REPRESENTATION_IDS,
   type RepresentationId,
 } from "../../artist/representation";
@@ -215,6 +216,14 @@ function applyStyleRadii(
   }
 }
 
+/**
+ * Apply representation / outline / radii, then **one** pipeline rebuild.
+ *
+ * Historical bug: `setRepresentation` + `setRepresentationOutline` + a
+ * trailing `rebuildCurrentFrame` each called `applyPipeline({ fullRebuild })`,
+ * so `view.set_style` flashed the canvas 2–3 times per call (especially
+ * obvious on skeletal, which also rebuilds element labels).
+ */
 async function applyGlobalStyle(
   app: MolvisApp,
   params: Record<string, unknown>,
@@ -225,25 +234,39 @@ async function applyGlobalStyle(
       `style must be one of ${REPRESENTATION_IDS.map((id) => `'${id}'`).join(", ")}`,
     );
   }
+
+  let representationTouched = false;
+
   if (representationId) {
-    await app.setRepresentation(representationId);
+    app.styleManager.setRepresentation(findRepresentation(representationId));
+    representationTouched = true;
   }
   if (params.outline != null) {
-    await app.setRepresentationOutline(
-      requireBoolean(params.outline, "outline"),
-    );
+    const enabled = requireBoolean(params.outline, "outline");
+    const current = app.styleManager.getRepresentation();
+    if (!current.outlineConfigurable) {
+      throw invalidParams(
+        `Representation '${current.id}' does not expose a configurable outline`,
+      );
+    }
+    app.styleManager.setOutlineEnabled(enabled);
+    representationTouched = true;
   }
   applyStyleRadii(app, params);
-}
 
-/**
- * Reapply the current source frame through the modifier pipeline. Used by
- * style / theme RPCs that mutate render-time state (radii, theme) without
- * changing the underlying data source.
- */
-function rebuildCurrentFrame(app: MolvisApp): Promise<Frame | null> {
-  if (!app.frame) return Promise.resolve(null);
-  return app.applyPipeline({ fullRebuild: true });
+  // Single geometry rebuild with all style state already applied.
+  if (app.frame) {
+    await app.applyPipeline({ fullRebuild: true });
+  } else {
+    app.artist.redrawFromSceneIndex();
+  }
+
+  if (representationTouched) {
+    app.events.emit(
+      "representation-change",
+      app.styleManager.getRepresentation(),
+    );
+  }
 }
 
 /** Serialize a modifier to the wire shape used by ``pipeline.*`` RPCs. */
@@ -1133,6 +1156,8 @@ export class RPCRouter {
 
   private handleSetStyle: RPCHandler = async (params) => {
     try {
+      // applyGlobalStyle already does a single fullRebuild — do not call
+      // rebuildCurrentFrame again (that was the multi-flash bug).
       await applyGlobalStyle(this.app, params);
     } catch (error) {
       if (error instanceof RPCError) {
@@ -1142,35 +1167,46 @@ export class RPCRouter {
         error instanceof Error ? error.message : String(error),
       );
     }
-
-    await rebuildCurrentFrame(this.app);
     return { success: true };
   };
 
   private handleSetTheme: RPCHandler = async (params) => {
-    const frame = this.app.frame;
-    const theme = params.theme;
-    switch (theme) {
+    const p = asRecord(params);
+    const name = String(p.theme ?? "")
+      .trim()
+      .toLowerCase();
+    let themeInst: ClassicTheme | ModernTheme | VividTheme;
+    switch (name) {
       case "classic":
-      case "Classic":
-        this.app.styleManager.setTheme(new ClassicTheme());
+        themeInst = new ClassicTheme();
         break;
       case "modern":
-      case "Modern":
-        this.app.styleManager.setTheme(new ModernTheme());
+        themeInst = new ModernTheme();
         break;
       case "vivid":
-      case "Vivid":
-        this.app.styleManager.setTheme(new VividTheme());
+        themeInst = new VividTheme();
         break;
       default:
-        throw new Error(`Unsupported theme '${String(theme)}'`);
+        throw invalidParams(
+          `theme must be one of 'classic', 'modern', 'vivid'; got '${String(p.theme)}'`,
+        );
     }
-    if (!frame) {
-      return { success: true };
+    // Palette only — StyleManager atom/bond colors. Viewport background is
+    // independent (host / view.set_background); never couple theme to clearColor.
+    this.app.styleManager.setTheme(themeInst);
+    // Canvas truth is SceneIndex (edit-pool place/draw + pipeline HEAD).
+    // Pipeline rebuild alone only recolors DS-sourced atoms and misses
+    // `scene.draw_frame` stamps — recolor impostor buffers from the theme.
+    this.app.artist.recolorFromTheme();
+    // When HEAD has structure, also re-run the pipeline so Draw modifiers
+    // stay consistent with the new theme.
+    const frame = this.app.frame;
+    const nAtoms = frame?.getBlock("atoms")?.nrows() ?? 0;
+    if (nAtoms > 0) {
+      await this.app.applyPipeline({ fullRebuild: true, changeKind: "full" });
     }
-    await rebuildCurrentFrame(this.app);
-    return { success: true };
+    this.app.world.renderOnce();
+    return { success: true, theme: name };
   };
 
   private handleSetMode: RPCHandler = (params) => {

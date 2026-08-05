@@ -155,23 +155,66 @@ def _resolve_sync(value: Any, *, timeout: float) -> Any:
     **deadlocks** — the Promise never settles because the loop cannot run
     while we block. Use ``pyodide.ffi.run_sync`` which pumps the browser
     event loop instead.
+
+    Under Pyodide we **poll** with short sleeps and cooperative
+    :func:`molvis.interrupt.check` so the host Interrupt button can abort
+    a long ``set_style`` / ``set_theme`` wait mid-flight, instead of
+    blocking on one uninterruptible ``run_sync(promise)``.
     """
     if not inspect.isawaitable(value) and not _is_thenable(value):
         return value
 
-    # ── Pyodide (in-page plugin): pump the browser event loop ──────────
+    # ── Pyodide (in-page plugin): interruptible pump ───────────────────
     try:
         from pyodide.ffi import run_sync  # type: ignore[import-not-found]
     except ImportError:
         run_sync = None  # type: ignore[assignment]
 
     if run_sync is not None:
-        # Prefer the raw JS Promise / awaitable so run_sync owns the wait.
-        # Do **not** fall through to concurrent.futures — that deadlocks.
         try:
-            return run_sync(value)
+            from ..interrupt import check as check_interrupt
+            from ..interrupt import InterruptRequested
+        except Exception:  # pragma: no cover
+
+            def check_interrupt() -> None:
+                return None
+
+            class InterruptRequested(Exception):  # type: ignore[no-redef]
+                pass
+
+        async def _wait_interruptible() -> Any:
+            # Drive the RPC promise as a task so we can poll the interrupt
+            # flag between short yields (browser keeps rendering / clicks).
+            # Polls molvis.interrupt (Python + host JS latch) — do not rely
+            # on Task.cancel re-entering this stack from the Interrupt button.
+            task = asyncio.ensure_future(_await_value(value))
+            steps = max(1, int(float(timeout) / 0.05) + 1)
+            try:
+                for _ in range(steps):
+                    if task.done():
+                        return await task
+                    check_interrupt()  # raises InterruptRequested
+                    try:
+                        return await asyncio.wait_for(
+                            asyncio.shield(task), timeout=0.05
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+                check_interrupt()
+                return await asyncio.wait_for(asyncio.shield(task), timeout=0.05)
+            except InterruptRequested:
+                task.cancel()
+                raise
+            except BaseException:
+                if not task.done():
+                    task.cancel()
+                raise
+
+        try:
+            return run_sync(_wait_interruptible())
         except TypeError:
-            # Not directly usable; wrap as a Python awaitable.
+            # Not directly usable; fall back to a single await.
+            check_interrupt()
             return run_sync(_await_value(value))
 
     # ── CPython, no running loop ───────────────────────────────────────

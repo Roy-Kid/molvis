@@ -77,10 +77,10 @@ def test_frame_arg_decorator_coerces_first_arg() -> None:
 def test_frame_arg_coerces_before_the_method_body() -> None:
     class Stage:
         @frame_arg
-        def draw(self, frame):
+        def draw_frame(self, frame):
             return frame
 
-    coerced = Stage().draw(FakeMolgraph())
+    coerced = Stage().draw_frame(FakeMolgraph())
     assert "blocks" in coerced.to_dict()
 
 

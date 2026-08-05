@@ -569,7 +569,14 @@ class Molvis(
             The transport never received a response.
         MolvisRPCError
             The frontend returned an error envelope.
+        InterruptRequested
+            Host interrupt flag is set (cooperative cancel between RPCs).
         """
+        # Cooperative interrupt: stop starting new RPCs once the host
+        # pressed Interrupt (demo loops, style tours, …).
+        from .interrupt import check as _check_interrupt
+
+        _check_interrupt()
         self._ensure_started()
         response = self._transport.send_request(
             method,

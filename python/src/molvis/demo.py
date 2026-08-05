@@ -4,6 +4,10 @@ Used by the Pyodide notebook host and any other controller that wants
 statement-at-a-time execution with inter-step delays. The runner does
 **not** know about cameras or frames — it only evals statements and
 awaits awaitables (including JS Promises from an in-process RPC).
+
+Between statements / loop iterations it checks
+:mod:`molvis.interrupt` so the host Interrupt button can stop a demo
+without SIGINT into the webloop.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ import asyncio
 import inspect
 import sys
 from typing import Any, Callable, Mapping, MutableMapping
+
+from .interrupt import check as check_interrupt
 
 __all__ = ["run_demo", "is_awaitable", "default_namespace", "strip_demo_magic"]
 
@@ -139,14 +145,33 @@ async def run_demo(
     else:
         ns = namespace
 
+    async def _interruptible_sleep(seconds: float) -> None:
+        """Sleep in short slices so Interrupt is noticed within ~50ms.
+
+        A single ``await asyncio.sleep(1.0)`` only ends on task cancel;
+        under Pyodide the Interrupt button often cannot re-enter Python to
+        cancel the task while ``run_sync`` holds the stack. Chunked sleep
+        + :func:`check_interrupt` (which also polls the host JS latch)
+        keeps demos responsive.
+        """
+        remaining = float(seconds)
+        while remaining > 0:
+            check_interrupt()
+            step = 0.05 if remaining > 0.05 else remaining
+            await asyncio.sleep(step)
+            remaining -= step
+        check_interrupt()
+
     async def iteration_step() -> None:
-        await asyncio.sleep(interval)
+        # Cooperative cancel at every loop-iteration beat.
+        await _interruptible_sleep(interval)
 
     ns[_STEP_HELPER] = iteration_step
 
     flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
 
     for index, statement in enumerate(body):
+        check_interrupt()
         try:
             if isinstance(statement, ast.Expr):
                 expr = ast.Expression(body=statement.value)
@@ -178,7 +203,7 @@ async def run_demo(
             raise
 
         if index < total - 1:
-            await asyncio.sleep(interval)
+            await _interruptible_sleep(interval)
 
 
 def default_namespace(

@@ -14,7 +14,7 @@ const categorical = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
 export class VividTheme implements Theme {
   public readonly name = "Vivid";
 
-  // Decorative — the scene clear color is owned by the viewport, not the theme.
+  // Not applied as viewport clearColor by set_theme (host owns canvas bg).
   public readonly backgroundColor = "#0E1116";
   public readonly selectionColor = "#7FE7FF";
   public readonly defaultSpecular = "#5A5A5A";

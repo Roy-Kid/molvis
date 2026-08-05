@@ -3,7 +3,11 @@ import { defineConfig } from "@rslib/core";
 /**
  * Library build for `@molcrafts/molvis-sketch`.
  * molrs only via `@molcrafts/molvis-core` so hosts share one WASM instance.
+ *
+ * Watch must not wipe `dist/` — hosts resolve package exports to dist.
  */
+const watching = process.argv.includes("--watch");
+
 export default defineConfig({
   lib: [
     {
@@ -17,6 +21,7 @@ export default defineConfig({
       },
       output: {
         target: "web",
+        cleanDistPath: !watching,
         externals: [
           "@molcrafts/molvis-core",
           "@molcrafts/molvis-core/molrs",

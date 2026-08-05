@@ -5,8 +5,8 @@ Convention
 Commands that take molecular data put the structure as the **first** argument
 after ``self``::
 
-    stage.draw_frame(frame, …)
-    stage.draw(atomistic, …)       # Frame | Atomistic | molgraph
+    stage.draw_frame(frame)        # Frame | Atomistic | molgraph
+    stage.commit()                 # edit pool → pipeline HEAD
     stage.set_trajectory(frames, …)
 
 :func:`frame_arg` and :func:`frames_arg` coerce that argument to a Frame-like.

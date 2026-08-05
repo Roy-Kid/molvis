@@ -44,9 +44,12 @@
     "vsc-ext"
   ],
   "scripts": {
-    "dev:core": "npm run typecheck -w @molcrafts/molvis-core",
-    "dev:page": "npm run build:engines && npm run dev -w page",
-    "dev:python": "npm run build:engines && npm run dev:python -w page",
+    "dev:core": "npm run dev -w @molcrafts/molvis-core",
+    "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
+    "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
+    "dev:engines": "node scripts/dev-with-engines.mjs engines",
+    "dev:page": "node scripts/dev-with-engines.mjs page",
+    "dev:python": "node scripts/dev-with-engines.mjs python",
     "build:core": "npm run build -w @molcrafts/molvis-core",
     "build:stage": "npm run build -w @molcrafts/molvis-stage",
     "build:sketch": "npm run build -w @molcrafts/molvis-sketch",
