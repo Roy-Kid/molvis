@@ -1,4 +1,7 @@
-import type { ReplicateModifier as CoreReplicate, Molvis } from "@molvis/stage";
+import type {
+  ReplicateModifier as CoreReplicate,
+  Molvis,
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

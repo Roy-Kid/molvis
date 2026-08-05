@@ -3,7 +3,7 @@ import {
   type Molvis,
   runStructureOptimize,
   UnsavedSceneError,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { FlaskConical } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -69,7 +69,9 @@ export const StructureOptimizePanel: React.FC<StructureOptimizePanelProps> = ({
   } | null>(null);
   const [result, setResult] = useState<OptimizeResult | null>(null);
   const [savePromptOpen, setSavePromptOpen] = useState(false);
-  const [sceneDirty, setSceneDirty] = useState(() => sceneHasUnsavedEdits(app));
+  const [_sceneDirty, setSceneDirty] = useState(() =>
+    sceneHasUnsavedEdits(app),
+  );
   const cancelRef = useRef(false);
 
   const hasApp = app !== null;

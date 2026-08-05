@@ -3,7 +3,7 @@ import {
   type IsosurfaceRenderMode,
   type Molvis,
   type SurfaceStyle,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";

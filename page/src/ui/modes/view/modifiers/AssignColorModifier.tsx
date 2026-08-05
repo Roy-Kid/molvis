@@ -1,7 +1,7 @@
 import type {
   AssignColorModifier as CoreAssignColorModifier,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";

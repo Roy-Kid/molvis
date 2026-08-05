@@ -251,84 +251,79 @@ def test_render_animation_rejects_mismatched_lengths():
         )
 
 
-def test_camera_track_interpolates_keypoints_and_look_at(monkeypatch):
-    """track() is the one API: key points + look-at → look_at samples."""
+def test_camera_track_sends_pipeline_modifier_rpc():
+    """track() installs a Camera track modifier via camera.track RPC."""
     control = import_control_module()
-    pose_response = {
-        "pose": {
-            "alpha": 0.0,
-            "beta": 1.0,
-            "radius": 10.0,
-            "target": [0.0, 0.0, 0.0],
-            "position": [10.0, 0.0, 0.0],
-            "up": [0.0, 0.0, 1.0],
-        },
-    }
-    viewer = FakeViewer(responses={"camera.look_at": pose_response})
+    viewer = FakeViewer(
+        responses={
+            "camera.track": {
+                "id": "alpha-1",
+                "playing": True,
+                "modifier": {"id": "alpha-1", "name": "Camera track"},
+            }
+        }
+    )
     cam = control.Camera(viewer)
-
-    sleeps: list[float] = []
-    monkeypatch.setattr(control, "_sleep", lambda dt: sleeps.append(dt))
-
     final = cam.track(
         [(10, 0, 0), (0, 10, 0), (-10, 0, 0)],
         target=(0, 0, 0),
-        duration=1.0,
-        fps=4,
+        duration=4.0,
         rate=1.0,
     )
     assert final is cam
-    look_calls = [c for c in viewer.calls if c["method"] == "camera.look_at"]
-    assert len(look_calls) >= 4
-    assert look_calls[0]["params"]["position"] == [10.0, 0.0, 0.0]
-    assert look_calls[0]["params"]["target"] == [0.0, 0.0, 0.0]
-    assert all(c["params"]["target"] == [0.0, 0.0, 0.0] for c in look_calls)
-    # duration=1, fps=4 → n_frames = int(4.999…)+1 = 5; dt = 1/4 = 0.25
-    assert len(sleeps) == len(look_calls) - 1
-    assert all(abs(dt - 0.25) < 1e-9 for dt in sleeps)
+    track_calls = [c for c in viewer.calls if c["method"] == "camera.track"]
+    assert len(track_calls) == 1
+    params = track_calls[0]["params"]
+    assert params["loop"] is False
+    assert params["duration"] == 4.0
+    assert params["rate"] == 1.0
+    assert len(params["keys"]) == 3
+    assert params["keys"][0]["position"] == [10.0, 0.0, 0.0]
+    assert params["keys"][0]["target"] == [0.0, 0.0, 0.0]
+    assert cam._track_modifier_id == "alpha-1"
 
 
-def test_camera_track_rate_scales_wall_clock_not_sample_count(monkeypatch):
-    """rate speeds up / slows down wall time; fps still sets path samples."""
+def test_camera_track_inf_loops_with_default_cycle():
+    """duration=inf → loop=True and 12s content cycle."""
     control = import_control_module()
-    pose_response = {
-        "pose": {
-            "alpha": 0.0,
-            "beta": 1.0,
-            "radius": 10.0,
-            "target": [0.0, 0.0, 0.0],
-            "position": [10.0, 0.0, 0.0],
-            "up": [0.0, 0.0, 1.0],
-        },
-    }
-    viewer = FakeViewer(responses={"camera.look_at": pose_response})
+    viewer = FakeViewer(
+        responses={"camera.track": {"id": "bravo-1", "playing": True}}
+    )
     cam = control.Camera(viewer)
-    sleeps: list[float] = []
-    monkeypatch.setattr(control, "_sleep", lambda dt: sleeps.append(dt))
-
     cam.track(
         [(10, 0, 0), (0, 10, 0)],
         target=(0, 0, 0),
-        duration=2.0,
-        fps=10,
-        rate=2.0,
+        duration=np.inf,
+        rate=0.5,
     )
-    # content samples: n_frames = int(2*10 + 0.999…)+1 = 21
-    # wall dt = (2/2) / 20 = 0.05
-    look_calls = [c for c in viewer.calls if c["method"] == "camera.look_at"]
-    assert len(look_calls) == 21
-    assert len(sleeps) == 20
-    assert all(abs(dt - 0.05) < 1e-9 for dt in sleeps)
+    params = [c for c in viewer.calls if c["method"] == "camera.track"][0][
+        "params"
+    ]
+    assert params["loop"] is True
+    assert params["duration"] == 12.0
+    assert params["rate"] == 0.5
 
 
-def test_camera_track_defaults_fps_to_60():
-    """Signature default for fps is 60 (playback-rate parameter is rate)."""
+def test_camera_stop_track_sends_rpc():
     control = import_control_module()
-    import inspect
+    viewer = FakeViewer(responses={"camera.stop_track": {"removed_ids": ["x"]}})
+    cam = control.Camera(viewer)
+    cam._track_modifier_id = "x"
+    assert cam.stop_track() is cam
+    assert any(c["method"] == "camera.stop_track" for c in viewer.calls)
+    assert cam._track_modifier_id is None
 
-    sig = inspect.signature(control.Camera.track)
-    assert sig.parameters["fps"].default == 60.0
-    assert sig.parameters["rate"].default == 1.0
+
+def test_camera_track_inf_accepts_math_inf():
+    control = import_control_module()
+    import math
+
+    viewer = FakeViewer(responses={"camera.track": {"id": "c-1"}})
+    cam = control.Camera(viewer)
+    assert (
+        cam.track([(1, 0, 0), (0, 1, 0)], target=(0, 0, 0), duration=math.inf)
+        is cam
+    )
 
 
 def test_camera_set_pose_requires_at_least_one_field():

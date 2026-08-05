@@ -6,7 +6,7 @@
  * It imports these four names from `./engine` instead, and each repo supplies
  * its own one-line binding:
  *
- * - host (this file)  → `@molvis/stage`, the real engine
+ * - host (this file)  → `@molcrafts/molvis-stage`, the real engine
  * - template / plugins → `@molcrafts/molvis-core`, the published surface
  *
  * When `@molcrafts/molvis-plugin-api` is published, only this file changes.
@@ -16,4 +16,4 @@ export type {
   Molvis,
   Overlay,
   PluginModeFactory,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";

@@ -1,11 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "paths": {
-      "@molvis/core": ["./src/index.ts"],
-      "@molvis/core/*": ["./src/*"]
-    }
+    "rootDir": "./src"
   },
   "include": ["src"]
 }

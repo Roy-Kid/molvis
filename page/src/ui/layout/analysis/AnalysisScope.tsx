@@ -1,4 +1,4 @@
-import type { FrameRange } from "@molvis/stage";
+import type { FrameRange } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Input } from "@/components/ui/input";
 import { AnalysisAlert } from "./AnalysisAlert";

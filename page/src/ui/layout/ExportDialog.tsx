@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   defaultExtensionForFormat,
   exportFrame,
@@ -6,7 +6,7 @@ import {
   type FileFormat,
   inferFormatFromFilename,
   isWritableFormat,
-} from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage/io";
 import { Download, Loader2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";

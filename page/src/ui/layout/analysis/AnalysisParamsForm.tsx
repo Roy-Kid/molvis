@@ -1,4 +1,7 @@
-import type { AnalysisParamSpec, AnalysisParamValues } from "@molvis/stage";
+import type {
+  AnalysisParamSpec,
+  AnalysisParamValues,
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useId } from "react";
 import { Input } from "@/components/ui/input";

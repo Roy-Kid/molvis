@@ -2,7 +2,7 @@ import type {
   ExpandSelectionModifier as CoreExpandSelectionModifier,
   ExpandSelectionMode,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Label } from "@/components/ui/label";
 import {

@@ -1,11 +1,7 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "experimentalDecorators": true,
-    "paths": {
-      "@molvis/stage": ["./src/index.ts"],
-      "@molvis/stage/*": ["./src/*"]
-    }
+    "experimentalDecorators": true
   },
   "include": ["src"]
 }

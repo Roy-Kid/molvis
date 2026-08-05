@@ -32,7 +32,8 @@ function ResizablePanel({
 
 /**
  * Workbench splitter — 1px hairline via `.workbench-split*` (same token as
- * pipeline / bottom edge / toolbar borders). No grip pill.
+ * pipeline / bottom edge / toolbar borders), plus a centered grip pill so
+ * closed rails stay discoverable without toolbar panel toggles.
  */
 function ResizableHandle({
   className,
@@ -42,7 +43,7 @@ function ResizableHandle({
     <ResizableSeparator
       data-slot="resizable-handle"
       className={cn(
-        "workbench-split workbench-split-v workbench-split-interactive outline-hidden",
+        "workbench-split workbench-split-v workbench-split-interactive workbench-split-grip outline-hidden",
         "focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1",
         className,
       )}

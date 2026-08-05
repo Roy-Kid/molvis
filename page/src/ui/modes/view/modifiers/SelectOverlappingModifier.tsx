@@ -1,4 +1,7 @@
-import type { SelectOverlappingModifier as Core, Molvis } from "@molvis/stage";
+import type {
+  SelectOverlappingModifier as Core,
+  Molvis,
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { ScalarSliderRow } from "./ScalarSliderRow";

@@ -6,7 +6,7 @@ import type {
   AnalysisDefinition,
   AnalysisParamKind,
   AnalysisParamSpec,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { analysisStore } from "./contributions/ui";
 import type { PluginAnalysisSpec } from "./types";
 

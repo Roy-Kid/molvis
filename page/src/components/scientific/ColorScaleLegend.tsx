@@ -1,4 +1,4 @@
-import { getColorMap } from "@molvis/stage";
+import { getColorMap } from "@molcrafts/molvis-stage";
 import type React from "react";
 
 export interface ColorScaleLegendProps {

@@ -20,8 +20,11 @@ import {
   ModifierRegistry,
   type Molvis,
   nextModifierId,
-} from "@molvis/stage";
-import { getAllAcceptExtensions, type LoadMode } from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage";
+import {
+  getAllAcceptExtensions,
+  type LoadMode,
+} from "@molcrafts/molvis-stage/io";
 import {
   Atom,
   ChartColumn,

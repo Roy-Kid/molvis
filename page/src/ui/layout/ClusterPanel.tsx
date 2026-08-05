@@ -8,7 +8,7 @@ import {
   type Molvis,
   nextModifierId,
   type SelectionMask,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";

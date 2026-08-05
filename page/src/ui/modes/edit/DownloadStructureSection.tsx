@@ -1,4 +1,4 @@
-import { type Frame, SDFReader } from "@molvis/stage";
+import { type Frame, SDFReader } from "@molcrafts/molvis-stage";
 import { Download, Loader2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";

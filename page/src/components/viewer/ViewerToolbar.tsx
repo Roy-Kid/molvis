@@ -1,4 +1,4 @@
-import { MOLVIS_VERSION, type Molvis } from "@molvis/stage";
+import { MOLVIS_VERSION, type Molvis } from "@molcrafts/molvis-stage";
 import {
   BrushCleaning,
   Focus,
@@ -35,6 +35,7 @@ interface ViewerToolbarProps {
 /**
  * Viewer toolbar with identity, context, and global scene actions.
  * Mode is shown by core's canvas ModePanel, not here.
+ * Side panels open via the canvas edge drag rails (not toolbar toggles).
  */
 export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
   app,

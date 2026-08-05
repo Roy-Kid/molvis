@@ -5,13 +5,13 @@
  * wider message guard and an `onExtraMessage` hook for selectAtoms / capabilities.
  */
 
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   exportFrame,
   type FileFormat,
   loadFileContent,
   loadFileStream,
-} from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage/io";
 import {
   type HostToWebviewMessage,
   isQuickViewHostMessage,

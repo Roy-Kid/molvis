@@ -3,7 +3,7 @@ import {
   isSelectionProducer,
   type Molvis,
   SelectModifier,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { Lasso, Plus, Trash2, X } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";

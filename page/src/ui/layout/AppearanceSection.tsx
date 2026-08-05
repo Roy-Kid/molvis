@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";

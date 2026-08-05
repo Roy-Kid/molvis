@@ -1,4 +1,4 @@
-import { DataSourceModifier, type Molvis } from "@molvis/stage";
+import { DataSourceModifier, type Molvis } from "@molcrafts/molvis-stage";
 import {
   Dialog,
   DialogContent,

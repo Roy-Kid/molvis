@@ -1,7 +1,7 @@
 import type {
   HideSelectionModifier as CoreHideModifier,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 
 interface ModifierProps {

@@ -6,7 +6,7 @@
  * Bump {@link RPC_PROTOCOL_VERSION} when removing or renaming a method.
  * Additive methods may keep the same major.minor and only add names.
  */
-export const RPC_PROTOCOL_VERSION = "1.3.0";
+export const RPC_PROTOCOL_VERSION = "1.4.0";
 
 /** Ordered catalog of methods the core router implements. */
 export const RPC_METHODS = [
@@ -49,6 +49,8 @@ export const RPC_METHODS = [
   "camera.look_at",
   "camera.fit",
   "camera.reset",
+  "camera.track",
+  "camera.stop_track",
   "state.get",
   "rpc.list_methods",
 ] as const;

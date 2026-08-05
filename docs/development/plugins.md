@@ -112,7 +112,7 @@ modules. Host peers (`react`, `@molcrafts/molvis-stage`,
 ## Build rules
 
 Externalize: `react`, `react-dom`, `react/jsx-runtime`, `@molcrafts/molvis-stage`,
-`@molvis/stage`, `@molcrafts/molvis-core/molrs`, `@molcrafts/molvis-core/elements`,
+`@molcrafts/molvis-stage`, `@molcrafts/molvis-core/molrs`, `@molcrafts/molvis-core/elements`,
 `@molcrafts/molplot` (shared Vega charts — never bundle a second copy).
 
 ## Relation to compile-time extension

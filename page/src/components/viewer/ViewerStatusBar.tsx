@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { AlertCircle, AlertTriangle, Check, Info, Loader2 } from "lucide-react";
 import type React from "react";
 import { useStatusMessage } from "@/hooks/useStatusMessage";

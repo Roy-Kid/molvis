@@ -2,7 +2,7 @@ import type {
   BondColumnMapping,
   BondMappingDecision,
   PickBondMapping,
-} from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage/io";
 import {
   createContext,
   type ReactNode,

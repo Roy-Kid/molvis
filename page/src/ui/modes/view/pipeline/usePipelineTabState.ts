@@ -9,7 +9,7 @@ import {
   nextModifierId,
   PipelineEvents,
   SelectModifier,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";

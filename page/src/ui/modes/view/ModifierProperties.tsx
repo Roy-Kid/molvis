@@ -1,4 +1,8 @@
-import { type Modifier, ModifierCapability, type Molvis } from "@molvis/stage";
+import {
+  type Modifier,
+  ModifierCapability,
+  type Molvis,
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { modifierUsesLeftConfig, resolveModifierPanel } from "@/plugins";
 import { ParentSelector } from "./pipeline/ParentSelector";

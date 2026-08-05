@@ -1,7 +1,7 @@
 import type {
   DrawAtomModifier as CoreDrawAtomModifier,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { RepresentationSelectRow } from "./RepresentationSelectRow";

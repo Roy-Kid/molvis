@@ -203,6 +203,7 @@ def test_visual_style_is_global_not_a_draw_argument() -> None:
             assert visual_parameter not in parameters
     style_parameters = inspect.signature(Molvis.set_style).parameters
     assert "style" in style_parameters
+    assert "theme" in style_parameters
     assert "atom_radius" in style_parameters
     assert "bond_radius" in style_parameters
     assert "outline" in style_parameters
@@ -217,6 +218,53 @@ def test_global_style_serializes_optional_outline() -> None:
     assert method == "view.set_style"
     assert params["style"] == "graph"
     assert params["outline"] is False
+
+
+def test_style_and_theme_catalogs_are_iterable() -> None:
+    assert "ball-and-stick" in Molvis.STYLE
+    assert "spacefill" in Molvis.STYLE
+    assert "classic" in Molvis.THEME
+    assert "modern" in Molvis.THEME
+    assert "vivid" in Molvis.THEME
+    # Instance inherits the same catalogs for stage.STYLE loops.
+    scene = Molvis(name="catalogs", transport=FakeTransport())
+    assert list(scene.STYLE) == list(Molvis.STYLE)
+    assert list(scene.THEME) == list(Molvis.THEME)
+
+
+def test_set_style_accepts_theme_as_second_positional() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="style-theme", transport=fake)
+    scene.set_style("spacefill", "modern")
+
+    methods = [m for m, _p, _meta in fake.sent]
+    assert methods == ["view.set_theme", "view.set_style"]
+    theme_params = fake.sent[0][1]
+    style_params = fake.sent[1][1]
+    assert theme_params["theme"] == "modern"
+    assert style_params["style"] == "spacefill"
+
+
+def test_set_style_theme_loop_matches_catalogs() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="style-theme-loop", transport=fake)
+    for style in scene.STYLE:
+        for theme in scene.THEME:
+            scene.set_style(style, theme)
+    theme_calls = [p for m, p, _ in fake.sent if m == "view.set_theme"]
+    style_calls = [p for m, p, _ in fake.sent if m == "view.set_style"]
+    assert len(theme_calls) == len(scene.STYLE) * len(scene.THEME)
+    assert len(style_calls) == len(scene.STYLE) * len(scene.THEME)
+    assert theme_calls[0]["theme"] == scene.THEME[0]
+    assert style_calls[0]["style"] == scene.STYLE[0]
+
+
+def test_set_theme_rejects_unknown() -> None:
+    import pytest
+
+    scene = Molvis(name="bad-theme", transport=FakeTransport())
+    with pytest.raises(ValueError, match="unknown theme"):
+        scene.set_theme("neon")
 
 
 def test_repr_mimebundle_emits_inline_mount() -> None:

@@ -237,7 +237,7 @@ export type PluginRpcHandler = (
     /**
      * Binary buffers carried alongside the JSON, for methods that take a
      * Frame. Pass them to `decodeFrame(payload, buffers)` from
-     * `@molvis/stage`. Built-in methods have always received these; plugin
+     * `@molcrafts/molvis-stage`. Built-in methods have always received these; plugin
      * methods used to have them dropped, so a plugin could not accept a Frame
      * at all without re-implementing the codec.
      */

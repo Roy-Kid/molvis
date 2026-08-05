@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   BondMappingCancelledError,
   canStream,
@@ -14,7 +14,7 @@ import {
   loadFileStream,
   type PickBondMapping,
   toIoError,
-} from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage/io";
 import {
   createContext,
   type ReactNode,

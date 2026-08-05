@@ -87,12 +87,11 @@ reinstalling a primary, or `setTrajectory` paths that leave the pipeline empty.
 
 ## 2026-07-30 — package naming lock
 
-- Shared molrs gateway, pure primitives, and framework-free shared custom elements:
-  workspace **`core/`** (`@molcrafts/molvis-core`, transitive only — not a product install).
+- Shared molrs gateway: **`core/`** → `@molcrafts/molvis-core` (transitive publish).
 - 2D: **`sketch/`** → `@molcrafts/molvis-sketch`.
 - 3D: **`stage/`** → `@molcrafts/molvis-stage`.
-- Umbrella: **repo root** `@molcrafts/molvis` (thin `src/` re-exports; not a
-  separate workspace). Prefer explicit stage/sketch when only one surface is needed.
+- Umbrella: **repo root** `@molcrafts/molvis` (thin `src/` re-exports only).
+- Hosts (page, vsc-ext) import package names only — no `../stage/src` paths.
 - Full matrix: [package-architecture.md](./package-architecture.md).
 
 ## 2026-07-30 — sketch chrome is package-owned (`gui` flag)

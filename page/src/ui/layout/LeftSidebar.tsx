@@ -3,7 +3,7 @@ import {
   getAnalysisDefinition,
   type Modifier,
   type Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { ArrowLeft, Database } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";

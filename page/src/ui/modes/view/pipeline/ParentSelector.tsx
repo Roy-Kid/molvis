@@ -1,4 +1,4 @@
-import type { Modifier, Molvis } from "@molvis/stage";
+import type { Modifier, Molvis } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Label } from "@/components/ui/label";
 import {

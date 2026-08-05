@@ -1,4 +1,4 @@
-import { parseSMILES } from "@molvis/stage";
+import { parseSMILES } from "@molcrafts/molvis-stage";
 import { AlertCircle, Wand2 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";

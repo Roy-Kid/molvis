@@ -6,7 +6,7 @@
  * touches stage statically.
  */
 
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import type { StructureOutlineNode } from "../protocol";
 import type { HostApi } from "../webview/errorBoundary";
 
@@ -52,7 +52,7 @@ function createOutlineCapability(): Capability {
   return {
     id: "outline",
     async enable(ctx) {
-      const { buildStructureOutline } = await import("@molvis/stage");
+      const { buildStructureOutline } = await import("@molcrafts/molvis-stage");
 
       const publish = (): void => {
         const frame = ctx.app.system.frame;

@@ -1,8 +1,8 @@
 import type {
   ColorByPropertyModifier as CoreModifier,
   Molvis,
-} from "@molvis/stage";
-import { DEFAULT_CATEGORICAL_COLOR_MAP } from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
+import { DEFAULT_CATEGORICAL_COLOR_MAP } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { ColorScaleLegend } from "@/components/scientific/ColorScaleLegend";
 import { Checkbox } from "@/components/ui/checkbox";

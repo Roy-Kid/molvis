@@ -3,7 +3,7 @@ import {
   isSelectionProducer,
   type Modifier,
   SelectModifier,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 
 export interface TreeNode {
   modifier: Modifier;

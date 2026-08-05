@@ -31,6 +31,16 @@
       "import": "./dist/transport/trajectory_worker/worker.js",
       "default": "./dist/transport/trajectory_worker/worker.js"
     },
+    "./trajectory-runtime": {
+      "types": "./dist/transport/trajectory_worker/runtime.d.ts",
+      "import": "./dist/transport/trajectory_worker/runtime.js",
+      "default": "./dist/transport/trajectory_worker/runtime.js"
+    },
+    "./trajectory-protocol": {
+      "types": "./dist/transport/trajectory_worker/protocol.d.ts",
+      "import": "./dist/transport/trajectory_worker/protocol.js",
+      "default": "./dist/transport/trajectory_worker/protocol.js"
+    },
     "./package.json": "./package.json"
   },
   "repository": {

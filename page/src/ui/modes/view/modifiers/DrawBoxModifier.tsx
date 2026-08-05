@@ -2,7 +2,7 @@ import type {
   DrawBoxModifier as CoreDrawBoxModifier,
   DrawBoxSpec,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";

@@ -5,9 +5,6 @@
     "jsx": "react-jsx",
     "types": ["node", "mocha", "vscode"],
     "paths": {
-      "@molvis/stage": ["../stage/dist/index.d.ts"],
-      "@molvis/stage/io": ["../stage/dist/io/index.d.ts"],
-      "@molvis/stage/io/formats": ["../stage/dist/io/formats.d.ts"],
       "@/*": ["../page/src/*"]
     }
   },

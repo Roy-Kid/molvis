@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { useEffect } from "react";
 import type { MountOpts } from "@/lib/mount-opts";
 
@@ -33,7 +33,7 @@ export function useDevDemo(
 
     const initDemo = async () => {
       const { Frame, Block, DataSourceModifier, applyAutoAttach } =
-        await import("@molvis/stage");
+        await import("@molcrafts/molvis-stage");
       if (disposed) return;
 
       const pipeline = app.modifierPipeline;

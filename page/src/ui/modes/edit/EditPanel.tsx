@@ -5,7 +5,7 @@ import {
   type Molvis,
   Perceive,
   parseSMILES,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { Loader2, Wand2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";

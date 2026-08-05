@@ -170,7 +170,7 @@ export class World {
 
     // Programmable camera trajectories (turntable preview + deterministic
     // export) render through a dedicated camera so the user's interactive
-    // view is never mutated. See core/src/camera/.
+    // view is never mutated. See stage/src/camera/.
     this.cameraAnimator = new CameraAnimator({
       scene,
       mainCamera: camera,

@@ -68,7 +68,7 @@ export function getCommandMetadata(
  * - undo(): Undo the command by executing its inverse operation
  *
  * Commands can be exposed for RPC using the @command decorator.
- * All commands MUST be located in core/src/commands/ directory.
+ * All commands MUST be located in stage/src/commands/ directory.
  */
 export abstract class Command<TResult = unknown> {
   protected app: MolvisApp;

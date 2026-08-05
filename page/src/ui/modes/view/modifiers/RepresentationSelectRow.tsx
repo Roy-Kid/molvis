@@ -1,4 +1,4 @@
-import { type Molvis, REPRESENTATIONS } from "@molvis/stage";
+import { type Molvis, REPRESENTATIONS } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";

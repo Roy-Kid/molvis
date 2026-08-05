@@ -1,4 +1,7 @@
-import type { SliceModifier as CoreSliceModifier, Molvis } from "@molvis/stage";
+import type {
+  SliceModifier as CoreSliceModifier,
+  Molvis,
+} from "@molcrafts/molvis-stage";
 import { RotateCcw } from "lucide-react";
 import type React from "react";
 import { Checkbox } from "@/components/ui/checkbox";

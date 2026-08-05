@@ -1,7 +1,7 @@
 import type {
   UnwrapTrajectoriesModifier as CoreUnwrap,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";

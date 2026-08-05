@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { createPluginAPI } from "./api/create_api";
 import { HOST_LOG_TAG } from "./constants";
 import { registerBuiltinModifierPanels } from "./contributions/builtins";

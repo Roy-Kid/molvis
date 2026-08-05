@@ -2,16 +2,10 @@
  * Separate webview build for the optional Open Page surface.
  * Isolated so React/page never enter the QV / Workbench / Sketch graph.
  */
-import { createRequire } from "node:module";
 import path from "node:path";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rslib/core";
 import { rspack } from "@rspack/core";
-
-const require = createRequire(import.meta.url);
-function pkg(name: string): string {
-  return require.resolve(name);
-}
 
 const sharedDefine = {
   "process.env.NODE_ENV": '"production"',
@@ -54,11 +48,8 @@ export default defineConfig({
   plugins: [pluginReact()],
 
   resolve: {
-    // Resolve package exports to dist files (workspace/registry layout).
     alias: {
-      "@molvis/stage": pkg("@molcrafts/molvis-stage"),
-      "@molvis/stage/io": pkg("@molcrafts/molvis-stage/io"),
-      "@molvis/stage/io/formats": pkg("@molcrafts/molvis-stage/io/formats"),
+      // Page sources only. Engines resolve as @molcrafts/* packages.
       "@": path.resolve(import.meta.dirname, "../page/src"),
     },
   },
@@ -106,7 +97,7 @@ export default defineConfig({
           cacheGroups: {
             pageShared: {
               name: "chunks/page-shared",
-              test: /[\\/](node_modules|core[\\/](src|dist)|stage[\\/](src|dist)|page[\\/]src|sketch[\\/]src)[\\/]/,
+              test: /[\\/](node_modules|core[\\/]dist|stage[\\/]dist|sketch[\\/]dist|page[\\/]src)[\\/]/,
               priority: 20,
               enforce: true,
               minSize: 0,
@@ -121,7 +112,7 @@ export default defineConfig({
       config.plugins = [
         ...(config.plugins ?? []),
         new rspack.NormalModuleReplacementPlugin(
-          /transport[\\/]trajectory_worker[\\/]runtime\.ts$/,
+          /trajectory_worker[\\/]runtime\.(ts|js)$/,
           (resource: { context: string; request: string }) => {
             if (resource.context.includes(`${path.sep}vsc-ext${path.sep}`)) {
               return;

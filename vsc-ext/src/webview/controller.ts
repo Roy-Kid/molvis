@@ -5,7 +5,7 @@
  * mounts the engine and starts it.
  */
 
-import { mountMolvis } from "@molvis/stage";
+import { mountMolvis } from "@molcrafts/molvis-stage";
 import type { WebviewToHostMessage } from "../protocol";
 import { attachQuickViewHost, postQuickViewReady } from "./attachQuickViewHost";
 import { installGlobalErrorHandlers, reportError } from "./errorBoundary";

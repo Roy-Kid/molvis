@@ -1,8 +1,11 @@
 import type {
   DataSourceModifier as CoreDataSourceModifier,
   Molvis,
-} from "@molvis/stage";
-import { getAllAcceptExtensions, type LoadMode } from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage";
+import {
+  getAllAcceptExtensions,
+  type LoadMode,
+} from "@molcrafts/molvis-stage/io";
 import { ChevronDown, FileUp } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";

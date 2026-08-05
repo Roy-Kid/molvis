@@ -1,5 +1,4 @@
 import { createRequire } from "node:module";
-import path from "node:path";
 import { defineConfig } from "@rslib/core";
 
 const require = createRequire(import.meta.url);

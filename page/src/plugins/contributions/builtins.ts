@@ -7,6 +7,7 @@
 import {
   AffineTransformationModifier as CoreAffineTransformationModifier,
   AssignColorModifier as CoreAssignColorModifier,
+  CameraTrackModifier as CoreCameraTrackModifier,
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   ComputeBondsModifier as CoreComputeBondsModifier,
   ComputePropertyModifier as CoreComputePropertyModifier,
@@ -38,9 +39,10 @@ import {
   UnwrapTrajectoriesModifier as CoreUnwrapTrajectoriesModifier,
   VectorFieldModifier as CoreVectorFieldModifier,
   type Modifier,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { AffineTransformationModifier } from "@/ui/modes/view/modifiers/AffineTransformationModifier";
 import { AssignColorModifier } from "@/ui/modes/view/modifiers/AssignColorModifier";
+import { CameraTrackModifier } from "@/ui/modes/view/modifiers/CameraTrackModifier";
 import { ColorByPropertyModifier } from "@/ui/modes/view/modifiers/ColorByPropertyModifier";
 import { ComputeBondsModifier } from "@/ui/modes/view/modifiers/ComputeBondsModifier";
 import { ComputePropertyModifier } from "@/ui/modes/view/modifiers/ComputePropertyModifier";
@@ -248,6 +250,11 @@ export function registerBuiltinModifierPanels(): void {
       match: (m) => m instanceof CoreTrajectoryLinesModifier,
       component: asPanel(TrajectoryLinesModifier),
       usesLeftConfig: true,
+    },
+    {
+      id: "builtin:CameraTrack",
+      match: (m) => m instanceof CoreCameraTrackModifier,
+      component: asPanel(CameraTrackModifier),
     },
     {
       id: "builtin:SteinhardtOrder",

@@ -1,17 +1,13 @@
-import { createRequire } from "node:module";
 import { defineConfig } from "@rslib/core";
-
-const require = createRequire(import.meta.url);
-
-/** Resolve workspace/registry package exports to concrete dist files. */
-function pkg(name: string): string {
-  return require.resolve(name);
-}
 
 const sharedDefine = {
   "process.env.NODE_ENV": '"production"',
 };
 
+/**
+ * VS Code extension host (Node). Imports `@molcrafts/molvis-stage/*` as a
+ * normal dependency (workspace → package exports → dist). Build engines first.
+ */
 export default defineConfig({
   lib: [
     {
@@ -33,14 +29,6 @@ export default defineConfig({
       },
     },
   ],
-
-  resolve: {
-    alias: {
-      "@molvis/stage": pkg("@molcrafts/molvis-stage"),
-      "@molvis/stage/io": pkg("@molcrafts/molvis-stage/io"),
-      "@molvis/stage/io/formats": pkg("@molcrafts/molvis-stage/io/formats"),
-    },
-  },
 
   tools: {
     rspack(config) {

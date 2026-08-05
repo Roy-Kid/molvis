@@ -1,4 +1,4 @@
-import { clearOpfsCache, readOpfsCacheUsage } from "@molvis/stage";
+import { clearOpfsCache, readOpfsCacheUsage } from "@molcrafts/molvis-stage";
 import { pluginCacheStore } from "@/plugins/contributions/ui";
 
 /**

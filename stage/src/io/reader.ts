@@ -358,7 +358,7 @@ export function loadBinaryTrajectory(
  * Format-specific frame decoration (PDB backbone ribbon, VASP volumetric
  * fields, …) is no longer a side-effect of the loader. It is handled by
  * auto-attaching pipeline modifiers — see
- * `core/src/pipeline/auto_modifiers/`.
+ * `stage/src/pipeline/auto_modifiers/`.
  */
 export function readFrames(
   content: string,

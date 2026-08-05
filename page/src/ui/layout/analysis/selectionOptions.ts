@@ -1,4 +1,4 @@
-import type { AnalysisAtomSelection, Molvis } from "@molvis/stage";
+import type { AnalysisAtomSelection, Molvis } from "@molcrafts/molvis-stage";
 
 export interface ModifierOption {
   id: string;

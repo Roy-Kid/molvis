@@ -412,7 +412,7 @@ async function extendIntoScene(
 }
 
 /**
- * Canonical file ingress for `@molvis/core`. Dispatches to the right
+ * Canonical file ingress for `@molcrafts/molvis-stage`. Dispatches to the right
  * reader based on payload shape (string → text format, object → zarr),
  * stamps the pipeline head with a `DataSourceModifier`, swaps in the
  * new trajectory, and replays user-added modifiers on it. All file

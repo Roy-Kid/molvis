@@ -123,6 +123,12 @@ export interface Modifier {
    * modifier's checkbox in the UI hides its mesh.
    */
   applyVisibility(app: import("../app").MolvisApp, visible: boolean): void;
+
+  /**
+   * Optional teardown when the modifier is removed from the pipeline.
+   * Side-effect modifiers (e.g. Camera track) stop observers here.
+   */
+  onRemoved?(): void;
 }
 
 /**
@@ -175,6 +181,11 @@ export abstract class BaseModifier implements Modifier {
    * re-enabling it restores visibility without forcing a full rebuild.
    */
   applyVisibility(_app: import("../app").MolvisApp, _visible: boolean): void {
+    // no-op
+  }
+
+  /** Optional teardown; see {@link Modifier.onRemoved}. */
+  onRemoved(): void {
     // no-op
   }
 

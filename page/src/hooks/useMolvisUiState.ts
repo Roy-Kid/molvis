@@ -1,4 +1,4 @@
-import type { DatasetExploration, Molvis } from "@molvis/stage";
+import type { DatasetExploration, Molvis } from "@molcrafts/molvis-stage";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useState } from "react";
 

@@ -1,10 +1,4 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": {
-    "paths": {
-      "@molcrafts/molvis-sketch": ["./src/index.ts"],
-      "@molcrafts/molvis-sketch/*": ["./src/*"]
-    }
-  },
   "include": ["src"]
 }

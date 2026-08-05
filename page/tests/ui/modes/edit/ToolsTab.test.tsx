@@ -3,7 +3,7 @@ import {
   ModeType,
   type Molvis,
   type MolvisEventMap,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { describe, expect, it } from "@rstest/core";
 import { act } from "react";
 import { createRoot } from "react-dom/client";

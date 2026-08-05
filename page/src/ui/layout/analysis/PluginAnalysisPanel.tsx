@@ -1,4 +1,4 @@
-import type { AnalysisParamValues, Molvis } from "@molvis/stage";
+import type { AnalysisParamValues, Molvis } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";

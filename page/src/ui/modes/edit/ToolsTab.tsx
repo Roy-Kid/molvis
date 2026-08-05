@@ -1,4 +1,4 @@
-import { ModeType, type Molvis } from "@molvis/stage";
+import { ModeType, type Molvis } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";

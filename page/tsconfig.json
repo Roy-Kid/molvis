@@ -3,10 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./src/*"],
-      "@molvis/stage": ["../stage/dist/index.d.ts"],
-      "@molvis/stage/io": ["../stage/dist/io/index.d.ts"],
-      "@molvis/stage/io/formats": ["../stage/dist/io/formats.d.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"]

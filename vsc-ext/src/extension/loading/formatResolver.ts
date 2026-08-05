@@ -2,7 +2,7 @@ import {
   FILE_FORMAT_REGISTRY,
   type FileFormat,
   inferFormatFromFilename,
-} from "@molvis/stage/io/formats";
+} from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
 
 /**

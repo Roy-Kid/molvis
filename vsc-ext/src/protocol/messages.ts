@@ -10,7 +10,7 @@
  *
  * `FileFormat` / `LoadMode` must stay equal to stage's unions
  * (`stage/src/io/formats.ts`, `stage/src/io/index.ts`). Runtime format
- * inference still uses `@molvis/stage/io/formats` (`FILE_FORMAT_REGISTRY`).
+ * inference still uses `@molcrafts/molvis-stage/io/formats` (`FILE_FORMAT_REGISTRY`).
  */
 
 /**

@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 # Keep in lockstep with core `RPC_PROTOCOL_VERSION` / `rpc.list_methods`.
-RPC_PROTOCOL_VERSION = "1.3.0"
+RPC_PROTOCOL_VERSION = "1.4.0"
 
 
 class FrontendCommandGroup(str, Enum):
@@ -22,6 +22,7 @@ class FrontendCommandGroup(str, Enum):
     SNAPSHOT = "snapshot"
     OVERLAY = "overlay"
     PIPELINE = "pipeline"
+    CAMERA = "camera"
     RPC = "rpc"
 
 
@@ -53,6 +54,8 @@ class FrontendCommands:
     SET_STYLE = FrontendCommand(FrontendCommandGroup.VIEW, "set_style")
     SET_THEME = FrontendCommand(FrontendCommandGroup.VIEW, "set_theme")
     SET_VIEW_MODE = FrontendCommand(FrontendCommandGroup.VIEW, "set_mode")
+    CAMERA_TRACK = FrontendCommand(FrontendCommandGroup.CAMERA, "track")
+    CAMERA_STOP_TRACK = FrontendCommand(FrontendCommandGroup.CAMERA, "stop_track")
     MARK_ATOM = FrontendCommand(FrontendCommandGroup.OVERLAY, "mark_atom")
     UNMARK_ATOM = FrontendCommand(FrontendCommandGroup.OVERLAY, "unmark_atom")
     PIPELINE_LIST = FrontendCommand(FrontendCommandGroup.PIPELINE, "list")

@@ -24,6 +24,7 @@ import {
 import { DrawAtomCommand, DrawBondCommand } from "../../commands/draw";
 import { PlaceMoleculeCommand } from "../../commands/place_molecule";
 import { viewAtomCoords } from "../../io/atom_coords";
+import { CameraTrackModifier } from "../../modifiers/CameraTrackModifier";
 import type { MarkAtomOverlay } from "../../overlays/mark_atom";
 import type { MarkAtomProps } from "../../overlays/types";
 import {
@@ -381,6 +382,8 @@ export class RPCRouter {
       ["camera.look_at", this.handleCameraLookAt],
       ["camera.fit", this.handleCameraFit],
       ["camera.reset", this.handleCameraReset],
+      ["camera.track", this.handleCameraTrack],
+      ["camera.stop_track", this.handleCameraStopTrack],
       ["state.get", this.handleStateGet],
       ["rpc.list_methods", this.handleListMethods],
     ]);
@@ -1010,6 +1013,79 @@ export class RPCRouter {
     const pose = resetCameraView(this.app);
     this.app.world.renderOnce();
     return { pose };
+  };
+
+  /**
+   * Install (or replace) a {@link CameraTrackModifier} and start playback.
+   * Params: keys[{position,target,up?}], duration, loop, rate.
+   */
+  private handleCameraTrack: RPCHandler = async (params) => {
+    const p = asRecord(params);
+    const rawKeys = p.keys;
+    if (!Array.isArray(rawKeys) || rawKeys.length < 2) {
+      throw invalidParams("camera.track requires keys: array of ≥2 poses");
+    }
+    const keys = rawKeys.map((raw, i) => {
+      const k = asRecord(raw);
+      const position = toNumberArray(k.position);
+      const target = toNumberArray(k.target);
+      const up = toNumberArray(k.up);
+      if (!position || !target) {
+        throw invalidParams(
+          `camera.track keys[${i}] needs position and target length-3 arrays`,
+        );
+      }
+      return {
+        position: position as [number, number, number],
+        target: target as [number, number, number],
+        up: (up as [number, number, number] | null) ?? undefined,
+      };
+    });
+
+    const duration = Number(p.duration ?? 12);
+    if (!(duration > 0) || !Number.isFinite(duration)) {
+      throw invalidParams("camera.track duration must be a finite number > 0");
+    }
+    const rate = Number(p.rate ?? 1);
+    if (!(rate > 0) || !Number.isFinite(rate)) {
+      throw invalidParams("camera.track rate must be a finite number > 0");
+    }
+    const loop = p.loop === undefined ? true : Boolean(p.loop);
+
+    // One live camera-track step at a time: remove previous instances.
+    const pipeline = this.app.modifierPipeline;
+    for (const m of [...pipeline.getModifiers()]) {
+      if (m instanceof CameraTrackModifier) {
+        pipeline.removeModifier(m.id);
+      }
+    }
+
+    const mod = new CameraTrackModifier(
+      `camera-track-${Date.now().toString(36)}`,
+    );
+    mod.setSpec({ keys, duration, loop, rate });
+    pipeline.addModifier(mod);
+    await this.app.applyPipeline({ fullRebuild: false });
+    return {
+      id: mod.id,
+      modifier: serializeModifier(mod),
+      playing: mod.isPlaying,
+    };
+  };
+
+  private handleCameraStopTrack: RPCHandler = async () => {
+    const pipeline = this.app.modifierPipeline;
+    const removed: string[] = [];
+    for (const m of [...pipeline.getModifiers()]) {
+      if (m instanceof CameraTrackModifier) {
+        pipeline.removeModifier(m.id);
+        removed.push(m.id);
+      }
+    }
+    if (removed.length > 0) {
+      await this.app.applyPipeline({ fullRebuild: false });
+    }
+    return { removed_ids: removed };
   };
 
   private handleListMethods: RPCHandler = () => {

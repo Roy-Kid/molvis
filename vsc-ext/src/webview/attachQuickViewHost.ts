@@ -3,7 +3,7 @@
  * Thin wrapper over {@link attachStageHost} — Workbench extends the same core.
  */
 
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   type AttachStageHostOptions,
   attachStageHost,

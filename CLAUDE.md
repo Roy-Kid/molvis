@@ -35,16 +35,14 @@ extension, and a Python package that drives the page bundle over WebSocket.
 
 ## Where things live
 
-- Source code: `core/src/` (shared molrs/data/browser primitives),
-  `sketch/src/` (2D), `stage/src/` (3D), `page/src/` (React 19 product shell),
-  `vsc-ext/src/` (VSCode extension), `python/src/` (Python package)
-- Tests: `core/tests/`, `sketch/tests/`, `stage/tests/`, `page/tests/`,
-  `vsc-ext/tests/`, `python/tests/` (+ `integration/` where present)
-- Public documentation: `docs/` (Zensical site; theme `molcrafts-zensical-theme`)
-- Passive project knowledge (notes, decisions, debt, blueprint): `.claude/notes/`
-- Active runtime specs (alive, deleted on completion): `.claude/specs/`
-- Claude Code runtime config (agents, skills, hooks, settings):
-  `.claude/agents/`, `.claude/skills/`, `.claude/hooks/`, `.claude/settings.json`
+- Packages: `core/` (`@molcrafts/molvis-core`), `stage/` (`@molcrafts/molvis-stage`),
+  `sketch/` (`@molcrafts/molvis-sketch`), root umbrella `@molcrafts/molvis` (`src/`),
+  `page/` (private React shell), `vsc-ext/` (VS Code), `python/` (PyPI driver)
+- Hosts import engines as packages (`@molcrafts/molvis-stage`, …), never
+  monorepo-relative `../stage/src` paths — see `.claude/notes/package-architecture.md`
+- Tests: `*/tests/` under each package (+ `python/tests/integration/` where present)
+- Docs: `docs/` (Zensical + `molcrafts-zensical-theme`)
+- Harness: `.claude/notes/`, `.claude/specs/`, agents/skills/hooks
 
 ## Design preferences (default)
 

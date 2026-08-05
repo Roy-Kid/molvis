@@ -18,7 +18,7 @@ import {
   ModifierCapability,
   SelectModifier,
   SliceModifier,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import {
   Box,
   ChevronDown,

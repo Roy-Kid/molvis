@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   formatProgressSuffix,

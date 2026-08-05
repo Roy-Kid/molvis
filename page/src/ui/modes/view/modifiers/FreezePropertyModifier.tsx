@@ -1,4 +1,7 @@
-import type { FreezePropertyModifier as Core, Molvis } from "@molvis/stage";
+import type {
+  FreezePropertyModifier as Core,
+  Molvis,
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

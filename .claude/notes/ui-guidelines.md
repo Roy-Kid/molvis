@@ -48,8 +48,11 @@ the right inspector starts at 15%, leaving 85% for the canvas. Once Analysis is
 open, both side panels are resizable and the canvas never shrinks below 70%.
 Below 1280px with a fine pointer, or 1580px with a coarse pointer, the same
 persistent panel instances become focus-managed edge drawers so analysis
-results and edit drafts survive layout changes. Status and trajectory controls
-share one 28px bottom region.
+results and edit drafts survive layout changes. Open state is shared across
+wide/narrow; presentation switches only. Side panels open via the canvas edge
+drag rails (center grip pill on the hairline) and in-panel close actions —
+not toolbar toggles. The bottom workbench strip appears only when a plugin
+registers content. Status and trajectory controls share one 28px bottom region.
 
 ## Product components
 

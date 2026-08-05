@@ -29,7 +29,26 @@ RepresentationStyle = Literal[
     "graph",
 ]
 
-__all__ = ["DrawingCommandsMixin"]
+ColorTheme = Literal["classic", "modern", "vivid"]
+
+#: Catalog of representation ids (same order as stage ``REPRESENTATION_IDS``).
+STYLE: tuple[str, ...] = (
+    "ball-and-stick",
+    "flat",
+    "ball-and-tube",
+    "tube",
+    "metal-tube",
+    "wireframe",
+    "bubble",
+    "spacefill",
+    "skeletal",
+    "graph",
+)
+
+#: Catalog of color-theme ids accepted by ``view.set_theme``.
+THEME: tuple[str, ...] = ("classic", "modern", "vivid")
+
+__all__ = ["ColorTheme", "DrawingCommandsMixin", "RepresentationStyle", "STYLE", "THEME"]
 
 
 class DrawingCommandsMixin:
@@ -52,7 +71,19 @@ class DrawingCommandsMixin:
 
     Column names are molrs's (:mod:`molrs.keys`) — this layer never invents or
     renames one.
+
+    Class attributes :attr:`STYLE` and :attr:`THEME` list every supported
+    representation / color theme so callers can iterate::
+
+        for style in stage.STYLE:
+            for theme in stage.THEME:
+                stage.set_style(style, theme)
     """
+
+    #: Iterable of representation style ids (see :data:`STYLE`).
+    STYLE: tuple[str, ...] = STYLE
+    #: Iterable of color theme ids (see :data:`THEME`).
+    THEME: tuple[str, ...] = THEME
 
     def new_frame(
         self: "Molvis",
@@ -260,25 +291,68 @@ class DrawingCommandsMixin:
     def set_style(
         self: "Molvis",
         style: RepresentationStyle | None = None,
+        theme: ColorTheme | str | None = None,
+        *,
         atom_radius: float | None = None,
         bond_radius: float | None = None,
         outline: bool | None = None,
     ) -> "Molvis":
-        """Set global visualization style parameters."""
-        self.send_cmd(
-            FrontendCommands.SET_STYLE.method,
-            {
-                "style": style,
-                "outline": outline,
-                "atoms": {"radius": atom_radius},
-                "bonds": {"radius": bond_radius},
-            },
-        )
+        """Set global representation style and/or color theme.
+
+        Parameters
+        ----------
+        style
+            Representation id (see :attr:`STYLE`). Optional when only
+            radii / outline / theme are changing.
+        theme
+            Color theme id (see :attr:`THEME`). Optional second positional
+            so ``stage.set_style(style, theme)`` works in a double loop
+            over :attr:`STYLE` × :attr:`THEME`.
+        atom_radius, bond_radius, outline
+            Keyword-only representation tweaks (not themes).
+
+        Examples
+        --------
+        ::
+
+            stage.set_style("spacefill")
+            stage.set_style("ball-and-stick", "modern")
+            stage.set_style(style="graph", outline=False)
+            for style in stage.STYLE:
+                for theme in stage.THEME:
+                    stage.set_style(style, theme)
+        """
+        if theme is not None:
+            self.set_theme(theme)
+        if (
+            style is not None
+            or atom_radius is not None
+            or bond_radius is not None
+            or outline is not None
+        ):
+            self.send_cmd(
+                FrontendCommands.SET_STYLE.method,
+                {
+                    "style": style,
+                    "outline": outline,
+                    "atoms": {"radius": atom_radius},
+                    "bonds": {"radius": bond_radius},
+                },
+            )
         return self
 
-    def set_theme(self: "Molvis", theme: str) -> "Molvis":
-        """Set color theme for molecular visualization."""
-        self.send_cmd(FrontendCommands.SET_THEME.method, {"theme": theme})
+    def set_theme(self: "Molvis", theme: ColorTheme | str) -> "Molvis":
+        """Set color theme for molecular visualization.
+
+        Accepted values are listed on :attr:`THEME`
+        (``classic`` / ``modern`` / ``vivid``).
+        """
+        name = str(theme).strip().lower()
+        if name not in THEME:
+            raise ValueError(
+                f"unknown theme {theme!r}; expected one of {list(THEME)}"
+            )
+        self.send_cmd(FrontendCommands.SET_THEME.method, {"theme": name})
         return self
 
     def set_view_mode(self: "Molvis", mode: str) -> "Molvis":

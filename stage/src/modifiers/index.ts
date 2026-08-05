@@ -5,6 +5,11 @@ export {
   AffineTransformationModifier,
 } from "./AffineTransformationModifier";
 export { AssignColorModifier } from "./AssignColorModifier";
+export {
+  type CameraTrackKey,
+  CameraTrackModifier,
+  type CameraTrackSpec,
+} from "./CameraTrackModifier";
 export { ColorByPropertyModifier } from "./ColorByPropertyModifier";
 export { ColorByTypeModifier } from "./ColorByTypeModifier";
 export {

@@ -1,4 +1,4 @@
-import type { Modifier, Molvis } from "@molvis/stage";
+import type { Modifier, Molvis } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { RESIZE_KEYBOARD_STEP_PX } from "@/lib/viewer-layout";

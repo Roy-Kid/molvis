@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { useCallback } from "react";
 import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
 

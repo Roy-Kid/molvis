@@ -5,7 +5,7 @@ import {
   REPRESENTATIONS,
   type RepresentationId,
   VividTheme,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import {
   Atom,
   Circle,

@@ -14,6 +14,7 @@ working implementation sat unreachable further down the MRO.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -26,6 +27,10 @@ if TYPE_CHECKING:
 __all__ = ["Camera", "CameraPose", "ControlMixin"]
 
 Vec3 = tuple[float, float, float]
+
+# Content seconds for one path lap when ``duration`` is infinite.
+# ``rate`` still scales wall-clock (``rate=0.5`` → twice as long per lap).
+_INF_CYCLE_CONTENT_S = 12.0
 
 
 @dataclass(frozen=True)
@@ -179,6 +184,13 @@ def _pose_from_result(result: Any) -> CameraPose:
     raise TypeError(f"camera RPC result missing pose fields: keys={list(result)}")
 
 
+def _is_infinite_duration(duration: float) -> bool:
+    try:
+        return math.isinf(float(duration))
+    except (TypeError, ValueError):
+        return False
+
+
 class Camera:
     """Proxy that translates camera operations to RPC calls on a viewer.
 
@@ -191,6 +203,8 @@ class Camera:
 
     def __init__(self, viewer: Any) -> None:
         self._viewer = viewer
+        #: Modifier id of the last :meth:`track` install (if any).
+        self._track_modifier_id: str | None = None
 
     def get_pose(self) -> CameraPose:
         """Query the live camera pose (does **not** return self — a read)."""
@@ -254,6 +268,22 @@ class Camera:
         self._viewer.send_cmd("camera.reset", {}, wait_for_response=True)
         return self
 
+    def stop_track(self) -> "Camera":
+        """Remove any **Camera track** pipeline modifier and stop motion.
+
+        Same effect as deleting the step in the pipeline UI. Returns ``self``.
+        """
+        self._viewer.send_cmd("camera.stop_track", {}, wait_for_response=True)
+        self._track_modifier_id = None
+        # Refresh pipeline mirror when the host supports it.
+        list_mod = getattr(self._viewer, "list_modifiers", None)
+        if callable(list_mod):
+            try:
+                list_mod()
+            except Exception:
+                pass
+        return self
+
     def track(
         self,
         keypoints: Sequence[Any],
@@ -261,15 +291,21 @@ class Camera:
         target: Sequence[float] | None = None,
         up: Sequence[float] | None = (0.0, 0.0, 1.0),
         duration: float = 4.0,
-        fps: float = 60.0,
         rate: float = 1.0,
     ) -> Any:
-        """Play an interpolated path through user-defined key points.
+        """Install a **Camera track** pipeline modifier and start playback.
 
-        **One API** for camera tours: pass key positions (and optional per-key
-        look-at / up), get a smooth path. Internally samples the polyline and
-        drives :meth:`look_at` each frame so the frontend ``set_pose`` /
-        ``look_at`` RPCs stay the source of truth.
+        The path is driven on the frontend render loop (never blocks the
+        kernel). A **Camera track** step appears in the pipeline UI; deleting
+        or disabling it stops the motion. Calling :meth:`track` again replaces
+        any previous camera-track step.
+
+        Timing is two independent knobs (no sample-rate / fps coupling):
+
+        * **duration** — content seconds for one lap (or one-shot path).
+        * **rate** — pure speed multiplier. Wall-clock lap =
+          ``duration / rate``. ``rate=2`` is twice as fast; ``rate=0.5`` is
+          half speed. Independent of display refresh.
 
         Parameters
         ----------
@@ -285,19 +321,17 @@ class Camera:
         up
             Default up vector (Z-up ``(0, 0, 1)``).
         duration
-            Path length in content seconds (independent of wall-clock speed).
-        fps
-            Samples per content second along the path. Default ``60``.
+            Content seconds for one lap when finite. ``math.inf`` /
+            ``numpy.inf`` → loop forever with a 12 s content cycle per lap
+            (still scaled by ``rate`` only).
         rate
-            Playback speed relative to ``duration``. ``1.0`` plays in real
-            time (wall time ≈ ``duration``); ``2.0`` is twice as fast;
-            ``0.5`` is half speed. Does not change sample count — only the
-            sleep between samples.
+            Playback speed multiplier (``1.0`` = real-time content
+            duration). Not a frame rate — do not pass ``fps``.
 
         Returns
         -------
         Camera
-            ``self`` (always blocks until the path finishes — no await needed).
+            ``self`` immediately (always non-blocking).
 
         Example
         -------
@@ -307,24 +341,19 @@ class Camera:
             pose = stage.camera.pose
             t = np.asarray(pose.target)
             r = float(pose.radius)
-            stage.camera.track(
-                [
-                    (t[0] + r, t[1], t[2] + 0.3 * r),
-                    (t[0], t[1] + r, t[2] + 0.3 * r),
-                    (t[0] - r, t[1], t[2] + 0.3 * r),
-                    (t[0], t[1] - r, t[2] + 0.3 * r),
-                    (t[0] + r, t[1], t[2] + 0.3 * r),
-                ],
-                target=tuple(t),
-                duration=4.0,
-                fps=60,
-                rate=1.0,
-            )
+            keys = [
+                (t[0] + r, t[1], t[2] + 0.3 * r),
+                (t[0], t[1] + r, t[2] + 0.3 * r),
+                (t[0] - r, t[1], t[2] + 0.3 * r),
+                (t[0], t[1] - r, t[2] + 0.3 * r),
+                (t[0] + r, t[1], t[2] + 0.3 * r),
+            ]
+            # Slow infinite orbit: 12 s content lap at half speed → 24 s wall.
+            stage.camera.track(keys, target=tuple(t), duration=np.inf, rate=0.5)
         """
-        if duration <= 0:
-            raise ValueError("duration must be > 0")
-        if fps <= 0:
-            raise ValueError("fps must be > 0")
+        infinite = _is_infinite_duration(duration)
+        if not infinite and float(duration) <= 0:
+            raise ValueError("duration must be > 0 (or inf for a looping track)")
         if rate <= 0:
             raise ValueError("rate must be > 0")
         if len(keypoints) < 2:
@@ -345,35 +374,35 @@ class Camera:
             )
             for i, raw in enumerate(keypoints)
         ]
-
-        # Content-time sampling: n_frames from duration×fps; wall sleep scaled
-        # by rate so playback speed is independent of path resolution.
-        n_frames = max(2, int(duration * fps + 0.999_999) + 1)
-        dt = (duration / rate) / (n_frames - 1)
-
-        for i in range(n_frames):
-            u = i / (n_frames - 1)
-            sample = _sample_keys(keys, u)
-            self.look_at(sample.position, sample.target, up=sample.up)
-            if i < n_frames - 1:
-                _sleep(dt)
+        wire_keys = [
+            {
+                "position": list(k.position),
+                "target": list(k.target),
+                "up": list(k.up),
+            }
+            for k in keys
+        ]
+        cycle_s = _INF_CYCLE_CONTENT_S if infinite else float(duration)
+        result = self._viewer.send_cmd(
+            "camera.track",
+            {
+                "keys": wire_keys,
+                "duration": cycle_s,
+                "loop": infinite,
+                "rate": float(rate),
+            },
+            wait_for_response=True,
+        )
+        if isinstance(result, Mapping):
+            mid = result.get("id")
+            self._track_modifier_id = str(mid) if mid is not None else None
+        list_mod = getattr(self._viewer, "list_modifiers", None)
+        if callable(list_mod):
+            try:
+                list_mod()
+            except Exception:
+                pass
         return self
-
-
-def _sleep(seconds: float) -> None:
-    """Wall-clock pause. Prefer Pyodide ``run_sync`` so the browser can paint."""
-    if seconds <= 0:
-        return
-    try:
-        import asyncio
-
-        from pyodide.ffi import run_sync  # type: ignore[import-not-found]
-
-        run_sync(asyncio.sleep(seconds))
-        return
-    except ImportError:
-        pass
-    time.sleep(seconds)
 
 
 def _png_bytes_from_response(response: Any) -> bytes:

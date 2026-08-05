@@ -9,7 +9,7 @@ import {
   downloadProjectJson,
   type Molvis,
   serializeProjectJson,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { FolderDown, Loader2 } from "lucide-react";
 import type React from "react";
 import { useState } from "react";

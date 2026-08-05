@@ -1,21 +1,22 @@
 /**
- * VS Code webview replacement for core's `spawnTrajectoryWorker`.
+ * VS Code webview replacement for stage's `spawnTrajectoryWorker`.
  *
- * Wired via resolve.alias in `rslib.webview.config.mts` so the main-thread
- * graph never pulls `worker.ts` into splitChunks (dual chunk ownership).
- * The worker is a separate rslib entry emitted as `out/chunks/worker.js`,
- * colocated with `chunks/shared.js`.
+ * Wired via `NormalModuleReplacementPlugin` in the webview rslib configs so
+ * the main-thread graph never pulls the trajectory worker into splitChunks
+ * (dual chunk ownership). The worker is a separate rslib entry
+ * (`rslib.webview.worker.config.mts` → `out/chunks/worker.js`), colocated
+ * with `chunks/shared.js`.
+ *
+ * Types/runtime resolve from `@molcrafts/molvis-stage` package exports → dist.
  */
 
-import type { Format } from "../../../stage/src/transport/trajectory_worker/protocol";
+import type { Format } from "@molcrafts/molvis-stage/trajectory-protocol";
 import {
   TrajectoryRuntime,
   type WorkerLike,
-} from "../../../stage/src/transport/trajectory_worker/runtime";
+} from "@molcrafts/molvis-stage/trajectory-runtime";
 
-// Re-export everything the original runtime module exposes so call sites
-// that import types / classes from the same path keep working.
-export type { Format } from "../../../stage/src/transport/trajectory_worker/protocol";
+export type { Format } from "@molcrafts/molvis-stage/trajectory-protocol";
 export {
   CancellationError,
   type IndexProgressCallback,
@@ -23,7 +24,7 @@ export {
   type OpenResult,
   TrajectoryRuntime,
   type WorkerLike,
-} from "../../../stage/src/transport/trajectory_worker/runtime";
+} from "@molcrafts/molvis-stage/trajectory-runtime";
 
 export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
   if (typeof Worker === "undefined") {

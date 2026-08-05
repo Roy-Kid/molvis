@@ -1,5 +1,6 @@
 import { AffineTransformationModifier } from "../modifiers/AffineTransformationModifier";
 import { AssignColorModifier } from "../modifiers/AssignColorModifier";
+import { CameraTrackModifier } from "../modifiers/CameraTrackModifier";
 import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
@@ -332,6 +333,11 @@ export class ModifierRegistry {
       TrajectoryLinesModifier.NAME,
       "Visualization",
       () => new TrajectoryLinesModifier(nextModifierId("traj-lines")),
+    );
+    ModifierRegistry.register(
+      CameraTrackModifier.NAME,
+      "Visualization",
+      () => new CameraTrackModifier(nextModifierId("camera-track")),
     );
 
     // ── Auto-attach only (visual elements; not in Add menu) ─────────

@@ -1,4 +1,4 @@
-import type { Modifier } from "@molvis/stage";
+import type { Modifier } from "@molcrafts/molvis-stage";
 import type React from "react";
 import {
   Dialog,

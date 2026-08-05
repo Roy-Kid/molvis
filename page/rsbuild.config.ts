@@ -1,23 +1,15 @@
-import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
 
 const root = import.meta.dirname;
-const require = createRequire(import.meta.url);
-function pkg(name: string): string {
-  return require.resolve(name);
-}
 
 /**
- * Flatten dist to ``dist/{js,css,wasm}/``.
+ * Product host (React). Engines resolve as normal workspace/npm packages
+ * (`@molcrafts/molvis-stage`, `@molcrafts/molvis-sketch`, … → package exports
+ * → dist). Build core/stage/sketch first.
  *
- * Engines resolve as normal npm packages via workspace install
- * (``node_modules/@molcrafts/*`` → package ``exports`` → dist).
- * Build core/stage/sketch first. Only short-name remaps for ``@molvis/stage*``;
- * never monorepo ``../stage/src`` paths.
- *
- * ``MOLVIS_PYTHON_DEV=1`` writes into the Python package tree.
+ * ``MOLVIS_PYTHON_DEV=1`` writes the bundle into the Python package tree.
  */
 const pythonDev = process.env.MOLVIS_PYTHON_DEV === "1";
 const distRoot = pythonDev
@@ -49,10 +41,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(root, "./src"),
-      // Package exports → dist files (workspace/registry under node_modules).
-      "@molvis/stage": pkg("@molcrafts/molvis-stage"),
-      "@molvis/stage/io": pkg("@molcrafts/molvis-stage/io"),
-      "@molvis/stage/io/formats": pkg("@molcrafts/molvis-stage/io/formats"),
     },
   },
   performance: {
@@ -90,8 +78,7 @@ export default defineConfig({
         ...config.experiments,
         asyncWebAssembly: true,
       };
-      // Stage/sketch ship unbundled ESM (`function f(){} export { f }`). Rspack's
-      // strict export presence wrongly flags those local re-exports.
+      // Unbundled stage dist uses `function f(){} export { f }`.
       config.module = {
         ...config.module,
         parser: {

@@ -1,7 +1,7 @@
 import type {
   ExpressionSelectionModifier as CoreExpressionModifier,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";

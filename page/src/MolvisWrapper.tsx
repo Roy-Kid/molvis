@@ -4,8 +4,8 @@ import {
   type MolvisConfig,
   type MolvisSetting,
   mountMolvis,
-} from "@molvis/stage";
-import type { LoadMode } from "@molvis/stage/io";
+} from "@molcrafts/molvis-stage";
+import type { LoadMode } from "@molcrafts/molvis-stage/io";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";

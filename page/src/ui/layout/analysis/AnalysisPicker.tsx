@@ -1,4 +1,4 @@
-import { type AnalysisDefinition, stripCode } from "@molvis/stage";
+import { type AnalysisDefinition, stripCode } from "@molcrafts/molvis-stage";
 import { Check, ChevronDown, Search } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";

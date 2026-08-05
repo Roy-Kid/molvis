@@ -4,7 +4,7 @@ import {
   findAlphaBounds,
   type Molvis,
   reencodeImage,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import {
   Camera,
   Crop,

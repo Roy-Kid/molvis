@@ -1,5 +1,5 @@
 import { LineChart, type SeriesPoint } from "@molcrafts/molplot";
-import type { AnalysisResultKind } from "@molvis/stage";
+import type { AnalysisResultKind } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useMemo } from "react";
 import { AnalysisChart, type AnalysisChartController } from "./AnalysisChart";

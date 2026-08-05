@@ -1,7 +1,7 @@
 import type {
   GaussianDensitySurfaceModifier as CoreGaussianDensitySurfaceModifier,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

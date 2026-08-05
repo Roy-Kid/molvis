@@ -3,7 +3,7 @@ import {
   type BackendStateSync,
   DataSourceModifier,
   type Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { useCallback, useEffect, useState } from "react";
 import {
   formatStatusLine,

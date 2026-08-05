@@ -1,49 +1,49 @@
-# Package architecture (naming lock)
+# Package architecture
 
-Decided 2026-07-30. Updated 2026-08-05: **umbrella is the repo root**, not a
-separate workspace package.
+Canonical monorepo layout for MolVis **0.2.0**.
 
 ## Topology
 
 ```
-                    core/  (@molcrafts/molvis-core)
-                    · sole import face for @molcrafts/molrs (WASM once)
-                    · pure data: elements / radii / normalize
-                    · framework-free shared Web Components
-                    · published as a *transitive* dep of stage/sketch
-                    · not a product install
-                              │
-              ┌───────────────┴───────────────┐
-              v                               v
-   sketch/                         stage/
-   @molcrafts/molvis-sketch        @molcrafts/molvis-stage
-   2D Canvas sketcher              3D Babylon engine
-   React-free                      React-free
-              \                               /
-               \                             /
-                v                           v
-   repo root  @molcrafts/molvis  (thin re-export only — src/*.js)
-                │
-                v
-         page/  (+ vsc-ext, python hosts)
+core/     @molcrafts/molvis-core     shared molrs gateway + pure/browser primitives
+  │                                  (published; transitive only — not a product install)
+  ├─→ stage/   @molcrafts/molvis-stage    3D engine (Babylon, pipeline, RPC)
+  └─→ sketch/  @molcrafts/molvis-sketch   2D canvas sketcher
+        │
+        ▼
+  repo root   @molcrafts/molvis      thin re-exports (src/*.js) — not a workspace member
+        │
+        ▼
+  page/       (private)              React 19 product shell
+  vsc-ext/    molvis (private)       VS Code extension host
+  python/     molcrafts-molvis       PyPI driver + shipped page bundle
 ```
 
-## npm / directory matrix
+## Rules
 
-| Role | Directory | Package name | Publish? |
-|------|-----------|--------------|----------|
-| Shared molrs gateway | `core/` | `@molcrafts/molvis-core` | **Yes** (transitive) |
-| 2D sketcher | `sketch/` | `@molcrafts/molvis-sketch` | **Yes** |
-| 3D engine | `stage/` | `@molcrafts/molvis-stage` | **Yes** |
-| Umbrella (both engines) | **repo root** | `@molcrafts/molvis` | **Yes** — `src/` re-exports only; **not** a workspace member |
-| Product UI | `page/` | `page` (private) | **No** |
-| VS Code host | `vsc-ext/` | Marketplace extension | **Yes** (vsce) |
-| Python host | `python/` | `molcrafts-molvis` | **Yes** (PyPI) |
+1. **Only `core` imports `@molcrafts/molrs`.** stage/sketch import `@molcrafts/molvis-core` (and subpaths).
+2. **sketch ↛ stage, stage ↛ sketch.** Peers only.
+3. **React only in `page` (and hosts that mount page).** Engines are React-free.
+4. **Hosts consume engines as packages**, not monorepo source paths:
+   - Import `@molcrafts/molvis-stage` / `@molcrafts/molvis-sketch` / `@molcrafts/molvis-core/*`
+   - Resolve via workspace `node_modules` → package `exports` → `dist/`
+   - **Never** `../stage/src/...` or `../core/src/...` from hosts
+5. **Umbrella is the repo root** (`@molcrafts/molvis`), not a separate workspace package.
+6. **Build order for hosts:** `core → stage → sketch → page | vsc-ext`.
 
-### Hard rules
+## Publish surface
 
-1. **Only `core` may import `@molcrafts/molrs`.** sketch and stage import `@molcrafts/molvis-core`.
-2. **sketch ↛ stage, stage ↛ sketch.** Engines are peers.
-3. **React / shadcn only in `page` (and hosts that mount page).**
-4. **Umbrella lives at the monorepo root** — `package.json` name `@molcrafts/molvis`, thin `src/` re-exports, `files: ["src", …]`. Do **not** reintroduce a separate `umbrella/` workspace.
-5. Root **runtime** `dependencies` are only stage + sketch. Monorepo tooling (biome, rstest, molplot, vega, …) stays in root `devDependencies` so the published umbrella tarball stays lean.
+| Package | How published |
+|---------|----------------|
+| `@molcrafts/molvis-core` | npm (tag workflow) |
+| `@molcrafts/molvis-stage` | npm |
+| `@molcrafts/molvis-sketch` | npm |
+| `@molcrafts/molvis` | npm (root `npm publish`) |
+| `molcrafts-molvis` | PyPI |
+| VS Code `molvis` | Marketplace (vsce) |
+
+## Not in tree
+
+- No `umbrella/` workspace
+- No repo-root `e2e/`, `regressions/`, or engine `examples/` demos
+- No host path aliases into engine `src/`

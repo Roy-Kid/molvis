@@ -1,12 +1,6 @@
-import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "@rslib/core";
 import { rspack } from "@rspack/core";
-
-const require = createRequire(import.meta.url);
-function pkg(name: string): string {
-  return require.resolve(name);
-}
 
 /**
  * VS Code webview — main-thread bundle
@@ -58,8 +52,10 @@ const sharedDefine = {
   "process.env.NODE_ENV": '"production"',
 };
 
+// Engines resolve via package exports → dist (workspace symlink realpath
+// still lands under monorepo package dirs — match dist only, never src).
 const sharedModulesPattern =
-  /[\\/](node_modules|core[\\/](src|dist)|stage[\\/](src|dist)|sketch[\\/]src)[\\/]/;
+  /[\\/](node_modules|core[\\/]dist|stage[\\/]dist|sketch[\\/]dist)[\\/]/;
 
 const spawnWrapper = path.resolve(
   import.meta.dirname,
@@ -99,16 +95,6 @@ export default defineConfig({
 
   // No React in webview entries (QV/Workbench = stage; Sketch = sketch package).
   plugins: [],
-
-  resolve: {
-    // Resolve package exports to dist files (workspace/registry layout).
-    // Build core/stage/sketch first. Never monorepo ../src paths.
-    alias: {
-      "@molvis/stage": pkg("@molcrafts/molvis-stage"),
-      "@molvis/stage/io": pkg("@molcrafts/molvis-stage/io"),
-      "@molvis/stage/io/formats": pkg("@molcrafts/molvis-stage/io/formats"),
-    },
-  },
 
   tools: {
     rspack(config) {
@@ -213,7 +199,7 @@ export default defineConfig({
       config.plugins = [
         ...(config.plugins ?? []),
         new rspack.NormalModuleReplacementPlugin(
-          /transport[\\/]trajectory_worker[\\/]runtime\.ts$/,
+          /trajectory_worker[\\/]runtime\.(ts|js)$/,
           (resource: { context: string; request: string }) => {
             if (resource.context.includes(`${path.sep}vsc-ext${path.sep}`)) {
               return;

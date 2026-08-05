@@ -1,7 +1,7 @@
 import type {
   VectorFieldModifier as CoreVectorFieldModifier,
   Molvis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useMemo } from "react";
 import { Input } from "@/components/ui/input";

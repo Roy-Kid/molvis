@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { X } from "lucide-react";
 import type React from "react";
 import {
@@ -130,11 +130,9 @@ const App: React.FC = () => {
     INLINE_PANEL_BREAKPOINT,
     COARSE_POINTER_INLINE_PANEL_BREAKPOINT,
   );
-  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
-  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  // Wide layout: analysis starts closed (0%); tools open by default; both
-  // can fully collapse. Overlay refs size the absolute chrome; panel refs
-  // drive the resizable workbench slots (collapse/expand/resize).
+  // Side-panel open flags are layout-mode agnostic: wide = resizable columns,
+  // narrow = edge drawers. Same flags, so resizing the host never "loses"
+  // an open tools panel. Bottom workbench stays separate (content-gated).
   //
   // Overlay width is driven by the live layout during drag via DOM only
   // (see handlePanelLayout). React state holds the *committed* size so
@@ -143,6 +141,7 @@ const App: React.FC = () => {
   // Once requested, keep the lazy panel mounted so analysis inputs/results
   // survive close/reopen without making the initial page pay its bundle cost.
   const [analysisPanelLoaded, setAnalysisPanelLoaded] = useState(false);
+  // Tools inspector starts open so modes/pipeline are reachable immediately.
   const [toolsInlineOpen, setToolsInlineOpen] = useState(true);
   const [analysisWidthPct, setAnalysisWidthPct] = useState(0);
   // Match resolveViewerPanelLayout({ both: true }).tools (15%); first
@@ -157,10 +156,10 @@ const App: React.FC = () => {
   const lastToolsWidthRef = useRef(15);
 
   useEffect(() => {
-    if (analysisInlineOpen || leftDrawerOpen) {
+    if (analysisInlineOpen) {
       setAnalysisPanelLoaded(true);
     }
-  }, [analysisInlineOpen, leftDrawerOpen]);
+  }, [analysisInlineOpen]);
 
   const applyOverlayWidth = useCallback(
     (side: "analysis" | "tools", pct: number) => {
@@ -174,7 +173,6 @@ const App: React.FC = () => {
   const setLeftOpen = useCallback(
     (open: boolean) => {
       if (open) setAnalysisPanelLoaded(true);
-      setLeftDrawerOpen(open);
       setAnalysisInlineOpen(open);
       const slot = analysisSlotRef.current;
       if (open) {
@@ -196,7 +194,6 @@ const App: React.FC = () => {
 
   const setRightOpen = useCallback(
     (open: boolean) => {
-      setRightDrawerOpen(open);
       setToolsInlineOpen(open);
       const slot = toolsSlotRef.current;
       if (open) {
@@ -261,20 +258,14 @@ const App: React.FC = () => {
       }
       if (e.key === "Escape") {
         setUiHidden(false);
-        setLeftDrawerOpen(false);
-        setRightDrawerOpen(false);
+        // Close side panels (drawers or inline) — same open flags either way.
+        setLeftOpen(false);
+        setRightOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    if (!isNarrow) {
-      setLeftDrawerOpen(false);
-      setRightDrawerOpen(false);
-    }
-  }, [isNarrow]);
+  }, [setLeftOpen, setRightOpen]);
 
   const handleModeChange = (mode: string) => {
     if (currentMode !== mode) {
@@ -487,13 +478,13 @@ const App: React.FC = () => {
                     )}
                   </ResizablePanelGroup>
 
-                  {isNarrow && (leftDrawerOpen || rightDrawerOpen) && (
+                  {isNarrow && (analysisInlineOpen || toolsInlineOpen) && (
                     <button
                       type="button"
                       aria-label="Close side panel"
                       onClick={() => {
-                        setLeftDrawerOpen(false);
-                        setRightDrawerOpen(false);
+                        setLeftOpen(false);
+                        setRightOpen(false);
                       }}
                       className="motion-fade-in absolute inset-0 z-20 cursor-default bg-scrim"
                     />
@@ -505,10 +496,7 @@ const App: React.FC = () => {
                       inlineWidth={`${analysisWidthPct}%`}
                       label="Left panel"
                       onClose={closeLeftPanel}
-                      open={
-                        !uiHidden &&
-                        (isNarrow ? leftDrawerOpen : analysisInlineOpen)
-                      }
+                      open={!uiHidden && analysisInlineOpen}
                       panelRef={analysisPanelRef}
                       side="left"
                     >
@@ -547,10 +535,7 @@ const App: React.FC = () => {
                       inlineWidth={`${toolsWidthPct}%`}
                       label="Right panel"
                       onClose={closeRightPanel}
-                      open={
-                        !uiHidden &&
-                        (isNarrow ? rightDrawerOpen : toolsInlineOpen)
-                      }
+                      open={!uiHidden && toolsInlineOpen}
                       panelRef={toolsPanelRef}
                       side="right"
                     >

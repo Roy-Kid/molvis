@@ -1,4 +1,4 @@
-import type { Modifier } from "@molvis/stage";
+import type { Modifier } from "@molcrafts/molvis-stage";
 import type { ModifierPanelComponent } from "../types";
 import { Emitter } from "./emitter";
 import { ContributionStore } from "./store";

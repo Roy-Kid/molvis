@@ -6,7 +6,7 @@ import {
   type FrameRange,
   type Molvis,
   runAnalysis,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/ui/empty-state";

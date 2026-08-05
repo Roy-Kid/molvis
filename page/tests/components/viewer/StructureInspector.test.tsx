@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { describe, expect, it } from "@rstest/core";
 import React from "react";
 import { createRoot } from "react-dom/client";

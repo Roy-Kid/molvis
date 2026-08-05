@@ -425,14 +425,14 @@ function _assertWorkerCtor(): void {
 
 /** Spawn a real worker pointing at the colocated worker module. The URL
  *  pattern is the rsbuild / rspack-supported "new URL(..., import.meta.url)"
- *  form so the worker is bundled with the rest of `@molvis/core`.
+ *  form so the worker is bundled with the stage package graph.
  *
  *  The reference is `./worker.js`, not `./worker.ts`: rslib builds this package
  *  bundleless, transpiling `worker.ts` → `worker.js` while leaving this URL
  *  string verbatim. Pointing at `.js` makes the published dist resolve to the
- *  emitted `worker.js`; when consumed from source inside the monorepo,
- *  rsbuild's default `.js` → `.ts` extension resolution maps it back to
- *  `worker.ts`.
+ *  emitted `worker.js`. Hosts that need a custom worker entry (e.g. VS Code
+ *  webview) import `@molcrafts/molvis-stage/trajectory-runtime` and supply
+ *  their own Worker via `TrajectoryRuntime` / a spawn wrapper.
  *
  *  Tests should NOT call this — construct `TrajectoryRuntime` directly
  *  with an injected fake worker instead. */

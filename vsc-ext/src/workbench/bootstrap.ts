@@ -101,7 +101,7 @@ export async function bootstrapWorkbench(
   const ensureStage = (): Promise<void> => {
     if (stageBridge) return Promise.resolve();
     stageMounting ??= (async () => {
-      const { mountMolvis } = await import("@molvis/stage");
+      const { mountMolvis } = await import("@molcrafts/molvis-stage");
       const app = mountMolvis(
         stagePane,
         { showUI: true },

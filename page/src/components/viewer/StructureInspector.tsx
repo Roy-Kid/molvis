@@ -1,4 +1,4 @@
-import type { Molvis } from "@molvis/stage";
+import type { Molvis } from "@molcrafts/molvis-stage";
 import { Code2, Edit3, MousePointer2, Move, Ruler, Video } from "lucide-react";
 import type React from "react";
 import { useMemo } from "react";

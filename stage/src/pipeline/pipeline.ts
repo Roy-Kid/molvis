@@ -119,6 +119,13 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       if (index >= 0) {
         this.modifiers.splice(index, 1);
         removed.push(mod);
+        // Tear down side-effects (camera observers, overlays, …) before
+        // the instance is dropped from the pipeline.
+        try {
+          mod.onRemoved?.();
+        } catch {
+          /* dispose must not block remove */
+        }
         this.emit(PipelineEvents.MODIFIER_REMOVED, {
           modifier: mod,
           index,

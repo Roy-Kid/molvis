@@ -7,7 +7,7 @@ import {
   type Overlay,
   type PluginModeFactory,
   registerRpcExtensionHandler,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { openPluginDialog } from "../contributions/dialog_host";
 import {
   PLUGIN_MODIFIER_TYPE_ID,

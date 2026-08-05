@@ -5,7 +5,7 @@ import {
   listAnalysisCategoriesWithEntries,
   type Molvis,
   structureProbeKey,
-} from "@molvis/stage";
+} from "@molcrafts/molvis-stage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listPluginAnalysisSpecs,
