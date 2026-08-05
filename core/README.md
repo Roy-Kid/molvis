@@ -3,10 +3,11 @@
 Shared MolVis **core**: the monorepo’s sole `@molcrafts/molrs` import face,
 element catalog, and framework-free controls shared by the 2D and 3D hosts.
 
-**Not a consumer-facing product.** Engines:
+**Not a consumer-facing product.** Product packages:
 
 - `@molcrafts/molvis-sketch` — 2D
 - `@molcrafts/molvis-stage` — 3D
+- `@molcrafts/molvis` — root umbrella (re-exports both)
 
 ## Imports
 

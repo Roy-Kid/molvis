@@ -24,8 +24,8 @@ jobs:
 
       - run: npm install
 
-      # Publish order: shared core → stage → sketch.
-      # core is a transitive dep (not a product install).
+      # Publish order: shared core → engines → root umbrella.
+      # Root package is `@molcrafts/molvis` (not a separate workspace).
       - name: Build core
         run: npm run build:core
 
@@ -46,3 +46,6 @@ jobs:
 
       - name: Publish @molcrafts/molvis-sketch
         run: npm publish -w @molcrafts/molvis-sketch --provenance --access public
+
+      - name: Publish @molcrafts/molvis (root umbrella)
+        run: npm publish --provenance --access public

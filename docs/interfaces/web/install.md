@@ -1,14 +1,15 @@
 # Install the Web binding
 
-Install the **3D stage** package in an application that targets modern browsers:
+Install both engines via the root umbrella, or pick a single surface:
 
 ```bash
+# 3D + 2D
+npm install @molcrafts/molvis
+
+# 3D only
 npm install @molcrafts/molvis-stage
-```
 
-Need 2D sketching as well?
-
-```bash
+# 2D only
 npm install @molcrafts/molvis-sketch
 ```
 

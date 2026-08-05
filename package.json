@@ -1,9 +1,41 @@
 {
-  "name": "molvis",
+  "name": "@molcrafts/molvis",
   "version": "0.2.0",
-  "description": "Interactive molecular visualization for web, VS Code, and Python",
+  "description": "MolVis umbrella: 2D sketch + 3D stage (install engines explicitly for a single surface)",
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MolCrafts/molvis.git"
+  },
+  "homepage": "https://github.com/MolCrafts/molvis#readme",
+  "bugs": {
+    "url": "https://github.com/MolCrafts/molvis/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./sketch": {
+      "types": "./src/sketch.d.ts",
+      "import": "./src/sketch.js",
+      "default": "./src/sketch.js"
+    },
+    "./stage": {
+      "types": "./src/stage.d.ts",
+      "import": "./src/stage.js",
+      "default": "./src/stage.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
   "workspaces": [
     "core",
     "stage",
@@ -46,8 +78,14 @@
     "version:sync": "node scripts/sync-version.mjs",
     "prepare": "node scripts/sync-version.mjs"
   },
+  "dependencies": {
+    "@molcrafts/molvis-sketch": "0.2.0",
+    "@molcrafts/molvis-stage": "0.2.0"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
+    "@molcrafts/molplot": "^0.1.1",
+    "@molcrafts/molrs": "^0.12.0",
     "@rsbuild/core": "^2.0.8",
     "@rslib/core": "^0.22.0",
     "@rstest/browser": "^0.11.6",
@@ -57,14 +95,10 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "shadcn": "^4.13.0",
-    "wait-on": "^9.0.10"
-  },
-  "dependencies": {
-    "@molcrafts/molplot": "^0.1.1",
-    "@molcrafts/molrs": "^0.12.0",
     "vega": "^5.30.0",
     "vega-embed": "^6.29.0",
-    "vega-lite": "^5.21.0"
+    "vega-lite": "^5.21.0",
+    "wait-on": "^9.0.10"
   },
   "overrides": {
     "@rspack/core": "^2.0.5",

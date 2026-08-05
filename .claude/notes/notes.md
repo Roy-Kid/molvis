@@ -91,7 +91,8 @@ reinstalling a primary, or `setTrajectory` paths that leave the pipeline empty.
   workspace **`core/`** (`@molcrafts/molvis-core`, transitive only — not a product install).
 - 2D: **`sketch/`** → `@molcrafts/molvis-sketch`.
 - 3D: **`stage/`** → `@molcrafts/molvis-stage`.
-- No umbrella package — install stage and/or sketch explicitly.
+- Umbrella: **repo root** `@molcrafts/molvis` (thin `src/` re-exports; not a
+  separate workspace). Prefer explicit stage/sketch when only one surface is needed.
 - Full matrix: [package-architecture.md](./package-architecture.md).
 
 ## 2026-07-30 — sketch chrome is package-owned (`gui` flag)

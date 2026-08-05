@@ -10,7 +10,7 @@ _Generated 2026-07-30 by /mol:map._
 
 ### Module list
 
-- `./` — `molvis`; npm workspace/build orchestrator for `core`, `stage`, `sketch`, `page`, and `vsc-ext`; root dependencies provide molrs, molplot, Vega, React, and shared build tooling.
+- `./` — published `@molcrafts/molvis` umbrella (thin `src/` re-exports of stage + sketch) and npm workspace orchestrator for `core`, `stage`, `sketch`, `page`, `vsc-ext`; monorepo tooling lives in root `devDependencies`.
 - `core/` — `@molcrafts/molvis-core` (transitive publish); entries `src/index.ts`, `src/molrs.ts`, `src/elements.ts`; dev alias `@molvis/core`; sole dependency/import face for `@molcrafts/molrs`.
 - `sketch/` — published `@molcrafts/molvis-sketch`; `src/index.ts` over board, commands, geometry, graph, export, and style groups; depends only on `@molcrafts/molvis-core`.
 - `stage/` — published `@molcrafts/molvis-stage`; entries `src/index.ts`, `src/element.ts`, bundled `src/element_entry.ts`, `src/io/index.ts`, and `src/io/formats.ts`; dev alias `@molvis/stage`; depends on core, Babylon, and tslog.
@@ -20,7 +20,7 @@ _Generated 2026-07-30 by /mol:map._
 
 ### Public surface
 
-- `./` — no library export map; public operational surface is the workspace build, typecheck, test, packaging, and molrs-gateway scripts.
+- `./` — public library surface `.` / `./stage` / `./sketch` re-exports engines; operational surface is workspace build, typecheck, test, packaging, and molrs-gateway scripts.
 - `core/` — `.` re-exports shared elements and molrs; `./molrs` re-exports the complete WASM API; `./elements` exports `IElement`, `TPeriodicTable`, `PeriodicTable`, `VanDerWaalsRadii`, `normalizeElement`, `getVanDerWaalsRadius`, and `isMetalElement`.
 - `sketch/` — `.` exports `SketchBoard`, `MoleculeGraph`, `SketchHistory`, command classes, viewport/rendering and hit-test types, geometry helpers, image-export options, element colors, and molecule data types.
 - `stage/` — `.` exports `mountMolvis`, `MolvisApp`/`Molvis`, renderer/system/world, analysis, palette and representation APIs, commands, modifiers, pipeline/data-source primitives, overlays, selection, transport/RPC, and selected molrs types; `./element` exports viewer/gallery custom-element APIs; `./viewer` registers those elements; `./io` and `./io/formats` are public file-ingress and format-registry subpaths.
@@ -40,7 +40,7 @@ _Generated 2026-07-30 by /mol:map._
 
 ### Layer roles
 
-- `./` — tooling/orchestration layer; owns workspace commands and cross-package artifact assembly, not a consumer engine.
+- `./` — published umbrella + tooling/orchestration layer; owns workspace commands and the thin `@molcrafts/molvis` re-export surface.
 - `core/` — private shared leaf: sole molrs/WASM gateway plus pure element data and explicitly registered framework-free shared Web Components. It owns no Babylon, React, charting, pipeline, or RPC implementation; the molrs entry alone carries package side effects.
 - `sketch/` — public React-free 2D engine peer; depends inward on core and neither imports stage nor accesses molrs directly.
 - `stage/` — public React-free 3D Babylon engine peer; depends inward on core and neither imports sketch nor accesses molrs directly. It owns the command/pipeline/rendering stack: `DataSourceModifier` remains the single scene-data ingress, `UpdateFrameCommand` is buffer-only, and full rebuilds belong to draw-frame flow.

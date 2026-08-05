@@ -25,6 +25,10 @@ const packageTargets = [
 /** Published inter-package deps that must track the monorepo version. */
 const pinSpecs = [
   {
+    path: "package.json",
+    keys: ["@molcrafts/molvis-stage", "@molcrafts/molvis-sketch"],
+  },
+  {
     path: "stage/package.json",
     keys: ["@molcrafts/molvis-core"],
   },
