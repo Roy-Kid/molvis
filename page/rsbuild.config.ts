@@ -18,7 +18,15 @@ const distRoot = pythonDev
   : "dist";
 
 export default defineConfig({
-  server: { port: 3000 },
+  server: {
+    port: 3000,
+    // Required for SharedArrayBuffer + JupyterLite pyodide-kernel interrupt
+    // (worker Atomics). Production hosts should set the same headers.
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
+  },
   plugins: [pluginReact()],
   html: {
     template: "./public/index.html",

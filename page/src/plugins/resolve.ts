@@ -1,6 +1,7 @@
 import {
   GITHUB_API_BASE,
   GITHUB_HOST,
+  githubReleaseDownloadBase,
   HOST_LOG_TAG,
   JSDELIVR_GH_BASE,
   MANIFEST_FILENAME,
@@ -47,15 +48,19 @@ export interface ResolvePluginSourceOptions {
  * Parse a user-supplied plugin location into fetchable URLs.
  *
  * Accepted forms:
- * - `owner/repo` — **no tag → latest GitHub release** (else default-branch tip)
- * - `owner/repo@ref`
+ * - `owner/repo` — **no tag → latest GitHub release** (Release assets base)
+ * - `owner/repo@ref` — **Release assets** when `ref` is a release tag;
+ *   otherwise jsDelivr git tree (dev tip / non-release refs)
  * - `https://github.com/owner/repo`
  * - `https://github.com/owner/repo/tree/ref`
  * - absolute **http(s)** URL to package root, manifest, or entry
  *   (includes **local debug**: `http://127.0.0.1:4173/` after `npm run serve`)
  *
- * Not accepted: bare filesystem paths / `file://` (browsers cannot fetch them).
- * Serve the plugin folder over HTTP and paste that URL instead.
+ * **Release layout** (CI): flat assets next to each other —
+ * `molvis.plugin.json` + `plugin.js` (+ workers). Manifest `entry` is
+ * `"plugin.js"`, not `"dist/plugin.js"`.
+ *
+ * Not accepted: bare filesystem paths / `file://`.
  */
 export async function resolvePluginSource(
   input: string,
@@ -114,8 +119,6 @@ export async function resolvePluginSource(
   if (gh) {
     let ref = gh.ref;
     if (!ref) {
-      // No tag: pin to latest GitHub release when one exists; otherwise
-      // leave unpinned so jsDelivr serves the default-branch tip.
       ref =
         (await fetchLatestGithubReleaseTag(
           gh.owner,
@@ -123,8 +126,29 @@ export async function resolvePluginSource(
           options?.fetchImpl,
         )) ?? undefined;
     }
+
+    if (ref && looksLikeReleaseTag(ref)) {
+      // Prefer GitHub Release assets (dist not in git).
+      const baseUrl = githubReleaseDownloadBase(gh.owner, gh.repo, ref);
+      return {
+        sourceKey: raw,
+        baseUrl,
+        manifestUrl: `${baseUrl}${MANIFEST_FILENAME}`,
+        resolvedRef: ref,
+      };
+    }
+
+    // Non-release ref or no tag: jsDelivr git tree (source checkout / branch tip).
+    // Without a published release this only works if the tree still contains
+    // built assets (local forks); official packages publish Release packages.
     const refPart = ref ? `@${ref}` : "";
     const baseUrl = `${JSDELIVR_GH_BASE}/${gh.owner}/${gh.repo}${refPart}/`;
+    if (!ref) {
+      console.warn(
+        `${HOST_LOG_TAG} ${gh.owner}/${gh.repo} has no GitHub release; ` +
+          "installing from the default branch (may lack built plugin assets).",
+      );
+    }
     return {
       sourceKey: raw,
       baseUrl,
@@ -136,6 +160,11 @@ export async function resolvePluginSource(
   throw new Error(
     `Unrecognized plugin source: ${raw}. Use owner/repo[@ref] or an HTTPS URL.`,
   );
+}
+
+/** True for tags we treat as GitHub Release packages (v1.2.3, 1.2.3, …). */
+export function looksLikeReleaseTag(ref: string): boolean {
+  return /^v?\d+\.\d+(\.\d+)?([._-].*)?$/i.test(ref.trim());
 }
 
 /**
@@ -154,9 +183,6 @@ export async function fetchLatestGithubReleaseTag(
       headers: { Accept: "application/vnd.github+json" },
     });
   } catch (err) {
-    // Offline / DNS / CORS. Distinct from "this repo has no release" — the
-    // caller falls back to the moving default-branch tip either way, so say
-    // so rather than letting a network blip look like a deliberate choice.
     console.warn(
       `${HOST_LOG_TAG} could not reach GitHub to pin ${owner}/${repo}; ` +
         "installing from the default branch instead",
@@ -164,8 +190,6 @@ export async function fetchLatestGithubReleaseTag(
     );
     return null;
   }
-  // 404 is the expected "no releases published" answer; anything else (403
-  // rate limit, 5xx) is a failure the user should be able to see.
   if (res.status !== 404 && !res.ok) {
     console.warn(
       `${HOST_LOG_TAG} GitHub release lookup for ${owner}/${repo} failed ` +

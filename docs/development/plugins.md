@@ -67,9 +67,13 @@ api.rpc.registerMethod("ping", () => "pong");
 ## Install
 
 1. **Settings → Plugins** — paste `owner/repo` (no tag → **latest GitHub
-   release**, else default-branch tip), `owner/repo@tag`, or HTTPS URL.
-2. **VS Code** — `"molvis.plugins": ["owner/repo"]` then reload view.
-3. **Python** — `Molvis(plugins=["owner/repo"])` or URL `?plugins=…`.
+   Release**), `owner/repo@v1.2.3`, or HTTPS URL (local `npm run serve`).
+2. **VS Code** — `"molvis.plugins": ["owner/repo@v1.2.3"]` then reload view.
+3. **Python** — `Molvis(plugins=["owner/repo@v1.2.3"])` or URL `?plugins=…`.
+
+**Distribution:** plugins ship **built assets on GitHub Releases** (flat files:
+`molvis.plugin.json` + `plugin.js` + any workers). `dist/` is **not** committed.
+CI builds on every PR; tagging `v*` runs the release workflow and uploads assets.
 
 Trust model: remote code runs in the page; no allowlist. Only install trusted sources.
 
@@ -79,10 +83,11 @@ Trust model: remote code runs in the page; no allowlist. Only install trusted so
 
 ```
 my-plugin/
-  molvis.plugin.json
-  dist/plugin.js          # entry (may import sibling chunks)
+  molvis.plugin.json      # entry: dist/plugin.js (local) / plugin.js (Release)
+  dist/                   # gitignored — npm run build
   src/
-    index.tsx             # activate → domain registers
+    index.tsx             # activate → domain registers (optional MolvisPlugin class)
+    plugin/               # optional OOP entry base
     modifiers/…
     modes/…
     analysis/…
@@ -103,12 +108,15 @@ my-plugin/
 }
 ```
 
+Release packaging rewrites `entry` to `"plugin.js"` and uploads `dist/*` as
+flat Release assets (`prepare-release-assets.mjs`).
+
 ### Multi-chunk
 
 Host recursively rewrites **relative** imports under the entry URL into blob
 modules. Host peers (`react`, `@molcrafts/molvis-stage`,
 `@molcrafts/molvis-core/molrs`, `@molcrafts/molplot`) must stay external.
-
+Workers for pyodide-kernel must sit next to `plugin.js` on the same Release.
 ## Build rules
 
 Externalize: `react`, `react-dom`, `react/jsx-runtime`, `@molcrafts/molvis-stage`,

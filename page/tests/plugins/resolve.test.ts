@@ -1,24 +1,41 @@
 import { describe, expect, it } from "@rstest/core";
 import {
   fetchLatestGithubReleaseTag,
+  looksLikeReleaseTag,
   resolvePluginSource,
 } from "../../src/plugins/resolve";
 
 function mockFetch(
-  impl: (url: string) => Promise<{ ok: boolean; body: unknown }>,
+  impl: (
+    url: string,
+  ) => Promise<{ ok: boolean; body: unknown; status?: number }>,
 ): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
-    const { ok, body } = await impl(url);
+    const { ok, body, status } = await impl(url);
     return {
       ok,
+      status: status ?? (ok ? 200 : 404),
       json: async () => body,
     } as Response;
   }) as typeof fetch;
 }
 
+describe("looksLikeReleaseTag", () => {
+  it("accepts semver-like tags", () => {
+    expect(looksLikeReleaseTag("v0.4.0")).toBe(true);
+    expect(looksLikeReleaseTag("1.2.3")).toBe(true);
+    expect(looksLikeReleaseTag("v1.0.0-beta.1")).toBe(true);
+  });
+
+  it("rejects branch-like refs", () => {
+    expect(looksLikeReleaseTag("master")).toBe(false);
+    expect(looksLikeReleaseTag("release/v0.2.0")).toBe(false);
+  });
+});
+
 describe("resolvePluginSource", () => {
-  it("owner/repo without tag pins to latest GitHub release", async () => {
+  it("owner/repo without tag pins to latest GitHub *Release assets*", async () => {
     const r = await resolvePluginSource("alice/hello-plugin", {
       fetchImpl: mockFetch(async () => ({
         ok: true,
@@ -26,23 +43,23 @@ describe("resolvePluginSource", () => {
       })),
     });
     expect(r.baseUrl).toBe(
-      "https://cdn.jsdelivr.net/gh/alice/hello-plugin@v3.1.0/",
+      "https://github.com/alice/hello-plugin/releases/download/v3.1.0/",
     );
     expect(r.manifestUrl).toBe(
-      "https://cdn.jsdelivr.net/gh/alice/hello-plugin@v3.1.0/molvis.plugin.json",
+      "https://github.com/alice/hello-plugin/releases/download/v3.1.0/molvis.plugin.json",
     );
     expect(r.resolvedRef).toBe("v3.1.0");
   });
 
   it("owner/repo without tag falls back to default-branch tip when no release", async () => {
     const r = await resolvePluginSource("alice/hello-plugin", {
-      fetchImpl: mockFetch(async () => ({ ok: false, body: {} })),
+      fetchImpl: mockFetch(async () => ({ ok: false, status: 404, body: {} })),
     });
     expect(r.baseUrl).toBe("https://cdn.jsdelivr.net/gh/alice/hello-plugin/");
     expect(r.resolvedRef).toBeUndefined();
   });
 
-  it("resolves owner/repo@tag without calling GitHub API", async () => {
+  it("resolves owner/repo@tag to Release download base (no API)", async () => {
     let called = false;
     const r = await resolvePluginSource("alice/hello-plugin@v1.2.3", {
       fetchImpl: mockFetch(async () => {
@@ -51,18 +68,27 @@ describe("resolvePluginSource", () => {
       }),
     });
     expect(r.baseUrl).toBe(
-      "https://cdn.jsdelivr.net/gh/alice/hello-plugin@v1.2.3/",
+      "https://github.com/alice/hello-plugin/releases/download/v1.2.3/",
     );
     expect(r.resolvedRef).toBe("v1.2.3");
     expect(called).toBe(false);
   });
 
-  it("resolves github.com tree URL", async () => {
+  it("resolves github.com tree URL of a release tag to Release assets", async () => {
     const r = await resolvePluginSource(
       "https://github.com/alice/hello-plugin/tree/v2.0.0",
     );
-    expect(r.baseUrl).toContain("alice/hello-plugin@v2.0.0");
+    expect(r.baseUrl).toBe(
+      "https://github.com/alice/hello-plugin/releases/download/v2.0.0/",
+    );
     expect(r.resolvedRef).toBe("v2.0.0");
+  });
+
+  it("resolves non-semver ref via jsDelivr git tree", async () => {
+    const r = await resolvePluginSource("alice/hello-plugin@feature-x");
+    expect(r.baseUrl).toBe(
+      "https://cdn.jsdelivr.net/gh/alice/hello-plugin@feature-x/",
+    );
   });
 
   it("resolves direct manifest URL", async () => {
