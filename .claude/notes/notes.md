@@ -3,6 +3,11 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+## 2026-08-05 — Canvas WYSIWYG = SceneIndex
+
+Canonical: [canvas-sceneindex.md](./canvas-sceneindex.md). Thin router also
+in `CLAUDE.md` **Invariants**.
+
 ## 2026-08-03 — vsc-ext: Quick View is the standard; no dual host bridge
 
 **Product / host constraints (locked):**

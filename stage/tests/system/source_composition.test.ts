@@ -35,7 +35,8 @@ function bonds(pairs: Array<[number, number]>): Frame {
   const block = new Block();
   block.setColU32("atomi", Uint32Array.from(pairs.map((p) => p[0])));
   block.setColU32("atomj", Uint32Array.from(pairs.map((p) => p[1])));
-  block.setColF("order", new Float64Array(pairs.length).fill(1));
+  block.setColU32("bond_type", new Uint32Array(pairs.length).fill(1));
+  block.setColU32("bond_number", new Uint32Array(pairs.length).fill(1));
   frame.insertBlock("bonds", block);
   return frame;
 }

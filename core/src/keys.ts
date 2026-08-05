@@ -34,8 +34,16 @@ export const TYPE = "type";
 
 /** Partial charge. */
 export const CHARGE = "charge";
-/** Bond order (e.g. `1.0`, `2.0`). */
-export const ORDER = "order";
+/**
+ * Chemical bond class: 0 unknown, 1 single, 2 double, 3 triple, 4 aromatic.
+ * Orthogonal to {@link BOND_NUMBER}.
+ */
+export const BOND_TYPE = "bond_type";
+/**
+ * Integer bond number of the localized Lewis/Kekulé structure:
+ * 0 unknown, 1 single, 2 double, 3 triple. Never fractional.
+ */
+export const BOND_NUMBER = "bond_number";
 /** Atomic mass. */
 export const MASS = "mass";
 /** Stable per-entity identifier. */

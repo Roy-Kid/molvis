@@ -34,6 +34,31 @@ __all__ = [
 R = TypeVar("R")
 
 
+def _with_kekule_orders(obj: Any) -> Any:
+    """Fill localized ``bond_number`` on aromatic bonds via molpy/molrs Perceive.
+
+    Graph-in / graph-out; never mutates *obj*. On Atomistic this is
+    ``Perceive.find_kekule_orders`` — the same chemistry as the WASM face used
+    by the page. Failures are logged and the input is returned unchanged so a
+    missing perception build cannot break draw.
+    """
+    try:
+        import molpy as mp
+    except ImportError:
+        return obj
+    perceive = getattr(mp, "Perceive", None)
+    if perceive is None:
+        return obj
+    try:
+        return perceive().find_kekule_orders(obj)
+    except (TypeError, ValueError, AttributeError) as exc:
+        # Frame-only inputs are not Atomistic — Python Perceive rejects them.
+        logger.debug(
+            "find_kekule_orders skipped for %r: %s", type(obj).__name__, exc
+        )
+        return obj
+
+
 def coerce_to_frame(
     obj: Any,
     *,
@@ -44,9 +69,10 @@ def coerce_to_frame(
     Order of checks
     ---------------
     1. Mapping with ``blocks`` → passed through.
-    2. Graph / Atomistic with ``to_frame`` only → ``to_frame(atom_fields=…)``.
+    2. Graph / Atomistic with ``to_frame`` only → Kekulé fill (when possible)
+       then ``to_frame(atom_fields=…)``.
     3. Object with both ``to_dict`` and ``to_frame`` → Frame if ``to_dict`` has
-       ``blocks``, else ``to_frame``.
+       ``blocks``, else Kekulé fill then ``to_frame``.
     4. Object with ``to_dict`` only → returned as-is.
     """
     if obj is None:
@@ -59,6 +85,7 @@ def coerce_to_frame(
     has_to_dict = callable(getattr(obj, "to_dict", None))
 
     if has_to_frame and not has_to_dict:
+        obj = _with_kekule_orders(obj)
         if atom_fields is not None:
             return obj.to_frame(atom_fields=atom_fields)
         return obj.to_frame()
@@ -74,7 +101,15 @@ def coerce_to_frame(
             logger.debug("to_dict() preview failed for %r: %s", type(obj), exc)
         else:
             if isinstance(preview, dict) and "blocks" in preview:
+                # Atomistic often implements both; Kekulé then re-frame so wire
+                # carries bond_number phases for multi-stick rendering.
+                kek = _with_kekule_orders(obj)
+                if kek is not obj and callable(getattr(kek, "to_frame", None)):
+                    if atom_fields is not None:
+                        return kek.to_frame(atom_fields=atom_fields)
+                    return kek.to_frame()
                 return obj
+        obj = _with_kekule_orders(obj)
         if atom_fields is not None:
             return obj.to_frame(atom_fields=atom_fields)
         return obj.to_frame()

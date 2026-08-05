@@ -14,7 +14,6 @@ import type { MolvisApp } from "./app";
 import type { AtomBufferOptions } from "./artist/atom_buffer";
 import {
   buildSubBondInstanceBuffers,
-  clampBondOrder,
   refreshBondPositions,
   subBondCount,
 } from "./artist/bond_buffer";
@@ -46,6 +45,11 @@ import type { AtomMeta, BondMeta } from "./entity_source";
 import type { ImpostorState } from "./scene_index";
 import { registerImpostorShaders } from "./shaders/impostor";
 import { isMetalElement } from "./system/elements";
+import {
+  displayBondOrder,
+  lewisOrderToBondCols,
+  resolveBondOrders,
+} from "./utils/bond_order";
 
 /**
  * Artist options for initialization
@@ -66,10 +70,21 @@ export interface DrawAtomOptions {
 }
 
 /**
- * Options for drawing a single bond
+ * Options for drawing a single bond.
+ *
+ * Prefer molrs `bondType` / `bondNumber`. `order` is edit-UI shorthand for
+ * Lewis 1|2|3 (`bond_type = bond_number = order`).
  */
 export interface DrawBondOptions {
+  bondType?: number;
+  bondNumber?: number;
+  /** Edit toolbar Lewis order 1|2|3 — ignored when bondType is set. */
   order?: number;
+  /**
+   * Stick count override for multi-bond GPU layout (e.g. Kekulé phase from
+   * {@link resolveBondOrders}). Chemistry meta still uses bondType/bondNumber.
+   */
+  sticks?: number;
   radius?: number;
   atomId1?: number;
   atomId2?: number;
@@ -248,9 +263,7 @@ export class Artist {
     const iAtoms = bondsBlock.viewColU32("atomi");
     const jAtoms = bondsBlock.viewColU32("atomj");
     if (!iAtoms || !jAtoms) return;
-    const orderCol = bondsBlock.dtype("order")
-      ? bondsBlock.viewColF("order")
-      : undefined;
+    const orderCol = resolveBondOrders(bondsBlock);
 
     const logicalCount = bondsBlock.nrows();
     let renderIdx = 0;
@@ -799,19 +812,30 @@ export class Artist {
   ): Promise<{ bondId: number; meshId: number }> {
     const bondId = options.bondId ?? this.app.world.sceneIndex.getNextBondId();
     const representation = this.app.styleManager.getRepresentation();
-    const order =
+    // molrs columns win; `order` is edit-UI Lewis shorthand only.
+    let bondType: number;
+    let bondNumber: number;
+    if (options.bondType != null) {
+      bondType = options.bondType;
+      bondNumber = options.bondNumber ?? 0;
+    } else {
+      const cols = lewisOrderToBondCols(options.order ?? 1);
+      bondType = cols.type;
+      bondNumber = cols.number;
+    }
+    const sticks =
       representation.bondOrderMode === "multiple"
-        ? clampBondOrder(options.order ?? 1)
+        ? (options.sticks ?? displayBondOrder(bondType, bondNumber))
         : 1;
     const bondRadius =
-      options.radius || this.app.styleManager.getBondStyle(order).radius;
+      options.radius || this.app.styleManager.getBondStyle(sticks).radius;
 
     const atomId1 = options.atomId1 ?? 0;
     const atomId2 = options.atomId2 ?? 0;
     let c0 = this.getAtomColor(atomId1);
     let c1 = this.getAtomColor(atomId2);
     if (representation.bondColorMode === "theme") {
-      const style = this.app.styleManager.getBondStyle(order);
+      const style = this.app.styleManager.getBondStyle(sticks);
       const c = Color3.FromHexString(style.color).toLinearSpace();
       c0 = new Float32Array([c.r, c.g, c.b, style.alpha ?? 1]);
       c1 = c0;
@@ -824,7 +848,7 @@ export class Artist {
     const { buffers: subBuffers, subCount } = buildSubBondInstanceBuffers(
       start,
       end,
-      order,
+      sticks,
       bondRadius,
       c0,
       c1,
@@ -848,7 +872,8 @@ export class Artist {
         bondId,
         atomId1,
         atomId2,
-        order,
+        bondType,
+        bondNumber,
         start: { x: start.x, y: start.y, z: start.z },
         end: { x: end.x, y: end.y, z: end.z },
       },
@@ -1127,9 +1152,7 @@ export class Artist {
 
     const iAtoms = bondsBlock.viewColU32("atomi");
     const jAtoms = bondsBlock.viewColU32("atomj");
-    const orderCol = bondsBlock.dtype("order")
-      ? bondsBlock.viewColF("order")
-      : undefined;
+    const orderCol = resolveBondOrders(bondsBlock);
 
     // Iterate with a running render index that advances by the bond's order,
     // because multi-order bonds expand to multiple GPU instances.

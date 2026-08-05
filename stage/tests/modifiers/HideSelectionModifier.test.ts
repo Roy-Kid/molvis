@@ -82,7 +82,8 @@ describe("HideSelectionModifier", () => {
     // Bonds: 0-1, 1-2
     bonds.setColU32("atomi", new Uint32Array([0, 1]));
     bonds.setColU32("atomj", new Uint32Array([1, 2]));
-    bonds.setColF("order", new Float64Array([1, 1]));
+    bonds.setColU32("bond_type", new Uint32Array([1, 1]));
+    bonds.setColU32("bond_number", new Uint32Array([1, 1]));
     frame.insertBlock("bonds", bonds);
 
     const context = createDefaultContext(frame, mockApp);

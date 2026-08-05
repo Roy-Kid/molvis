@@ -1,8 +1,21 @@
 # `@molcrafts/molvis`
 
-Umbrella package re-exporting:
+Umbrella package for MolVis. Install once when you need both engines:
 
-- `@molcrafts/molvis-sketch` — 2D sketcher
-- `@molcrafts/molvis-stage` — 3D stage engine
+```bash
+npm install @molcrafts/molvis
+```
 
-Shared molrs gateway lives in workspace-private `@molcrafts/molvis-core` (not a product package).
+Re-exports:
+
+| Import path | Package |
+|-------------|---------|
+| `@molcrafts/molvis` | stage + sketch public surfaces |
+| Prefer explicit installs when you only need one engine | `@molcrafts/molvis-stage` (3D) or `@molcrafts/molvis-sketch` (2D) |
+
+Shared molrs and element data live in the monorepo package
+`@molcrafts/molvis-core` (pulled in transitively; not a separate product install).
+
+## License
+
+BSD-3-Clause

@@ -4,6 +4,7 @@ import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { type Block, Frame as MolrsFrame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import type { SceneIndex } from "../scene_index";
+import { materializeFrameFromScene } from "../scene_sync";
 import type { SelectedEntity } from "../selection_manager";
 import { logger } from "../utils/logger";
 import { Command, command } from "./base";
@@ -577,60 +578,133 @@ function gatherRows(source: Block, target: Block, indices: number[]): void {
 /**
  * Build a Frame holding just the selected atoms and bonds.
  *
- * A real subset of the live frame, sliced by row index — so every column the
- * scene was built from survives, not only the handful the renderer happens to
- * draw. Bond endpoints are renumbered into the emitted atom subset so the
- * returned Frame stands on its own.
+ * Canvas selection is WYSIWYG against SceneIndex. When the working tree is
+ * dirty, or any selected id is not a dense HEAD row, materialize from the
+ * scene (canvas coordinates) and remap logical ids → dense rows. Clean HEAD
+ * with in-range ids may use `system.frame` so extra columns are preserved.
+ *
+ * Bond endpoints are renumbered into the emitted atom subset so the returned
+ * Frame stands on its own.
  */
 export function getSelectedCommand(app: MolvisApp): { frame: Frame } {
   const selected = new MolrsFrame();
-  const source = app.frame;
-  if (!source) return { frame: selected };
-
   const sm = app.world.selectionManager;
-  const atomRows = [...sm.getSelectedAtomIds()].sort((a, b) => a - b);
-  const bondRows = [...sm.getSelectedBondIds()].sort((a, b) => a - b);
-
-  const sourceAtoms = source.getBlock("atoms");
-  if (sourceAtoms && atomRows.length > 0) {
-    gatherRows(sourceAtoms, selected.createBlock("atoms"), atomRows);
+  const selectedAtomIds = [...sm.getSelectedAtomIds()].sort((a, b) => a - b);
+  const selectedBondIds = [...sm.getSelectedBondIds()].sort((a, b) => a - b);
+  if (selectedAtomIds.length === 0 && selectedBondIds.length === 0) {
+    return { frame: selected };
   }
 
-  const sourceBonds = source.getBlock("bonds");
-  if (sourceBonds && bondRows.length > 0) {
-    // Endpoints index the full frame, so a bond is only meaningful in the
-    // subset when both of its atoms came along. Decide which rows survive
-    // *before* gathering, or the remapped endpoint columns would end up
-    // shorter than the bond block's other columns.
-    const remap = new Map(atomRows.map((row, i) => [row, i]));
-    const sourceI = sourceBonds.viewColU32(keys.ATOMI);
-    const sourceJ = sourceBonds.viewColU32(keys.ATOMJ);
-    const keptRows =
-      sourceI && sourceJ
-        ? bondRows.filter(
-            (row) => remap.has(sourceI[row]) && remap.has(sourceJ[row]),
-          )
-        : bondRows;
+  const head = app.frame;
+  const headAtoms = head?.getBlock("atoms");
+  const headN = headAtoms?.nrows() ?? 0;
+  const headBonds = head?.getBlock("bonds");
+  const headBondN = headBonds?.nrows() ?? 0;
+  const dirty = app.world.sceneIndex.hasUnsavedChanges;
+  const idsOutOfHead =
+    selectedAtomIds.some((id) => id < 0 || id >= headN) ||
+    selectedBondIds.some((id) => id < 0 || id >= headBondN);
 
-    if (keptRows.length > 0) {
-      const bonds = selected.createBlock("bonds");
-      gatherRows(sourceBonds, bonds, keptRows);
-      if (sourceI && sourceJ) {
-        bonds.setColU32(
-          keys.ATOMI,
-          Uint32Array.from(
-            keptRows,
-            (row) => remap.get(sourceI[row]) as number,
-          ),
-        );
-        bonds.setColU32(
-          keys.ATOMJ,
-          Uint32Array.from(
-            keptRows,
-            (row) => remap.get(sourceJ[row]) as number,
-          ),
-        );
+  // Prefer scene whenever canvas may disagree with HEAD (dirty or edit-only ids).
+  const useScene = dirty || !head || headN === 0 || idsOutOfHead;
+
+  let source = head;
+  let ownsSource = false;
+  let atomRows = selectedAtomIds;
+  let bondRows = selectedBondIds;
+
+  if (useScene) {
+    const built = materializeFrameFromScene(app.world.sceneIndex, {
+      sourceFrame: head ?? undefined,
+      markSaved: false,
+    });
+    source = built.frame;
+    ownsSource = true;
+    atomRows = selectedAtomIds
+      .map((id) => built.atomIdToFrameIndex.get(id))
+      .filter((row): row is number => row !== undefined);
+    bondRows = selectedBondIds
+      .map((id) => built.bondIdToFrameIndex.get(id))
+      .filter((row): row is number => row !== undefined);
+    // Selected ids with no scene meta: fail loudly rather than export HEAD ghosts.
+    if (
+      atomRows.length !== selectedAtomIds.length ||
+      bondRows.length !== selectedBondIds.length
+    ) {
+      const missingAtoms = selectedAtomIds.filter(
+        (id) => !built.atomIdToFrameIndex.has(id),
+      );
+      const missingBonds = selectedBondIds.filter(
+        (id) => !built.bondIdToFrameIndex.has(id),
+      );
+      if (ownsSource) source.free?.();
+      throw new Error(
+        `get_selected: selection refers to entities not on the canvas` +
+          (missingAtoms.length ? ` (atoms: ${missingAtoms.join(",")})` : "") +
+          (missingBonds.length ? ` (bonds: ${missingBonds.join(",")})` : ""),
+      );
+    }
+  }
+
+  try {
+    const sourceAtoms = source?.getBlock("atoms");
+    if (sourceAtoms && atomRows.length > 0) {
+      const n = sourceAtoms.nrows();
+      const validRows = atomRows.filter((i) => i >= 0 && i < n);
+      if (validRows.length > 0) {
+        gatherRows(sourceAtoms, selected.createBlock("atoms"), validRows);
       }
+    }
+
+    const sourceBonds = source?.getBlock("bonds");
+    if (sourceBonds && bondRows.length > 0) {
+      const keptAtomRows =
+        atomRows.length > 0
+          ? atomRows.filter((i) => {
+              const sa = source?.getBlock("atoms");
+              return sa != null && i >= 0 && i < sa.nrows();
+            })
+          : atomRows;
+      // Endpoints index the full source, so a bond is only meaningful when
+      // both atoms came along.
+      const remap = new Map(keptAtomRows.map((row, i) => [row, i]));
+      const sourceI = sourceBonds.viewColU32(keys.ATOMI);
+      const sourceJ = sourceBonds.viewColU32(keys.ATOMJ);
+      const keptRows =
+        sourceI && sourceJ
+          ? bondRows.filter(
+              (row) =>
+                row >= 0 &&
+                row < sourceBonds.nrows() &&
+                remap.has(sourceI[row]) &&
+                remap.has(sourceJ[row]),
+            )
+          : bondRows;
+
+      if (keptRows.length > 0) {
+        const bonds = selected.createBlock("bonds");
+        gatherRows(sourceBonds, bonds, keptRows);
+        if (sourceI && sourceJ) {
+          bonds.setColU32(
+            keys.ATOMI,
+            Uint32Array.from(
+              keptRows,
+              (row) => remap.get(sourceI[row]) as number,
+            ),
+          );
+          bonds.setColU32(
+            keys.ATOMJ,
+            Uint32Array.from(
+              keptRows,
+              (row) => remap.get(sourceJ[row]) as number,
+            ),
+          );
+        }
+      }
+    }
+  } finally {
+    if (ownsSource && source) {
+      source.free?.();
     }
   }
 

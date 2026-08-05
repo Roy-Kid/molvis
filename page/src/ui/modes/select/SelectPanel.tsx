@@ -47,8 +47,8 @@ function formatCount(atoms: number, bonds: number): string {
  * Right-inspector surface for Select mode.
  *
  * Layout (top → bottom, one concern each):
- * 1. Live selection summary
- * 2. Canvas pick (fence + pending commit)
+ * 1. Live selection summary (canvas pick is WYSIWYG — highlight = selected)
+ * 2. Fence + push live selection to pipeline / clear
  * 3. Expression form
  * 4. Named pipeline selections (when any)
  * 5. Atom/bond table for the current selection (fills remaining height)
@@ -57,8 +57,6 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
   const { run, running } = usePipelineOperation();
   const [expression, setExpression] = useState("");
   const [fenceActive, setFenceActive] = useState(false);
-  const [pendingAtomCount, setPendingAtomCount] = useState(0);
-  const [pendingBondCount, setPendingBondCount] = useState(0);
   const [selectionItems, setSelectionItems] = useState<SelectionItem[]>([]);
   const snapshot = useSelectionSnapshot(app);
 
@@ -66,33 +64,6 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     if (!app) return;
     const unsub = app.events.on("fence-select-change", (active: boolean) =>
       setFenceActive(active),
-    );
-    return unsub;
-  }, [app]);
-
-  useEffect(() => {
-    if (!app) {
-      setPendingAtomCount(0);
-      setPendingBondCount(0);
-      return;
-    }
-    setPendingAtomCount(app.pendingAtomCount);
-    setPendingBondCount(app.pendingBondCount);
-
-    const unsub = app.events.on(
-      "pending-selection-change",
-      ({
-        atomCount,
-        bondCount,
-      }: {
-        atomKeys: string[];
-        bondKeys: string[];
-        atomCount: number;
-        bondCount: number;
-      }) => {
-        setPendingAtomCount(atomCount);
-        setPendingBondCount(bondCount);
-      },
     );
     return unsub;
   }, [app]);
@@ -152,11 +123,12 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     [app, run],
   );
 
-  const handleAddPending = useCallback(() => {
-    app?.confirmPendingSelection();
+  /** Push live selection into the pipeline as a named SelectModifier. */
+  const handleAddToPipeline = useCallback(() => {
+    void app?.confirmPendingSelection();
   }, [app]);
 
-  const handleClearPending = useCallback(() => {
+  const handleClearSelection = useCallback(() => {
     app?.clearPendingSelection();
   }, [app]);
 
@@ -190,7 +162,6 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
     [snapshot.atomIds],
   );
 
-  const hasPending = pendingAtomCount > 0 || pendingBondCount > 0;
   const hasSelection = snapshot.atomCount > 0 || snapshot.bondCount > 0;
   const canApplyExpression = expression.trim().length > 0;
 
@@ -211,7 +182,7 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
         </p>
       </div>
 
-      {/* 2. Canvas pick — fence + pending commit */}
+      {/* 2. Canvas pick — live selection (WYSIWYG) */}
       <section
         aria-label="Canvas pick"
         className="shrink-0 space-y-2 border-b border-border/70 px-2 py-2"
@@ -229,28 +200,29 @@ export const SelectPanel: React.FC<SelectPanelProps> = ({ app }) => {
           </ViewerToggleAction>
         </div>
 
-        {hasPending ? (
+        {hasSelection ? (
           <div className="flex items-center gap-1">
             <span className="min-w-0 flex-1 truncate text-micro tabular-nums text-muted-foreground">
-              Pending · {formatCount(pendingAtomCount, pendingBondCount)}
+              Selected · {formatCount(snapshot.atomCount, snapshot.bondCount)}
             </span>
             <ViewerAction
               className="shrink-0"
-              disabled={!hasPending}
-              onClick={handleAddPending}
+              disabled={!hasSelection}
+              onClick={handleAddToPipeline}
+              title="Push live selection into the modifier pipeline"
             >
               <Plus />
-              Add
+              Pipeline
             </ViewerAction>
             <ViewerIconAction
               icon={<X />}
-              label="Clear pending pick"
-              onClick={handleClearPending}
+              label="Clear selection"
+              onClick={handleClearSelection}
             />
           </div>
         ) : (
           <p className="text-micro leading-snug text-subtle-foreground">
-            Pick on the canvas, then add the pending pick here.
+            Click atoms on the canvas — highlight is the selection.
           </p>
         )}
       </section>

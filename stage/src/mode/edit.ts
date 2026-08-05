@@ -504,7 +504,10 @@ class EditMode extends BaseMode {
         this.clickedBond.uniqueId,
         this.clickedBondIndex !== -1 ? this.clickedBondIndex : undefined,
       );
-      if (meta?.type === "bond" && meta.order !== this.bondOrder) {
+      if (
+        meta?.type === "bond" &&
+        (meta.bondType !== this.bondOrder || meta.bondNumber !== this.bondOrder)
+      ) {
         void this.app.commandManager.execute(
           new SetBondOrderCommand(this.app, meta.bondId, this.bondOrder),
         );

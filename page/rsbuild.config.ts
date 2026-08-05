@@ -4,11 +4,44 @@ import { pluginReact } from "@rsbuild/plugin-react";
 
 const root = import.meta.dirname;
 
+/**
+ * Default rsbuild nests assets under ``static/js`` etc., which becomes the
+ * silly ``python/src/molvis/dist/static/...`` when the page is grafted into
+ * the package. Flatten to ``dist/{js,css,wasm}/`` so the package only has
+ * one “dist” segment.
+ *
+ * ``MOLVIS_PYTHON_DEV=1`` writes the bundle straight into the Python package
+ * (``python/src/molvis/dist``) so ``npm run dev:python`` can watch without a
+ * separate copy step.
+ */
+const pythonDev = process.env.MOLVIS_PYTHON_DEV === "1";
+const distRoot = pythonDev
+  ? path.join("..", "python", "src", "molvis", "dist")
+  : "dist";
+
 export default defineConfig({
   server: { port: 3000 },
   plugins: [pluginReact()],
   html: {
     template: "./public/index.html",
+  },
+  output: {
+    distPath: {
+      root: distRoot,
+      js: "js",
+      jsAsync: "js/async",
+      css: "css",
+      cssAsync: "css/async",
+      wasm: "wasm",
+      image: "image",
+      font: "font",
+      media: "media",
+      svg: "svg",
+      assets: "assets",
+    },
+    // Clean the target dist on each build so stale hashed chunks don't linger
+    // (especially important when writing into the Python package tree).
+    cleanDistPath: true,
   },
   resolve: {
     alias: {

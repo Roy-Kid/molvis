@@ -1,6 +1,15 @@
 # front-end
 static/
+# zensical-theme formatters stage these from node_modules at docs build time
 /docs/assets/molvis-core/
+/docs/assets/molvis-stage/
+/docs/assets/molvis-sketch/
+/docs/assets/molplot/
+
+# local artifacts / packaging noise
+/artifacts/
+*.egg-info/
+python/**/*.egg-info/
 
 # build
 build/

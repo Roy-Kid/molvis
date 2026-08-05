@@ -1,7 +1,13 @@
 import { Vector3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molvis-core/molrs";
 import { encodePickingColorInto } from "../picker";
+import { resolveBondOrders } from "../utils/bond_order";
 import type { BondColorMode, BondOrderMode } from "./representation";
+
+/** Stick count for ORDER_CONFIG keys; input is already 1|2|3 from displayBondOrder. */
+function stickConfigKey(sticks: number): 1 | 2 | 3 {
+  return sticks >= 3 ? 3 : sticks >= 2 ? 2 : 1;
+}
 
 // Module-level scratch vectors — avoids per-call allocation in hot paths.
 const TMP_P1 = new Vector3();
@@ -98,24 +104,20 @@ function computePerpFrame(dir: Vector3, viewDirection?: Vector3): void {
 }
 
 /**
- * Clamp a raw order value into the set of rendered orders (1..3).
+ * Number of render instances a stick-count expands to (1, 2, or 3).
+ * `sticks` is the output of {@link displayBondOrder} / {@link resolveBondOrders}
+ * — never a float chemistry value.
  */
-export function clampBondOrder(order: number): number {
-  return Math.max(1, Math.min(Math.round(order), 3));
+export function subBondCount(sticks: number): number {
+  return ORDER_CONFIG[stickConfigKey(sticks)].offsets.length;
 }
 
 /**
- * Number of render instances an order-N bond expands to (1, 2, or 3).
- */
-export function subBondCount(order: number): number {
-  return ORDER_CONFIG[clampBondOrder(order)].offsets.length;
-}
-
-/**
- * Build the per-instance GPU buffers for a single bond with the given order.
- * Returns a map of stride-sized-by-subCount buffers ready to hand to
- * `ImpostorState.append`, matching the layout emitted by `buildBondBuffers`
- * so edit-mode bonds and frame-mode bonds render identically.
+ * Build the per-instance GPU buffers for a single bond with the given stick
+ * count (1–3 from {@link displayBondOrder}). Returns a map of
+ * stride-sized-by-subCount buffers ready to hand to `ImpostorState.append`,
+ * matching the layout emitted by `buildBondBuffers` so edit-mode bonds and
+ * frame-mode bonds render identically.
  *
  * Color0/color1 are the endpoint atom colors (length-4 RGBA Float32Array).
  * splitOffset is the same per-instance split value used in single-bond draws.
@@ -123,15 +125,15 @@ export function subBondCount(order: number): number {
 export function buildSubBondInstanceBuffers(
   start: Vector3,
   end: Vector3,
-  order: number,
+  sticks: number,
   baseRadius: number,
   color0: Float32Array,
   color1: Float32Array,
   splitOffset: number,
   viewDirection?: Vector3,
 ): { buffers: Map<string, Float32Array>; subCount: number } {
-  const clamped = clampBondOrder(order);
-  const config = ORDER_CONFIG[clamped];
+  const configKey = stickConfigKey(sticks);
+  const config = ORDER_CONFIG[configKey];
   const subCount = config.offsets.length;
 
   TMP_P1.copyFrom(start);
@@ -142,7 +144,7 @@ export function buildSubBondInstanceBuffers(
   if (distance > 1e-8) TMP_DIR.scaleInPlace(1 / distance);
   else TMP_DIR.set(0, 1, 0);
 
-  if (clamped > 1) computePerpFrame(TMP_DIR, viewDirection);
+  if (configKey > 1) computePerpFrame(TMP_DIR, viewDirection);
 
   const subRadius = baseRadius * config.radiusScale;
   const scale = distance + subRadius * 2;
@@ -160,7 +162,7 @@ export function buildSubBondInstanceBuffers(
     let cx = TMP_CENTER.x;
     let cy = TMP_CENTER.y;
     let cz = TMP_CENTER.z;
-    if (clamped > 1) {
+    if (configKey > 1) {
       cx += (TMP_PERP1.x * ox + TMP_PERP2.x * oy) * offsetDist;
       cy += (TMP_PERP1.y * ox + TMP_PERP2.y * oy) * offsetDist;
       cz += (TMP_PERP1.z * ox + TMP_PERP2.z * oy) * offsetDist;
@@ -209,9 +211,7 @@ export function countBondInstances(
   orderMode: BondOrderMode = "multiple",
 ): number {
   if (orderMode === "single") return bondsBlock.nrows();
-  const orderCol = bondsBlock.dtype("order")
-    ? bondsBlock.viewColF("order")
-    : undefined;
+  const orderCol = resolveBondOrders(bondsBlock);
   if (!orderCol) return bondsBlock.nrows();
   let total = 0;
   for (let b = 0; b < bondsBlock.nrows(); b++) {
@@ -243,9 +243,7 @@ export function buildBondBuffers(
   const zCoords = atomsBlock.viewColF("z");
   if (!xCoords || !yCoords || !zCoords) return undefined;
 
-  const orderCol = bondsBlock.dtype("order")
-    ? bondsBlock.viewColF("order")
-    : undefined;
+  const orderCol = resolveBondOrders(bondsBlock);
 
   // Size buffers exactly. Without an order column every bond is one instance;
   // with one, countBondInstances() sums the per-bond instance counts in a
@@ -280,9 +278,9 @@ export function buildBondBuffers(
     const j = jAtoms[b];
     const atomsVisible = isVisible(i) && isVisible(j);
     const bondVisible = isBondVisible(b, i, j);
-    const order =
-      orderMode === "multiple" && orderCol ? clampBondOrder(orderCol[b]) : 1;
-    const config = ORDER_CONFIG[order] ?? ORDER_CONFIG[1];
+    const sticks =
+      orderMode === "multiple" && orderCol ? stickConfigKey(orderCol[b]) : 1;
+    const config = ORDER_CONFIG[sticks];
 
     TMP_P1.set(xCoords[i], yCoords[i], zCoords[i]);
     if (miDisp) {
@@ -303,7 +301,7 @@ export function buildBondBuffers(
     else TMP_DIR.set(0, 1, 0);
 
     // Compute perpendicular frame for multi-bond offset
-    if (order > 1) {
+    if (sticks > 1) {
       computePerpFrame(TMP_DIR, options?.viewDirection);
     }
 
@@ -318,7 +316,7 @@ export function buildBondBuffers(
       let cy = TMP_CENTER.y;
       let cz = TMP_CENTER.z;
 
-      if (order > 1) {
+      if (sticks > 1) {
         const offsetDist = MULTI_BOND_SPACING;
         cx += (TMP_PERP1.x * ox + TMP_PERP2.x * oy) * offsetDist;
         cy += (TMP_PERP1.y * ox + TMP_PERP2.y * oy) * offsetDist;
@@ -428,9 +426,7 @@ export function refreshBondPositions(
 ): void {
   const iAtoms = bondsBlock.viewColU32("atomi");
   const jAtoms = bondsBlock.viewColU32("atomj");
-  const orderCol = bondsBlock.dtype("order")
-    ? bondsBlock.viewColF("order")
-    : undefined;
+  const orderCol = resolveBondOrders(bondsBlock);
   if (!iAtoms || !jAtoms) return;
 
   const logicalCount = bondsBlock.nrows();
@@ -453,9 +449,9 @@ export function refreshBondPositions(
 
     const i = iAtoms[b];
     const j = jAtoms[b];
-    const order =
-      orderMode === "multiple" && orderCol ? clampBondOrder(orderCol[b]) : 1;
-    const config = ORDER_CONFIG[order] ?? ORDER_CONFIG[1];
+    const sticks =
+      orderMode === "multiple" && orderCol ? stickConfigKey(orderCol[b]) : 1;
+    const config = ORDER_CONFIG[sticks];
 
     TMP_P1.set(x[i], y[i], z[i]);
     if (miDisplacements) {
@@ -475,7 +471,7 @@ export function refreshBondPositions(
     if (dist > 1e-8) TMP_DIR.scaleInPlace(1 / dist);
     else TMP_DIR.set(0, 1, 0);
 
-    if (order > 1) {
+    if (sticks > 1) {
       computePerpFrame(TMP_DIR);
     }
 
@@ -486,7 +482,7 @@ export function refreshBondPositions(
       let cy = TMP_CENTER.y;
       let cz = TMP_CENTER.z;
 
-      if (order > 1) {
+      if (sticks > 1) {
         const offsetDist = MULTI_BOND_SPACING;
         cx += (TMP_PERP1.x * ox + TMP_PERP2.x * oy) * offsetDist;
         cy += (TMP_PERP1.y * ox + TMP_PERP2.y * oy) * offsetDist;

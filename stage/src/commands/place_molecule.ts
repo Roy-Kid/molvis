@@ -2,6 +2,8 @@ import { Vector3 } from "@babylonjs/core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import { viewAtomCoords } from "../io/atom_coords";
+import { BOND_TYPE_SINGLE } from "../utils/bond_order";
+import { withKekuleOrders } from "../utils/kekule";
 import { Command } from "./base";
 import { CompositeCommand } from "./composite";
 import { DrawAtomCommand, DrawBondCommand } from "./draw";
@@ -11,9 +13,10 @@ import { DrawAtomCommand, DrawBondCommand } from "./draw";
  * the target location, and executes batch DrawAtom + DrawBond commands.
  * Undo removes all placed atoms/bonds as a single atomic action.
  *
- * Read-only on the Frame: callers may stamp the same template multiple
- * times (EditMode pending-molecule stamp mode). Ownership and free stay
- * with the caller.
+ * Read-only on the caller's Frame: stamps go through molrs
+ * {@link withKekuleOrders} (new handle, freed after column snapshot) so
+ * aromatic bonds carry localized `bond_number` without mutating the template.
+ * Ownership of the constructor Frame stays with the caller.
  */
 export class PlaceMoleculeCommand extends Command<void> {
   private composite: CompositeCommand | null = null;
@@ -33,7 +36,17 @@ export class PlaceMoleculeCommand extends Command<void> {
       return;
     }
 
-    const atomBlock = this.frame.getBlock("atoms");
+    // molrs Perceive.findKekuleOrders — new Frame; free when we are done reading.
+    const prepared = withKekuleOrders(this.frame);
+    try {
+      await this.buildAndRunFrom(prepared);
+    } finally {
+      prepared.free();
+    }
+  }
+
+  private async buildAndRunFrom(frame: Frame): Promise<void> {
+    const atomBlock = frame.getBlock("atoms");
     if (!atomBlock) return;
 
     const nAtoms = atomBlock.nrows();
@@ -96,34 +109,33 @@ export class PlaceMoleculeCommand extends Command<void> {
 
     // Build bond commands with pre-assigned IDs
     const bondCommands: Command<unknown>[] = [];
-    const bondBlock = this.frame.getBlock("bonds");
+    const bondBlock = frame.getBlock("bonds");
 
     if (bondBlock && bondBlock.nrows() > 0) {
       const nBonds = bondBlock.nrows();
       const is = bondBlock.copyColU32("atomi");
       const js = bondBlock.copyColU32("atomj");
 
-      // Keep the order as molrs stores it — float, so an aromatic 1.5 survives
-      // into BondMeta and back out on commit. Rounding to a stick count is the
-      // renderer's job (clampBondOrder), not the model's.
-      let orderValues: number[];
-      try {
-        orderValues = Array.from(bondBlock.copyColF("order"));
-      } catch {
-        orderValues = Array.from({ length: nBonds }, () => 1);
-      }
+      const typeCol = bondBlock.viewColU32("bond_type");
+      const numberCol = bondBlock.viewColU32("bond_number");
 
       for (let b = 0; b < nBonds; b++) {
         const ai = is[b];
         const aj = js[b];
         if (ai >= nAtoms || aj >= nAtoms) continue;
 
+        const bondType = typeCol?.[b] ?? BOND_TYPE_SINGLE;
+        const bondNumber =
+          numberCol?.[b] ??
+          (bondType >= BOND_TYPE_SINGLE && bondType <= 3 ? bondType : 0);
+
         const startPos = new Vector3(xs[ai] + ox, ys[ai] + oy, zs[ai] + oz);
         const endPos = new Vector3(xs[aj] + ox, ys[aj] + oy, zs[aj] + oz);
 
         bondCommands.push(
           new DrawBondCommand(this.app, startPos, endPos, {
-            order: orderValues[b],
+            bondType,
+            bondNumber,
             atomId1: baseAtomId + ai,
             atomId2: baseAtomId + aj,
             bondId: baseBondId + b,

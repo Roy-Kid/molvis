@@ -4,8 +4,9 @@ Nothing in this module invents a name or a layout.
 
 **Names** come from :mod:`molrs.keys` (mirrored into :mod:`molrs.fields`, which
 molpy re-exports). ``x``/``y``/``z``, ``element``, ``symbol``, ``type``,
-``charge``, ``atomi``/``atomj``/``atomk``/``atoml``, ``order`` — this module
-reads that registry, it does not define one, and it never renames a column.
+``charge``, ``atomi``/``atomj``/``atomk``/``atoml``, ``bond_type``/
+``bond_number`` — this module reads that registry, it does not define one,
+and it never renames a column.
 Translating a format-native spelling (``species``, ``q``, ``mol``) to a
 canonical one is :class:`molrs.fields.FieldFormatter`'s job at the I/O boundary.
 

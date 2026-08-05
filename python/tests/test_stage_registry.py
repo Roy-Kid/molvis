@@ -41,8 +41,8 @@ class FakeTransport:
             ws_url="ws://localhost:1234/ws",
             session=session,
             token="t0k",
-            scripts=(f"{base}static/js/index.abc.js",),
-            css=(f"{base}static/css/index.abc.css",),
+            scripts=(f"{base}js/index.abc.js",),
+            css=(f"{base}css/index.abc.css",),
             standalone_url=f"{base}?ws_url=ws&token=t0k&session={session}",
         )
 

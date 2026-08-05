@@ -7,8 +7,11 @@
       "!**/examples-dist",
       "!**/docs/assets/molvis-core",
       "!**/docs/assets/molvis-stage",
+      "!**/docs/assets/molvis-sketch",
+      "!**/docs/assets/molplot",
       "!**/node_modules",
       "!**/.venv",
+      "!**/.cache",
       "!**/.rslib",
       "!**/out",
       "!**/out-test",
@@ -16,6 +19,7 @@
       "!**/.claude",
       "!**/.pw-debug",
       "!**/site",
+      "!**/artifacts",
       "!**/*.css"
     ]
   },

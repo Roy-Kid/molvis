@@ -431,7 +431,8 @@ class IdPassPickerBackend implements PickerBackend {
         bondId,
         atomId1: -1,
         atomId2: -1,
-        order: 1,
+        bondType: 1,
+        bondNumber: 1,
         start: { x: cx - dx * half, y: cy - dy * half, z: cz - dz * half },
         end: { x: cx + dx * half, y: cy + dy * half, z: cz + dz * half },
       };

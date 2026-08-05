@@ -23,7 +23,8 @@ function makeFrame(
     const b = new Block();
     b.setColU32("atomi", new Uint32Array(bonds.map((p) => p[0])));
     b.setColU32("atomj", new Uint32Array(bonds.map((p) => p[1])));
-    b.setColF("order", new Float64Array(bonds.map(() => 1)));
+    b.setColU32("bond_type", new Uint32Array(bonds.map(() => 1)));
+    b.setColU32("bond_number", new Uint32Array(bonds.map(() => 1)));
     frame.insertBlock("bonds", b);
   }
   if (box) frame.box = box;

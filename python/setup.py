@@ -3,9 +3,10 @@
 ``WebSocketTransport`` serves ``src/molvis/dist/`` on its own HTTP port
 (see :func:`molvis.transport.resolve_dist`). That directory is not source —
 it is a *copy* of ``page/dist/`` made by the root ``npm run build:page``
-script, and it is gitignored. Building a wheel, or an editable install, from
-the source tree without refreshing it ships whatever bundle happened to be
-lying around, which then silently disagrees with ``npm run dev:page``.
+script, and it is gitignored. Layout is flat under ``dist/`` (``js/``,
+``css/``, ``wasm/``) — not ``dist/static/``. Building a wheel, or an editable
+install, from the source tree without refreshing it ships whatever bundle
+happened to be lying around.
 
 This wrapper refreshes it before setuptools packages anything. It stays out
 of the way unless every one of these holds:
@@ -20,9 +21,9 @@ of the way unless every one of these holds:
 Escape hatches: ``MOLVIS_SKIP_UI_BUILD=1`` skips the build entirely;
 ``MOLVIS_FORCE_UI_BUILD=1`` runs it even when the copy looks current.
 
-Note this fires at *install* time only. Editing TypeScript after an editable
-install still requires ``npm run build:page`` (or pointing ``MOLVIS_DIST`` at
-a freshly built ``page/dist/``) — a build backend cannot observe later edits.
+Note this fires at *install* time only. Day-to-day TS edits use
+``npm run dev:python`` (watch rebuild into ``src/molvis/dist/``) or a
+one-shot ``npm run build:page``.
 """
 
 from __future__ import annotations

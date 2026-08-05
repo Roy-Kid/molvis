@@ -1,6 +1,7 @@
 # `@molcrafts/molvis-stage`
 
-3D stage engine for MolVis (Babylon.js rendering, pipeline, modes, RPC).
+3D stage engine for MolVis: Babylon.js rendering, commands, modes, OVITO-shaped
+modifier pipeline, selection, and JSON-RPC.
 
 ## Install
 
@@ -8,11 +9,8 @@
 npm install @molcrafts/molvis-stage
 ```
 
-For 2D sketching use `@molcrafts/molvis-sketch`. For both:
-
-```bash
-npm install @molcrafts/molvis
-```
+Need 2D sketching as well? Use `@molcrafts/molvis-sketch`, or install both via
+the umbrella package `@molcrafts/molvis`.
 
 ## Quick start
 
@@ -25,7 +23,18 @@ if (!container) throw new Error("viewer container not found");
 
 const app = mountMolvis(container);
 await app.start();
+
+const pdbText = await (await fetch("/structure.pdb")).text();
+await loadFileContent(app, pdbText, "structure.pdb");
 ```
+
+Entry points:
+
+| Import | Role |
+|--------|------|
+| `@molcrafts/molvis-stage` | Application, rendering, analysis, pipeline, types |
+| `@molcrafts/molvis-stage/io` | Format loaders, trajectory sources, writers |
+| `@molcrafts/molvis-stage/viewer` | Registers `molvis-viewer` / `molvis-style-gallery` |
 
 ## Dev commands
 
@@ -36,7 +45,7 @@ npm run test -w @molcrafts/molvis-stage
 npm run release:check -w @molcrafts/molvis-stage
 ```
 
-## Package layout (monorepo)
+## Related packages
 
 | Package | Role |
 |---------|------|

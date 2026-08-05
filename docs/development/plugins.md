@@ -97,8 +97,8 @@ my-plugin/
 {
   "id": "com.example.my-plugin",
   "name": "My Plugin",
-  "version": "0.1.0",
-  "molvis": ">=0.1.0",
+  "version": "0.2.0",
+  "molvis": ">=0.2.0",
   "entry": "dist/plugin.js"
 }
 ```

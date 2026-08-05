@@ -13,6 +13,7 @@ import {
 import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
+import { formatBondLabel } from "../utils/bond_order";
 import type { ModeId } from "./mode_type";
 import { resolvePointerSpacePosition } from "./placement_position";
 import type { SceneHit } from "./types";
@@ -328,17 +329,23 @@ abstract class BaseMode {
       const atomPart = `Atom ${el} · ID ${atomId} · ${xyz}`;
       return residue ? `${residue} · ${atomPart}` : atomPart;
     }
-    const { start, end, atomId1, atomId2, order } = hit.metadata;
+    const { start, end, atomId1, atomId2, bondType, bondNumber } = hit.metadata;
     const length = Vector3.Distance(
       new Vector3(start.x, start.y, start.z),
       new Vector3(end.x, end.y, end.z),
     );
-    const bond = `Bond ${atomId1}–${atomId2} · ${length.toFixed(2)} Å`;
-    return order ? `${bond} · order ${order}` : bond;
+    const kind = formatBondLabel(bondType, bondNumber);
+    return `Bond ${atomId1}–${atomId2} · ${length.toFixed(2)} Å · ${kind}`;
   }
 
-  /** `THR 222 · chain A` when the atoms block carries residue columns. */
+  /**
+   * `THR 222 · chain A` when trajectory Frame carries residue columns.
+   * Atom must exist on SceneIndex (canvas); columns are reverse-lookup only.
+   */
   private residueLabelForAtom(atomId: number): string | null {
+    if (this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomId) == null) {
+      return null;
+    }
     const frame = this.app.system.frame;
     const atoms = frame?.getBlock("atoms");
     if (!atoms || atomId < 0 || atomId >= atoms.nrows()) return null;

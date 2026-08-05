@@ -28,7 +28,7 @@ describe("MoleculeGraph", () => {
     expect(g.getMoleculeData().atoms[0].element).toBe("O");
   });
 
-  it("toFrame writes element + atomi/atomj (u32) + order (F) for generate3D", () => {
+  it("toFrame writes element + atomi/atomj + bond_type/bond_number for generate3D", () => {
     const g = new MoleculeGraph();
     g.loadMoleculeData(H2O);
     const frame = g.toFrame();
@@ -40,14 +40,16 @@ describe("MoleculeGraph", () => {
       expect(bonds).toBeDefined();
       expect(Array.from(bonds?.copyColU32("atomi") ?? [])).toEqual([0, 0]);
       expect(Array.from(bonds?.copyColU32("atomj") ?? [])).toEqual([1, 2]);
-      // order must be F — u32 is mis-read by generate3D as 0
-      expect(Array.from(bonds?.copyColF("order") ?? [])).toEqual([1, 1]);
+      expect(Array.from(bonds?.copyColU32("bond_type") ?? [])).toEqual([1, 1]);
+      expect(Array.from(bonds?.copyColU32("bond_number") ?? [])).toEqual([
+        1, 1,
+      ]);
     } finally {
       frame.free();
     }
   });
 
-  it("toFrame preserves Kekulé double-bond orders as float", () => {
+  it("toFrame preserves Kekulé double-bond orders as bond_type/bond_number", () => {
     const g = new MoleculeGraph();
     g.loadMoleculeData({
       atoms: Array.from({ length: 6 }, (_, i) => ({
@@ -66,9 +68,13 @@ describe("MoleculeGraph", () => {
     });
     const frame = g.toFrame();
     try {
-      expect(
-        Array.from(frame.getBlock("bonds")?.copyColF("order") ?? []),
-      ).toEqual([2, 1, 2, 1, 2, 1]);
+      const bonds = frame.getBlock("bonds");
+      expect(Array.from(bonds?.copyColU32("bond_type") ?? [])).toEqual([
+        2, 1, 2, 1, 2, 1,
+      ]);
+      expect(Array.from(bonds?.copyColU32("bond_number") ?? [])).toEqual([
+        2, 1, 2, 1, 2, 1,
+      ]);
     } finally {
       frame.free();
     }

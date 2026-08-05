@@ -35,8 +35,10 @@ describe("molvis-sketch-01-model regression", () => {
       const bonds = frame.getBlock("bonds");
       expect(Array.from(bonds?.copyColU32("atomi") ?? [])).toEqual([0, 0]);
       expect(Array.from(bonds?.copyColU32("atomj") ?? [])).toEqual([1, 2]);
-      // generate3D requires float bond order; u32 is mis-read as 0
-      expect(Array.from(bonds?.copyColF("order") ?? [])).toEqual([1, 1]);
+      expect(Array.from(bonds?.copyColU32("bond_type") ?? [])).toEqual([1, 1]);
+      expect(Array.from(bonds?.copyColU32("bond_number") ?? [])).toEqual([
+        1, 1,
+      ]);
 
       const g2 = new MoleculeGraph();
       g2.fromFrame(frame);

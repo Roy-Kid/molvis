@@ -7,6 +7,7 @@ import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { BOND_TYPE_SINGLE, setBondTopology } from "../utils/bond_order";
 import { DType } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
@@ -201,16 +202,22 @@ function tileBondsBlock(
       outJ[g * nb + b] = atomj[b] + off;
     }
   }
-  out.setColU32("atomi", outI);
-  out.setColU32("atomj", outJ);
-  const order = bonds.dtype("order") ? bonds.viewColF("order") : undefined;
-  if (order) {
-    const outO = new Float64Array(nb * images);
-    for (let g = 0; g < images; g++) {
-      outO.set(order.subarray(0, nb), g * nb);
+  const bondType = bonds.dtype("bond_type")
+    ? bonds.viewColU32("bond_type")
+    : undefined;
+  const bondNumber = bonds.dtype("bond_number")
+    ? bonds.viewColU32("bond_number")
+    : undefined;
+  const outT = new Uint32Array(nb * images);
+  const outN = new Uint32Array(nb * images);
+  for (let g = 0; g < images; g++) {
+    for (let b = 0; b < nb; b++) {
+      const t = bondType?.[b] ?? BOND_TYPE_SINGLE;
+      outT[g * nb + b] = t;
+      outN[g * nb + b] = bondNumber?.[b] ?? t;
     }
-    out.setColF("order", outO);
   }
+  setBondTopology(out, outI, outJ, outT, outN);
   return out;
 }
 

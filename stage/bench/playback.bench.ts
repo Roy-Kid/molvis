@@ -37,15 +37,16 @@ function makeFrame(nAtoms: number, nBonds: number): Frame {
     const bonds = new Block();
     const ai = new Uint32Array(nBonds);
     const aj = new Uint32Array(nBonds);
-    const order = new Uint32Array(nBonds);
+    const bondType = new Uint32Array(nBonds);
     for (let b = 0; b < nBonds; b++) {
       ai[b] = b % nAtoms;
       aj[b] = (b + 1) % nAtoms;
-      order[b] = 1;
+      bondType[b] = 1;
     }
     bonds.setColU32("atomi", ai);
     bonds.setColU32("atomj", aj);
-    bonds.setColU32("order", order);
+    bonds.setColU32("bond_type", bondType);
+    bonds.setColU32("bond_number", bondType);
     f.insertBlock("bonds", bonds);
   }
   return f;

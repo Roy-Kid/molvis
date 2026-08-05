@@ -1,13 +1,14 @@
 import { Matrix, type PointerInfo, Vector3 } from "@babylonjs/core";
 import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import type { MolvisApp as Molvis } from "../app";
-import { viewAtomCoords } from "../io/atom_coords";
 import { SelectModifier } from "../modifiers/SelectModifier";
+import { type Point2D, simplifyPolyline } from "../selection/fence";
 import {
-  type Point2D,
-  pointInPolygon,
-  simplifyPolyline,
-} from "../selection/fence";
+  type FenceWorldPoint,
+  fenceAtomWorldPoints,
+  fenceBondWorldPoints,
+  selectIdsInPolygon,
+} from "../selection/fence_query";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
@@ -87,15 +88,13 @@ class SelectModeContextMenu extends ContextMenuController {
   }
 }
 
-function toggleInSet(set: Set<number>, value: number): void {
-  if (set.has(value)) {
-    set.delete(value);
-  } else {
-    set.add(value);
-  }
-}
-
-/** Atom indices sharing chain_id + res_seq (ribbon residue pick). */
+/**
+ * Atom ids sharing chain_id + res_seq (ribbon residue pick).
+ *
+ * Residue columns live on trajectory Frame; identity is still canvas —
+ * only ids that exist on SceneIndex are returned (mismatch dropped with
+ * no silent frame-only ghosts).
+ */
 function atomIdsForResidue(
   app: Molvis,
   chainId: string,
@@ -113,34 +112,37 @@ function atomIdsForResidue(
     }
     const chains = atoms.copyColStr("chain_id") as string[];
     const n = atoms.nrows();
-    const out: number[] = [];
+    const candidates: number[] = [];
     if (atoms.dtype("res_seq") === "i32") {
       const seqs = atoms.copyColI32("res_seq");
       for (let i = 0; i < n; i++) {
         if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
-          out.push(i);
+          candidates.push(i);
         }
       }
     } else if (atoms.dtype("res_seq") === "u32") {
       const seqs = atoms.copyColU32("res_seq");
       for (let i = 0; i < n; i++) {
         if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
-          out.push(i);
+          candidates.push(i);
         }
       }
     }
-    return out;
+    const sceneAtoms = app.world.sceneIndex.metaRegistry.atoms;
+    return candidates.filter((id) => sceneAtoms.getMeta(id) != null);
   } catch {
     return [];
   }
 }
 
 /**
- * SelectMode with unified pipeline-based selection.
+ * SelectMode — what you highlight is the selection (WYSIWYG).
  *
- * Click/fence interactions build a pending selection (preview highlight).
- * The user confirms via confirmPendingSelection() which adds a SelectModifier
- * to the pipeline. All selection logic flows through modifiers.
+ * Click / fence write {@link SelectionManager} immediately. Highlighter and
+ * Python `get_selected` / `event.selection_changed` all read that same store.
+ * Optional {@link confirmPendingSelection} only **pushes** the live selection
+ * into the modifier pipeline as a {@link SelectModifier} (for hide/color…),
+ * not for “making the selection real”.
  */
 class SelectMode extends BaseMode {
   private _fenceActive = false;
@@ -148,11 +150,6 @@ class SelectMode extends BaseMode {
   private _fencePath: Point2D[] = [];
   private _fenceOverlay: SVGSVGElement | null = null;
   private _fenceOverlayPath: SVGPathElement | null = null;
-
-  /** Logical atom IDs in the pending selection (== frame indices for frame atoms). */
-  private _pendingAtomIds = new Set<number>();
-  /** Logical bond IDs in the pending selection. */
-  private _pendingBondIds = new Set<number>();
 
   constructor(app: Molvis) {
     super(ModeType.Select, app);
@@ -166,12 +163,13 @@ class SelectMode extends BaseMode {
     return this._fenceActive;
   }
 
+  /** Live selection size (API alias — not a separate “pending” set). */
   get pendingAtomCount(): number {
-    return this._pendingAtomIds.size;
+    return this.app.world.selectionManager.getSelectedAtomIds().size;
   }
 
   get pendingBondCount(): number {
-    return this._pendingBondIds.size;
+    return this.app.world.selectionManager.getSelectedBondIds().size;
   }
 
   /**
@@ -204,18 +202,13 @@ class SelectMode extends BaseMode {
 
   override start(): void {
     super.start();
-    this._pendingAtomIds.clear();
-    this._pendingBondIds.clear();
     this.app.world.highlighter.invalidateAndRebuild();
-    this._emitPendingChange();
   }
 
   override finish(): void {
     if (this._fenceActive) {
       this.exitFenceMode();
     }
-    this._pendingAtomIds.clear();
-    this._pendingBondIds.clear();
     this.app.world.highlighter.highlightPreview([]);
     this.disposeFenceOverlay();
     super.finish();
@@ -233,13 +226,13 @@ class SelectMode extends BaseMode {
 
   override async _on_left_up(pointerInfo: PointerInfo): Promise<void> {
     if (this._fenceActive && this._fenceDrawing) {
-      this.completeFencePreview(pointerInfo);
+      this.completeFenceSelect(pointerInfo);
       return;
     }
 
-    // Click-select: replace (no modifier) or toggle (Ctrl) the pending set.
-    // Follows file-explorer convention: click = single-select, Ctrl+click = multi-toggle.
+    // Click = live selection (replace); Ctrl+click = multi-toggle.
     const isCtrl = isCtrlOrMeta(pointerInfo.event);
+    const sm = this.app.world.selectionManager;
     const hit = await this.pickHit();
 
     if (
@@ -247,24 +240,19 @@ class SelectMode extends BaseMode {
       (hit.type !== "atom" && hit.type !== "bond" && hit.type !== "ribbon")
     ) {
       if (!isCtrl) {
-        this._pendingAtomIds.clear();
-        this._pendingBondIds.clear();
+        sm.apply({ type: "clear" });
       }
-      this._emitPendingChange();
       return;
     }
 
     if (hit.type === "ribbon") {
       const residueAtoms = atomIdsForResidue(this.app, hit.chainId, hit.resSeq);
-      if (!isCtrl) {
-        this._pendingAtomIds.clear();
-        this._pendingBondIds.clear();
+      if (residueAtoms.length === 0) return;
+      if (isCtrl) {
+        sm.apply({ type: "toggle", atoms: residueAtoms });
+      } else {
+        sm.apply({ type: "replace", atoms: residueAtoms });
       }
-      for (const id of residueAtoms) {
-        if (isCtrl) toggleInSet(this._pendingAtomIds, id);
-        else this._pendingAtomIds.add(id);
-      }
-      this._emitPendingChange();
       return;
     }
 
@@ -272,23 +260,17 @@ class SelectMode extends BaseMode {
 
     if (meta.type === "atom") {
       if (isCtrl) {
-        toggleInSet(this._pendingAtomIds, meta.atomId);
+        sm.apply({ type: "toggle", atoms: [meta.atomId] });
       } else {
-        this._pendingAtomIds.clear();
-        this._pendingBondIds.clear();
-        this._pendingAtomIds.add(meta.atomId);
+        sm.apply({ type: "replace", atoms: [meta.atomId] });
       }
     } else if (meta.type === "bond") {
       if (isCtrl) {
-        toggleInSet(this._pendingBondIds, meta.bondId);
+        sm.apply({ type: "toggle", bonds: [meta.bondId] });
       } else {
-        this._pendingAtomIds.clear();
-        this._pendingBondIds.clear();
-        this._pendingBondIds.add(meta.bondId);
+        sm.apply({ type: "replace", bonds: [meta.bondId] });
       }
     }
-
-    this._emitPendingChange();
   }
 
   override async _on_pointer_move(pointerInfo: PointerInfo): Promise<void> {
@@ -312,12 +294,30 @@ class SelectMode extends BaseMode {
   override _on_pointer_pick(_pointerInfo: PointerInfo): void {}
 
   /**
-   * Confirm the pending selection by adding a SelectModifier to the pipeline.
-   * Called by the UI "Select" button.
+   * Push the **live** selection into the modifier pipeline as a SelectModifier
+   * (for hide / color / …). Selection is already real — this does not “confirm”
+   * a preview.
+   *
+   * If the canvas working tree is dirty (edit pool), auto-commits first so
+   * SelectModifier ids match dense HEAD rows (user-chosen: auto-commit, not
+   * error / one-shot snapshot).
    */
-  confirmPendingSelection(): void {
-    const atomIndices = [...this._pendingAtomIds];
-    const bondIds = [...this._pendingBondIds];
+  async confirmPendingSelection(): Promise<void> {
+    const sm = this.app.world.selectionManager;
+    if (
+      sm.getSelectedAtomIds().size === 0 &&
+      sm.getSelectedBondIds().size === 0
+    ) {
+      return;
+    }
+
+    if (this.app.world.sceneIndex.hasUnsavedChanges) {
+      await this.app.commitScene();
+    }
+
+    // Re-read after commit (ids remapped to dense 0..N-1).
+    const atomIndices = [...sm.getSelectedAtomIds()].sort((a, b) => a - b);
+    const bondIds = [...sm.getSelectedBondIds()].sort((a, b) => a - b);
     if (atomIndices.length === 0 && bondIds.length === 0) return;
 
     this.app.modifierPipeline.addModifier(
@@ -329,36 +329,19 @@ class SelectMode extends BaseMode {
       ),
     );
 
-    // Clear pending state (keep preview highlight until pipeline finishes)
-    this._pendingAtomIds.clear();
-    this._pendingBondIds.clear();
-    this.app.events.emit("pending-selection-change", {
-      atomKeys: [],
-      bondKeys: [],
-      atomCount: 0,
-      bondCount: 0,
-    });
-
-    // Apply pipeline; clear preview highlight only after rendering completes
-    this.app.applyPipeline({ fullRebuild: true }).then(() => {
-      this.app.world.highlighter.highlightPreview([]);
-    });
+    await this.app.applyPipeline({ fullRebuild: true });
   }
 
-  /**
-   * Clear the pending selection without committing.
-   */
+  /** Clear the live selection. */
   clearPending(): void {
-    this._pendingAtomIds.clear();
-    this._pendingBondIds.clear();
-    this._emitPendingChange();
+    this.app.world.selectionManager.apply({ type: "clear" });
   }
 
   /**
    * Complete fence selection: project atoms/bonds to screen space,
-   * test against polygon, add to pending set (preview only).
+   * test against polygon, update SelectionManager immediately.
    */
-  private completeFencePreview(pointerInfo: PointerInfo): void {
+  private completeFenceSelect(pointerInfo: PointerInfo): void {
     this._fencePath.push({
       x: pointerInfo.event.offsetX,
       y: pointerInfo.event.offsetY,
@@ -380,22 +363,28 @@ class SelectMode extends BaseMode {
 
     const isShift = pointerInfo.event.shiftKey;
     const isCtrl = isCtrlOrMeta(pointerInfo.event);
+    const sm = this.app.world.selectionManager;
 
-    // File-explorer convention: no-modifier = replace, Shift = extend, Ctrl = remove
-    if (!isShift && !isCtrl) {
-      this._pendingAtomIds.clear();
-      this._pendingBondIds.clear();
-    }
-
+    // no-modifier = replace, Shift = extend, Ctrl = remove
     if (isCtrl) {
-      for (const id of selectedAtomIndices) this._pendingAtomIds.delete(id);
-      for (const id of selectedBondIds) this._pendingBondIds.delete(id);
+      sm.apply({
+        type: "remove",
+        atoms: selectedAtomIndices,
+        bonds: selectedBondIds,
+      });
+    } else if (isShift) {
+      sm.apply({
+        type: "add",
+        atoms: selectedAtomIndices,
+        bonds: selectedBondIds,
+      });
     } else {
-      for (const id of selectedAtomIndices) this._pendingAtomIds.add(id);
-      for (const id of selectedBondIds) this._pendingBondIds.add(id);
+      sm.apply({
+        type: "replace",
+        atoms: selectedAtomIndices,
+        bonds: selectedBondIds,
+      });
     }
-
-    this._emitPendingChange();
 
     // Reset drawing state — fence stays active for the next region
     this._fenceDrawing = false;
@@ -404,115 +393,56 @@ class SelectMode extends BaseMode {
   }
 
   /**
-   * Resolve pending IDs to selection keys and emit preview highlight + event.
-   */
-  private _emitPendingChange(): void {
-    const atomKeys: string[] = [];
-    for (const id of this._pendingAtomIds) {
-      const key = this.app.world.sceneIndex.getSelectionKeyForAtom(id);
-      if (key) atomKeys.push(key);
-    }
-    const bondKeys: string[] = [];
-    for (const id of this._pendingBondIds) {
-      // Use all render instance keys so multi-order bonds are fully highlighted
-      const keys = this.app.world.sceneIndex.getSelectionKeysForBond(id);
-      for (const key of keys) bondKeys.push(key);
-    }
-
-    this.app.world.highlighter.highlightPreview([...atomKeys, ...bondKeys]);
-    this.app.events.emit("pending-selection-change", {
-      atomKeys,
-      bondKeys,
-      atomCount: this._pendingAtomIds.size,
-      bondCount: this._pendingBondIds.size,
-    });
-  }
-
-  /**
-   * Project all atom positions to screen space and return indices
-   * for atoms inside the fence polygon.
+   * Project live-scene atom positions (frame + edit) to screen space and
+   * return logical atom ids inside the fence polygon.
+   *
+   * Must use metaRegistry, not `system.frame` alone — edit atoms from sketch /
+   * place / draw live only in the scene overlay until commit, while bonds were
+   * already sourced from metaRegistry (so fence looked “bond-only”).
    */
   private projectAndSelect(polygon: Point2D[]): number[] {
-    const frame = this.app.system.frame;
-    const atoms = frame?.getBlock("atoms");
-    if (!atoms) return [];
-
-    const coords = viewAtomCoords(atoms);
-    const xCoords = coords?.x;
-    const yCoords = coords?.y;
-    const zCoords = coords?.z;
-    if (!xCoords || !yCoords || !zCoords) return [];
-
-    const scene = this.app.world.scene;
-    const camera = scene.activeCamera;
-    if (!camera) return [];
-
-    // Use CSS dimensions (not render-buffer dimensions) because
-    // the fence polygon coordinates come from event.offsetX/offsetY
-    // which are in CSS pixel space, not device-pixel space.
-    const width = this.app.canvas.clientWidth || 1;
-    const height = this.app.canvas.clientHeight || 1;
-    const viewportMatrix = camera.viewport.toGlobal(width, height);
-    const transformMatrix = scene.getTransformMatrix();
-    const worldMatrix = Matrix.Identity();
-
-    const atomCount = atoms.nrows();
-    const tmpVec = new Vector3();
-    const selectedIndices: number[] = [];
-
-    for (let i = 0; i < atomCount; i++) {
-      tmpVec.set(xCoords[i], yCoords[i], zCoords[i]);
-      const projected = Vector3.Project(
-        tmpVec,
-        worldMatrix,
-        transformMatrix,
-        viewportMatrix,
-      );
-
-      if (pointInPolygon({ x: projected.x, y: projected.y }, polygon)) {
-        selectedIndices.push(i);
-      }
-    }
-
-    return selectedIndices;
+    return this.projectMetaPoints(
+      polygon,
+      fenceAtomWorldPoints(this.app.world.sceneIndex.metaRegistry.atoms),
+    );
   }
 
   private projectAndSelectBondIds(polygon: Point2D[]): number[] {
+    return this.projectMetaPoints(
+      polygon,
+      fenceBondWorldPoints(this.app.world.sceneIndex.metaRegistry.bonds),
+    );
+  }
+
+  /**
+   * Project world points with the active camera into CSS pixel space (matches
+   * pointer `offsetX`/`offsetY` used for the fence path).
+   */
+  private projectMetaPoints(
+    polygon: Point2D[],
+    points: FenceWorldPoint[],
+  ): number[] {
     const scene = this.app.world.scene;
     const camera = scene.activeCamera;
     if (!camera) return [];
 
-    // CSS pixel space to match fence polygon coordinates
     const width = this.app.canvas.clientWidth || 1;
     const height = this.app.canvas.clientHeight || 1;
     const viewportMatrix = camera.viewport.toGlobal(width, height);
     const transformMatrix = scene.getTransformMatrix();
     const worldMatrix = Matrix.Identity();
     const tmpVec = new Vector3();
-    const selected: number[] = [];
 
-    for (const bondId of this.app.world.sceneIndex.metaRegistry.bonds.getAllIds()) {
-      const meta = this.app.world.sceneIndex.metaRegistry.bonds.getMeta(bondId);
-      if (!meta) continue;
-
-      tmpVec.set(
-        (meta.start.x + meta.end.x) * 0.5,
-        (meta.start.y + meta.end.y) * 0.5,
-        (meta.start.z + meta.end.z) * 0.5,
-      );
+    return selectIdsInPolygon(polygon, points, (x, y, z) => {
+      tmpVec.set(x, y, z);
       const projected = Vector3.Project(
         tmpVec,
         worldMatrix,
         transformMatrix,
         viewportMatrix,
       );
-
-      if (pointInPolygon({ x: projected.x, y: projected.y }, polygon)) {
-        selected.push(meta.bondId);
-      }
-    }
-
-    return selected;
+      return { x: projected.x, y: projected.y };
+    });
   }
 
   private ensureFenceOverlay(): void {

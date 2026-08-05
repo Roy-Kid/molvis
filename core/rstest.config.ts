@@ -1,10 +1,12 @@
 import { defineConfig } from "@rstest/core";
 
+/** Unit lane: browser mode for OPFS / WASM. No e2e. */
 export default defineConfig({
   browser: {
     enabled: true,
     name: "chromium",
     headless: true,
+    provider: "playwright",
   },
   setupFiles: ["./tests/setup_wasm.ts"],
   tools: {
@@ -15,5 +17,6 @@ export default defineConfig({
       };
     },
   },
-  include: ["**/?(*.){test,spec}.?(c|m)[jt]s?(x)"],
+  include: ["tests/**/?(*.){test,spec}.?(c|m)[jt]s?(x)"],
+  exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
 });

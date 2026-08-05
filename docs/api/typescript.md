@@ -56,27 +56,30 @@ directly — `mountMolvis()` does that for you.
 
 ### Loading structures
 
-| Method | Purpose |
-|---|---|
-| `renderFrame(frame: Frame): void` | Re-render the active frame through the pipeline. Visual style always comes from global app state. |
-| `setTrajectory(traj: Trajectory): Promise<void>` | Attach a multi-frame trajectory; the timeline appears automatically. |
-| `seekFrame(index: number): void` | Jump to a specific frame in the current trajectory. |
+Prefer the I/O package for files. App methods act on an already-resolved
+`Frame` or `Trajectory`.
 
-`renderFrame` only draws once the app is running — call `await app.start()`
-first, otherwise the render loop is not active and nothing appears.
+| API | Purpose |
+|---|---|
+| `loadFileContent(app, content, filename, format?, mode?)` from `@molcrafts/molvis-stage/io` | Canonical file ingress (replace / augment / extend) |
+| `loadFileStream(app, blob, filename, format, …)` from `/io` | Stream large text trajectories without materializing the whole file |
+| `renderFrame(frame: Frame): void` | Draw one frame through the pipeline (style is global app state) |
+| `setTrajectory(traj: Trajectory): Promise<void>` | Attach a multi-frame trajectory; timeline appears automatically |
+| `seekFrame(index: number): void` | Jump to a trajectory index |
 
 ```typescript
-import { readFrame } from "@molcrafts/molvis-stage";
+import { mountMolvis } from "@molcrafts/molvis-stage";
+import { loadFileContent } from "@molcrafts/molvis-stage/io";
 
 const app = mountMolvis(document.getElementById("viewer")!);
-await app.start();                       // start() must come first
+await app.start();
 
-const frame = readFrame(pdbText, "structure.pdb");
-app.renderFrame(frame);
+await loadFileContent(app, pdbText, "structure.pdb");
 ```
 
-To render a single frame as a navigable trajectory instead, wrap it:
-`await app.setTrajectory(new Trajectory([frame]))`.
+When you already have a molrs `Frame`, call `app.renderFrame(frame)` after
+`start()`. For a navigable single-frame trajectory, use
+`await app.setTrajectory(frameToTrajectory(frame))`.
 
 ### Global molecular style
 
@@ -238,7 +241,10 @@ create yourself.
 ### `Frame`
 
 ```typescript
-const frame = readFrame(pdbText, "structure.pdb");
+import { readFrames } from "@molcrafts/molvis-stage/io";
+
+const frames = readFrames(pdbText, "structure.pdb");
+const frame = frames[0]!;
 const atoms = frame.getBlock("atoms");
 
 atoms.nrows();              // number of atoms
@@ -246,12 +252,15 @@ atoms.viewColF("x");        // Float64Array — view into WASM memory
 atoms.copyColF("x");        // Float64Array — owned copy
 atoms.setColStr("element", ["C", "O", "H"]);
 
-frame.box;               // Box | undefined
+frame.box;                  // Box | undefined
 frame.gridNames();          // string[] of volumetric field names
 frame.getGrid("density");   // Grid | undefined
 
 frame.free();
 ```
+
+For full scene install (data source + pipeline), use `loadFileContent` instead
+of parsing frames by hand.
 
 ### `Block`
 
@@ -295,20 +304,28 @@ cubic.free();
 Multi-frame container. Two construction modes:
 
 ```typescript
-// eager: pre-materialized frames
-const traj = new Trajectory([frame0, frame1, frame2], [box0, box1, box2]);
+import { Trajectory, type FrameProvider } from "@molcrafts/molvis-stage";
+import { loadTextTrajectory } from "@molcrafts/molvis-stage/io";
 
-// lazy: backed by a FrameProvider
+// From a text file body (disposes the underlying reader when you call dispose)
+const { trajectory, dispose } = loadTextTrajectory(dumpText, "traj.dump");
+await app.setTrajectory(trajectory);
+
+// Eager: pre-materialized frames
+const traj = new Trajectory([frame0, frame1, frame2]);
+
+// Lazy: FrameProvider (large streams / Zarr)
 const provider: FrameProvider = {
   length: frameCount,
-  get(index) { return reader.readFrame(index); },
+  get(index) {
+    return trajectory.get(index);
+  },
 };
-const traj = Trajectory.fromProvider(provider);
+const lazy = Trajectory.fromProvider(provider);
 ```
 
-The pipeline and timeline both work with either form. Use the
-provider form when the frame count is large and on-demand loading is
-needed (e.g. Zarr or LAMMPS dumps).
+Prefer `loadFileContent` / `loadFileStream` for ordinary product loads so the
+pipeline head stays a proper data source.
 
 ## Commands
 
@@ -408,46 +425,63 @@ ModifierRegistry.list();   // all registered factories
 
 ## Readers and writers
 
-Format-agnostic helpers:
+I/O lives on the `@molcrafts/molvis-stage/io` subpath (and
+`@molcrafts/molvis-stage/io/formats` for the format registry).
+
+### File ingress
 
 ```typescript
 import {
-  readFrame, readPDBFrame, readXYZFrame, readLAMMPSData,
-  exportFrame, writePDBFrame, writeXYZFrame, writeLAMMPSData,
+  loadFileContent,
+  loadFileStream,
+  loadTextTrajectory,
+  readFrames,
   inferFormatFromFilename,
-} from "@molcrafts/molvis-stage";
+  writeFrame,
+  writeXYZFrame,
+  writePDBFrame,
+  writeLAMMPSData,
+} from "@molcrafts/molvis-stage/io";
 
-const frame  = readFrame(content, "a.pdb");
+// Install into the live scene (pipeline + data source)
+await loadFileContent(app, content, "a.pdb");
+// mode: "replace" | "augment" | "extend"
+
+// Parse without mounting
+const frames = readFrames(content, "a.pdb");
 const format = inferFormatFromFilename("a.pdb"); // "pdb"
-const text   = writeXYZFrame(frame);
+
+// Serialize
+const text = writeXYZFrame(frame);
+const payload = writeFrame(frame, { filename: "out.pdb" });
 ```
 
-For trajectories:
+### Large trajectories
 
 ```typescript
-import { TrajectoryReader } from "@molcrafts/molvis-stage";
+// Stream from a Blob (worker indexes byte ranges; never one giant string)
+await loadFileStream(app, fileBlob, "traj.dump", "lammps-dump", {
+  onProgress: (p) => console.log(p),
+});
 
-const reader = new TrajectoryReader(dumpText, "lammps-dump");
-const n      = reader.getFrameCount();
-const frame  = reader.readFrame(0);
-reader.free();
+// Or materialize a Trajectory from a text body
+const { trajectory, dispose } = loadTextTrajectory(dumpText, "traj.dump");
+await app.setTrajectory(trajectory);
+// later: dispose();
 ```
 
-For Zarr directories:
+### Zarr
 
 ```typescript
-import { MolRecReader, processZarrFrame } from "@molcrafts/molvis-stage";
+import { loadFileContent, loadZarrFiles } from "@molcrafts/molvis-stage/io";
 
-const reader = new MolRecReader(fileMap);
-const raw    = reader.readFrame(0);
-const frame  = processZarrFrame(raw);
-reader.free();
+// fileMap: path → base64 (or pass the map straight to loadFileContent)
+await loadFileContent(app, fileMap, "dataset.zarr", "zarr");
 ```
 
 ## Canonical column names
 
-All blocks use canonical column names that match the molpy / molrs
-ecosystem. Format readers normalize aliases on the way in.
+Blocks use molpy / molrs names. Format readers normalize aliases on the way in.
 
 | Block | Columns |
 |---|---|
@@ -455,10 +489,6 @@ ecosystem. Format readers normalize aliases on the way in.
 | `bonds` | `atomi`, `atomj`, `type`, `order` |
 | `angles` | `atomi`, `atomj`, `atomk`, `type` |
 | `dihedrals` | `atomi`, `atomj`, `atomk`, `atoml`, `type` |
-
-Reader aliases (`q` → `charge`, `mol` → `mol_id`, `symbol` → `element`,
-etc.) are defined in `core/src/reader.ts`. If you add a new format,
-extend the alias maps there.
 
 ## Constants
 
@@ -470,19 +500,17 @@ extend the alias maps there.
 
 ## Runtime notes
 
-Non-obvious behaviors you should know about:
-
-- **Manual `DrawBoxModifier`** writes the user-defined cell onto
-  `frame.box` (frame data, not just a wireframe). Pipeline execution
-  runs it before pure geometry transforms.
-- **`WrapPBCModifier`** wraps atom coordinates into `frame.box`. Pure
-  geometry transforms always run before Draw modifiers so the visual
-  sees wrapped positions.
+- **Single scene path** — open always has a primary data source (Empty Scene
+  when nothing is loaded). File load, sketch commit, and box ops stay on
+  `DataSource → compose → transforms → draws`.
+- **Manual `DrawBoxModifier`** writes the user-defined cell onto `frame.box`
+  (frame data, not only a wireframe). Geometry transforms run before Draw
+  modifiers so the visual sees transformed positions.
+- **`WrapPBCModifier`** wraps atom coordinates into `frame.box`.
 - **`DataSourceModifier`** visibility toggles are UI state only — the
-  modifier itself always passes data through.
-- **`SetFrameMetaCommand`** is registered but a no-op; it will persist
-  frame metadata in 0.0.3.
-- **Thin-instance buffers**: the `Artist` owns singleton meshes for
-  atoms and bonds. `ImpostorState` segments the buffer into
-  `[0, frameOffset)` (frame data) and `[frameOffset, count)` (edit
-  pool). `UpdateFrameCommand` only touches the first segment.
+  modifier always passes data through.
+- **Canvas selection is SceneIndex** — pick / fence / live selection resolve
+  against the rendered index, not a ghost of the trajectory HEAD.
+- **Thin-instance buffers** — the `Artist` owns singleton meshes for atoms
+  and bonds. `UpdateFrameCommand` updates buffer data only; full scene
+  rebuilds use `DrawFrameCommand`.

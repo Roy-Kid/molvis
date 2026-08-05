@@ -45,11 +45,13 @@ async function main() {
     // Bond
     const bond_i = new Uint32Array([0]);
     const bond_j = new Uint32Array([1]);
-    const bond_order = new Uint32Array([1]);
+    const bond_type = new Uint32Array([1]);
+    const bond_number = new Uint32Array([1]);
 
     bondsBlock.setColU32("i", bond_i);
     bondsBlock.setColU32("j", bond_j);
-    bondsBlock.setColU32("order", bond_order);
+    bondsBlock.setColU32("bond_type", bond_type);
+    bondsBlock.setColU32("bond_number", bond_number);
 
     const frame = new Frame();
     frame.insertBlock("atoms", atomsBlock);

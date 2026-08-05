@@ -367,7 +367,7 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
         bondIds.push(meta.bondId);
         atomId1s.push(meta.atomId1);
         atomId2s.push(meta.atomId2);
-        orders.push(meta.order);
+        orders.push(meta.bondNumber > 0 ? meta.bondNumber : meta.bondType);
         startXs.push(meta.start.x);
         startYs.push(meta.start.y);
         startZs.push(meta.start.z);

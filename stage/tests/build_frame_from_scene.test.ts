@@ -3,7 +3,10 @@ import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import { AtomSource, BondSource } from "../src/entity_source";
 import type { SceneIndex } from "../src/scene_index";
-import { buildFrameFromScene } from "../src/scene_sync";
+import {
+  buildFrameFromScene,
+  materializeFrameFromScene,
+} from "../src/scene_sync";
 
 // buildFrameFromScene only touches sceneIndex.metaRegistry.{atoms,bonds} and
 // markAllSaved(), so a mock backed by real AtomSource/BondSource suffices —
@@ -35,7 +38,8 @@ function sceneWith3Atoms(): SceneIndex {
     bondId: 0,
     atomId1: 0,
     atomId2: 1,
-    order: 2,
+    bondType: 2,
+    bondNumber: 2,
     start: { x: 1, y: 2, z: 3 },
     end: { x: 4, y: 5, z: 6 },
   });
@@ -51,13 +55,11 @@ describe("buildFrameFromScene", () => {
     expect(x && Array.from(x)).toEqual([1, 4]);
     const b = frame.getBlock("bonds");
     expect(b?.nrows()).toBe(1);
-    expect(b?.viewColF("order")?.[0]).toBe(2);
+    expect(b?.viewColU32("bond_type")?.[0]).toBe(2);
+    expect(b?.viewColU32("bond_number")?.[0]).toBe(2);
   });
 
-  it("keeps an aromatic order of 1.5 intact", () => {
-    // The commit path used to write `order` as u32, which both truncated 1.5
-    // to 1 and made molrs reject the frame outright:
-    //   column 'order' is declared 'float' by the Frame schema, got 'uint'
+  it("preserves BondMeta aromatic bond_type=4, bond_number=0", () => {
     const atoms = new AtomSource();
     atoms.setEdit(0, {
       type: "atom",
@@ -77,15 +79,16 @@ describe("buildFrameFromScene", () => {
       bondId: 0,
       atomId1: 0,
       atomId2: 1,
-      order: 1.5,
+      bondType: 4,
+      bondNumber: 0,
       start: { x: 0, y: 0, z: 0 },
       end: { x: 1.4, y: 0, z: 0 },
     });
 
     const frame = buildFrameFromScene(mockSceneIndex(atoms, bonds));
     const b = frame.getBlock("bonds");
-    expect(b?.dtype("order")).toBe("f64");
-    expect(b?.viewColF("order")?.[0]).toBe(1.5);
+    expect(b?.viewColU32("bond_type")?.[0]).toBe(4);
+    expect(b?.viewColU32("bond_number")?.[0]).toBe(0);
   });
 
   it("preserves the simulation box from the source frame", () => {
@@ -116,5 +119,41 @@ describe("buildFrameFromScene", () => {
     // Source frame must remain usable and box intact after the build.
     expect(() => sourceFrame.box).not.toThrow();
     expect(sourceFrame.box).toBeTruthy();
+  });
+
+  it("materializeFrameFromScene maps sparse edit ids to dense rows", () => {
+    const atoms = new AtomSource();
+    atoms.setEdit(10, {
+      type: "atom",
+      atomId: 10,
+      element: "C",
+      position: { x: 1, y: 0, z: 0 },
+    });
+    atoms.setEdit(20, {
+      type: "atom",
+      atomId: 20,
+      element: "O",
+      position: { x: 2, y: 0, z: 0 },
+    });
+    const bonds = new BondSource();
+    bonds.setEdit(7, {
+      type: "bond",
+      bondId: 7,
+      atomId1: 10,
+      atomId2: 20,
+      bondType: 1,
+      bondNumber: 1,
+      start: { x: 1, y: 0, z: 0 },
+      end: { x: 2, y: 0, z: 0 },
+    });
+
+    const built = materializeFrameFromScene(mockSceneIndex(atoms, bonds));
+    expect(built.frame.getBlock("atoms")?.nrows()).toBe(2);
+    expect(built.atomIdToFrameIndex.get(10)).toBe(0);
+    expect(built.atomIdToFrameIndex.get(20)).toBe(1);
+    expect(built.bondIdToFrameIndex.get(7)).toBe(0);
+    // Endpoints renumbered into dense atom rows.
+    expect(built.frame.getBlock("bonds")?.viewColU32("atomi")?.[0]).toBe(0);
+    expect(built.frame.getBlock("bonds")?.viewColU32("atomj")?.[0]).toBe(1);
   });
 });

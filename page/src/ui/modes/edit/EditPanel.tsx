@@ -3,6 +3,7 @@ import {
   generate3D,
   ModeType,
   type Molvis,
+  Perceive,
   parseSMILES,
 } from "@molvis/stage";
 import { Loader2, Wand2 } from "lucide-react";
@@ -53,7 +54,12 @@ function generateAndPlace(app: Molvis, frame2d: Frame) {
   } finally {
     frame2d.free();
   }
-  placeFrame(app, frame3d);
+  // molrs Perceive: fill localized bond_number on aromatic bonds before stamp.
+  // PlaceMoleculeCommand also runs this; doing it here keeps the pending
+  // template inspectable / re-stampable with correct columns.
+  const withKekule = new Perceive().findKekuleOrders(frame3d);
+  frame3d.free();
+  placeFrame(app, withKekule);
 }
 
 const GENERATE_COPY = {

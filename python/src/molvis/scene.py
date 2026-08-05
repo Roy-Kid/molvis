@@ -245,11 +245,16 @@ class Molvis(
                 event_bus=self._events,
                 surface="full" if self.gui else "canvas",
                 plugins=self._plugins,
+                session=self.name,
             )
         else:
             attach = getattr(transport, "attach_event_bus", None)
             if callable(attach):
                 attach(self._events)
+            # Align page/ws session query with Stage.name (molmcp session id).
+            set_session = getattr(transport, "set_session_name", None)
+            if callable(set_session):
+                set_session(self.name)
 
         self._transport: Transport = transport
 

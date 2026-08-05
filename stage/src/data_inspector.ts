@@ -4,6 +4,7 @@
  */
 
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
+import { resolveBondOrders } from "./utils/bond_order";
 import { type ColumnDType, DType } from "./utils/dtype";
 
 export interface ColumnDescriptor {
@@ -143,7 +144,7 @@ export function extractBondRows(frame: Frame): BondRow[] {
   const iCol = bonds.viewColU32("atomi");
   const jCol = bonds.viewColU32("atomj");
 
-  const orderCol = bonds.dtype("order") ? bonds.viewColF("order") : undefined;
+  const orderCol = resolveBondOrders(bonds);
   const rows: BondRow[] = [];
 
   for (let b = 0; b < bonds.nrows(); b++) {

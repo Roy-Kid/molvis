@@ -24,7 +24,6 @@ function cloneBond(b: Bond2D): Bond2D {
 
 type BondBlock = {
   copyColU32: (name: string) => Uint32Array | undefined;
-  copyColF: (name: string) => Float32Array | Float64Array | undefined;
 };
 
 function readU32Col(block: BondBlock, name: string): number[] | null {
@@ -37,35 +36,39 @@ function readU32Col(block: BondBlock, name: string): number[] | null {
 }
 
 /**
- * Bond order is F for generate3D; accept legacy u32 columns too.
- * Sketch topology only stores integer orders 1–3 (round aromatic 1.5 → 2).
+ * Sketch topology stores integer Kekulé orders 1–3.
+ * Frame columns are molrs bond_type + bond_number only.
  */
+function clampSketchOrder(v: number): number {
+  const n = Math.round(Number(v));
+  if (n < 1) return 1;
+  if (n > 3) return 3;
+  return n;
+}
+
 function readBondOrders(block: BondBlock): number[] {
   try {
-    const f = block.copyColF("order");
-    if (f && f.length > 0) {
-      return Array.from(f, (v) => {
-        const n = Math.round(Number(v));
-        if (n < 1) return 1;
-        if (n > 3) return 3;
-        return n;
+    const numbers = block.copyColU32("bond_number");
+    const types = block.copyColU32("bond_type");
+    if (numbers && numbers.length > 0) {
+      return Array.from(numbers, (bn, i) => {
+        if (bn > 0) return clampSketchOrder(bn);
+        const bt = types?.[i] ?? 0;
+        if (bt > 0 && bt < 4) return clampSketchOrder(bt);
+        // Aromatic without Kekulé phase → double for sketch sticks.
+        if (bt === 4) return 2;
+        return 1;
+      });
+    }
+    if (types && types.length > 0) {
+      return Array.from(types, (bt) => {
+        if (bt === 4) return 2;
+        if (bt > 0 && bt < 4) return clampSketchOrder(bt);
+        return 1;
       });
     }
   } catch {
-    /* fall through */
-  }
-  try {
-    const u = block.copyColU32("order");
-    if (u && u.length > 0) {
-      return Array.from(u, (v) => {
-        const n = Number(v);
-        if (n < 1) return 1;
-        if (n > 3) return 3;
-        return n;
-      });
-    }
-  } catch {
-    /* fall through */
+    /* missing columns */
   }
   return [];
 }
@@ -73,11 +76,9 @@ function readBondOrders(block: BondBlock): number[] {
 /**
  * 2D molecular graph: topology + document-Å coordinates.
  *
- * Frame IO for the generate3D path: atoms.element (str);
- * bonds.atomi/atomj (u32), order (**F** — molrs generate3D reads bond order
- * as float; a u32 column is read as 0 and saturates valences to alkanes).
- * Delete-atom policy: remove incident bonds and re-map surviving bond endpoints
- * to the post-deletion index space.
+ * Frame IO: atoms.element (str); bonds.atomi/atomj (u32), bond_type +
+ * bond_number (u32). Delete-atom policy: remove incident bonds and re-map
+ * surviving bond endpoints to the post-deletion index space.
  */
 export class MoleculeGraph {
   private atoms: Atom2D[] = [];
@@ -113,8 +114,8 @@ export class MoleculeGraph {
 
   /**
    * Export molrs Frame for generate3D.
-   * Columns: atoms.element (str); bonds.atomi, atomj (u32), order (F).
-   * Does not write x/y (generate3D embeds coordinates).
+   * Columns: atoms.element (str); bonds.atomi/atomj (u32), bond_type +
+   * bond_number (u32, sketch Kekulé 1–3). No x/y (generate3D embeds coords).
    */
   toFrame(): Frame {
     const frame = new Frame();
@@ -127,14 +128,11 @@ export class MoleculeGraph {
 
     if (this.bonds.length > 0) {
       const bondBlock = new Block();
+      const orderU32 = new Uint32Array(this.bonds.map((b) => b.order));
       bondBlock.setColU32("atomi", new Uint32Array(this.bonds.map((b) => b.i)));
       bondBlock.setColU32("atomj", new Uint32Array(this.bonds.map((b) => b.j)));
-      // Must be F: u32 order is mis-read as 0 → every carbon gets full H
-      // saturation (benzene Kekulé becomes cyclohexane).
-      bondBlock.setColF(
-        "order",
-        new Float64Array(this.bonds.map((b) => b.order)),
-      );
+      bondBlock.setColU32("bond_type", orderU32);
+      bondBlock.setColU32("bond_number", orderU32);
       frame.insertBlock("bonds", bondBlock);
     }
     return frame;

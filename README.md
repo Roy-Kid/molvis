@@ -27,8 +27,6 @@ RPC layer lets an agent operate the live scene while the user inspects every
 result, selects the relevant atoms or bonds, and sends that precise visual context
 back to the agent.
 
-> **Under active development.** Public APIs may change between minor releases.
-
 ## Vision
 
 Molecular visualization tools have long made you choose: a powerful desktop application that is hard to install and impossible to share, or a lightweight web viewer that cannot keep up once your work gets serious. MolVis exists to erase that trade-off — a single rendering stack that runs anywhere a browser does, with no compromise on what you can see or do.
@@ -131,7 +129,7 @@ See the [documentation](https://docs.molcrafts.org/molvis/) for the web viewer, 
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) or the [development guide](https://docs.molcrafts.org/molvis/development/).
+Contributions are welcome — see the [development guide](https://docs.molcrafts.org/molvis/development/).
 
 ## License
 

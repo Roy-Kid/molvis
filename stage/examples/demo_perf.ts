@@ -163,7 +163,7 @@ function generateWaterBox(numMolecules: number, boxSize: number): Frame {
 
   const bond_i = new Uint32Array(totalBonds);
   const bond_j = new Uint32Array(totalBonds);
-  const bond_order = new Uint32Array(totalBonds);
+  const bond_type = new Uint32Array(totalBonds);
 
   // Generate water molecules
   for (let i = 0; i < numMolecules; i++) {
@@ -205,11 +205,11 @@ function generateWaterBox(numMolecules: number, boxSize: number): Frame {
     const bondIdx = i * 2;
     bond_i[bondIdx] = oIdx;
     bond_j[bondIdx] = h1Idx;
-    bond_order[bondIdx] = 1;
+    bond_type[bondIdx] = 1;
 
     bond_i[bondIdx + 1] = oIdx;
     bond_j[bondIdx + 1] = h2Idx;
-    bond_order[bondIdx + 1] = 1;
+    bond_type[bondIdx + 1] = 1;
   }
 
   // Set block columns
@@ -218,9 +218,10 @@ function generateWaterBox(numMolecules: number, boxSize: number): Frame {
   atomsBlock.setColF("z", z);
   atomsBlock.setColStr("element", elements);
 
-  bondsBlock.setColU32("i", bond_i);
-  bondsBlock.setColU32("j", bond_j);
-  bondsBlock.setColU32("order", bond_order);
+  bondsBlock.setColU32("atomi", bond_i);
+  bondsBlock.setColU32("atomj", bond_j);
+  bondsBlock.setColU32("bond_type", bond_type);
+  bondsBlock.setColU32("bond_number", bond_type);
 
   // Create frame
   const frame = new Frame();

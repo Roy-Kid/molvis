@@ -1,5 +1,6 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import type { SceneIndex } from "./scene_index";
+import { setBondTopology } from "./utils/bond_order";
 import { logger } from "./utils/logger";
 
 export interface BuildFrameFromSceneOptions {
@@ -13,25 +14,59 @@ export interface BuildFrameFromSceneOptions {
 }
 
 /**
+ * Materialized Frame plus scene→dense-row maps.
+ *
+ * Scene atom/bond ids may be sparse (edit pool). Frame blocks are always dense
+ * `0..N-1`. Callers that must preserve selection or selection-export identity
+ * across commit use these maps — never assume scene id === frame row.
+ */
+export interface MaterializedSceneFrame {
+  frame: Frame;
+  /** Scene logical atom id → dense atoms-block row. */
+  atomIdToFrameIndex: Map<number, number>;
+  /** Scene logical bond id → dense bonds-block row. */
+  bondIdToFrameIndex: Map<number, number>;
+}
+
+/**
  * Build a NEW Frame from the current scene state (SceneIndex MetaRegistry).
  *
  * Returns a fresh Frame rather than mutating one in place — the previous
  * `syncSceneToFrame(frame)` called `frame.clear()` on the live `system.frame`,
  * which violated immutability and could corrupt the source if a write threw
  * mid-rebuild. Callers swap the returned frame into the System.
+ *
+ * Prefer {@link materializeFrameFromScene} when you need id remaps (commit,
+ * get_selected).
  */
 export function buildFrameFromScene(
   sceneIndex: SceneIndex,
   options: BuildFrameFromSceneOptions = {},
 ): Frame {
+  return materializeFrameFromScene(sceneIndex, options).frame;
+}
+
+/**
+ * Same as {@link buildFrameFromScene}, but also returns scene→dense id maps.
+ */
+export function materializeFrameFromScene(
+  sceneIndex: SceneIndex,
+  options: BuildFrameFromSceneOptions = {},
+): MaterializedSceneFrame {
   const frame = new Frame();
 
   const atoms: Array<{ x: number; y: number; z: number; element: string }> = [];
-  const bonds: Array<{ atomId1: number; atomId2: number; order: number }> = [];
+  const bonds: Array<{
+    atomId1: number;
+    atomId2: number;
+    bondType: number;
+    bondNumber: number;
+  }> = [];
 
   // Atom IDs may be sparse (deletions in edit mode); Frame blocks are dense
   // 0..N, so re-index while collecting.
   const atomIdToFrameIndex = new Map<number, number>();
+  const bondIdToFrameIndex = new Map<number, number>();
 
   // 1. Collect Atoms
   for (const atomId of sceneIndex.metaRegistry.atoms.getAllIds()) {
@@ -57,7 +92,13 @@ export function buildFrameFromScene(
     const idx2 = atomIdToFrameIndex.get(meta.atomId2);
 
     if (idx1 !== undefined && idx2 !== undefined) {
-      bonds.push({ atomId1: idx1, atomId2: idx2, order: meta.order });
+      bondIdToFrameIndex.set(bondId, bonds.length);
+      bonds.push({
+        atomId1: idx1,
+        atomId2: idx2,
+        bondType: meta.bondType,
+        bondNumber: meta.bondNumber,
+      });
     } else {
       // Bond endpoint refers to an atom that no longer exists (e.g. deleted in
       // edit mode). Drop it, but never silently — a save that loses topology
@@ -96,20 +137,18 @@ export function buildFrameFromScene(
     const bondBlock = new Block();
     const iArr = new Uint32Array(bondCount);
     const jArr = new Uint32Array(bondCount);
-    // `order` is a float column in the Frame schema — an aromatic bond is 1.5.
-    const orderArr = new Float64Array(bondCount);
+    const typeArr = new Uint32Array(bondCount);
+    const numberArr = new Uint32Array(bondCount);
 
     for (let idx = 0; idx < bonds.length; idx++) {
       const bond = bonds[idx];
       iArr[idx] = bond.atomId1;
       jArr[idx] = bond.atomId2;
-      orderArr[idx] = bond.order;
+      typeArr[idx] = bond.bondType;
+      numberArr[idx] = bond.bondNumber;
     }
 
-    bondBlock.setColU32("atomi", iArr);
-    bondBlock.setColU32("atomj", jArr);
-    bondBlock.setColF("order", orderArr);
-
+    setBondTopology(bondBlock, iArr, jArr, typeArr, numberArr);
     frame.insertBlock("bonds", bondBlock);
   }
 
@@ -134,5 +173,5 @@ export function buildFrameFromScene(
     sceneIndex.markAllSaved();
   }
 
-  return frame;
+  return { frame, atomIdToFrameIndex, bondIdToFrameIndex };
 }

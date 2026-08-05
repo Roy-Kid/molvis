@@ -1,17 +1,14 @@
-# Molvis Page
+# MolVis Page
 
-React web application for MolVis. It is the shared human-review surface for
-browser, Python/Jupyter, VS Code, and agent-driven RPC sessions.
+React 19 product shell for MolVis — the shared human-review surface for browser,
+Python/Jupyter, VS Code (Open Page), and agent-driven RPC sessions.
 
-Current app capabilities include:
+Includes:
 
-- Full MolVis canvas integration through `MolvisWrapper`
-- Left and right sidebars for mode-specific controls
-- Timeline controls for trajectory playback
-- Analysis panels such as histogram, scatter, and data inspection
-- Export, settings, and keyboard shortcuts dialogs
-- Bidirectional RPC state synchronization
-- Visual review and atom/bond selection feedback for agent workflows
+- Stage canvas via `MolvisWrapper` and peer 2D sketch host
+- Mode panels, OVITO-shaped pipeline UI, left Analysis
+- Trajectory timeline, export, settings, command palette
+- Bidirectional RPC and selection feedback for agent workflows
 
 ## Development
 

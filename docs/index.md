@@ -5,12 +5,12 @@ hide:
   - navigation
   - toc
 hero:
-  kicker: Manual
+  kicker: MolVis Manual
   title: MolVis
   description: Inspect molecular data with people and agents in one shared, RPC-controlled visual workspace.
   actions:
-    - { label: Build an agent review loop, href: interfaces/python/agents/, style: primary }
-    - { label: Start the tutorial, href: tutorial/ }
+    - { label: Start the tutorial, href: tutorial/, style: primary }
+    - { label: Agent review loop, href: interfaces/python/agents/ }
     - { label: Choose an interface, href: interfaces/web/ }
   install:
     label: Install a binding
@@ -18,6 +18,20 @@ hero:
     methods:
       - { label: Python, command: pip install molcrafts-molvis }
       - { label: TypeScript, command: npm install @molcrafts/molvis-stage }
+      - { label: Umbrella, command: npm install @molcrafts/molvis }
+  badges:
+    - img: https://img.shields.io/npm/v/@molcrafts/molvis-stage?color=7c3aed&label=npm%20stage
+      href: https://www.npmjs.com/package/@molcrafts/molvis-stage
+      alt: npm stage version
+    - img: https://img.shields.io/pypi/v/molcrafts-molvis?color=8b5cf6&label=PyPI
+      href: https://pypi.org/project/molcrafts-molvis/
+      alt: PyPI version
+    - img: https://img.shields.io/github/actions/workflow/status/MolCrafts/molvis/ci.yml?label=CI
+      href: https://github.com/molcrafts/molvis/actions/workflows/ci.yml
+      alt: CI status
+    - img: https://img.shields.io/badge/license-BSD--3--Clause-18432B
+      href: https://github.com/molcrafts/molvis/blob/master/LICENSE
+      alt: License BSD-3-Clause
 ---
 
 <h1 class="molcrafts-sr-only">MolVis manual</h1>
@@ -157,7 +171,7 @@ object or command you need.
 <div class="molcrafts-manual-list">
   <a href="development/">
     <strong>Development</strong>
-    <em>Architecture, setup, extension points, commands, modifiers, and headless rendering.</em>
+    <em>Architecture, setup, plugins, OVITO parity, extension points, and headless rendering.</em>
   </a>
   <a href="api/typescript/">
     <strong>TypeScript API</strong>
@@ -169,7 +183,7 @@ object or command you need.
   </a>
   <a href="https://github.com/molcrafts/molvis">
     <strong>Source and issues</strong>
-    <em>Repository, releases, issue tracker, and BSD-3-Clause license.</em>
+    <em>Repository, issue tracker, and BSD-3-Clause license.</em>
   </a>
 </div>
 

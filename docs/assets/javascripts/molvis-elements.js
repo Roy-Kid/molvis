@@ -20,6 +20,6 @@ try {
     packageError,
   );
   await import(
-    "https://cdn.jsdelivr.net/npm/@molcrafts/molvis-stage@latest/dist/viewer.js"
+    "https://cdn.jsdelivr.net/npm/@molcrafts/molvis-stage@0.2.0/dist/viewer.js"
   );
 }

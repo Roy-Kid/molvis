@@ -14,6 +14,7 @@ export default defineConfig({
     enabled: true,
     name: "chromium",
     headless: true,
+    provider: "playwright",
   },
   setupFiles: [path.join(monorepoRoot, "core/tests/setup_wasm.ts")],
   tools: {

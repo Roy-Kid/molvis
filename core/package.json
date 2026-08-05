@@ -1,9 +1,8 @@
 {
   "name": "@molcrafts/molvis-core",
   "version": "0.2.0",
-  "private": true,
   "type": "module",
-  "description": "MolVis shared core: molrs gateway, element data, and framework-free shared controls (workspace-private)",
+  "description": "MolVis shared core: molrs gateway, element data, and framework-free shared controls (transitive dependency of stage/sketch; not a product install)",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -66,12 +65,12 @@
     "test": "rstest run"
   },
   "dependencies": {
-    "@molcrafts/molrs": "file:../../molrs/molrs-wasm/pkg"
+    "@molcrafts/molrs": "^0.12.0"
   },
   "devDependencies": {
     "@rslib/core": "^0.22.0",
-    "@rstest/browser": "^0.10.3",
-    "@rstest/core": "^0.10.3",
+    "@rstest/browser": "^0.11.6",
+    "@rstest/core": "^0.11.6",
     "playwright": "^1.60.0",
     "typescript": "^6.0.3"
   },

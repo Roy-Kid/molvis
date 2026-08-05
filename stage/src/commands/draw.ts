@@ -121,13 +121,14 @@ export class SetAtomElementCommand extends Command<void> {
   }
 }
 
-/** Change a bond order without creating a duplicate bond at the same ids. */
+/** Change a bond's molrs type/number without creating a duplicate bond. */
 export class SetBondOrderCommand extends Command<void> {
-  private previousOrder: number | null = null;
+  private previous: { bondType: number; bondNumber: number } | null = null;
 
   constructor(
     app: MolvisApp,
     private bondId: number,
+    /** Edit-UI Lewis order 1|2|3 → bond_type = bond_number. */
     private order: number,
   ) {
     super(app);
@@ -138,17 +139,25 @@ export class SetBondOrderCommand extends Command<void> {
       this.bondId,
     );
     if (!meta) return;
-    if (this.previousOrder === null) this.previousOrder = meta.order;
-    await this.replace(meta.order, this.order);
+    if (this.previous === null) {
+      this.previous = {
+        bondType: meta.bondType,
+        bondNumber: meta.bondNumber,
+      };
+    }
+    await this.replace({ bondType: this.order, bondNumber: this.order });
   }
 
   async undo(): Promise<Command> {
-    if (this.previousOrder === null) return new NoOpCommand(this.app);
-    await this.replace(this.order, this.previousOrder);
+    if (this.previous === null) return new NoOpCommand(this.app);
+    await this.replace(this.previous);
     return new NoOpCommand(this.app);
   }
 
-  private async replace(_from: number, to: number): Promise<void> {
+  private async replace(cols: {
+    bondType: number;
+    bondNumber: number;
+  }): Promise<void> {
     const index = this.app.world.sceneIndex;
     const meta = index.metaRegistry.bonds.getMeta(this.bondId);
     const state = index.meshRegistry.getBondState();
@@ -160,7 +169,8 @@ export class SetBondOrderCommand extends Command<void> {
       bondId: this.bondId,
       atomId1: meta.atomId1,
       atomId2: meta.atomId2,
-      order: to,
+      bondType: cols.bondType,
+      bondNumber: cols.bondNumber,
     });
   }
 }
@@ -181,7 +191,8 @@ export class DeleteAtomCommand extends Command<void> {
     meta: {
       atomId1: number;
       atomId2: number;
-      order: number;
+      bondType: number;
+      bondNumber: number;
       start: { x: number; y: number; z: number };
       end: { x: number; y: number; z: number };
     } | null;
@@ -254,7 +265,8 @@ export class DeleteAtomCommand extends Command<void> {
             ? {
                 atomId1: bondMeta.atomId1,
                 atomId2: bondMeta.atomId2,
-                order: bondMeta.order,
+                bondType: bondMeta.bondType,
+                bondNumber: bondMeta.bondNumber,
                 start: { ...bondMeta.start },
                 end: { ...bondMeta.end },
               }
@@ -297,7 +309,8 @@ export class DeleteAtomCommand extends Command<void> {
           bondId,
           atomId1: meta.atomId1,
           atomId2: meta.atomId2,
-          order: meta.order,
+          bondType: meta.bondType,
+          bondNumber: meta.bondNumber,
           start: meta.start,
           end: meta.end,
         },
@@ -359,7 +372,8 @@ export class DeleteBondCommand extends Command<void> {
   private savedMeta: {
     atomId1: number;
     atomId2: number;
-    order: number;
+    bondType: number;
+    bondNumber: number;
     start: { x: number; y: number; z: number };
     end: { x: number; y: number; z: number };
   } | null = null;
@@ -397,7 +411,8 @@ export class DeleteBondCommand extends Command<void> {
       this.savedMeta = {
         atomId1: meta.atomId1,
         atomId2: meta.atomId2,
-        order: meta.order,
+        bondType: meta.bondType,
+        bondNumber: meta.bondNumber,
         start: { ...meta.start },
         end: { ...meta.end },
       };

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,6 +21,22 @@ const packageTargets = [
   "umbrella/package.json",
   "page/package.json",
   "vsc-ext/package.json",
+];
+
+/** Published inter-package deps that must track the monorepo version. */
+const pinSpecs = [
+  {
+    path: "stage/package.json",
+    keys: ["@molcrafts/molvis-core"],
+  },
+  {
+    path: "sketch/package.json",
+    keys: ["@molcrafts/molvis-core"],
+  },
+  {
+    path: "umbrella/package.json",
+    keys: ["@molcrafts/molvis-stage", "@molcrafts/molvis-sketch"],
+  },
 ];
 
 let updated = 0;
@@ -47,18 +63,45 @@ for (const target of packageTargets) {
   syncText(path, next);
 }
 
-const lockPath = join(repoRoot, "package-lock.json");
-const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-lock.version = version;
-for (const target of ["", ...packageTargets.map((path) => dirname(path))]) {
-  if (!lock.packages[target]) {
-    throw new Error(
-      `package-lock.json is missing workspace ${target || "<root>"}`,
-    );
+for (const { path: rel, keys } of pinSpecs) {
+  const path = join(repoRoot, rel);
+  const data = JSON.parse(readFileSync(path, "utf8"));
+  let dirty = false;
+  for (const section of [
+    "dependencies",
+    "peerDependencies",
+    "devDependencies",
+  ]) {
+    const bag = data[section];
+    if (!bag) continue;
+    for (const key of keys) {
+      if (key in bag && bag[key] !== version) {
+        bag[key] = version;
+        dirty = true;
+      }
+    }
   }
-  lock.packages[target].version = version;
+  if (dirty) {
+    writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`);
+    updated += 1;
+    console.log(`pinned deps in ${rel} -> ${version}`);
+  }
 }
-syncText(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+
+const lockPath = join(repoRoot, "package-lock.json");
+if (existsSync(lockPath)) {
+  const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+  lock.version = version;
+  for (const target of ["", ...packageTargets.map((path) => dirname(path))]) {
+    if (!lock.packages?.[target]) {
+      throw new Error(
+        `package-lock.json is missing workspace ${target || "<root>"}`,
+      );
+    }
+    lock.packages[target].version = version;
+  }
+  syncText(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+}
 
 const pyprojectPath = join(repoRoot, "python/pyproject.toml");
 const pyproject = readFileSync(pyprojectPath, "utf8");
@@ -87,6 +130,19 @@ if (
   throw new Error("docs/interfaces/web/install.md is missing the CDN version");
 }
 syncText(installDocPath, nextInstallDoc);
+
+const elementsJsPath = join(
+  repoRoot,
+  "docs/assets/javascripts/molvis-elements.js",
+);
+if (existsSync(elementsJsPath)) {
+  const elementsJs = readFileSync(elementsJsPath, "utf8");
+  const nextElementsJs = elementsJs.replace(
+    /(@molcrafts\/molvis-stage@)[^/"'\s]+(\/dist\/viewer\.js)/,
+    `$1${version}$2`,
+  );
+  syncText(elementsJsPath, nextElementsJs);
+}
 
 console.log(
   `MolVis version ${version}: ${updated === 0 ? "in sync" : "synced"}`,

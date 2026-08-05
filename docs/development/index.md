@@ -13,10 +13,13 @@ instead.
   the viewport, load a frame.
 - [**Extending**](extending.md) — write a custom modifier, register a
   new command, add a mode, plug a renderer into the scene.
-- [**OVITO parity**](ovito-parity.md) — capability matrix vs OVITO modifiers
-  (gaps, placement iron law, P0/P1 backlog).
+- [**Page plugins**](plugins.md) — domain-oriented ESM plugins
+  (modifiers, modes, analysis, commands, settings, RPC).
+- [**OVITO parity**](ovito-parity.md) — modifier placement and the shipped
+  OVITO-shaped pipeline catalog.
 - [**Headless rendering**](headless-rendering.md) — run the WebGL2 visual
   smoke suite or author deterministic representation and surface captures.
+- [**PCA tool**](pca-tool.md) — project per-frame properties to a 2-D scatter.
 
 ## The 30-second mental model
 

@@ -29,7 +29,8 @@ async function main() {
   const bondsBlock = new Block();
   bondsBlock.setColU32("i", new Uint32Array([0, 0]));
   bondsBlock.setColU32("j", new Uint32Array([1, 2]));
-  bondsBlock.setColU32("order", new Uint32Array([1, 1]));
+  bondsBlock.setColU32("bond_type", new Uint32Array([1, 1]));
+  bondsBlock.setColU32("bond_number", new Uint32Array([1, 1]));
 
   const box = Box.cube(1, new Float64Array([0, 0, 0]), false, false, false);
 

@@ -1,6 +1,7 @@
 {
   "name": "page",
   "version": "0.2.0",
+  "private": true,
   "main": "index.js",
   "type": "module",
   "keywords": [],
@@ -39,14 +40,17 @@
   "devDependencies": {
     "@rsbuild/core": "^2.0.8",
     "@rsbuild/plugin-react": "^2.0.0",
-    "@rstest/core": "^0.10.3",
+    "@rstest/browser": "^0.11.6",
+    "@rstest/core": "^0.11.6",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "playwright": "^1.60.0",
     "typescript": "^6.0.3"
   },
   "scripts": {
     "dev": "rsbuild dev",
+    "dev:python": "MOLVIS_PYTHON_DEV=1 rsbuild build --watch",
     "build": "rsbuild build",
     "typecheck": "tsc --noEmit",
     "test": "rstest run --passWithNoTests"

@@ -1,5 +1,6 @@
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "./io/atom_coords";
+import { BOND_TYPE_SINGLE } from "./utils/bond_order";
 import { DType } from "./utils/dtype";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,7 +38,10 @@ export interface BondMeta {
   bondId: number;
   atomId1: number;
   atomId2: number;
-  order: number;
+  /** molrs `bond_type`: 1 single, 2 double, 3 triple, 4 aromatic. */
+  bondType: number;
+  /** molrs `bond_number`: Lewis integer; 0 when aromatic has no Kekulé phase. */
+  bondNumber: number;
   start: { x: number; y: number; z: number };
   end: { x: number; y: number; z: number };
 }
@@ -309,7 +313,8 @@ export class BondSource {
 
     const iAtoms = bb.viewColU32("atomi");
     const jAtoms = bb.viewColU32("atomj");
-    const orders = bb.dtype("order") ? bb.viewColF("order") : undefined;
+    const typeCol = bb.viewColU32("bond_type");
+    const numberCol = bb.viewColU32("bond_number");
 
     const coords = viewAtomCoords(ab);
     const ax = coords?.x;
@@ -321,12 +326,19 @@ export class BondSource {
     const i = iAtoms[index];
     const j = jAtoms[index];
 
+    const bondType = typeCol?.[index] ?? BOND_TYPE_SINGLE;
+    // Prefer bond_number; if missing, Lewis number matches type for 1–3,
+    // and 0 for aromatic / unknown (same as molrs aromatic without Kekulé).
+    const bondNumber =
+      numberCol?.[index] ??
+      (bondType >= BOND_TYPE_SINGLE && bondType <= 3 ? bondType : 0);
     return {
       type: "bond",
       bondId: index,
       atomId1: i,
       atomId2: j,
-      order: orders ? orders[index] : 1,
+      bondType,
+      bondNumber,
       start: { x: ax[i], y: ay[i], z: az[i] },
       end: { x: ax[j], y: ay[j], z: az[j] },
     };

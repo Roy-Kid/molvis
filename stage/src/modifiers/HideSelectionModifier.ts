@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { remapBondSubset } from "../utils/bond_order";
 import { DType } from "../utils/dtype";
 
 /**
@@ -108,9 +109,6 @@ export class HideSelectionModifier extends BaseModifier {
     if (bonds) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
-      const orderCol = bonds.dtype("order")
-        ? bonds.viewColF("order")
-        : undefined;
 
       if (iCol && jCol) {
         const bondCount = bonds.nrows();
@@ -124,25 +122,7 @@ export class HideSelectionModifier extends BaseModifier {
           }
         }
 
-        if (validBonds.length > 0) {
-          newBonds = new Block();
-          const newNb = validBonds.length;
-          const newI = new Uint32Array(newNb);
-          const newJ = new Uint32Array(newNb);
-          const newOrder = new Float64Array(newNb);
-
-          for (let k = 0; k < newNb; k++) {
-            const originalIdx = validBonds[k];
-            newI[k] = indexMap[iCol[originalIdx]];
-            newJ[k] = indexMap[jCol[originalIdx]];
-            if (orderCol) newOrder[k] = orderCol[originalIdx];
-            else newOrder[k] = 1;
-          }
-
-          newBonds.setColU32("atomi", newI);
-          newBonds.setColU32("atomj", newJ);
-          if (orderCol) newBonds.setColF("order", newOrder);
-        }
+        newBonds = remapBondSubset(bonds, validBonds, indexMap, Block);
       }
     }
 

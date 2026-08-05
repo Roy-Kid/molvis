@@ -9,6 +9,11 @@ import { primaryDataSource as headPrimary } from "../pipeline/empty_scene";
 import { ModifierCapability } from "../pipeline/modifier";
 import { buildFrameFromScene } from "../scene_sync";
 import {
+  BOND_TYPE_SINGLE,
+  displayBondOrder,
+  setBondTopology,
+} from "../utils/bond_order";
+import {
   type GeometryOptimizeMethod,
   isWasmForceField,
   packCoords,
@@ -139,7 +144,8 @@ function materializeWorkingFromSource(source: Frame): {
   const z = new Float64Array(zSrc);
 
   const bonds: Array<[number, number]> = [];
-  const orders: number[] = [];
+  const bondTypes: number[] = [];
+  const bondNumbers: number[] = [];
   const bondBlock = source.getBlock("bonds");
   if (bondBlock && bondBlock.nrows() > 0) {
     const iCol =
@@ -147,14 +153,17 @@ function materializeWorkingFromSource(source: Frame): {
     const jCol =
       bondBlock.viewColU32("atomj") ?? bondBlock.viewColU32("j") ?? null;
     if (iCol && jCol) {
-      // order optional — missing → single bond.
-      const orderCol = bondBlock.dtype("order")
-        ? bondBlock.viewColF("order")
+      const typeCol = bondBlock.dtype("bond_type")
+        ? bondBlock.viewColU32("bond_type")
+        : undefined;
+      const numberCol = bondBlock.dtype("bond_number")
+        ? bondBlock.viewColU32("bond_number")
         : undefined;
       for (let b = 0; b < bondBlock.nrows(); b++) {
         bonds.push([iCol[b], jCol[b]]);
-        const o = orderCol?.[b];
-        orders.push(o !== undefined && Number.isFinite(o) && o > 0 ? o : 1);
+        const t = typeCol?.[b] ?? BOND_TYPE_SINGLE;
+        bondTypes.push(t);
+        bondNumbers.push(numberCol?.[b] ?? t);
       }
     }
   }
@@ -171,22 +180,27 @@ function materializeWorkingFromSource(source: Frame): {
     const bb = new Block();
     const atomi = new Uint32Array(bonds.length);
     const atomj = new Uint32Array(bonds.length);
-    // Float order is the molrs Atomistic / MMFF canonical shape.
-    const orderArr = new Float64Array(bonds.length);
+    const types = new Uint32Array(bonds.length);
+    const numbers = new Uint32Array(bonds.length);
     for (let b = 0; b < bonds.length; b++) {
       atomi[b] = bonds[b][0];
       atomj[b] = bonds[b][1];
-      const o = orders[b] ?? 1;
-      orderArr[b] = Number.isFinite(o) && o > 0 ? o : 1;
+      types[b] = bondTypes[b] ?? BOND_TYPE_SINGLE;
+      numbers[b] = bondNumbers[b] ?? types[b];
     }
-    bb.setColU32("atomi", atomi);
-    bb.setColU32("atomj", atomj);
-    bb.setColF("order", orderArr);
+    setBondTopology(bb, atomi, atomj, types, numbers);
     frame.insertBlock("bonds", bb);
   }
 
   const box = source.box;
   if (box) frame.box = box;
+
+  const orders = bonds.map((_, i) =>
+    displayBondOrder(
+      bondTypes[i] ?? BOND_TYPE_SINGLE,
+      bondNumbers[i] ?? bondTypes[i] ?? 1,
+    ),
+  );
 
   return { frame, x, y, z, elements, bonds, orders };
 }
@@ -202,31 +216,6 @@ function writeCoords(
   atoms.setColF("x", x);
   atoms.setColF("y", y);
   atoms.setColF("z", z);
-}
-
-/**
- * molrs bond `order` is float (F). Write F so {@link Perceive.findHydrogens} /
- * Atomistic::from_frame sees correct bond demand (u32 is accepted but F is
- * the canonical round-trip shape from to_frame).
- */
-function ensureFloatBondOrder(frame: Frame): void {
-  const bonds = frame.getBlock("bonds");
-  if (!bonds || bonds.nrows() === 0) return;
-  const dtype = bonds.dtype("order");
-  if (dtype === "f64" || dtype === "f32") return;
-  const n = bonds.nrows();
-  const out = new Float64Array(n);
-  if (dtype === "u32") {
-    const u = bonds.viewColU32("order");
-    if (u) {
-      for (let i = 0; i < n; i++) out[i] = u[i] > 0 ? u[i] : 1;
-    } else {
-      out.fill(1);
-    }
-  } else {
-    out.fill(1);
-  }
-  bonds.setColF("order", out);
 }
 
 function hasDrawModifiers(app: MolvisApp): boolean {
@@ -316,9 +305,6 @@ export async function runStructureOptimize(
   let working = snapshotWorkingFrame(app);
   let hydrogensAdded = 0;
 
-  // MMFF (and H-capping) need float bond orders; always normalize.
-  ensureFloatBondOrder(working.frame);
-
   if (wantHydrogens) {
     // molrs chemical perception: Perceive.findHydrogens (not a free function).
     const before = working.elements.length;
@@ -335,7 +321,6 @@ export async function runStructureOptimize(
       working.frame.free();
       working = materializeWorkingFromSource(capped);
       capped.free();
-      ensureFloatBondOrder(working.frame);
     } else {
       capped.free();
     }

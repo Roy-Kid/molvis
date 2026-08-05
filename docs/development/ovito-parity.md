@@ -1,29 +1,41 @@
 # OVITO modifier parity
 
-MolVis’s Add-modifier menu is **OVITO-shaped** (Selection / Modification /
-Coloring / Visualization), but not every OVITO modifier is implemented, and
-some capabilities live under **left Analysis** or **Settings** instead of the
-pipeline (iron law: only scene-changing steps are modifiers).
+MolVis’s Add-modifier menu follows OVITO’s folder layout (Selection /
+Modification / Coloring / Structure identification / Visualization / Analysis).
+Not every OVITO modifier exists here. Chart-only analyses and some viewport
+graphics live outside the pipeline (only steps that change the canvas are
+modifiers).
 
-## Placement rules (short)
+## Placement
 
 | Where | What |
 |-------|------|
-| Pipeline Add menu | **OVITO folders**: Selection, Modification, Coloring, Structure identification, Visualization, Analysis |
-| Left Analysis panel | Chart-only RDF/MSD/histograms (not Add-menu); optional “Add pipeline modifier” when results can paint |
-| Left compute / right draw | Structure ID / mesh steps (`usesLeftConfig`) |
-| Settings | Viewport graphics (e.g. ambient occlusion) |
+| Pipeline Add menu | Selection, Modification, Coloring, Structure identification, Visualization, Analysis |
+| Left Analysis panel | Chart-only RDF / MSD / histograms; optional “Add pipeline modifier” when results can paint the scene |
+| Left compute / right draw | Structure ID and mesh steps that set `usesLeftConfig` |
+| Settings | Viewport graphics (for example ambient occlusion) |
 
-Python folder is intentionally omitted.
+There is no separate Python-only modifier folder in the UI.
 
-## Priority backlog (from the matrix)
+## Shipped pipeline modifiers
 
-| Priority | Gaps |
-|----------|------|
-| **P0** | ~~Replicate; Unwrap~~ (shipped) |
-| **P1a** | ~~Compute / Freeze / Edit types / Select overlapping / Displacement~~ (shipped) |
-| **P1b** | ~~Coordination polyhedra; Trajectory lines; Construct surface mesh~~ (shipped) |
-| **P2** | ~~Smooth trajectory; SSAO; Edit lattice UX~~ (shipped) |
-| **OOS** | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs |
+| Folder | Modifiers |
+|--------|-----------|
+| Selection | Expression Select, Clear, Invert, Select Type, Expand, Select overlapping, Hide Selection |
+| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute property, Freeze property, Edit types, Delete Selected, Hide Hydrogens, Edit lattice |
+| Coloring | Color by Property, Color by Type, Assign Color |
+| Structure identification | Steinhardt order, Solid–liquid |
+| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density / Construct surface mesh, Coordination polyhedra, Generate trajectory lines |
+| Analysis | Displacement vectors |
 
-Shipped parity batches: `ovito-parity-01` … `05` (see `.claude/specs/INDEX.md` shipped section).
+## Outside the pipeline
+
+| Surface | Examples |
+|---------|----------|
+| Left Analysis | RDF, MSD, histograms, cluster (with optional “add Color by Property”) |
+| Settings | SSAO / ambient occlusion and other viewport graphics |
+
+## Not in MolVis
+
+Python OVITO scripting, Voronoi analysis, and CNA / PTM / CSP / DXA without
+molrs support remain out of scope.

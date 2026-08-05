@@ -12,6 +12,7 @@ import React from "react";
 import molvisLogoUrl from "@/assets/molvis-logo-48.png";
 import { Separator } from "@/components/ui/separator";
 import { ExportDialog } from "@/ui/layout/ExportDialog";
+import { ExportProjectDialog } from "@/ui/layout/ExportProjectDialog";
 import { ScreenshotDialog } from "@/ui/layout/ScreenshotDialog";
 import { SettingsDialog } from "@/ui/layout/SettingsDialog";
 import { ThemeToggle } from "@/ui/layout/ThemeToggle";
@@ -190,6 +191,7 @@ export const ViewerToolbar: React.FC<ViewerToolbarProps> = ({
               onClick={handleReset}
             />
             <ExportDialog app={app} />
+            <ExportProjectDialog app={app} />
           </>
         )}
 

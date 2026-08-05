@@ -41,7 +41,7 @@ extension, and a Python package that drives the page bundle over WebSocket.
 - Tests: `core/tests/`, `sketch/tests/`, `stage/tests/` (+ `integration/`),
   `page/tests/`, `vsc-ext/tests/`, `python/tests/` (+ `integration/`);
   public-API goldens → `regressions/`
-- Public documentation: `docs/` (incl. `docs/specs/` public design docs)
+- Public documentation: `docs/` (Zensical site; theme `molcrafts-zensical-theme`)
 - Passive project knowledge (notes, decisions, debt, blueprint): `.claude/notes/`
 - Active runtime specs (alive, deleted on completion): `.claude/specs/`
 - Claude Code runtime config (agents, skills, hooks, settings):
@@ -155,6 +155,14 @@ history (the commit immediately before the harness rebuild).
 - **`UpdateFrameCommand` is buffer-update-only** — it must never call
   `sceneIndex.registerFrame()` or recreate `ImpostorState`. Full scene rebuilds
   are `DrawFrameCommand`'s job. Never mix the two.
+- **Canvas WYSIWYG = SceneIndex** — pick / hover entity / fence / measure
+  anchors / highlight / live `SelectionManager` resolve against SceneIndex
+  only. `system.frame` is reverse-lookup for trajectory columns / pipeline /
+  analysis. Mismatch (selected id not on canvas) is an error, never a silent
+  HEAD ghost. Pipeline selection producers write `selectionSet` only — they
+  do **not** clobber live canvas selection. Pushing live selection into the
+  pipeline auto-commits a dirty scene first. Details:
+  `.claude/notes/canvas-sceneindex.md`.
 - **`core` must never depend on a charting library or own charting** — charts
   live in the separate `@molcrafts/molplot` repo.
 - **Core subpath exports (`./io`, `./io/formats`) are public API** — treat

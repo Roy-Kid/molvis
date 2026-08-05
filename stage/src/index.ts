@@ -436,6 +436,17 @@ export {
   pluginIdLeaf,
 } from "./plugin_id";
 export {
+  downloadProjectJson,
+  hydrateProject,
+  isMolvisProject,
+  MOLVIS_PROJECT_FORMAT,
+  type MolvisProject,
+  type PortableFrame,
+  type ProjectPipelineEntry,
+  serializeProject,
+  serializeProjectJson,
+} from "./project";
+export {
   type AnimationOptions,
   MolvisRenderer,
   type MolvisRendererOptions,

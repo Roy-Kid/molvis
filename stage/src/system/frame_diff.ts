@@ -90,20 +90,19 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   if (!equalNumberArray(leftI, rightI)) return false;
   if (!equalNumberArray(leftJ, rightJ)) return false;
 
-  // `order` is required here, not defaulted. Substituting 1 for a missing
-  // column would call an aromatic frame (1.5) identical to a single-bonded one
-  // and skip the redraw; a bonds block without orders is simply not comparable.
-  const leftOrder = leftBonds.dtype("order")
-    ? leftBonds.viewColF("order")
-    : undefined;
-  const rightOrder = rightBonds.dtype("order")
-    ? rightBonds.viewColF("order")
-    : undefined;
-  if (!leftOrder || !rightOrder) return false;
+  const leftType = leftBonds.viewColU32("bond_type");
+  const rightType = rightBonds.viewColU32("bond_type");
+  const leftNumber = leftBonds.viewColU32("bond_number");
+  const rightNumber = rightBonds.viewColU32("bond_number");
+  if (!leftType && !rightType && !leftNumber && !rightNumber) return true;
+  if ((!leftType && rightType) || (leftType && !rightType)) return false;
+  if ((!leftNumber && rightNumber) || (leftNumber && !rightNumber))
+    return false;
 
   const count = leftBonds.nrows();
   for (let i = 0; i < count; i++) {
-    if (leftOrder[i] !== rightOrder[i]) return false;
+    if ((leftType?.[i] ?? 0) !== (rightType?.[i] ?? 0)) return false;
+    if ((leftNumber?.[i] ?? 0) !== (rightNumber?.[i] ?? 0)) return false;
   }
   return true;
 }

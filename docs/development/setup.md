@@ -37,32 +37,22 @@ yet — `start()` boots the loop and initializes the WASM kernels.
 
 ## Loading a structure
 
-```typescript
-import { readFrame } from "@molcrafts/molvis-stage";
-
-const text  = await fetch("/structure.pdb").then(r => r.text());
-const frame = readFrame(text, "structure.pdb");
-
-app.loadFrame(frame);
-```
-
-For multi-frame files:
+All file ingress goes through `loadFileContent` (replace / augment / extend).
+It installs a primary data source, runs the pipeline, and fits the camera.
 
 ```typescript
-import { TrajectoryReader, Trajectory } from "@molcrafts/molvis-stage";
+import { loadFileContent } from "@molcrafts/molvis-stage/io";
 
-const dump   = await fetch("/traj.dump").then(r => r.text());
-const reader = new TrajectoryReader(dump, "lammps-dump");
-const traj   = Trajectory.fromProvider({
-  length: reader.getFrameCount(),
-  get(index) { return reader.readFrame(index); },
-});
-
-app.setTrajectory(traj);
+const text = await fetch("/structure.pdb").then((r) => r.text());
+await loadFileContent(app, text, "structure.pdb");
 ```
 
-See the [TypeScript API reference](../api/typescript.md) for every
-supported reader and writer.
+Binary formats take a `Uint8Array`. Large text trajectories can use
+`loadFileStream` with a `Blob` so the full file is never held as one string.
+
+See the [TypeScript API reference](../api/typescript.md) for I/O helpers
+(`readFrames`, `writeFrame`, format registry) and `renderFrame` when you
+already hold a molrs `Frame`.
 
 ## Configuration
 
@@ -150,9 +140,9 @@ export function MolVisView({ pdb }: { pdb: string }) {
 
   useEffect(() => {
     if (!app) return;
-    import("@molcrafts/molvis-stage").then(({ readFrame }) => {
-      app.loadFrame(readFrame(pdb, "structure.pdb"));
-    });
+    void import("@molcrafts/molvis-stage/io").then(({ loadFileContent }) =>
+      loadFileContent(app, pdb, "structure.pdb"),
+    );
   }, [app, pdb]);
 
   return <div ref={ref} style={{ width: "100%", height: "100%" }} />;

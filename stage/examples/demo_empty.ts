@@ -30,7 +30,8 @@ async function main() {
   const emptyBonds = new Block();
   emptyBonds.setColU32("i", new Uint32Array(0));
   emptyBonds.setColU32("j", new Uint32Array(0));
-  emptyBonds.setColU32("order", new Uint32Array(0));
+  emptyBonds.setColU32("bond_type", new Uint32Array(0));
+  emptyBonds.setColU32("bond_number", new Uint32Array(0));
 
   const emptyFrame = new Frame();
   emptyFrame.insertBlock("atoms", emptyAtoms);

@@ -27,7 +27,8 @@ function ethaneSkeleton(): Frame {
   const bonds = new Block();
   bonds.setColU32("atomi", new Uint32Array([0]));
   bonds.setColU32("atomj", new Uint32Array([1]));
-  bonds.setColF("order", new Float64Array([1]));
+  bonds.setColU32("bond_type", new Uint32Array([1]));
+  bonds.setColU32("bond_number", new Uint32Array([1]));
   frame.insertBlock("bonds", bonds);
   return frame;
 }

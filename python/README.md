@@ -180,9 +180,18 @@ except mv.MolvisRPCError as exc:
 ## Development
 
 ```bash
-npm run build:page                   # build page bundle + copy to dist/
+# one-shot: build page → copy into python/src/molvis/dist/
+npm run build:page
+
+# watch: rebuild straight into python/src/molvis/dist/ on TS changes
+# (refresh the browser / notebook to pick up new hashes)
+npm run dev:python
+
 cd python && python -m pytest tests/ -v
 ```
+
+The package ships a single ``dist/`` tree (``index.html`` + ``js/`` / ``css/`` /
+``wasm/``). There is no nested ``dist/static/``.
 
 ## Packaging
 

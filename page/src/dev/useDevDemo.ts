@@ -111,12 +111,11 @@ export function useDevDemo(
           10, 10, 17,
         ]),
       );
-      bondsBlock.setColF(
-        "order",
-        new Float64Array([
-          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1,
-        ]),
-      );
+      const bondTypes = new Uint32Array([
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1,
+      ]);
+      bondsBlock.setColU32("bond_type", bondTypes);
+      bondsBlock.setColU32("bond_number", bondTypes);
 
       const frame = new Frame();
       frame.insertBlock("atoms", atomsBlock);

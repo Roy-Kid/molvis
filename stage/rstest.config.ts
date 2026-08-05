@@ -1,10 +1,16 @@
 import { defineConfig } from "@rstest/core";
 
+/**
+ * Unit lane only. Browser mode (@rstest/browser + Playwright Chromium) for
+ * WASM/DOM. Full app E2E lives in repo-root `e2e/` with @rstest/playwright.
+ */
 export default defineConfig({
   browser: {
     enabled: true,
     name: "chromium",
     headless: true,
+    // Explicit Playwright provider (default); peer `playwright` must be installed.
+    provider: "playwright",
   },
   // Import bundler-target @molcrafts/molvis-core/molrs before every test file so its WASM
   // side-effect (import .wasm + __wbindgen_start) runs before collection.
@@ -20,5 +26,11 @@ export default defineConfig({
       };
     },
   },
-  include: ["**/?(*.){test,spec}.?(c|m)[jt]s?(x)", "**/test_*.?(c|m)[jt]s?(x)"],
+  include: ["tests/**/?(*.){test,spec}.?(c|m)[jt]s?(x)"],
+  exclude: [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/integration/**",
+    "**/e2e/**",
+  ],
 });

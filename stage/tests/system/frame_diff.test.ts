@@ -13,7 +13,7 @@ interface AtomSpec {
 interface BondSpec {
   i: number;
   j: number;
-  /** Required — frame_diff refuses to default a missing order to 1. */
+  /** Display/Lewis order; 1.5 maps to aromatic bond_type=4. */
   order: number;
 }
 
@@ -110,14 +110,22 @@ function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
 }
 
 function buildBondBlock(bonds: BondSpec[]): MockBlock {
-  // Endpoints are u32 indices; `order` is float per the Frame schema, so an
-  // aromatic 1.5 survives the diff instead of collapsing onto 1 or 2.
+  // molrs: bond_type + bond_number (u32). BondSpec.order 1.5 → aromatic type 4.
+  const types = new Uint32Array(
+    bonds.map((bond) =>
+      bond.order === 1.5 ? 4 : Math.max(1, Math.min(3, Math.round(bond.order))),
+    ),
+  );
+  const numbers = new Uint32Array(
+    bonds.map((bond) =>
+      bond.order === 1.5 ? 0 : Math.max(1, Math.min(3, Math.round(bond.order))),
+    ),
+  );
   const columnsU32 = new Map<string, Uint32Array>([
     ["atomi", new Uint32Array(bonds.map((bond) => bond.i))],
     ["atomj", new Uint32Array(bonds.map((bond) => bond.j))],
-  ]);
-  const columnsF = new Map<string, Float64Array>([
-    ["order", new Float64Array(bonds.map((bond) => bond.order))],
+    ["bond_type", types],
+    ["bond_number", numbers],
   ]);
 
   return {
@@ -126,7 +134,6 @@ function buildBondBlock(bonds: BondSpec[]): MockBlock {
     },
     dtype(name: string) {
       if (columnsU32.has(name)) return "u32";
-      if (columnsF.has(name)) return "f64";
       return undefined;
     },
     viewColU32(name: string): Uint32Array {
@@ -134,8 +141,8 @@ function buildBondBlock(bonds: BondSpec[]): MockBlock {
       if (!col) throw new Error(`Column '${name}' not found`);
       return col;
     },
-    viewColF(name: string): Float64Array | undefined {
-      return columnsF.get(name);
+    viewColF(_name: string): Float64Array | undefined {
+      return undefined;
     },
     copyColStr(_name: string): string[] {
       throw new Error("No string columns in bond block");

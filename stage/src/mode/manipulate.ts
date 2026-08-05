@@ -2,6 +2,7 @@ import { type AbstractMesh, type PointerInfo, Vector3 } from "@babylonjs/core";
 import type { MolvisApp as Molvis } from "../app";
 import { buildSubBondInstanceBuffers } from "../artist/bond_buffer";
 import { ContextMenuController } from "../ui/menus/controller";
+import { displayBondOrder, formatBondLabel } from "../utils/bond_order";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import type { MenuItem, SceneHit } from "./types";
@@ -105,8 +106,11 @@ class ManipulateMode extends BaseMode {
     this.app.world.selectionManager.apply({ type: "replace", bonds: [key] });
 
     const meta = this.world.sceneIndex.getMeta(mesh.uniqueId, thinIndex);
-    const order = meta && meta.type === "bond" ? meta.order : 1;
-    this.app.events.emit("info-text-change", `Selected bond (order: ${order})`);
+    const label =
+      meta && meta.type === "bond"
+        ? formatBondLabel(meta.bondType, meta.bondNumber)
+        : "single";
+    this.app.events.emit("info-text-change", `Selected bond · ${label}`);
   }
 
   /**
@@ -193,9 +197,11 @@ class ManipulateMode extends BaseMode {
       );
 
       const bondMeta = this.findBondMeta(bondId);
-      const order = bondMeta?.order ?? 1;
+      const sticks = bondMeta
+        ? displayBondOrder(bondMeta.bondType, bondMeta.bondNumber)
+        : 1;
       const bondRadius = bondMeta
-        ? this.app.styleManager.getBondStyle(order).radius
+        ? this.app.styleManager.getBondStyle(sticks).radius
         : 0.1;
 
       // Reuse the same sub-instance layout the edit path used when creating
@@ -204,7 +210,7 @@ class ManipulateMode extends BaseMode {
       const { buffers: subBuffers } = buildSubBondInstanceBuffers(
         p1,
         p2,
-        order,
+        sticks,
         bondRadius,
         placeholderColor,
         placeholderColor,

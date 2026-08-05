@@ -1,4 +1,5 @@
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { BOND_TYPE_SINGLE, setBondTopology } from "../utils/bond_order";
 import { type ColumnDType, DType } from "../utils/dtype";
 import type { Trajectory } from "./trajectory";
 
@@ -383,7 +384,8 @@ function concatBonds(
 ): Block | undefined {
   const atomi: number[] = [];
   const atomj: number[] = [];
-  const order: number[] = [];
+  const bondType: number[] = [];
+  const bondNumber: number[] = [];
   let offset = 0;
   let any = false;
 
@@ -392,15 +394,20 @@ function concatBonds(
     if (bonds) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
-      const orderCol = bonds.dtype("order")
-        ? bonds.viewColF("order")
+      const typeCol = bonds.dtype("bond_type")
+        ? bonds.viewColU32("bond_type")
+        : undefined;
+      const numberCol = bonds.dtype("bond_number")
+        ? bonds.viewColU32("bond_number")
         : undefined;
       if (iCol && jCol) {
         any = true;
         for (let row = 0; row < bonds.nrows(); row++) {
           atomi.push(iCol[row] + offset);
           atomj.push(jCol[row] + offset);
-          order.push(orderCol ? orderCol[row] : 1);
+          const t = typeCol?.[row] ?? BOND_TYPE_SINGLE;
+          bondType.push(t);
+          bondNumber.push(numberCol?.[row] ?? t);
         }
       }
     }
@@ -409,8 +416,12 @@ function concatBonds(
 
   if (!any) return undefined;
   const block = new Block();
-  block.setColU32("atomi", Uint32Array.from(atomi));
-  block.setColU32("atomj", Uint32Array.from(atomj));
-  block.setColF("order", Float64Array.from(order));
+  setBondTopology(
+    block,
+    Uint32Array.from(atomi),
+    Uint32Array.from(atomj),
+    Uint32Array.from(bondType),
+    Uint32Array.from(bondNumber),
+  );
   return block;
 }

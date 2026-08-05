@@ -46,8 +46,8 @@ video = [
     "imageio-ffmpeg>=0.6",
 ]
 docs = [
-    "zensical>=0.0.51",
-    "molcrafts-zensical-theme>=0.2.3",
+    "zensical>=0.0.53",
+    "molcrafts-zensical-theme>=0.2.5",
 ]
 
 [project.scripts]

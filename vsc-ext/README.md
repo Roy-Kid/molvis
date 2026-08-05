@@ -10,7 +10,7 @@ Interactive molecular visualization inside VS Code: **stage** (3D) and **sketch*
 | **Quick View** | `MolVis: Quick View (Stage)` | Light stage-only peek (custom editor / side-by-side) |
 | **Workbench** | `MolVis: Open Workbench` | Editor tab hosting **Stage + Sketch** tabs (lazy mount) |
 | **Stage** | `MolVis: Open Stage` | Workbench focused on 3D |
-| **Sketch** | `MolVis: Open Sketch` | Workbench focused on 2D (no separate sketch Quick View yet) |
+| **Sketch** | `MolVis: Open Sketch` | Workbench focused on 2D |
 | **Page** | `MolVis: Open Page` | Full React product shell (`page/`) |
 | **Home** | Activity Bar | Native tree (actions / recent / help) |
 | **Sketch side bar** | Activity Bar Sketch | Standalone sketch webview (peer entry) |

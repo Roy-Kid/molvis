@@ -25,7 +25,6 @@ import { EventEmitter, type MolvisEventMap } from "./events";
 import { exportFrameToGLB, type GltfExportOptions } from "./export/gltf";
 import { FrameRenderScheduler } from "./frame_render_scheduler";
 import { disposeLoadedFile } from "./io";
-import { viewAtomCoords } from "./io/atom_coords";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { MenuItem, SceneHit } from "./mode/types";
@@ -47,7 +46,7 @@ import type {
 } from "./pipeline/types";
 import { defaultSaveFile } from "./save_file";
 import { SceneSession } from "./scene_session";
-import { buildFrameFromScene } from "./scene_sync";
+import { materializeFrameFromScene } from "./scene_sync";
 import {
   captureStructuralSelectionSnapshot,
   reconcileSelectionAfterStructuralUpdate,
@@ -61,7 +60,6 @@ import {
 } from "./system/frame_diff";
 import type { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
-import { DType } from "./utils/dtype";
 import { logger } from "./utils/logger";
 import { MOLVIS_VERSION } from "./version";
 import { World } from "./world";
@@ -279,16 +277,15 @@ export class MolvisApp {
       this.events.emit("dirty-change", isDirty);
     };
 
-    // Store named selections for analysis tools (RDF, etc.).
-    // Selection-to-scene sync is handled exclusively in applyPipeline().
+    // Named pipeline selections (modifier producers) for analysis tools.
+    // Live canvas SelectionManager is independent — see WYSIWYG invariant.
     this._modifierPipeline.on(PipelineEvents.COMPUTED, ({ context }) => {
       this._lastSelectionSet = new Map(context.selectionSet);
     });
 
-    // Sync atom-anchored overlays (text labels, highlight halos, ...) on each
-    // frame render so they follow their atom across the trajectory.
-    this.events.on("frame-rendered", ({ frame }) => {
-      this._syncAnchoredOverlays(frame);
+    // Sync atom-anchored overlays from SceneIndex (canvas positions), not HEAD.
+    this.events.on("frame-rendered", () => {
+      this._syncAnchoredOverlays();
     });
   }
 
@@ -486,7 +483,25 @@ export class MolvisApp {
   public async commitScene(): Promise<void> {
     const sourceFrame = this._system.frame;
     if (!sourceFrame) return;
-    const saved = buildFrameFromScene(this._world.sceneIndex, { sourceFrame });
+    const built = materializeFrameFromScene(this._world.sceneIndex, {
+      sourceFrame,
+    });
+    const saved = built.frame;
+
+    // Remap live canvas selection through dense re-index before dropping
+    // the edit pool — sparse edit ids become 0..N-1 rows.
+    const sm = this._world.selectionManager;
+    const prevAtoms = [...sm.getSelectedAtomIds()];
+    const prevBonds = [...sm.getSelectedBondIds()];
+    if (prevAtoms.length > 0 || prevBonds.length > 0) {
+      const nextAtoms = prevAtoms
+        .map((id) => built.atomIdToFrameIndex.get(id))
+        .filter((row): row is number => row !== undefined);
+      const nextBonds = prevBonds
+        .map((id) => built.bondIdToFrameIndex.get(id))
+        .filter((row): row is number => row !== undefined);
+      sm.apply({ type: "replace", atoms: nextAtoms, bonds: nextBonds });
+    }
 
     this._system.updateCurrentFrame(saved);
 
@@ -501,6 +516,21 @@ export class MolvisApp {
       primary.frameCount === 1
     ) {
       primary.trajectory.replaceFrame(0, saved);
+    }
+
+    // Single-source invariant: committed content lives on the primary DS.
+    // Promote Empty Scene → named memory source so export/project see real data.
+    if (primary && primary.kind === "memory") {
+      const atomCount = saved.getBlock("atoms")?.nrows() ?? 0;
+      if (atomCount > 0) {
+        if (
+          primary.sourceType === "empty" ||
+          primary.filename === "Empty Scene"
+        ) {
+          primary.filename = "Scene";
+          primary.sourceType = "backend";
+        }
+      }
     }
 
     // Point meta at the committed frame and drop the edit overlay so
@@ -678,52 +708,56 @@ export class MolvisApp {
     });
   }
 
-  private _syncAnchoredOverlays(frame: Frame): void {
-    // Fires on every frame render. Skip all WASM block/column access when there
-    // are no overlays to anchor (the common case).
+  /**
+   * Follow atom-anchored overlays from SceneIndex meta (canvas positions).
+   * Frame HEAD may lag uncommitted edits; mismatch → skip that overlay.
+   */
+  private _syncAnchoredOverlays(): void {
     if (this.overlayManager.size === 0) return;
-    const atoms = frame.getBlock("atoms");
-    if (!atoms) return;
-    const coords = viewAtomCoords(atoms);
-    const x = coords?.x;
-    const y = coords?.y;
-    const z = coords?.z;
-    if (!x || !y || !z) return;
+    const atoms = this._world.sceneIndex.metaRegistry.atoms;
 
     for (const overlay of this.overlayManager.list()) {
       const anchored = asAtomAnchored(overlay);
       if (!anchored) continue;
       const atomId = anchored.getAnchorAtomId();
-      if (atomId < 0 || atomId >= x.length) continue;
-      anchored.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
+      if (atomId < 0) continue;
+      const meta = atoms.getMeta(atomId);
+      if (!meta) {
+        logger.warn(
+          `anchored overlay ${overlay.id}: atom ${atomId} not on canvas`,
+        );
+        continue;
+      }
+      anchored.syncToAtomPosition(
+        meta.position.x,
+        meta.position.y,
+        meta.position.z,
+      );
     }
   }
 
   /**
-   * Snap a freshly-added overlay onto its anchor atom in the current frame.
-   *
-   * Atom-anchored overlays seed at the world origin and rely on the
-   * ``frame-rendered`` event to be moved onto their atom — but on a static
-   * scene that event won't fire again after creation, leaving the overlay
-   * parked at (0,0,0). Commands that create anchored overlays should call
-   * this once after ``overlayManager.add`` so the mark is positioned
+   * Snap a freshly-added overlay onto its anchor atom on the canvas
+   * (SceneIndex). Commands that create anchored overlays should call this
+   * once after ``overlayManager.add`` so the mark is positioned
    * synchronously instead of waiting on the next render cycle.
    */
   public syncAnchoredOverlay(overlay: Overlay): void {
     const anchored = asAtomAnchored(overlay);
     if (!anchored) return;
-    const frame = this.frame;
-    if (!frame) return;
-    const atoms = frame.getBlock("atoms");
-    if (!atoms) return;
     const atomId = anchored.getAnchorAtomId();
     if (atomId < 0) return;
-    const x = atoms.dtype("x") === DType.F64 ? atoms.viewColF("x") : undefined;
-    const y = atoms.dtype("y") === DType.F64 ? atoms.viewColF("y") : undefined;
-    const z = atoms.dtype("z") === DType.F64 ? atoms.viewColF("z") : undefined;
-    if (!x || !y || !z) return;
-    if (atomId >= x.length) return;
-    anchored.syncToAtomPosition(x[atomId], y[atomId], z[atomId]);
+    const meta = this._world.sceneIndex.metaRegistry.atoms.getMeta(atomId);
+    if (!meta) {
+      throw new Error(
+        `syncAnchoredOverlay: atom ${atomId} is not on the canvas (SceneIndex)`,
+      );
+    }
+    anchored.syncToAtomPosition(
+      meta.position.x,
+      meta.position.y,
+      meta.position.z,
+    );
   }
 
   public destroy(): void {
@@ -802,37 +836,35 @@ export class MolvisApp {
   }
 
   /**
-   * Confirm the pending manual selection by committing it as a SelectModifier.
-   * Only works when in Select mode.
+   * Push the live canvas selection into the pipeline as a SelectModifier
+   * (for hide / color / named selection). Auto-commits a dirty scene first
+   * so ids match HEAD. Highlight is already the selection.
    */
-  public confirmPendingSelection(): void {
+  public async confirmPendingSelection(): Promise<void> {
     const mode = this._world.mode;
     if (mode instanceof SelectMode) {
-      mode.confirmPendingSelection();
+      await mode.confirmPendingSelection();
     }
   }
 
-  /**
-   * Clear the pending selection without committing.
-   * Only works when in Select mode.
-   */
+  /** Clear the live canvas selection. */
   public clearPendingSelection(): void {
     const mode = this._world.mode;
     if (mode instanceof SelectMode) {
       mode.clearPending();
+    } else {
+      this._world.selectionManager.apply({ type: "clear" });
     }
   }
 
-  /** Number of atoms in the pending (uncommitted) manual selection. */
+  /** Live selected atom count (SelectionManager). */
   public get pendingAtomCount(): number {
-    const mode = this._world.mode;
-    return mode instanceof SelectMode ? mode.pendingAtomCount : 0;
+    return this._world.selectionManager.getSelectedAtomIds().size;
   }
 
-  /** Number of bonds in the pending (uncommitted) manual selection. */
+  /** Live selected bond count (SelectionManager). */
   public get pendingBondCount(): number {
-    const mode = this._world.mode;
-    return mode instanceof SelectMode ? mode.pendingBondCount : 0;
+    return this._world.selectionManager.getSelectedBondIds().size;
   }
 
   public setTheme(theme: Theme): void {
@@ -1103,31 +1135,23 @@ export class MolvisApp {
       m.applyVisibility(this, m.enabled);
     }
     this.artist.applySliceMaskIfPresent(renderTarget);
-    this._world.sceneIndex.markAllSaved();
+    // Pipeline rebuild does not absorb the edit pool. Only clear dirty when
+    // there is no edit overlay — otherwise hasUnsavedChanges would lie and
+    // get_selected / confirm would treat canvas as clean HEAD.
+    const meta = this._world.sceneIndex.metaRegistry;
+    if (meta.atoms.edits.size === 0 && meta.bonds.edits.size === 0) {
+      this._world.sceneIndex.markAllSaved();
+    }
     this.events.emit("frame-rendered", {
       frame: renderTarget,
       box: renderTarget.box ?? undefined,
     });
 
-    // Unified selection sync — single path, no duplication
+    // Pipeline selection producers write `selectionSet` only (via COMPUTED).
+    // Live canvas SelectionManager is WYSIWYG and must not be clobbered here —
+    // fence/click selection survives recompute; named pipeline selections stay
+    // in `_lastSelectionSet` for hide/color/analysis consumers.
     const ctx = captured.context;
-    if (ctx && ctx.selectionSet.size > 0) {
-      const mask = ctx.currentSelection;
-      if (mask) {
-        // Always sync selection data (for other modifiers to reference)
-        this._world.selectionManager.apply({
-          type: "replace",
-          atoms: mask.getIndices(),
-          bonds: ctx.selectedBondIds,
-        });
-        // If highlight is suppressed, remove the visual overlay but keep selection
-        if (ctx.suppressHighlight) {
-          this._world.highlighter.clearAll();
-        }
-      }
-    } else {
-      this._world.selectionManager.clearSelection();
-    }
 
     // Execute post-render effects registered by modifiers during apply().
     if (ctx) {

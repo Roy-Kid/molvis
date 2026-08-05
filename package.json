@@ -1,7 +1,7 @@
 {
   "name": "molvis",
   "version": "0.2.0",
-  "description": "interactive molecule visulization package",
+  "description": "Interactive molecular visualization for web, VS Code, and Python",
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
   "workspaces": [
@@ -17,6 +17,7 @@
     "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
     "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
     "dev:page": "npm run dev -w page",
+    "dev:python": "npm run dev:python -w page",
     "build:core": "npm run build -w @molcrafts/molvis-core",
     "build:stage": "npm run build -w @molcrafts/molvis-stage",
     "build:sketch": "npm run build -w @molcrafts/molvis-sketch",
@@ -40,6 +41,7 @@
     "test:python": "cd python && if [ -x .venv/bin/python ]; then .venv/bin/python -m pytest tests; else python3 -m pytest tests; fi",
     "test:vsc-ext": "npm run test:unit -w vsc-ext",
     "test:regressions": "npm run test:regressions -w @molcrafts/molvis-stage",
+    "test:e2e": "rstest run -c e2e/rstest.config.ts",
     "test": "npm run test:core && npm run test:stage && npm run test:sketch && npm run test:page && npm run test:python && npm run test:vsc-ext",
     "test:watch": "npm run test:watch -w @molcrafts/molvis-stage",
     "release:stage:check": "npm run release:check -w @molcrafts/molvis-stage",
@@ -55,7 +57,11 @@
     "@biomejs/biome": "2.4.16",
     "@rsbuild/core": "^2.0.8",
     "@rslib/core": "^0.22.0",
+    "@rstest/browser": "^0.11.6",
+    "@rstest/core": "^0.11.6",
+    "@rstest/playwright": "^0.11.6",
     "concurrently": "^10.0.0",
+    "playwright": "^1.60.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "shadcn": "^4.13.0",
@@ -63,7 +69,7 @@
   },
   "dependencies": {
     "@molcrafts/molplot": "^0.1.1",
-    "@molcrafts/molrs": "file:../molrs/molrs-wasm/pkg",
+    "@molcrafts/molrs": "^0.12.0",
     "vega": "^5.30.0",
     "vega-embed": "^6.29.0",
     "vega-lite": "^5.21.0"
@@ -73,8 +79,9 @@
     "@rsbuild/core": "^2.0.8",
     "@rslib/core": "^0.22.0",
     "@rsbuild/plugin-react": "^2.0.0",
-    "@rstest/core": "^0.10.0",
-    "@rstest/browser": "^0.10.0"
+    "@rstest/core": "^0.11.6",
+    "@rstest/browser": "^0.11.6",
+    "@rstest/playwright": "^0.11.6"
   },
   "packageManager": "npm@11.16.0"
 }

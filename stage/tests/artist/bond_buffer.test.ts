@@ -8,6 +8,7 @@ import {
   countBondInstances,
   refreshBondPositions,
 } from "../../src/artist/bond_buffer";
+import { displayBondOrder } from "../../src/utils/bond_order";
 
 function getBuffer(
   result: BondBufferResult | undefined,
@@ -39,7 +40,19 @@ function makeBlocks(
   const bondsBlock = new Block();
   bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b.i)));
   bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b.j)));
-  bondsBlock.setColF("order", new Float64Array(bonds.map((b) => b.order)));
+  // molrs bond_type / bond_number. order 1.5 in fixtures → aromatic (type 4).
+  const types = new Uint32Array(
+    bonds.map((b) =>
+      b.order === 1.5 ? 4 : Math.max(1, Math.min(3, Math.round(b.order))),
+    ),
+  );
+  const numbers = new Uint32Array(
+    bonds.map((b) =>
+      b.order === 1.5 ? 0 : Math.max(1, Math.min(3, Math.round(b.order))),
+    ),
+  );
+  bondsBlock.setColU32("bond_type", types);
+  bondsBlock.setColU32("bond_number", numbers);
 
   return { atoms, bonds: bondsBlock };
 }
@@ -54,6 +67,18 @@ function makeAtomColor(count: number): Float32Array {
   }
   return color;
 }
+
+describe("displayBondOrder (molrs bond_type / bond_number)", () => {
+  it("maps aromatic bond_type=4, bond_number=0 to one stick", () => {
+    expect(displayBondOrder(4, 0)).toBe(1);
+  });
+
+  it("keeps Lewis single / double / triple", () => {
+    expect(displayBondOrder(1, 1)).toBe(1);
+    expect(displayBondOrder(2, 2)).toBe(2);
+    expect(displayBondOrder(3, 3)).toBe(3);
+  });
+});
 
 describe("countBondInstances", () => {
   it("should return nrows for all single bonds", () => {
@@ -89,22 +114,25 @@ describe("countBondInstances", () => {
     expect(countBondInstances(bonds)).toBe(3);
   });
 
-  it("renders an aromatic 1.5 bond as two sticks", () => {
-    // molrs writes 1.5 for a perceived aromatic bond. A fractional order must
-    // resolve to a whole stick count here, or the instance total goes
-    // non-integer and every downstream renderIdx walk drifts.
+  it("aromatic bond_type=4 with bond_number=0 is one stick (no local Kekulé)", () => {
+    // Stick mapping is pure: number=0 → 1 stick. Ingress fills number via molrs.
     const { bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 1.5 }]);
-    expect(countBondInstances(bonds)).toBe(2);
+    expect(countBondInstances(bonds)).toBe(1);
   });
 
-  it("keeps a benzene ring's instance count integral", () => {
-    const ring = Array.from({ length: 6 }, (_, k) => ({
-      i: k,
-      j: (k + 1) % 6,
-      order: 1.5,
-    }));
-    const { bonds } = makeBlocks(6, ring);
-    expect(countBondInstances(bonds)).toBe(12);
+  it("aromatic bond with Kekulé bond_number drives multi-stick", () => {
+    // Simulate molrs findKekuleOrders output: type=4, number=2 → two sticks.
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0, 1]));
+    atoms.setColF("y", new Float64Array([0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0]));
+    atoms.setColStr("element", ["C", "C"]);
+    const bonds = new Block();
+    bonds.setColU32("atomi", new Uint32Array([0]));
+    bonds.setColU32("atomj", new Uint32Array([1]));
+    bonds.setColU32("bond_type", new Uint32Array([4]));
+    bonds.setColU32("bond_number", new Uint32Array([2]));
+    expect(countBondInstances(bonds)).toBe(2);
   });
 
   it("collapses bond orders for tube and graph representations", () => {
@@ -379,7 +407,8 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColF("order", new Float64Array([1]));
+    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
+    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -406,7 +435,8 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColF("order", new Float64Array([1]));
+    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
+    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -429,7 +459,8 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColF("order", new Float64Array([1]));
+    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
+    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.ortho(
       new Float64Array([10, 10, 10]),
@@ -488,7 +519,8 @@ describe("buildBondBuffers with PBC minimum image", () => {
     const bondsBlock = new Block();
     bondsBlock.setColU32("atomi", new Uint32Array([0]));
     bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColF("order", new Float64Array([1]));
+    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
+    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
     const atomColor = makeAtomColor(2);
 
     const disp = miDisplacementsViaBox(box, atoms, bondsBlock);
