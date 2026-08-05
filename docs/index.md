@@ -17,8 +17,8 @@ hero:
     align: left
     methods:
       - { label: Python, command: pip install molcrafts-molvis }
-      - { label: TypeScript, command: npm install @molcrafts/molvis-stage }
-      - { label: Umbrella, command: npm install @molcrafts/molvis }
+      - { label: Stage (3D), command: npm install @molcrafts/molvis-stage }
+      - { label: Sketch (2D), command: npm install @molcrafts/molvis-sketch }
   badges:
     - img: https://img.shields.io/npm/v/@molcrafts/molvis-stage?color=7c3aed&label=npm%20stage
       href: https://www.npmjs.com/package/@molcrafts/molvis-stage

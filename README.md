@@ -63,8 +63,7 @@ for a complete selection-feedback loop.
 |---------|------|
 | `@molcrafts/molvis-stage` | **3D stage** — Babylon.js rendering, commands, modes, pipeline, RPC |
 | `@molcrafts/molvis-sketch` | **2D sketch** — Canvas structure editor |
-| `@molcrafts/molvis` | Umbrella re-export of stage + sketch |
-| `@molcrafts/molvis-core` | Workspace-private molrs gateway + element catalog (not a product install) |
+| `@molcrafts/molvis-core` | Shared molrs gateway + element catalog (transitive; not a product install) |
 | `page` | React 19 product UI (ships inside Python / VS Code hosts) |
 | VS Code extension | Custom editor for molecular formats |
 | `molcrafts-molvis` (PyPI) | Python driver over WebSocket |
@@ -72,14 +71,11 @@ for a complete selection-feedback loop.
 ## Install
 
 ```bash
-# 3D only
+# 3D
 npm install @molcrafts/molvis-stage
 
-# 2D only
+# 2D
 npm install @molcrafts/molvis-sketch
-
-# both
-npm install @molcrafts/molvis
 ```
 
 Requires Node.js 22+. The Python package (`pip install molcrafts-molvis`) needs Python 3.12+; the VS Code extension installs from the Marketplace.

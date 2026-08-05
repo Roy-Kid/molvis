@@ -9,8 +9,7 @@ modifier pipeline, selection, and JSON-RPC.
 npm install @molcrafts/molvis-stage
 ```
 
-Need 2D sketching as well? Use `@molcrafts/molvis-sketch`, or install both via
-the umbrella package `@molcrafts/molvis`.
+Need 2D sketching as well? Install `@molcrafts/molvis-sketch` alongside stage.
 
 ## Quick start
 
@@ -51,8 +50,7 @@ npm run release:check -w @molcrafts/molvis-stage
 |---------|------|
 | `@molcrafts/molvis-stage` | This package — 3D engine |
 | `@molcrafts/molvis-sketch` | 2D sketcher |
-| `@molcrafts/molvis` | Umbrella re-export |
-| `@molcrafts/molvis-core` | Workspace-private molrs gateway + element data |
+| `@molcrafts/molvis-core` | Shared molrs gateway + element data (transitive) |
 
 ## License
 

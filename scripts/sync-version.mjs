@@ -18,7 +18,6 @@ const packageTargets = [
   "core/package.json",
   "stage/package.json",
   "sketch/package.json",
-  "umbrella/package.json",
   "page/package.json",
   "vsc-ext/package.json",
 ];
@@ -32,10 +31,6 @@ const pinSpecs = [
   {
     path: "sketch/package.json",
     keys: ["@molcrafts/molvis-core"],
-  },
-  {
-    path: "umbrella/package.json",
-    keys: ["@molcrafts/molvis-stage", "@molcrafts/molvis-sketch"],
   },
 ];
 

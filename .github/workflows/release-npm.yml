@@ -24,9 +24,8 @@ jobs:
 
       - run: npm install
 
-      # Publish order: shared core → engines → umbrella.
-      # core is a transitive dep (not a product install); stage/sketch/umbrella
-      # are the consumer packages. See .claude/notes/package-architecture.md.
+      # Publish order: shared core → stage → sketch.
+      # core is a transitive dep (not a product install).
       - name: Build core
         run: npm run build:core
 
@@ -39,9 +38,6 @@ jobs:
       - name: Build sketch
         run: npm run build:sketch
 
-      - name: Build umbrella
-        run: npm run build:umbrella
-
       - name: Publish @molcrafts/molvis-core
         run: npm publish -w @molcrafts/molvis-core --provenance --access public
 
@@ -50,6 +46,3 @@ jobs:
 
       - name: Publish @molcrafts/molvis-sketch
         run: npm publish -w @molcrafts/molvis-sketch --provenance --access public
-
-      - name: Publish @molcrafts/molvis
-        run: npm publish -w @molcrafts/molvis --provenance --access public

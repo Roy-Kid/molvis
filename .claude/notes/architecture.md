@@ -10,12 +10,11 @@ _Generated 2026-07-30 by /mol:map._
 
 ### Module list
 
-- `./` — `molvis`; npm workspace/build orchestrator for `core`, `stage`, `sketch`, `umbrella`, `page`, and `vsc-ext`; root dependencies provide molrs, molplot, Vega, React, and shared build tooling.
-- `core/` — private `@molcrafts/molvis-core`; entries `src/index.ts`, `src/molrs.ts`, `src/elements.ts`; dev alias `@molvis/core`; sole dependency/import face for `@molcrafts/molrs`.
+- `./` — `molvis`; npm workspace/build orchestrator for `core`, `stage`, `sketch`, `page`, and `vsc-ext`; root dependencies provide molrs, molplot, Vega, React, and shared build tooling.
+- `core/` — `@molcrafts/molvis-core` (transitive publish); entries `src/index.ts`, `src/molrs.ts`, `src/elements.ts`; dev alias `@molvis/core`; sole dependency/import face for `@molcrafts/molrs`.
 - `sketch/` — published `@molcrafts/molvis-sketch`; `src/index.ts` over board, commands, geometry, graph, export, and style groups; depends only on `@molcrafts/molvis-core`.
 - `stage/` — published `@molcrafts/molvis-stage`; entries `src/index.ts`, `src/element.ts`, bundled `src/element_entry.ts`, `src/io/index.ts`, and `src/io/formats.ts`; dev alias `@molvis/stage`; depends on core, Babylon, and tslog.
-- `umbrella/` — published `@molcrafts/molvis`; entries `src/index.ts`, `src/sketch.ts`, `src/stage.ts`; depends on and re-exports sketch and stage.
-- `page/` — `page`; React product application rooted at `src/index.tsx`, with mount, plugin, hook, component, and mode/layout groups; source aliases stage, core, and sketch and consumes molplot.
+- `page/` — `page` (private); React product application rooted at `src/index.tsx`, with mount, plugin, hook, component, and mode/layout groups; source aliases stage, core, and sketch and consumes molplot.
 - `vsc-ext/` — VSCode extension `molvis`; Node activation + Quick View / Workbench / Sketch webviews and trajectory worker; depends on stage/sketch/core only (**never page**).
 - `python/` — hatchling package `molcrafts-molvis`, import name `molvis`; `src/molvis/__init__.py`, `scene.py`, command mixins, event/runtime, transport, and CLI groups; depends on molpy, NumPy, and websockets and ships the built page bundle.
 
@@ -25,7 +24,6 @@ _Generated 2026-07-30 by /mol:map._
 - `core/` — `.` re-exports shared elements and molrs; `./molrs` re-exports the complete WASM API; `./elements` exports `IElement`, `TPeriodicTable`, `PeriodicTable`, `VanDerWaalsRadii`, `normalizeElement`, `getVanDerWaalsRadius`, and `isMetalElement`.
 - `sketch/` — `.` exports `SketchBoard`, `MoleculeGraph`, `SketchHistory`, command classes, viewport/rendering and hit-test types, geometry helpers, image-export options, element colors, and molecule data types.
 - `stage/` — `.` exports `mountMolvis`, `MolvisApp`/`Molvis`, renderer/system/world, analysis, palette and representation APIs, commands, modifiers, pipeline/data-source primitives, overlays, selection, transport/RPC, and selected molrs types; `./element` exports viewer/gallery custom-element APIs; `./viewer` registers those elements; `./io` and `./io/formats` are public file-ingress and format-registry subpaths.
-- `umbrella/` — `.` re-exports both engine barrels; `./sketch` and `./stage` expose the individual peer surfaces.
 - `page/` — host-facing bundle exposes `window.MolvisApp.mount`; its mount boundary is `mountMolvisApp`, `MountHostOpts`, `MountedApp`, `MountOpts`, surface/chrome settings, WebSocket/session options, and plugin sources.
 - `vsc-ext/` — exports `activate`/`deactivate`; contributes Quick View / Workbench / file-loading commands, launcher/outline/sketch views, custom editors, and stage/sketch webview bundles.
 - `python/` — top-level exports `Molvis`, transport classes, event/state types, runtime detection, palette helpers, `MolvisRPCError`, and `NumpyEncoder`; `Molvis` composes drawing, frame, overlay, palette, pipeline, selection, and snapshot methods; CLI entry is `molvis`.
@@ -36,7 +34,6 @@ _Generated 2026-07-30 by /mol:map._
 - `core/` — naming=PascalCase exported data types and camelCase helpers; construction=readonly registries plus molrs class re-exports; errors=element lookup normalizes input and uses documented radius fallbacks. ESM, unbundled with declarations; only the molrs entry is side-effectful.
 - `sketch/` — naming=PascalCase graph/board/command classes; construction=direct constructors with reversible command/history composition; errors=eager validation through descriptive `Error`s. React-free, unbundled ESM, `sideEffects: false`.
 - `stage/` — naming=PascalCase domain, command, modifier, renderer, and transport classes with camelCase primitives; construction=direct constructors plus the DOM `mountMolvis` entry; errors=validated `Error`s, domain errors, abort/cancellation errors, and RPC envelopes. Unbundled typed ESM plus a bundled WASM-capable viewer entry.
-- `umbrella/` — naming mirrors sketch and stage; construction=pure re-export composition; errors=none introduced locally. Unbundled ESM and `sideEffects: false`.
 - `page/` — naming=PascalCase React components and `use*` hooks; construction=React composition through `mountMolvisApp`; errors=ErrorBoundary, operation-status reporting, caught async errors, and `AbortError` cancellation. Rsbuild output is copied into the Python wheel.
 - `vsc-ext/` — naming=VSCode provider classes and activation/register helpers; construction=`activate()` registers providers, commands, and panels; errors=host/webview boundaries catch and report failures. Builds a bundled CJS extension, shared ESM webviews, and an isolated ESM worker.
 - `python/` — naming=snake_case methods and PascalCase classes; construction=`Molvis` OOP facade composed from command mixins with `WebSocketTransport`; errors=`ValueError` for input contracts, timeout/runtime errors for transport, and `MolvisRPCError` for frontend RPC failures.
@@ -47,7 +44,6 @@ _Generated 2026-07-30 by /mol:map._
 - `core/` — private shared leaf: sole molrs/WASM gateway plus pure element data and explicitly registered framework-free shared Web Components. It owns no Babylon, React, charting, pipeline, or RPC implementation; the molrs entry alone carries package side effects.
 - `sketch/` — public React-free 2D engine peer; depends inward on core and neither imports stage nor accesses molrs directly.
 - `stage/` — public React-free 3D Babylon engine peer; depends inward on core and neither imports sketch nor accesses molrs directly. It owns the command/pipeline/rendering stack: `DataSourceModifier` remains the single scene-data ingress, `UpdateFrameCommand` is buffer-only, and full rebuilds belong to draw-frame flow.
-- `umbrella/` — public convenience facade above sketch and stage; re-exports both peers while relying on their shared core transitively.
 - `page/` — product/frontend composition layer; owns React, shadcn/Radix, host chrome, plugins, and chart presentation, and composes stage plus sketch through core-backed aliases.
 - `vsc-ext/` — VSCode host layer; activates editors/views and packages stage+sketch webviews. Hosts never import `page/` (page depends on engines, not the reverse).
 - `python/` — Python driver/host layer; controls the page over WebSocket, ships its static bundle, and does not import TypeScript engine internals or own WebGL rendering.

@@ -7,7 +7,6 @@ element catalog, and framework-free controls shared by the 2D and 3D hosts.
 
 - `@molcrafts/molvis-sketch` — 2D
 - `@molcrafts/molvis-stage` — 3D
-- `@molcrafts/molvis` — umbrella (2D + 3D)
 
 ## Imports
 

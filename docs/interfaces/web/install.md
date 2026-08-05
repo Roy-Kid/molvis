@@ -9,8 +9,7 @@ npm install @molcrafts/molvis-stage
 Need 2D sketching as well?
 
 ```bash
-npm install @molcrafts/molvis
-# or: npm install @molcrafts/molvis-stage @molcrafts/molvis-sketch
+npm install @molcrafts/molvis-sketch
 ```
 
 MolVis expects ES modules, WebAssembly, and WebGL2. Serve the application over

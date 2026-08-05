@@ -88,17 +88,16 @@ reinstalling a primary, or `setTrajectory` paths that leave the pipeline empty.
 ## 2026-07-30 — package naming lock
 
 - Shared molrs gateway, pure primitives, and framework-free shared custom elements:
-  workspace **`core/`** (`@molcrafts/molvis-core`, not a consumer-facing product).
+  workspace **`core/`** (`@molcrafts/molvis-core`, transitive only — not a product install).
 - 2D: **`sketch/`** → `@molcrafts/molvis-sketch`.
-- 3D: **`stage/`** (today still mostly under `core/`) → `@molcrafts/molvis-stage`.
-- Umbrella publish: **`@molcrafts/molvis`** (2D+3D).
-- Full matrix, rules, migration: [package-architecture.md](./package-architecture.md).
+- 3D: **`stage/`** → `@molcrafts/molvis-stage`.
+- No umbrella package — install stage and/or sketch explicitly.
+- Full matrix: [package-architecture.md](./package-architecture.md).
 
 ## 2026-07-30 — sketch chrome is package-owned (`gui` flag)
 
 - Icon tool rails (top common · left chem · bottom assoc) live in
-  **`sketch/src/ui/SketchComposer`**, not only in `examples/demo.ts` or a React
-  reimplementation in page.
+  **`sketch/src/ui/SketchComposer`**, not only in a host reimplementation in page.
 - **`gui: true` (default)** mounts chrome; **`gui: false`** is canvas-only /
   host-owned chrome — same idea as stage's `gui` flag.
 - Fragment templates (structure-diagram previews, nested category menu) are
