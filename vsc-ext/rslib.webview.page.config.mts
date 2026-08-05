@@ -2,10 +2,16 @@
  * Separate webview build for the optional Open Page surface.
  * Isolated so React/page never enter the QV / Workbench / Sketch graph.
  */
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rslib/core";
 import { rspack } from "@rspack/core";
+
+const require = createRequire(import.meta.url);
+function pkg(name: string): string {
+  return require.resolve(name);
+}
 
 const sharedDefine = {
   "process.env.NODE_ENV": '"production"',
@@ -48,12 +54,11 @@ export default defineConfig({
   plugins: [pluginReact()],
 
   resolve: {
-    // Package-name remaps only — resolve via node_modules / exports → dist.
-    // Build core/stage/sketch first. Never monorepo ../src paths.
+    // Resolve package exports to dist files (workspace/registry layout).
     alias: {
-      "@molvis/stage": "@molcrafts/molvis-stage",
-      "@molvis/stage/io": "@molcrafts/molvis-stage/io",
-      "@molvis/stage/io/formats": "@molcrafts/molvis-stage/io/formats",
+      "@molvis/stage": pkg("@molcrafts/molvis-stage"),
+      "@molvis/stage/io": pkg("@molcrafts/molvis-stage/io"),
+      "@molvis/stage/io/formats": pkg("@molcrafts/molvis-stage/io/formats"),
       "@": path.resolve(import.meta.dirname, "../page/src"),
     },
   },
@@ -68,6 +73,7 @@ export default defineConfig({
           javascript: {
             ...(config.module?.parser?.javascript || {}),
             worker: false,
+            exportsPresence: "warn",
           },
         },
         rules: [

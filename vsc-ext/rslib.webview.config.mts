@@ -1,6 +1,12 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "@rslib/core";
 import { rspack } from "@rspack/core";
+
+const require = createRequire(import.meta.url);
+function pkg(name: string): string {
+  return require.resolve(name);
+}
 
 /**
  * VS Code webview — main-thread bundle
@@ -95,12 +101,12 @@ export default defineConfig({
   plugins: [],
 
   resolve: {
-    // Package-name remaps only — resolve via node_modules / exports → dist.
+    // Resolve package exports to dist files (workspace/registry layout).
     // Build core/stage/sketch first. Never monorepo ../src paths.
     alias: {
-      "@molvis/stage": "@molcrafts/molvis-stage",
-      "@molvis/stage/io": "@molcrafts/molvis-stage/io",
-      "@molvis/stage/io/formats": "@molcrafts/molvis-stage/io/formats",
+      "@molvis/stage": pkg("@molcrafts/molvis-stage"),
+      "@molvis/stage/io": pkg("@molcrafts/molvis-stage/io"),
+      "@molvis/stage/io/formats": pkg("@molcrafts/molvis-stage/io/formats"),
     },
   },
 
@@ -118,6 +124,8 @@ export default defineConfig({
             ...(config.module?.parser?.javascript || {}),
             // Worker is a separate rslib config — keep it out of this graph.
             worker: false,
+            // Unbundled stage dist uses `function f(){} export { f }`.
+            exportsPresence: "warn",
           },
         },
         rules: [
