@@ -1,6 +1,6 @@
 import { defineConfig } from "@rstest/core";
 
-/** Unit lane: browser mode for canvas / WASM. No e2e. */
+/** Unit tests: browser mode for canvas / WASM. */
 export default defineConfig({
   browser: {
     enabled: true,
@@ -18,5 +18,5 @@ export default defineConfig({
     },
   },
   include: ["tests/**/?(*.){test,spec}.?(c|m)[jt]s?(x)"],
-  exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+  exclude: ["**/node_modules/**", "**/dist/**"],
 });

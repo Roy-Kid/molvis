@@ -38,9 +38,8 @@ extension, and a Python package that drives the page bundle over WebSocket.
 - Source code: `core/src/` (shared molrs/data/browser primitives),
   `sketch/src/` (2D), `stage/src/` (3D), `page/src/` (React 19 product shell),
   `vsc-ext/src/` (VSCode extension), `python/src/` (Python package)
-- Tests: `core/tests/`, `sketch/tests/`, `stage/tests/` (+ `integration/`),
-  `page/tests/`, `vsc-ext/tests/`, `python/tests/` (+ `integration/`);
-  public-API goldens → `regressions/`
+- Tests: `core/tests/`, `sketch/tests/`, `stage/tests/`, `page/tests/`,
+  `vsc-ext/tests/`, `python/tests/` (+ `integration/` where present)
 - Public documentation: `docs/` (Zensical site; theme `molcrafts-zensical-theme`)
 - Passive project knowledge (notes, decisions, debt, blueprint): `.claude/notes/`
 - Active runtime specs (alive, deleted on completion): `.claude/specs/`
@@ -94,7 +93,7 @@ leaving rot you already saw.
   than one coherent responsibility.
 - **All-in-one façade APIs.** No public `run_everything` /
   `compute_all` / `pipeline` that hides multi-step work. Composition
-  is the **caller's** job (scripts, docs examples, `regressions/`).
+  is the **caller's** job (host apps, docs examples).
   The library exposes primitives only.
 
 ### Shape check (before adding a public symbol)
@@ -109,9 +108,8 @@ leaving rot you already saw.
 
 - Unit tests **only** under `tests/`, path mirrors source
   (`src/foo/boo.py` → `tests/test_foo/test_boo.py`), types mirror
-  (`FooClass` → `TestFooClass`). Single-function tests — no e2e under
-  `tests/`. Public-API scenarios → `regressions/` with **hard-coded**
-  goldens (no live third-party oracles). Details: `tester` agent.
+  (`FooClass` → `TestFooClass`). Single-function unit tests only.
+  Details: `tester` agent.
 
 ## Default workflow
 

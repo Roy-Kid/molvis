@@ -14,8 +14,6 @@
   ],
   "scripts": {
     "dev:core": "npm run typecheck -w @molcrafts/molvis-core",
-    "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
-    "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
     "dev:page": "npm run dev -w page",
     "dev:python": "npm run dev:python -w page",
     "build:core": "npm run build -w @molcrafts/molvis-core",
@@ -36,12 +34,9 @@
     "test:core": "npm run test -w @molcrafts/molvis-core",
     "test:stage": "npm run test -w @molcrafts/molvis-stage",
     "test:sketch": "npm run test -w @molcrafts/molvis-sketch",
-    "test:headless": "npm run test:headless -w @molcrafts/molvis-stage",
     "test:page": "npm run test -w page",
     "test:python": "cd python && if [ -x .venv/bin/python ]; then .venv/bin/python -m pytest tests; else python3 -m pytest tests; fi",
     "test:vsc-ext": "npm run test:unit -w vsc-ext",
-    "test:regressions": "npm run test:regressions -w @molcrafts/molvis-stage",
-    "test:e2e": "rstest run -c e2e/rstest.config.ts",
     "test": "npm run test:core && npm run test:stage && npm run test:sketch && npm run test:page && npm run test:python && npm run test:vsc-ext",
     "test:watch": "npm run test:watch -w @molcrafts/molvis-stage",
     "release:stage:check": "npm run release:check -w @molcrafts/molvis-stage",
@@ -59,7 +54,6 @@
     "@rslib/core": "^0.22.0",
     "@rstest/browser": "^0.11.6",
     "@rstest/core": "^0.11.6",
-    "@rstest/playwright": "^0.11.6",
     "concurrently": "^10.0.0",
     "playwright": "^1.60.0",
     "react": "^19.2.8",
@@ -80,8 +74,7 @@
     "@rslib/core": "^0.22.0",
     "@rsbuild/plugin-react": "^2.0.0",
     "@rstest/core": "^0.11.6",
-    "@rstest/browser": "^0.11.6",
-    "@rstest/playwright": "^0.11.6"
+    "@rstest/browser": "^0.11.6"
   },
   "packageManager": "npm@11.16.0"
 }

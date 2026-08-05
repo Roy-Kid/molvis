@@ -68,7 +68,6 @@ nav = [
     "development/extending.md",
     "development/plugins.md",
     "development/ovito-parity.md",
-    "development/headless-rendering.md",
     "development/pca-tool.md",
   ]},
   { "API Reference" = [

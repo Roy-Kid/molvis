@@ -16,8 +16,6 @@
   "sideEffects": false,
   "scripts": {
     "build": "rslib build",
-    "dev": "rsbuild dev",
-    "preview:demo": "rsbuild preview",
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
     "test:watch": "rstest watch"

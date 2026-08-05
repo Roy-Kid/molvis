@@ -1,9 +1,6 @@
 import { defineConfig } from "@rstest/core";
 
-/**
- * Unit lane only. Browser mode (@rstest/browser + Playwright Chromium) for
- * WASM/DOM. Full app E2E lives in repo-root `e2e/` with @rstest/playwright.
- */
+/** Unit tests: browser mode (@rstest/browser + Playwright Chromium) for WASM/DOM. */
 export default defineConfig({
   browser: {
     enabled: true,
@@ -27,10 +24,5 @@ export default defineConfig({
     },
   },
   include: ["tests/**/?(*.){test,spec}.?(c|m)[jt]s?(x)"],
-  exclude: [
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/integration/**",
-    "**/e2e/**",
-  ],
+  exclude: ["**/node_modules/**", "**/dist/**"],
 });

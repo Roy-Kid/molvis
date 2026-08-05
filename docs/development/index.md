@@ -17,8 +17,6 @@ instead.
   (modifiers, modes, analysis, commands, settings, RPC).
 - [**OVITO parity**](ovito-parity.md) — modifier placement and the shipped
   OVITO-shaped pipeline catalog.
-- [**Headless rendering**](headless-rendering.md) — run the WebGL2 visual
-  smoke suite or author deterministic representation and surface captures.
 - [**PCA tool**](pca-tool.md) — project per-frame properties to a 2-D scatter.
 
 ## The 30-second mental model
