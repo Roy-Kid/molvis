@@ -29,14 +29,9 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      "@molvis/stage/io/formats": path.resolve(
-        import.meta.dirname,
-        "../stage/src/io/formats.ts",
-      ),
-      "@molcrafts/molvis-core/molrs": path.resolve(
-        import.meta.dirname,
-        "../core/src/molrs.ts",
-      ),
+      "@molvis/stage": "@molcrafts/molvis-stage",
+      "@molvis/stage/io": "@molcrafts/molvis-stage/io",
+      "@molvis/stage/io/formats": "@molcrafts/molvis-stage/io/formats",
     },
   },
 });

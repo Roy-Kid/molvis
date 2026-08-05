@@ -5,14 +5,14 @@ import { pluginReact } from "@rsbuild/plugin-react";
 const root = import.meta.dirname;
 
 /**
- * Default rsbuild nests assets under ``static/js`` etc., which becomes the
- * silly ``python/src/molvis/dist/static/...`` when the page is grafted into
- * the package. Flatten to ``dist/{js,css,wasm}/`` so the package only has
- * one “dist” segment.
+ * Flatten dist to ``dist/{js,css,wasm}/``.
  *
- * ``MOLVIS_PYTHON_DEV=1`` writes the bundle straight into the Python package
- * (``python/src/molvis/dist``) so ``npm run dev:python`` can watch without a
- * separate copy step.
+ * Engines resolve as normal npm packages via workspace install
+ * (``node_modules/@molcrafts/*`` → package ``exports`` → dist).
+ * Build core/stage/sketch first. Only short-name remaps for ``@molvis/stage*``;
+ * never monorepo ``../stage/src`` paths.
+ *
+ * ``MOLVIS_PYTHON_DEV=1`` writes into the Python package tree.
  */
 const pythonDev = process.env.MOLVIS_PYTHON_DEV === "1";
 const distRoot = pythonDev
@@ -39,42 +39,15 @@ export default defineConfig({
       svg: "svg",
       assets: "assets",
     },
-    // Clean the target dist on each build so stale hashed chunks don't linger
-    // (especially important when writing into the Python package tree).
     cleanDistPath: true,
   },
   resolve: {
     alias: {
       "@": path.resolve(root, "./src"),
-      // 3D engine
-      "@molvis/stage": path.resolve(root, "../stage/src/index.ts"),
-      "@molvis/stage/io/formats": path.resolve(
-        root,
-        "../stage/src/io/formats.ts",
-      ),
-      "@molvis/stage/io": path.resolve(root, "../stage/src/io/index.ts"),
-      "@molcrafts/molvis-stage": path.resolve(root, "../stage/src/index.ts"),
-      // Shared core (molrs face + elements)
-      "@molcrafts/molvis-core": path.resolve(root, "../core/src/index.ts"),
-      "@molcrafts/molvis-core/molrs": path.resolve(
-        root,
-        "../core/src/molrs.ts",
-      ),
-      "@molcrafts/molvis-core/elements": path.resolve(
-        root,
-        "../core/src/elements.ts",
-      ),
-      // 2D sketch
-      "@molcrafts/molvis-sketch": path.resolve(root, "../sketch/src/index.ts"),
-    },
-  },
-  source: {
-    watchFiles: {
-      paths: [
-        path.resolve(root, "../core/src/**"),
-        path.resolve(root, "../stage/src/**"),
-        path.resolve(root, "../sketch/src/**"),
-      ],
+      // Package-name remaps only (not filesystem paths).
+      "@molvis/stage": "@molcrafts/molvis-stage",
+      "@molvis/stage/io": "@molcrafts/molvis-stage/io",
+      "@molvis/stage/io/formats": "@molcrafts/molvis-stage/io/formats",
     },
   },
   performance: {

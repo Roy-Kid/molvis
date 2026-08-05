@@ -1,5 +1,12 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import { defineConfig } from "@rslib/core";
+
+const require = createRequire(import.meta.url);
+/** Resolve published package entry (workspace/registry → dist file). */
+const trajectoryWorkerEntry = require.resolve(
+  "@molcrafts/molvis-stage/trajectory-worker",
+);
 
 /**
  * VS Code webview — isolated trajectory worker
@@ -32,10 +39,8 @@ export default defineConfig({
       autoExtension: false,
       source: {
         entry: {
-          "chunks/worker": path.resolve(
-            import.meta.dirname,
-            "../stage/src/transport/trajectory_worker/worker.ts",
-          ),
+          // Package export resolved to dist file (see stage "./trajectory-worker")
+          "chunks/worker": trajectoryWorkerEntry,
         },
         define: sharedDefine,
       },

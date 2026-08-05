@@ -9,17 +9,8 @@ export default defineConfig({
     {
       format: "esm",
       bundle: false,
-      dts: {
-        alias: {
-          "@molcrafts/molvis-core": "../core/dist/index.d.ts",
-          "@molcrafts/molvis-core/molrs": "../core/dist/molrs.d.ts",
-          "@molcrafts/molvis-core/elements": "../core/dist/elements.d.ts",
-          "@molcrafts/molvis-core/platform": "../core/dist/platform.d.ts",
-          "@molcrafts/molvis-core/save-file": "../core/dist/save_file.d.ts",
-          "@molcrafts/molvis-core/element-picker":
-            "../core/dist/element_picker.d.ts",
-        },
-      },
+      // Package-name imports stay in .d.ts for registry/workspace consumers.
+      dts: true,
       source: {
         entry: { index: "./src/**" },
         tsconfigPath: "./tsconfig.build.json",

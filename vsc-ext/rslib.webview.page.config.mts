@@ -48,59 +48,12 @@ export default defineConfig({
   plugins: [pluginReact()],
 
   resolve: {
+    // Package-name remaps only — resolve via node_modules / exports → dist.
+    // Build core/stage/sketch first. Never monorepo ../src paths.
     alias: {
-      "@molvis/stage": path.resolve(
-        import.meta.dirname,
-        "../stage/src/index.ts",
-      ),
-      "@molvis/stage/io/formats": path.resolve(
-        import.meta.dirname,
-        "../stage/src/io/formats.ts",
-      ),
-      "@molvis/stage/io": path.resolve(
-        import.meta.dirname,
-        "../stage/src/io/index.ts",
-      ),
-      "@molcrafts/molvis-stage": path.resolve(
-        import.meta.dirname,
-        "../stage/src/index.ts",
-      ),
-      "@molcrafts/molvis-core": path.resolve(
-        import.meta.dirname,
-        "../core/src/index.ts",
-      ),
-      "@molcrafts/molvis-core/molrs": path.resolve(
-        import.meta.dirname,
-        "../core/src/molrs.ts",
-      ),
-      "@molcrafts/molvis-core/elements": path.resolve(
-        import.meta.dirname,
-        "../core/src/elements.ts",
-      ),
-      "@molcrafts/molvis-core/element-picker": path.resolve(
-        import.meta.dirname,
-        "../core/src/element_picker.ts",
-      ),
-      "@molcrafts/molvis-core/save-file": path.resolve(
-        import.meta.dirname,
-        "../core/src/save_file.ts",
-      ),
-      "@molcrafts/molvis-core/platform": path.resolve(
-        import.meta.dirname,
-        "../core/src/platform.ts",
-      ),
-      "@molcrafts/molvis-core/opfs": path.resolve(
-        import.meta.dirname,
-        "../core/src/opfs.ts",
-      ),
-      "@molcrafts/molvis-core/image-crop": path.resolve(
-        import.meta.dirname,
-        "../core/src/image_crop.ts",
-      ),
-      "@molcrafts/molvis-sketch": path.resolve(
-        import.meta.dirname,
-        "../sketch/src/index.ts",
-      ),
+      "@molvis/stage": "@molcrafts/molvis-stage",
+      "@molvis/stage/io": "@molcrafts/molvis-stage/io",
+      "@molvis/stage/io/formats": "@molcrafts/molvis-stage/io/formats",
       "@": path.resolve(import.meta.dirname, "../page/src"),
     },
   },

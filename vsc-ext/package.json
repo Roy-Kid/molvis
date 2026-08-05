@@ -571,5 +571,11 @@
     "react-dom": "^19.2.6",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3"
-  }
+  },
+  "dependencies": {
+    "@molcrafts/molvis-core": "0.2.0",
+    "@molcrafts/molvis-sketch": "0.2.0",
+    "@molcrafts/molvis-stage": "0.2.0"
+  },
+  "private": true
 }

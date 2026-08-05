@@ -50,15 +50,15 @@ repos:
       # build jobs. Pre-push because each takes ~30-60s and they run in
       # serial here (CI runs them in parallel on separate runners).
       - id: build-core
-        name: build core (rslib)
-        entry: npm run build:core
+        name: build core + stage (rslib)
+        entry: bash -c 'npm run build:core && npm run build:stage'
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
-      # Fails if dist/ reintroduces inspector/gui-editor/loaders or the CDN
-      # elements surface exceeds the size budget (the 0.0.11 regression).
+      # Fails if stage dist/ reintroduces inspector/gui-editor/loaders or the
+      # CDN elements surface exceeds the size budget (0.0.11 regression).
       - id: check-pack
         name: check pack (no inspector / elements budget)
         entry: npm run check:pack
@@ -69,7 +69,7 @@ repos:
 
       - id: build-page
         name: build page (rsbuild)
-        entry: npm run build:page
+        entry: bash -c 'npm run build:core && npm run build:stage && npm run build:sketch && npm run build:page'
         language: system
         pass_filenames: false
         always_run: true
@@ -77,7 +77,7 @@ repos:
 
       - id: build-vsc-ext
         name: build vsc-ext (rslib)
-        entry: npm run build:vsc-ext
+        entry: bash -c 'npm run build:core && npm run build:stage && npm run build:sketch && npm run build:vsc-ext'
         language: system
         pass_filenames: false
         always_run: true

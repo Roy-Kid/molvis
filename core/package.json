@@ -7,48 +7,49 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "default": "./src/index.ts"
+      "default": "./dist/index.js"
     },
     "./molrs": {
       "types": "./dist/molrs.d.ts",
       "import": "./dist/molrs.js",
-      "default": "./src/molrs.ts"
+      "default": "./dist/molrs.js"
     },
     "./keys": {
       "types": "./dist/keys.d.ts",
       "import": "./dist/keys.js",
-      "default": "./src/keys.ts"
+      "default": "./dist/keys.js"
     },
     "./elements": {
       "types": "./dist/elements.d.ts",
       "import": "./dist/elements.js",
-      "default": "./src/elements.ts"
+      "default": "./dist/elements.js"
     },
     "./element-picker": {
       "types": "./dist/element_picker.d.ts",
       "import": "./dist/element_picker.js",
-      "default": "./src/element_picker.ts"
+      "default": "./dist/element_picker.js"
     },
     "./opfs": {
       "types": "./dist/opfs.d.ts",
       "import": "./dist/opfs.js",
-      "default": "./src/opfs.ts"
+      "default": "./dist/opfs.js"
     },
     "./platform": {
       "types": "./dist/platform.d.ts",
       "import": "./dist/platform.js",
-      "default": "./src/platform.ts"
+      "default": "./dist/platform.js"
     },
     "./save-file": {
       "types": "./dist/save_file.d.ts",
       "import": "./dist/save_file.js",
-      "default": "./src/save_file.ts"
+      "default": "./dist/save_file.js"
     },
     "./image-crop": {
       "types": "./dist/image_crop.d.ts",
       "import": "./dist/image_crop.js",
-      "default": "./src/image_crop.ts"
-    }
+      "default": "./dist/image_crop.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
