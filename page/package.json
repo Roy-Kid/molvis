@@ -52,10 +52,11 @@
     "typescript": "^6.0.3"
   },
   "scripts": {
-    "dev": "rsbuild dev",
-    "dev:python": "MOLVIS_PYTHON_DEV=1 rsbuild build --watch",
+    "dev": "concurrently -k -n engines,page \"npm:dev:engines\" \"rsbuild dev\"",
+    "dev:python": "concurrently -k -n engines,page \"npm:dev:engines\" \"MOLVIS_PYTHON_DEV=1 rsbuild build --watch\"",
     "build": "rsbuild build",
     "typecheck": "tsc --noEmit",
-    "test": "rstest run --passWithNoTests"
+    "test": "rstest run --passWithNoTests",
+    "dev:engines": "concurrently -k -n core,stage,sketch,plugin \"npm --prefix .. run dev:core\" \"npm --prefix .. run dev:stage\" \"npm --prefix .. run dev:sketch\" \"npm --prefix .. run dev:plugin\""
   }
 }
