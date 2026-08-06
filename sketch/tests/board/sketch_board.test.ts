@@ -38,7 +38,7 @@ function pointer(
 }
 
 describe("SketchBoard", () => {
-  it("ignores an empty-paper Chain drag that can make only one segment", () => {
+  it("ignores an empty-paper Chain drag that can make only one segment", async () => {
     const board = new SketchBoard({ bondChainStep: 1 });
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -54,7 +54,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("routes Chain through a middle carbon when dropped on its canonical endpoint", () => {
+  it("routes Chain through a middle carbon when dropped on its canonical endpoint", async () => {
     const board = new SketchBoard({ bondChainStep: 1 });
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -93,7 +93,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("atom tool places atom on empty click", () => {
+  it("atom tool places atom on empty click", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -106,7 +106,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("bond tool connects two atoms", () => {
+  it("bond tool connects two atoms", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -126,7 +126,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("atom tool replaces an existing atom and undo restores it", () => {
+  it("atom tool replaces an existing atom and undo restores it", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -139,12 +139,12 @@ describe("SketchBoard", () => {
     const point = board.viewport.docToScreen(0, 0);
     pointer("pointerdown", canvas, point.x, point.y);
     expect(board.getMoleculeData().atoms[0].element).toBe("N");
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData().atoms[0].element).toBe("C");
     board.unmount();
   });
 
-  it("bond and chain gestures can start on empty paper as one undo step", () => {
+  it("bond and chain gestures can start on empty paper as one undo step", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -156,7 +156,7 @@ describe("SketchBoard", () => {
     pointer("pointerup", canvas, end.x, end.y);
     expect(board.getMoleculeData().atoms).toHaveLength(2);
     expect(board.getMoleculeData().bonds).toHaveLength(1);
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData()).toEqual({ atoms: [], bonds: [] });
 
     board.setBondOrder(3);
@@ -167,12 +167,12 @@ describe("SketchBoard", () => {
     pointer("pointerup", canvas, end.x, end.y);
     expect(board.getMoleculeData().atoms).toHaveLength(3);
     expect(board.getMoleculeData().bonds).toHaveLength(2);
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData()).toEqual({ atoms: [], bonds: [] });
     board.unmount();
   });
 
-  it("bond empty-drop places one terminal C at fixed length; undo restores", () => {
+  it("bond empty-drop places one terminal C at fixed length; undo restores", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -190,12 +190,12 @@ describe("SketchBoard", () => {
     expect(board.getMoleculeData().bonds).toHaveLength(1);
     const c1 = board.getMoleculeData().atoms[1];
     expect(Math.hypot(c1.x, c1.y)).toBeCloseTo(1.0, 5);
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData().atoms).toHaveLength(1);
     board.unmount();
   });
 
-  it("bond drag snaps to nearby atom instead of spawning new carbon", () => {
+  it("bond drag snaps to nearby atom instead of spawning new carbon", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -217,7 +217,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("erase removes atom and incident bonds", () => {
+  it("erase removes atom and incident bonds", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -236,7 +236,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("select toggle and Delete key", () => {
+  it("select toggle and Delete key", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -255,7 +255,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("selects and drags an atom in one gesture, with undo", () => {
+  it("selects and drags an atom in one gesture, with undo", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -271,13 +271,13 @@ describe("SketchBoard", () => {
     pointer("pointerup", canvas, end.x, end.y);
     expect(board.getMoleculeData().atoms[0].x).toBeCloseTo(1, 6);
     expect(board.getMoleculeData().atoms[0].y).toBeCloseTo(0.5, 6);
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData().atoms[0].x).toBeCloseTo(0, 6);
     expect(board.getMoleculeData().atoms[0].y).toBeCloseTo(0, 6);
     board.unmount();
   });
 
-  it("marquee selects enclosed atoms and bonds", () => {
+  it("marquee selects enclosed atoms and bonds", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -309,7 +309,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("fuses a ring onto an existing atom or bond", () => {
+  it("fuses a ring onto an existing atom or bond", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -323,7 +323,7 @@ describe("SketchBoard", () => {
     pointer("pointerdown", canvas, atom.x, atom.y);
     expect(board.getMoleculeData().atoms).toHaveLength(6);
     expect(board.getMoleculeData().bonds).toHaveLength(6);
-    board.undo();
+    await board.undo();
 
     board.loadMoleculeData({
       atoms: [
@@ -340,7 +340,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("load creates a new history root and state subscriptions stay current", () => {
+  it("load creates a new history root and state subscriptions stay current", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -357,7 +357,7 @@ describe("SketchBoard", () => {
       bonds: [],
     });
     expect(board.getState().canUndo).toBe(false);
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData().atoms).toEqual([
       { element: "O", x: 2, y: 0 },
     ]);
@@ -365,7 +365,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("ignores right-click edits and resolves two-letter element shortcuts", () => {
+  it("ignores right-click edits and resolves two-letter element shortcuts", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -383,7 +383,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("colors the full current selection as one undo step", () => {
+  it("colors the full current selection as one undo step", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -415,16 +415,16 @@ describe("SketchBoard", () => {
     expect(board.applyColorToSelection()).toBe(true);
     expect(board.getMoleculeData().atoms[0].color).toBeUndefined();
     expect(board.getMoleculeData().bonds[0].color).toBeUndefined();
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData().atoms[0].color).toBe("#008000");
     expect(board.getMoleculeData().bonds[0].color).toBe("#008000");
-    board.undo();
+    await board.undo();
     expect(board.getMoleculeData().atoms[0].color).toBeUndefined();
     expect(board.getMoleculeData().bonds[0].color).toBeUndefined();
     board.unmount();
   });
 
-  it("keeps color override parallel to the active tool", () => {
+  it("keeps color override parallel to the active tool", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -453,7 +453,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("disabled state blocks pointer and keyboard mutation", () => {
+  it("disabled state blocks pointer and keyboard mutation", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     board.mount(canvas);
@@ -473,7 +473,7 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
-  it("markDirty schedules at most one rAF; idle after paint", () => {
+  it("markDirty schedules at most one rAF; idle after paint", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();
     const rafCbs: FrameRequestCallback[] = [];
@@ -504,7 +504,7 @@ describe("SketchBoard", () => {
     }
   });
 
-  it("toFrame works without mount", () => {
+  it("toFrame works without mount", async () => {
     const board = new SketchBoard();
     board.loadMoleculeData({
       atoms: [

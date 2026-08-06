@@ -1,4 +1,5 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
+import type { App } from "@molcrafts/molvis-core/app";
 import {
   cropToContent,
   reencodeImage,
@@ -72,7 +73,7 @@ function asAtomAnchored(overlay: Overlay): AtomAnchored | null {
     : null;
 }
 
-export class MolvisApp {
+export class MolvisApp implements App {
   // DOM elements
   private _container: HTMLElement;
   private _root: HTMLElement;
@@ -886,9 +887,9 @@ export class MolvisApp {
     this._world.scene.clearColor = new Color4(r, g, b, a);
   }
 
-  public setRepresentation(id: RepresentationId): Promise<void> {
+  public async setRepresentation(id: RepresentationId): Promise<void> {
     const representation = findRepresentation(id);
-    return this.commandManager.execute(
+    await this.commandManager.execute(
       new SetRepresentationCommand(this, { style: representation }),
     );
   }

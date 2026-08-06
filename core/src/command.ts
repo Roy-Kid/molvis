@@ -31,12 +31,26 @@ export interface CommandHost {
 }
 
 /**
- * A reversible operation.
+ * Anything the history can drive.
+ *
+ * Declared separately from {@link Command} because an app handle is a
+ * convenience for subclasses, not something the history needs — `sketch`'s
+ * commands capture what they edit and take no app at all.
+ */
+export interface Reversible<TResult = unknown> {
+  do(): TResult | Promise<TResult>;
+  undo(): unknown;
+}
+
+/**
+ * A reversible operation bound to an app.
  *
  * `do()` performs it, `undo()` reverses it. Both may be async; the manager
  * awaits them.
  */
-export abstract class Command<TApp, TResult = unknown> {
+export abstract class Command<TApp, TResult = unknown>
+  implements Reversible<TResult>
+{
   protected app: TApp;
 
   constructor(app: TApp) {
@@ -61,51 +75,87 @@ export type CommandLog = (message: string) => void;
  * `execute` clears the redo stack — the semantics every implementation of this
  * has copied, asserted here once.
  */
+function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof (value as Promise<T>)?.then === "function";
+}
+
 export class CommandManager<TApp extends CommandHost> {
   private readonly app: TApp;
   private readonly log: CommandLog;
-  private undoStack: Command<TApp, unknown>[] = [];
-  private redoStack: Command<TApp, unknown>[] = [];
+  private undoStack: Reversible[] = [];
+  private redoStack: Reversible[] = [];
 
   constructor(app: TApp, log: CommandLog = () => {}) {
     this.app = app;
     this.log = log;
   }
 
-  /** Run a command, push it on the undo stack, and drop any redo history. */
-  public async execute<T>(command: Command<TApp, T>): Promise<T> {
+  /**
+   * Run a command, push it on the undo stack, and drop any redo history.
+   *
+   * **Stays synchronous for a synchronous command.** A 2D gesture handler
+   * applies an edit and reads `canUndo()` in the same tick; forcing every
+   * command through a microtask left the stacks briefly disagreeing with the
+   * document. Callers with async commands simply `await` as before.
+   */
+  public execute<T>(command: Reversible<T>): T | Promise<T> {
     this.log(`Executing command: ${command.constructor.name}`);
-    const result = await command.do();
-    this.undoStack.push(command as Command<TApp, unknown>);
-    this.redoStack = [];
-    this.emitHistoryChange();
-    return result as T;
+    const result = command.do();
+    if (isPromise(result)) {
+      return result.then((value) => {
+        this.commit(command);
+        return value;
+      });
+    }
+    this.commit(command);
+    return result;
   }
 
-  public async undo(): Promise<boolean> {
+  public undo(): boolean | Promise<boolean> {
     const command = this.undoStack.pop();
     if (!command) {
       this.log("Undo stack empty");
       return false;
     }
     this.log(`Undoing command: ${command.constructor.name}`);
-    await command.undo();
-    this.redoStack.push(command);
-    this.emitHistoryChange();
+    const reversed = command.undo();
+    if (isPromise(reversed)) {
+      return reversed.then(() => {
+        this.settle(command, this.redoStack);
+        return true;
+      });
+    }
+    this.settle(command, this.redoStack);
     return true;
   }
 
-  public async redo(): Promise<boolean> {
+  public redo(): boolean | Promise<boolean> {
     const command = this.redoStack.pop();
     if (!command) {
       this.log("Redo stack empty");
       return false;
     }
     this.log(`Redoing command: ${command.constructor.name}`);
-    await command.do();
-    this.undoStack.push(command);
-    this.emitHistoryChange();
+    const result = command.do();
+    if (isPromise(result)) {
+      return result.then(() => {
+        this.settle(command, this.undoStack);
+        return true;
+      });
+    }
+    this.settle(command, this.undoStack);
     return true;
+  }
+
+  private commit(command: Reversible<unknown>): void {
+    this.undoStack.push(command);
+    this.redoStack = [];
+    this.emitHistoryChange();
+  }
+
+  private settle(command: Reversible<unknown>, target: Reversible[]): void {
+    target.push(command);
+    this.emitHistoryChange();
   }
 
   public clearHistory(): void {

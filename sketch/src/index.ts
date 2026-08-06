@@ -1,3 +1,4 @@
+export { SketchApp } from "./app";
 export {
   DEFAULT_BOND_SCREEN_PX,
   MAX_SCALE,
@@ -78,7 +79,6 @@ export {
 } from "./geometry/snap";
 export { MoleculeGraph } from "./molecule_graph";
 export { SketchCommand } from "./sketch_command";
-export { SketchHistory } from "./sketch_history";
 export {
   DEFAULT_CUSTOM_COLOR,
   normalizeSketchColor,

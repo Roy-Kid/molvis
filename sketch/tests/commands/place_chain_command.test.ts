@@ -1,19 +1,19 @@
+import { CommandManager } from "@molcrafts/molvis-core/command";
 import { describe, expect, it } from "@rstest/core";
 import { PlaceChainCommand } from "../../src/commands/place_chain_command";
 import { MoleculeGraph } from "../../src/molecule_graph";
-import { SketchHistory } from "../../src/sketch_history";
 
 describe("PlaceChainCommand", () => {
-  it("commits a reversible three-segment single-bond chain at 120 degrees", () => {
+  it("commits a reversible three-segment single-bond chain at 120 degrees", async () => {
     const graph = new MoleculeGraph();
     const before = {
       atoms: [{ element: "C", x: 0, y: 0 }],
       bonds: [],
     };
     graph.loadMoleculeData(before);
-    const history = new SketchHistory();
+    const history = new CommandManager({ events: { emit: () => {} } });
 
-    history.execute(new PlaceChainCommand(graph, 0, 3, 0, 1, 1));
+    await history.execute(new PlaceChainCommand(graph, 0, 3, 0, 1, 1));
     const after = graph.getMoleculeData();
     expect(after.atoms).toHaveLength(4);
     expect(after.bonds).toEqual([
@@ -36,13 +36,13 @@ describe("PlaceChainCommand", () => {
       expect(angleDegrees).toBeCloseTo(120, 6);
     }
 
-    history.undo();
+    await history.undo();
     expect(graph.getMoleculeData()).toEqual(before);
-    history.redo();
+    await history.redo();
     expect(graph.getMoleculeData()).toEqual(after);
   });
 
-  it("does not consume an already bonded neighbor as a new chain segment", () => {
+  it("does not consume an already bonded neighbor as a new chain segment", async () => {
     const graph = new MoleculeGraph();
     graph.loadMoleculeData({
       atoms: [
@@ -51,13 +51,13 @@ describe("PlaceChainCommand", () => {
       ],
       bonds: [{ i: 0, j: 1, order: 1 }],
     });
-    const history = new SketchHistory();
-    history.execute(new PlaceChainCommand(graph, 0, 2.4, 0, 1.2, 1));
+    const history = new CommandManager({ events: { emit: () => {} } });
+    await history.execute(new PlaceChainCommand(graph, 0, 2.4, 0, 1.2, 1));
 
     expect(graph.atomCount()).toBe(4);
     expect(graph.bondCount()).toBe(3);
     expect(graph.findBondIndex(0, 2)).not.toBeNull();
-    history.undo();
+    await history.undo();
     expect(graph.atomCount()).toBe(2);
     expect(graph.bondCount()).toBe(1);
   });

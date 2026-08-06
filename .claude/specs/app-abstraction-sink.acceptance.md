@@ -9,9 +9,9 @@ checked. Status starts `pending`.
 | 2 | `Command` and `CommandManager` live in `core`; `stage/src/commands/{base,manager}.ts` hold only a **binding** to them (fixing the app type), no re-implementation | structural | `grep` + `typecheck` | **met** |
 | 3 | The 12 command files in `stage/src/commands/` are **byte-identical**; only the two binding files change | correctness | `git diff --name-only stage/src/commands/` lists only `base.ts`, `manager.ts` | **met** |
 | 4 | `stage`'s 883 tests pass unchanged after the command migration | regression | `npm run test:stage` | **met** (883/0) |
-| 5 | `sketch/src/sketch_command.ts` and `sketch/src/sketch_history.ts` are deleted, and no replacement class in `sketch/src` defines both `do()` and `undo()` outside a `Command` subclass | structural | `test` (new gate) | pending |
+| 5 | `sketch/src/sketch_history.ts` is deleted and no local undo/redo stack replaces it; `sketch_command.ts` remains as a 6-line binding to core's `Reversible` (it held no logic to duplicate) | structural | `sketch/tests/no_duplicate_history.test.ts` | **met** |
 | 6 | `CommandManager` undo/redo semantics (execute clears redo; undo/redo return false when empty) are asserted in `core`'s own tests | correctness | `npm run test:core` | **met** (8 tests; reverting the redo-clear fails exactly one) |
-| 7 | `SketchApp` and `StageApp` both satisfy the `App` interface — assignability is checked by the compiler, not by a cast | correctness | `typecheck` | pending |
+| 7 | `SketchApp` and `MolvisApp` both satisfy the `App` interface — assignability is checked by the compiler, not by a cast | correctness | `typecheck` | **met** (`implements App` on both) |
 | 8 | `@molcrafts/molvis-stage/plugin` resolves and exports `Modifier`, `Overlay`, `PluginMode`, `PluginModeFactory`, `StageApp` | api | `typecheck` + import smoke test | pending |
 | 9 | `plugin/src` defines no contract type of its own: every exported type is a re-export of `core` or `stage/plugin` (`MolvisPlugin`, tokens, `pluginExternals`, `cn` excepted) | structural | `grep` for `export interface`/`export type X =` in `plugin/src` | pending |
 | 10 | `page/src/plugins/{contract,contract_tokens,engine}.ts` and `page/src/plugins/kit/` are gone; nothing under `page/src` references them | structural | `grep` | pending |
@@ -37,3 +37,9 @@ checked. Status starts `pending`.
   Babylon, too much has moved.
 - Criteria 5 + 6 together are the payoff: the duplicate is gone *and* its
   semantics are asserted somewhere.
+- Task 5 surfaced a design constraint the spec missed: core's history was
+  written `async`, but `sketch` applies edits inside a pointer handler and
+  reads `canUndo()` in the same tick. Deferring a synchronous command by a
+  microtask left the stacks disagreeing with the document — 17 board tests
+  caught it. `CommandManager` now stays synchronous for a synchronous command
+  and returns a promise only when one is actually needed.

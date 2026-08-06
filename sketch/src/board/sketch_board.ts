@@ -1,3 +1,6 @@
+import { CommandManager } from "@molcrafts/molvis-core/command";
+import type { AppEventMap } from "@molcrafts/molvis-core/events";
+import { EventEmitter } from "@molcrafts/molvis-core/events";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import {
@@ -50,7 +53,6 @@ import {
 } from "../geometry/snap";
 import { MoleculeGraph } from "../molecule_graph";
 import type { SketchCommand } from "../sketch_command";
-import { SketchHistory } from "../sketch_history";
 import {
   DEFAULT_CUSTOM_COLOR,
   normalizeSketchColor,
@@ -133,7 +135,9 @@ interface MoveGesture {
  */
 export class SketchBoard {
   readonly graph = new MoleculeGraph();
-  readonly history = new SketchHistory();
+  /** Announces `history-change`; also what makes this board a `CommandHost`. */
+  readonly events = new EventEmitter<AppEventMap>();
+  readonly history = new CommandManager(this);
   readonly viewport = new ViewportCoords();
   readonly renderer = new SketchRenderer();
   readonly viewportCtrl = new ViewportController(this.viewport);
@@ -542,6 +546,7 @@ export class SketchBoard {
 
   undo(): void {
     if (this.disabled) return;
+    // Synchronous: core's history stays sync for synchronous commands.
     if (this.history.undo()) {
       this.clearSelection();
       this.cancelTransientGesture();
@@ -552,6 +557,7 @@ export class SketchBoard {
 
   redo(): void {
     if (this.disabled) return;
+    // Synchronous: core's history stays sync for synchronous commands.
     if (this.history.redo()) {
       this.clearSelection();
       this.cancelTransientGesture();

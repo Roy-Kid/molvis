@@ -1,14 +1,14 @@
+import { CommandManager } from "@molcrafts/molvis-core/command";
 import { generate3D } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { PlaceRingCommand } from "../src/commands/ops_commands";
 import { MoleculeGraph } from "../src/molecule_graph";
-import { SketchHistory } from "../src/sketch_history";
 
 describe("benzene toFrame → generate3D", () => {
-  it("Kekulé benzene yields C6H6 not C6H12", () => {
+  it("Kekulé benzene yields C6H6 not C6H12", async () => {
     const g = new MoleculeGraph();
-    const h = new SketchHistory();
-    h.execute(new PlaceRingCommand(g, 6, 0, 0, undefined, "benzene"));
+    const h = new CommandManager({ events: { emit: () => {} } });
+    await h.execute(new PlaceRingCommand(g, 6, 0, 0, undefined, "benzene"));
     const orders = g.getMoleculeData().bonds.map((b) => b.order);
     expect(orders).toEqual([2, 1, 2, 1, 2, 1]);
 

@@ -59,6 +59,11 @@
       "import": "./dist/events.js",
       "default": "./dist/events.js"
     },
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "import": "./dist/app.js",
+      "default": "./dist/app.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
