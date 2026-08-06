@@ -3,7 +3,6 @@
 
 # Development
 .vscode/**
-.vscode-test/**
 .claude/**
 src/**
 tests/**
@@ -19,7 +18,6 @@ out-test/**
 **/tsconfig.json
 tsconfig.test.json
 biome.json
-.vscode-test.mjs
 *.vsix
 
 # Build configs (not needed at runtime)

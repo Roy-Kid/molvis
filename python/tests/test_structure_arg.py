@@ -15,9 +15,9 @@ if "molpy" not in sys.modules:
     sys.modules["molpy"] = _mp
 
 from molvis.structure import (
-    frame_payload,
     coerce_to_frame,
     frame_arg,
+    frame_payload,
     frames_arg,
 )
 

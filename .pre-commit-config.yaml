@@ -36,6 +36,23 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # ─── ci.yml::guards ───────────────────────────────────────────────────
+      # Both are one-liners in package.json, not files in a scripts/ dir —
+      # a rule with nowhere to live is a rule nobody runs.
+      - id: check-molrs-gateway
+        name: only core/ imports @molcrafts/molrs
+        entry: npm run check:molrs-gateway
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: check-versions
+        name: workspace versions and pins in sync
+        entry: npm run check:versions
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # ─── ci.yml::typecheck ────────────────────────────────────────────────
       - id: typecheck
         name: typecheck (core / page / vsc-ext)
@@ -101,6 +118,51 @@ repos:
       - id: build-vsc-ext
         name: build vsc-ext (rslib)
         entry: npm run build:vsc-ext
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      # ─── ci.yml::test (matrix) / test-vsc-ext / test-python ──────────────
+      # The header above promises parity with every CI job. Only `test-core`
+      # was mirrored, so a pre-push could greenlight a change that broke
+      # stage's 881 tests. Pre-push rather than pre-commit: these are the
+      # slow legs, and CI runs them on separate runners.
+      - id: test-stage
+        name: test stage (881 tests)
+        entry: npm run test:stage
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: test-sketch
+        name: test sketch
+        entry: npm run test:sketch
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: test-page
+        name: test page
+        entry: npm run test:page
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: test-vsc-ext
+        name: test vsc-ext (mocha, unit only)
+        entry: npm run test:vsc-ext
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: test-python
+        name: test python (uv, dev extra)
+        entry: npm run test:python
         language: system
         pass_filenames: false
         always_run: true

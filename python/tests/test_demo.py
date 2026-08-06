@@ -3,29 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
-import sys
-from pathlib import Path
+import importlib
 
 import pytest
 
 
 def _load_demo():
-    """Load demo.py without importing molvis/__init__ (avoids molpy/molrs pin)."""
-    path = Path(__file__).resolve().parents[1] / "src" / "molvis" / "demo.py"
-    # Register a lightweight parent package so relative imports aren't needed.
-    if "molvis" not in sys.modules:
-        pkg = type(sys)("molvis")
-        pkg.__path__ = [str(path.parent)]  # type: ignore[attr-defined]
-        pkg.__package__ = "molvis"
-        sys.modules["molvis"] = pkg
-    name = "molvis.demo"
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    """Import molvis.demo. See the note in test_control.import_control_module —
+    the old by-path loader installed a fake `molvis` into sys.modules and broke
+    every module imported after it."""
+    return importlib.import_module("molvis.demo")
 
 
 demo_mod = _load_demo()
@@ -86,7 +73,6 @@ def test_run_demo_awaits_coroutines(monkeypatch):
 
     async def _instant(_dt):
         order.append("sleep")
-        return None
 
     monkeypatch.setattr(asyncio, "sleep", _instant)
 

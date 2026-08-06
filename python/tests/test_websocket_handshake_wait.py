@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import threading
-from unittest.mock import MagicMock
 
 import pytest
+
 from molvis.transport.websocket import (
     DEFAULT_HANDSHAKE_RETRIES,
     DEFAULT_HANDSHAKE_TIMEOUT_S,

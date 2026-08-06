@@ -11,10 +11,14 @@ instead.
 
 - [**Embedding**](setup.md) — add MolVis to your own web app, wire up
   the viewport, load a frame.
+- [**Testing**](testing.md) — one unit lane per package, why browser mode
+  is not e2e, and how to prove a test can actually fail.
 - [**Extending**](extending.md) — write a custom modifier, register a
   new command, add a mode, plug a renderer into the scene.
 - [**Page plugins**](plugins.md) — domain-oriented ESM plugins
   (modifiers, modes, analysis, commands, settings, RPC).
+- [**Headless rendering**](headless-rendering.md) — scripted snapshots,
+  turntables, and trajectory animations.
 - [**OVITO parity**](ovito-parity.md) — modifier placement and the shipped
   OVITO-shaped pipeline catalog.
 - [**PCA tool**](pca-tool.md) — project per-frame properties to a 2-D scatter.

@@ -27,6 +27,9 @@ export default defineConfig({
           "react/jsx-runtime",
           "react/jsx-dev-runtime",
           "@molcrafts/molvis-stage",
+          // dist re-exports `@molcrafts/molvis-core/{command,events}` as bare
+          // specifiers; keep them external explicitly, not by accident.
+          "@molcrafts/molvis-core",
           "@radix-ui/react-slot",
           "@radix-ui/react-checkbox",
           "@radix-ui/react-select",

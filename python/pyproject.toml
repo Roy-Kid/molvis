@@ -37,6 +37,10 @@ dev = [
     "pytest-cov",
     "imageio-ffmpeg>=0.6",
     "pillow>=10",
+    # test_ipython_extension.py and test_scene_smoke.py drive the inline
+    # viewer through a live IPython shell; without this the declared dev
+    # environment cannot run its own suite (7 collection errors).
+    "ipython>=8",
     # test_mdx.py drives the molvis fence through Python-Markdown directly
     # (at docs-build time zensical brings these along).
     "markdown>=3.5",
@@ -73,6 +77,3 @@ molvis = ["dist/*", "dist/**/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-markers = [
-    "integration: live network, subprocess, or host-tool oracles (tests/integration/)",
-]

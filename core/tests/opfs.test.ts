@@ -22,23 +22,39 @@ describe("safeKey", () => {
 });
 
 describe("fingerprintFile", () => {
-  const file = () =>
-    new File(["xyz"], "traj file.lammpstrj", { lastModified: 1700000000000 });
+  const fileOf = (name: string, bytes: string, lastModified: number): File =>
+    new File([bytes], name, { lastModified, type: "text/plain" });
 
-  it("keys on name, size, mtime and kind", () => {
-    const fp = fingerprintFile(file(), "lammpstrj");
-    expect(fp).toContain("traj%20file.lammpstrj");
-    expect(fp).toContain("-3-");
-    expect(fp).toContain("1700000000000");
-    expect(fp.endsWith("-lammpstrj")).toBe(true);
+  it("includes name, size, mtime, and format", () => {
+    const f = fileOf("traj.lammpstrj", "x".repeat(100), 1700000000000);
+    expect(fingerprintFile(f, "lammps-dump")).toBe(
+      "traj.lammpstrj-100-1700000000000-lammps-dump",
+    );
   });
 
-  it("separates the same bytes read as different kinds", () => {
+  it("differs across formats for the same file", () => {
     // Without `kind`, a sketch document and a trajectory of identical
     // name/size/mtime would collide on one cache entry.
-    expect(fingerprintFile(file(), "lammpstrj")).not.toBe(
-      fingerprintFile(file(), "sketch"),
-    );
+    const f = fileOf("data.bin", "x".repeat(1), 1);
+    expect(fingerprintFile(f, "xyz")).not.toBe(fingerprintFile(f, "pdb"));
+  });
+
+  it("differs when only the size changes", () => {
+    const a = fileOf("foo", "abc", 100);
+    const b = fileOf("foo", "abcd", 100);
+    expect(fingerprintFile(a, "xyz")).not.toBe(fingerprintFile(b, "xyz"));
+  });
+
+  it("URL-encodes name characters that aren't filesystem-safe", () => {
+    const fp = fingerprintFile(fileOf("with space + slash/", "", 0), "xyz");
+    expect(fp).not.toContain(" ");
+    expect(fp).not.toContain("/");
+  });
+
+  it("clips long filenames so the fingerprint stays bounded", () => {
+    const f = fileOf(`${"a".repeat(500)}.pdb`, "", 0);
+    // 64 chars name budget + size + mtime + format separators is short.
+    expect(fingerprintFile(f, "pdb").length).toBeLessThan(120);
   });
 });
 

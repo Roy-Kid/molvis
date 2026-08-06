@@ -95,14 +95,9 @@ describe("HideSelectionModifier", () => {
     const outAtoms = out.getBlock("atoms")!;
     expect(outAtoms.nrows()).toBe(2); // 0 and 2 remain
 
-    const outBonds = out.getBlock("bonds");
     // Both bonds 0-1 and 1-2 connected to 1, so both should be removed.
-    if (outBonds) {
-      expect(outBonds.nrows()).toBe(0);
-    } else {
-      // If block missing, implied 0.
-      expect(true).toBe(true);
-    }
+    // A missing block counts as zero rows, but must not pass silently.
+    expect(out.getBlock("bonds")?.nrows() ?? 0).toBe(0);
   });
 
   test("Should keep bonds between visible atoms", () => {

@@ -63,11 +63,6 @@ async function withRenderedSketch(
 }
 
 describe("MolvisSketch", () => {
-  it("exports a forwardRef component with displayName", () => {
-    expect(MolvisSketch).toBeDefined();
-    expect(MolvisSketch.displayName).toBe("MolvisSketch");
-  });
-
   it("mounts sketch package chrome (SketchComposer gui)", async () => {
     await withRenderedSketch((host) => {
       expect(host.querySelector(".molvis-sketch-composer")).not.toBeNull();

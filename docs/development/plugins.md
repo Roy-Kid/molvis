@@ -88,20 +88,24 @@ Trust model: remote code runs in the page; no allowlist. Only install trusted so
 
 ## Package layout
 
+What `npx molvis-plugin create` writes:
+
 ```
 my-plugin/
-  molvis.plugin.json      # entry: dist/plugin.js (local) / plugin.js (Release)
-  dist/                   # gitignored — npm run build
+  molvis.plugin.json           # entry: dist/plugin.js (local) / plugin.js (Release)
+  .github/workflows/release.yml  # tag v* → build + flat assets on a Release
+  dist/                        # gitignored — npm run build
   src/
-    index.tsx             # activate → domain registers (optional MolvisPlugin class)
-    plugin/               # optional OOP entry base
+    index.tsx                  # activate → domain registers (MolvisPlugin subclass)
     modifiers/…
-    modes/…
     analysis/…
     commands/…
-    overlays/…
     settings/…
+    modes/README.md            # prose: a real mode needs a pointer lifecycle
+    overlays/README.md         # prose: overlays own Babylon meshes
 ```
+
+There is no `scripts/` directory: packaging lives in the release workflow.
 
 ### Manifest
 
@@ -120,22 +124,61 @@ CDN/release URLs. Users install the **repo**, not this file’s path.
 
 - **Local serve:** `entry` stays `dist/plugin.js` next to the repo-root manifest
   (or serve `dist/` and use a local manifest there).
-- **Release packaging** (`prepare-release-assets.mjs`): rewrites `entry` →
-  `"plugin.js"` and uploads flat assets. The host also strips a leading
-  `dist/` when `layout === "release"`, so a non-rewritten manifest still loads.
+- **Release packaging** (inline in the repo's `release.yml`): copies `dist/`
+  top-level files flat, rewrites `entry` → `"plugin.js"`, and uploads them.
+  The host also strips a leading `dist/` when `layout === "release"`, so a
+  non-rewritten manifest still loads. `npx molvis-plugin create` scaffolds a
+  workflow that already does this.
 
 ### Multi-chunk
 
 Host recursively rewrites **relative** imports under the entry URL into blob
-modules. Host peers (`react`, `@molcrafts/molvis-stage`,
-`@molcrafts/molvis-core/molrs`, `@molcrafts/molplot`) must stay external.
+modules. Everything in `pluginExternals` must stay external (see Build rules).
 Workers for pyodide-kernel must sit next to `plugin.js` on the same Release.
 ## Build rules
 
-Externalize via the host kit list (`page/src/plugins/kit/externals.ts`, vendored
-as `plugin-externals.ts`): `react`, `react-dom`, `react/jsx-runtime`,
-`@molcrafts/molvis-stage`, `@molcrafts/molvis-core/molrs`,
-`@molcrafts/molvis-core/elements`, `@molcrafts/molplot` (never a second copy).
+Every module the host injects must be **external** in your bundle. Do not
+retype the list — import it:
+
+```ts
+// rsbuild.config.ts
+import { pluginExternals } from "@molcrafts/molvis-plugin";
+
+export default defineConfig({
+  output: { externals: pluginExternals },
+});
+```
+
+`pluginExternals` covers `react`, `react-dom`, `react-dom/client`,
+`react/jsx-runtime`, `react/jsx-dev-runtime`, `@molcrafts/molvis-stage`,
+`@molcrafts/molvis-plugin`, `@molcrafts/molvis-plugin/ui`,
+`@molcrafts/molvis-core/{molrs,keys,elements}`, and `@molcrafts/molplot`.
+
+Note `@molcrafts/molvis-plugin` and `@molcrafts/molvis-plugin/ui` are listed
+separately: a bundler treats a subpath as its own specifier, so externalizing
+only the root still bundles the UI primitives.
+
+Both directions of a mismatch break something, which is why the list is code
+rather than prose:
+
+- **externalized but not injected** → the bare specifier fails at runtime.
+- **injected but not externalized** → a second copy of React/molrs/WASM, with
+  class identities that are not `===` the host's.
+
+The host's inject map (`page/src/plugins/host_shared.ts`) is checked against
+this list with `satisfies` at compile time, so the two cannot drift apart
+silently.
+
+The SDK is a host module, not a vendored dependency. Bundling it pulls a
+private copy of the shadcn primitives and their Radix/`clsx`/`tailwind-merge`
+tree into every plugin — measured at 33.9 kB vs 2.3 kB for a hello-world
+plugin, and 160 kB vs 40 kB for the LAMMPS generator. Two such plugins loaded
+together also give the page two Radix trees, which `resolve.dedupe` cannot
+prevent because it only dedupes within one bundle.
+
+Radix, `clsx`, `class-variance-authority` and `tailwind-merge` still belong in
+your **devDependencies** — the SDK's `.d.ts` files reference their types — but
+never in `dependencies`.
 
 ## Public SDK (never import `page/`)
 
@@ -147,19 +190,24 @@ npx molvis-plugin create my-plugin
 npx molvis-plugin create my-plugin --id com.acme.demo --name "Acme Demo" -y
 ```
 
-Import only umbrella re-exports:
+Import from the SDK package:
 
 ```ts
-import { MolvisPlugin, type PluginAPI, pluginExternals, token } from "@molcrafts/molvis/plugin";
-import { Button } from "@molcrafts/molvis/plugin/ui";
-import "@molcrafts/molvis/plugin/css";
+import { MolvisPlugin, type PluginAPI, pluginExternals, token } from "@molcrafts/molvis-plugin";
+import { Button } from "@molcrafts/molvis-plugin/ui";
+import "@molcrafts/molvis-plugin/css";
 ```
 
 | Path | Contents |
 |------|----------|
-| `@molcrafts/molvis/plugin` | `MolvisPlugin` base, contract types, tokens, `cn`, `pluginExternals` |
-| `@molcrafts/molvis/plugin/ui` | Host-aligned shadcn primitives |
-| `@molcrafts/molvis/plugin/css` | shadcn CLI CSS anchor (runtime theme is host-owned) |
+| `@molcrafts/molvis-plugin` | `MolvisPlugin` base, contract types, tokens, `cn`, `pluginExternals` |
+| `@molcrafts/molvis-plugin/ui` | Host-aligned shadcn primitives |
+| `@molcrafts/molvis-plugin/css` | shadcn CLI CSS anchor (runtime theme is host-owned) |
+| `@molcrafts/molvis-plugin/testing` | `fakePluginAPI`, `mapStorage` for unit tests |
+
+The umbrella re-exports the same values under `@molcrafts/molvis/plugin*`, but
+prefer the scoped spelling above: it is the package that is actually
+published and injected, and one name per thing is worth more than a synonym.
 
 Implementation may live under monorepo `plugin/` + `page/` (host loader), but
 plugin **authors** must not name `page` in import paths. Runtime theme:

@@ -317,14 +317,6 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
     ...(context.extensionMode !== vscode.ExtensionMode.Production
-      ? [
-          vscode.commands.registerCommand(
-            "molvis._test.getRegisteredPanelViewTypes",
-            () => panelRegistry.getRegisteredViewTypes(),
-          ),
-        ]
-      : []),
-    ...(context.extensionMode !== vscode.ExtensionMode.Production
       ? [createHotReloadWatcher(context, panelRegistry)]
       : []),
     vscode.workspace.onDidChangeConfiguration(async (event) => {

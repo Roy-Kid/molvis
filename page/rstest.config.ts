@@ -1,7 +1,7 @@
 import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rstest/core";
 
-/** Unit/component lane for React page shell. App E2E → repo-root e2e/. */
+/** Unit/component lane for the React page shell. There is no e2e lane. */
 export default defineConfig({
   plugins: [pluginReact()],
   browser: {
@@ -11,5 +11,5 @@ export default defineConfig({
     provider: "playwright",
   },
   include: ["tests/**/?(*.){test,spec}.?(c|m)[jt]s?(x)"],
-  exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+  exclude: ["**/node_modules/**", "**/dist/**"],
 });

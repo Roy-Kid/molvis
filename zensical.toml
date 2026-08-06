@@ -65,8 +65,10 @@ nav = [
   { "Development" = [
     "development/index.md",
     "development/setup.md",
+    "development/testing.md",
     "development/extending.md",
     "development/plugins.md",
+    "development/headless-rendering.md",
     "development/ovito-parity.md",
     "development/pca-tool.md",
   ]},

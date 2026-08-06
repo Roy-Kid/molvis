@@ -67,27 +67,6 @@ export const SHARED_CSS = `
     }
 `;
 
-/** Documented host-overridable token names (for product bridges). */
-export const MOLVIS_UI_THEME_VARS = [
-  "--molvis-ui-font",
-  "--molvis-ui-font-size",
-  "--molvis-ui-fg",
-  "--molvis-ui-panel-fg",
-  "--molvis-ui-surface",
-  "--molvis-ui-hover",
-  "--molvis-ui-accent",
-  "--molvis-ui-accent-fg",
-  "--molvis-ui-border",
-  "--molvis-ui-muted",
-  "--molvis-ui-radius",
-  "--molvis-ui-shadow",
-  "--molvis-ui-row-min-h",
-  "--molvis-ui-row-pad-x",
-  "--molvis-ui-row-pad-y",
-  "--molvis-ui-motion-fast",
-  "--molvis-ui-motion-ease",
-] as const;
-
 export class MolvisElement extends HTMLElement {
   protected root: ShadowRoot;
 

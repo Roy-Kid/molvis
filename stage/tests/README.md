@@ -6,9 +6,9 @@
   `tests/foo/bar.test.ts`). Types mirror (`FooClass` → `TestFooClass` / file
   name). Single concern per test — **no e2e, multi-module façades, or full
   app boots** here.
-- **Public-API goldens** → repo-root `regressions/` (`npm run test:regressions`).
-- **Page/app E2E** (real Chromium driving a built URL) → repo-root `e2e/` with
-  `@rstest/playwright` (`npm run test:e2e`). Not mixed into this tree.
+There is no e2e or goldens lane in this repo, and none should be added — see
+`.claude/notes/package-architecture.md`. Behaviour a unit test cannot reach is
+a design signal, not a reason for a browser driver.
 
 Helpers (not cases): `setup_wasm.ts`, `io/cache/opfs_test_helpers.ts`.
 
@@ -21,8 +21,6 @@ runs *inside* the page bundle, not against a deployed app.
 | Lane | Path | Runner |
 |------|------|--------|
 | Unit | `stage/tests/**` | `@rstest/core` + browser mode |
-| Goldens | `regressions/` | `@rstest/core` + browser mode |
-| E2E | `e2e/**` | `@rstest/playwright` (Node worker + `page.goto`) |
 
 ## Mirror status
 
@@ -45,4 +43,4 @@ rpc_style_scope, app_modifier_toggle (static method only)
 
 When adding tests for a nested module, place them under the mirror path.
 Do **not** reintroduce `tests/integration/` or boot a full `new MolvisApp`
-pipeline here — that belongs in `e2e/` or `regressions/`.
+pipeline here — split the seam instead.

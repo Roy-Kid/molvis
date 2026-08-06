@@ -38,6 +38,10 @@ function pointer(
 }
 
 describe("SketchBoard", () => {
+  it("starts on the atom tool", () => {
+    expect(new SketchBoard().getTool()).toBe("atom");
+  });
+
   it("ignores an empty-paper Chain drag that can make only one segment", async () => {
     const board = new SketchBoard({ bondChainStep: 1 });
     const canvas = makeCanvas();

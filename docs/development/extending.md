@@ -134,22 +134,25 @@ app.execute("rotate_camera", { axis: [0, 0, 1], angle: Math.PI / 4 });
 app.commandManager.undo();
 ```
 
-### `DrawFrameCommand` vs `UpdateFrameCommand`
+### `changeKind`: buffer update vs full rebuild
 
 A single gotcha worth calling out: there are two ways to refresh the
-scene, and they do **different** things.
+scene, and they do **different** things. You do not choose between them
+by picking a command — `classifyFrameTransition`
+(`system/frame_diff.ts`) compares the incoming frame against the last
+rendered one and threads the verdict through `PipelineContext.changeKind`,
+which the Draw modifiers read.
 
-- **`DrawFrameCommand`** — full rebuild. Clears `SceneIndex`, re-creates
-  `ImpostorState` buffers, then renders from scratch. Use when the
+- **`changeKind: "full"`** — full rebuild. Clears `SceneIndex`, re-creates
+  `ImpostorState` buffers, then renders from scratch. Chosen when the
   topology (atom count, bond count, element types) changes.
-- **`UpdateFrameCommand`** — buffer-only update. Writes new positions
-  into existing `ImpostorState` buffers. Use when only coordinates
+- **`changeKind: "position"`** — buffer-only update. Writes new positions
+  into existing `ImpostorState` buffers. Chosen when only coordinates
   change between frames of a trajectory.
 
-`UpdateFrameCommand` **must never** call `sceneIndex.registerFrame()` —
-that would re-create the buffers and flicker the canvas. Use
-`FrameDiff` (`system/frame_diff.ts`) to pick between the two
-automatically during trajectory playback.
+A `"position"` pass **must never** call `sceneIndex.registerFrame()` —
+that would re-create the buffers and flicker the canvas. Pass
+`applyPipeline({ changeKind: "full" })` explicitly to force a rebuild.
 
 ## Modes
 

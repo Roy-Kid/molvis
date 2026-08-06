@@ -35,13 +35,19 @@ Plugin authors import **`@molcrafts/molvis/plugin`** only — never `page/…`.
    - **Never** `../stage/src/...` or `../core/src/...` from hosts
 5. **Umbrella is the repo root** (`@molcrafts/molvis`), not a separate workspace package.
 6. **Build order for hosts:** `core → stage → sketch → page | vsc-ext`.
-7. **Dev watch order (not concurrent from t=0):** root `npm run dev:page|dev:python|dev:engines`
-   runs `scripts/dev-with-engines.mjs` — start core watch → wait for all core export
-   files → stage+sketch watches → wait for main entries → host. Never preface with
-   a one-shot `build:engines` (that was a race bandage and printed misleading
-   “build” noise). Library `dev` is still `rslib build --watch` (rslib’s compile-to-dist
-   verb); watch mode sets `cleanDistPath: false` so dist is never wiped mid-rebuild
-   while dependents resolve exports.
+7. **Dev watch order is wireit's job, not a script's.** `npm run dev:page` is
+   `npm run dev -w page`; wireit reads each package's own `dependencies` and
+   starts core → stage/sketch → host in order. Never preface it with a
+   one-shot `build:engines` (that was a race bandage and printed misleading
+   “build” noise). Library `dev` is `rslib build --watch` (rslib’s
+   compile-to-dist verb); watch mode sets `cleanDistPath: false` so dist is
+   never wiped mid-rebuild while dependents resolve exports.
+8. **No `scripts/` directory.** Repo constraints live where they run:
+   `package.json` one-liners (`check:versions`, `check:molrs-gateway`,
+   `check:pack`), wired into `.github/workflows/ci.yml` **and**
+   `.pre-commit-config.yaml`. Build steps belong to the build config; release
+   packaging belongs to the release workflow. A rule in a loose script is a
+   rule with no owner, no test, and no gate.
 
 ## Publish surface
 

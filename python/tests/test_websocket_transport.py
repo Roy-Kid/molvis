@@ -1,8 +1,9 @@
-"""Integration tests for molvis.transport.WebSocketTransport.
+"""Unit tests for molvis.transport.WebSocketTransport.
 
-These tests drive the real server using an in-process ``websockets``
-client: they confirm the hello/ready handshake, token validation, and
-notification → EventBus dispatch path.
+The transport is driven through an in-process ``websockets`` client on
+loopback (see ``proxy=None`` below). That is the only way to reach the
+hello/ready handshake, token validation, and the notification → EventBus
+dispatch path — every other suite substitutes a fake transport.
 """
 
 from __future__ import annotations
@@ -14,16 +15,15 @@ import threading
 from typing import Any
 
 import pytest
+
 from molvis.events import EventBus
 from molvis.transport import WebSocketTransport
 
-pytestmark = pytest.mark.integration
-
 websockets = pytest.importorskip("websockets")
-import functools  # noqa: E402
+import functools
 
-from websockets.asyncio.client import connect as _ws_connect  # noqa: E402
-from websockets.exceptions import ConnectionClosed  # noqa: E402
+from websockets.asyncio.client import connect as _ws_connect
+from websockets.exceptions import ConnectionClosed
 
 # websockets >= 14 auto-discovers proxies (including the macOS system-level
 # SOCKS proxy) even for localhost; these tests talk to a local transport and

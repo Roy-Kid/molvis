@@ -33,7 +33,6 @@ def _capture_send_request(scene: Molvis) -> list[dict[str, Any]]:
 
     def stub(method, params, *, buffers=None, wait_for_response=False, timeout=10.0):
         calls.append({"method": method, "params": params})
-        return None
 
     scene._transport.send_request = stub  # type: ignore[method-assign]
     return calls
@@ -124,7 +123,6 @@ def test_event_bus_dispatch_triggers_send(monkeypatch: pytest.MonkeyPatch) -> No
     def stub(method, params, *, buffers=None, wait_for_response=False, timeout=10.0):
         captured.append({"method": method, "params": params})
         ready.set()
-        return None
 
     scene._transport.send_request = stub  # type: ignore[method-assign]
 

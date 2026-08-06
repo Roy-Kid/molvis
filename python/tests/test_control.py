@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,23 +9,16 @@ import numpy as np
 
 
 def import_control_module():
-    """Load control.py by path — avoid molvis/__init__ (pulls molpy/molrs)."""
-    import importlib.util
+    """Import molvis.control.
 
-    path = Path(__file__).resolve().parents[1] / "src" / "molvis" / "control.py"
-    if "molvis" not in sys.modules:
-        pkg = type(sys)("molvis")
-        pkg.__path__ = [str(path.parent)]  # type: ignore[attr-defined]
-        pkg.__package__ = "molvis"
-        sys.modules["molvis"] = pkg
-    name = "molvis.control"
-    sys.modules.pop(name, None)
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    This used to load control.py by path behind a hand-built stub package,
+    to dodge molvis/__init__ pulling molpy/molrs. Both are ordinary declared
+    dependencies now, and the stub was actively harmful: when this module was
+    imported before anything had imported the real `molvis`, it left a fake
+    one in sys.modules and every later `from molvis import ...` in the suite
+    failed with "unknown location".
+    """
+    return importlib.import_module("molvis.control")
 
 
 class FakeViewer:

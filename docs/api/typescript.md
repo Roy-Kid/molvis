@@ -512,5 +512,5 @@ Blocks use molpy / molrs names. Format readers normalize aliases on the way in.
 - **Canvas selection is SceneIndex** — pick / fence / live selection resolve
   against the rendered index, not a ghost of the trajectory HEAD.
 - **Thin-instance buffers** — the `Artist` owns singleton meshes for atoms
-  and bonds. `UpdateFrameCommand` updates buffer data only; full scene
-  rebuilds use `DrawFrameCommand`.
+  and bonds. A `changeKind: "position"` pipeline pass updates buffer data
+  only; `changeKind: "full"` rebuilds the scene.

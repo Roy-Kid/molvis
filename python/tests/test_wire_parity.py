@@ -156,7 +156,7 @@ class TestWireDtypeParity:
 
         ts_source = WIRE_TS.read_text()
         declaration = re.search(
-            r"export type WireDType =([^;]+);", ts_source, re.S
+            r"export type WireDType =([^;]+);", ts_source, re.DOTALL
         )
         assert declaration is not None, "failed to find WireDType in wire.ts"
         ts_dtypes = set(re.findall(r'"([^"]+)"', declaration.group(1)))

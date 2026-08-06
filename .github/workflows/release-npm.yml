@@ -38,6 +38,13 @@ jobs:
       - name: Build sketch
         run: npm run build:sketch
 
+      # The root umbrella declares @molcrafts/molvis-plugin as a runtime
+      # dependency and re-exports its dist, so it must be on the registry
+      # before the umbrella is published — otherwise `npm i @molcrafts/molvis`
+      # fails E404 for every user.
+      - name: Build plugin SDK
+        run: npm run build:plugin
+
       - name: Publish @molcrafts/molvis-core
         run: npm publish -w @molcrafts/molvis-core --provenance --access public
 
@@ -46,6 +53,9 @@ jobs:
 
       - name: Publish @molcrafts/molvis-sketch
         run: npm publish -w @molcrafts/molvis-sketch --provenance --access public
+
+      - name: Publish @molcrafts/molvis-plugin
+        run: npm publish -w @molcrafts/molvis-plugin --provenance --access public
 
       - name: Publish @molcrafts/molvis (root umbrella)
         run: npm publish --provenance --access public

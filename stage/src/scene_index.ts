@@ -38,16 +38,6 @@ export interface RegisterBondFrameOptions {
   instanceMap?: Uint32Array;
 }
 
-export interface RegisterAtomOptions {
-  mesh: Mesh;
-  meta: Omit<AtomMeta, "type">;
-}
-
-export interface RegisterBondOptions {
-  mesh: Mesh;
-  meta: Omit<BondMeta, "type">;
-}
-
 export interface RegisterBoxOptions {
   mesh: Mesh;
   meta: Omit<BoxMeta, "type">;

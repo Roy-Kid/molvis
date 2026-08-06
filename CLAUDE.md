@@ -40,7 +40,7 @@ extension, and a Python package that drives the page bundle over WebSocket.
 | Engines | `core/`, `stage/`, `sketch/` |
 | Plugin SDK | `plugin/` (`@molcrafts/molvis-plugin`) |
 | Hosts | `page/` (React shell), `vsc-ext/`, `python/`, root umbrella `src/` |
-| Tests | `*/tests/`, plus `python/tests/integration/` |
+| Tests | `*/tests/` — unit only, no e2e (`docs/development/testing.md`) |
 | Docs | `docs/` (Zensical + `molcrafts-zensical-theme`) |
 | Blueprint | `.claude/notes/architecture.md` |
 | Design rules, full text | `.claude/notes/design-preferences.md` |
@@ -66,6 +66,8 @@ names an exception via `/mol:note`.
 - **No god context bags** — pass the fields a call needs.
 - **No all-in-one façades** — composition is the caller's job.
 - **Tests mirror source**, single-function, one module → its own tests only.
+- **No e2e lanes.** Browser-mode rstest is a unit environment, not a driver. Every gate must be proven to bite.
+- **No `scripts/` directory.** Constraints live in `package.json` one-liners wired into CI *and* pre-commit; build steps belong to the build config, release packaging to the release workflow.
 
 ## Default workflow
 
@@ -102,9 +104,15 @@ history (the commit immediately before the harness rebuild).
   Load / sketch commit / box / wrap all operate on that path
   (`DataSource → compose → transforms → draws`). See
   `.claude/notes/notes.md` and `stage/src/pipeline/empty_scene.ts`.
-- **`UpdateFrameCommand` is buffer-update-only** — it must never call
-  `sceneIndex.registerFrame()` or recreate `ImpostorState`. Full scene rebuilds
-  are `DrawFrameCommand`'s job. Never mix the two.
+- **`changeKind` decides buffer-update vs rebuild** — `classifyFrameTransition`
+  (`stage/src/app.ts:999`) compares the incoming frame against
+  `_lastRenderedFrame` and threads `changeKind: "position" | "full"` into
+  `PipelineContext`. A `"position"` pass is buffer-update-only: it must never
+  call `sceneIndex.registerFrame()` or recreate `ImpostorState`. Only `"full"`
+  rebuilds the scene. Never mix the two.
+  (Superseded the old `UpdateFrameCommand`/`DrawFrameCommand` wording —
+  `DrawFrameCommand` never existed in this tree and `UpdateFrameCommand` was
+  deleted as dead code; the rule had no referent.)
 - **Canvas WYSIWYG = SceneIndex** — pick / hover entity / fence / measure
   anchors / highlight / live `SelectionManager` resolve against SceneIndex
   only. `system.frame` is reverse-lookup for trajectory columns / pipeline /

@@ -1,24 +1,38 @@
 /**
  * Shared host modules for plugin import-map injection.
  *
- * External specifier list: {@link PLUGIN_HOST_MODULE_IDS} in `./kit/externals`
- * (vendored to plugins as `plugin-externals.ts`). Keep inject ↔ external in sync.
+ * The specifier list is {@link PluginHostModuleId} in
+ * `@molcrafts/molvis-plugin`. This map must inject every id on that list, and
+ * nothing else — `satisfies` below enforces both directions at compile time,
+ * so the two can no longer drift apart silently.
  *
  * - `@molcrafts/molvis-stage` — 3D engine
  * - `@molcrafts/molvis-core/molrs` — sole WASM binding
  * - `@molcrafts/molvis-core/elements` — pure element catalog
+ * - `@molcrafts/molvis-plugin` — the authoring SDK itself; injected so plugins
+ *   share the host's `Command`/`EventEmitter` class identity instead of
+ *   bundling a private copy of the SDK and its shadcn dependencies
  * - `@molcrafts/molplot` — Vega-Lite charts (shared singleton; do not bundle)
  */
 
 import * as MolvisElements from "@molcrafts/molvis-core/elements";
 import * as MolvisKeys from "@molcrafts/molvis-core/keys";
 import * as Molrs from "@molcrafts/molvis-core/molrs";
+import * as MolvisPlugin from "@molcrafts/molvis-plugin";
+import * as MolvisPluginUi from "@molcrafts/molvis-plugin/ui";
 import * as MolvisStage from "@molcrafts/molvis-stage";
 import * as React from "react";
 import * as JsxDevRuntime from "react/jsx-dev-runtime";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactDOM from "react-dom";
 import * as ReactDOMClient from "react-dom/client";
+
+export type { PluginHostModuleId } from "@molcrafts/molvis-plugin";
+
+import type { PluginHostModuleId } from "@molcrafts/molvis-plugin";
+
+/** molplot is the one host module resolved lazily; the rest are eager. */
+type EagerHostModuleId = Exclude<PluginHostModuleId, "@molcrafts/molplot">;
 
 const eagerPluginHostModules = {
   react: React,
@@ -27,16 +41,16 @@ const eagerPluginHostModules = {
   "react/jsx-runtime": JsxRuntime,
   "react/jsx-dev-runtime": JsxDevRuntime,
   "@molcrafts/molvis-stage": MolvisStage,
+  "@molcrafts/molvis-plugin": MolvisPlugin,
+  "@molcrafts/molvis-plugin/ui": MolvisPluginUi,
   "@molcrafts/molvis-core/molrs": Molrs,
   "@molcrafts/molvis-core/elements": MolvisElements,
   "@molcrafts/molvis-core/keys": MolvisKeys,
-} as const;
+} as const satisfies Record<EagerHostModuleId, unknown>;
 
 export type PluginHostModules = typeof eagerPluginHostModules & {
   "@molcrafts/molplot": typeof import("@molcrafts/molplot");
 };
-
-// Kit list (`./kit/externals`) must stay aligned with these inject keys.
 
 let pluginHostModulesPromise: Promise<PluginHostModules> | undefined;
 
@@ -52,5 +66,3 @@ export function getPluginHostModules(): Promise<PluginHostModules> {
   }));
   return pluginHostModulesPromise;
 }
-
-export type PluginHostModuleId = keyof PluginHostModules;

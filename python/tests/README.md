@@ -1,17 +1,25 @@
 # python/tests
 
-| Lane | Path | Notes |
-|------|------|-------|
-| Unit | `tests/test_*.py` | Fakes preferred; collected by default |
-| Integration | `tests/integration/` | Live WS / ffmpeg — `pytestmark = pytest.mark.integration` |
+One flat lane: `tests/test_<module>.py` mirrors `src/molvis/<module>.py`.
+Everything is collected by default and the whole suite runs in seconds.
 
-Run unit only:
+There is no separate integration lane and no e2e. Two suites reach real
+machinery because nothing else covers it, and both stay in-process:
+
+- `test_websocket_transport.py` drives `WebSocketTransport` over loopback
+  (`proxy=None`, never leaves the machine) — the only coverage of the
+  hello/ready handshake and token validation.
+- `test_video.py` runs the ffmpeg binary vendored by the `imageio-ffmpeg`
+  dev dependency — the only coverage of `write_video`.
+
+If a new test needs a browser, a built artifact, or a network peer, the
+seam is wrong — inject a fake instead of adding a lane.
+
+Run:
 
 ```bash
-pytest tests -m 'not integration'
+uv run --extra dev python -m pytest tests
 ```
-
-Default `npm run test:python` still runs both lanes.
 
 `__pycache__/`, `.pyc`, coverage output, and temporary media are generated
 artifacts, not fixtures. Keep committed fixtures explicit and place them in a
