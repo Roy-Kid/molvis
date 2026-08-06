@@ -49,6 +49,11 @@
       "import": "./dist/image_crop.js",
       "default": "./dist/image_crop.js"
     },
+    "./command": {
+      "types": "./dist/command.d.ts",
+      "import": "./dist/command.js",
+      "default": "./dist/command.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

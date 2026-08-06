@@ -1,4 +1,22 @@
+import { Command as CoreCommand } from "@molcrafts/molvis-core/command";
 import type { MolvisApp } from "../app";
+
+export type {
+  CommandHost,
+  HistoryChange,
+} from "@molcrafts/molvis-core/command";
+
+/**
+ * Stage's binding of the engine-neutral {@link CoreCommand}.
+ *
+ * Every command in this package acts on the same app, so the app type is
+ * fixed once here rather than repeated at ~40 declaration and return-type
+ * annotations. `sketch` binds the same base to its own board.
+ */
+export abstract class Command<TResult = unknown> extends CoreCommand<
+  MolvisApp,
+  TResult
+> {}
 
 /**
  * Metadata for RPC-exposed commands
@@ -57,35 +75,4 @@ export function getCommandMetadata(
   commandClass: CommandClass,
 ): CommandMetadata | undefined {
   return commandMetadataRegistry.get(commandClass);
-}
-
-/**
- * Base class for all commands
- *
- * Commands encapsulate operations that can be executed, undone, and redone.
- * Each command must implement:
- * - do(): Execute the command and return a result
- * - undo(): Undo the command by executing its inverse operation
- *
- * Commands can be exposed for RPC using the @command decorator.
- * All commands MUST be located in stage/src/commands/ directory.
- */
-export abstract class Command<TResult = unknown> {
-  protected app: MolvisApp;
-
-  constructor(app: MolvisApp) {
-    this.app = app;
-  }
-
-  /**
-   * Execute the command
-   * @returns The result of the command execution
-   */
-  abstract do(): TResult | Promise<TResult>;
-
-  /**
-   * Undo the command by executing its inverse
-   * @returns The inverse command that was executed
-   */
-  abstract undo(): Command | Promise<Command>;
 }

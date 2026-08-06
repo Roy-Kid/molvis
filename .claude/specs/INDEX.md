@@ -5,7 +5,7 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 | Spec | Status | Summary |
 |------|--------|---------|
-| _(none)_ | — | All prior specs closed; open new ones via `/mol:spec` |
+| [app-abstraction-sink](app-abstraction-sink.md) | open | Sink the engine-neutral App (Command/events/settings) into core; stage + sketch both become Apps; plugin becomes the facade |
 
 ## Shipped batches
 
