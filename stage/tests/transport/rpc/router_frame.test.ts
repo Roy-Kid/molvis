@@ -1,4 +1,3 @@
-import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../../setup_wasm";
 import type { MolvisApp } from "../../../src/app";
@@ -132,7 +131,6 @@ function fakeApp() {
     }
     if (cmd instanceof PlaceMoleculeCommand) {
       const n = 3; // WATER fixture
-      const base = state.nextAtomId;
       state.nextAtomId += n;
       return undefined;
     }

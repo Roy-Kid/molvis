@@ -29,8 +29,9 @@ function pickRibbonAt(
   if (!hit?.hit || hit.faceId === undefined || hit.faceId < 0) {
     return { type: "empty" };
   }
-  const meta = hit.pickedMesh?.metadata;
-  if (!isRibbonMeshMeta(meta)) return { type: "empty" };
+  const mesh = hit.pickedMesh;
+  const meta = mesh?.metadata;
+  if (!mesh || !isRibbonMeshMeta(meta)) return { type: "empty" };
   const step = Math.floor(hit.faceId / Math.max(1, meta.trisPerStep));
   const resIdx =
     meta.residueOfPoint[
@@ -39,7 +40,7 @@ function pickRibbonAt(
   const ri = Math.min(Math.max(0, resIdx), meta.resNames.length - 1);
   return {
     type: "ribbon",
-    mesh: hit.pickedMesh!,
+    mesh,
     chainId: meta.chainId,
     resName: meta.resNames[ri] ?? "UNK",
     resSeq: meta.resSeqs[ri] ?? 0,

@@ -59,8 +59,7 @@ export class WrapPBCModifier extends BaseModifier {
     }
 
     const bonds = input.getBlock("bonds");
-    // hasUsableBox narrowed logically; box is non-null for wrap.
-    const wrapped = wrapMoleculeAware(box!, x, y, z, atomCount, bonds);
+    const wrapped = wrapMoleculeAware(box, x, y, z, atomCount, bonds);
 
     const result = new Frame();
     result.insertBlock("atoms", atoms);

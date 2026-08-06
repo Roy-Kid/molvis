@@ -154,9 +154,8 @@ export const StageStyleSection: React.FC<StageStyleSectionProps> = ({
             label="Repr"
             tooltip="Choose how the molecular structure is rendered."
           >
-            <div
+            <fieldset
               className="flex flex-wrap items-center justify-end gap-0.5"
-              role="group"
               aria-label="Representation"
             >
               {REPRESENTATIONS.map((r) => {
@@ -180,7 +179,7 @@ export const StageStyleSection: React.FC<StageStyleSectionProps> = ({
                   />
                 );
               })}
-            </div>
+            </fieldset>
           </SettingsRow>
 
           {representation?.outlineConfigurable ? (
@@ -210,9 +209,8 @@ export const StageStyleSection: React.FC<StageStyleSectionProps> = ({
             label="Palette"
             tooltip="Choose the element color palette."
           >
-            <div
+            <fieldset
               className="flex flex-wrap items-center justify-end gap-0.5"
-              role="group"
               aria-label="Element palette"
             >
               {MOL_THEMES.map((t) => (
@@ -237,7 +235,7 @@ export const StageStyleSection: React.FC<StageStyleSectionProps> = ({
                   }}
                 />
               ))}
-            </div>
+            </fieldset>
           </SettingsRow>
 
           {bg ? (

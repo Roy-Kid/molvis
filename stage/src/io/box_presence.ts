@@ -70,7 +70,7 @@ export function shouldDrawBox(box: Box | undefined | null): boolean {
  * Alias of {@link shouldDrawBox} — usable for Wrap PBC / ribbon MI /
  * isosurface auto-attach that need a real cell, not a 1 Å placeholder.
  */
-export function hasUsableBox(box: Box | undefined | null): boolean {
+export function hasUsableBox(box: Box | undefined | null): box is Box {
   return shouldDrawBox(box);
 }
 

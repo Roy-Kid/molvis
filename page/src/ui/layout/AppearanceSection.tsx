@@ -36,9 +36,8 @@ export const AppearanceSection: React.FC<AppearanceSectionProps> = ({
         label="Chrome"
         tooltip="Choose the application color scheme."
       >
-        <div
+        <fieldset
           className="inline-flex m-0 rounded-control border border-border p-0.5"
-          role="group"
           aria-label="Chrome theme"
         >
           {(
@@ -62,7 +61,7 @@ export const AppearanceSection: React.FC<AppearanceSectionProps> = ({
               {opt.label}
             </button>
           ))}
-        </div>
+        </fieldset>
       </SettingsRow>
       <SettingsRow label="Show FPS" tooltip="Show renderer frames per second.">
         <Switch

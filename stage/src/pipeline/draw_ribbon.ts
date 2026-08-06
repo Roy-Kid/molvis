@@ -80,7 +80,7 @@ function splitChainsAtBreaks(rows: Residue[], box: Box | undefined): void {
     const a = WasmArray.from(aBuf, new Uint32Array([pairCount, 3]));
     const b = WasmArray.from(bBuf, new Uint32Array([pairCount, 3]));
     try {
-      const mi = box!.delta(a, b, true);
+      const mi = box.delta(a, b, true);
       try {
         miBuf = mi.toCopy() as Float64Array;
       } finally {

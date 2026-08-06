@@ -78,10 +78,7 @@ export function PipelinePropertiesPane({
             />
           </ScrollArea>
         ) : (
-          <div
-            aria-label="No selection"
-            className="flex h-full min-h-0 min-w-0 flex-1 items-center justify-center px-3"
-          >
+          <div className="flex h-full min-h-0 min-w-0 flex-1 items-center justify-center px-3">
             <p className="max-w-full truncate text-center text-micro text-muted-foreground/80">
               Select an item
             </p>
