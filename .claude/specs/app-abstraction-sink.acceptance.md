@@ -5,7 +5,7 @@ checked. Status starts `pending`.
 
 | # | Criterion | type | verified_by | status |
 |---|-----------|------|-------------|--------|
-| 1 | `core` declares no `@babylonjs*` dependency and no file under `core/src/**` imports one | structural | `test` (new gate in `core/tests`) | pending |
+| 1 | `core` declares no `@babylonjs*` dependency and no file under `core/src/**` imports one | structural | `test` (`core/tests/engine_free.test.ts`) | **met** (adding a fake `@babylonjs/core` dep fails it) |
 | 2 | `Command` and `CommandManager` live in `core`; `stage/src/commands/{base,manager}.ts` hold only a **binding** to them (fixing the app type), no re-implementation | structural | `grep` + `typecheck` | **met** |
 | 3 | The 12 command files in `stage/src/commands/` are **byte-identical**; only the two binding files change | correctness | `git diff --name-only stage/src/commands/` lists only `base.ts`, `manager.ts` | **met** |
 | 4 | `stage`'s 883 tests pass unchanged after the command migration | regression | `npm run test:stage` | **met** (883/0) |

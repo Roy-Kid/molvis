@@ -1,3 +1,5 @@
+import type { AppEventMap } from "@molcrafts/molvis-core/events";
+import { EventEmitter } from "@molcrafts/molvis-core/events";
 import type { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import type { DatasetExploration } from "./analysis/exploration";
 import type { RepresentationStyle } from "./artist/representation";
@@ -9,7 +11,7 @@ import type { Trajectory } from "./system/trajectory";
  * Typed event map for MolvisApp.events.
  * Every event name and its payload type is defined here.
  */
-export interface MolvisEventMap {
+export interface MolvisEventMap extends AppEventMap {
   "frame-change": number;
   "frame-load-start": { frameId: number; requestId: number };
   "frame-load-end": { frameId: number; requestId: number; success: boolean };
@@ -19,7 +21,6 @@ export interface MolvisEventMap {
   "info-text-change": string;
   "fps-change": number;
   "show-fps-change": boolean;
-  "history-change": { canUndo: boolean; canRedo: boolean };
   "dirty-change": boolean;
   "status-message": {
     text: string;
@@ -88,52 +89,5 @@ export interface BackendStateSync {
   boxes: (Box | undefined)[];
 }
 
-export type Listener<T = unknown> = (data: T) => void;
-
-/**
- * Type-safe event emitter.
- *
- * When instantiated as EventEmitter<MolvisEventMap>, all emit/on/off calls
- * are checked against the event map at compile time.
- */
-export class EventEmitter<TMap = Record<string, unknown>> {
-  private listeners = new Map<string, Set<Listener<unknown>>>();
-
-  public on<K extends string & keyof TMap>(
-    event: K,
-    listener: Listener<TMap[K]>,
-  ): () => void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)?.add(listener as Listener<unknown>);
-
-    return () => this.off(event, listener);
-  }
-
-  public off<K extends string & keyof TMap>(
-    event: K,
-    listener: Listener<TMap[K]>,
-  ): void {
-    const listeners = this.listeners.get(event);
-    if (listeners) {
-      listeners.delete(listener as Listener<unknown>);
-      if (listeners.size === 0) {
-        this.listeners.delete(event);
-      }
-    }
-  }
-
-  public emit<K extends string & keyof TMap>(event: K, data: TMap[K]): void {
-    const listeners = this.listeners.get(event);
-    if (listeners) {
-      for (const listener of new Set(listeners)) {
-        (listener as Listener<TMap[K]>)(data);
-      }
-    }
-  }
-
-  public clear(): void {
-    this.listeners.clear();
-  }
-}
+export type { AppEventMap, Listener } from "@molcrafts/molvis-core/events";
+export { EventEmitter };

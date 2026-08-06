@@ -54,6 +54,11 @@
       "import": "./dist/command.js",
       "default": "./dist/command.js"
     },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "import": "./dist/events.js",
+      "default": "./dist/events.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
