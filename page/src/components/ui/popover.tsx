@@ -1,5 +1,6 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import type * as React from "react";
+import { usePortalContainer } from "@/lib/portal-container";
 import { cn } from "@/lib/utils";
 
 function Popover({
@@ -20,8 +21,10 @@ function PopoverContent({
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+  // Keeps the overlay inside a Shadow DOM mount; see portal-container.tsx.
+  const portalContainer = usePortalContainer() ?? undefined;
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={portalContainer}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}

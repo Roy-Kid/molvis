@@ -2,7 +2,7 @@
 
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import type * as React from "react";
-
+import { usePortalContainer } from "@/lib/portal-container";
 import { cn } from "@/lib/utils";
 
 function TooltipProvider({
@@ -40,8 +40,10 @@ function TooltipContent({
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+  // Keeps the overlay inside a Shadow DOM mount; see portal-container.tsx.
+  const portalContainer = usePortalContainer() ?? undefined;
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal container={portalContainer}>
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}

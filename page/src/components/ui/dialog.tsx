@@ -2,6 +2,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { Button } from "@/components/ui/button";
+import { usePortalContainer } from "@/lib/portal-container";
 import { cn } from "@/lib/utils";
 
 function Dialog({
@@ -19,7 +20,16 @@ function DialogTrigger({
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
+  // `container` keeps the dialog inside a Shadow DOM mount; `null` (the
+  // standalone page) leaves the Radix default of `document.body`.
+  const container = usePortalContainer();
+  return (
+    <DialogPrimitive.Portal
+      data-slot="dialog-portal"
+      container={container ?? undefined}
+      {...props}
+    />
+  );
 }
 
 function DialogClose({
