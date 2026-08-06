@@ -186,3 +186,7 @@ core/src/**/*.js
 stage/src/**/*.js
 sketch/src/**/*.js
 umbrella/src/**/*.js
+
+# Build analysis reports (RSDOCTOR=true)
+.rsdoctor/
+**/.rsdoctor/

@@ -100,7 +100,10 @@
     "sync:plugin-contract": "node scripts/sync-plugin-contract.mjs",
     "check:plugin-contract": "node scripts/sync-plugin-contract.mjs --check",
     "version:sync": "node scripts/sync-version.mjs",
-    "prepare": "node scripts/sync-version.mjs"
+    "prepare": "node scripts/sync-version.mjs",
+    "doctor:stage": "RSDOCTOR=true npm run build:stage",
+    "doctor:page": "RSDOCTOR=true npm run build:page",
+    "doctor:core": "RSDOCTOR=true npm run build:core"
   },
   "dependencies": {
     "@molcrafts/molvis-plugin": "0.2.0",
@@ -112,6 +115,7 @@
     "@molcrafts/molplot": "^0.1.1",
     "@molcrafts/molrs": "^0.12.0",
     "@rsbuild/core": "^2.0.8",
+    "@rsdoctor/rspack-plugin": "^1.6.1",
     "@rslib/core": "^0.22.0",
     "@rstest/browser": "^0.11.6",
     "@rstest/core": "^0.11.6",

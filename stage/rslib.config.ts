@@ -42,7 +42,12 @@ export default defineConfig({
       bundle: false,
       // Keep package-name imports in .d.ts (consumers resolve @molcrafts/molvis-core
       // from the registry/workspace). Never rewrite to monorepo-relative paths.
-      dts: true,
+      // Watch mode skips declaration generation: it is ~16 of the 21 seconds a
+      // dev start costs, and `rsbuild dev` type-strips rather than reading
+      // .d.ts. `build` and `typecheck` still emit and check them, and the
+      // previous build's files stay on disk for the editor (watch does not
+      // clean dist — see cleanDistPath above).
+      dts: !watching,
       source: {
         entry: { index: "./src/**" },
         tsconfigPath: "./tsconfig.build.json",
