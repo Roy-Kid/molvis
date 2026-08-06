@@ -15,6 +15,10 @@ python/**/*.egg-info/
 build/
 site/
 
+# wireit task state: per-machine build fingerprints and concurrency locks.
+# Tracking them let one machine's cache decide another machine's build.
+.wireit/
+
 # VSCode extension package
 *.vsix
 
