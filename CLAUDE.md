@@ -35,98 +35,52 @@ extension, and a Python package that drives the page bundle over WebSocket.
 
 ## Where things live
 
-- Packages: `core/` (`@molcrafts/molvis-core`), `stage/` (`@molcrafts/molvis-stage`),
-  `sketch/` (`@molcrafts/molvis-sketch`), root umbrella `@molcrafts/molvis` (`src/`),
-  `page/` (private React shell), `vsc-ext/` (VS Code), `python/` (PyPI driver)
-- Hosts import engines as packages (`@molcrafts/molvis-stage`, …), never
-  monorepo-relative `../stage/src` paths — see `.claude/notes/package-architecture.md`
-- Tests: `*/tests/` under each package (+ `python/tests/integration/` where present)
-- Docs: `docs/` (Zensical + `molcrafts-zensical-theme`)
-- Harness: `.claude/notes/`, `.claude/specs/`, agents/skills/hooks
+| What | Where |
+|------|-------|
+| Engines | `core/`, `stage/`, `sketch/` |
+| Plugin SDK | `plugin/` (`@molcrafts/molvis-plugin`) |
+| Hosts | `page/` (React shell), `vsc-ext/`, `python/`, root umbrella `src/` |
+| Tests | `*/tests/`, plus `python/tests/integration/` |
+| Docs | `docs/` (Zensical + `molcrafts-zensical-theme`) |
+| Blueprint | `.claude/notes/architecture.md` |
+| Design rules, full text | `.claude/notes/design-preferences.md` |
+| Package boundaries | `.claude/notes/package-architecture.md` |
+| Canvas ↔ SceneIndex rules | `.claude/notes/canvas-sceneindex.md` |
+| Notes, open questions | `.claude/notes/` |
+| Live specs | `.claude/specs/` |
+
+Hosts import engines as packages (`@molcrafts/molvis-stage`, …), never
+monorepo-relative `../stage/src` paths.
 
 ## Design preferences (default)
 
-**Default for all MolCrafts projects.** Apply unless the operator
-**explicitly** requires a functional (or other) style for a named
-subsystem — then capture the exception with `/mol:note` and scope it.
-Do **not** invent a functional style on your own.
+Full text: `.claude/notes/design-preferences.md`. Applies unless the operator
+names an exception via `/mol:note`.
 
-### Iron law — no silent debt (all projects)
-
-Discover anti-pattern / failing test / broken invariant / clear bug
-in the surface you touch or depend on → **prioritize or hard-stop**:
-
-1. **Do not ignore** ("pre-existing, leave it"), skip-mark, weaken
-   asserts, or land features on known rot.
-2. **Fix now** if local + stage-allowed; else **stop**, report
-   path:line, route `/mol:fix` / `/mol:refactor` / supersede.
-3. **Name it** in the summary (found / fixed / blocking). Silence = process failure.
-
-Outranks "stay in scope" / "minimal diff" when those mean knowingly
-leaving rot you already saw.
-
-### Prefer
-
-- **OOP by default.** Domain concepts are types with methods
-  (`NeighborList.build`, `ForceField.energy`), not free-floating
-  helpers. Module-level functions only for true free operations (pure
-  math with no natural owner) or thin package re-exports.
-- **Primitive, single-responsibility public APIs.** Callers compose:
-  construct → configure → one concern → read result. Each public
-  method does one named thing.
-- **Inline until the second real use.** A helper used in exactly one
-  place stays inline (or a private method on the owning type). Extract
-  only at a second call site, or when a unit test must target that unit.
-
-### Forbid
-
-- **Factory functions as the primary constructor story.** No
-  `make_foo` / `build_bar` / `create_*` wrappers around construction.
-  Prefer `Foo(...)`. Explicit alternate constructors only when they
-  have distinct semantics (`Foo.from_file`, `Foo.empty`) — not
-  `make_foo` aliases of `__init__`.
-- **God data structures.** No mega-dict / mega-struct / ambient
-  "context" blob every layer reaches into. Pass the few fields a call
-  needs, or a narrow typed view. Split types that accumulate more
-  than one coherent responsibility.
-- **All-in-one façade APIs.** No public `run_everything` /
-  `compute_all` / `pipeline` that hides multi-step work. Composition
-  is the **caller's** job (host apps, docs examples).
-  The library exposes primitives only.
-
-### Shape check (before adding a public symbol)
-
-1. Natural owning type? → method on that type, not a free function.
-2. More than one user-visible step? → split into primitives.
-3. Only one in-tree call site? → do not extract.
-4. Tempted to hang another field on a "context" bag? → new parameter
-   or smaller type instead.
-
-### Tests (default)
-
-- Unit tests **only** under `tests/`, path mirrors source
-  (`src/foo/boo.py` → `tests/test_foo/test_boo.py`), types mirror
-  (`FooClass` → `TestFooClass`). Single-function unit tests only.
-  Details: `tester` agent.
+- **Iron law — no silent debt.** Rot you touch gets fixed or hard-stops the work; never skip-marked, never left silent in the summary.
+- **Iron law — high cohesion, low coupling.** One job per module; deps through explicit seams. A unit is green via its own package's tests alone — if it needs the full suite, the page shell, or a sibling package's real implementation, the design is wrong.
+- **OOP by default.** Types with methods (`NeighborList.build`), not free helpers.
+- **Primitive APIs.** Construct → configure → one concern → read result.
+- **Inline until the second use.** Extract at a second call site, not before.
+- **No factory functions** as the primary constructor story.
+- **No god context bags** — pass the fields a call needs.
+- **No all-in-one façades** — composition is the caller's job.
+- **Tests mirror source**, single-function, one module → its own tests only.
 
 ## Default workflow
 
-For non-trivial work, prefer:
-1. plan (`/mol:spec` or free-form → discuss / grill)
-2. implement (`/mol:impl` or `/mol:fix`)
-3. review (`/mol:review`)
-4. capture decisions (`/mol:note` — harness sync, not append-only)
+plan (`/mol:spec`) → implement (`/mol:impl` / `/mol:fix`) → review
+(`/mol:review`) → capture (`/mol:note`).
 
 ## What must never change casually
 
-Molecular-visualization correctness and command/pipeline integrity depend on the
-invariants under **## Invariants** below. Break one only with a deliberate
-decision — never as a side effect.
+The invariants below are load-bearing for rendering correctness and
+command/pipeline integrity. Break one only by deliberate decision, never as a
+side effect.
 
 <!-- mol:bootstrap:managed end -->
 
-<!-- Free-form additions below this line are preserved across re-runs.
-     If a section grows past a screen, promote to .claude/notes/<topic>.md. -->
+<!-- Free-form additions below this line are preserved across re-runs. -->
 
 ## Invariants
 
