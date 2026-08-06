@@ -1,14 +1,14 @@
 /**
  * Public palettes are intentionally minimal:
- * - element lookups (`cpk`, `ovito`)
- * - a soft qualitative palette for arbitrary string types (`tableau-soft`,
- *   the default) plus the high-distinguishability `glasbey-vivid` for the
- *   many-category case
+ * - element lookups (`cpk`, `ovito`, `vivid`)
  *
- * Numeric property coloring uses a single internal continuous ramp
- * (`viridis`), registered separately in colormaps.ts.
+ * Colours for arbitrary string types are not a palette at all — they are
+ * generated per canvas by {@link categoricalSequence}. Numeric property
+ * coloring uses a single internal continuous ramp (`viridis`), registered
+ * separately in colormaps.ts.
  */
 
+import { categoricalSequence } from "./categorical_palette";
 export type LinearRGB = [number, number, number];
 export type ColorMapKind = "continuous" | "categorical" | "lookup";
 export type PaletteKind = "element" | "categorical";
@@ -28,7 +28,6 @@ export interface PaletteDefinition extends PaletteSummary {
   entries: PaletteEntry[];
 }
 
-export const DEFAULT_CATEGORICAL_COLOR_MAP = "tableau-soft";
 const INTERNAL_NUMERIC_COLOR_MAP = "viridis";
 
 // ============================================================================
@@ -392,292 +391,6 @@ const VIVID_RECORD: Record<string, string> = (() => {
   return out;
 })();
 
-const GLASBEY_VIVID_COLORS = [
-  "#d70000",
-  "#8a3dff",
-  "#008a00",
-  "#00aeca",
-  "#eba600",
-  "#ff7dd2",
-  "#04ff35",
-  "#75045d",
-  "#004971",
-  "#714900",
-  "#b6aeff",
-  "#0cf7d2",
-  "#c208c6",
-  "#86ba71",
-  "#d27969",
-  "#005120",
-  "#0079e7",
-  "#7d0808",
-  "#ef007d",
-  "#008a71",
-  "#552d86",
-  "#928200",
-  "#3900fb",
-  "#96d7ff",
-  "#d2df00",
-  "#9e495d",
-  "#b282ca",
-  "#b25508",
-  "#14758e",
-  "#ff5d00",
-  "#00c200",
-  "#00be9e",
-  "#61a6ff",
-  "#595d9e",
-  "#ffaa79",
-  "#55650c",
-  "#864d8e",
-  "#f3b6ff",
-  "#e755ff",
-  "#8aef9a",
-  "#c26d92",
-  "#8e82fb",
-  "#aaae00",
-  "#ae0079",
-  "#ff4d59",
-  "#ff00ce",
-  "#ff9aaa",
-  "#c28639",
-  "#ae0035",
-  "#efd265",
-  "#14a65d",
-  "#8a00c6",
-  "#8a4128",
-  "#ba35ff",
-  "#00d7df",
-  "#08753d",
-  "#6d9e28",
-  "#558eba",
-  "#8ad745",
-  "#ca5549",
-  "#6504df",
-  "#752839",
-  "#00d27d",
-  "#ce8eff",
-  "#5551ff",
-  "#0059b6",
-  "#710086",
-  "#353992",
-  "#ff5d9a",
-  "#b21c00",
-  "#ff8a35",
-  "#926510",
-  "#7965aa",
-  "#45c6ff",
-  "#ce399e",
-  "#9a009a",
-  "#9ac2ff",
-  "#df0045",
-  "#00868a",
-  "#b6d77d",
-  "#bea64d",
-  "#598641",
-  "#6979c2",
-  "#d28ece",
-  "#75d7ae",
-  "#ae59a6",
-  "#6d2d00",
-  "#ff7d59",
-  "#92004d",
-  "#863969",
-  "#ae71f3",
-  "#c20c59",
-  "#ffca00",
-  "#186500",
-  "#d76d2d",
-  "#6d499e",
-  "#db61c2",
-  "#8e9adb",
-  "#f786ff",
-  "#394d00",
-  "#ffa6db",
-  "#fb3118",
-  "#4171a6",
-  "#eb5175",
-  "#d74904",
-  "#5d86ff",
-  "#9e45ba",
-  "#929a45",
-  "#00a620",
-  "#82e7e3",
-  "#ff7582",
-  "#d2c218",
-  "#00e355",
-  "#e7b261",
-  "#a2ef00",
-  "#df86ae",
-  "#6daad2",
-  "#39a282",
-  "#693979",
-  "#00618e",
-  "#7db600",
-  "#aa92db",
-  "#4149ba",
-  "#b66549",
-  "#14aeae",
-  "#00efa6",
-  "#49ba55",
-  "#a64582",
-  "#be5dd7",
-  "#df8e5d",
-  "#697d00",
-  "#e708e7",
-  "#a63935",
-  "#b68e04",
-  "#0096eb",
-  "#59b682",
-  "#eb5939",
-  "#6d5dce",
-  "#8e4d04",
-  "#715d00",
-  "#ba6169",
-  "#39518a",
-  "#008e55",
-  "#0049ff",
-  "#aaba59",
-  "#6da25d",
-  "#ff59eb",
-  "#b66d00",
-  "#9e14f3",
-  "#20d7be",
-  "#8e1c2d",
-  "#4900ca",
-  "#65bed2",
-  "#82f369",
-  "#ff1461",
-  "#4565c6",
-  "#6d18ba",
-  "#00aef3",
-  "#8e86ce",
-  "#b6e75d",
-  "#00fb86",
-  "#d2aaf7",
-  "#51458e",
-  "#00f3ff",
-  "#ef8e82",
-  "#ef41a2",
-  "#652461",
-  "#9265f3",
-  "#7169ff",
-  "#417500",
-  "#75d775",
-  "#c2242d",
-  "#aeca00",
-  "#0039b6",
-  "#a27d2d",
-  "#db758a",
-  "#be75b2",
-  "#8a2d00",
-  "#db8e04",
-  "#9e5531",
-  "#752d20",
-  "#8210e7",
-  "#9661aa",
-  "#a22d5d",
-  "#188aaa",
-  "#ce79e3",
-  "#ba411c",
-  "#28dbff",
-  "#59c2be",
-  "#ba5179",
-  "#d720ff",
-  "#59e300",
-  "#920075",
-  "#a6399e",
-  "#823da2",
-  "#c6a600",
-  "#d20082",
-  "#a25dd2",
-  "#929a00",
-  "#e33939",
-  "#6992db",
-  "#ffbe45",
-  "#591cff",
-  "#9e0014",
-  "#ffa63d",
-  "#797520",
-  "#3d963d",
-  "#8aae45",
-  "#8a393d",
-  "#be089e",
-  "#8649c2",
-  "#ff59c2",
-  "#7d2d79",
-  "#0082c2",
-  "#ff82aa",
-  "#457131",
-  "#286128",
-  "#009ece",
-  "#96aeff",
-  "#a696ff",
-  "#d2db61",
-  "#ca65ff",
-  "#aa514d",
-  "#d79a4d",
-  "#7d96ff",
-  "#798a35",
-  "#79ca8e",
-  "#00d29e",
-  "#ba10e3",
-  "#ca45be",
-  "#6d3def",
-  "#558e00",
-  "#79c24d",
-  "#ba7139",
-  "#d74182",
-  "#f79eef",
-  "#5510ae",
-  "#496dff",
-  "#7defbe",
-  "#82bee7",
-  "#e779db",
-  "#2d8231",
-  "#df7900",
-  "#e36565",
-  "#9e00be",
-  "#1c9a8e",
-  "#6145b6",
-  "#7d2451",
-  "#79d7e7",
-  "#d2be61",
-  "#a23d00",
-  "#e369aa",
-  "#7d0431",
-  "#9a75ca",
-  "#ce3d55",
-  "#6d2496",
-] as const;
-
-// Bright qualitative palette for arbitrary particle types (the default).
-// All entries sit in a high-lightness band so they stay distinguishable on
-// dark canvases — no muddy browns / deep navies. Overflow ordinals use
-// {@link goldenAngleBrightColor} in the same regime.
-const TABLEAU_SOFT_COLORS = [
-  "#5B9BD5", // sky blue
-  "#FF9F43", // vivid orange
-  "#FF6B6B", // coral red
-  "#4ECDC4", // bright teal
-  "#7DDE6A", // lime green
-  "#FFD93D", // gold
-  "#C77DFF", // violet
-  "#FF8FAB", // pink
-  "#B0B8C4", // light steel (type "C"-like grey)
-  "#E8E8EC", // near-white grey
-  "#6BCBFF", // light azure
-  "#FFB347", // light orange
-  "#95E06C", // spring green
-  "#FFE066", // light gold
-  "#FF7EB6", // hot pink
-  "#A78BFA", // soft purple
-  "#2DD4BF", // cyan-teal
-  "#F472B6", // rose
-  "#94A3B8", // slate light
-  "#FBBF24", // amber
-] as const;
-
 function stableStringHash(value: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < value.length; i++) {
@@ -770,32 +483,6 @@ function linearRgbToHex(rgb: LinearRGB): string {
 }
 
 /** HSL (h in degrees, s/l in [0,1]) → sRGB [0,1] triplet. */
-function hslToSrgb(h: number, s: number, l: number): [number, number, number] {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const hp = ((((h % 360) + 360) % 360) / 60) % 6;
-  const x = c * (1 - Math.abs((hp % 2) - 1));
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  if (hp < 1) [r, g, b] = [c, x, 0];
-  else if (hp < 2) [r, g, b] = [x, c, 0];
-  else if (hp < 3) [r, g, b] = [0, c, x];
-  else if (hp < 4) [r, g, b] = [0, x, c];
-  else if (hp < 5) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  const m = l - c / 2;
-  return [r + m, g + m, b + m];
-}
-
-// Golden-angle hue rotation — successive ordinals land far apart on the color
-// wheel and only repeat after a very large count.
-const GOLDEN_ANGLE_DEG = 137.508;
-// Bright regime: high lightness (reads on black/dark UI), healthy saturation
-// for distinguishability without pure neon primaries.
-const BRIGHT_GEN_SATURATION = 0.72;
-const BRIGHT_GEN_LIGHTNESS = 0.68;
-/** Minimum HSL lightness for any categorical / type color (sRGB HSL L). */
-const MIN_CATEGORICAL_LIGHTNESS = 0.55;
 
 /**
  * Relative luminance of an sRGB hex (WCAG), 0–1.
@@ -813,54 +500,15 @@ export function relativeLuminanceHex(hex: string): number {
 }
 
 /**
- * Lift a linear-RGB color into the bright band used for type/category
- * coloring. Near-achromatic colors stay grey (good for carbon-like types)
- * but never drop below {@link MIN_CATEGORICAL_LIGHTNESS}.
- */
-export function ensureBrightLinear(
-  rgb: LinearRGB,
-  minL = MIN_CATEGORICAL_LIGHTNESS,
-): LinearRGB {
-  const hex = linearRgbToHex(rgb);
-  const [h, s, l] = hexToHsl(hex);
-  if (l >= minL && relativeLuminanceHex(hex) >= 0.2) return rgb;
-  // Lift lightness; keep some chroma unless it is already a grey.
-  const s2 = s < 0.12 ? s : Math.max(s, 0.45);
-  const l2 = Math.max(minL, Math.min(0.82, l < minL ? minL + 0.05 : l));
-  return hexToLinearRgb(hslToHex(h, s2, l2));
-}
-
-/**
- * Deterministic bright color for a category ordinal beyond the curated palette.
- * Used by {@link buildCategoricalColorLookup} once the number of distinct
- * categories exceeds the curated list, so colors never collide via modulo
- * wrap while staying in the bright band.
- */
-function goldenAngleBrightColor(ordinal: number): LinearRGB {
-  const hue = (ordinal * GOLDEN_ANGLE_DEG) % 360;
-  // Slight L jitter so neighboring ordinals don't look same-value.
-  const l = BRIGHT_GEN_LIGHTNESS + (((ordinal * 17) % 7) - 3) * 0.015;
-  const [r, g, b] = hslToSrgb(
-    hue,
-    BRIGHT_GEN_SATURATION,
-    Math.min(0.8, Math.max(MIN_CATEGORICAL_LIGHTNESS, l)),
-  );
-  return ensureBrightLinear([
-    srgbToLinear(r),
-    srgbToLinear(g),
-    srgbToLinear(b),
-  ]);
-}
-
-/**
- * Bright categorical color for ordinal `i` (0-based). Uses the curated
- * palette then the golden-angle generator. Safe for UI rails / legends.
+ * Categorical color for a fixed ordinal (0-based) — UI rails, legends, and the
+ * secondary-structure colors, all of which pin an ordinal and want the same
+ * color every time.
  */
 export function categoricalColorAt(ordinal: number): LinearRGB {
-  if (ordinal >= 0 && ordinal < TABLEAU_SOFT_COLORS.length) {
-    return ensureBrightLinear(hexToLinearRgb(TABLEAU_SOFT_COLORS[ordinal]));
-  }
-  return goldenAngleBrightColor(Math.max(0, ordinal));
+  const i = Math.max(0, ordinal);
+  return categoricalSequence(i + 1, {
+    background: hexToLinearRgb(DEFAULT_CANVAS_BACKGROUND),
+  })[i];
 }
 
 export class ColorMap {
@@ -924,13 +572,6 @@ export class ColorMap {
 
     if (this._palette.length === 0) {
       return [0, 0, 0];
-    }
-
-    if (this.kind === "categorical") {
-      // Hash → curated bright swatch, then enforce min lightness so type
-      // colors never collapse into indistinguishable dark blobs on black.
-      const idx = stableStringHash(key) % this._palette.length;
-      return ensureBrightLinear(this._palette[idx % this._palette.length]);
     }
 
     const raw = stableStringHash(key) / 0xffffffff;
@@ -1047,32 +688,43 @@ export function listContinuousColorMaps(): string[] {
   return names.sort();
 }
 
-export function getCategoricalPalette(
-  name = DEFAULT_CATEGORICAL_COLOR_MAP,
-): readonly LinearRGB[] {
-  const cm = getColorMap(name);
-  if (cm.kind !== "categorical") {
-    throw new Error(`Colormap '${name}' is not categorical`);
-  }
-  return cm.colors;
+export interface CategoricalLookupOptions {
+  /**
+   * Canvas colour as `#RRGGBB`. Generated colours are kept away from it, so
+   * a white canvas yields a different palette than a near-black one — which
+   * is the whole reason this is a parameter and not a constant.
+   * Defaults to the dark canvas the viewer ships with.
+   */
+  background?: string;
 }
 
+/** The viewer's stock canvas, used when a caller does not say otherwise. */
+const DEFAULT_CANVAS_BACKGROUND = "#17171C";
+
+/**
+ * Assign one colour per distinct key.
+ *
+ * Keys are sorted with {@link compareNaturalKeys} first, so the mapping
+ * depends only on the *set* of keys, never on iteration order.
+ *
+ * Colours come from {@link categoricalSequence}, whose every prefix is
+ * maximally separated — which is what an unknown category count needs.
+ */
 export function buildCategoricalColorLookup(
   keys: Iterable<string>,
-  paletteName = DEFAULT_CATEGORICAL_COLOR_MAP,
+  options: CategoricalLookupOptions = {},
 ): Map<string, LinearRGB> {
   const uniqueKeys = Array.from(new Set(keys));
   uniqueKeys.sort(compareNaturalKeys);
 
-  const palette = getCategoricalPalette(paletteName);
+  const background = hexToLinearRgb(
+    options.background ?? DEFAULT_CANVAS_BACKGROUND,
+  );
+  const colors = categoricalSequence(uniqueKeys.length, { background });
 
-  // Curated colors for the first N categories (the common 2–6 type case);
-  // a golden-angle generator in the same soft regime for any beyond N, so
-  // colors never collide via modulo wrap.
   const lookup = new Map<string, LinearRGB>();
   for (let i = 0; i < uniqueKeys.length; i++) {
-    const raw = i < palette.length ? palette[i] : goldenAngleBrightColor(i);
-    lookup.set(uniqueKeys[i], ensureBrightLinear(raw));
+    lookup.set(uniqueKeys[i], colors[i]);
   }
   return lookup;
 }
@@ -1087,12 +739,12 @@ export function buildCategoricalColorLookup(
  */
 export function buildSourceColorLegend(
   sourceIds: number[],
-  paletteName = DEFAULT_CATEGORICAL_COLOR_MAP,
+  options: CategoricalLookupOptions = {},
 ): Array<{ sourceId: number; hex: string }> {
   const distinct = Array.from(new Set(sourceIds)).sort((a, b) => a - b);
   const lookup = buildCategoricalColorLookup(
     distinct.map((id) => String(id)),
-    paletteName,
+    options,
   );
   return distinct.map((sourceId) => ({
     sourceId,
@@ -1265,19 +917,6 @@ registerLookup("ovito", OVITO_RECORD, "#CCCCCC", ELEMENT_ORDER);
 // Register vivid (brighter, livelier default element palette). Unknown
 // elements fall back to a bright neutral grey rather than white.
 registerLookup("vivid", VIVID_RECORD, "#CDD2DA", ELEMENT_ORDER);
-
-// Register tableau-soft (default categorical palette for arbitrary types)
-register(
-  ColorMap.fromPalette(
-    DEFAULT_CATEGORICAL_COLOR_MAP,
-    Array.from(TABLEAU_SOFT_COLORS),
-  ),
-);
-
-// Register glasbey-vivid (256 categorical colors) — opt-in for many-category data
-register(
-  ColorMap.fromPalette("glasbey-vivid", Array.from(GLASBEY_VIVID_COLORS)),
-);
 
 // Register viridis (internal, continuous, not public)
 register(

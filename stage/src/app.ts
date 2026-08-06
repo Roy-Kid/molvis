@@ -704,6 +704,7 @@ export class MolvisApp implements App {
     const frame = this.frame;
     if (!frame) throw new Error("exportGLTF: no frame loaded to export");
     return exportFrameToGLB(frame, this._engine, {
+      background: this.getBackgroundColor(),
       styleManager: this._styleManager,
       ...options,
     });
@@ -877,6 +878,19 @@ export class MolvisApp implements App {
     });
   }
 
+  /**
+   * Canvas colour as `#RRGGBB`. Read by the categorical palette, which
+   * generates type colours that stay clear of whatever the canvas is.
+   */
+  public getBackgroundColor(): string {
+    const c = this._world.scene.clearColor;
+    const byte = (v: number) =>
+      Math.round(Math.min(1, Math.max(0, v)) * 255)
+        .toString(16)
+        .padStart(2, "0");
+    return `#${byte(c.r)}${byte(c.g)}${byte(c.b)}`.toUpperCase();
+  }
+
   public setBackgroundColor(color: string): void {
     const hex = color.replace(/^#/, "");
     const r = Number.parseInt(hex.substring(0, 2), 16) / 255;
@@ -885,6 +899,11 @@ export class MolvisApp implements App {
     const a =
       hex.length >= 8 ? Number.parseInt(hex.substring(6, 8), 16) / 255 : 1;
     this._world.scene.clearColor = new Color4(r, g, b, a);
+    // Type colours are generated away from the canvas colour, so they are
+    // stale the moment it changes. Same reasoning as `setTheme`.
+    void this.applyPipeline({ changeKind: "full" }).catch((error) => {
+      logger.error("setBackgroundColor applyPipeline failed", error);
+    });
   }
 
   public async setRepresentation(id: RepresentationId): Promise<void> {

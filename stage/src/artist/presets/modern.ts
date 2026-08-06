@@ -1,9 +1,8 @@
 import { PeriodicTable } from "../../system/elements";
-import { DEFAULT_CATEGORICAL_COLOR_MAP, getColorMap } from "../palette";
+import { getColorMap } from "../palette";
 import type { AtomStyle, BondStyle, Theme } from "../theme";
 
 const ovito = getColorMap("ovito");
-const categorical = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
 
 export class ModernTheme implements Theme {
   public readonly name = "Modern";
@@ -29,18 +28,13 @@ export class ModernTheme implements Theme {
     };
   }
 
-  public getTypeStyle(type: string): AtomStyle {
-    const [r, g, b] = categorical.colorForKey(type);
-    const toHex = (v: number) => {
-      const s = Math.round(Math.min(1, Math.max(0, v)) ** (1 / 2.2) * 255);
-      return s.toString(16).padStart(2, "0");
-    };
-    return {
-      color: `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase(),
-      radius: 0.4,
-      specularColor: "#FFFFFF",
-      emissiveColor: "#000000",
-    };
+  /**
+   * Neutral stand-in only. Type colours come from the generated categorical
+   * palette, which needs the whole type set to separate them and so cannot be
+   * answered one key at a time here.
+   */
+  public getTypeStyle(_type: string): AtomStyle {
+    return { color: "#B6BDC7", radius: 0.5 };
   }
 
   public getBondStyle(_order: number, _type?: string): BondStyle {

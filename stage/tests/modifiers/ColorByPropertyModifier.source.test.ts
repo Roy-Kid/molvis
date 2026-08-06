@@ -2,10 +2,7 @@ import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { buildAtomBuffers } from "../../src/artist/atom_buffer";
-import {
-  buildCategoricalColorLookup,
-  getCategoricalPalette,
-} from "../../src/artist/palette";
+import { buildCategoricalColorLookup } from "../../src/artist/palette";
 import { BALL_AND_STICK } from "../../src/artist/representation";
 import type { StyleManager } from "../../src/artist/style_manager";
 import {
@@ -123,20 +120,19 @@ describe("ColorByPropertyModifier — categorical numeric (source_id)", () => {
     expect(readTriple(resA, 4)).toEqual(lookup.get("2"));
   });
 
-  it("ac-003: beyond the curated palette colors are generated, not wrapped", () => {
-    const paletteLen = getCategoricalPalette().length;
-    const sourceIds = Array.from({ length: paletteLen + 1 }, (_, i) => i);
+  it("ac-003: many sources each get their own color, none reused", () => {
+    const sourceIds = Array.from({ length: 40 }, (_, i) => i);
     const frame = makeAtoms(sourceIds);
     const mod = makeCategoricalSourceModifier();
 
     const result = mod.apply(frame, createDefaultContext(frame));
-    const tripleFirst = readTriple(result, 0);
-    const tripleOverflow = readTriple(result, paletteLen);
-    expect(tripleFirst).not.toBeNull();
-    // No modulo collision: the (paletteLen)-th source gets its own generated
-    // soft color rather than reusing the first palette entry.
-    expect(tripleOverflow).not.toEqual(tripleFirst);
-    expect(tripleOverflow).not.toBeNull();
+    const seen = new Set<string>();
+    for (let i = 0; i < sourceIds.length; i++) {
+      const triple = readTriple(result, i);
+      expect(triple).not.toBeNull();
+      seen.add(JSON.stringify(triple));
+    }
+    expect(seen.size).toBe(sourceIds.length);
   });
 
   it("ac-004: isApplicable gated on source_id presence; missing column injects nothing", () => {

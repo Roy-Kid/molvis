@@ -2,7 +2,6 @@ import type {
   ColorByPropertyModifier as CoreModifier,
   Molvis,
 } from "@molcrafts/molvis-stage";
-import { DEFAULT_CATEGORICAL_COLOR_MAP } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { ColorScaleLegend } from "@/components/scientific/ColorScaleLegend";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -227,9 +226,8 @@ export const ColorByPropertyModifier: React.FC<Props> = ({
         <>
           <Separator />
           <div className="text-micro text-muted-foreground">
-            Categorical column — colors assigned automatically per unique value
-            using{" "}
-            <span className="font-mono">{DEFAULT_CATEGORICAL_COLOR_MAP}</span>.
+            Categorical column — each unique value gets its own colour,
+            generated to stay apart from the others and from the canvas.
           </div>
         </>
       )}

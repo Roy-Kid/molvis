@@ -18,6 +18,11 @@ import { StyleManager } from "../artist/style_manager";
  * ball-and-stick model that renders identically in any glTF viewer.
  */
 export interface GltfExportOptions {
+  /**
+   * Canvas colour as `#RRGGBB`. Generated type colours depend on it, so
+   * passing the live one is what keeps an export matching the screen.
+   */
+  background?: string;
   /** PBR roughness. High = matte (default 0.9). */
   roughness?: number;
   /** PBR metalness (default 0). */
@@ -86,7 +91,9 @@ export async function exportFrameToGLB(
     };
 
     // Atoms → spheres. instanceData = [x, y, z, radius]; instanceColor = linear RGBA.
-    const atomBuffers = buildAtomBuffers(atomsBlock, styleManager, 0);
+    const atomBuffers = buildAtomBuffers(atomsBlock, styleManager, 0, {
+      background: options?.background,
+    });
     const atomData = atomBuffers.get("instanceData");
     const atomColor = atomBuffers.get("instanceColor");
     if (!atomData || !atomColor) {

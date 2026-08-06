@@ -241,7 +241,7 @@ export class RibbonRenderer {
   /**
    * Resolve the RGB triple for residue `i` of `n` in chain `chainIdx`
    * under `style`. All modes draw from the stage palette
-   * (`ss` / `chain` → tableau-soft, `spectrum` → viridis).
+   * (`ss` / `chain` → the categorical sequence, `spectrum` → viridis).
    */
   private colorFor(
     ss: SecondaryStructureType,

@@ -153,6 +153,10 @@ export {
 export { estimateRMax } from "./analysis/utils";
 export { MolvisApp as Molvis } from "./app";
 export {
+  type CategoricalSequenceOptions,
+  categoricalSequence,
+} from "./artist/categorical_palette";
+export {
   DEFAULT_ISOSURFACE_STYLE,
   type IsosurfaceRenderMode,
   type IsosurfaceStyle,
@@ -169,9 +173,6 @@ export {
   buildSourceColorLegend,
   ColorMap,
   categoricalColorAt,
-  DEFAULT_CATEGORICAL_COLOR_MAP,
-  ensureBrightLinear,
-  getCategoricalPalette,
   getColorMap,
   getPaletteDefinition,
   hexToLinearRgb,

@@ -140,7 +140,7 @@ export class ColorByPropertyModifier extends BaseModifier {
     this.detectedRange = null;
   }
 
-  apply(input: Frame, _context: PipelineContext): Frame {
+  apply(input: Frame, context: PipelineContext): Frame {
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
     if (!this._config.columnName) return input;
@@ -166,7 +166,11 @@ export class ColorByPropertyModifier extends BaseModifier {
       const keys = readCategoricalKeys(atoms, this._config.columnName, dtype);
       if (!keys) return input;
 
-      const lookup = buildCategoricalColorLookup(keys);
+      // Optional: a context built without an app (tests, headless frame
+      // conversion) falls back to the stock canvas rather than throwing.
+      const lookup = buildCategoricalColorLookup(keys, {
+        background: context.app?.getBackgroundColor(),
+      });
       for (let i = 0; i < atomCount; i++) {
         const rgb = lookup.get(keys[i]);
         if (!rgb) continue;

@@ -1,9 +1,8 @@
 import { PeriodicTable } from "../../system/elements";
-import { DEFAULT_CATEGORICAL_COLOR_MAP, getColorMap } from "../palette";
+import { getColorMap } from "../palette";
 import type { AtomStyle, BondStyle, Theme } from "../theme";
 
 const vivid = getColorMap("vivid");
-const categorical = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
 
 /**
  * VividTheme — the default look. Same structure as ClassicTheme but backed by
@@ -27,9 +26,13 @@ export class VividTheme implements Theme {
     return { color, radius };
   }
 
-  public getTypeStyle(type: string): AtomStyle {
-    const [r, g, b] = categorical.colorForKey(type);
-    return { color: linearToGammaHex(r, g, b), radius: 0.5 };
+  /**
+   * Neutral stand-in only. Type colours come from the generated categorical
+   * palette, which needs the whole type set to separate them and so cannot be
+   * answered one key at a time here.
+   */
+  public getTypeStyle(_type: string): AtomStyle {
+    return { color: "#CDD2DA", radius: 0.5 };
   }
 
   public getBondStyle(_order: number, _type?: string): BondStyle {

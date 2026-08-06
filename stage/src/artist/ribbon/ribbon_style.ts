@@ -10,7 +10,7 @@
  * presentation knob — it changes density of ink, not which atoms
  * a given visual shape implies.
  *
- * Colors always come from the stage palette (`tableau-soft` categorical
+ * Colors always come from the stage palette (the categorical sequence
  * + internal `viridis` ramp) so ribbons match atom/type coloring.
  */
 
@@ -33,7 +33,7 @@ export interface RibbonStyle {
 }
 
 /**
- * Secondary-structure → `tableau-soft` ordinal.
+ * Secondary-structure → categorical ordinal.
  * Helix coral, sheet gold, coil steel grey — still SS-readable, but
  * drawn from the same swatches as type/chain coloring.
  */

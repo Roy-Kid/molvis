@@ -85,7 +85,7 @@ export async function drawAtomsRepresentation(
     atomsBlock,
     host.app.styleManager,
     host.atomMesh.uniqueId,
-    options,
+    { ...options, background: host.app.getBackgroundColor() },
   );
 
   host.app.world.sceneIndex.registerAtomFrame({
@@ -222,5 +222,7 @@ export function resolveAtomColorForBondsFallback(
     | Float32Array
     | undefined;
   if (registered) return registered;
-  return buildAtomColorOnly(atomsBlock, app.styleManager);
+  return buildAtomColorOnly(atomsBlock, app.styleManager, {
+    background: app.getBackgroundColor(),
+  });
 }

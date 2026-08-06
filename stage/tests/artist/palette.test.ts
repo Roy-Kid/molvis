@@ -1,74 +1,15 @@
 import { describe, expect, it } from "@rstest/core";
+import { categoricalSequence } from "../../src/artist/categorical_palette";
 import {
   buildCategoricalColorLookup,
   categoricalColorAt,
-  DEFAULT_CATEGORICAL_COLOR_MAP,
-  ensureBrightLinear,
-  getCategoricalPalette,
-  getColorMap,
   getPaletteDefinition,
   hexToLinearRgb,
-  listColorMaps,
   listContinuousColorMaps,
   listPaletteDefinitions,
-  relativeLuminanceHex,
 } from "../../src/artist/palette";
 
 describe("categorical palettes", () => {
-  it("registers tableau-soft as the default categorical palette", () => {
-    const palette = getCategoricalPalette();
-    expect(getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP).kind).toBe("categorical");
-    expect(palette.length).toBe(20);
-    expect(DEFAULT_CATEGORICAL_COLOR_MAP).toBe("tableau-soft");
-  });
-
-  it("keeps glasbey-vivid available for many-category data", () => {
-    expect(getColorMap("glasbey-vivid").kind).toBe("categorical");
-    expect(getCategoricalPalette("glasbey-vivid").length).toBe(256);
-  });
-
-  it("keeps all tableau-soft colors unique", () => {
-    const palette = getCategoricalPalette();
-    const serialized = palette.map((rgb) => rgb.join(","));
-    expect(new Set(serialized).size).toBe(palette.length);
-  });
-
-  it("generates non-colliding soft colors beyond the curated palette", () => {
-    const palette = getCategoricalPalette();
-    const keys = Array.from({ length: palette.length + 5 }, (_, i) => `t${i}`);
-    const lookup = buildCategoricalColorLookup(keys);
-    const serialized = keys.map((k) => lookup.get(k)?.join(","));
-    // No wrap/collision: every category gets a distinct color, and the
-    // generated overflow stays inside [0,1].
-    expect(new Set(serialized).size).toBe(keys.length);
-    for (const rgb of lookup.values()) {
-      for (const c of rgb) {
-        expect(c).toBeGreaterThanOrEqual(0);
-        expect(c).toBeLessThanOrEqual(1);
-      }
-    }
-  });
-
-  it("returns values in [0,1] for categorical colors", () => {
-    const cm = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
-    const [r, g, b] = cm.colorForKey("opls_145");
-    expect(r).toBeGreaterThanOrEqual(0);
-    expect(r).toBeLessThanOrEqual(1);
-    expect(g).toBeGreaterThanOrEqual(0);
-    expect(g).toBeLessThanOrEqual(1);
-    expect(b).toBeGreaterThanOrEqual(0);
-    expect(b).toBeLessThanOrEqual(1);
-  });
-
-  it("keeps colorForKey deterministic for the same key", () => {
-    const cm = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
-    const a = cm.colorForKey("opls_145");
-    const b = cm.colorForKey("opls_145");
-    expect(a[0]).toBeCloseTo(b[0], 10);
-    expect(a[1]).toBeCloseTo(b[1], 10);
-    expect(a[2]).toBeCloseTo(b[2], 10);
-  });
-
   it("assigns dataset-level categorical colors independently of row order", () => {
     const a = buildCategoricalColorLookup(["opls_146", "opls_145", "opls_147"]);
     const b = buildCategoricalColorLookup(["opls_147", "opls_145", "opls_146"]);
@@ -79,23 +20,17 @@ describe("categorical palettes", () => {
   });
 
   it("uses natural ordering when assigning categorical colors", () => {
-    const palette = getCategoricalPalette();
+    // The point is the ordering — `opls_2` before `opls_10`, which plain
+    // lexicographic sorting gets backwards. Asserted against the generated
+    // sequence rather than a named palette so it keeps testing ordering and
+    // not which palette happens to supply the colors.
+    const sequence = categoricalSequence(3, {
+      background: hexToLinearRgb("#17171C"),
+    });
     const lookup = buildCategoricalColorLookup(["opls_10", "opls_2", "opls_1"]);
-    expect(lookup.get("opls_1")).toEqual(palette[0]);
-    expect(lookup.get("opls_2")).toEqual(palette[1]);
-    expect(lookup.get("opls_10")).toEqual(palette[2]);
-  });
-
-  it("only exposes the element palettes and the default categorical palette", () => {
-    expect(() => getColorMap("tol-bright")).toThrow();
-    expect(() => getColorMap("tableau10")).toThrow();
-    expect(listColorMaps()).toEqual([
-      "cpk",
-      "glasbey-vivid",
-      "ovito",
-      DEFAULT_CATEGORICAL_COLOR_MAP,
-      "vivid",
-    ]);
+    expect(lookup.get("opls_1")).toEqual(sequence[0]);
+    expect(lookup.get("opls_2")).toEqual(sequence[1]);
+    expect(lookup.get("opls_10")).toEqual(sequence[2]);
   });
 
   it("keeps a single internal continuous ramp for numeric data", () => {
@@ -105,40 +40,12 @@ describe("categorical palettes", () => {
   it("returns palette summaries and definitions for public palettes", () => {
     expect(listPaletteDefinitions()).toEqual([
       { name: "cpk", kind: "element", size: 118 },
-      { name: "glasbey-vivid", kind: "categorical", size: 256 },
       { name: "ovito", kind: "element", size: 118 },
-      { name: DEFAULT_CATEGORICAL_COLOR_MAP, kind: "categorical", size: 20 },
       { name: "vivid", kind: "element", size: 118 },
     ]);
 
     const cpk = getPaletteDefinition("cpk");
     expect(cpk.entries[0]).toEqual({ label: "H", color: "#FFFFFF" });
-
-    const soft = getPaletteDefinition(DEFAULT_CATEGORICAL_COLOR_MAP);
-    expect(soft.entries[0]).toEqual({ label: "1", color: "#5B9BD5" });
-  });
-
-  it("keeps every curated categorical swatch in the bright band", () => {
-    const def = getPaletteDefinition(DEFAULT_CATEGORICAL_COLOR_MAP);
-    for (const entry of def.entries) {
-      expect(relativeLuminanceHex(entry.color)).toBeGreaterThan(0.2);
-    }
-  });
-
-  it("ensures dark inputs are lifted for type coloring", () => {
-    const dark = hexToLinearRgb("#1a1a1a");
-    const lifted = ensureBrightLinear(dark);
-    // Lifted should not equal near-black components in linear space.
-    expect(lifted[0] + lifted[1] + lifted[2]).toBeGreaterThan(0.3);
-  });
-
-  it("colorForKey on categorical stays bright for arbitrary type strings", () => {
-    const cm = getColorMap(DEFAULT_CATEGORICAL_COLOR_MAP);
-    for (const key of ["1", "2", "opls_145", "type_99", "C", "H"]) {
-      const rgb = cm.colorForKey(key);
-      // At least one channel has substantial energy after ensureBright.
-      expect(Math.max(rgb[0], rgb[1], rgb[2])).toBeGreaterThan(0.15);
-    }
   });
 
   it("categoricalColorAt is deterministic and distinct for first swatches", () => {
