@@ -51,7 +51,7 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _package_version
 
-from .demo import run_demo, strip_demo_magic
+from .demo import demo_cell_transform, run_demo, strip_demo_magic
 from .errors import MolvisRPCError
 from .events import EventBus, EventHandle, Selection, ViewerState
 from .palettes import (
@@ -99,6 +99,7 @@ __all__ = [
     "render_palette_preview",
     "run_demo",
     "save_palette_preview_bytes",
+    "demo_cell_transform",
     "strip_demo_magic",
 ]
 # Read from installed package metadata; pyproject.toml is synchronized from

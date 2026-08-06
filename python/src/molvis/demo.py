@@ -20,7 +20,13 @@ from typing import Any, Callable, Mapping, MutableMapping
 
 from .interrupt import check as check_interrupt
 
-__all__ = ["run_demo", "is_awaitable", "default_namespace", "strip_demo_magic"]
+__all__ = [
+    "run_demo",
+    "is_awaitable",
+    "default_namespace",
+    "strip_demo_magic",
+    "demo_cell_transform",
+]
 
 _STEP_HELPER = "__mv_demo_iteration_step__"
 
@@ -221,3 +227,24 @@ def default_namespace(
     if extras:
         ns.update(extras)
     return ns
+
+
+def demo_cell_transform(lines: list[str]) -> list[str]:
+    """IPython input transformer that makes ``%%mv.demo`` an awaited call.
+
+    Registered on ``shell.input_transformers_cleanup``, which runs *before*
+    IPython's own ``cell_magic`` transform — so the cell never reaches the
+    magic lookup that would reject it.
+
+    A cell magic cannot do this job: ``InteractiveShell.run_cell_magic`` calls
+    ``result = fn(*args, **kwargs)`` and discards the result without awaiting,
+    while :func:`run_demo` is a coroutine. Rewriting to top-level ``await``
+    keeps the cell genuinely blocked until the demo finishes, so the next cell
+    does not race it.
+
+    Cells that do not open with the magic are returned untouched.
+    """
+    if not lines or not lines[0].lstrip().startswith("%%mv.demo"):
+        return lines
+    body, delay = strip_demo_magic("".join(lines))
+    return [f"await __import__('molvis').run_demo({body!r}, globals(), delay={delay!r})\n"]
