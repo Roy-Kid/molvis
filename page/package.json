@@ -52,11 +52,36 @@
     "typescript": "^6.0.3"
   },
   "scripts": {
-    "dev": "concurrently -k -n engines,page \"npm:dev:engines\" \"rsbuild dev\"",
-    "dev:python": "concurrently -k -n engines,page \"npm:dev:engines\" \"MOLVIS_PYTHON_DEV=1 rsbuild build --watch\"",
+    "dev": "wireit",
+    "dev:python": "wireit",
     "build": "rsbuild build",
     "typecheck": "tsc --noEmit",
-    "test": "rstest run --passWithNoTests",
-    "dev:engines": "concurrently -k -n core,stage,sketch,plugin \"npm --prefix .. run dev:core\" \"npm --prefix .. run dev:stage\" \"npm --prefix .. run dev:sketch\" \"npm --prefix .. run dev:plugin\""
+    "test": "rstest run --passWithNoTests"
+  },
+  "wireit": {
+    "dev": {
+      "command": "rsbuild dev",
+      "dependencies": [
+        "../core:dev",
+        "../stage:dev",
+        "../sketch:dev",
+        "../plugin:dev"
+      ],
+      "service": {
+        "readyWhen": {
+          "lineMatches": "Local:"
+        }
+      }
+    },
+    "dev:python": {
+      "command": "MOLVIS_PYTHON_DEV=1 rsbuild build --watch",
+      "dependencies": [
+        "../core:dev",
+        "../stage:dev",
+        "../sketch:dev",
+        "../plugin:dev"
+      ],
+      "service": true
+    }
   }
 }

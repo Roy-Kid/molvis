@@ -17,8 +17,8 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "wireit",
+    "build": "wireit",
     "typecheck": "tsc --noEmit",
     "test": "rstest run",
     "test:watch": "rstest watch"
@@ -36,5 +36,24 @@
   },
   "author": "Roy Kid",
   "license": "BSD-3-Clause",
-  "description": "MolVis 2D molecule sketch engine (Canvas + graph model)"
+  "description": "MolVis 2D molecule sketch engine (Canvas + graph model)",
+  "wireit": {
+    "dev": {
+      "command": "rslib build --watch",
+      "dependencies": [
+        "../core:dev"
+      ],
+      "service": {
+        "readyWhen": {
+          "lineMatches": "success build completed, watching for changes"
+        }
+      }
+    },
+    "build": {
+      "command": "rslib build",
+      "dependencies": [
+        "../core:build"
+      ]
+    }
+  }
 }

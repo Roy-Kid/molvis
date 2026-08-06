@@ -1,0 +1,1 @@
+{"fullyTracked":false,"platform":"darwin","arch":"arm64","nodeVersion":"v23.10.0","command":"rslib build","extraArgs":[],"clean":true,"files":{},"output":[],"dependencies":{"[\"/Users/roykid/work/molcrafts/molvis/core\",\"build\"]":"473d872769199dc8acf5203458c83eb1c51536fc624984cdb61fd22f6818d011"},"env":{}}

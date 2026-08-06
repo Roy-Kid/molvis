@@ -44,8 +44,8 @@
     "./dist/styles/shadcn.css"
   ],
   "scripts": {
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "wireit",
+    "build": "wireit",
     "typecheck": "tsc --noEmit",
     "test": "rstest run --passWithNoTests"
   },
@@ -71,5 +71,24 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "typescript": "^6.0.3"
+  },
+  "wireit": {
+    "dev": {
+      "command": "rslib build --watch",
+      "dependencies": [
+        "../stage:dev"
+      ],
+      "service": {
+        "readyWhen": {
+          "lineMatches": "success build completed, watching for changes"
+        }
+      }
+    },
+    "build": {
+      "command": "rslib build",
+      "dependencies": [
+        "../stage:build"
+      ]
+    }
   }
 }

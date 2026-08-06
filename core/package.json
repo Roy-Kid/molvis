@@ -61,8 +61,8 @@
     "./dist/molrs.js"
   ],
   "scripts": {
-    "dev": "rslib build --watch",
-    "build": "rslib build",
+    "dev": "wireit",
+    "build": "wireit",
     "typecheck": "tsc --noEmit",
     "test": "rstest run"
   },
@@ -77,5 +77,18 @@
     "typescript": "^6.0.3"
   },
   "author": "Roy Kid",
-  "license": "BSD-3-Clause"
+  "license": "BSD-3-Clause",
+  "wireit": {
+    "dev": {
+      "command": "rslib build --watch",
+      "service": {
+        "readyWhen": {
+          "lineMatches": "success build completed, watching for changes"
+        }
+      }
+    },
+    "build": {
+      "command": "rslib build"
+    }
+  }
 }
