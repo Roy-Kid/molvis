@@ -20,8 +20,14 @@ const distRoot = pythonDev
 export default defineConfig({
   server: {
     port: 3000,
-    // Required for SharedArrayBuffer + JupyterLite pyodide-kernel interrupt
-    // (worker Atomics). Production hosts should set the same headers.
+    // Bind IPv4 too. The default binds `[::1]` only, so `127.0.0.1:3000`
+    // — the address every plugin doc and script prints — is refused.
+    host: "0.0.0.0",
+    // REQUIRED, not just for the interrupt buffer: without cross-origin
+    // isolation `@jupyterlite/pyodide-kernel` falls back to its comlink
+    // worker, whose `execute()` assigns callbacks across a Comlink proxy and
+    // throws DataCloneError on every cell. Drop these headers and Python
+    // stops working — see `plugins/pyodide-molpy/src/kernel/host_kernel.ts`.
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",

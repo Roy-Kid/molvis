@@ -28,18 +28,36 @@
       "types": "./src/stage.d.ts",
       "import": "./src/stage.js",
       "default": "./src/stage.js"
-    }
+    },
+    "./plugin": {
+      "types": "./src/plugin.d.ts",
+      "import": "./src/plugin.js",
+      "default": "./src/plugin.js"
+    },
+    "./plugin/ui": {
+      "types": "./src/plugin-ui.d.ts",
+      "import": "./src/plugin-ui.js",
+      "default": "./src/plugin-ui.js"
+    },
+    "./plugin/css": "./plugin/dist/styles/shadcn.css",
+    "./plugin/components.json": "./plugin/components.json"
   },
   "files": [
     "src",
+    "plugin/dist",
+    "plugin/components.json",
+    "plugin/README.md",
     "README.md",
     "LICENSE"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./plugin/dist/styles/shadcn.css"
+  ],
   "workspaces": [
     "core",
     "stage",
     "sketch",
+    "plugin",
     "page",
     "vsc-ext"
   ],
@@ -47,13 +65,15 @@
     "dev:core": "npm run dev -w @molcrafts/molvis-core",
     "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
     "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
-    "dev:engines": "node scripts/dev-with-engines.mjs engines",
-    "dev:page": "node scripts/dev-with-engines.mjs page",
-    "dev:python": "node scripts/dev-with-engines.mjs python",
+    "dev:plugin": "npm run dev -w @molcrafts/molvis-plugin",
+    "dev:engines": "[ -f core/dist/index.js ] && [ -f stage/dist/index.js ] || npm run build:engines; concurrently -k -n core,stage,sketch,plugin npm:dev:core npm:dev:stage npm:dev:sketch npm:dev:plugin",
+    "dev:page": "[ -f core/dist/index.js ] && [ -f stage/dist/index.js ] || npm run build:engines; concurrently -k -n core,stage,sketch,plugin,page npm:dev:core npm:dev:stage npm:dev:sketch npm:dev:plugin \"npm run dev -w page\"",
+    "dev:python": "[ -f core/dist/index.js ] && [ -f stage/dist/index.js ] || npm run build:engines; concurrently -k -n core,stage,sketch,plugin,page npm:dev:core npm:dev:stage npm:dev:sketch npm:dev:plugin \"npm run dev:python -w page\"",
     "build:core": "npm run build -w @molcrafts/molvis-core",
     "build:stage": "npm run build -w @molcrafts/molvis-stage",
     "build:sketch": "npm run build -w @molcrafts/molvis-sketch",
-    "build:engines": "npm run build:core && npm run build:stage && npm run build:sketch",
+    "build:plugin": "npm run build -w @molcrafts/molvis-plugin",
+    "build:engines": "npm run build:core && npm run build:stage && npm run build:sketch && npm run build:plugin",
     "build:page": "npm run build:engines && npm run build -w page && rm -rf python/src/molvis/dist && mkdir -p python/src/molvis/dist && cp -r page/dist/. python/src/molvis/dist/",
     "build:vsc-ext": "npm run build:engines && npm run build -w vsc-ext",
     "build:all": "npm run build:engines && npm run build -w page && rm -rf python/src/molvis/dist && mkdir -p python/src/molvis/dist && cp -r page/dist/. python/src/molvis/dist/ && npm run build -w vsc-ext",
@@ -62,9 +82,10 @@
     "typecheck:core": "npm run typecheck -w @molcrafts/molvis-core",
     "typecheck:stage": "npm run typecheck -w @molcrafts/molvis-stage",
     "typecheck:sketch": "npm run typecheck -w @molcrafts/molvis-sketch",
+    "typecheck:plugin": "npm run typecheck -w @molcrafts/molvis-plugin",
     "typecheck:page": "npm run typecheck -w page",
     "typecheck:vsc-ext": "npm run typecheck -w vsc-ext",
-    "typecheck": "npm run build:engines && npm run typecheck:core && npm run typecheck:stage && npm run typecheck:sketch && npm run typecheck:page && npm run typecheck:vsc-ext",
+    "typecheck": "npm run build:engines && npm run typecheck:core && npm run typecheck:stage && npm run typecheck:sketch && npm run typecheck:plugin && npm run typecheck:page && npm run typecheck:vsc-ext",
     "test:core": "npm run test -w @molcrafts/molvis-core",
     "test:stage": "npm run test -w @molcrafts/molvis-stage",
     "test:sketch": "npm run test -w @molcrafts/molvis-sketch",
@@ -83,6 +104,7 @@
     "prepare": "node scripts/sync-version.mjs"
   },
   "dependencies": {
+    "@molcrafts/molvis-plugin": "0.2.0",
     "@molcrafts/molvis-sketch": "0.2.0",
     "@molcrafts/molvis-stage": "0.2.0"
   },
@@ -101,8 +123,7 @@
     "shadcn": "^4.13.0",
     "vega": "^5.30.0",
     "vega-embed": "^6.29.0",
-    "vega-lite": "^5.21.0",
-    "wait-on": "^9.0.10"
+    "vega-lite": "^5.21.0"
   },
   "overrides": {
     "@rspack/core": "^2.0.5",
