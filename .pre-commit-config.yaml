@@ -3,6 +3,13 @@ default_install_hook_types: [pre-commit, pre-push]
 
 # Mirrors every job in .github/workflows/ci.yml. Any divergence is a bug
 # — when you add/modify a CI job, update this file in the same commit.
+#
+# Build ordering is NOT written here: `wireit` resolves it from each
+# package's own `dependencies`. Asking for `build:page` builds whatever it
+# needs, once. Re-listing `build:core && build:stage && …` was a third copy
+# of the dependency graph, and it also meant two hooks could run overlapping
+# builds — the collision that produced "Transaction already in progress"
+# from rspack's cache and a truncated WASM read in test-core.
 # (We deliberately do NOT add docs / doc-build hooks here: there is no
 # corresponding CI job, and adding one would diverge from CI.)
 #
@@ -45,13 +52,29 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # ─── local-only guard ────────────────────────────────────────────────
+      # The build hooks below and a running `npm run dev:page` share
+      # `node_modules/.cache/rspack` and the same `dist/` trees. Overlapping
+      # them made rspack panic ("Transaction already in progress"), truncated
+      # a WASM read in test-core, and hung rstest's snapshot RPC — three
+      # different-looking failures, one cause. CI has no watchers, so this
+      # guard is local-only and has no CI counterpart by design.
+      - id: no-dev-watcher
+        name: no dev watcher running (shared rspack cache)
+        entry: bash -c 'pgrep -f "rslib build --watch|rsbuild dev" >/dev/null && { echo "A dev watcher is running — stop it before pushing; the build hooks share node_modules/.cache/rspack and dist/ with it."; exit 1; }; exit 0'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       # ─── ci.yml::build-core / build-page / build-vsc-ext ─────────────────
-      # All three builds run rsbuild/rslib — same shape as CI's parallel
-      # build jobs. Pre-push because each takes ~30-60s and they run in
-      # serial here (CI runs them in parallel on separate runners).
+      # Same shape as CI's parallel build jobs. Pre-push because each takes
+      # ~30-60s and they run serially here (CI runs them on separate
+      # runners). Each asks only for its own target; wireit builds the
+      # dependencies once.
       - id: build-core
         name: build core + stage (rslib)
-        entry: bash -c 'npm run build:core && npm run build:stage'
+        entry: npm run build:stage
         language: system
         pass_filenames: false
         always_run: true
@@ -69,7 +92,7 @@ repos:
 
       - id: build-page
         name: build page (rsbuild)
-        entry: bash -c 'npm run build:core && npm run build:stage && npm run build:sketch && npm run build:page'
+        entry: npm run build:page
         language: system
         pass_filenames: false
         always_run: true
@@ -77,7 +100,7 @@ repos:
 
       - id: build-vsc-ext
         name: build vsc-ext (rslib)
-        entry: bash -c 'npm run build:core && npm run build:stage && npm run build:sketch && npm run build:vsc-ext'
+        entry: npm run build:vsc-ext
         language: system
         pass_filenames: false
         always_run: true

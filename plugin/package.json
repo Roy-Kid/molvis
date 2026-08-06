@@ -76,6 +76,7 @@
     "dev": {
       "command": "rslib build --watch",
       "dependencies": [
+        "../core:dev",
         "../stage:dev"
       ],
       "service": {
@@ -87,6 +88,7 @@
     "build": {
       "command": "rslib build",
       "dependencies": [
+        "../core:build",
         "../stage:build"
       ]
     }

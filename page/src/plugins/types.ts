@@ -5,10 +5,10 @@
  * from `./contract`). This file adds host-only install/runtime chrome.
  */
 
+import type { Molvis } from "@molcrafts/molvis-plugin";
 import type React from "react";
-import type { Molvis } from "./engine";
 
-export * from "./contract";
+export * from "@molcrafts/molvis-plugin";
 
 /**
  * Host-internal command-palette entry. Plugins never construct this — they

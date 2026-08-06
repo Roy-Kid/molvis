@@ -1,9 +1,0 @@
-/**
- * shadcn CLI registry anchor for plugin packages.
- *
- * Theme + Tailwind utilities come from the MolVis host at runtime
- * (`page/src/styles/tailwind.css` — `--molvis-*` and `@theme` tokens).
- * Plugins must not ship a second palette; run `npx shadcn add …` with
- * the vendored `components.json`, then replace generated UI with host
- * primitives from the next `sync-plugin-contract` pass when possible.
- */

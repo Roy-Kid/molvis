@@ -8,6 +8,10 @@
  *   import "@molcrafts/molvis/plugin/css";
  */
 
+// `export type *` drops values; the facade must forward these explicitly.
+export { Command, CommandManager } from "@molcrafts/molvis-core/command";
+export { EventEmitter } from "@molcrafts/molvis-core/events";
+export { ModifierCapability } from "@molcrafts/molvis-stage/plugin";
 export type * from "./contract";
 export {
   FONT,

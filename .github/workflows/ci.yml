@@ -65,9 +65,9 @@ jobs:
 
       - run: npm install
 
-      # Engines first: check:pack inspects stage/dist (not core alone).
-      - name: Build core + stage
-        run: npm run build:core && npm run build:stage
+      # wireit builds core first; asking for stage is enough.
+      - name: Build stage
+        run: npm run build:stage
 
       # Pack gate: ban inspector/gui-editor/loaders in dist and enforce the
       # CDN elements size budget. Catches the 0.0.11 multi-MB debug-UI leak.
@@ -86,10 +86,6 @@ jobs:
 
       - run: npm install
 
-      # Hosts resolve engines via package exports → dist (workspace link).
-      - name: Build engines
-        run: npm run build:core && npm run build:stage && npm run build:sketch
-
       - name: Build page
         run: npm run build:page
 
@@ -104,9 +100,6 @@ jobs:
           node-version: 22
 
       - run: npm install
-
-      - name: Build engines
-        run: npm run build:core && npm run build:stage && npm run build:sketch
 
       - name: Build vsc-ext
         run: npm run build:vsc-ext

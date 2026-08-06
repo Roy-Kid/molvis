@@ -41,6 +41,11 @@
       "import": "./dist/transport/trajectory_worker/protocol.js",
       "default": "./dist/transport/trajectory_worker/protocol.js"
     },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js",
+      "default": "./dist/plugin.js"
+    },
     "./package.json": "./package.json"
   },
   "repository": {

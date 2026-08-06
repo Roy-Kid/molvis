@@ -9,14 +9,22 @@
  * — there is no free-floating `api.ui` bag.
  */
 
+// Stage's contribution surface, not this package's: a `Modifier` receives a
+// `PipelineContext` carrying the renderer. The facade re-exports it so plugin
+// authors still import one package.
 import type {
   Modifier,
-  Molvis,
+  StageApp as Molvis,
   Overlay,
   PluginModeFactory,
-} from "@molcrafts/molvis-stage";
+} from "@molcrafts/molvis-stage/plugin";
 import type React from "react";
 
+export type { App, History } from "@molcrafts/molvis-core/app";
+export type { CommandHost, Reversible } from "@molcrafts/molvis-core/command";
+export { Command, CommandManager } from "@molcrafts/molvis-core/command";
+export type { AppEventMap, EventEmitter } from "@molcrafts/molvis-core/events";
+export { ModifierCapability } from "@molcrafts/molvis-stage/plugin";
 export type { Modifier, Molvis, Overlay, PluginModeFactory };
 
 /** Mirrors core CommandFn without requiring a deep export. */

@@ -12,13 +12,13 @@ checked. Status starts `pending`.
 | 5 | `sketch/src/sketch_history.ts` is deleted and no local undo/redo stack replaces it; `sketch_command.ts` remains as a 6-line binding to core's `Reversible` (it held no logic to duplicate) | structural | `sketch/tests/no_duplicate_history.test.ts` | **met** |
 | 6 | `CommandManager` undo/redo semantics (execute clears redo; undo/redo return false when empty) are asserted in `core`'s own tests | correctness | `npm run test:core` | **met** (8 tests; reverting the redo-clear fails exactly one) |
 | 7 | `SketchApp` and `MolvisApp` both satisfy the `App` interface — assignability is checked by the compiler, not by a cast | correctness | `typecheck` | **met** (`implements App` on both) |
-| 8 | `@molcrafts/molvis-stage/plugin` resolves and exports `Modifier`, `Overlay`, `PluginMode`, `PluginModeFactory`, `StageApp` | api | `typecheck` + import smoke test | pending |
-| 9 | `plugin/src` defines no contract type of its own: every exported type is a re-export of `core` or `stage/plugin` (`MolvisPlugin`, tokens, `pluginExternals`, `cn` excepted) | structural | `grep` for `export interface`/`export type X =` in `plugin/src` | pending |
-| 10 | `page/src/plugins/{contract,contract_tokens,engine}.ts` and `page/src/plugins/kit/` are gone; nothing under `page/src` references them | structural | `grep` | pending |
-| 11 | The four official plugins compile against the facade with no import path changes beyond `api.app` consumers | integration | `plugins-official` `npm run typecheck` | pending |
-| 12 | Cold-tree `npm run dev:page` (all engine `dist/` removed) brings the page up with **zero** `Module not found` errors | integration | manual run + log grep | pending |
-| 13 | `plugins-official` gates all pass: `typecheck`, `lint:py`, `test`, `build`, `verify:bundle` | regression | those five scripts | pending |
-| 14 | Browser end-to-end still works: 7 mode tabs present, pyodide kernel reaches ready, a notebook cell completes, zero console errors | integration | Playwright session | pending |
+| 8 | `@molcrafts/molvis-stage/plugin` resolves and exports `Modifier`, `Overlay`, `PluginMode`, `PluginModeFactory`, `StageApp` | api | `typecheck` + import smoke test | **met** (`stage/dist/plugin.js` exports `ModifierCapability` at runtime; the rest are types) |
+| 9 | `plugin/src` defines no contract type of its own: every exported type is a re-export of `core` or `stage/plugin` (`MolvisPlugin`, tokens, `pluginExternals`, `cn` excepted) | structural | `grep` for `export interface`/`export type X =` in `plugin/src` | **met** (contract.ts re-exports only; `MolvisPlugin`/tokens/`pluginExternals`/`cn` excepted as specified) |
+| 10 | `page/src/plugins/{contract,contract_tokens,engine}.ts` and `page/src/plugins/kit/` are gone; nothing under `page/src` references them | structural | `grep` | **met** (`kit/`, `contract.ts`, `contract_tokens.ts`, `engine.ts`, `contract_testing.ts` all deleted) |
+| 11 | The four official plugins compile against the facade with no import path changes beyond `api.app` consumers | integration | `plugins-official` `npm run typecheck` | **met** (typecheck 0, no plugin import changed) |
+| 12 | Cold-tree `npm run dev:page` (all engine `dist/` removed) brings the page up with **zero** `Module not found` errors | integration | manual run + log grep | **met** (cold tree, 0 `Module not found`, 4 watchers) |
+| 13 | `plugins-official` gates all pass: `typecheck`, `lint:py`, `test`, `build`, `verify:bundle` | regression | those five scripts | **met** (all five exit 0) |
+| 14 | Browser end-to-end still works: 7 mode tabs present, pyodide kernel reaches ready, a notebook cell completes, zero console errors | integration | Playwright session | **met** (7 tabs, kernel ready 10s, cell 5s, 0 console errors) |
 | 15 | `npm run check` in `molvis` passes (biome, typecheck, test-core, builds) | regression | pre-commit hooks | pending |
 
 ## Notes

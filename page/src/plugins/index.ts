@@ -1,4 +1,9 @@
 export {
+  PLUGIN_HOST_MODULE_IDS,
+  type PluginHostModuleId,
+  pluginExternals,
+} from "@molcrafts/molvis-plugin";
+export {
   getPluginAnalysisSpec,
   isPluginAnalysisId,
   listPluginAnalysisSpecs,
@@ -41,11 +46,6 @@ export {
   usePluginSettingsSections,
   usePluginToolbarActions,
 } from "./hooks";
-export {
-  PLUGIN_HOST_MODULE_IDS,
-  type PluginHostModuleId,
-  pluginExternals,
-} from "./kit";
 export { loadPluginModule, rewriteModuleGraph } from "./loader";
 export { PluginManager, pluginManager } from "./manager";
 export {
