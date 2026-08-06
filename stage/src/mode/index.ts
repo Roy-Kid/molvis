@@ -24,12 +24,30 @@ export const KEY_TO_MODE: Readonly<Record<string, ModeType>> = {
   "5": ModeType.Measure,
 };
 
+/**
+ * What this manager requires of a plugin-supplied mode: an id and the two
+ * lifecycle calls. Nothing else is ever touched.
+ *
+ * Deliberately not `BaseMode`. That class's abstract
+ * `createContextMenuController()` must return a `ContextMenuController`
+ * whose concrete implementations are internal to this package, so no
+ * external plugin can extend it — a factory typed `=> BaseMode` was
+ * unimplementable from a plugin, and the plugin repos papered over it by
+ * re-declaring the factory as returning `unknown`. `BaseMode` satisfies
+ * this interface structurally, so built-in modes are unaffected.
+ */
+export interface PluginMode {
+  readonly name: ModeId;
+  start(): void;
+  finish(): void;
+}
+
 /** Factory for a plugin-supplied interaction mode instance. */
-export type PluginModeFactory = (app: MolvisApp) => BaseMode;
+export type PluginModeFactory = (app: MolvisApp) => PluginMode;
 
 class ModeManager {
   private _app: MolvisApp;
-  private _mode: BaseMode | null = null;
+  private _mode: BaseMode | PluginMode | null = null;
   private _pluginModes = new Map<string, PluginModeFactory>();
 
   constructor(app: MolvisApp) {
@@ -125,7 +143,7 @@ class ModeManager {
     this._app.events?.emit("mode-change", builtIn);
   };
 
-  public get currentMode(): BaseMode | null {
+  public get currentMode(): BaseMode | PluginMode | null {
     return this._mode;
   }
 

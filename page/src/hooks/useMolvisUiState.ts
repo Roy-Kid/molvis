@@ -28,7 +28,7 @@ export function useMolvisUiState(app: Molvis | null): {
     }
 
     if (app.mode) {
-      setCurrentMode(app.mode.type);
+      setCurrentMode(app.mode.name);
     }
     setTrajectoryLength(app.system.trajectory.length);
     setFrameLabels(app.system.frameLabels);
