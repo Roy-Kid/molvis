@@ -80,6 +80,18 @@ class RuntimeEnv(str, enum.Enum):
     """VSCode's Jupyter extension (ZMQ kernel, ``VSCODE_PID`` set)."""
 
 
+class Appearance(str, enum.Enum):
+    """Light or dark chrome for the viewer.
+
+    Orthogonal to the molecule palette chosen by ``set_theme``
+    (``classic`` / ``modern`` / ``vivid``): this one is the UI's
+    light/dark mode, the same axis as ``prefers-color-scheme``.
+    """
+
+    LIGHT = "light"
+    DARK = "dark"
+
+
 class DisplaySurface(str, enum.Enum):
     """Where the rendered viewer appears for the current runtime."""
 

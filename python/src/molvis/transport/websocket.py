@@ -225,6 +225,8 @@ class WebSocketTransport:
         dist: pathlib.Path | None = None,
         event_bus: EventBus | None = None,
         surface: str = "full",
+        appearance: str | None = None,
+        background: str | None = None,
         handshake_timeout: float | None = DEFAULT_HANDSHAKE_TIMEOUT_S,
         handshake_retries: int = DEFAULT_HANDSHAKE_RETRIES,
         serve_page: bool = True,
@@ -241,6 +243,8 @@ class WebSocketTransport:
         if surface not in ("full", "canvas"):
             raise ValueError(f"surface must be 'full' or 'canvas', got {surface!r}")
         self._surface = surface
+        self._appearance = appearance
+        self._background = background
         if handshake_timeout is not None and handshake_timeout <= 0:
             raise ValueError(
                 f"handshake_timeout must be positive or None, got {handshake_timeout!r}"
@@ -338,6 +342,10 @@ class WebSocketTransport:
         }
         if self._surface != "full":
             params["surface"] = self._surface
+        if self._appearance:
+            params["theme"] = self._appearance
+        if self._background:
+            params["background"] = self._background
         if self._plugins:
             # Comma-separated list; page `readMountOptsFromUrl` splits it.
             params["plugins"] = ",".join(self._plugins)

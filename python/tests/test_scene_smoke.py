@@ -463,3 +463,169 @@ def test_close_stops_transport_and_drops_registry() -> None:
     scene.close()
     assert fake.stopped is True
     assert "close-test" not in Molvis.list_scenes()
+
+
+def test_send_cmd_mounts_the_inline_viewer_before_the_first_rpc(monkeypatch):
+    """A cell that drives a scene without displaying it must still mount.
+
+    `stage = mv.Stage()` followed by `stage.draw_frame(...)` never displays
+    the scene, so nothing calls `_repr_mimebundle_` — the RPC used to block on
+    a handshake with a browser tab nothing had opened.
+    """
+    published: list[dict] = []
+    monkeypatch.setattr(
+        "IPython.display.publish_display_data",
+        lambda data, *a, **k: published.append(data),
+    )
+    scene = Molvis(
+        name="inline-mount",
+        transport=FakeTransport(port=1234),
+        display_surface=DisplaySurface.INLINE,
+        serve_page=False,
+    )
+
+    scene.send_cmd("noop", {})
+
+    assert len(published) == 1
+    assert "text/html" in published[0]
+
+
+def test_send_cmd_mounts_at_most_once(monkeypatch):
+    published: list[dict] = []
+    monkeypatch.setattr(
+        "IPython.display.publish_display_data",
+        lambda data, *a, **k: published.append(data),
+    )
+    scene = Molvis(
+        name="inline-mount-once",
+        transport=FakeTransport(port=1234),
+        display_surface=DisplaySurface.INLINE,
+        serve_page=False,
+    )
+
+    scene.send_cmd("noop", {})
+    scene.send_cmd("noop", {})
+    scene.send_cmd("noop", {})
+
+    assert len(published) == 1
+
+
+def test_send_cmd_does_not_mount_outside_inline_hosts(monkeypatch):
+    published: list[dict] = []
+    monkeypatch.setattr(
+        "IPython.display.publish_display_data",
+        lambda data, *a, **k: published.append(data),
+    )
+    scene = Molvis(
+        name="browser-no-mount",
+        transport=FakeTransport(port=1234),
+        display_surface=DisplaySurface.BROWSER,
+        serve_page=False,
+    )
+
+    scene.send_cmd("noop", {})
+
+    assert published == []
+
+
+def test_gui_defaults_to_canvas_inline_and_page_in_a_browser_tab():
+    """A notebook cell is a stage, not an application."""
+    inline = Molvis(
+        name="gui-inline",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+        serve_page=False,
+    )
+    tab = Molvis(
+        name="gui-tab",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.BROWSER,
+        serve_page=False,
+    )
+
+    assert inline.gui is False
+    assert tab.gui is True
+
+
+def test_explicit_gui_wins_over_the_surface_default():
+    scene = Molvis(
+        name="gui-explicit",
+        transport=FakeTransport(),
+        display_surface=DisplaySurface.INLINE,
+        gui=True,
+        serve_page=False,
+    )
+
+    assert scene.gui is True
+
+
+def test_inline_mount_asks_for_the_canvas_surface(monkeypatch):
+    published: list[dict] = []
+    monkeypatch.setattr(
+        "IPython.display.publish_display_data",
+        lambda data, *a, **k: published.append(data),
+    )
+    scene = Molvis(
+        name="gui-surface",
+        transport=FakeTransport(port=1234),
+        display_surface=DisplaySurface.INLINE,
+        serve_page=False,
+    )
+
+    scene.send_cmd("noop", {})
+
+    html = published[0]["text/html"]
+    assert '"canvas"' in html
+    assert '"full"' not in html
+
+
+def test_inline_mount_carries_appearance_and_background(monkeypatch):
+    published: list[dict] = []
+    monkeypatch.setattr(
+        "IPython.display.publish_display_data",
+        lambda data, *a, **k: published.append(data),
+    )
+    scene = Molvis(
+        name="opts-inline",
+        transport=FakeTransport(port=1234),
+        display_surface=DisplaySurface.INLINE,
+        appearance="light",
+        background="#ffffff",
+        serve_page=False,
+    )
+
+    scene.send_cmd("noop", {})
+
+    html = published[0]["text/html"]
+    assert '"theme": "light"' in html or '"theme":"light"' in html
+    assert "#FFFFFF" in html
+
+
+def test_inline_mount_omits_appearance_when_unset(monkeypatch):
+    """No flag means the host's stored light/dark preference wins."""
+    published: list[dict] = []
+    monkeypatch.setattr(
+        "IPython.display.publish_display_data",
+        lambda data, *a, **k: published.append(data),
+    )
+    scene = Molvis(
+        name="opts-unset",
+        transport=FakeTransport(port=1234),
+        display_surface=DisplaySurface.INLINE,
+        serve_page=False,
+    )
+
+    scene.send_cmd("noop", {})
+
+    assert '"theme"' not in published[0]["text/html"]
+
+
+def test_background_must_be_a_hex_color():
+    with pytest.raises(ValueError, match="RRGGBB"):
+        Molvis(
+            name="bad-bg",
+            transport=FakeTransport(),
+            display_surface=DisplaySurface.BROWSER,
+            background="rebeccapurple",
+            serve_page=False,
+        )

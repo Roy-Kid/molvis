@@ -60,7 +60,9 @@ from .commands import (
 from .control import ControlMixin
 from .errors import MolvisRPCError
 from .events import EventBus, EventHandle, Selection, ViewerState
+from .palettes import normalize_hex_color
 from .runtime import (
+    Appearance,
     DisplaySurface,
     RuntimeEnv,
     detect_runtime,
@@ -136,8 +138,9 @@ class Molvis(
     Example
     -------
         >>> import molvis as mv
-        >>> viewer = mv.Molvis()                          # full UI
-        >>> canvas = mv.Molvis(name="bare", gui=False)    # canvas only
+        >>> viewer = mv.Molvis()             # canvas inline, full UI in a tab
+        >>> ui = mv.Molvis(name="app", gui=True)          # page chrome, always
+        >>> canvas = mv.Molvis(name="bare", gui=False)    # canvas, always
         >>> viewer.draw_frame(frame)
         >>> viewer.on("selection_changed",
         ...           lambda ev: print(ev["atom_ids"]))
@@ -167,6 +170,8 @@ class Molvis(
         gui: bool | _Unset = _UNSET,
         serve_page: bool | _Unset = _UNSET,
         display_surface: DisplaySurface | _Unset = _UNSET,
+        appearance: Appearance | str | None = None,
+        background: str | None = None,
         plugins: list[str] | None = None,
     ) -> "Molvis":
         scene_name = name or cls._DEFAULT_NAME
@@ -181,6 +186,8 @@ class Molvis(
             gui=gui,
             serve_page=serve_page,
             display_surface=display_surface,
+            appearance=appearance,
+            background=background,
         )
         return existing
 
@@ -194,6 +201,8 @@ class Molvis(
         gui: bool | _Unset = _UNSET,
         serve_page: bool | _Unset = _UNSET,
         display_surface: DisplaySurface | _Unset = _UNSET,
+        appearance: Appearance | str | None = None,
+        background: str | None = None,
         plugins: list[str] | None = None,
     ) -> None:
         if getattr(self, "_initialised", False):
@@ -204,8 +213,18 @@ class Molvis(
         self.name: str = name or self._DEFAULT_NAME
         self.width: int = 1200 if isinstance(width, _Unset) else width
         self.height: int = 800 if isinstance(height, _Unset) else height
-        self.gui: bool = True if isinstance(gui, _Unset) else gui
         self.serve_page: bool = True if isinstance(serve_page, _Unset) else serve_page
+        #: Light/dark chrome. ``None`` follows the host's stored preference.
+        #: Distinct from :meth:`set_theme`, which picks a *palette*
+        #: (``classic`` / ``modern`` / ``vivid``) for the molecules.
+        self.appearance: Appearance | None = (
+            None if appearance is None else Appearance(str(appearance).lower())
+        )
+        #: Canvas clear colour as ``#RRGGBB`` / ``#RRGGBBAA``. ``None`` keeps
+        #: whatever Babylon renders by default.
+        self.background: str | None = (
+            None if background is None else normalize_hex_color(background)
+        )
         # Page plugins (owner/repo[@tag] or URL) injected on mount.
         self._plugins: list[str] = list(plugins or [])
         self._created_at: float = time.time()
@@ -224,6 +243,16 @@ class Molvis(
             else _detect_display_surface()
         )
         self._has_displayed_inline: bool = False
+
+        # `gui` defaults per surface, so it is resolved after detection.
+        # A notebook cell is a stage, not an application: inline mounts the
+        # bare canvas and the page chrome is opt-in (`gui=True`). A browser
+        # tab has nothing else in it, so there the page is the default.
+        self.gui: bool = (
+            gui
+            if not isinstance(gui, _Unset)
+            else self._display_surface is not DisplaySurface.INLINE
+        )
 
         self._state = ViewerState()
         self._events = EventBus(self._state)
@@ -244,6 +273,8 @@ class Molvis(
                 serve_page=self.serve_page,
                 event_bus=self._events,
                 surface="full" if self.gui else "canvas",
+                appearance=None if self.appearance is None else self.appearance.value,
+                background=self.background,
                 plugins=self._plugins,
                 session=self.name,
             )
@@ -310,6 +341,8 @@ class Molvis(
         gui: bool | _Unset,
         serve_page: bool | _Unset,
         display_surface: DisplaySurface | _Unset,
+        appearance: Appearance | str | None = None,
+        background: str | None = None,
     ) -> None:
         """Raise if the cached scene does not match the requested config.
 
@@ -331,6 +364,14 @@ class Molvis(
             mismatches.append(f"width: cached={self.width!r}, requested={width!r}")
         if not isinstance(height, _Unset) and height != self.height:
             mismatches.append(f"height: cached={self.height!r}, requested={height!r}")
+        if appearance is not None and Appearance(str(appearance).lower()) != self.appearance:
+            mismatches.append(
+                f"appearance: cached={self.appearance!r}, requested={appearance!r}"
+            )
+        if background is not None and normalize_hex_color(background) != self.background:
+            mismatches.append(
+                f"background: cached={self.background!r}, requested={background!r}"
+            )
         if not isinstance(serve_page, _Unset) and serve_page != self.serve_page:
             mismatches.append(
                 f"serve_page: cached={self.serve_page!r}, requested={serve_page!r}"
@@ -549,6 +590,38 @@ class Molvis(
         if callable(start):
             start()
 
+    def _ensure_inline_mount(self) -> None:
+        """Publish the inline viewer before an RPC that needs one.
+
+        In an inline host the viewer is mounted by
+        :meth:`_repr_mimebundle_` — that is, only when the scene is
+        *displayed*. A cell that builds a scene and drives it without
+        displaying it::
+
+            stage = mv.Stage()
+            stage.draw_frame(frame)     # nothing has mounted a viewer
+
+        would otherwise block on a handshake with a browser nothing ever
+        opened, and fail with ``No browser connected after 5 attempt(s)``.
+        Publishing the mimebundle here makes the viewer appear as this
+        cell's output and connect, which is what the notebook user meant.
+
+        The bundle is published directly rather than through
+        ``display(self)``: building it flips ``_has_displayed_inline``
+        ourselves, so this runs at most once per scene no matter how the
+        host's formatter happens to treat the object. Later commands
+        render the compact status line, as before.
+        """
+        if self._has_displayed_inline:
+            return
+        if self._display_surface is not DisplaySurface.INLINE:
+            return
+        try:
+            from IPython.display import publish_display_data
+        except ImportError:  # pragma: no cover — inline implies IPython
+            return
+        publish_display_data(self._repr_mimebundle_())
+
     # ------------------------------------------------------------------
     # Command channel (used by every command mixin)
     # ------------------------------------------------------------------
@@ -578,6 +651,7 @@ class Molvis(
 
         _check_interrupt()
         self._ensure_started()
+        self._ensure_inline_mount()
         response = self._transport.send_request(
             method,
             params,
@@ -831,9 +905,12 @@ class Molvis(
             "session": endpoints.session,
             "useShadowDOM": True,
             "cssUrls": list(endpoints.css),
-            "theme": "dark",
             "surface": "full" if self.gui else "canvas",
         }
+        if self.appearance is not None:
+            opts["theme"] = self.appearance.value
+        if self.background is not None:
+            opts["background"] = self.background
         if self._plugins:
             opts["plugins"] = list(self._plugins)
         loader = _BOOTSTRAP_LOADER.format(

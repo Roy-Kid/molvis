@@ -78,6 +78,14 @@ const App: React.FC = () => {
     !chrome.timeline;
 
   const [app, setApp] = useState<Molvis | null>(null);
+
+  // Host-supplied canvas colour (`mv.Stage(background="#FFFFFF")` or
+  // `?background=`). Applied once, when the engine hands us the app; the
+  // Style panel owns it from then on.
+  useEffect(() => {
+    if (!app || !opts.background) return;
+    app.setBackgroundColor(opts.background);
+  }, [app, opts.background]);
   const { currentMode, setCurrentMode, trajectoryLength } =
     useMolvisUiState(app);
 

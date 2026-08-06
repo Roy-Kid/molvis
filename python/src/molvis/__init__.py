@@ -61,7 +61,7 @@ from .palettes import (
     render_palette_preview,
     save_palette_preview_bytes,
 )
-from .runtime import DisplaySurface, RuntimeEnv, detect_runtime, display_surface
+from .runtime import Appearance, DisplaySurface, RuntimeEnv, detect_runtime, display_surface
 from .scene import Molvis
 from .structure import coerce_to_frame, frame_arg, frame_payload, frames_arg
 from .transport import InProcessTransport, Transport, WebSocketTransport
@@ -73,6 +73,7 @@ Stage = Molvis
 demo = run_demo
 
 __all__ = [
+    "Appearance",
     "DisplaySurface",
     "EventBus",
     "EventHandle",
@@ -100,6 +101,7 @@ __all__ = [
     "run_demo",
     "save_palette_preview_bytes",
     "demo_cell_transform",
+    "load_ipython_extension",
     "strip_demo_magic",
 ]
 # Read from installed package metadata; pyproject.toml is synchronized from
@@ -108,6 +110,36 @@ try:
     __version__ = _package_version("molcrafts-molvis")
 except PackageNotFoundError:  # pragma: no cover — source tree without install
     __version__ = "0+unknown"
+
+
+def load_ipython_extension(ipython: object) -> None:
+    """Register molvis' IPython input transformers.
+
+    Called by ``%load_ext molvis`` and, for the common case, by molvis
+    itself at import time — a notebook that says ``import molvis as mv``
+    gets ``%%mv.demo`` without a second incantation.
+
+    Idempotent: re-importing or re-loading does not stack transformers.
+    """
+    transformers = getattr(ipython, "input_transformers_cleanup", None)
+    if transformers is None:
+        return
+    if demo_cell_transform not in transformers:
+        transformers.append(demo_cell_transform)
+
+
+def _register_with_active_ipython() -> None:
+    """Wire into the shell that is already running, if there is one."""
+    try:
+        from IPython import get_ipython
+    except ImportError:
+        return
+    shell = get_ipython()
+    if shell is not None:
+        load_ipython_extension(shell)
+
+
+_register_with_active_ipython()
 
 
 def __dir__() -> list[str]:

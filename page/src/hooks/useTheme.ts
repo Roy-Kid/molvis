@@ -74,8 +74,11 @@ export function unregisterThemeRoot(el: HTMLElement): void {
 }
 
 /** Call once before React hydrates to avoid a flash of the wrong theme. */
-export function bootstrapTheme(): void {
-  applyTheme(readStoredTheme());
+export function bootstrapTheme(seed?: Theme): void {
+  // A host-supplied appearance (`mv.Stage(appearance=...)` → `?theme=`)
+  // seeds the very first paint only; once the user picks a side in
+  // Settings the stored preference wins.
+  applyTheme(seed ?? readStoredTheme());
 }
 
 export function useTheme() {

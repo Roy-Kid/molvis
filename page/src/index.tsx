@@ -31,7 +31,10 @@ if (typeof window !== "undefined") {
 if (typeof document !== "undefined") {
   const rootEl = document.getElementById("root");
   if (rootEl) {
-    bootstrapTheme();
+    const themeParam = new URLSearchParams(window.location.search).get("theme");
+    bootstrapTheme(
+      themeParam === "light" || themeParam === "dark" ? themeParam : undefined,
+    );
     mountMolvisApp(rootEl, {
       ...readMountOptsFromUrl(),
       ...readMountOptsFromHost(),

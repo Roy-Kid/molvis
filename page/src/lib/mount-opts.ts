@@ -49,6 +49,11 @@ export interface MountOpts {
    */
   chrome?: MolvisChromeFlags;
   /**
+   * Canvas clear colour as `#RRGGBB` or `#RRGGBBAA`. Omit to keep whatever
+   * Babylon renders by default. Applied once the engine reports ready.
+   */
+  background?: string;
+  /**
    * Opt-in demo seed. `true` seeds a Dopamine molecule on start; `false`
    * or undefined leaves the canvas empty. Defaults on in dev mode so
    * `npm run dev:page` stays interactive; production embeds (VSCode,
@@ -169,6 +174,7 @@ export function readMountOptsFromUrl(): MountOpts {
     token: params.get("token") ?? undefined,
     session: params.get("session") ?? undefined,
     surface,
+    background: params.get("background") ?? undefined,
     demo: params.has("demo") ? true : undefined,
     plugins: parsePluginsField(params.get("plugins") ?? undefined),
   };
