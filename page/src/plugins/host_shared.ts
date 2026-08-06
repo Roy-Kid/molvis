@@ -1,8 +1,8 @@
 /**
  * Shared host modules for plugin import-map injection.
  *
- * Plugins must externalize these packages; the loader rewrites bare
- * imports to blob URLs that re-export the host's singleton instances.
+ * External specifier list: {@link PLUGIN_HOST_MODULE_IDS} in `./kit/externals`
+ * (vendored to plugins as `plugin-externals.ts`). Keep inject ↔ external in sync.
  *
  * - `@molcrafts/molvis-stage` — 3D engine
  * - `@molcrafts/molvis-core/molrs` — sole WASM binding
@@ -35,6 +35,8 @@ const eagerPluginHostModules = {
 export type PluginHostModules = typeof eagerPluginHostModules & {
   "@molcrafts/molplot": typeof import("@molcrafts/molplot");
 };
+
+// Kit list (`./kit/externals`) must stay aligned with these inject keys.
 
 let pluginHostModulesPromise: Promise<PluginHostModules> | undefined;
 

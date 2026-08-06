@@ -66,10 +66,17 @@ api.rpc.registerMethod("ping", () => "pong");
 
 ## Install
 
-1. **Settings → Plugins** — paste `owner/repo` (no tag → **latest GitHub
-   Release**), `owner/repo@v1.2.3`, or HTTPS URL (local `npm run serve`).
+Users only ever type a **GitHub repo** — never a release download URL.
+
+1. **Settings → Plugins** — `owner/repo` (→ **latest Release**) or
+   `owner/repo@v1.2.3`. Local debug only: `http://127.0.0.1:4173/`.
 2. **VS Code** — `"molvis.plugins": ["owner/repo@v1.2.3"]` then reload view.
 3. **Python** — `Molvis(plugins=["owner/repo@v1.2.3"])` or URL `?plugins=…`.
+
+**What the host does:** short key → GitHub Release base
+(`…/releases/download/{tag}/`) → fetch `molvis.plugin.json` → resolve relative
+`entry` (`plugin.js`, or `dist/plugin.js` rewritten to flat `plugin.js` on
+Release layout). Settings / storage keep `owner/repo[@tag]` only.
 
 **Distribution:** plugins ship **built assets on GitHub Releases** (flat files:
 `molvis.plugin.json` + `plugin.js` + any workers). `dist/` is **not** committed.
@@ -98,6 +105,9 @@ my-plugin/
 
 ### Manifest
 
+Repo-root `molvis.plugin.json` points at **relative** assets only — never absolute
+CDN/release URLs. Users install the **repo**, not this file’s path.
+
 ```json
 {
   "id": "com.example.my-plugin",
@@ -108,8 +118,11 @@ my-plugin/
 }
 ```
 
-Release packaging rewrites `entry` to `"plugin.js"` and uploads `dist/*` as
-flat Release assets (`prepare-release-assets.mjs`).
+- **Local serve:** `entry` stays `dist/plugin.js` next to the repo-root manifest
+  (or serve `dist/` and use a local manifest there).
+- **Release packaging** (`prepare-release-assets.mjs`): rewrites `entry` →
+  `"plugin.js"` and uploads flat assets. The host also strips a leading
+  `dist/` when `layout === "release"`, so a non-rewritten manifest still loads.
 
 ### Multi-chunk
 
@@ -119,9 +132,38 @@ modules. Host peers (`react`, `@molcrafts/molvis-stage`,
 Workers for pyodide-kernel must sit next to `plugin.js` on the same Release.
 ## Build rules
 
-Externalize: `react`, `react-dom`, `react/jsx-runtime`, `@molcrafts/molvis-stage`,
-`@molcrafts/molvis-stage`, `@molcrafts/molvis-core/molrs`, `@molcrafts/molvis-core/elements`,
-`@molcrafts/molplot` (shared Vega charts — never bundle a second copy).
+Externalize via the host kit list (`page/src/plugins/kit/externals.ts`, vendored
+as `plugin-externals.ts`): `react`, `react-dom`, `react/jsx-runtime`,
+`@molcrafts/molvis-stage`, `@molcrafts/molvis-core/molrs`,
+`@molcrafts/molvis-core/elements`, `@molcrafts/molplot` (never a second copy).
+
+## Public SDK (never import `page/`)
+
+Scaffold (Clack UI):
+
+```bash
+npx molvis-plugin create
+npx molvis-plugin create my-plugin
+npx molvis-plugin create my-plugin --id com.acme.demo --name "Acme Demo" -y
+```
+
+Import only umbrella re-exports:
+
+```ts
+import { MolvisPlugin, type PluginAPI, pluginExternals, token } from "@molcrafts/molvis/plugin";
+import { Button } from "@molcrafts/molvis/plugin/ui";
+import "@molcrafts/molvis/plugin/css";
+```
+
+| Path | Contents |
+|------|----------|
+| `@molcrafts/molvis/plugin` | `MolvisPlugin` base, contract types, tokens, `cn`, `pluginExternals` |
+| `@molcrafts/molvis/plugin/ui` | Host-aligned shadcn primitives |
+| `@molcrafts/molvis/plugin/css` | shadcn CLI CSS anchor (runtime theme is host-owned) |
+
+Implementation may live under monorepo `plugin/` + `page/` (host loader), but
+plugin **authors** must not name `page` in import paths. Runtime theme:
+host `--molvis-*` tokens (`bg-accent`, `h-control`, `rounded-control`, …).
 
 ## Relation to compile-time extension
 

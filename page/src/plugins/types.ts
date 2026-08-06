@@ -1,10 +1,8 @@
 /**
  * Host-side plugin types.
  *
- * The plugin-facing contract lives in `./contract` and is vendored verbatim
- * into the plugin template and every plugin repo — edit it there, not here.
- * This file holds only what the host itself needs: install records, runtime
- * status, source resolution, and host-internal chrome.
+ * Plugin-facing contract is public `@molcrafts/molvis/plugin` (re-exported
+ * from `./contract`). This file adds host-only install/runtime chrome.
  */
 
 import type React from "react";
@@ -67,13 +65,28 @@ export interface PluginRuntimeState {
   resolvedRef?: string;
 }
 
+/**
+ * How package assets are laid out under {@link ResolvedPluginSource.baseUrl}.
+ *
+ * - `release` — flat GitHub Release assets (`plugin.js` next to manifest)
+ * - `tree` — source-tree CDN (jsDelivr); entry often still `dist/plugin.js`
+ * - `direct` — user-supplied HTTP base (local serve, custom CDN)
+ */
+export type PluginPackageLayout = "release" | "tree" | "direct";
+
 /** Resolved URLs for loading a plugin package. */
 export interface ResolvedPluginSource {
-  /** Canonical key stored in localStorage (user input, trimmed). */
+  /**
+   * Canonical key stored in localStorage / Settings list.
+   * GitHub sources always use short form `owner/repo` or `owner/repo@ref`
+   * — never a release-download or jsDelivr URL.
+   */
   sourceKey: string;
   /** Base URL ending with `/` for resolving relative entry paths. */
   baseUrl: string;
   manifestUrl: string;
+  /** Asset layout under baseUrl (drives entry path normalization). */
+  layout: PluginPackageLayout;
   /**
    * Git ref actually used for CDN (tag/branch/sha). Set when the user
    * omitted `@ref` and we pinned to the latest GitHub release, or when

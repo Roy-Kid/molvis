@@ -52,13 +52,13 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
         <Input
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          placeholder="plugin url"
+          placeholder="owner/repo[@v1.2.3]"
           className="h-control-compact min-w-0 flex-1 rounded-none border-0 border-b border-border bg-transparent px-0 shadow-none focus-visible:border-accent focus-visible:ring-0"
           onKeyDown={(e) => {
             if (e.key === "Enter") void onInstall();
           }}
           disabled={busy}
-          aria-label="Plugin source"
+          aria-label="Plugin source (GitHub owner/repo)"
         />
         <ViewerIconAction
           icon={busy ? <Loader2 className="animate-spin" /> : <Plus />}
@@ -67,6 +67,10 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
           onClick={() => void onInstall()}
         />
       </div>
+      <p className="text-micro text-muted-foreground">
+        GitHub repo only — host loads Release assets for you. Local debug:{" "}
+        <span className="font-mono">http://127.0.0.1:4173/</span>
+      </p>
 
       {formError ? (
         <p className="truncate text-micro text-destructive" title={formError}>
@@ -79,7 +83,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
           {plugins.map((p) => (
             <li
               key={p.source}
-              className="flex items-center gap-1 py-1.5 first:pt-0 last:pb-0"
+              className="flex flex-wrap items-center gap-1 py-1.5 first:pt-0 last:pb-0"
             >
               <StatusIcon status={p.status} error={p.error} />
               <div className="min-w-0 flex-1">
@@ -93,9 +97,19 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
                 </div>
                 <div
                   className="truncate font-mono text-micro text-muted-foreground"
-                  title={p.source}
+                  title={
+                    p.resolvedRef && !p.source.includes("@")
+                      ? `${p.source} → ${p.resolvedRef}`
+                      : p.source
+                  }
                 >
                   {p.source}
+                  {p.resolvedRef && !p.source.includes("@") ? (
+                    <span className="text-muted-foreground/80">
+                      {" "}
+                      @{p.resolvedRef}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <ViewerIconAction
@@ -117,6 +131,13 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({
                 className="text-destructive hover:text-destructive"
                 onClick={() => void pluginManager.uninstall(p.source)}
               />
+              {/* The reason a plugin failed belongs on screen, not only in a
+                  tooltip: a broken bundle otherwise looks like an idle one. */}
+              {p.status === "error" && p.error ? (
+                <p className="w-full break-words pl-5 font-mono text-micro text-destructive">
+                  {p.error}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

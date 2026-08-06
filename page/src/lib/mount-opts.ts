@@ -57,8 +57,9 @@ export interface MountOpts {
    */
   demo?: boolean;
   /**
-   * Plugin sources to load on mount (`owner/repo[@ref]` or HTTPS URL).
-   * Merged with Settings / localStorage plugins; host sources are enabled.
+   * Plugin sources to load on mount. Prefer short GitHub form
+   * `owner/repo` or `owner/repo@tag` (host resolves Release assets).
+   * HTTPS only for local debug serve. Merged with Settings / localStorage.
    * VSCode: `molvis.plugins`. Python: `Molvis(plugins=[…])` / URL `plugins=`.
    */
   plugins?: string[];

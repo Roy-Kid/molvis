@@ -188,6 +188,14 @@ export async function rewriteModuleGraph(
       },
     );
 
+    // Pin the network entry URL for co-located assets (workers, .whl, all.json).
+    // rspack often freezes `import.meta.url` to a build-time file: path inside
+    // the plugin bundle, and blob modules would make it a blob: URL — both
+    // break Release/local flat assets next to plugin.js.
+    rewritten =
+      `globalThis.__MOLVIS_PLUGIN_ENTRY__=${JSON.stringify(absolute)};\n` +
+      rewritten;
+
     const blob = new Blob([rewritten], { type: "text/javascript" });
     const blobUrl = URL.createObjectURL(blob);
     rewrittenModuleBlobs.set(absolute, blobUrl);
@@ -265,7 +273,12 @@ export async function loadPluginModule(
   entryUrl: string,
 ): Promise<MolvisPluginModule> {
   await ensurePluginHostModules();
+  const absolute = new URL(entryUrl).href;
   const blobUrl = await rewriteModuleGraph(entryUrl);
+  const g = globalThis as { __MOLVIS_PLUGIN_ENTRY__?: string };
+  const prevEntry = g.__MOLVIS_PLUGIN_ENTRY__;
+  // Visible while the module body runs (capture PLUGIN_ENTRY_AT_LOAD).
+  g.__MOLVIS_PLUGIN_ENTRY__ = absolute;
   try {
     const mod = (await import(
       /* webpackIgnore: true */
@@ -279,5 +292,7 @@ export async function loadPluginModule(
     throw err instanceof Error
       ? err
       : new Error(`Failed to import plugin: ${String(err)}`);
+  } finally {
+    g.__MOLVIS_PLUGIN_ENTRY__ = prevEntry;
   }
 }

@@ -11,13 +11,18 @@ core/     @molcrafts/molvis-core     shared molrs gateway + pure/browser primiti
   └─→ sketch/  @molcrafts/molvis-sketch   2D canvas sketcher
         │
         ▼
-  repo root   @molcrafts/molvis      thin re-exports (src/*.js) — not a workspace member
+  plugin/     @molcrafts/molvis-plugin    plugin authoring SDK (base class, contract, UI)
         │
         ▼
-  page/       (private)              React 19 product shell
+  repo root   @molcrafts/molvis      thin re-exports — ./plugin, ./stage, ./sketch
+        │
+        ▼
+  page/       (private)              React 19 product shell + plugin *host* loader
   vsc-ext/    molvis (private)       VS Code extension host
   python/     molcrafts-molvis       PyPI driver + shipped page bundle
 ```
+
+Plugin authors import **`@molcrafts/molvis/plugin`** only — never `page/…`.
 
 ## Rules
 
@@ -45,7 +50,9 @@ core/     @molcrafts/molvis-core     shared molrs gateway + pure/browser primiti
 | `@molcrafts/molvis-core` | npm (tag workflow) |
 | `@molcrafts/molvis-stage` | npm |
 | `@molcrafts/molvis-sketch` | npm |
-| `@molcrafts/molvis` | npm (root `npm publish`) |
+| `@molcrafts/molvis-plugin` | npm (plugin SDK) |
+| `@molcrafts/molvis` | npm (root — re-exports `./plugin`, engines) |
+| `molvis-plugin` | npm CLI — `npx molvis-plugin create` (template repo) |
 | `molcrafts-molvis` | PyPI |
 | VS Code `molvis` | Marketplace (vsce) |
 

@@ -41,9 +41,19 @@ export {
   usePluginSettingsSections,
   usePluginToolbarActions,
 } from "./hooks";
+export {
+  PLUGIN_HOST_MODULE_IDS,
+  type PluginHostModuleId,
+  pluginExternals,
+} from "./kit";
 export { loadPluginModule, rewriteModuleGraph } from "./loader";
 export { PluginManager, pluginManager } from "./manager";
-export { resolvePluginSource } from "./resolve";
+export {
+  canonicalizePluginSourceKey,
+  normalizeManifestEntry,
+  resolvePluginEntryUrl,
+  resolvePluginSource,
+} from "./resolve";
 export type {
   ModeTabSpec,
   ModifierPanelComponent,
@@ -53,6 +63,7 @@ export type {
   PluginAPI,
   PluginDialogSpec,
   PluginManifest,
+  PluginPackageLayout,
   PluginPanelSpec,
   PluginRuntimeState,
   ResolvedPluginSource,

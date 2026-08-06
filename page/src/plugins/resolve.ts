@@ -6,7 +6,35 @@ import {
   JSDELIVR_GH_BASE,
   MANIFEST_FILENAME,
 } from "./constants";
-import type { ResolvedPluginSource } from "./types";
+import type { PluginPackageLayout, ResolvedPluginSource } from "./types";
+
+export interface ResolvePluginEntryOptions {
+  /**
+   * Package layout under `baseUrl`. Release packages are flat — a repo-root
+   * manifest may still say `dist/plugin.js`; the host rewrites that to
+   * `plugin.js` so users never need a different install URL.
+   */
+  layout?: PluginPackageLayout;
+}
+
+/**
+ * Normalize a manifest `entry` path for the package layout.
+ *
+ * Release assets are uploaded flat (`plugin.js` next to `molvis.plugin.json`).
+ * Repo-root manifests keep `entry: "dist/plugin.js"` for local `npm run serve`.
+ * On a release base we strip a leading `dist/` so both work without user action.
+ */
+export function normalizeManifestEntry(
+  entry: string,
+  layout: PluginPackageLayout = "direct",
+): string {
+  let path = entry.trim().replace(/^\.\//, "");
+  if (!path) return path;
+  if (layout === "release") {
+    path = path.replace(/^dist\//, "");
+  }
+  return path;
+}
 
 /**
  * Resolve a manifest's `entry` against its package base.
@@ -16,8 +44,12 @@ import type { ResolvedPluginSource } from "./types";
  * defeating the ref pinning the user asked for. Entry must stay inside the
  * package the manifest was fetched from.
  */
-export function resolvePluginEntryUrl(entry: string, baseUrl: string): string {
-  const trimmed = entry.trim();
+export function resolvePluginEntryUrl(
+  entry: string,
+  baseUrl: string,
+  options?: ResolvePluginEntryOptions,
+): string {
+  const trimmed = normalizeManifestEntry(entry, options?.layout ?? "direct");
   if (!trimmed) {
     throw new Error("Plugin manifest 'entry' is empty");
   }
@@ -37,6 +69,30 @@ export function resolvePluginEntryUrl(entry: string, baseUrl: string): string {
     );
   }
   return resolved.href;
+}
+
+/**
+ * Canonical storage / Settings key for a plugin source.
+ *
+ * GitHub locations collapse to `owner/repo` or `owner/repo@ref` so the UI
+ * never shows release-download or jsDelivr URLs. Direct HTTP bases stay as-is
+ * (local debug serve).
+ */
+export function canonicalizePluginSourceKey(input: string): string {
+  const raw = input.trim();
+  if (!raw) return raw;
+  // Release asset URLs before generic github.com parse (which would drop the tag).
+  const fromRelease = parseGithubReleaseDownloadUrl(raw);
+  if (fromRelease) {
+    return `${fromRelease.owner}/${fromRelease.repo}@${fromRelease.tag}`;
+  }
+  const gh = parseGitHub(raw);
+  if (gh) {
+    return gh.ref
+      ? `${gh.owner}/${gh.repo}@${gh.ref}`
+      : `${gh.owner}/${gh.repo}`;
+  }
+  return raw;
 }
 
 export interface ResolvePluginSourceOptions {
@@ -90,17 +146,44 @@ export async function resolvePluginSource(
       0,
       manifestUrl.length - MANIFEST_FILENAME.length,
     );
-    return { sourceKey: raw, baseUrl, manifestUrl };
+    // If someone pastes a Release asset URL, still store short GH key when possible.
+    const ghFromRelease = parseGithubReleaseDownloadUrl(raw);
+    if (ghFromRelease) {
+      return {
+        sourceKey: `${ghFromRelease.owner}/${ghFromRelease.repo}@${ghFromRelease.tag}`,
+        baseUrl,
+        manifestUrl,
+        layout: "release",
+        resolvedRef: ghFromRelease.tag,
+      };
+    }
+    return {
+      sourceKey: raw,
+      baseUrl,
+      manifestUrl,
+      layout: "direct",
+    };
   }
 
   // Direct entry .js URL — synthesize a sibling manifest next to entry
   if (/^https?:\/\//i.test(raw) && /\.m?js(\?.*)?$/i.test(raw)) {
     const url = new URL(raw);
     const baseUrl = url.href.replace(/[^/]+$/, "");
+    const ghFromRelease = parseGithubReleaseDownloadUrl(raw);
+    if (ghFromRelease) {
+      return {
+        sourceKey: `${ghFromRelease.owner}/${ghFromRelease.repo}@${ghFromRelease.tag}`,
+        baseUrl,
+        manifestUrl: new URL(MANIFEST_FILENAME, baseUrl).href,
+        layout: "release",
+        resolvedRef: ghFromRelease.tag,
+      };
+    }
     return {
       sourceKey: raw,
       baseUrl,
       manifestUrl: new URL(MANIFEST_FILENAME, baseUrl).href,
+      layout: "direct",
     };
   }
 
@@ -112,11 +195,17 @@ export async function resolvePluginSource(
       sourceKey: raw,
       baseUrl,
       manifestUrl: new URL(MANIFEST_FILENAME, baseUrl).href,
+      layout: "direct",
     };
   }
 
   const gh = parseGitHub(raw);
   if (gh) {
+    // Always persist short form — never release/jsDelivr URLs in Settings.
+    const sourceKey = gh.ref
+      ? `${gh.owner}/${gh.repo}@${gh.ref}`
+      : `${gh.owner}/${gh.repo}`;
+
     let ref = gh.ref;
     if (!ref) {
       ref =
@@ -131,9 +220,10 @@ export async function resolvePluginSource(
       // Prefer GitHub Release assets (dist not in git).
       const baseUrl = githubReleaseDownloadBase(gh.owner, gh.repo, ref);
       return {
-        sourceKey: raw,
+        sourceKey,
         baseUrl,
         manifestUrl: `${baseUrl}${MANIFEST_FILENAME}`,
+        layout: "release",
         resolvedRef: ref,
       };
     }
@@ -150,16 +240,35 @@ export async function resolvePluginSource(
       );
     }
     return {
-      sourceKey: raw,
+      sourceKey,
       baseUrl,
       manifestUrl: `${baseUrl}${MANIFEST_FILENAME}`,
+      layout: "tree",
       resolvedRef: ref,
     };
   }
 
   throw new Error(
-    `Unrecognized plugin source: ${raw}. Use owner/repo[@ref] or an HTTPS URL.`,
+    `Unrecognized plugin source: ${raw}. Use owner/repo[@ref] ` +
+      "(e.g. MolCrafts/molvis-plugins-official) or an HTTPS URL for local serve.",
   );
+}
+
+/** Match `…/owner/repo/releases/download/tag/…` so pasted asset URLs still canonicalize. */
+function parseGithubReleaseDownloadUrl(
+  raw: string,
+): { owner: string; repo: string; tag: string } | null {
+  try {
+    if (!isGithubUrl(raw)) return null;
+    const url = new URL(raw);
+    const m = /^\/([^/]+)\/([^/]+)\/releases\/download\/([^/]+)\//.exec(
+      url.pathname,
+    );
+    if (!m) return null;
+    return { owner: m[1], repo: m[2], tag: decodeURIComponent(m[3]) };
+  } catch {
+    return null;
+  }
 }
 
 /** True for tags we treat as GitHub Release packages (v1.2.3, 1.2.3, …). */
@@ -242,6 +351,9 @@ function parseGitHub(
       ref = parts.slice(3).join("/");
     } else if (parts[2] === "blob" && parts[3]) {
       ref = parts[3];
+    } else if (parts[2] === "releases" && parts[3] === "download" && parts[4]) {
+      // …/releases/download/{tag}/… — same short key as owner/repo@tag
+      ref = decodeURIComponent(parts[4]);
     }
     return { owner, repo, ref };
   } catch {

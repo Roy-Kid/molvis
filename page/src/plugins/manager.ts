@@ -8,7 +8,11 @@ import {
   loadPluginModule,
   releasePluginModuleGraph,
 } from "./loader";
-import { resolvePluginEntryUrl, resolvePluginSource } from "./resolve";
+import {
+  canonicalizePluginSourceKey,
+  resolvePluginEntryUrl,
+  resolvePluginSource,
+} from "./resolve";
 import {
   loadPluginStore,
   removeInstallRecord,
@@ -78,21 +82,34 @@ export class PluginManager {
   private async _restore(hostSources: readonly string[]): Promise<void> {
     const store = loadPluginStore();
     for (const entry of store.entries) {
-      this.plugins.set(entry.source, {
+      // Migrate long/pasted URLs to short owner/repo[@ref] keys.
+      const source = canonicalizePluginSourceKey(entry.source);
+      if (!source) continue;
+      const prev = this.plugins.get(source);
+      this.plugins.set(source, {
         state: {
-          source: entry.source,
-          enabled: entry.enabled,
-          id: entry.id,
-          status: entry.enabled ? "idle" : "disabled",
-          installedAt: entry.installedAt,
+          source,
+          enabled: entry.enabled || prev?.state.enabled === true,
+          id: entry.id ?? prev?.state.id,
+          status: entry.enabled || prev?.state.enabled ? "idle" : "disabled",
+          installedAt: prev?.state.installedAt ?? entry.installedAt,
         },
       });
+      if (source !== entry.source) {
+        removeInstallRecord(entry.source);
+        upsertInstallRecord({
+          source,
+          enabled: entry.enabled || prev?.state.enabled === true,
+          id: entry.id ?? prev?.state.id,
+          installedAt: prev?.state.installedAt ?? entry.installedAt,
+        });
+      }
     }
     this.emit();
 
     // Host inject: ensure each source is present and enabled.
     const normalizedHost = hostSources
-      .map((s) => s.trim())
+      .map((s) => canonicalizePluginSourceKey(s.trim()))
       .filter((s) => s.length > 0);
     for (const source of normalizedHost) {
       const existing = this.plugins.get(source);
@@ -129,7 +146,7 @@ export class PluginManager {
    */
   async applyHostSources(sources: readonly string[]): Promise<void> {
     for (const raw of sources) {
-      const source = raw.trim();
+      const source = canonicalizePluginSourceKey(raw.trim());
       if (!source) continue;
       const existing = this.plugins.get(source);
       if (existing?.state.status === "active") continue;
@@ -141,10 +158,14 @@ export class PluginManager {
     }
   }
 
-  /** Install from user input (GitHub or URL), enable, and activate. */
+  /**
+   * Install from user input (GitHub short form or URL), enable, and activate.
+   * GitHub sources are stored as `owner/repo[@ref]` — never as release URLs.
+   */
   async install(source: string): Promise<void> {
-    const sourceKey = source.trim();
-    if (!sourceKey) throw new Error("Empty plugin source");
+    const raw = source.trim();
+    if (!raw) throw new Error("Empty plugin source");
+    const sourceKey = canonicalizePluginSourceKey(raw);
 
     const installedAt =
       this.plugins.get(sourceKey)?.state.installedAt ??
@@ -244,7 +265,9 @@ export class PluginManager {
     try {
       const resolved = await resolvePluginSource(source);
       const manifest = await fetchPluginManifest(resolved.manifestUrl);
-      const entryUrl = resolvePluginEntryUrl(manifest.entry, resolved.baseUrl);
+      const entryUrl = resolvePluginEntryUrl(manifest.entry, resolved.baseUrl, {
+        layout: resolved.layout,
+      });
       const mod = await loadPluginModule(entryUrl);
 
       if (mod.id !== manifest.id) {
@@ -305,7 +328,17 @@ export class PluginManager {
     return true;
   }
 
+  /**
+   * Record a plugin failure **and say so on the console**.
+   *
+   * Without the log, a plugin whose module throws at evaluation time simply
+   * does not appear: no contributions, no console output, and the only
+   * signal is a small icon inside Settings → Plugins. A broken bundle then
+   * reads exactly like a plugin that was never installed, which is how a
+   * build-time breakage went unnoticed until someone opened that panel.
+   */
   private setError(source: string, message: string): void {
+    console.error(`${HOST_LOG_TAG} plugin failed: ${source} — ${message}`);
     if (!this.patchState(source, { status: "error", error: message })) return;
     this.emit();
   }
