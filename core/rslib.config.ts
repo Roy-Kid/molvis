@@ -7,8 +7,6 @@ import { defineConfig } from "@rslib/core";
  * Watch must not wipe `dist/` — dependents resolve package exports to dist,
  * and a clean mid-rebuild races stage/sketch/page (Module not found).
  */
-const watching = process.argv.includes("--watch");
-
 export default defineConfig({
   lib: [
     {
@@ -19,8 +17,14 @@ export default defineConfig({
         entry: { index: "./src/**" },
       },
       output: {
+        // Never empty dist. `stage` and `page` resolve `@molcrafts/molvis-core`
+        // subpaths straight into it, and a build that wipes dist first opens a
+        // window where those resolve to nothing — which rspack then *caches*,
+        // so every later build fails with "Can't resolve" until the cache is
+        // deleted by hand. The entry map is one file per module, so stale
+        // output only appears if a source module is deleted.
+        cleanDistPath: false,
         target: "web",
-        cleanDistPath: !watching,
         externals: ["@molcrafts/molrs"],
       },
     },
