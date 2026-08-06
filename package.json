@@ -67,6 +67,7 @@
     "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
     "dev:plugin": "npm run dev -w @molcrafts/molvis-plugin",
     "dev:page": "npm run dev -w page",
+    "check:dev-ready": "L=$(mktemp); FORCE_COLOR=1 npm run dev:page > \"$L\" 2>&1 & P=$!; for i in $(seq 1 72); do sleep 5; grep -q \"Local:\" \"$L\" && break; done; if grep -q \"Local:\" \"$L\"; then R=0; else echo \"dev never reported ready \u2014 a service readyWhen pattern likely does not match its colored output:\"; tail -20 \"$L\"; R=1; fi; kill -INT $P 2>/dev/null; sleep 3; kill -9 $P 2>/dev/null; exit $R",
     "dev:python": "npm run dev:python -w page",
     "build:core": "npm run build -w @molcrafts/molvis-core",
     "build:stage": "npm run build -w @molcrafts/molvis-stage",

@@ -98,7 +98,7 @@
       "command": "rslib build --watch",
       "service": {
         "readyWhen": {
-          "lineMatches": "success build completed, watching for changes"
+          "lineMatches": "build completed, watching for changes"
         }
       }
     },
