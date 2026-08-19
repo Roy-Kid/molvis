@@ -1,8 +1,9 @@
 import * as assert from "assert";
 import {
+  waitForWasmWant,
   wasmHrefFromWorkerScript,
   webviewWorkerBootstrap,
-  webviewWorkerWithMainThreadWasm,
+  webviewWorkerWithPostedWasm,
 } from "../../../src/webview/spawnWebviewWorker";
 
 suite("spawnWebviewWorker", () => {
@@ -27,13 +28,40 @@ suite("spawnWebviewWorker", () => {
     );
   });
 
-  test("wasm fetch interceptor rewrites .module.wasm to the blob URL", () => {
-    const body = webviewWorkerWithMainThreadWasm(
-      "/* worker */",
-      "blob:vscode-webview://wasm",
-    );
+  test("posted-wasm prefix inlines the worker and never import()s a CDN URL", () => {
+    const body = webviewWorkerWithPostedWasm("/* worker-body */");
+    assert.ok(body.includes("__molvisWasmWant"));
+    assert.ok(body.includes("__molvisWasm"));
     assert.ok(body.includes(".module.wasm"));
-    assert.ok(body.includes("blob:vscode-webview://wasm"));
-    assert.ok(body.endsWith("/* worker */"));
+    assert.ok(body.includes("new Response"));
+    assert.ok(body.includes("application/wasm"));
+    assert.ok(body.endsWith("/* worker-body */"));
+    assert.ok(!body.includes("await import("));
+    assert.ok(!body.includes("vscode-cdn.net"));
+    assert.ok(!body.includes("createObjectURL"));
+    assert.doesNotMatch(
+      body,
+      /origFetch\([^)]*\.module\.wasm/,
+      "wasm must not fall through to fetch",
+    );
+  });
+
+  test("waitForWasmWant resolves on the prefix handshake flag", async () => {
+    const listeners = new Map<string, Set<(event: Event) => void>>();
+    const worker = {
+      addEventListener(type: string, listener: (event: Event) => void) {
+        const set = listeners.get(type) ?? new Set();
+        set.add(listener);
+        listeners.set(type, set);
+      },
+      removeEventListener(type: string, listener: (event: Event) => void) {
+        listeners.get(type)?.delete(listener);
+      },
+    };
+    const pending = waitForWasmWant(worker, 200);
+    for (const listener of listeners.get("message") ?? []) {
+      listener({ data: { __molvisWasmWant: true } } as MessageEvent);
+    }
+    await pending;
   });
 });

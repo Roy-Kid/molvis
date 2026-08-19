@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 
 /** Bump when webview JS changes under the same extension version so
  *  Chromium does not reuse a cached `shared.js` after `--force` install. */
-const WEBVIEW_ASSET_REV = "dcd-preview-3";
+const WEBVIEW_ASSET_REV = "dcd-preview-5";
 
 function scriptUri(
   webview: vscode.Webview,
@@ -42,7 +42,7 @@ function buildCsp(webview: vscode.Webview, nonce: string): string {
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     `script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval' blob:`,
     `worker-src ${webview.cspSource} blob:`,
-    `connect-src ${webview.cspSource} https:`,
+    `connect-src ${webview.cspSource} https: blob:`,
     `font-src ${webview.cspSource} https: data:`,
   ].join("; ");
 }

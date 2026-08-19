@@ -28,4 +28,20 @@ suite("binary custom editor range", () => {
       "binary preview must call handleRangeMessage or DCD/XTC/TRR open hangs",
     );
   });
+
+  test("webview CSP connect-src allows blob: (worker wasm must not fetch)", () => {
+    const src = readFileSync(
+      join(vscExtRoot(), "src/extension/panels/html.ts"),
+      "utf8",
+    );
+    assert.match(
+      src,
+      /connect-src \$\{webview\.cspSource\} https: blob:/,
+      "connect-src must include blob: so leftover worker blob fetches are not a CSP 400",
+    );
+    assert.ok(
+      src.includes('WEBVIEW_ASSET_REV = "dcd-preview-5"'),
+      "bump WEBVIEW_ASSET_REV when webview worker bootstrap changes",
+    );
+  });
 });

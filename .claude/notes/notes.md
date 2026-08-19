@@ -3,6 +3,32 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+<!-- mol:note:topic:webview-worker-wasm -->
+## [2026-08-19] VS Code trajectory worker WASM is posted, never fetched
+
+Webviews are `vscode-webview://`; `asWebviewUri` scripts live on
+`*.vscode-cdn.net`. Three Chromium traps, all observed:
+
+1. `new Worker(cdnUrl)` is a cross-origin constructor — rejected.
+2. Blob-module **static** `import` of the CDN worker loads JS, but the
+   worker's `fetch(*.module.wasm)` is CORS / CSP `connect-src` and throws
+   `Failed to fetch`. Redirecting that fetch to a `blob:` wasm URL still
+   fetches.
+3. Blob-module **dynamic** `import(cdnUrl)` is itself a fetch —
+   `Failed to fetch dynamically imported module`. Static `import` is
+   hoisted, so it cannot run after a wasm handshake.
+
+**Rule**: Main thread `fetch`es worker.js + wasm via `asWebviewUri`. Spawn a
+blob worker whose prefix waits for `{__molvisWasm: ArrayBuffer}`, serves
+`.module.wasm` with `new Response(bytes)` (and patches
+`WebAssembly.instantiateStreaming`), then **inlines** the worker source in
+the same module. No worker-side `import()`, no worker-side wasm `fetch`.
+Handshake is `__molvisWasmWant` first — Chrome drops messages posted before
+the worker script starts. Bump `WEBVIEW_ASSET_REV` in `html.ts` when this
+bootstrap changes. `connect-src` / `worker-src` must allow `blob:`.
+
+Code: `vsc-ext/src/webview/spawnWebviewWorker.ts`.
+
 <!-- mol:note:topic:molrs-traj-streaming -->
 ## [2026-08-18] MolRS owns trajectory streaming
 
