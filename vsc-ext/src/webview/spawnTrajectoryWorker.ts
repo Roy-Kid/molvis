@@ -15,7 +15,7 @@ import {
   TrajectoryRuntime,
   type WorkerLike,
 } from "@molcrafts/molvis-stage/trajectory-runtime";
-import { spawnWebviewWorkerFromHref } from "./spawnWebviewWorker";
+import { spawnWebviewWorkerLoadingWasm } from "./spawnWebviewWorker";
 
 export type { Format } from "@molcrafts/molvis-stage/trajectory-protocol";
 export {
@@ -27,12 +27,14 @@ export {
   type WorkerLike,
 } from "@molcrafts/molvis-stage/trajectory-runtime";
 
-export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
+export async function spawnTrajectoryWorker(
+  format: Format,
+): Promise<TrajectoryRuntime> {
   // Non-literal path: bundlers must not treat this as a worker entry to fold
   // into the main graph. Resolves relative to this module's chunk URL
   // (`…/chunks/shared.js` → `…/chunks/worker.js`).
   const workerScript = "./worker.js";
-  const worker = spawnWebviewWorkerFromHref(
+  const worker = await spawnWebviewWorkerLoadingWasm(
     new URL(workerScript, import.meta.url).href,
     `trajectory-${format}`,
   );

@@ -94,11 +94,8 @@ function workerSourceFor(
  *  `Worker` interface satisfies this; tests can supply a fake. */
 export interface WorkerLike {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: "message", listener: (e: MessageEvent) => void): void;
-  removeEventListener(
-    type: "message",
-    listener: (e: MessageEvent) => void,
-  ): void;
+  addEventListener(type: string, listener: (e: Event) => void): void;
+  removeEventListener(type: string, listener: (e: Event) => void): void;
   terminate(): void;
 }
 
@@ -114,7 +111,7 @@ interface PendingRequest {
 export class TrajectoryRuntime {
   private nextRequestId = 1;
   private pending = new Map<number, PendingRequest>();
-  private listener: (e: MessageEvent) => void;
+  private listener: (e: Event) => void;
   private closed = false;
   private openRequestId: number | null = null;
   /** Correlation id of the most recent {@link loadFrameLatest} request, or
@@ -140,16 +137,49 @@ export class TrajectoryRuntime {
    *  worker emitting a `worker-heartbeat` from its module top-level. */
   private readonly workerReady: Promise<void>;
   private resolveWorkerReady!: () => void;
+  private rejectWorkerReady!: (err: Error) => void;
+  private workerReadySettled = false;
+  private workerReadyTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly worker: WorkerLike,
     private readonly format: Format,
   ) {
-    this.workerReady = new Promise<void>((resolve) => {
+    this.workerReady = new Promise<void>((resolve, reject) => {
       this.resolveWorkerReady = resolve;
+      this.rejectWorkerReady = reject;
+      this.workerReadyTimer = setTimeout(() => {
+        this.failWorkerReady(
+          new Error(
+            "Trajectory worker failed to start (WASM). See the webview console.",
+          ),
+        );
+      }, 30_000);
     });
-    this.listener = (e) => this.dispatch(e.data as WorkerResponse);
+    this.listener = (e) =>
+      this.dispatch((e as MessageEvent).data as WorkerResponse);
     this.worker.addEventListener("message", this.listener);
+    this.worker.addEventListener("error", (event) => {
+      const message =
+        event instanceof ErrorEvent && event.message
+          ? event.message
+          : "worker error";
+      this.failWorkerReady(new Error(`Trajectory worker: ${message}`));
+    });
+  }
+
+  private markWorkerReady(): void {
+    if (this.workerReadySettled) return;
+    this.workerReadySettled = true;
+    clearTimeout(this.workerReadyTimer);
+    this.resolveWorkerReady();
+  }
+
+  private failWorkerReady(err: Error): void {
+    if (this.workerReadySettled) return;
+    this.workerReadySettled = true;
+    clearTimeout(this.workerReadyTimer);
+    this.rejectWorkerReady(err);
   }
 
   /** Run the (blocking) indexing pass on the source. Resolves once the
@@ -327,7 +357,7 @@ export class TrajectoryRuntime {
       case "worker-heartbeat":
         // The worker's ready signal — resolve the workerReady promise
         // so deferred outbound posts can fire.
-        this.resolveWorkerReady();
+        this.markWorkerReady();
         return;
       case "index-progress":
         this.onIndexProgress(msg);

@@ -564,7 +564,7 @@ export async function loadFileStream(
   });
   // canStream narrows `format` to the worker's `Format` type, so
   // spawnTrajectoryWorker accepts it without a cast.
-  const runtime = spawnTrajectoryWorker(format);
+  const runtime = await Promise.resolve(spawnTrajectoryWorker(format));
   const source = isTrajectorySource(file) ? file : new BlobRangeSource(file);
   // Real Files have stable identity (size + lastModified) so we can
   // key the OPFS index sidecar against them. Network-fetched Blobs
@@ -680,7 +680,9 @@ export async function loadFileStream(
   }
 
   app.events.emit("status-message", {
-    text: `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`,
+    text: opened.indexComplete
+      ? `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`
+      : `Showing frame 1; indexing ${filename}…`,
     type: "info",
   });
   await installPrimaryTrajectory(

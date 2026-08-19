@@ -37,11 +37,9 @@ class FakeWorker implements WorkerLike {
     queueMicrotask(() => this.respond(req, this));
   }
 
-  addEventListener(
-    _type: "message",
-    listener: (e: MessageEvent) => void,
-  ): void {
-    this.listeners.push(listener);
+  addEventListener(type: string, listener: (e: Event) => void): void {
+    if (type !== "message") return;
+    this.listeners.push(listener as (e: MessageEvent) => void);
     // Mimic the real worker emitting a heartbeat once it has
     // registered its own message listener — runtime.open() awaits
     // this before posting any outbound message.
@@ -54,10 +52,8 @@ class FakeWorker implements WorkerLike {
     });
   }
 
-  removeEventListener(
-    _type: "message",
-    listener: (e: MessageEvent) => void,
-  ): void {
+  removeEventListener(type: string, listener: (e: Event) => void): void {
+    if (type !== "message") return;
     this.listeners = this.listeners.filter((l) => l !== listener);
   }
 
