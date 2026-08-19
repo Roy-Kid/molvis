@@ -7,6 +7,7 @@ import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import {
   handleDropUri,
+  handleRangeMessage,
   handleSaveFile,
   loadTextDocumentToWebview,
   onWebviewMessage,
@@ -102,6 +103,15 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
             this.logger.error(`MolVis: ${message.message}`);
             break;
           default:
+            if (
+              await handleRangeMessage(
+                webviewPanel.webview,
+                message,
+                this.logger,
+              )
+            ) {
+              break;
+            }
             break;
         }
       }, this.logger),

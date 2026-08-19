@@ -14,18 +14,17 @@
  * Hosts that build the worker separately (VS Code webview) swap this module
  * via `NormalModuleReplacementPlugin` — keep it single-purpose.
  */
+import { spawnModuleWorker } from "../transport/spawn_module_worker";
+
 export function spawnComputeWorker(): Worker {
-  if (typeof Worker === "undefined") {
-    throw new Error("Compute worker: Worker is not available");
-  }
   // Module worker. This chunk pulls shared split chunks, so the folding
   // host MUST emit ESM with `import`-based worker chunk loading: the page
   // sets `output.module: true` (rsbuild), the stage viewer bundle sets
   // `workerChunkLoading: "import"` (rslib is already ESM), and the repo
   // `.browserslistrc` keeps the browser floor module-worker-capable.
   // Under legacy `importScripts` loading a module worker dies at boot.
-  return new Worker(new URL("./worker.js", import.meta.url), {
-    type: "module",
-    name: "molvis-compute",
-  });
+  return spawnModuleWorker(
+    new URL("./worker.js", import.meta.url),
+    "molvis-compute",
+  );
 }

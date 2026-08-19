@@ -43,7 +43,8 @@ export class TrajectoryExtent {
   }
 
   get filmstripVisible(): boolean {
-    return this.addressableLength > 1;
+    // Scanning (unknown N) must show the indicator even at 1 indexed frame.
+    return !this.indexComplete || this.addressableLength > 1;
   }
 
   get allowsImplicitWholeRange(): boolean {

@@ -1,5 +1,8 @@
 import * as assert from "assert";
-import { WebviewHostRangeSource } from "../../../src/webview/hostRangeSource";
+import {
+  asHostBytes,
+  WebviewHostRangeSource,
+} from "../../../src/webview/hostRangeSource";
 
 suite("hostRangeSource", () => {
   test("kind is host and size is the declared byte length", async () => {
@@ -28,5 +31,36 @@ suite("hostRangeSource", () => {
     src.deliver(1, new Uint8Array([0, 1, 2, 3]));
     assert.deepStrictEqual([...(await a)], [0, 1, 2, 3]);
     assert.deepStrictEqual([...(await b)], [4, 5, 6, 7]);
+  });
+});
+
+suite("asHostBytes", () => {
+  test("accepts Uint8Array and ArrayBuffer", () => {
+    const u8 = new Uint8Array([1, 2, 3]);
+    assert.deepStrictEqual([...(asHostBytes(u8) as Uint8Array)], [1, 2, 3]);
+    const fromBuf = asHostBytes(u8.buffer);
+    assert.deepStrictEqual([...(fromBuf as Uint8Array)], [1, 2, 3]);
+  });
+
+  test("copies a view onto a larger buffer", () => {
+    const backing = new Uint8Array([9, 1, 2, 3, 9]);
+    const view = backing.subarray(1, 4);
+    const packed = asHostBytes(view);
+    assert.ok(packed);
+    assert.deepStrictEqual([...packed], [1, 2, 3]);
+    assert.strictEqual(packed.byteOffset, 0);
+    assert.strictEqual(packed.buffer.byteLength, 3);
+  });
+
+  test("accepts Node Buffer JSON shape", () => {
+    const packed = asHostBytes({ type: "Buffer", data: [4, 5] });
+    assert.deepStrictEqual([...(packed as Uint8Array)], [4, 5]);
+  });
+
+  test("rejects missing or non-binary payloads", () => {
+    assert.strictEqual(asHostBytes(null), null);
+    assert.strictEqual(asHostBytes(undefined), null);
+    assert.strictEqual(asHostBytes({}), null);
+    assert.strictEqual(asHostBytes("abc"), null);
   });
 });

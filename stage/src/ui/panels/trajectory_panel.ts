@@ -1,6 +1,6 @@
 export class MolvisTrajectoryPanel extends HTMLElement {
   static get observedAttributes() {
-    return ["length", "current", "playing"];
+    return ["length", "current", "playing", "scanning"];
   }
 
   private static readonly WIDTH_RATIO = 0.62;
@@ -263,19 +263,11 @@ export class MolvisTrajectoryPanel extends HTMLElement {
   }
 
   attributeChangedCallback(name: string, _oldValue: string, newValue: string) {
-    if (name === "length") {
-      const len = Number.parseInt(newValue, 10);
-      this.slider.max = (len - 1).toString();
-      this.totalLabel.textContent = newValue;
-      // Hide if 0 or 1 frame
-      if (len <= 1) {
-        this.setAttribute("hidden", "");
-      } else {
-        this.removeAttribute("hidden");
-      }
+    if (name === "length" || name === "scanning") {
+      this.syncReadout();
     } else if (name === "current") {
       this.slider.value = newValue;
-      this.currentLabel.textContent = newValue;
+      this.syncCurrentLabel();
     } else if (name === "playing") {
       const isPlaying = newValue !== null;
       const playIcon = this.shadow.getElementById("playIcon") as HTMLElement;
@@ -305,6 +297,15 @@ export class MolvisTrajectoryPanel extends HTMLElement {
 
   set current(val: number) {
     this.setAttribute("current", val.toString());
+  }
+
+  get scanning(): boolean {
+    return this.hasAttribute("scanning");
+  }
+
+  set scanning(val: boolean) {
+    if (val) this.setAttribute("scanning", "");
+    else this.removeAttribute("scanning");
   }
 
   get playing(): boolean {
@@ -340,6 +341,27 @@ export class MolvisTrajectoryPanel extends HTMLElement {
 
     this.style.setProperty("--traj-width", `${panelWidth}px`);
     this.style.setProperty("--traj-bottom", `${panelBottom}px`);
+  }
+
+  private syncReadout(): void {
+    const len = this.length;
+    const scanning = this.scanning;
+    this.slider.max = String(Math.max(0, len - 1));
+    this.totalLabel.textContent = scanning ? `${len}…` : String(len);
+    this.syncCurrentLabel();
+    // Scanning (unknown N, including 0/1 indexed frames) must show the
+    // indicator. Do not rely on the `hidden` content attribute alone:
+    // Chromium's UA `[hidden] { display: none !important }` fights
+    // `:host { display: flex }`.
+    const show = scanning || len > 1;
+    this.toggleAttribute("hidden", !show);
+    this.style.display = show ? "flex" : "none";
+  }
+
+  private syncCurrentLabel(): void {
+    const len = this.length;
+    const idx = this.current;
+    this.currentLabel.textContent = String(len === 0 ? 0 : idx + 1);
   }
 
   private updateLayoutFromHost(): void {

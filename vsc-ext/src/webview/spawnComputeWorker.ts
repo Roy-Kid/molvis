@@ -8,16 +8,15 @@
  * colocated with the shared chunks.
  */
 
+import { spawnWebviewWorkerFromHref } from "./spawnWebviewWorker";
+
 export function spawnComputeWorker(): Worker {
-  if (typeof Worker === "undefined") {
-    throw new Error("Compute worker: Worker is not available");
-  }
   // Non-literal path: bundlers must not treat this as a worker entry to fold
   // into the main graph. Resolves relative to this module's chunk URL
   // (`…/chunks/*.js` → `…/chunks/compute-worker.js`).
   const workerScript = "./compute-worker.js";
-  return new Worker(new URL(workerScript, import.meta.url), {
-    type: "module",
-    name: "molvis-compute",
-  });
+  return spawnWebviewWorkerFromHref(
+    new URL(workerScript, import.meta.url).href,
+    "molvis-compute",
+  );
 }

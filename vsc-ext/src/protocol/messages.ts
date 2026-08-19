@@ -101,7 +101,8 @@ export type HostToWebviewMessage =
   | {
       type: "bytes";
       fetchId: number;
-      data: Uint8Array;
+      data: Uint8Array | null;
+      error?: string;
     };
 
 /** Webview → host. */

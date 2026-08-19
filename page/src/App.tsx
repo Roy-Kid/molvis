@@ -290,9 +290,10 @@ const App: React.FC = () => {
     100 -
       railMinPct * ((showInlineCompute ? 1 : 0) + (showInlineTools ? 1 : 0)),
   );
-  // Trajectory is a canvas HUD (P0), not status-bar chrome. Single-frame
-  // trajectories never show the strip. Fullscreen (uiHidden) still keeps it.
-  const showTimeline = chrome.timeline && app !== null && trajectoryLength > 1;
+  // Trajectory is a canvas HUD (P0), not status-bar chrome. Hide only a
+  // finished 1-frame structure — scanning (unknown N) must stay visible.
+  const showTimeline =
+    chrome.timeline && app !== null && trajectoryExtent.filmstripVisible;
   // P1: status is a canvas overlay, not a layout strip.
   const showStatusOverlay = !uiHidden && chrome.statusBar;
 

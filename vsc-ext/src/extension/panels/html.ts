@@ -2,14 +2,19 @@ import * as vscode from "vscode";
 
 // --- Asset URIs ---
 
+/** Bump when webview JS changes under the same extension version so
+ *  Chromium does not reuse a cached `shared.js` after `--force` install. */
+const WEBVIEW_ASSET_REV = "traj-hud-1";
+
 function scriptUri(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
   ...pathSegments: string[]
 ): vscode.Uri {
-  return webview.asWebviewUri(
+  const uri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "out", ...pathSegments),
   );
+  return uri.with({ query: `v=${WEBVIEW_ASSET_REV}` });
 }
 
 // --- HTML ---
@@ -35,7 +40,7 @@ function buildCsp(webview: vscode.Webview, nonce: string): string {
     "default-src 'none'",
     `img-src ${webview.cspSource} https: data:`,
     `style-src ${webview.cspSource} 'unsafe-inline'`,
-    `script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+    `script-src ${webview.cspSource} 'nonce-${nonce}' 'wasm-unsafe-eval' blob:`,
     `worker-src ${webview.cspSource} blob:`,
     `connect-src ${webview.cspSource} https:`,
     `font-src ${webview.cspSource} https: data:`,

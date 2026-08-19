@@ -556,6 +556,12 @@ export async function loadFileStream(
       `Format "${format}" cannot stream (descriptor.streaming = "eager-only"). Route this load through loadFileContent / loadFileSmart's eager path instead.`,
     );
   }
+  // HUD first — emit before spawning so a stuck worker still shows `0/0…`.
+  app.events.emit("length-changed", {
+    indexedLength: 0,
+    length: null,
+    indexComplete: false,
+  });
   // canStream narrows `format` to the worker's `Format` type, so
   // spawnTrajectoryWorker accepts it without a cast.
   const runtime = spawnTrajectoryWorker(format);

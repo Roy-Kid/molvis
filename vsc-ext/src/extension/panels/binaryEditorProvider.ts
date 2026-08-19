@@ -7,6 +7,7 @@ import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import {
   handleDropUri,
+  handleRangeMessage,
   handleSaveFile,
   onWebviewMessage,
   sendLoadedFile,
@@ -121,6 +122,15 @@ export class MolvisBinaryEditorProvider
             this.logger.error(`MolVis: ${message.message}`);
             break;
           default:
+            if (
+              await handleRangeMessage(
+                webviewPanel.webview,
+                message,
+                this.logger,
+              )
+            ) {
+              break;
+            }
             break;
         }
       }, this.logger),

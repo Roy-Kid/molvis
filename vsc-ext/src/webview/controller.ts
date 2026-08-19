@@ -51,14 +51,16 @@ export function bootstrapWebview(
   });
 
   // App startup is independent from molecule shader compilation.
+  // Post `ready` before outline/settings so the host can `openUri` (and
+  // the trajectory HUD can appear) without waiting on those imports.
   void app
     .start()
     .then(async () => {
+      options.onReady?.();
+      postQuickViewReady(host);
       for (const id of DEFAULT_STAGE_CAPABILITIES) {
         await capabilities.enable(id);
       }
-      options.onReady?.();
-      postQuickViewReady(host);
     })
     .catch((error: unknown) => {
       // Dismiss overlay so the canvas (and any error toast) is visible.

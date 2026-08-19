@@ -25,6 +25,7 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
 import { logger } from "../../utils/logger";
+import { spawnModuleWorker } from "../spawn_module_worker";
 import { rehydrateFrame } from "./frame_codec";
 import type {
   CancelRequest,
@@ -371,10 +372,15 @@ export class TrajectoryRuntime {
         req.byteOffset,
         req.byteOffset + req.byteLen,
       );
-      // Transfer the underlying buffer instead of cloning. ArrayBuffer
-      // is the canonical transferable here; once posted, the local
-      // `bytes` view is detached.
-      const buf = bytes.buffer;
+      if (!(bytes instanceof Uint8Array)) {
+        throw new Error("runtime: readRange did not return Uint8Array");
+      }
+      // Copy into a packed buffer before transfer. Hosts (VS Code IPC)
+      // often hand back a view onto a larger pooled buffer; transferring
+      // `bytes.buffer` would send the wrong bytes and detach the pool.
+      const packed = new Uint8Array(bytes.byteLength);
+      packed.set(bytes);
+      const buf = packed.buffer;
       this.worker.postMessage(
         {
           kind: "bytes",
@@ -497,10 +503,10 @@ function _assertWorkerCtor(): void {
  *  with an injected fake worker instead. */
 export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
   _assertWorkerCtor();
-  const worker = new Worker(new URL("./worker.js", import.meta.url), {
-    type: "module",
-    name: `trajectory-${format}`,
-  });
+  const worker = spawnModuleWorker(
+    new URL("./worker.js", import.meta.url),
+    `trajectory-${format}`,
+  );
   logger.info(`[trajectory-runtime] spawned worker for ${format}`);
   return new TrajectoryRuntime(worker as WorkerLike, format);
 }

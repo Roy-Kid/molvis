@@ -26,7 +26,7 @@ import {
 } from "../protocol";
 import { applyConfigAndSettings } from "./applySettings";
 import { type HostApi, reportError, runAsync } from "./errorBoundary";
-import { WebviewHostRangeSource } from "./hostRangeSource";
+import { asHostBytes, WebviewHostRangeSource } from "./hostRangeSource";
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   const CHUNK_SIZE = 0x8000;
@@ -103,6 +103,16 @@ export function attachStageHost(
         }
         return true;
       case "openUri": {
+        // Show `0/0…` immediately — do not wait for the worker to spawn.
+        app.events.emit("length-changed", {
+          indexedLength: 0,
+          length: null,
+          indexComplete: false,
+        });
+        app.events.emit("status-message", {
+          text: `Opening ${message.filename}…`,
+          type: "info",
+        });
         const source = new WebviewHostRangeSource(
           message.uri,
           message.size,
@@ -128,9 +138,22 @@ export function attachStageHost(
         });
         return true;
       }
-      case "bytes":
-        rangeSource?.deliver(message.fetchId, message.data);
+      case "bytes": {
+        if (message.error) {
+          rangeSource?.fail(message.fetchId, message.error);
+          return true;
+        }
+        const bytes = asHostBytes(message.data);
+        if (!bytes) {
+          rangeSource?.fail(
+            message.fetchId,
+            "byte-range payload was not binary",
+          );
+          return true;
+        }
+        rangeSource?.deliver(message.fetchId, bytes);
         return true;
+      }
       case "loadFile": {
         const { content, filename, format, mode, stream } = message;
         if (stream && content instanceof Uint8Array && format) {

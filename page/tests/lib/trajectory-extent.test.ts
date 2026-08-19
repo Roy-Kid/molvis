@@ -30,4 +30,14 @@ describe("TrajectoryExtent", () => {
     expect(ext.lastControlLabel).toBe("Last indexed frame");
     expect(ext.filmstripVisible).toBe(true);
   });
+
+  it("shows the filmstrip while scanning even with a single indexed frame", () => {
+    const ext = new TrajectoryExtent({
+      length: null,
+      indexedLength: 1,
+      indexComplete: false,
+    });
+    expect(ext.filmstripVisible).toBe(true);
+    expect(ext.frameReadout(0)).toBe("1/1…");
+  });
 });

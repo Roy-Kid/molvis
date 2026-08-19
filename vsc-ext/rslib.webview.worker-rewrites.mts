@@ -43,10 +43,18 @@ export class TrajectoryRuntimeRewrite {
   }
 
   plugin(): InstanceType<typeof rspack.NormalModuleReplacementPlugin> {
+    // Stage's io graph imports `./runtime.js` from the trajectory_worker
+    // folder — not the path `trajectory_worker/runtime.js`. Match the
+    // short request and pin the rewrite to that folder, or the original
+    // `new Worker(cdnUrl)` ships in the webview and Chromium rejects it.
     return new rspack.NormalModuleReplacementPlugin(
-      /trajectory_worker[\\/]runtime\.(ts|js)$/,
+      /(^|[\\/])runtime\.(ts|js)$/,
       (resource: { context: string; request: string }) => {
         if (importedFromExtension(resource.context)) {
+          return;
+        }
+        const ctx = resource.context.replace(/\\/g, "/");
+        if (!ctx.endsWith("/trajectory_worker")) {
           return;
         }
         resource.request = this.wrapper;

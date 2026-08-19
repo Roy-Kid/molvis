@@ -15,6 +15,7 @@ import {
   TrajectoryRuntime,
   type WorkerLike,
 } from "@molcrafts/molvis-stage/trajectory-runtime";
+import { spawnWebviewWorkerFromHref } from "./spawnWebviewWorker";
 
 export type { Format } from "@molcrafts/molvis-stage/trajectory-protocol";
 export {
@@ -27,16 +28,13 @@ export {
 } from "@molcrafts/molvis-stage/trajectory-runtime";
 
 export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
-  if (typeof Worker === "undefined") {
-    throw new Error("TrajectoryRuntime: Worker is not available");
-  }
   // Non-literal path: bundlers must not treat this as a worker entry to fold
   // into the main graph. Resolves relative to this module's chunk URL
   // (`…/chunks/shared.js` → `…/chunks/worker.js`).
   const workerScript = "./worker.js";
-  const worker = new Worker(new URL(workerScript, import.meta.url), {
-    type: "module",
-    name: `trajectory-${format}`,
-  });
+  const worker = spawnWebviewWorkerFromHref(
+    new URL(workerScript, import.meta.url).href,
+    `trajectory-${format}`,
+  );
   return new TrajectoryRuntime(worker as WorkerLike, format);
 }

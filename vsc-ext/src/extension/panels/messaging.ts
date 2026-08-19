@@ -49,6 +49,10 @@ export async function sendLoadedFile(
       } catch {
         // no sibling sidecar
       }
+      const mb = loaded.openUri.size / (1024 * 1024);
+      logger.info(
+        `MolVis: streaming ${filename} (${mb.toFixed(1)} MB) via byte ranges`,
+      );
       sendToWebview(webview, {
         type: "openUri",
         uri: uri.toString(),
@@ -116,6 +120,12 @@ export async function handleRangeMessage(
     sendToWebview(webview, { type: "bytes", fetchId: message.fetchId, data });
   } catch (error) {
     logger.error(`MolVis: range read failed: ${error}`);
+    sendToWebview(webview, {
+      type: "bytes",
+      fetchId: message.fetchId,
+      data: null,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
   return true;
 }

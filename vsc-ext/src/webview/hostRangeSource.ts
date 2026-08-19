@@ -8,6 +8,39 @@
 
 import type { WebviewToHostMessage } from "../protocol";
 
+/**
+ * Coerce a host `bytes` payload into a packed `Uint8Array`.
+ *
+ * VS Code IPC sometimes delivers `ArrayBuffer`, a `Buffer` JSON shape
+ * `{ type: "Buffer", data: number[] }`, or a view onto a pooled buffer.
+ * Anything else is `null` so the caller can fail the fetch instead of
+ * hanging the worker.
+ */
+export function asHostBytes(data: unknown): Uint8Array | null {
+  if (data == null) return null;
+  if (data instanceof Uint8Array) {
+    return data.byteOffset === 0 && data.byteLength === data.buffer.byteLength
+      ? data
+      : data.slice();
+  }
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) {
+    const view = data as ArrayBufferView;
+    return new Uint8Array(
+      view.buffer,
+      view.byteOffset,
+      view.byteLength,
+    ).slice();
+  }
+  if (typeof data === "object") {
+    const rec = data as { type?: unknown; data?: unknown };
+    if (rec.type === "Buffer" && Array.isArray(rec.data)) {
+      return Uint8Array.from(rec.data as number[]);
+    }
+  }
+  return null;
+}
+
 export class WebviewHostRangeSource {
   readonly kind = "host" as const;
   private nextFetchId = 1;
@@ -49,6 +82,13 @@ export class WebviewHostRangeSource {
     if (!pending) return;
     this.pending.delete(fetchId);
     pending.resolve(data);
+  }
+
+  fail(fetchId: number, message: string): void {
+    const pending = this.pending.get(fetchId);
+    if (!pending) return;
+    this.pending.delete(fetchId);
+    pending.reject(new Error(message));
   }
 
   cancel(fetchId: number): void {

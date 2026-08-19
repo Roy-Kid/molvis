@@ -41,6 +41,10 @@ export class GUIManager {
     this.handleTrajectoryChange(trajectory);
   private readonly frameChangeHandler = (index: number) =>
     this.handleFrameChange(index);
+  private readonly lengthChangeHandler = (event: {
+    indexedLength: number;
+    indexComplete: boolean;
+  }) => this.handleLengthChange(event);
 
   constructor(container: HTMLElement, app: MolvisApp, config: MolvisConfig) {
     this.container = container;
@@ -213,7 +217,9 @@ export class GUIManager {
       ) as MolvisTrajectoryPanel;
       this.uiOverlay.appendChild(this.trajectoryPanel);
 
-      // Sync initial trajectory state immediately so single-frame datasets stay hidden.
+      // Scanning first: a 1-frame boot must not hide the HUD before
+      // `length-changed` arrives. Order matters — `length` triggers readout.
+      this.trajectoryPanel.scanning = !this.app.system.trajectory.indexComplete;
       this.trajectoryPanel.length = this.app.system.trajectory.indexedLength;
       this.trajectoryPanel.current = this.app.system.trajectory.currentIndex;
       this.trajectoryPanel.playing = false;
@@ -255,6 +261,7 @@ export class GUIManager {
 
     this.app.events.on("trajectory-change", this.trajectoryChangeHandler);
     this.app.events.on("frame-change", this.frameChangeHandler);
+    this.app.events.on("length-changed", this.lengthChangeHandler);
   }
 
   /**
@@ -268,6 +275,7 @@ export class GUIManager {
 
     this.app.events.off("trajectory-change", this.trajectoryChangeHandler);
     this.app.events.off("frame-change", this.frameChangeHandler);
+    this.app.events.off("length-changed", this.lengthChangeHandler);
   }
 
   /**
@@ -305,10 +313,29 @@ export class GUIManager {
 
   private handleTrajectoryChange(traj: Trajectory): void {
     if (this.trajectoryPanel) {
-      this.trajectoryPanel.length = traj.indexedLength;
-      this.updateTrajectoryPanelLayout();
-      this.stopPlayback(); // Stop ensuring no weirdness
+      this.applyExtent({
+        indexedLength: traj.indexedLength,
+        indexComplete: traj.indexComplete,
+      });
+      this.stopPlayback();
     }
+  }
+
+  private handleLengthChange(event: {
+    indexedLength: number;
+    indexComplete: boolean;
+  }): void {
+    this.applyExtent(event);
+  }
+
+  private applyExtent(event: {
+    indexedLength: number;
+    indexComplete: boolean;
+  }): void {
+    if (!this.trajectoryPanel) return;
+    this.trajectoryPanel.scanning = !event.indexComplete;
+    this.trajectoryPanel.length = event.indexedLength;
+    this.updateTrajectoryPanelLayout();
   }
 
   private handleFrameChange(index: number): void {
