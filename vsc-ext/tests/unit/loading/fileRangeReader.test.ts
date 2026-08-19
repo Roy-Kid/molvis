@@ -12,6 +12,9 @@ suite("fileRangeReader", () => {
     const reader = new FileRangeReader();
     const slice = await reader.read(path, 2, 6, 1);
     assert.strictEqual(Buffer.from(slice).toString("utf8"), "cdef");
+    assert.strictEqual(Object.getPrototypeOf(slice), Uint8Array.prototype);
+    assert.strictEqual(slice.byteOffset, 0);
+    assert.strictEqual(slice.buffer.byteLength, slice.byteLength);
   });
 
   test("cancel rejects an in-flight read", async () => {

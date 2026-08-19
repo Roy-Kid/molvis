@@ -132,7 +132,13 @@ export function attachStageHost(
             new HostRangeSource(source),
             message.filename,
             message.format,
-            { fingerprint },
+            {
+              fingerprint,
+              // Host IPC is a postMessage round-trip per chunk. 1 MiB
+              // is enough for a first streamable frame without stuffing
+              // the webview channel.
+              chunkSize: 1024 * 1024,
+            },
             message.mode,
           );
         });

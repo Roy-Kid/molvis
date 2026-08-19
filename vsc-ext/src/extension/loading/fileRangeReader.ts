@@ -46,7 +46,12 @@ export class FileRangeReader {
           );
         });
         const { bytesRead } = await Promise.race([read, cancelled]);
-        return new Uint8Array(buf.subarray(0, bytesRead));
+        // Packed copy — not a view onto Node's Buffer pool. VS Code IPC
+        // otherwise serializes a Buffer as `{ type: "Buffer", data: number[] }`
+        // and an 8 MiB chunk freezes the webview.
+        const packed = new Uint8Array(bytesRead);
+        packed.set(buf.subarray(0, bytesRead));
+        return packed;
       } finally {
         await handle.close();
       }

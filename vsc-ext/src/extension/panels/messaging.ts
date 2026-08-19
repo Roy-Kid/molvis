@@ -117,6 +117,8 @@ export async function handleRangeMessage(
       message.end,
       message.fetchId,
     );
+    // `data` is already a packed Uint8Array. Post it as-is so VS Code's
+    // buffer serializer can extract the ArrayBuffer instead of JSON.
     sendToWebview(webview, { type: "bytes", fetchId: message.fetchId, data });
   } catch (error) {
     logger.error(`MolVis: range read failed: ${error}`);
