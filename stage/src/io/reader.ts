@@ -29,17 +29,24 @@ import { normalizeAtomCoords, normalizeAtomElements } from "./normalize_coords";
 
 export {
   canStream,
+  decideIngest,
   describeFormat,
   FILE_FORMAT_REGISTRY,
   type FileFormat,
   type FileFormatDescriptor,
   type FormatPayload,
   getAllAcceptExtensions,
+  type IngestDecision,
+  type IngestKind,
   inferFormatFromFilename,
+  ingestKind,
   isBinaryFormat,
   isStreamingOnly,
+  STREAMING_FILE_THRESHOLD_BYTES,
   type StreamingCapability,
   sniffFormatFromTextHead,
+  TRAJECTORY_WHOLE_FILE_CAP_BYTES,
+  wholeFileTrajectoryReason,
 } from "./formats";
 export { extractMessage, toIoError } from "./load_error";
 

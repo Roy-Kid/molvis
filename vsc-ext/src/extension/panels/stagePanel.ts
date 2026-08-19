@@ -1,49 +1,42 @@
 import * as vscode from "vscode";
-import type { StructureOutlinePayload, WorkbenchSurface } from "../../protocol";
+import type { StructureOutlinePayload } from "../../protocol";
 import { createInitMessage } from "../configuration";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
 import type { Logger, PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
-import { getWorkbenchHtml } from "./html";
+import { getPreviewHtml } from "./html";
 import {
   handleDropUri,
+  handleRangeMessage,
   handleSaveFile,
   onWebviewMessage,
   sendLoadedFile,
   sendToWebview,
 } from "./messaging";
 
-export type OpenWorkbenchPanelOptions = {
+export type OpenStagePanelOptions = {
   onStructureOutline?: (outline: StructureOutlinePayload | null) => void;
-  /** Initial engine tab. Default stage. */
-  surface?: WorkbenchSurface;
 };
 
-export const WORKBENCH_VIEW_TYPE = "molvis.workbench";
+export const STAGE_VIEW_TYPE = "molvis.stage";
 
-/**
- * Workbench editor tab — peer hosts for stage (3D) and sketch (2D).
- * Not the React page shell (use Open Page for that).
- */
-export function openWorkbenchPanel(
+/** Dedicated 3D stage editor tab. Peer of the Sketch tab — not a sidebar. */
+export function openStagePanel(
   context: vscode.ExtensionContext,
   panelRegistry: PanelRegistry,
   logger: Logger,
   fileLoader: MolecularFileLoader,
   uri?: vscode.Uri,
-  options?: OpenWorkbenchPanelOptions,
+  options?: OpenStagePanelOptions,
 ): vscode.WebviewPanel {
   const onStructureOutline = options?.onStructureOutline;
-  const surface = options?.surface ?? "stage";
   const baseTitle = uri
-    ? `MolVis: ${getDisplayName(uri)}`
-    : surface === "sketch"
-      ? "MolVis Sketch"
-      : "MolVis Workbench";
+    ? `MolVis Stage: ${getDisplayName(uri)}`
+    : "MolVis Stage";
 
   const panel = vscode.window.createWebviewPanel(
-    WORKBENCH_VIEW_TYPE,
+    STAGE_VIEW_TYPE,
     baseTitle,
     { viewColumn: vscode.ViewColumn.One, preserveFocus: false },
     {
@@ -53,8 +46,7 @@ export function openWorkbenchPanel(
     },
   );
 
-  const getHtml = () =>
-    getWorkbenchHtml(panel.webview, context.extensionUri, { surface });
+  const getHtml = () => getPreviewHtml(panel.webview, context.extensionUri);
   panel.webview.html = getHtml();
 
   const messageDisposable = onWebviewMessage(
@@ -64,19 +56,10 @@ export function openWorkbenchPanel(
         case "ready":
           sendToWebview(panel.webview, createInitMessage());
           if (uri) {
-            // Ensure stage pane is active before load (host may have opened sketch).
-            sendToWebview(panel.webview, {
-              type: "setWorkbenchSurface",
-              surface: "stage",
-            });
             await sendLoadedFile(panel.webview, uri, fileLoader, logger);
           }
           break;
         case "dropUri":
-          sendToWebview(panel.webview, {
-            type: "setWorkbenchSurface",
-            surface: "stage",
-          });
           await handleDropUri(message.uri, panel.webview, fileLoader, logger);
           break;
         case "structureOutline":
@@ -92,6 +75,9 @@ export function openWorkbenchPanel(
           logger.error(`MolVis: ${message.message}`);
           break;
         default:
+          if (await handleRangeMessage(panel.webview, message, logger)) {
+            break;
+          }
           break;
       }
     }, logger),
@@ -99,7 +85,7 @@ export function openWorkbenchPanel(
 
   panelRegistry.register(panel, {
     getHtml,
-    viewType: WORKBENCH_VIEW_TYPE,
+    viewType: STAGE_VIEW_TYPE,
   });
 
   panel.onDidDispose(() => {
@@ -109,13 +95,4 @@ export function openWorkbenchPanel(
   });
 
   return panel;
-}
-
-/** Focus an existing workbench on a surface, or no-op. */
-export function focusWorkbenchSurface(
-  panel: vscode.WebviewPanel,
-  surface: WorkbenchSurface,
-): void {
-  sendToWebview(panel.webview, { type: "setWorkbenchSurface", surface });
-  panel.reveal(panel.viewColumn ?? vscode.ViewColumn.One, false);
 }

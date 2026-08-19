@@ -1,16 +1,23 @@
 /**
  * Shared stage ↔ VS Code host bridge.
  *
- * Quick View and Workbench share load/settings/save/drop. Workbench passes a
- * wider message guard and an `onExtraMessage` hook for selectAtoms / capabilities.
+ * Stage surfaces (Quick View and the Stage editor tab) share
+ * load/settings/save/drop. Extra host messages (selectAtoms) go through
+ * {@link AttachStageHostOptions.onExtraMessage} or the core switch.
  */
 
 import type { Molvis } from "@molcrafts/molvis-stage";
 import {
+  decideIngest,
+  decodeMolidx,
   exportFrame,
   type FileFormat,
+  HostRangeSource,
+  inferFormatFromFilename,
+  isBinaryFormat,
   loadFileContent,
   loadFileStream,
+  OpfsIndexCache,
 } from "@molcrafts/molvis-stage/io";
 import {
   type HostToWebviewMessage,
@@ -19,6 +26,7 @@ import {
 } from "../protocol";
 import { applyConfigAndSettings } from "./applySettings";
 import { type HostApi, reportError, runAsync } from "./errorBoundary";
+import { WebviewHostRangeSource } from "./hostRangeSource";
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
   const CHUNK_SIZE = 0x8000;
@@ -33,8 +41,8 @@ export interface AttachStageHostOptions {
   host: HostApi;
   enableDrop?: boolean;
   /**
-   * When false, only {@link StageHostHandle.handleMessage} is used (Workbench
-   * owns the window listener). Default true for Quick View.
+   * When false, only {@link StageHostHandle.handleMessage} is used.
+   * Default true for Stage / Quick View.
    */
   listenWindow?: boolean;
   /**
@@ -70,6 +78,8 @@ export function attachStageHost(
     onExtraMessage,
   } = options;
 
+  let rangeSource: WebviewHostRangeSource | null = null;
+
   app.saveFile = async (blob: Blob, suggestedName: string) => {
     const buffer = await blob.arrayBuffer();
     const data = uint8ArrayToBase64(new Uint8Array(buffer));
@@ -92,6 +102,35 @@ export function attachStageHost(
           );
         }
         return true;
+      case "openUri": {
+        const source = new WebviewHostRangeSource(
+          message.uri,
+          message.size,
+          (msg) => host.postMessage(msg),
+        );
+        rangeSource = source;
+        const fingerprint = `${message.uri}:${message.size}:${message.mtime}`;
+        runAsync(host, `Failed to load ${message.filename}`, async () => {
+          if (message.index) {
+            const copy = new Uint8Array(message.index.byteLength);
+            copy.set(message.index);
+            const decoded = decodeMolidx(copy.buffer);
+            if (decoded) await OpfsIndexCache.set(fingerprint, decoded);
+          }
+          return loadFileStream(
+            app,
+            new HostRangeSource(source),
+            message.filename,
+            message.format,
+            { fingerprint },
+            message.mode,
+          );
+        });
+        return true;
+      }
+      case "bytes":
+        rangeSource?.deliver(message.fetchId, message.data);
+        return true;
       case "loadFile": {
         const { content, filename, format, mode, stream } = message;
         if (stream && content instanceof Uint8Array && format) {
@@ -113,6 +152,12 @@ export function attachStageHost(
           reportError(host, "Failed to save", error);
         }
         return true;
+      case "selectAtoms": {
+        const { indices } = message;
+        if (!Array.isArray(indices) || indices.length === 0) return true;
+        app.world.selectionManager.replaceAtomsByIds(indices);
+        return true;
+      }
       case "error":
         return true;
       default:
@@ -182,8 +227,26 @@ export function attachStageHost(
 
       void (async () => {
         try {
-          const content = await file.text();
-          await loadFileContent(app, content, file.name, undefined, "replace");
+          const inferred = inferFormatFromFilename(file.name);
+          const decision = inferred ? decideIngest(inferred, file.size) : null;
+          if (decision?.path === "refuse") {
+            throw new Error(decision.reason);
+          }
+          if (decision?.path === "stream" && inferred) {
+            await loadFileStream(app, file, file.name, inferred, {}, "replace");
+            return;
+          }
+          const content =
+            inferred !== null && isBinaryFormat(inferred)
+              ? new Uint8Array(await file.arrayBuffer())
+              : await file.text();
+          await loadFileContent(
+            app,
+            content,
+            file.name,
+            inferred ?? undefined,
+            "replace",
+          );
         } catch (error) {
           reportError(host, `Failed to load dropped file ${file.name}`, error);
         }

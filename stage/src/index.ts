@@ -227,6 +227,7 @@ export type {
   RibbonStyle,
 } from "./artist/ribbon/ribbon_style";
 export type { CategoricalThemeId } from "./artist/style_manager";
+export { type AtomTypeSource, readAtomTypeKeys } from "./atom_type";
 export {
   CameraAnimator,
   type TurntableOptions,
@@ -506,7 +507,6 @@ export {
 export {
   DATA_SOURCE_CATEGORY,
   DataSource,
-  type DataSourceKind,
   type DataSourceOptions,
   FileDataSource,
   MemoryDataSource,
@@ -615,7 +615,6 @@ export {
   WasmArray,
   WasmKMeans,
   WasmPca2,
-  WasmPcaResult,
 } from "./system/index";
 export {
   type CompositionSource,

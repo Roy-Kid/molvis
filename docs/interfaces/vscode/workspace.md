@@ -1,39 +1,55 @@
-# MolVis Workbench
+# Stage, Sketch, and the Activity Bar
 
-The Workbench is an editor tab that **hosts both peer engines**:
+Stage and Sketch are peer editor tabs. The Activity Bar never hosts a canvas.
 
-- **Stage** — 3D (`@molcrafts/molvis-stage`)
-- **Sketch** — 2D (`@molcrafts/molvis-sketch`)
+- **Stage** — 3D editor tab (`@molcrafts/molvis-stage`)
+- **Sketch** — 2D editor tab (`@molcrafts/molvis-sketch`)
+- **Page** — full product shell (`MolVis: Open Page`), same as the web app
+- **Files** — workspace molecular files plus recent paths
+- **Stage** outline — chain / residue / atom tree of the open Stage
+- **Sketch** outline — atoms and bonds of the open Sketch
 
-Switch with the Stage | Sketch tabs (or commands). Each engine mounts lazily
-the first time you open its tab.
+## Files
 
-It is **not** the full React `page/` shell — use **MolVis: Open Page** for that.
+The Activity Bar **Files** view scans the workspace for molecular formats and
+keeps a Recent section. Click a coordinate/trajectory file to open Stage; click
+a `.mol` / `.sdf` file to open Sketch. The view title bar has **Open
+Structure…** (picker, routed by format) and **Refresh**. Right-click a row for
+Quick View.
 
-## Open
+Empty workspace: **Open Structure…** from the welcome.
 
-- **MolVis: Open Workbench** (default Stage tab)
-- **MolVis: Open Stage** / **Open Sketch**
-- Activity Bar Home actions
-- Explorer → Load in Workbench / Open Structure…
+## Open Stage
 
-## Stage tab
+- Click a non-MOL/SDF file in **Files**
+- **MolVis: Open Structure…** (non-sketch formats)
+- Explorer → **MolVis: Open Stage**
+- **MolVis: Open Stage** (empty tab, or the active editor if it is molecular)
 
-- Load molecular files (stream when large)
-- Structure Outline activity-bar tree
-- Stage built-in UI (`showUI`)
+The Stage tab owns the 3D canvas. Its outline appears in the Activity Bar
+after a frame loads.
 
-## Sketch tab
+## Open Sketch
 
-- Package-owned chrome (`SketchComposer`, `gui: true`)
-- Export SVG/PNG via host Save dialog
+- Click a `.mol` / `.sdf` file in **Files**
+- **MolVis: Open Sketch**
+- Explorer → **MolVis: Open Sketch**
+
+The Sketch tab owns the 2D canvas. Its outline appears in the Activity Bar
+after a molecule loads.
+
+## Outlines
+
+After a tab loads a molecule, the matching outline lists hierarchy (Stage) or
+atoms/bonds (Sketch). Click a node to select those atoms on that tab.
 
 ## Related commands
 
 | Command | Role |
 |---------|------|
-| Quick View (Stage) | Lightweight stage-only surface (not Workbench) |
-| Open Page | Full product UI from `page/` |
-| Open Sketch (activity bar) | Standalone sketch webview (also available) |
+| Quick View | 3D peek beside the source file |
+| Quick View (Sketch) | 2D peek beside a MOL/SDF file |
+| Open Structure… | Pick a file; Stage or Sketch by format |
+| Reload View | Rebuild the active Stage or Sketch tab |
 
 Continue with [configuration](configuration.md).

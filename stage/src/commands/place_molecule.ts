@@ -82,13 +82,10 @@ export class PlaceMoleculeCommand extends Command<void> {
     const ys = Float64Array.from(coords.y);
     const zs = Float64Array.from(coords.z);
 
-    // Read element symbols — try canonical "element", fall back to "symbol" for
-    // older molrs builds that still use the atomistic-layer column name.
-    const elements =
-      atomBlock.copyColStr("element") ?? atomBlock.copyColStr("symbol");
-    if (!elements || elements.length < nAtoms) {
+    const elements = atomBlock.getStr("element") as string[];
+    if (elements.length < nAtoms) {
       throw new Error(
-        "Frame atoms are missing element/symbol column (required to place)",
+        "Frame atoms are missing element column (required to place)",
       );
     }
 
@@ -145,11 +142,15 @@ export class PlaceMoleculeCommand extends Command<void> {
 
     if (bondBlock && bondBlock.nrows() > 0) {
       const nBonds = bondBlock.nrows();
-      const is = bondBlock.copyColU32("atomi");
-      const js = bondBlock.copyColU32("atomj");
+      const is = bondBlock.getU32("atomi");
+      const js = bondBlock.getU32("atomj");
 
-      const typeCol = bondBlock.viewColU32("bond_type");
-      const numberCol = bondBlock.viewColU32("bond_number");
+      const typeCol = bondBlock.hasU32("bond_type")
+        ? bondBlock.getU32("bond_type")
+        : undefined;
+      const numberCol = bondBlock.hasU32("bond_number")
+        ? bondBlock.getU32("bond_number")
+        : undefined;
 
       for (let b = 0; b < nBonds; b++) {
         const ai = is[b];

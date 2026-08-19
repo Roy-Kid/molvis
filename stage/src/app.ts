@@ -573,7 +573,7 @@ export class MolvisApp implements App {
     if (
       primary &&
       primary.trajectory !== this._system.trajectory &&
-      primary.kind === "memory" &&
+      primary instanceof MemoryDataSource &&
       primary.frameCount === 1
     ) {
       primary.trajectory.replaceFrame(0, saved);

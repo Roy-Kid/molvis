@@ -1,7 +1,8 @@
 import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   BondMappingCancelledError,
-  canStream,
+  CancellationError,
+  decideIngest,
   FILE_FORMAT_REGISTRY,
   type FileContent,
   type FileFormat,
@@ -13,6 +14,7 @@ import {
   loadFileContent,
   loadFileStream,
   type PickBondMapping,
+  TRAJECTORY_WHOLE_FILE_CAP_BYTES,
   toIoError,
 } from "@molcrafts/molvis-stage/io";
 import {
@@ -217,12 +219,6 @@ export async function loadFileStreamWithFormatPrompt(
   );
 }
 
-/** Files larger than this threshold take the streaming worker path.
- *  The streaming path is correct at any size, but spawning a worker
- *  for a few-KB file is a net loss compared to the whole-content
- *  reader. */
-const STREAMING_FILE_THRESHOLD = 16 * 1024 * 1024;
-
 /**
  * Outcome of {@link loadFileSmart}. Parse / molrs failures **throw** an
  * `Error` whose message is the molrs/WASM detail (never a bare
@@ -256,46 +252,74 @@ export async function loadFileSmart(
     // (text-only for now) and the eager path (which knows how to read
     // binary formats as bytes). Unknown-extension files fall through with
     // `inferred = null` and the prompt happens inside the chosen path.
-    const inferred = inferFormatFromFilename(file.name);
-    const eagerOnly = inferred !== null && !canStream(inferred);
-    const useStreaming = file.size >= STREAMING_FILE_THRESHOLD && !eagerOnly;
-
-    if (useStreaming) {
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      app.events.emit("status-message", {
-        text: `Indexing ${file.name} (${sizeMB} MB)…`,
-        type: "info",
-      });
-      const result = await loadFileStreamWithFormatPrompt(
-        app,
-        file,
-        pickFormat,
-        {
-          onProgress: ({ bytesScanned, totalBytes, framesIndexedSoFar }) => {
-            const pct = totalBytes
-              ? ((bytesScanned / totalBytes) * 100).toFixed(0)
-              : "0";
-            app.events.emit("status-message", {
-              text: `Indexing ${file.name}… ${pct}% — ${framesIndexedSoFar} frame(s)`,
-              type: "info",
-            });
-          },
-        },
-        mode,
-        pickBondMapping,
-      );
-      if (!result) {
+    let inferred = inferFormatFromFilename(file.name);
+    if (!inferred && file.size >= TRAJECTORY_WHOLE_FILE_CAP_BYTES) {
+      const reason = file.name.includes(".")
+        ? "unknown-extension"
+        : "no-extension";
+      inferred = (await pickFormat(file.name, reason)) ?? null;
+      if (!inferred) {
         app.events.emit("status-message", {
           text: `Cancelled loading ${file.name}`,
           type: "info",
         });
         return "cancelled";
       }
+    }
+    const decision = inferred ? decideIngest(inferred, file.size) : null;
+    if (decision?.path === "refuse") {
+      throw new Error(decision.reason);
+    }
+
+    if (decision?.path === "stream") {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      const abort = new AbortController();
+      const onEscape = (event: KeyboardEvent) => {
+        if (event.key === "Escape") abort.abort();
+      };
+      window.addEventListener("keydown", onEscape);
       app.events.emit("status-message", {
-        text: `Indexed ${file.name}`,
+        text: `Indexing ${file.name} (${sizeMB} MB)… Esc to cancel`,
         type: "info",
+        progress: 0,
       });
-      return "started";
+      try {
+        const result = await loadFileStreamWithFormatPrompt(
+          app,
+          file,
+          pickFormat,
+          {
+            signal: abort.signal,
+            onProgress: ({ bytesScanned, totalBytes, framesIndexedSoFar }) => {
+              const pct = totalBytes
+                ? Math.round((bytesScanned / totalBytes) * 100)
+                : 0;
+              app.events.emit("status-message", {
+                text: `Indexing ${file.name}… ${pct}% — ${framesIndexedSoFar} frame(s). Esc to cancel`,
+                type: "info",
+                progress: pct,
+              });
+            },
+          },
+          mode,
+          pickBondMapping,
+        );
+        if (!result) {
+          app.events.emit("status-message", {
+            text: `Cancelled loading ${file.name}`,
+            type: "info",
+          });
+          return "cancelled";
+        }
+        const ready = app.system.trajectory.indexedLength;
+        app.events.emit("status-message", {
+          text: `${ready} frame(s) ready — ${file.name}`,
+          type: "info",
+        });
+        return "started";
+      } finally {
+        window.removeEventListener("keydown", onEscape);
+      }
     }
 
     // Eager path. Binary formats (DCD) need raw bytes — `file.text()`
@@ -324,7 +348,10 @@ export async function loadFileSmart(
     }
     return "started";
   } catch (err) {
-    if (err instanceof BondMappingCancelledError) {
+    if (
+      err instanceof BondMappingCancelledError ||
+      err instanceof CancellationError
+    ) {
       app.events.emit("status-message", {
         text: `Cancelled loading ${file.name}`,
         type: "info",

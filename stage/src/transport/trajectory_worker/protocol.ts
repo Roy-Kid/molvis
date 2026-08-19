@@ -12,7 +12,15 @@
  * sender must not retain references after sending.
  */
 
-export type Format = "lammps-dump" | "xyz" | "pdb" | "lammps" | "sdf";
+export type Format =
+  | "lammps-dump"
+  | "xyz"
+  | "pdb"
+  | "lammps"
+  | "sdf"
+  | "dcd"
+  | "xtc"
+  | "trr";
 
 // ---------------------------------------------------------------------------
 //  Source handles

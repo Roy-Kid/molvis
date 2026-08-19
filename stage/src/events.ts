@@ -17,6 +17,15 @@ export interface MolvisEventMap extends AppEventMap {
   "frame-load-end": { frameId: number; requestId: number; success: boolean };
   "frame-rendered": { frame: Frame; box?: Box };
   "trajectory-change": Trajectory;
+  "length-changed": {
+    indexedLength: number;
+    length: number | null;
+    indexComplete: boolean;
+  };
+  "index-complete": {
+    indexedLength: number;
+    length: number | null;
+  };
   "mode-change": ModeId;
   "info-text-change": string;
   "fps-change": number;

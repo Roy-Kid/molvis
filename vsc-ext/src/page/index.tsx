@@ -1,6 +1,6 @@
 /**
- * Optional full product shell for VS Code ("Open Page").
- * Mounts page package only; Workbench does not use this entry.
+ * Full product shell for VS Code (`MolVis: Open Page`).
+ * Mounts the page package; Stage / Sketch tabs do not use this entry.
  */
 
 import { bootstrapTheme } from "@/hooks/useTheme";

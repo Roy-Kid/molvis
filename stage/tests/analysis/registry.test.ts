@@ -160,6 +160,8 @@ describe("catalog parameter slots", () => {
       const args = analysis.params
         .filter((param) => param.slot === "ctor")
         .map((param) => {
+          // Optional ctor slots are `undefined` at the WASM Option seam.
+          if (param.optional) return undefined;
           const value = defaults[param.key];
           if (param.kind === "intList") {
             return new Uint32Array(String(value).split(",").map(Number));

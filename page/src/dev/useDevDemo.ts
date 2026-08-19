@@ -129,7 +129,7 @@ export function useDevDemo(
       } else {
         app.system.updateCurrentFrame(frame);
         if (
-          primary.kind === "memory" &&
+          primary instanceof MemoryDataSource &&
           primary.trajectory !== app.system.trajectory
         ) {
           primary.trajectory.replaceFrame(0, frame);

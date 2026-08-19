@@ -1,18 +1,19 @@
 import * as assert from "assert";
 import {
   isQuickViewHostMessage,
-  isWorkbenchHostMessage,
   QUICK_VIEW_HOST_MESSAGE_TYPES,
-  WORKBENCH_HOST_MESSAGE_TYPES,
 } from "../../../src/protocol";
 
 suite("protocol/messages", () => {
   test("QUICK_VIEW_HOST_MESSAGE_TYPES lists the core set", () => {
     assert.deepStrictEqual([...QUICK_VIEW_HOST_MESSAGE_TYPES].sort(), [
       "applySettings",
+      "bytes",
       "error",
       "init",
       "loadFile",
+      "openUri",
+      "selectAtoms",
       "triggerSave",
     ]);
   });
@@ -28,33 +29,14 @@ suite("protocol/messages", () => {
     assert.strictEqual(isQuickViewHostMessage(msg), true);
   });
 
-  test("isQuickViewHostMessage rejects selectAtoms (Workbench-only)", () => {
+  test("isQuickViewHostMessage accepts selectAtoms", () => {
     assert.strictEqual(
       isQuickViewHostMessage({ type: "selectAtoms", indices: [0] }),
-      false,
+      true,
     );
   });
 
-  test("isWorkbenchHostMessage accepts selectAtoms, capabilities, surface", () => {
-    assert.strictEqual(
-      isWorkbenchHostMessage({ type: "selectAtoms", indices: [0] }),
-      true,
-    );
-    assert.strictEqual(
-      isWorkbenchHostMessage({ type: "enableCapability", id: "outline" }),
-      true,
-    );
-    assert.strictEqual(
-      isWorkbenchHostMessage({
-        type: "setWorkbenchSurface",
-        surface: "sketch",
-      }),
-      true,
-    );
-    assert.ok(WORKBENCH_HOST_MESSAGE_TYPES.includes("selectAtoms"));
-  });
-
-  test("isQuickViewHostMessage rejects enableCapability (Workbench-only)", () => {
+  test("isQuickViewHostMessage rejects enableCapability", () => {
     assert.strictEqual(
       isQuickViewHostMessage({ type: "enableCapability", id: "pipeline" }),
       false,

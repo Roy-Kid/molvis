@@ -1,6 +1,6 @@
 # VS Code configuration
 
-Settings apply when a Quick View or Workbench starts, and again when you change
+Settings apply when a Quick View or Stage starts, and again when you change
 `molvis.config` / `molvis.settings` (existing views receive `applySettings`).
 
 ## `molvis.config`
@@ -53,9 +53,9 @@ Unknown forward-compatible fields are allowed.
 
 ## `molvis.plugins`
 
-**Reserved.** Not loaded by the current Quick View, Workbench, or Sketch
+**Reserved.** Not loaded by the current Quick View, Stage, or Sketch
 surfaces (those hosts do not mount the page plugin runtime). Kept so a future
-Workbench capability can use the same setting key without a schema break.
+Stage plugin capability can use the same setting key without a schema break.
 
 ## Apply changes
 

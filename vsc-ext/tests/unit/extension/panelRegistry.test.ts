@@ -65,12 +65,12 @@ suite("panelRegistry", () => {
 
   test("getRegisteredViewTypes falls back to panel.viewType (WebviewPanel path)", () => {
     const registry = new InMemoryPanelRegistry();
-    const panel = makePanelHandle({ viewType: "molvis.workbench" });
+    const panel = makePanelHandle({ viewType: "molvis.stage" });
 
     registry.register(panel, { getHtml: () => "" });
 
     const types = registry.getRegisteredViewTypes();
-    assert.ok(types.includes("molvis.workbench"));
+    assert.ok(types.includes("molvis.stage"));
   });
 
   test("forEach visits all panels regardless of visibility", async () => {

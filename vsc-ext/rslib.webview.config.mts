@@ -9,9 +9,8 @@ import {
  * =====================================
  *
  * Entries:
- *   - `webview/index`    — Quick View / custom-editor preview (stage only)
- *   - `workbench/index`  — Workbench thin shell (dynamic stage + capabilities)
- *   - `sketch/index`     — standalone 2D structure editor
+ *   - `webview/index`    — Stage editor tab + Quick View (stage only)
+ *   - `sketch/index`     — Sketch editor tab + Sketch Quick View
  *
  * The trajectory worker is a **separate** build
  * (`rslib.webview.worker.config.mts`) so it never shares a module graph
@@ -40,14 +39,14 @@ import {
  *
  * ```
  * out/
- *   webview/index.js  workbench/index.js  sketch/index.js
+ *   webview/index.js  sketch/index.js
  *   chunks/runtime.js chunks/shared.js chunks/styles.css
  *   chunks/worker.js                  ← from worker config
  *   chunks/babylon-serializers.js
  *   static/wasm/*.module.wasm
  * ```
  *
- * Quick View / Workbench must not statically import `page/src` (React product).
+ * Stage / Quick View must not statically import `page/src` (React product).
  */
 
 const sharedDefine = {
@@ -74,7 +73,6 @@ export default defineConfig({
       source: {
         entry: {
           "webview/index": "./src/webview/index.ts",
-          "workbench/index": "./src/workbench/index.ts",
           "sketch/index": "./src/sketch/index.ts",
         },
         define: sharedDefine,
@@ -95,7 +93,7 @@ export default defineConfig({
     },
   ],
 
-  // No React in webview entries (QV/Workbench = stage; Sketch = sketch package).
+  // No React in webview entries (Stage/QV = stage; Sketch = sketch package).
   plugins: [],
 
   tools: {

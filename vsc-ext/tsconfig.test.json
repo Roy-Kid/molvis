@@ -20,6 +20,18 @@
     "src/extension/types.ts",
     "src/extension/panels/panelRegistry.ts",
     "src/extension/loading/zarrDirectoryReaderCore.ts",
-    "src/extension/loading/pathUtils.ts"
+    "src/extension/loading/pathUtils.ts",
+    "src/extension/loading/filesTree.ts",
+    "src/extension/loading/molecularMatch.ts",
+    "src/extension/loading/formatMenu.ts",
+    "src/extension/loading/fileRangeReader.ts",
+    "src/webview/hostRangeSource.ts",
+    "src/webview/sketchOutline.ts",
+    "src/protocol/messages.ts"
+  ],
+  "exclude": [
+    "tests/unit/loading/molecularLoadIntent.test.ts",
+    "tests/unit/loading/remoteMolrsIndexer.test.ts",
+    "tests/unit/loading/remoteIndexStore.test.ts"
   ]
 }

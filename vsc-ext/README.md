@@ -18,23 +18,21 @@ Requires VS Code 1.120.0 or newer.
 
 ## Use
 
-1. Click the **MolVis** icon in the Activity Bar. Home lists Open Structure,
-   Workbench, recent files, and help — it does not start a WebGL canvas.
-2. Open a structure file, or right-click one in Explorer → **MolVis: Quick View**.
-3. Use **MolVis Sketch** in the Activity Bar for the standalone 2D editor.
+1. Click the **MolVis** icon in the Activity Bar. **Files** lists workspace
+   molecular files. After a Stage or Sketch tab loads, its outline appears
+   below Files. The canvases themselves open as editor tabs.
+2. Or run **MolVis: Open Stage** / **Open Sketch** / **Open Page**, or
+   right-click in Explorer.
 
 | Surface | Command | Use it when |
 |---------|---------|-------------|
-| **Quick View (Stage)** | `MolVis: Quick View (Stage)` | One file is the document; light 3D peek or custom editor |
-| **Quick View (Sketch)** | `MolVis: Quick View (Sketch)` | Light 2D peek (`.mol` / `.sdf`, or Command Palette) |
-| **Workbench** | `MolVis: Open Workbench` | A session with Stage + Sketch tabs |
-| **Stage / Sketch** | `MolVis: Open Stage` / `Open Sketch` | Jump into Workbench on that engine |
-| **Page** | `MolVis: Open Page` | Full React product shell |
-| **Home** | Activity Bar | Recent files and workflow entry |
-| **Sketch side bar** | Activity Bar Sketch | Standalone 2D editor |
+| **Stage** | `MolVis: Open Stage` | 3D session in an editor tab |
+| **Sketch** | `MolVis: Open Sketch` | 2D session in an editor tab |
+| **Page** | `MolVis: Open Page` | Full product shell (same as the web app) |
+| **Quick View** | `MolVis: Quick View` | 3D peek beside the source file |
+| **Files** | Activity Bar | Workspace + recent files |
 
-Same engines as the web product. Quick View keeps VS Code document semantics
-(dirty state, Save). Workbench is the longer session. Page is the full shell.
+Same engines as the web product. Each command opens one surface.
 
 ## Formats
 
@@ -46,10 +44,12 @@ directories load through **MolVis: Open Structure…**.
 
 ## Commands
 
-- `MolVis: Quick View (Stage)` / `Quick View (Sketch)`
-- `MolVis: Open Workbench` / `Open Stage` / `Open Sketch` / `Open Page`
-- `MolVis: Open Structure…` / `Load in Workbench`
-- `MolVis: Reload View` / `Save`
+- `MolVis: Open Stage`
+- `MolVis: Open Sketch`
+- `MolVis: Open Page`
+- `MolVis: Open Structure…`
+- `MolVis: Quick View`
+- `MolVis: Reload View` (when a MolVis editor is active)
 
 Settings: `molvis.config` (mount) and `molvis.settings` (runtime). See
 [configuration](https://docs.molcrafts.org/molvis/interfaces/vscode/configuration/).

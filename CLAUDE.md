@@ -98,8 +98,17 @@ history (the commit immediately before the harness rebuild).
 - **Command `do()`/`undo()` symmetry** — every reversible operation captures the
   state needed to fully reverse it.
 - **Pipeline is the single scene-data ingress** — never bypass the head
-  `DataSourceModifier` when loading; both GUI and RPC paths funnel through it, or
+  `DataSource` when loading; both GUI and RPC paths funnel through it, or
   downstream modifiers (selection, hide, color) never see the new frame.
+  A DataSource **subclass** converts a source into `Trajectory`/`Frame`.
+  There is no `DataSourceKind`. SSH/HTTP are host transports, not source
+  types, and they are not MolRS concepts. Details:
+  `.claude/notes/notes.md` (datasource-no-kind).
+- **MolRS owns trajectory streaming** — frame index + one-frame decode
+  live only in MolRS. Hosts supply byte ranges. Do not reimplement a
+  format scanner in page / vsc-ext / Python. `.molidx` is only a cache
+  of MolRS `FrameIndexEntry[]`. Details: `.claude/notes/notes.md`
+  (molrs-traj-streaming).
 - **Pipeline path** — open/reset: empty pipeline + length-1 `System.trajectory`.
   User adds Source(s) via Open / Add source / Stream; compose with zero sources
   is empty Frame. Ingress is still `DataSource(s) → compose → transforms → draws`

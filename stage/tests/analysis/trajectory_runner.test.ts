@@ -7,6 +7,7 @@ import {
   expandFrameRange,
   resolveTrackedAtomIndices,
   resolveTrackedAtomSelection,
+  resolveVisitLength,
   runTrajectoryAccumulate,
   runTrajectoryFrames,
   type TrajectoryAccumulateSink,
@@ -520,5 +521,32 @@ describe("TestRunTrajectoryAccumulate", () => {
     );
 
     expect(sink.ownershipCalls).toEqual([]);
+  });
+});
+
+describe("resolveVisitLength", () => {
+  it("throws for an unscoped walk on an incomplete index", () => {
+    expect(() =>
+      resolveVisitLength({
+        length: null,
+        indexedLength: 1,
+        indexComplete: false,
+        frame: async () => new Frame(),
+      }),
+    ).toThrow(/complete index/);
+  });
+
+  it("uses indexedLength for an explicit range while scanning", () => {
+    expect(
+      resolveVisitLength(
+        {
+          length: null,
+          indexedLength: 1,
+          indexComplete: false,
+          frame: async () => new Frame(),
+        },
+        { start: 0, endInclusive: 0 },
+      ),
+    ).toBe(1);
   });
 });

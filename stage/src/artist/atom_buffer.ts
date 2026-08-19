@@ -1,5 +1,6 @@
 import { Color3 } from "@babylonjs/core";
 import type { Block } from "@molcrafts/molvis-core/molrs";
+import { readAtomTypeKeys } from "../atom_type";
 import {
   COLOR_OVERRIDE_B,
   COLOR_OVERRIDE_G,
@@ -8,7 +9,6 @@ import {
 import { viewAtomCoords } from "../io/atom_coords";
 import { encodePickingColorInto } from "../picker";
 import { isMetalElement } from "../system/elements";
-import { DType } from "../utils/dtype";
 import { buildCategoricalColorLookup, type LinearRGB } from "./palette";
 import type { StyleManager } from "./style_manager";
 
@@ -52,16 +52,13 @@ export function buildAtomBuffers(
   const yCoords = coords?.y;
   const zCoords = coords?.z;
 
-  // Canonical: `element` is String. Secondary: `type` as stringified numeric
-  // category for LAMMPS dumps/data that carry no element symbol. These are
-  // the only two sources the renderer reads — no other column names.
-  const elementsColumn =
-    atomsBlock.dtype("element") === DType.String
-      ? (atomsBlock.copyColStr("element") as string[])
-      : undefined;
-  const typesColumn = elementsColumn
-    ? undefined
-    : readTypeAsStrings(atomsBlock);
+  // Canonical: `element` is String. Secondary: `type` / `type_id` via
+  // {@link readAtomTypeKeys} (LAMMPS data/dump write the ordinal as
+  // `type_id`). These are the only two sources the renderer reads.
+  const elementsColumn = atomsBlock.hasStr("element")
+    ? (atomsBlock.getStr("element") as string[])
+    : undefined;
+  const typesColumn = elementsColumn ? undefined : readAtomTypeKeys(atomsBlock);
 
   if (!xCoords || !yCoords || !zCoords)
     throw new Error("No coordinates column");
@@ -180,13 +177,10 @@ export function buildAtomColorOnly(
   styleManager: StyleManager,
 ): Float32Array {
   const atomCount = atomsBlock.nrows();
-  const elementsColumn =
-    atomsBlock.dtype("element") === DType.String
-      ? (atomsBlock.copyColStr("element") as string[])
-      : undefined;
-  const typesColumn = elementsColumn
-    ? undefined
-    : readTypeAsStrings(atomsBlock);
+  const elementsColumn = atomsBlock.hasStr("element")
+    ? (atomsBlock.getStr("element") as string[])
+    : undefined;
+  const typesColumn = elementsColumn ? undefined : readAtomTypeKeys(atomsBlock);
 
   const overrideR = atomsBlock.dtype(COLOR_OVERRIDE_R)
     ? atomsBlock.viewColF(COLOR_OVERRIDE_R)
@@ -232,25 +226,6 @@ export function buildAtomColorOnly(
     out[idx4 + 3] = style.a;
   }
   return out;
-}
-
-/**
- * Read the `type` column as stringified category keys (e.g. "1", "2"). LAMMPS
- * dumps emit `type` as I32, LAMMPS data as I64; both are palette-keyed by
- * their string form. Returns undefined when `type` is absent.
- */
-function readTypeAsStrings(block: Block): string[] | undefined {
-  const dt = block.dtype("type");
-  if (dt === DType.I32) {
-    return Array.from(block.copyColI32("type"), (v) => String(v));
-  }
-  if (dt === DType.U32) {
-    return Array.from(block.copyColU32("type"), (v) => String(v));
-  }
-  if (dt === DType.String) {
-    return block.copyColStr("type") as string[];
-  }
-  return undefined;
 }
 
 function resolveAtomStyle(

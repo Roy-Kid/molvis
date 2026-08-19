@@ -234,6 +234,50 @@ describe("Trajectory", () => {
     });
   });
 
+  describe("three-component index", () => {
+    it("keeps eager length, indexedLength, and indexComplete in sync", () => {
+      const traj = new Trajectory(makeFrames(3));
+      expect(traj.length).toBe(3);
+      expect(traj.indexedLength).toBe(3);
+      expect(traj.indexComplete).toBe(true);
+    });
+
+    it("does not grow length while recording a file scan", () => {
+      const traj = Trajectory.fromAsyncProvider({
+        get: async () => new Frame(),
+      });
+      expect(traj.length).toBeNull();
+      expect(traj.indexedLength).toBe(0);
+      expect(traj.indexComplete).toBe(false);
+      traj.recordIndexedLength(1);
+      expect(traj.length).toBeNull();
+      expect(traj.indexedLength).toBe(1);
+    });
+
+    it("clamps seek to indexedLength even when a larger N is known", () => {
+      const traj = Trajectory.fromAsyncProvider({
+        get: async () => new Frame(),
+      });
+      traj.recordIndexedLength(1, 4);
+      expect(traj.length).toBe(4);
+      expect(traj.indexedLength).toBe(1);
+      traj.seek(5);
+      expect(traj.currentIndex).toBe(0);
+    });
+
+    it("requireCompleteLength throws until markIndexComplete", () => {
+      const traj = Trajectory.fromAsyncProvider({
+        get: async () => new Frame(),
+      });
+      traj.recordIndexedLength(1);
+      expect(() => traj.requireCompleteLength("analysis")).toThrow(/analysis/);
+      traj.markIndexComplete();
+      expect(traj.length).toBe(1);
+      expect(traj.indexComplete).toBe(true);
+      expect(traj.requireCompleteLength("analysis")).toBe(1);
+    });
+  });
+
   describe("frameToTrajectory (ac-001..004)", () => {
     it("ac-001: wraps a frame as a length-1 trajectory", () => {
       expect(frameToTrajectory(new Frame()).length).toBe(1);

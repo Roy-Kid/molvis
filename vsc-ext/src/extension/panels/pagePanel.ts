@@ -7,8 +7,7 @@ import { handleSaveFile, onWebviewMessage } from "./messaging";
 export const PAGE_VIEW_TYPE = "molvis.page";
 
 /**
- * Full React product shell from `page/` — optional command surface.
- * Not the default Workbench path (Workbench hosts stage + sketch engines only).
+ * Full React product shell from `page/`. Peer of Stage and Sketch tabs.
  */
 export function openPagePanel(
   context: vscode.ExtensionContext,

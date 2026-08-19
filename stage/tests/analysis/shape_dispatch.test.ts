@@ -4,7 +4,10 @@ import "../setup_wasm";
 import type { AnalysisDefinition } from "../../src/analysis/registry";
 import { getAnalysisDefinition } from "../../src/analysis/registry";
 import type { AnalysisParamValues } from "../../src/analysis/shape_dispatch";
-import { runSingleFrame } from "../../src/analysis/shape_dispatch";
+import {
+  CatalogAccumulator,
+  runSingleFrame,
+} from "../../src/analysis/shape_dispatch";
 import { AnalysisUnsupportedError } from "../../src/analysis/trajectory_runner";
 
 // ---------------------------------------------------------------------------
@@ -328,18 +331,23 @@ describe("runSingleFrame", () => {
     ).toThrow(/nK/);
   }, 30_000);
 
-  it("runs the `frameNeighbors` shape and marshals the RDF result table", () => {
+  it("runs the `accumulate` RDF binding and answers a plain g(r) table", () => {
     const definition = catalogDefinition(RDF_ID);
-    const payload = runRecord(pairFrame(1.05), definition, {
-      cutoff: 5,
+    expect(definition.inputKind).toBe("accumulate");
+    expect(definition.readCall).toBe("finalize");
+    const accumulator = new CatalogAccumulator(definition, {
       nBins: 50,
       rMax: 5,
       rMin: 0,
     });
+    let payload: Record<string, unknown>;
+    try {
+      accumulator.feed(pairFrame(1.05));
+      payload = asRecord("rdf payload", accumulator.result());
+    } finally {
+      accumulator.dispose();
+    }
 
-    // `molrs.RDFResult` is an owned handle whose columns are behind *methods*.
-    // Fields here mean the exit went through `marshalAnalysisResult`'s table
-    // (`result_marshal.ts`), which copies the columns out and frees the handle.
     const binCenters = asF64("rdf payload.binCenters", payload.binCenters);
     const pairCounts = asF64("rdf payload.pairCounts", payload.pairCounts);
     expect(asNumber("rdf payload.numPoints", payload.numPoints)).toBe(2);
@@ -372,9 +380,6 @@ describe("runSingleFrame", () => {
     );
     expect(numClusters).toBe(1);
 
-    // Same marshalling proof as the RDF case: `molrs.CenterOfMassResult` keeps
-    // its columns behind methods, so these three fields exist only because the
-    // `result_marshal` table copied them out.
     const centersOfMass = asF64(
       "com payload.centersOfMass",
       payload.centersOfMass,

@@ -379,7 +379,7 @@ abstract class BaseMode {
   }
 
   /**
-   * `THR 222 · chain A` when trajectory Frame carries residue columns.
+   * `THR 222 · chain A` when trajectory Frame carries `res_name` + `res_id`.
    * Atom must exist on SceneIndex (canvas); columns are reverse-lookup only.
    */
   private residueLabelForAtom(atomId: number): string | null {
@@ -389,29 +389,17 @@ abstract class BaseMode {
     const frame = this.app.system.frame;
     const atoms = frame?.getBlock("atoms");
     if (!atoms || atomId < 0 || atomId >= atoms.nrows()) return null;
-    try {
-      if (
-        atoms.dtype("res_name") !== "string" ||
-        atoms.dtype("chain_id") !== "string"
-      ) {
-        return null;
-      }
-      const resName = (atoms.copyColStr("res_name") as string[])[
-        atomId
-      ]?.trim();
-      const chainId =
-        (atoms.copyColStr("chain_id") as string[])[atomId]?.trim() || "A";
-      let resSeq: number | null = null;
-      if (atoms.dtype("res_seq") === "i32") {
-        resSeq = atoms.copyColI32("res_seq")[atomId];
-      } else if (atoms.dtype("res_seq") === "u32") {
-        resSeq = atoms.copyColU32("res_seq")[atomId];
-      }
-      if (!resName || resSeq === null || !Number.isFinite(resSeq)) return null;
-      return `${resName} ${resSeq} · chain ${chainId}`;
-    } catch {
-      return null;
-    }
+    const resName = atoms.hasStr("res_name")
+      ? atoms.getStr("res_name")[atomId]?.trim()
+      : undefined;
+    const chainId = atoms.hasStr("chain_id")
+      ? atoms.getStr("chain_id")[atomId]?.trim() || "A"
+      : "A";
+    const resId = atoms.hasU32("res_id")
+      ? atoms.getU32("res_id")[atomId]
+      : undefined;
+    if (!resName || resId === undefined) return null;
+    return `${resName} ${resId} · chain ${chainId}`;
   }
 
   _on_pointer_wheel(_pointerInfo: PointerInfo): void {}

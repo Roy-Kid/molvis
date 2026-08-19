@@ -40,6 +40,7 @@ import {
   AnalysisUnsupportedError,
   expandFrameRange,
   type FrameRange,
+  resolveVisitLength,
   resolveTrackedAtomIndices,
   resolveTrackedAtomSelection,
   runTrajectoryAccumulate,
@@ -283,7 +284,10 @@ export async function runAnalysis(
   options: AnalysisDispatchOptions,
 ): Promise<AnalysisRunResult> {
   const { definition, trajectory } = options;
-  const frameIndices = expandFrameRange(trajectory.length, options.frameRange);
+  const frameIndices = expandFrameRange(
+    resolveVisitLength(trajectory, options.frameRange),
+    options.frameRange,
+  );
   const failures: AnalysisFrameFailure[] = [];
 
   if (frameIndices.length === 0) {

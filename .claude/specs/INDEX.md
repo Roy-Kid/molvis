@@ -5,7 +5,15 @@ spec's tasks off and prunes the entry (and file) on completion.
 
 ## Open
 
-_(none)_
+- [traj-ingest-00-molrs](traj-ingest-00-molrs.md) — MolRS 是唯一轨迹 streaming 基建；DCD/XTC/TRR 同面；host 不得自写 indexer [approved]
+- [traj-ingest-01-index](traj-ingest-01-index.md) — stage first-frame-first + Trajectory 三分量 + host-range source 缝 [approved]
+- [traj-ingest-02-sidecar](traj-ingest-02-sidecar.md) — `.molidx` 帧索引表 v2（MolRS 产出的 offset 缓存，不是新格式） [approved]
+- [traj-ingest-03-hud](traj-ingest-03-hud.md) — page HUD / 时间轴 / 分析范围消费三分量 [approved]
+- [traj-ingest-04-range](traj-ingest-04-range.md) — vsc-ext `openUri` / `readRange`，轨迹不再整文件拷贝 [approved]
+- [traj-ingest-05-remote](traj-ingest-05-remote.md) — Remote：EH 调 **同一份 MolRS** 建表 + 三级 `.molidx` 放置 [approved]
+- [traj-ingest-06-source](traj-ingest-06-source.md) — DataSource 删除 kind；子类做来源→内部对象；ssh/http 不是 DS、不进 MolRS [approved]
+
+Chain `traj-ingest`: **00（molrs 面）** → 01 → 02；03 可与 02 并行；04 依赖 01 `kind: "host"`；05 依赖 00+02+04；06 可与 01 后并行。Phase 0 已在树里。`.molidx` = 帧偏移缓存，不是 sidecar 格式体系。
 
 ## Shipped (recent)
 

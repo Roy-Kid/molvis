@@ -290,7 +290,7 @@ function serializeEntry(entry: PipelineEntry): Record<string, unknown> {
       selection_scope_id: null,
       source_owner_id: null,
       category: DATA_SOURCE_CATEGORY,
-      kind: entry.kind,
+      type_name: entry.constructor.name,
       filename: entry.filename,
       source_type: entry.sourceType,
     };
@@ -934,7 +934,7 @@ export class RPCRouter {
   private handleSetFrameLabels: RPCHandler = (params, buffers) => {
     const rawLabels = params.labels;
     const trajectory = this.app.system.trajectory;
-    const nFrames = trajectory.length;
+    const nFrames = trajectory.indexedLength;
 
     // null → no-op. Python callers that want to clear should set empty
     // strings on the keys they wrote, or delete keys — but molrs currently
@@ -1564,7 +1564,7 @@ export class RPCRouter {
   private handleListDataSources: RPCHandler = async () => {
     const dsList = this.app.modifierPipeline.sources().map((ds) => ({
       id: ds.id,
-      kind: ds.kind,
+      type_name: ds.constructor.name,
       filename: ds.filename,
       source_type: ds.sourceType,
       frame_count: ds.frameCount,

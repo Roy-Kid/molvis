@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { StructureOutlinePayload } from "../../protocol";
 import { createInitMessage } from "../configuration";
 import { resolveActiveUri } from "../loading/activeUri";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
@@ -8,6 +9,7 @@ import { withErrorHandler } from "./errorBoundary";
 import { getPreviewHtml } from "./html";
 import {
   handleDropUri,
+  handleRangeMessage,
   handleSaveFile,
   onWebviewMessage,
   sendLoadedFile,
@@ -20,6 +22,12 @@ export async function openQuickViewPanel(
   logger: Logger,
   fileLoader: MolecularFileLoader,
   uri?: vscode.Uri,
+  options?: {
+    onStructureOutline?: (
+      outline: StructureOutlinePayload | null,
+      webview: vscode.Webview,
+    ) => void;
+  },
 ): Promise<void> {
   const targetUri = resolveActiveUri(uri);
 
@@ -68,6 +76,9 @@ export async function openQuickViewPanel(
         case "dropUri":
           await handleDropUri(message.uri, panel.webview, fileLoader, logger);
           break;
+        case "structureOutline":
+          options?.onStructureOutline?.(message.outline, panel.webview);
+          break;
         case "dirtyStateChanged":
           panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;
           break;
@@ -75,6 +86,9 @@ export async function openQuickViewPanel(
           logger.error(`MolVis: ${message.message}`);
           break;
         default:
+          if (await handleRangeMessage(panel.webview, message, logger)) {
+            break;
+          }
           break;
       }
     }, logger),

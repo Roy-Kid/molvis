@@ -87,7 +87,7 @@ const App: React.FC = () => {
     if (!app || !opts.background) return;
     app.setBackgroundColor(opts.background);
   }, [app, opts.background]);
-  const { currentMode, setCurrentMode, trajectoryLength } =
+  const { currentMode, setCurrentMode, trajectoryLength, trajectoryExtent } =
     useMolvisUiState(app);
 
   // Bind plugin runtime once the engine is ready; restore Settings plugins
@@ -536,6 +536,9 @@ const App: React.FC = () => {
                                   <TrajectoryTimeline
                                     app={app}
                                     totalFrames={trajectoryLength}
+                                    indexComplete={
+                                      trajectoryExtent.indexComplete
+                                    }
                                     compact={isNarrow}
                                   />
                                 </div>

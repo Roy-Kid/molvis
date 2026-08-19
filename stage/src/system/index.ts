@@ -11,7 +11,6 @@ export {
   WasmArray,
   WasmKMeans,
   WasmPca2,
-  WasmPcaResult,
 } from "@molcrafts/molvis-core/molrs";
 export {
   applyTransform,

@@ -1,9 +1,8 @@
 /**
  * Single host ↔ webview postMessage protocol for the MolVis VS Code extension.
  *
- * Quick View is the normative consumer (stage-only). Workbench will be a
- * strict superset (capability messages) of this same module — never a
- * second schema in `page/` or a parallel host bridge.
+ * Stage and Sketch editor tabs share this protocol with Quick View.
+ * Never a second schema in `page/`.
  *
  * This module is **host-safe**: no stage runtime imports, so the extension
  * host bundle and unit tests can load it without pulling Babylon/WASM.
@@ -47,7 +46,7 @@ export type LoadMode = "replace" | "augment" | "extend";
  */
 export type MolecularFilePayload = string | Uint8Array | Record<string, string>;
 
-/** Hierarchy node for the native Structure Outline tree (Workbench). */
+/** Hierarchy node for the native Structure Outline tree. */
 export type StructureOutlineNode = {
   id: string;
   label: string;
@@ -61,10 +60,7 @@ export type StructureOutlinePayload = {
   roots: StructureOutlineNode[];
 };
 
-/** Engines the Workbench can host (peers). */
-export type WorkbenchSurface = "stage" | "sketch";
-
-/** Host → webview. QV understands the core set; Workbench adds capability. */
+/** Host → webview (stage surfaces). */
 export type HostToWebviewMessage =
   | {
       type: "init";
@@ -89,8 +85,24 @@ export type HostToWebviewMessage =
   | { type: "selectAtoms"; indices: number[] }
   | { type: "enableCapability"; id: string; opts?: unknown }
   | { type: "disableCapability"; id: string }
-  /** Workbench: show stage (3D) or sketch (2D) pane. */
-  | { type: "setWorkbenchSurface"; surface: WorkbenchSurface };
+  | {
+      type: "openUri";
+      uri: string;
+      filename: string;
+      format: FileFormat;
+      /** Source size in bytes. */
+      size: number;
+      /** File mtime in milliseconds. */
+      mtime: number;
+      mode?: LoadMode;
+      /** Optional prebuilt .molidx v2 bytes (Remote index-near-data). */
+      index?: Uint8Array;
+    }
+  | {
+      type: "bytes";
+      fetchId: number;
+      data: Uint8Array;
+    };
 
 /** Webview → host. */
 export type WebviewToHostMessage =
@@ -105,7 +117,17 @@ export type WebviewToHostMessage =
       id: string;
       status: "loading" | "ready" | "error" | "disabled";
       message?: string;
-    };
+    }
+  | {
+      type: "readRange";
+      uri: string;
+      /** Inclusive start byte. */
+      start: number;
+      /** Exclusive end byte. */
+      end: number;
+      fetchId: number;
+    }
+  | { type: "cancelRange"; fetchId: number };
 
 /** Message types handled by Quick View (stage-only surface). */
 export const QUICK_VIEW_HOST_MESSAGE_TYPES = [
@@ -114,25 +136,15 @@ export const QUICK_VIEW_HOST_MESSAGE_TYPES = [
   "loadFile",
   "triggerSave",
   "error",
+  "selectAtoms",
+  "openUri",
+  "bytes",
 ] as const;
 
 export type QuickViewHostMessageType =
   (typeof QUICK_VIEW_HOST_MESSAGE_TYPES)[number];
 
-/** Quick View set + Workbench-only messages. */
-export const WORKBENCH_HOST_MESSAGE_TYPES = [
-  ...QUICK_VIEW_HOST_MESSAGE_TYPES,
-  "selectAtoms",
-  "enableCapability",
-  "disableCapability",
-  "setWorkbenchSurface",
-] as const;
-
-export type WorkbenchHostMessageType =
-  (typeof WORKBENCH_HOST_MESSAGE_TYPES)[number];
-
 const QUICK_VIEW_HOST_TYPE_SET = new Set<string>(QUICK_VIEW_HOST_MESSAGE_TYPES);
-const WORKBENCH_HOST_TYPE_SET = new Set<string>(WORKBENCH_HOST_MESSAGE_TYPES);
 
 function isTypedHostMessage(
   data: unknown,
@@ -152,11 +164,4 @@ export function isQuickViewHostMessage(
   data: unknown,
 ): data is HostToWebviewMessage {
   return isTypedHostMessage(data, QUICK_VIEW_HOST_TYPE_SET);
-}
-
-/** Type guard for host → webview messages that Workbench accepts. */
-export function isWorkbenchHostMessage(
-  data: unknown,
-): data is HostToWebviewMessage {
-  return isTypedHostMessage(data, WORKBENCH_HOST_TYPE_SET);
 }

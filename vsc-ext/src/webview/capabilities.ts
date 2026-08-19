@@ -1,14 +1,13 @@
 /**
- * Workbench L2 capabilities — named features enabled after L1 stage is up.
+ * Stage-surface capabilities enabled after the engine is up.
  *
- * Heavy capabilities should `import()` inside `enable`. Outline is light but
- * still loads `buildStructureOutline` via dynamic import so the L0 entry never
- * touches stage statically.
+ * Heavy work `import()`s inside `enable`. Outline loads
+ * `buildStructureOutline` dynamically so the webview entry stays light.
  */
 
 import type { Molvis } from "@molcrafts/molvis-stage";
 import type { StructureOutlineNode } from "../protocol";
-import type { HostApi } from "../webview/errorBoundary";
+import type { HostApi } from "./errorBoundary";
 
 export type CapabilityId = "outline" | "settings";
 
@@ -93,7 +92,6 @@ function createOutlineCapability(): Capability {
   };
 }
 
-/** Settings are applied via host `applySettings`; this marks the surface ready. */
 function createSettingsCapability(): Capability {
   return {
     id: "settings",
@@ -156,8 +154,7 @@ export function createCapabilityRegistry(
   };
 }
 
-/** Default capabilities enabled when a Workbench panel starts. */
-export const DEFAULT_WORKBENCH_CAPABILITIES: readonly CapabilityId[] = [
+export const DEFAULT_STAGE_CAPABILITIES: readonly CapabilityId[] = [
   "outline",
   "settings",
 ];

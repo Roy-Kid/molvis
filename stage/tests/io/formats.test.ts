@@ -86,10 +86,16 @@ describe("format registry flags", () => {
     expect(isBinaryFormat("poscar")).toBe(false);
   });
 
-  it("marks gro/mol2/poscar/trr/xtc as non-streamable", () => {
-    for (const f of ["gro", "mol2", "poscar", "trr", "xtc"] as const) {
+  it("marks gro/mol2/poscar as non-streamable", () => {
+    for (const f of ["gro", "mol2", "poscar"] as const) {
       expect(canStream(f)).toBe(false);
     }
+  });
+
+  it("streams dcd/trr/xtc through the same MolRS worker surface", () => {
+    expect(canStream("dcd")).toBe(true);
+    expect(canStream("trr")).toBe(true);
+    expect(canStream("xtc")).toBe(true);
   });
 });
 

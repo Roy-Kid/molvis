@@ -1,6 +1,7 @@
-import type {
-  SelectTypeModifier as CoreSelectTypeModifier,
-  Molvis,
+import {
+  type SelectTypeModifier as CoreSelectTypeModifier,
+  type Molvis,
+  readAtomTypeKeys,
 } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { useMemo } from "react";
@@ -39,7 +40,7 @@ export const SelectTypeModifier: React.FC<Props> = ({
 
   const frameElements = useMemo(() => {
     const atoms = app?.system?.frame?.getBlock("atoms");
-    if (!atoms?.dtype("element")) return [] as string[];
+    if (!atoms || atoms.dtype("element") !== "string") return [] as string[];
     const els = atoms.copyColStr("element") as string[];
     return [...new Set(els)].sort();
   }, [app, app?.system?.frame]);
@@ -47,24 +48,12 @@ export const SelectTypeModifier: React.FC<Props> = ({
   const frameTypes = useMemo(() => {
     const atoms = app?.system?.frame?.getBlock("atoms");
     if (!atoms) return [] as string[];
-    if (atoms.dtype("type") === "string") {
-      return [...new Set(atoms.copyColStr("type") as string[])].sort();
-    }
-    if (atoms.dtype("type") === "i32") {
-      const col = atoms.viewColI32("type");
-      if (!col) return [];
-      return [...new Set(Array.from(col, String))].sort(
-        (a, b) => Number(a) - Number(b),
-      );
-    }
-    if (atoms.dtype("type") === "u32") {
-      const col = atoms.viewColU32("type");
-      if (!col) return [];
-      return [...new Set(Array.from(col, String))].sort(
-        (a, b) => Number(a) - Number(b),
-      );
-    }
-    return [];
+    const keys = readAtomTypeKeys(atoms);
+    if (!keys) return [];
+    const numeric = keys.every((key) => /^[+-]?\d+$/.test(key));
+    return [...new Set(keys)].sort(
+      numeric ? (a, b) => Number(a) - Number(b) : undefined,
+    );
   }, [app, app?.system?.frame]);
 
   return (

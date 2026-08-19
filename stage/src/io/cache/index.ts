@@ -27,8 +27,15 @@ export {
 } from "@molcrafts/molvis-core/opfs";
 export {
   type CachedIndex,
+  type CachedIndexInput,
+  decideMolidxUse,
   decodeMolidx,
   encodeMolidx,
   type FrameIndexLike,
+  MOLIDX_VERSION,
+  type MolidxIdentity,
+  type MolidxUse,
+  normalizeCachedIndex,
+  STAGE_INDEXER_VERSION,
 } from "./molidx_codec";
 export { OpfsIndexCache } from "./opfs_index_cache";

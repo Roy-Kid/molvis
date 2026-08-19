@@ -21,16 +21,9 @@
  * scene/rendering code.
  */
 
-import {
-  type FrameIndexEntry,
-  WasmLammpsDataStream,
-  WasmLammpsDumpStream,
-  WasmPdbStream,
-  WasmSdfStream,
-  WasmXyzStream,
-  wasmMemory,
-} from "@molcrafts/molvis-core/molrs";
+import { wasmMemory } from "@molcrafts/molvis-core/molrs";
 import { OpfsBlobCache } from "@molcrafts/molvis-core/opfs";
+import { decideMolidxUse } from "../../io/cache/molidx_codec";
 import { OpfsIndexCache } from "../../io/cache/opfs_index_cache";
 import { OPFSSyncRangeSource } from "../../io/sources/opfs_sync_range_source";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
@@ -52,40 +45,24 @@ import type {
   WorkerRequest,
 } from "./protocol";
 import { frameMessageTransferList } from "./protocol";
+import { type MolrsTrajStream, makeStream } from "./streams";
 
 // ---------------------------------------------------------------------------
 //  Type aliases — every wasm stream class shares the same JS-facing shape,
 //  so we abstract over them with a structural type.
 // ---------------------------------------------------------------------------
 
-type WasmTrajStream =
-  | WasmLammpsDumpStream
-  | WasmXyzStream
-  | WasmPdbStream
-  | WasmLammpsDataStream
-  | WasmSdfStream;
-
-function makeStream(format: Format): WasmTrajStream {
-  switch (format) {
-    case "lammps-dump":
-      return new WasmLammpsDumpStream();
-    case "xyz":
-      return new WasmXyzStream();
-    case "pdb":
-      return new WasmPdbStream();
-    case "lammps":
-      return new WasmLammpsDataStream();
-    case "sdf":
-      return new WasmSdfStream();
-  }
-}
+type WasmTrajStream = MolrsTrajStream;
 
 // ---------------------------------------------------------------------------
 //  Worker state
 // ---------------------------------------------------------------------------
 
 interface WorkerState {
-  stream: WasmTrajStream | null;
+  /** Feeds `feedIndexChunk` / `finishIndex`. */
+  indexStream: WasmTrajStream | null;
+  /** Decodes one frame via `parseRangeInInput` while indexing continues. */
+  parseStream: WasmTrajStream | null;
   /** Active trajectory source, abstracting over blob (reverse-RPC to
    *  main thread) and OPFS (sync handle) backends. */
   source: TrajectorySource | null;
@@ -126,7 +103,8 @@ class MainThreadBlobSource implements TrajectorySource {
 }
 
 const state: WorkerState = {
-  stream: null,
+  indexStream: null,
+  parseStream: null,
   source: null,
   index: [],
   cancelledOpenId: null,
@@ -205,42 +183,41 @@ self.addEventListener("message", messageHandler);
 async function handleOpen(req: OpenRequest): Promise<void> {
   rejectPendingFetches("worker: new open superseded");
 
-  state.stream = makeStream(req.format);
+  state.indexStream = makeStream(req.format);
+  state.parseStream = makeStream(req.format);
   state.index = [];
   state.cancelledOpenId = null;
 
   state.source = await resolveSource(req.source);
   const totalBytes = await state.source.size();
+  state.indexStream.hintTotalBytes?.(totalBytes);
   const fp = req.fingerprint;
 
-  // Cache fast path: a sidecar with matching format + byte length is
-  // structurally compatible.
   if (fp) {
-    const cached = await OpfsIndexCache.get(fp);
-    if (
-      cached &&
-      cached.totalBytes === totalBytes &&
-      cached.format === req.format
-    ) {
-      state.index = cached.entries;
+    const use = decideMolidxUse(
+      await OpfsIndexCache.get(fp),
+      totalBytes,
+      req.format,
+    );
+    if (use.action === "hit") {
+      state.index = use.index.entries;
+      sendIndexReady(req.requestId, totalBytes);
+      return;
+    }
+    if (use.action === "resume") {
+      state.index = use.index.entries;
+      await runIndexingPass(req, totalBytes, use.scannedBytes);
+      if (state.cancelledOpenId === req.requestId) return;
+      persistIndex(fp, req.format, totalBytes, true);
       sendIndexReady(req.requestId, totalBytes);
       return;
     }
   }
 
-  await runIndexingPass(req, totalBytes);
+  await runIndexingPass(req, totalBytes, 0);
   if (state.cancelledOpenId === req.requestId) return;
 
-  // Persist the index for next time. Best-effort; `set` swallows I/O
-  // failures internally. `state.index` is already the right shape.
-  if (fp) {
-    void OpfsIndexCache.set(fp, {
-      format: req.format,
-      totalBytes,
-      entries: state.index,
-    });
-  }
-
+  persistIndex(fp, req.format, totalBytes, true);
   sendIndexReady(req.requestId, totalBytes);
 }
 
@@ -263,15 +240,29 @@ async function resolveSource(
 async function runIndexingPass(
   req: OpenRequest,
   totalBytes: number,
+  startAt: number,
 ): Promise<void> {
-  if (!state.stream || !state.source) return;
+  if (!state.indexStream || !state.source) return;
   const chunkSize = Math.max(1, req.chunkSize ?? DEFAULT_CHUNK_SIZE);
-  let bytesScanned = 0;
+  let bytesScanned = startAt;
   let lastProgressAt = 0;
+  let announcedFirst = state.index.length >= 1;
+
+  if (startAt > 0 && req.format === "dcd" && state.index[0]) {
+    const headerEnd = state.index[0].byteOffset;
+    if (headerEnd > 0) {
+      const header = await state.source.readRange(0, headerEnd);
+      const ptr = state.indexStream.allocInputBuffer(header.byteLength);
+      writeIntoWasm(ptr, header);
+      state.indexStream.feedIndexChunk(0, header.byteLength);
+      copyDecoderContext();
+    }
+  }
 
   while (bytesScanned < totalBytes) {
     if (state.cancelledOpenId === req.requestId) {
-      state.stream = null;
+      state.indexStream = null;
+      state.parseStream = null;
       state.index = [];
       state.source?.close?.();
       state.source = null;
@@ -283,20 +274,57 @@ async function runIndexingPass(
     const len = end - bytesScanned;
     const slice = await state.source.readRange(bytesScanned, end);
 
-    const ptr = state.stream.allocInputBuffer(len);
+    const ptr = state.indexStream.allocInputBuffer(len);
     writeIntoWasm(ptr, slice);
 
-    appendIndex(state.stream.feedIndexChunk(bytesScanned, len));
+    appendIndex(state.indexStream.feedIndexChunk(bytesScanned, len));
+    copyDecoderContext();
     bytesScanned = end;
+
+    if (!announcedFirst && state.index.length >= 1) {
+      sendIndexProgress(req.requestId, bytesScanned, totalBytes);
+      lastProgressAt = nowMs();
+      announcedFirst = true;
+      continue;
+    }
 
     const now = nowMs();
     if (now - lastProgressAt >= PROGRESS_THROTTLE_MS) {
       sendIndexProgress(req.requestId, bytesScanned, totalBytes);
       lastProgressAt = now;
+      persistIndex(req.fingerprint, req.format, totalBytes, false);
     }
   }
 
-  appendIndex(state.stream.finishIndex());
+  appendIndex(state.indexStream.finishIndex());
+  copyDecoderContext();
+}
+
+/** DCD parse needs the header the indexer already saw. Text / XTC / TRR
+ *  streams return an empty context and this is a no-op. */
+function persistIndex(
+  fingerprint: string | undefined | null,
+  format: Format,
+  fileSize: number,
+  complete: boolean,
+): void {
+  if (!fingerprint) return;
+  const last = state.index[state.index.length - 1];
+  void OpfsIndexCache.set(fingerprint, {
+    format,
+    fileSize,
+    totalBytes: fileSize,
+    complete,
+    scannedBytes: last ? last.byteOffset + last.byteLen : 0,
+    entries: state.index,
+  });
+}
+
+function copyDecoderContext(): void {
+  const ctx = state.indexStream?.decoderContext?.();
+  if (ctx && ctx.length > 0 && state.parseStream?.setDecoderContext) {
+    state.parseStream.setDecoderContext(ctx);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +332,7 @@ async function runIndexingPass(
 // ---------------------------------------------------------------------------
 
 async function handleLoadFrame(req: LoadFrameRequest): Promise<void> {
-  if (!state.stream || !state.source) {
+  if (!state.parseStream || !state.source) {
     throw new Error("worker: load-frame before open");
   }
   if (state.cancelledFrameIds.delete(req.requestId)) return; // pre-cancelled
@@ -320,21 +348,21 @@ async function handleLoadFrame(req: LoadFrameRequest): Promise<void> {
   );
   if (state.cancelledFrameIds.delete(req.requestId)) return;
 
-  const ptr = state.stream.allocInputBuffer(slice.byteLength);
+  const ptr = state.parseStream.allocInputBuffer(slice.byteLength);
   writeIntoWasm(ptr, slice);
 
-  state.stream.parseRangeInInput(0, slice.byteLength);
+  state.parseStream.parseRangeInInput(0, slice.byteLength);
 
   // Materialize the parsed frame into the wire payload while WASM
   // memory is still pinned to this parse. After releaseFrame the
   // pointers go stale; before it, every wasm call that resizes memory
   // also detaches the ArrayBuffer view, so we re-derive views as we
   // go, never cache them across calls.
-  const blocks = readBlocks(state.stream);
-  const box = readBox(state.stream);
-  const grids = readGrids(state.stream);
+  const blocks = readBlocks(state.parseStream);
+  const box = readBox(state.parseStream);
+  const grids = readGrids(state.parseStream);
 
-  state.stream.releaseFrame();
+  state.parseStream.releaseFrame();
 
   const msg: FrameMessage = {
     kind: "frame",
@@ -452,8 +480,10 @@ function handleCancel(req: CancelRequest): void {
 }
 
 function handleClose(req: CloseRequest): void {
-  state.stream?.free?.();
-  state.stream = null;
+  state.indexStream?.free?.();
+  state.parseStream?.free?.();
+  state.indexStream = null;
+  state.parseStream = null;
   state.source?.close?.();
   state.source = null;
   state.index = [];
@@ -528,7 +558,9 @@ function sendFrameError(
 //  Low-level helpers
 // ---------------------------------------------------------------------------
 
-function appendIndex(entries: FrameIndexEntry[] | null | undefined): void {
+function appendIndex(
+  entries: Array<{ byteOffset: number; byteLen: number }> | null | undefined,
+): void {
   if (!entries) return;
   for (const e of entries) {
     // wasm-bindgen returns FrameIndexEntry instances with getter

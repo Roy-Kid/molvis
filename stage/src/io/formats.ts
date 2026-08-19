@@ -54,6 +54,27 @@ export type StreamingCapability =
   | "streaming-preferred"
   | "streaming-only";
 
+/**
+ * Product ingest kind. Independent of {@link StreamingCapability}:
+ * a format may have a stream *reader* and still be a one-frame structure
+ * (LAMMPS data). Only `"trajectory"` files get a frame index / `.molidx`.
+ */
+export type IngestKind = "structure" | "trajectory";
+
+/** Size at which a *trajectory* prefers the streaming worker over a
+ *  whole-content reader. Structures ignore this. */
+export const STREAMING_FILE_THRESHOLD_BYTES = 16 * 1024 * 1024;
+
+/** Whole-file materialize of a trajectory at or above this size is
+ *  refused. Streamable hosts (page `File` handle) never hit this:
+ *  {@link decideIngest} sends those to `"stream"`. */
+export const TRAJECTORY_WHOLE_FILE_CAP_BYTES = 512 * 1024 * 1024;
+
+export type IngestDecision =
+  | { path: "stream" }
+  | { path: "whole-file" }
+  | { path: "refuse"; reason: string };
+
 export interface FileFormatDescriptor {
   readonly format: FileFormat;
   readonly label: string;
@@ -63,6 +84,8 @@ export interface FileFormatDescriptor {
   readonly payload: FormatPayload;
   /** Whether the streaming-worker path is available for this format. */
   readonly streaming: StreamingCapability;
+  /** Structure = one frame, no index. Trajectory = N frames + index. */
+  readonly ingest: IngestKind;
   /** Whether molrs (via WASM) has a writer for this format (export support). */
   readonly writable: boolean;
 }
@@ -70,141 +93,155 @@ export interface FileFormatDescriptor {
 export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
   {
     format: "pdb",
-    label: "Protein Data Bank",
+    label: "PDB structure",
     description: "RCSB PDB-style ATOM/HETATM records (.pdb, .ent, .brk)",
     extensions: ["pdb", "ent", "brk"],
     payload: "text",
     streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: true,
   },
   {
     format: "xyz",
-    label: "XYZ / Extended XYZ",
+    label: "XYZ coords",
     description:
       "Cartesian coordinates, optional properties header (.xyz, .extxyz, .exyz)",
     extensions: ["xyz", "extxyz", "exyz"],
     payload: "text",
     streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: true,
   },
   {
     format: "cif",
-    label: "Crystallographic Information File",
+    label: "CIF crystal",
     description:
       "IUCr CIF / mmCIF — atomic coordinates plus unit cell that becomes frame.box (.cif, .mmcif)",
     extensions: ["cif", "mmcif"],
     payload: "text",
     streaming: "eager-only",
+    ingest: "structure",
     writable: true,
   },
   {
     format: "lammps",
-    label: "LAMMPS Data",
+    label: "LAMMPS data",
     description:
       "LAMMPS data / restart-text file (.data, .lmp, .lammps, .lammpsdata)",
     extensions: ["data", "lmp", "lammps", "lammpsdata"],
     payload: "text",
     streaming: "streaming-preferred",
+    ingest: "structure",
     writable: true,
   },
   {
     format: "lammps-dump",
-    label: "LAMMPS Dump / Trajectory",
+    label: "LAMMPS traj",
     description:
       "LAMMPS dump trajectory (.dump, .lammpstrj, .lmptrj, .lammpsdump)",
     extensions: ["dump", "lammpstrj", "lmptrj", "lammpsdump"],
     payload: "text",
     streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: true,
   },
   {
     format: "sdf",
-    label: "MDL Molfile / SDF",
+    label: "SDF molecule",
     description:
       "MDL V2000 connection table; multi-record SDF exposes each record as a frame (.sdf, .mol)",
     extensions: ["sdf", "mol"],
     payload: "text",
     streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: false,
   },
   {
     format: "dcd",
-    label: "DCD Trajectory",
+    label: "DCD traj",
     description:
       "Binary CHARMM/NAMD-style trajectory; fixed-stride frames after a small header (.dcd)",
     extensions: ["dcd"],
     payload: "binary",
-    streaming: "eager-only",
+    streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: true,
   },
   {
     format: "cube",
-    label: "Gaussian Cube",
+    label: "Gaussian cube",
     description:
       "Gaussian-style volumetric scalar field with embedded geometry (.cube, .cub)",
     extensions: ["cube", "cub"],
     payload: "text",
     streaming: "eager-only",
+    ingest: "structure",
     writable: true,
   },
   {
     format: "chgcar",
-    label: "VASP CHGCAR",
+    label: "VASP charge",
     description:
       "VASP charge density / spin density (filename CHGCAR or CHGCAR_*; .chgcar accepted for renames)",
     extensions: ["chgcar"],
     payload: "text",
     streaming: "eager-only",
+    ingest: "structure",
     writable: false,
   },
   {
     format: "gro",
-    label: "GROMACS GRO",
+    label: "GROMACS structure",
     description:
       "GROMACS structure / trajectory; fixed-column atoms + box, coordinates nm\u2192\u00c5 on read (.gro)",
     extensions: ["gro"],
     payload: "text",
     streaming: "eager-only",
+    ingest: "structure",
     writable: true,
   },
   {
     format: "mol2",
-    label: "Tripos MOL2",
+    label: "MOL2 molecule",
     description:
       "Tripos MOL2 connection table; @<TRIPOS> sections, atoms + bonds (.mol2)",
     extensions: ["mol2"],
     payload: "text",
     streaming: "eager-only",
+    ingest: "structure",
     writable: true,
   },
   {
     format: "poscar",
-    label: "VASP POSCAR / CONTCAR",
+    label: "VASP structure",
     description:
       "VASP crystal cell + atoms (filename POSCAR/CONTCAR or .poscar/.contcar/.vasp)",
     extensions: ["poscar", "contcar", "vasp"],
     payload: "text",
     streaming: "eager-only",
+    ingest: "structure",
     writable: true,
   },
   {
     format: "trr",
-    label: "GROMACS TRR",
+    label: "GROMACS traj",
     description:
       "GROMACS full-precision binary trajectory; coordinates nm\u2192\u00c5 on read (.trr)",
     extensions: ["trr"],
     payload: "binary",
-    streaming: "eager-only",
+    streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: true,
   },
   {
     format: "xtc",
-    label: "GROMACS XTC",
+    label: "GROMACS traj",
     description:
       "GROMACS compressed binary trajectory; coordinates nm\u2192\u00c5 on read (.xtc)",
     extensions: ["xtc"],
     payload: "binary",
-    streaming: "eager-only",
+    streaming: "streaming-preferred",
+    ingest: "trajectory",
     writable: true,
   },
 ];
@@ -353,7 +390,7 @@ export function canStream(
   format: FileFormat,
 ): format is Exclude<
   FileFormat,
-  "dcd" | "cif" | "cube" | "chgcar" | "gro" | "mol2" | "poscar" | "trr" | "xtc"
+  "cif" | "cube" | "chgcar" | "gro" | "mol2" | "poscar"
 > {
   return describeFormat(format).streaming !== "eager-only";
 }
@@ -365,4 +402,61 @@ export function canStream(
  */
 export function isStreamingOnly(format: FileFormat): boolean {
   return describeFormat(format).streaming === "streaming-only";
+}
+
+/** Structure (one frame, no index) vs trajectory (N frames + index). */
+export function ingestKind(format: FileFormat): IngestKind {
+  return describeFormat(format).ingest;
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function wholeFileTrajectoryReason(
+  format: FileFormat,
+  byteLength: number,
+): string {
+  const label = describeFormat(format).label;
+  const size = formatByteSize(byteLength);
+  return `Cannot load ${size} trajectory (${label}) as one buffer. This host would copy the whole file into memory.`;
+}
+
+/**
+ * Host-agnostic ingest router. Structures always open as one frame.
+ * Streamable trajectories at/above {@link STREAMING_FILE_THRESHOLD_BYTES}
+ * take `"stream"` when the host can range-read. Pass `hostCanRange: false`
+ * (VS Code today) so a stream decision that still copies the whole file
+ * is refused at {@link TRAJECTORY_WHOLE_FILE_CAP_BYTES}.
+ */
+export function decideIngest(
+  format: FileFormat,
+  byteLength: number,
+  opts?: { hostCanRange?: boolean },
+): IngestDecision {
+  if (ingestKind(format) === "structure") {
+    return { path: "whole-file" };
+  }
+  if (canStream(format) && byteLength >= STREAMING_FILE_THRESHOLD_BYTES) {
+    if (
+      opts?.hostCanRange === false &&
+      byteLength >= TRAJECTORY_WHOLE_FILE_CAP_BYTES
+    ) {
+      return {
+        path: "refuse",
+        reason: `${wholeFileTrajectoryReason(format, byteLength)} Range open is not available yet.`,
+      };
+    }
+    return { path: "stream" };
+  }
+  if (byteLength >= TRAJECTORY_WHOLE_FILE_CAP_BYTES) {
+    return {
+      path: "refuse",
+      reason: wholeFileTrajectoryReason(format, byteLength),
+    };
+  }
+  return { path: "whole-file" };
 }

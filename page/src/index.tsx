@@ -3,10 +3,6 @@ import {
   type MountHostOpts,
   mountMolvisApp,
 } from "@/lib/mount";
-import { applyAssetPublicPath } from "./public-path";
-
-applyAssetPublicPath();
-
 import { readMountOptsFromHost, readMountOptsFromUrl } from "@/lib/mount-opts";
 import { registerMolvisServiceWorker } from "@/lib/pwa";
 import "@/styles/tailwind.css";

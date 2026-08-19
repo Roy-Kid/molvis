@@ -1,9 +1,9 @@
 import {
-  FILE_FORMAT_REGISTRY,
   type FileFormat,
   inferFormatFromFilename,
 } from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
+import { FORMAT_MENU, formatMenuLabel } from "./formatMenu";
 
 /**
  * Resolve a molecular file format for `filename`. Returns the inferred
@@ -22,18 +22,14 @@ export async function resolveFileFormat(
   if (inferred) return inferred;
 
   const items: Array<vscode.QuickPickItem & { format: FileFormat }> =
-    FILE_FORMAT_REGISTRY.map((entry) => ({
-      label: entry.label,
-      description: entry.extensions.map((e) => `.${e}`).join(" "),
-      detail: entry.description,
+    FORMAT_MENU.map((entry) => ({
+      label: formatMenuLabel(entry),
       format: entry.format,
     }));
 
   const picked = await vscode.window.showQuickPick(items, {
-    title: `Pick a format for "${filename}"`,
-    placeHolder: "MolVis couldn't infer a format from the extension",
-    matchOnDescription: true,
-    matchOnDetail: true,
+    title: "Format",
+    placeHolder: filename,
     ignoreFocusOut: true,
   });
 

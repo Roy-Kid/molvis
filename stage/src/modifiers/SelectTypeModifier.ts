@@ -1,8 +1,8 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
+import { readAtomTypeKeys } from "../atom_type";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
-import { DType } from "../utils/dtype";
 
 /**
  * OVITO-style **Select Type**: select atoms by `element` and/or type
@@ -68,11 +68,11 @@ export class SelectTypeModifier extends BaseModifier {
       this._elements.length > 0 ? new Set(this._elements) : null;
     const typeSet = this._types.length > 0 ? new Set(this._types) : null;
 
-    const elements =
-      elementSet && atoms.dtype("element")
-        ? (atoms.copyColStr("element") as string[])
-        : null;
-    const typeStrings = typeSet ? readTypeColumnAsStrings(atoms, n) : null;
+    const elements = elementSet ? (atoms.getStr("element") as string[]) : null;
+    const typeStrings = typeSet ? readAtomTypeKeys(atoms) : null;
+    if (typeSet && !typeStrings) {
+      throw new Error("Select Type needs a string type or u32 type_id column");
+    }
 
     const indices: number[] = [];
     for (let i = 0; i < n; i++) {
@@ -89,35 +89,4 @@ export class SelectTypeModifier extends BaseModifier {
     context.selectionSet.set(this.id, mask);
     return input;
   }
-}
-
-/**
- * Read the atoms' type as strings. Missing → `""`.
- *
- * The schema splits the quantity in two: `type` is always a String (a
- * force-field label, "what survives a round trip through a force field") and
- * `type_id` is always a UInt (a LAMMPS ordinal). Reading a numeric `type`
- * used to be the path for LAMMPS frames, but molrs rejects that column
- * outright now — so the ordinal is read from `type_id` and stringified,
- * letting one `types` list match either spelling.
- */
-function readTypeColumnAsStrings(
-  atoms: {
-    dtype: (name: string) => string | undefined;
-    copyColStr: (name: string) => string[] | undefined;
-    viewColU32: (name: string) => Uint32Array | undefined;
-  },
-  n: number,
-): string[] {
-  const blank = () => Array.from({ length: n }, () => "");
-
-  if (atoms.dtype("type") === DType.String) {
-    const src = atoms.copyColStr("type") as string[] | undefined;
-    if (src) return src.map((v) => String(v));
-  }
-  if (atoms.dtype("type_id") === DType.U32) {
-    const src = atoms.viewColU32("type_id");
-    if (src) return Array.from(src, (v) => String(v));
-  }
-  return blank();
 }

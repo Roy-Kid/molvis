@@ -344,6 +344,22 @@ describe("SketchBoard", () => {
     board.unmount();
   });
 
+  it("replaceSelectedAtoms keeps only in-range indices", () => {
+    const board = new SketchBoard();
+    board.loadMoleculeData({
+      atoms: [
+        { element: "C", x: 0, y: 0 },
+        { element: "O", x: 1.4, y: 0 },
+      ],
+      bonds: [{ i: 0, j: 1, order: 1 }],
+    });
+    board.replaceSelectedAtoms([1, 9, -1, 0]);
+    expect(board.selectedAtomIndices()).toEqual([0, 1]);
+    expect(board.getState().selectedAtomCount).toBe(2);
+    board.replaceSelectedAtoms([]);
+    expect(board.selectedAtomIndices()).toEqual([]);
+  });
+
   it("load creates a new history root and state subscriptions stay current", async () => {
     const board = new SketchBoard();
     const canvas = makeCanvas();

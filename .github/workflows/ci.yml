@@ -199,6 +199,14 @@ jobs:
       - name: Build page (no viewer package)
         run: npm run build:page
 
+      - name: Page publicPath is document-relative
+        run: |
+          f=$(ls page/dist/js/index.*.js | head -1)
+          if grep -F 'p.p="/"' "$f"; then
+            echo "origin-root publicPath would break WASM under /molvis/" >&2
+            exit 1
+          fi
+
   build-vsc-ext:
     runs-on: ubuntu-latest
     needs: [lint, typecheck]

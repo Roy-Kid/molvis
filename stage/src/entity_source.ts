@@ -92,12 +92,12 @@ export class AtomSource {
     if (this._elementCacheFrame === this.frame && this._elementCache) {
       return this._elementCache;
     }
-    if (fb.dtype("element") !== DType.String) {
+    if (!fb.hasStr("element")) {
       this._elementCache = null;
       this._elementCacheFrame = this.frame;
       return null;
     }
-    const col = fb.copyColStr("element");
+    const col = fb.getStr("element") as string[];
     this._elementCache = col;
     this._elementCacheFrame = this.frame;
     return col;

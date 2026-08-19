@@ -242,15 +242,13 @@ function materializeWorkingFromSource(source: Frame): WorkingSnapshot {
   if (!atoms || atoms.nrows() === 0) {
     throw new Error("No atoms to optimize");
   }
-  const n = atoms.nrows();
   const xSrc = atoms.copyColF("x");
   const ySrc = atoms.copyColF("y");
   const zSrc = atoms.copyColF("z");
   if (!xSrc || !ySrc || !zSrc) {
     throw new Error("Atoms are missing x/y/z coordinates");
   }
-  const elements =
-    atoms.copyColStr("element") ?? Array.from({ length: n }, () => "C");
+  const elements = atoms.getStr("element") as string[];
   const x = new Float64Array(xSrc);
   const y = new Float64Array(ySrc);
   const z = new Float64Array(zSrc);
@@ -258,18 +256,14 @@ function materializeWorkingFromSource(source: Frame): WorkingSnapshot {
   const bonds: Array<[number, number]> = [];
   const bondTypes: number[] = [];
   if (bondBlock && bondBlock.nrows() > 0) {
-    const iCol =
-      bondBlock.viewColU32("atomi") ?? bondBlock.viewColU32("i") ?? null;
-    const jCol =
-      bondBlock.viewColU32("atomj") ?? bondBlock.viewColU32("j") ?? null;
-    if (iCol && jCol) {
-      const typeCol = bondBlock.dtype("bond_type")
-        ? bondBlock.viewColU32("bond_type")
-        : undefined;
-      for (let b = 0; b < bondBlock.nrows(); b++) {
-        bonds.push([iCol[b], jCol[b]]);
-        bondTypes.push(typeCol?.[b] ?? BOND_TYPE_SINGLE);
-      }
+    const iCol = bondBlock.viewColU32("atomi");
+    const jCol = bondBlock.viewColU32("atomj");
+    const typeCol = bondBlock.hasU32("bond_type")
+      ? bondBlock.viewColU32("bond_type")
+      : undefined;
+    for (let b = 0; b < bondBlock.nrows(); b++) {
+      bonds.push([iCol[b], jCol[b]]);
+      bondTypes.push(typeCol?.[b] ?? BOND_TYPE_SINGLE);
     }
   }
 

@@ -30,7 +30,6 @@ export {
 export {
   DATA_SOURCE_CATEGORY,
   DataSource,
-  type DataSourceKind,
   type DataSourceOptions,
   FileDataSource,
   MemoryDataSource,

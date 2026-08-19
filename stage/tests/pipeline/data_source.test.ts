@@ -32,15 +32,14 @@ describe("Acquisition-kind DataSource subtypes", () => {
     }
   }
 
-  // ac-001 — kind discriminators are acquisition-based.
-  it("ac-001: FileDataSource.kind === 'file'", () => {
-    const ds = new FileDataSource(new Trajectory([new Frame()]));
-    expect(ds.kind).toBe("file");
-  });
-
-  it("ac-001: MemoryDataSource.kind === 'memory'", () => {
-    const ds = new MemoryDataSource(new Frame());
-    expect(ds.kind).toBe("memory");
+  it("distinguishes FileDataSource and MemoryDataSource with instanceof", () => {
+    const file = new FileDataSource(new Trajectory([new Frame()]));
+    const memory = new MemoryDataSource(new Frame());
+    expect(file).toBeInstanceOf(FileDataSource);
+    expect(memory).toBeInstanceOf(MemoryDataSource);
+    expect(file).not.toBeInstanceOf(MemoryDataSource);
+    expect("kind" in file).toBe(false);
+    expect("kind" in memory).toBe(false);
   });
 
   it("ac-001: both are DataSource instances", () => {
@@ -194,5 +193,19 @@ describe("Acquisition-kind DataSource subtypes", () => {
     expect(ds.sourceType).toBe("file");
     expect(ds.filename).toBe("topology.data");
     expect(ds.contributedBlocks).toEqual(["bonds"]);
+  });
+
+  it("frameCount uses indexedLength while a scan is incomplete", () => {
+    const traj = Trajectory.fromAsyncProvider({
+      get: async () => new Frame(),
+    });
+    traj.recordIndexedLength(1);
+    const ds = new FileDataSource(traj);
+    expect(ds.frameCount).toBe(1);
+    expect(ds.indexComplete).toBe(false);
+    traj.recordIndexedLength(4);
+    traj.markIndexComplete();
+    expect(ds.frameCount).toBe(4);
+    expect(ds.indexComplete).toBe(true);
   });
 });

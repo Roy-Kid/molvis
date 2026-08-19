@@ -7,7 +7,8 @@ import { type Box, WasmArray } from "@molcrafts/molvis-core/molrs";
 
 type BondView = {
   nrows(): number;
-  viewColU32(key: string): Uint32Array | undefined;
+  hasU32(key: string): boolean;
+  viewColU32(key: string): Uint32Array;
 };
 
 /**

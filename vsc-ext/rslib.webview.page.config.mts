@@ -1,6 +1,6 @@
 /**
  * Separate webview build for the optional Open Page surface.
- * Isolated so React/page never enter the QV / Workbench / Sketch graph.
+ * Isolated so React/page never enter the Stage / Quick View / Sketch graph.
  */
 import path from "node:path";
 import { pluginReact } from "@rsbuild/plugin-react";

@@ -1,13 +1,14 @@
 /**
- * Host bridge for Sketch Quick View (2D peek).
+ * Host bridge for the Sketch editor tab and Sketch Quick View.
  *
  * Parallel to {@link attachQuickViewHost} for stage — no `page/` imports.
- * Handles init / loadFile / triggerSave over the shared protocol subset.
+ * Handles init / loadFile / selectAtoms and publishes the sidebar outline.
  */
 
 import type { SketchComposer } from "@molcrafts/molvis-sketch";
 import type { HostToWebviewMessage, WebviewToHostMessage } from "../protocol";
 import { tryParseMolV2000 } from "./mol_v2000";
+import { buildSketchOutline } from "./sketchOutline";
 
 export type SketchHost = {
   postMessage: (message: WebviewToHostMessage) => void;
@@ -17,12 +18,13 @@ export type SketchQuickViewHostHandle = {
   dispose: () => void;
 };
 
-/** Host → sketch messages that Quick View understands. */
+/** Host → sketch messages the Sketch surfaces understand. */
 export const SKETCH_QUICK_VIEW_HOST_MESSAGE_TYPES = [
   "init",
   "applySettings",
   "loadFile",
   "triggerSave",
+  "selectAtoms",
   "error",
 ] as const;
 
@@ -40,10 +42,22 @@ function payloadToText(content: unknown): string | null {
   return null;
 }
 
+function publishOutline(composer: SketchComposer, host: SketchHost): void {
+  host.postMessage({
+    type: "structureOutline",
+    outline: buildSketchOutline(composer.board.getMoleculeData()),
+  });
+}
+
 export function attachSketchQuickViewHost(
   composer: SketchComposer,
-  _options: { host: SketchHost },
+  options: { host: SketchHost },
 ): SketchQuickViewHostHandle {
+  const { host } = options;
+  const unsubscribe = composer.board.subscribe(() => {
+    publishOutline(composer, host);
+  });
+
   const onMessage = (event: MessageEvent): void => {
     const msg = event.data as HostToWebviewMessage | undefined;
     if (!msg || typeof msg !== "object" || !("type" in msg)) return;
@@ -51,7 +65,6 @@ export function attachSketchQuickViewHost(
     switch (msg.type) {
       case "init":
       case "applySettings":
-        // Sketch QV has no settings surface yet — accept for handshake.
         break;
       case "loadFile": {
         const text = payloadToText(msg.content);
@@ -60,11 +73,12 @@ export function attachSketchQuickViewHost(
         if (data) {
           composer.board.loadMoleculeData(data);
         }
-        // Unsupported formats: keep empty board; never throw.
         break;
       }
+      case "selectAtoms":
+        composer.board.replaceSelectedAtoms(msg.indices);
+        break;
       case "triggerSave":
-        // Sketch export is UI-driven (SVG/PNG menu); host Save is a no-op here.
         break;
       case "error":
         break;
@@ -77,6 +91,7 @@ export function attachSketchQuickViewHost(
 
   return {
     dispose() {
+      unsubscribe();
       window.removeEventListener("message", onMessage);
     },
   };

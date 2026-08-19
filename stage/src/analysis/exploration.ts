@@ -131,14 +131,12 @@ export function runExploration(
   let variance: [number, number];
   const pca = new WasmPca2();
   try {
-    const result = pca.fitTransform(values, nFrames, nDescriptors);
-    try {
-      coords = result.coords();
-      const v = result.variance();
-      variance = [v[0], v[1]];
-    } finally {
-      result.free();
-    }
+    const result = pca.fitTransform(values, nFrames, nDescriptors) as {
+      coords: Float64Array;
+      variance: [number, number];
+    };
+    coords = new Float64Array(result.coords);
+    variance = [result.variance[0], result.variance[1]];
   } finally {
     pca.free();
   }
@@ -148,7 +146,8 @@ export function runExploration(
     const { k, seed } = config.clustering;
     const km = new WasmKMeans(k, KMEANS_MAX_ITER, seed);
     try {
-      clusters = km.fit(coords, nFrames, 2);
+      const out = km.fit(coords, nFrames, 2) as { labels: Int32Array };
+      clusters = new Int32Array(out.labels);
     } finally {
       km.free();
     }

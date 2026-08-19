@@ -19,6 +19,7 @@ import {
 } from "../system/source_composition";
 import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
 import {
+  CancellationError,
   type IndexProgressCallback,
   spawnTrajectoryWorker,
   type TrajectoryRuntime,
@@ -30,9 +31,10 @@ import {
   loadBinaryTrajectory,
   loadTextTrajectory,
 } from "./reader";
-import { BlobRangeSource } from "./sources";
+import { BlobRangeSource, type TrajectorySource } from "./sources";
 import { loadZarrFiles } from "./zarr";
 
+export { CancellationError } from "../transport/trajectory_worker";
 export {
   BOX_MIN_DRAW_LENGTH,
   BOX_ZERO_EPS,
@@ -41,7 +43,18 @@ export {
   shouldDrawBox,
 } from "./box_presence";
 export {
+  type CachedIndex,
+  type CachedIndexInput,
+  decideMolidxUse,
+  decodeMolidx,
+  encodeMolidx,
+  type FrameIndexLike,
+  MOLIDX_VERSION,
+  OpfsIndexCache,
+} from "./cache";
+export {
   canStream,
+  decideIngest,
   describeFormat,
   extractMessage,
   FILE_FORMAT_REGISTRY,
@@ -49,17 +62,27 @@ export {
   type FileFormatDescriptor,
   type FormatPayload,
   getAllAcceptExtensions,
+  type IngestDecision,
+  type IngestKind,
   inferFormatFromFilename,
+  ingestKind,
   isBinaryFormat,
   isStreamingOnly,
   loadBinaryTrajectory,
   loadTextTrajectory,
   readFrames,
+  STREAMING_FILE_THRESHOLD_BYTES,
   type StreamingCapability,
   sniffFormatFromTextHead,
+  TRAJECTORY_WHOLE_FILE_CAP_BYTES,
   toIoError,
+  wholeFileTrajectoryReason,
 } from "./reader";
-export { BlobRangeSource, type TrajectorySource } from "./sources";
+export {
+  BlobRangeSource,
+  HostRangeSource,
+  type TrajectorySource,
+} from "./sources";
 export {
   defaultExtensionForFormat,
   type ExportFormat,
@@ -283,7 +306,7 @@ function remapTrajectoryBonds(
     mapping,
   );
   return Trajectory.fromAsyncProvider({
-    length: trajectory.length,
+    length: trajectory.requireCompleteLength("remap-bonds"),
     get: async (index) =>
       (await remap.apply(await trajectory.frame(index), {} as never)) as Frame,
   });
@@ -480,6 +503,10 @@ export interface LoadFileStreamOptions {
   onProgress?: IndexProgressCallback;
   /** Bytes per indexer chunk. Default 8 MiB. */
   chunkSize?: number;
+  /** Abort the blocking index pass. The worker drops at the next chunk. */
+  signal?: AbortSignal;
+  /** Sidecar cache key. Hosts that already indexed near the data pass this. */
+  fingerprint?: string;
 }
 
 export interface LoadFileStreamResult {
@@ -491,8 +518,9 @@ export interface LoadFileStreamResult {
 }
 
 /**
- * Streaming file ingress. Used for large text-format trajectories
- * (LAMMPS dump / XYZ / PDB / LAMMPS data / SDF). The original file is
+ * Streaming file ingress. Used for large text-format *trajectories*
+ * (LAMMPS dump / XYZ / PDB / SDF). LAMMPS data is a structure and
+ * stays on the whole-file path. The original file is
  * never materialized as a JS string — a Dedicated Worker reads byte
  * ranges through `BlobRangeSource`, the molrs-wasm streaming reader
  * indexes / parses chunks, and frames flow back to the main thread one
@@ -503,9 +531,20 @@ export interface LoadFileStreamResult {
  * (e.g. `BackboneRibbonModifier`) are attached against frame 0, the
  * pipeline is rebuilt, and the camera is reset.
  */
+function isTrajectorySource(
+  value: Blob | TrajectorySource,
+): value is TrajectorySource {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    "readRange" in value
+  );
+}
+
 export async function loadFileStream(
   app: Molvis,
-  file: Blob,
+  file: Blob | TrajectorySource,
   filename: string,
   format: FileFormat,
   options: LoadFileStreamOptions = {},
@@ -520,26 +559,23 @@ export async function loadFileStream(
   // canStream narrows `format` to the worker's `Format` type, so
   // spawnTrajectoryWorker accepts it without a cast.
   const runtime = spawnTrajectoryWorker(format);
-  const source = new BlobRangeSource(file);
+  const source = isTrajectorySource(file) ? file : new BlobRangeSource(file);
   // Real Files have stable identity (size + lastModified) so we can
   // key the OPFS index sidecar against them. Network-fetched Blobs
   // come through `loadFileContent` (eager path) instead of this
   // streaming path, so this only fingerprints user-dropped files.
   const fingerprint =
-    file instanceof File ? fingerprintFile(file, format) : undefined;
+    options.fingerprint ??
+    (file instanceof File ? fingerprintFile(file, format) : undefined);
 
-  // Indexing pass — blocking. Progress drains through the optional
-  // callback; the caller surfaces it as a status-bar message. A
-  // matching `.molidx` sidecar in OPFS short-circuits the scan
-  // entirely.
-  const { frameCount } = await runtime.open(source, {
-    onProgress: options.onProgress,
-    chunkSize: options.chunkSize,
-    fingerprint,
-  });
+  if (options.signal?.aborted) {
+    await runtime.close();
+    throw new CancellationError(-1);
+  }
+  const onAbort = () => runtime.cancelOpen();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
 
   const provider: AsyncFrameProvider = {
-    length: frameCount,
     get: (index) => runtime.loadFrameLatest(index),
     dispose: () => {
       void runtime.close();
@@ -550,7 +586,56 @@ export async function loadFileStream(
     trajectory.dispose();
   };
 
+  const emitLength = (): void => {
+    app.events.emit("length-changed", {
+      indexedLength: trajectory.indexedLength,
+      length: trajectory.length,
+      indexComplete: trajectory.indexComplete,
+    });
+  };
+
+  let opened: Awaited<ReturnType<typeof runtime.open>>;
+  try {
+    opened = await runtime.open(source, {
+      onProgress: (event) => {
+        options.onProgress?.(event);
+        if (event.framesIndexedSoFar > trajectory.indexedLength) {
+          trajectory.recordIndexedLength(event.framesIndexedSoFar);
+          emitLength();
+        }
+      },
+      onIndexComplete: (result) => {
+        trajectory.recordIndexedLength(result.indexedLength, result.length);
+        if (!trajectory.indexComplete) trajectory.markIndexComplete();
+        emitLength();
+        app.events.emit("index-complete", {
+          indexedLength: trajectory.indexedLength,
+          length: trajectory.length,
+        });
+      },
+      chunkSize: options.chunkSize,
+      fingerprint,
+    });
+  } catch (err) {
+    if (err instanceof CancellationError || options.signal?.aborted) {
+      await runtime.close();
+      throw err instanceof CancellationError ? err : new CancellationError(-1);
+    }
+    throw err;
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+  }
+
+  trajectory.recordIndexedLength(
+    opened.indexedLength,
+    opened.length === null ? undefined : opened.length,
+  );
+  if (opened.indexComplete && !trajectory.indexComplete) {
+    trajectory.markIndexComplete();
+  }
+
   if (mode === "extend") {
+    await runtime.whenIndexComplete;
     await extendIntoScene(
       app,
       trajectory,
@@ -559,13 +644,14 @@ export async function loadFileStream(
       pickBondMapping,
     );
     app.events.emit("status-message", {
-      text: `Extended current scene with ${frameCount} frame(s) from ${filename}`,
+      text: `Extended current scene with ${trajectory.indexedLength} frame(s) from ${filename}`,
       type: "info",
     });
     return { runtime };
   }
 
   if (mode === "augment") {
+    await runtime.whenIndexComplete;
     try {
       await augmentTrajectoryAsDataSource(
         app,
@@ -579,7 +665,7 @@ export async function loadFileStream(
     }
 
     app.events.emit("status-message", {
-      text: `Loaded ${frameCount} frame(s) from ${filename}`,
+      text: `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`,
       type: "info",
     });
     app.world.fit();
@@ -588,7 +674,7 @@ export async function loadFileStream(
   }
 
   app.events.emit("status-message", {
-    text: `Loaded ${frameCount} frame(s) from ${filename}`,
+    text: `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`,
     type: "info",
   });
   await installPrimaryTrajectory(

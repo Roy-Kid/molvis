@@ -60,8 +60,11 @@ export class System {
   set trajectory(value: Trajectory) {
     this._trajectory = value;
     this._activeLoad = null;
-    this._currentFrame = value.length > 0 ? value.currentFrame : new Frame();
-    logger.info(`[System] Trajectory set with ${value.length} frame(s)`);
+    this._currentFrame =
+      value.indexedLength > 0 ? value.currentFrame : new Frame();
+    logger.info(
+      `[System] Trajectory set with ${value.indexedLength} frame(s)`,
+    );
     this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
     this.setExploration(null);
     this.events?.emit("trajectory-change", value);
@@ -80,13 +83,13 @@ export class System {
   async setTrajectory(value: Trajectory): Promise<void> {
     this._trajectory = value;
     this._activeLoad = null;
-    if (value.length > 0) {
+    if (value.indexedLength > 0) {
       this._currentFrame = await value.frame(value.currentIndex);
     } else {
       this._currentFrame = new Frame();
     }
     logger.info(
-      `[System] Trajectory set with ${value.length} frame(s) (async)`,
+      `[System] Trajectory set with ${value.indexedLength} frame(s) (async)`,
     );
     this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
     this.setExploration(null);
@@ -183,7 +186,7 @@ export class System {
     this.setFrameLabels(extendFrameLabels(this._frameLabels, frame));
     this.setExploration(null);
     this.events?.emit("trajectory-change", this._trajectory);
-    return this._trajectory.length - 1;
+    return this._trajectory.indexedLength - 1;
   }
 
   // -------------------------------------------------------------------------
@@ -204,7 +207,7 @@ export class System {
   }
 
   private async _navigateTo(rawIndex: number): Promise<boolean> {
-    const length = this._trajectory.length;
+    const length = this._trajectory.indexedLength;
     if (length === 0) return false;
     const index = Math.max(0, Math.min(rawIndex, length - 1));
     if (index === this._trajectory.currentIndex && this._activeLoad === null) {

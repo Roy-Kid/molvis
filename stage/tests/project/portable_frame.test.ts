@@ -66,7 +66,7 @@ describe("isMolvisProject", () => {
             selection_scope_id: null,
             source_owner_id: null,
             dataSource: {
-              kind: "memory",
+              typeName: "MemoryDataSource",
               filename: "Scene",
               sourceType: "backend",
               contributedBlocks: [],

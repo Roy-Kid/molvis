@@ -87,11 +87,13 @@ export function MsdPanel({
   app,
   frameRange,
   trajectoryLength,
+  scopeBlocked = false,
   children,
 }: {
   app: Molvis | null;
   frameRange: FrameRange;
   trajectoryLength: number;
+  scopeBlocked?: boolean;
   /** Shared frame-scope control; rendered in the pinned footer, above Run. */
   children?: React.ReactNode;
 }) {
@@ -226,7 +228,8 @@ export function MsdPanel({
     cancelRef.current = true;
   }, []);
 
-  const computeDisabled = computing || trajectoryLength < 2;
+  const computeDisabled =
+    computing || trajectoryLength < 2 || scopeBlocked;
 
   return (
     <AnalysisPanelShell
@@ -240,9 +243,11 @@ export function MsdPanel({
           disabled={computeDisabled}
           label="Compute MSD"
           summary={
-            trajectoryLength < 2
-              ? "Needs at least 2 frames"
-              : `${trajectoryLength} frames`
+            scopeBlocked
+              ? "Set an explicit end frame"
+              : trajectoryLength < 2
+                ? "Needs at least 2 frames"
+                : `${trajectoryLength} frames`
           }
         />
       }

@@ -294,7 +294,6 @@ describe("TestComputeMsdTrajectory", () => {
     // Every atom moves with the frame, so MSD = shift²: 0, 1² and 4².
     expect(run.result.count).toBe(3);
     expect(run.result.frames.map((item) => item.mean)).toEqual([0, 1, 16]);
-    expect(Array.from(run.result.frames[2].perParticle)).toEqual([16, 16]);
     expect(run.frameIndices).toEqual([0, 1, 2]);
     expect(run.failures).toEqual([]);
     expect(run.trackedSelection.mode).toBe("all");

@@ -31,10 +31,18 @@ Confirm that:
 
 ## A large file never appears
 
-Check transfer and memory messages in the Output channel. Large remote files
-must first cross the extension-host/webview boundary. Prefer a binary or
-chunked trajectory format for long simulations instead of a huge expanded text
-dump.
+Check transfer and memory messages in the Output channel.
+
+- **Structure files** (LAMMPS data, POSCAR, …) open as one frame. MolVis does
+  not refuse them for size. A VS Code `TextDocument` path is still capped at
+  ~50 MB — use Quick View / Stage, not the text editor.
+- **Streamable trajectories** open by range (`openUri` / `readRange`). A
+  512 MiB dump is no longer refused on a `file:` URI.
+- **Eager-only** trajectories at or above 512 MiB are still refused — there
+  is no range indexer for those formats.
+- The standalone web app streams a local `File` handle the same way.
+
+Press Esc on the web app while “Indexing …” is showing to cancel the scan.
 
 ## Notebook selection is different
 

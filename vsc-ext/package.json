@@ -42,52 +42,37 @@
           "id": "molvis",
           "title": "MolVis",
           "icon": "image/molvis-activitybar.svg"
-        },
-        {
-          "id": "molvisSketch",
-          "title": "MolVis Sketch",
-          "icon": "image/molvis-sketch-activitybar.svg"
         }
       ]
     },
     "views": {
       "molvis": [
         {
-          "id": "molvis.launcher",
-          "name": "Home",
+          "id": "molvis.files",
+          "name": "Files",
           "visibility": "visible"
         },
         {
-          "id": "molvis.outline",
-          "name": "Structure",
-          "visibility": "visible"
-        }
-      ],
-      "molvisSketch": [
+          "id": "molvis.stageOutline",
+          "name": "Stage",
+          "visibility": "visible",
+          "when": "molvis.hasStageOutline"
+        },
         {
-          "id": "molvis.sketch",
+          "id": "molvis.sketchOutline",
           "name": "Sketch",
-          "type": "webview",
-          "visibility": "visible"
+          "visibility": "visible",
+          "when": "molvis.hasSketchOutline"
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "molvis.files",
+        "contents": "No molecular files in this workspace.\n[Open Structure…](command:molvis.openStructure)"
+      }
+    ],
     "commands": [
-      {
-        "command": "molvis.quickView",
-        "title": "MolVis: Quick View (Stage)",
-        "icon": "$(eye)"
-      },
-      {
-        "command": "molvis.quickViewSketch",
-        "title": "MolVis: Quick View (Sketch)",
-        "icon": "$(edit)"
-      },
-      {
-        "command": "molvis.openWorkbench",
-        "title": "MolVis: Open Workbench",
-        "icon": "$(window)"
-      },
       {
         "command": "molvis.openStage",
         "title": "MolVis: Open Stage",
@@ -104,23 +89,32 @@
         "icon": "$(browser)"
       },
       {
-        "command": "molvis.loadInWorkbench",
-        "title": "MolVis: Load in Workbench",
-        "icon": "$(open-preview)"
-      },
-      {
-        "command": "molvis.outline.select",
-        "title": "MolVis: Select Outline Node"
-      },
-      {
         "command": "molvis.openStructure",
         "title": "MolVis: Open Structure\u2026",
         "icon": "$(folder-opened)"
       },
       {
-        "command": "molvis.openRecentInWorkbench",
-        "title": "MolVis: Open in Workbench",
-        "icon": "$(window)"
+        "command": "molvis.quickView",
+        "title": "MolVis: Quick View",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "molvis.quickViewSketch",
+        "title": "MolVis: Quick View (Sketch)",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "molvis.stageOutline.select",
+        "title": "MolVis: Select Stage Outline Node"
+      },
+      {
+        "command": "molvis.sketchOutline.select",
+        "title": "MolVis: Select Sketch Outline Node"
+      },
+      {
+        "command": "molvis.refreshFiles",
+        "title": "MolVis: Refresh Files",
+        "icon": "$(refresh)"
       },
       {
         "command": "molvis.removeRecent",
@@ -157,7 +151,7 @@
         "command": "molvis.save",
         "key": "ctrl+s",
         "mac": "cmd+s",
-        "when": "activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.workbench || activeWebviewPanelId == molvis.page"
+        "when": "activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.stage || activeWebviewPanelId == molvis.sketch || activeWebviewPanelId == molvis.page"
       }
     ],
     "customEditors": [
@@ -282,53 +276,96 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "molvis.openStage"
+        },
+        {
+          "command": "molvis.openSketch"
+        },
+        {
+          "command": "molvis.openPage"
+        },
+        {
+          "command": "molvis.openStructure"
+        },
+        {
+          "command": "molvis.quickView"
+        },
+        {
+          "command": "molvis.reload",
+          "when": "activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.stage || activeWebviewPanelId == molvis.sketch || activeWebviewPanelId == molvis.page"
+        },
+        {
+          "command": "molvis.quickViewSketch",
+          "when": "false"
+        },
+
+        {
+          "command": "molvis.stageOutline.select",
+          "when": "false"
+        },
+        {
+          "command": "molvis.sketchOutline.select",
+          "when": "false"
+        },
+        {
+          "command": "molvis.refreshFiles",
+          "when": "false"
+        },
+        {
+          "command": "molvis.removeRecent",
+          "when": "false"
+        },
+        {
+          "command": "molvis.clearRecent",
+          "when": "false"
+        },
+        {
+          "command": "molvis.openDocs",
+          "when": "false"
+        },
+        {
+          "command": "molvis.showOutput",
+          "when": "false"
+        },
+        {
+          "command": "molvis.save",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "molvis.openStructure",
-          "when": "view == molvis.launcher",
+          "when": "view == molvis.files",
           "group": "navigation@1"
         },
         {
-          "command": "molvis.openWorkbench",
-          "when": "view == molvis.launcher",
+          "command": "molvis.refreshFiles",
+          "when": "view == molvis.files",
           "group": "navigation@2"
         },
         {
           "command": "molvis.clearRecent",
-          "when": "view == molvis.launcher",
+          "when": "view == molvis.files",
           "group": "1_more"
         }
       ],
       "view/item/context": [
         {
           "command": "molvis.quickView",
-          "when": "view == molvis.launcher && viewItem == molvis.recent",
-          "group": "inline@1"
-        },
-        {
-          "command": "molvis.openRecentInWorkbench",
-          "when": "view == molvis.launcher && viewItem == molvis.recent",
-          "group": "inline@2"
-        },
-        {
-          "command": "molvis.openRecentInWorkbench",
-          "when": "view == molvis.launcher && viewItem == molvis.recent",
+          "when": "view == molvis.files && viewItem =~ /molvis\\.file/",
           "group": "1_open"
         },
         {
-          "command": "molvis.quickView",
-          "when": "view == molvis.launcher && viewItem == molvis.recent",
+          "command": "molvis.openStage",
+          "when": "view == molvis.files && viewItem =~ /sketch/",
           "group": "1_open"
         },
         {
           "command": "molvis.removeRecent",
-          "when": "view == molvis.launcher && viewItem == molvis.recent",
+          "when": "view == molvis.files && viewItem =~ /recent/",
           "group": "2_modify"
-        },
-        {
-          "command": "molvis.clearRecent",
-          "when": "view == molvis.launcher && viewItem == molvis.section.recent",
-          "group": "1_modify"
         }
       ],
       "editor/title": [
@@ -339,30 +376,30 @@
         },
         {
           "command": "molvis.reload",
-          "when": "activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.workbench",
+          "when": "activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.stage || activeWebviewPanelId == molvis.sketch || activeWebviewPanelId == molvis.page",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "molvis.loadInWorkbench",
-          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
+          "command": "molvis.openSketch",
+          "when": "resourceExtname == .sdf || resourceExtname == .mol",
           "group": "navigation@1"
         },
         {
-          "command": "molvis.quickView",
+          "command": "molvis.openStage",
           "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
           "group": "navigation@2"
         },
         {
-          "command": "molvis.quickViewSketch",
-          "when": "resourceExtname == .sdf || resourceExtname == .mol",
-          "group": "navigation@2.5"
-        },
-        {
-          "command": "molvis.openWorkbench",
+          "command": "molvis.quickView",
           "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
           "group": "navigation@3"
+        },
+        {
+          "command": "molvis.quickViewSketch",
+          "when": "resourceExtname == .sdf || resourceExtname == .mol",
+          "group": "navigation@4"
         }
       ]
     },
@@ -526,7 +563,7 @@
         "molvis.plugins": {
           "type": "array",
           "default": [],
-          "markdownDescription": "Reserved for a future Workbench plugin capability. Not loaded by current Quick View / Workbench / Sketch surfaces (hosts do not mount the page plugin runtime).",
+          "markdownDescription": "Reserved for a future Stage plugin capability. Not loaded by current Quick View / Stage / Sketch surfaces.",
           "items": {
             "type": "string",
             "minLength": 1
@@ -543,7 +580,8 @@
     "build:webview:main": "rslib build -c rslib.webview.config.mts",
     "build:webview:worker": "rslib build -c rslib.webview.worker.config.mts",
     "build:webview": "npm run build:webview:main && npm run build:webview:worker && npm run build:webview:page",
-    "build:all": "npm-run-all build:extension build:webview",
+    "build:webview:page": "rslib build -c rslib.webview.page.config.mts",
+    "build:all": "npm-run-all clean:out build:extension build:webview",
     "build": "npm run build:all",
     "watch:extension": "rslib build --watch -c rslib.extension.config.mts",
     "watch:webview": "rslib build --watch -c rslib.webview.config.mts",
@@ -551,7 +589,7 @@
     "watch": "npm-run-all -p watch:extension watch:webview watch:typecheck",
     "dev": "npm run watch",
     "typecheck": "tsc --noEmit",
-    "package:prepare": "NODE_ENV=production npm-run-all clean build:all",
+    "package:prepare": "NODE_ENV=production npm run build",
     "package": "npm run package:prepare",
     "vscode:prepublish": "npm run package",
     "test:compile": "tsc --project tsconfig.test.json",
@@ -560,8 +598,7 @@
     "test": "npm run test:unit",
     "deploy:vsce": "vsce publish",
     "deploy": "npm run deploy:vsce",
-    "deploy:ovsx": "ovsx publish",
-    "build:webview:page": "rslib build -c rslib.webview.page.config.mts"
+    "deploy:ovsx": "ovsx publish"
   },
   "devDependencies": {
     "@rsbuild/plugin-react": "^2.1.0",

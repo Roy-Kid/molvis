@@ -7,9 +7,9 @@ export type OutlineTreeItem = StructureOutlineNode & {
 };
 
 /**
- * Native VS Code tree of chain → residue → atom for the active MolVis
- * workspace. Populated from webview `structureOutline` messages; click
- * posts `selectAtoms` back via the callback.
+ * Native VS Code tree for one editor surface (Stage or Sketch).
+ * Populated from that surface's `structureOutline` messages; click posts
+ * `selectAtoms` back via the callback.
  */
 export class StructureOutlineProvider
   implements vscode.TreeDataProvider<OutlineTreeItem>, vscode.Disposable
@@ -21,7 +21,11 @@ export class StructureOutlineProvider
 
   private roots: OutlineTreeItem[] = [];
 
-  constructor(private readonly onSelectAtoms: (indices: number[]) => void) {}
+  constructor(
+    private readonly selectCommand: string,
+    private readonly onSelectAtoms: (indices: number[]) => void,
+    private readonly contextKey: string,
+  ) {}
 
   dispose(): void {
     this._onDidChangeTreeData.dispose();
@@ -29,6 +33,11 @@ export class StructureOutlineProvider
 
   setOutline(payload: StructureOutlinePayload | null): void {
     this.roots = payload ? payload.roots.map((n) => hydrate(n)) : [];
+    void vscode.commands.executeCommand(
+      "setContext",
+      this.contextKey,
+      this.roots.length > 0,
+    );
     this._onDidChangeTreeData.fire(undefined);
   }
 
@@ -49,7 +58,7 @@ export class StructureOutlineProvider
         ? `${element.atomIndices.length} atoms`
         : undefined;
     item.command = {
-      command: "molvis.outline.select",
+      command: this.selectCommand,
       title: "Select",
       arguments: [element],
     };

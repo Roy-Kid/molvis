@@ -155,7 +155,7 @@ describe("HideHydrogensModifier", () => {
     expect(result).toBe(frame);
   });
 
-  it("should handle frame with no element column", () => {
+  it("throws when enabled without an element column", () => {
     const mod = new HideHydrogensModifier();
     mod.hideHydrogens = true;
     const frame = new Frame();
@@ -163,7 +163,6 @@ describe("HideHydrogensModifier", () => {
     atoms.setColF("x", new Float64Array([1, 2]));
     frame.insertBlock("atoms", atoms);
     const ctx = createDefaultContext(frame, mockApp);
-    const result = mod.apply(frame, ctx);
-    expect(result).toBe(frame);
+    expect(() => mod.apply(frame, ctx)).toThrow(/element/);
   });
 });

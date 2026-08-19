@@ -1,6 +1,6 @@
 /**
  * Normative host bridge for Quick View (stage-only surface).
- * Thin wrapper over {@link attachStageHost} — Workbench extends the same core.
+ * Thin wrapper over {@link attachStageHost} for stage-only surfaces.
  */
 
 import type { Molvis } from "@molcrafts/molvis-stage";

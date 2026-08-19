@@ -8,6 +8,10 @@
 import { mountMolvis } from "@molcrafts/molvis-stage";
 import type { WebviewToHostMessage } from "../protocol";
 import { attachQuickViewHost, postQuickViewReady } from "./attachQuickViewHost";
+import {
+  createCapabilityRegistry,
+  DEFAULT_STAGE_CAPABILITIES,
+} from "./capabilities";
 import { installGlobalErrorHandlers, reportError } from "./errorBoundary";
 
 declare const acquireVsCodeApi: () => {
@@ -38,8 +42,10 @@ export function bootstrapWebview(
   );
 
   const bridge = attachQuickViewHost(app, { host });
+  const capabilities = createCapabilityRegistry({ app, host });
 
   window.addEventListener("beforeunload", () => {
+    capabilities.dispose();
     bridge.dispose();
     app.destroy();
   });
@@ -47,7 +53,10 @@ export function bootstrapWebview(
   // App startup is independent from molecule shader compilation.
   void app
     .start()
-    .then(() => {
+    .then(async () => {
+      for (const id of DEFAULT_STAGE_CAPABILITIES) {
+        await capabilities.enable(id);
+      }
       options.onReady?.();
       postQuickViewReady(host);
     })

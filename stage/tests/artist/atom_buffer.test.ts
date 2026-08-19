@@ -59,6 +59,19 @@ describe("buildAtomBuffers", () => {
     expect(readColor(colors, 0)).not.toEqual(readColor(colors, 1));
   });
 
+  it("uses type_id ordinals when LAMMPS wrote no type label", () => {
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0, 1, 2]));
+    atoms.setColF("y", new Float64Array(3));
+    atoms.setColF("z", new Float64Array(3));
+    atoms.setColU32("type_id", new Uint32Array([1, 2, 1]));
+    const colors = buildAtomBuffers(atoms, makeStyleManager(), 7).get(
+      "instanceColor",
+    )!;
+    expect(readColor(colors, 0)).toEqual(readColor(colors, 2));
+    expect(readColor(colors, 0)).not.toEqual(readColor(colors, 1));
+  });
+
   it("keeps type colors stable when row order changes", () => {
     const first = buildAtomBuffers(
       makeTypeOnlyBlock(["opls_145", "opls_146"]),

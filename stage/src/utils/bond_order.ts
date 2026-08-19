@@ -19,8 +19,8 @@ export const BOND_TYPE_AROMATIC = 4;
 
 type BondColsBlock = {
   nrows(): number;
-  dtype(key: string): string | undefined;
-  viewColU32(key: string): Uint32Array | undefined;
+  hasU32(key: string): boolean;
+  viewColU32(key: string): Uint32Array;
 };
 
 /**
@@ -70,10 +70,10 @@ export function resolveBondOrders(bonds: BondColsBlock): Float64Array | null {
   const n = bonds.nrows();
   if (n === 0) return null;
 
-  const bondType = bonds.dtype("bond_type")
+  const bondType = bonds.hasU32("bond_type")
     ? bonds.viewColU32("bond_type")
     : undefined;
-  const bondNumber = bonds.dtype("bond_number")
+  const bondNumber = bonds.hasU32("bond_number")
     ? bonds.viewColU32("bond_number")
     : undefined;
   if (!bondType && !bondNumber) return null;
@@ -131,7 +131,6 @@ export function remapBondSubset(
 
   const iCol = source.viewColU32("atomi");
   const jCol = source.viewColU32("atomj");
-  if (!iCol || !jCol) return undefined;
 
   const nb = keepRows.length;
   const newI = new Uint32Array(nb);
@@ -142,10 +141,10 @@ export function remapBondSubset(
     newJ[k] = atomIndexMap[jCol[orig]];
   }
 
-  const bondType = source.dtype("bond_type")
+  const bondType = source.hasU32("bond_type")
     ? source.viewColU32("bond_type")
     : undefined;
-  const bondNumber = source.dtype("bond_number")
+  const bondNumber = source.hasU32("bond_number")
     ? source.viewColU32("bond_number")
     : undefined;
 

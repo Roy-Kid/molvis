@@ -214,7 +214,7 @@ export class GUIManager {
       this.uiOverlay.appendChild(this.trajectoryPanel);
 
       // Sync initial trajectory state immediately so single-frame datasets stay hidden.
-      this.trajectoryPanel.length = this.app.system.trajectory.length;
+      this.trajectoryPanel.length = this.app.system.trajectory.indexedLength;
       this.trajectoryPanel.current = this.app.system.trajectory.currentIndex;
       this.trajectoryPanel.playing = false;
       this.updateTrajectoryPanelLayout();
@@ -305,7 +305,7 @@ export class GUIManager {
 
   private handleTrajectoryChange(traj: Trajectory): void {
     if (this.trajectoryPanel) {
-      this.trajectoryPanel.length = traj.length;
+      this.trajectoryPanel.length = traj.indexedLength;
       this.updateTrajectoryPanelLayout();
       this.stopPlayback(); // Stop ensuring no weirdness
     }
@@ -349,7 +349,7 @@ export class GUIManager {
     }
     this.playbackInterval = setInterval(() => {
       const sys = this.app.system;
-      if (sys.trajectory.currentIndex >= sys.trajectory.length - 1) {
+      if (sys.trajectory.currentIndex >= sys.trajectory.indexedLength - 1) {
         // Loop or stop? Let's loop
         this.app.seekFrame(0);
       } else {

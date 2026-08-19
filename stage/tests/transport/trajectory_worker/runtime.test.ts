@@ -77,6 +77,36 @@ function blobSource(content: string): BlobRangeSource {
 }
 
 describe("TrajectoryRuntime", () => {
+  it("resolves open() on the first indexed frame before index-ready", async () => {
+    const worker = new FakeWorker((req, fake) => {
+      if (req.kind !== "open") return;
+      const open = req as OpenRequest;
+      fake.emit({
+        kind: "index-progress",
+        requestId: open.requestId,
+        bytesScanned: 10,
+        totalBytes: 200,
+        framesIndexedSoFar: 1,
+      });
+      queueMicrotask(() => {
+        fake.emit({
+          kind: "index-ready",
+          requestId: open.requestId,
+          frameCount: 7,
+          totalBytes: 200,
+        });
+      });
+    });
+    const runtime = new TrajectoryRuntime(worker, "xyz");
+    const first = await runtime.open(blobSource("..."));
+    expect(first.indexComplete).toBe(false);
+    expect(first.indexedLength).toBe(1);
+    expect(first.length).toBeNull();
+    const done = await runtime.whenIndexComplete;
+    expect(done.indexComplete).toBe(true);
+    expect(done.indexedLength).toBe(7);
+  });
+
   it("resolves open() once worker reports index-ready", async () => {
     const worker = new FakeWorker((req, fake) => {
       const open = req as OpenRequest;
@@ -122,6 +152,19 @@ describe("TrajectoryRuntime", () => {
       onProgress: (e) => events.push(e.bytesScanned),
     });
     expect(events).toEqual([100]);
+  });
+
+  it("cancelOpen rejects the in-flight open with CancellationError", async () => {
+    const worker = new FakeWorker(() => {
+      // Leave open pending so cancel can win.
+    });
+    const runtime = new TrajectoryRuntime(worker, "xyz");
+    const opening = runtime.open(blobSource("..."));
+    while (!worker.posts.some((p) => p.kind === "open")) {
+      await Promise.resolve();
+    }
+    runtime.cancelOpen();
+    await expect(opening).rejects.toMatchObject({ name: "CancellationError" });
   });
 
   it("rejects open() on open-error", async () => {

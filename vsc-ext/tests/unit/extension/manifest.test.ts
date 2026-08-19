@@ -31,13 +31,18 @@ const pkg = JSON.parse(readFileSync(extensionManifestPath(), "utf8")) as {
   description?: string;
   contributes?: {
     commands?: Array<{ command: string }>;
-    views?: Record<string, ViewContribution[]>;
+    views?: Record<string, Array<ViewContribution & { when?: string }>>;
     viewsContainers?: { activitybar?: Array<{ id: string }> };
+    viewsWelcome?: Array<{ view: string }>;
     menus?: Record<string, Array<{ command: string; when?: string }>>;
   };
 };
 
 const contributes = pkg.contributes ?? {};
+
+function extensionBundlePath(): string {
+  return join(dirname(extensionManifestPath()), "out", "extension.js");
+}
 const views = contributes.views ?? {};
 const commandIds = new Set((contributes.commands ?? []).map((c) => c.command));
 
@@ -61,31 +66,50 @@ suite("contribution manifest", () => {
     );
   });
 
-  test("declares every command the launcher and editors invoke", () => {
+  test("declares every command the files view and editors invoke", () => {
     for (const id of [
       "molvis.quickView",
-      "molvis.quickViewSketch",
-      "molvis.openWorkbench",
       "molvis.openStage",
       "molvis.openSketch",
       "molvis.openPage",
       "molvis.openStructure",
+      "molvis.refreshFiles",
       "molvis.clearRecent",
-      "molvis.openDocs",
-      "molvis.showOutput",
       "molvis.reload",
     ]) {
       assert.ok(commandIds.has(id), `missing contributed command ${id}`);
     }
   });
 
-  test("activity bar hosts a native launcher view, not a webview", () => {
-    const launcher = views.molvis?.find((v) => v.id === "molvis.launcher");
-    assert.ok(launcher, "Expected molvis.launcher in views.molvis");
+  test("extension host bundle does not require workspace packages", () => {
+    const bundle = extensionBundlePath();
+    assert.ok(existsSync(bundle), `extension host bundle missing: ${bundle}`);
+    const src = readFileSync(bundle, "utf8");
+    assert.match(
+      src,
+      /registerCommand\(\s*["']molvis\.quickView["']/,
+      "activate must register molvis.quickView in the shipped bundle",
+    );
+    assert.doesNotMatch(
+      src,
+      /require\(["']@molcrafts\//,
+      "VSIX has no node_modules — require(@molcrafts/…) makes every command not found on Remote-SSH",
+    );
+  });
+
+  test("does not contribute a Workbench command", () => {
+    assert.ok(!commandIds.has("molvis.openWorkbench"));
+    assert.ok(!commandIds.has("molvis.loadInWorkbench"));
+    assert.ok(!commandIds.has("molvis.openRecentInStage"));
+  });
+
+  test("activity bar hosts a native files view, not a webview", () => {
+    const files = views.molvis?.find((v) => v.id === "molvis.files");
+    assert.ok(files, "Expected molvis.files in views.molvis");
     assert.notStrictEqual(
-      launcher.type,
+      files.type,
       "webview",
-      "Launcher must be a native tree view, not a heavyweight webview",
+      "Files must be a native tree view, not a heavyweight webview",
     );
   });
 
@@ -97,35 +121,88 @@ suite("contribution manifest", () => {
     );
   });
 
-  test("launcher exposes Open Structure as a view/title action", () => {
+  test("files view title only exposes Open Structure and Refresh", () => {
+    const titleMenus = contributes.menus?.["view/title"] ?? [];
+    const filesActions = titleMenus.filter((m) =>
+      m.when?.includes("molvis.files"),
+    );
+    assert.ok(
+      filesActions.some((m) => m.command === "molvis.openStructure"),
+      "view/title must expose Open Structure on Files",
+    );
+    assert.ok(
+      filesActions.some((m) => m.command === "molvis.refreshFiles"),
+      "view/title must expose Refresh on Files",
+    );
+    assert.ok(
+      !filesActions.some(
+        (m) =>
+          m.command === "molvis.openStage" || m.command === "molvis.openSketch",
+      ),
+      "Files title must not host Stage or Sketch — those are other views",
+    );
+  });
+
+  test("activity bar has a single MolVis container", () => {
+    const activitybar = contributes.viewsContainers?.activitybar ?? [];
+    assert.strictEqual(activitybar.length, 1);
+    assert.strictEqual(activitybar[0]?.id, "molvis");
+    assert.strictEqual(views.molvisSketch, undefined);
+  });
+
+  test("activity bar Stage and Sketch views are native trees hidden until loaded", () => {
+    const stage = views.molvis?.find((v) => v.id === "molvis.stageOutline");
+    const sketch = views.molvis?.find((v) => v.id === "molvis.sketchOutline");
+    assert.ok(stage);
+    assert.ok(sketch);
+    assert.notStrictEqual(stage.type, "webview");
+    assert.notStrictEqual(sketch.type, "webview");
+    assert.ok(stage.when?.includes("molvis.hasStageOutline"));
+    assert.ok(sketch.when?.includes("molvis.hasSketchOutline"));
+    assert.strictEqual(
+      views.molvis?.find(
+        (v) => v.id === "molvis.sketch" && v.type === "webview",
+      ),
+      undefined,
+      "Sketch canvas must not live in the activity bar",
+    );
+  });
+
+  test("outline views do not host Open Stage or Open Sketch", () => {
     const titleMenus = contributes.menus?.["view/title"] ?? [];
     assert.ok(
-      titleMenus.some(
+      !titleMenus.some(
         (m) =>
-          m.command === "molvis.openStructure" &&
-          m.when?.includes("molvis.launcher"),
+          (m.command === "molvis.openStage" ||
+            m.command === "molvis.openSketch") &&
+          (m.when?.includes("stageOutline") ||
+            m.when?.includes("sketchOutline")),
       ),
-      "view/title must expose Open Structure on the launcher",
     );
+    const welcome = pkg.contributes?.viewsWelcome ?? [];
+    assert.ok(!welcome.some((w) => w.view === "molvis.stageOutline"));
+    assert.ok(!welcome.some((w) => w.view === "molvis.sketchOutline"));
+    assert.ok(welcome.some((w) => w.view === "molvis.files"));
   });
 
-  test("declares both activity-bar containers", () => {
-    const activitybar = contributes.viewsContainers?.activitybar ?? [];
-    assert.ok(
-      activitybar.some((c) => c.id === "molvis"),
-      "Expected molvis activity bar container",
+  test("command palette only shows single-purpose commands", () => {
+    const palette = contributes.menus?.commandPalette ?? [];
+    const hidden = new Set(
+      palette.filter((m) => m.when === "false").map((m) => m.command),
     );
-    assert.ok(
-      activitybar.some((c) => c.id === "molvisSketch"),
-      "Expected standalone sketch activity container",
+    const shown = (contributes.commands ?? [])
+      .map((c) => c.command)
+      .filter((id) => !hidden.has(id));
+    assert.deepStrictEqual(
+      shown.sort(),
+      [
+        "molvis.openPage",
+        "molvis.openSketch",
+        "molvis.openStage",
+        "molvis.openStructure",
+        "molvis.quickView",
+        "molvis.reload",
+      ].sort(),
     );
-  });
-
-  test("the standalone sketch view is a webview", () => {
-    const sketchView = views.molvisSketch?.find(
-      (v) => v.id === "molvis.sketch",
-    );
-    assert.ok(sketchView, "Expected molvis.sketch in views.molvisSketch");
-    assert.strictEqual(sketchView.type, "webview");
   });
 });

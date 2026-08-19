@@ -1,8 +1,12 @@
-import {
-  Cluster,
-  type Frame,
-  type ClusterResult as WasmClusterResult,
-} from "@molcrafts/molvis-core/molrs";
+import { Cluster, type Frame } from "@molcrafts/molvis-core/molrs";
+
+/** Plain payload of `Cluster.compute()`. */
+interface ClusterOut {
+  clusterIdx: Int32Array;
+  clusterSizes: Uint32Array;
+  numClusters: number;
+}
+
 import { SpatialNeighborQuery } from "../algo/neighbor_list";
 import { estimateRMax } from "./utils";
 
@@ -93,16 +97,15 @@ function computeClustersByCutoff(
   let query: SpatialNeighborQuery | null = null;
   let nlist: ReturnType<SpatialNeighborQuery["build"]> | null = null;
   let cluster: Cluster | null = null;
-  let wasmResult: WasmClusterResult | null = null;
 
   try {
     query = new SpatialNeighborQuery(rMax);
     nlist = query.build(frame);
     cluster = new Cluster(minClusterSize);
-    wasmResult = cluster.compute(frame, nlist);
+    const wasmResult = cluster.compute(frame, nlist) as ClusterOut;
 
-    let clusterIdx = wasmResult.clusterIdx();
-    let clusterSizes = wasmResult.clusterSizes();
+    let clusterIdx = wasmResult.clusterIdx;
+    let clusterSizes = wasmResult.clusterSizes;
     let numClusters = wasmResult.numClusters;
 
     if (params.selectedIndices) {
@@ -132,7 +135,6 @@ function computeClustersByCutoff(
       minClusterSize,
     };
   } finally {
-    wasmResult?.free();
     cluster?.free();
     nlist?.free();
     query?.free();

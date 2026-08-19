@@ -158,7 +158,7 @@ export async function extendSourcesToTrajectory(
 
 function timelineLength(sources: readonly CompositionSource[]): number {
   return sources.reduce(
-    (max, source) => Math.max(max, source.trajectory.length),
+    (max, source) => Math.max(max, source.trajectory.indexedLength),
     0,
   );
 }

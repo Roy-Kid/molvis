@@ -34,6 +34,7 @@ import {
   type AnalysisRunOptions,
   type AnalysisTrajectorySource,
   expandFrameRange,
+  resolveVisitLength,
   resolveTrackedAtomIndices,
   resolveTrackedAtomSelection,
   runTrajectoryAccumulate,
@@ -190,7 +191,10 @@ export async function computeRdfTrajectory(
   params: RdfTrajectoryParams = {},
   run: AnalysisRunOptions = {},
 ): Promise<RdfTrajectoryResult | null> {
-  const frameIndices = expandFrameRange(trajectory.length, run.frameRange);
+  const frameIndices = expandFrameRange(
+    resolveVisitLength(trajectory, run.frameRange),
+    run.frameRange,
+  );
   if (frameIndices.length === 0) return null;
 
   // Group A is the selection the runner follows for us. Group B is resolved
@@ -309,7 +313,12 @@ export async function computeMsdTrajectory(
 ): Promise<MsdTrajectoryResult | null> {
   // A displacement needs an origin frame and a later one: too short a range
   // is answered before a single analyzer handle exists.
-  if (expandFrameRange(trajectory.length, run.frameRange).length < 2) {
+  if (
+    expandFrameRange(
+      resolveVisitLength(trajectory, run.frameRange),
+      run.frameRange,
+    ).length < 2
+  ) {
     return null;
   }
 

@@ -21,7 +21,7 @@
  * reaches Babylon (the WebGL engine the stage renders with), the DOM (Document
  * Object Model, the live page), a pipeline modifier or the stage `System`: the
  * dependency set is molrs, `../algo/neighbor_list`, and the analysis modules
- * that are themselves molrs-only (`./panel_inputs`, `./frame_subset`,
+ * that are themselves molrs-only (`./panel_inputs`,
  * `./result_marshal`, `./registry` for types, `./analysis_ids`,
  * `./trajectory_runner` for the error class and the accumulate-sink interface
  * {@link CatalogAccumulator} implements). So one frame in, one plain-data
@@ -42,7 +42,7 @@ import {
   VORONOI_RADICAL_ANALYSIS_ID,
   VORONOI_VOID_ANALYSIS_ID,
 } from "./analysis_ids";
-import { buildAtomSubFrame } from "./frame_subset";
+
 import {
   angleTriples,
   atomLabels,
@@ -83,7 +83,9 @@ export type AnalysisParamValues = Record<string, number | boolean | string>;
 export interface WasmAnalysis {
   compute?: (...args: unknown[]) => unknown;
   fit?: (...args: unknown[]) => unknown;
-  feed?: (frame: Frame) => void;
+  fitTransform?: (...args: unknown[]) => unknown;
+  finalize?: () => unknown;
+  feed?: (frame: Frame, groupA?: unknown, groupB?: unknown) => void;
   free?: () => void;
 }
 
@@ -153,7 +155,15 @@ function ctorArgs(
 ): unknown[] {
   return definition.params
     .filter((spec) => spec.slot === "ctor")
-    .map((spec) => coerce(spec, params[spec.key]));
+    .map((spec) => {
+      const raw = params[spec.key];
+      // Optional catalog defaults (volume 0, window 0, rMin 0) mean "unset"
+      // at the WASM Option seam — pass undefined, not the dummy number.
+      if (spec.optional && (raw === undefined || raw === spec.default)) {
+        return undefined;
+      }
+      return coerce(spec, raw);
+    });
 }
 
 function callValue(
@@ -334,7 +344,6 @@ export function runSingleFrame(
         );
       } finally {
         instance.free?.();
-        clusters.free();
         cluster.free();
         neighbors.free();
         query.free();
@@ -388,12 +397,8 @@ export const PER_FRAME_KINDS = new Set([
  * reads: releasing a holder of WASM (WebAssembly) handles that it did not build
  * would free memory out from under its owner.
  *
- * Two rules keep that memory from escaping this class. A subset feed builds a
- * sub-frame and frees it in the same call that built it — the rule
- * `MsdAnalyzer.feed` (`./msd`) already follows. And the binding's answer leaves
- * through `marshalAnalysisResult` (`./result_marshal`), which copies an owned
- * result handle's columns out and frees the handle, so what reaches the caller
- * owns no WASM memory at all.
+ * A subset feed is the binding's own optional group argument, not a cloned
+ * sub-frame. The result leaves through `marshalAnalysisResult`.
  */
 export class CatalogAccumulator implements TrajectoryAccumulateSink<unknown> {
   private readonly instance: WasmAnalysis;
@@ -417,23 +422,15 @@ export class CatalogAccumulator implements TrajectoryAccumulateSink<unknown> {
       this.instance.feed?.(frame);
       return;
     }
-    const subFrame = buildAtomSubFrame(frame, atomIndices);
-    if (!subFrame) {
-      throw new AnalysisUnsupportedError(
-        this.definition.id,
-        "the frame has no atom coordinates to select from",
-      );
-    }
-    try {
-      this.instance.feed?.(subFrame);
-    } finally {
-      subFrame.free();
-    }
+    this.instance.feed?.(frame, Uint32Array.from(atomIndices));
   }
 
   /** What the fed frames add up to, as data that owns no WASM memory. */
   result(): unknown {
-    return marshalAnalysisResult(this.definition.id, this.instance.compute?.());
+    const read = this.definition.readCall ?? "compute";
+    const fn = this.instance[read];
+    const raw = typeof fn === "function" ? fn.call(this.instance) : undefined;
+    return marshalAnalysisResult(this.definition.id, raw);
   }
 
   /** Release the binding. */

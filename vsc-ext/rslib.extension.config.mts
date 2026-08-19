@@ -5,14 +5,16 @@ const sharedDefine = {
 };
 
 /**
- * VS Code extension host (Node). Imports `@molcrafts/molvis-stage/*` as a
- * normal dependency (workspace → package exports → dist). Build engines first.
+ * VS Code extension host (Node). `autoExternal` is off: the VSIX is
+ * packaged `--no-dependencies`, so every import except `vscode` must
+ * land in `out/extension.js`.
  */
 export default defineConfig({
   lib: [
     {
       format: "cjs",
       bundle: true,
+      autoExternal: false,
       autoExtension: false,
       source: {
         entry: { extension: "./src/extension/activate.ts" },

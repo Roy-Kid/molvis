@@ -1,3 +1,8 @@
+import {
+  decideIngest,
+  inferFormatFromFilename,
+} from "@molcrafts/molvis-stage/io/formats";
+
 /**
  * Standalone open-structure ingress helpers.
  *
@@ -234,6 +239,14 @@ export async function fetchStructureFile(
   });
   if (!res.ok) {
     throw new Error(`Could not download ${filename} (HTTP ${res.status})`);
+  }
+  const announced = Number(res.headers.get("content-length"));
+  const format = inferFormatFromFilename(filename);
+  if (format && Number.isFinite(announced) && announced > 0) {
+    const decision = decideIngest(format, announced, { hostCanRange: false });
+    if (decision.path === "refuse") {
+      throw new Error(decision.reason);
+    }
   }
   const buffer = await res.arrayBuffer();
   if (buffer.byteLength === 0) {

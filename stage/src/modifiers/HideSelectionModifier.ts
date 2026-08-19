@@ -107,7 +107,7 @@ export class HideSelectionModifier extends BaseModifier {
     const bonds = input.getBlock("bonds");
     let newBonds: Block | undefined;
 
-    if (bonds) {
+    if (bonds && bonds.nrows() > 0) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
 

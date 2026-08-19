@@ -40,7 +40,11 @@ import type {
 } from "./protocol";
 
 export interface OpenResult {
+  /** Playable frames so far (= {@link indexedLength}). */
   frameCount: number;
+  indexedLength: number;
+  length: number | null;
+  indexComplete: boolean;
   totalBytes: number;
 }
 
@@ -55,6 +59,8 @@ export type IndexProgressCallback = (event: {
 export interface OpenOptions {
   /** Streaming-progress callback during the (blocking) indexing pass. */
   onProgress?: IndexProgressCallback;
+  /** Fires once when the worker reports `index-ready`. */
+  onIndexComplete?: (result: OpenResult) => void;
   /** Per-chunk feed size in bytes. Default 8 MiB. */
   chunkSize?: number;
   /** Cache key used by the `.molidx` sidecar fast path. Stable over
@@ -70,7 +76,9 @@ function workerSourceFor(
   source: TrajectorySource,
   totalBytes: number,
 ): SourceHandle {
-  if (source.kind === "blob") return { kind: "blob", totalBytes };
+  if (source.kind === "blob" || source.kind === "host") {
+    return { kind: "blob", totalBytes };
+  }
   // For OPFS sources, the page-side source is purely declarative —
   // the worker re-opens its own sync handle. Today only blob and
   // opfs are defined; refine when more land.
@@ -98,6 +106,8 @@ interface PendingRequest {
   reject: (err: Error) => void;
   /** Optional progress callback (open requests only). */
   onProgress?: IndexProgressCallback;
+  onIndexComplete?: (result: OpenResult) => void;
+  openSettled?: boolean;
 }
 
 export class TrajectoryRuntime {
@@ -110,6 +120,12 @@ export class TrajectoryRuntime {
    *  null when none is in flight — used to cancel a superseded streaming load
    *  during latest-wins scrubbing. */
   private latestFrameRequestId: number | null = null;
+  private indexing = false;
+  private indexCompleteResolvers: Array<{
+    resolve: (value: OpenResult) => void;
+    reject: (err: Error) => void;
+  }> = [];
+  private lastIndexComplete: OpenResult | null = null;
   /** Live source held on the main thread. The worker never sees the
    *  Blob — it asks for byte ranges via `request-bytes` and we answer
    *  with transferable ArrayBuffers, which sidesteps the silent
@@ -150,7 +166,7 @@ export class TrajectoryRuntime {
     if (this.closed) {
       throw new Error("TrajectoryRuntime: already closed");
     }
-    if (this.openRequestId !== null) {
+    if (this.openRequestId !== null || this.indexing) {
       throw new Error("TrajectoryRuntime: another open is in flight");
     }
 
@@ -170,6 +186,7 @@ export class TrajectoryRuntime {
         resolve: resolve as (v: unknown) => void,
         reject,
         onProgress: opts.onProgress,
+        onIndexComplete: opts.onIndexComplete,
       });
       const req: OpenRequest = {
         kind: "open",
@@ -237,6 +254,23 @@ export class TrajectoryRuntime {
       this.worker.postMessage(req);
     });
     return { requestId, promise };
+  }
+
+  /** Resolves when the current index scan reports `index-ready`. */
+  get whenIndexComplete(): Promise<OpenResult> {
+    if (this.lastIndexComplete?.indexComplete) {
+      return Promise.resolve(this.lastIndexComplete);
+    }
+    return new Promise((resolve, reject) => {
+      this.indexCompleteResolvers.push({ resolve, reject });
+    });
+  }
+
+  /** Cancel the in-flight {@link open} index pass, if any. */
+  cancelOpen(): void {
+    if (this.openRequestId !== null) {
+      this.cancel(this.openRequestId);
+    }
   }
 
   /** Cancel an in-flight request by id. Idempotent — cancelling an
@@ -366,17 +400,42 @@ export class TrajectoryRuntime {
       totalBytes: msg.totalBytes,
       framesIndexedSoFar: msg.framesIndexedSoFar,
     });
+    if (pending && !pending.openSettled && msg.framesIndexedSoFar >= 1) {
+      pending.openSettled = true;
+      this.openRequestId = null;
+      this.indexing = true;
+      pending.resolve({
+        frameCount: msg.framesIndexedSoFar,
+        indexedLength: msg.framesIndexedSoFar,
+        length: null,
+        indexComplete: false,
+        totalBytes: msg.totalBytes,
+      } satisfies OpenResult);
+    }
   }
 
   private onIndexReady(msg: IndexReady): void {
     const pending = this.pending.get(msg.requestId);
-    if (!pending) return;
-    this.pending.delete(msg.requestId);
-    if (this.openRequestId === msg.requestId) this.openRequestId = null;
-    pending.resolve({
+    const result: OpenResult = {
       frameCount: msg.frameCount,
+      indexedLength: msg.frameCount,
+      length: msg.frameCount,
+      indexComplete: true,
       totalBytes: msg.totalBytes,
-    } satisfies OpenResult);
+    };
+    this.indexing = false;
+    this.lastIndexComplete = result;
+    if (this.openRequestId === msg.requestId) this.openRequestId = null;
+    if (pending) {
+      this.pending.delete(msg.requestId);
+      if (!pending.openSettled) {
+        pending.openSettled = true;
+        pending.resolve(result);
+      }
+      pending.onIndexComplete?.(result);
+    }
+    for (const waiter of this.indexCompleteResolvers) waiter.resolve(result);
+    this.indexCompleteResolvers = [];
   }
 
   private onOpenError(msg: OpenError): void {

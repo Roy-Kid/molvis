@@ -25,6 +25,7 @@ import {
   type AnalysisTrajectorySource,
   expandFrameRange,
   type FrameRange,
+  resolveVisitLength,
 } from "./trajectory_runner";
 
 export { CELL_TILT_EPS };
@@ -395,7 +396,10 @@ export async function snapshotFramesForAnalysis(
   frameRange?: FrameRange,
 ): Promise<AnalysisFrameSnapshot[]> {
   const snapshots: AnalysisFrameSnapshot[] = [];
-  for (const frameIndex of expandFrameRange(trajectory.length, frameRange)) {
+  for (const frameIndex of expandFrameRange(
+    resolveVisitLength(trajectory, frameRange),
+    frameRange,
+  )) {
     // Borrowed, not taken: snapshot the frame and leave it to the trajectory.
     const frame = await trajectory.frame(frameIndex);
     snapshots.push(snapshotFrameForAnalysis(frame, frameIndex));

@@ -1,15 +1,11 @@
 import {
   type Frame,
-  MSD as WasmMSD,
-  type MSDResult as WasmMSDResult,
+  MSDAccumulator as WasmMSD,
 } from "@molcrafts/molvis-core/molrs";
-import { buildAtomSubFrame } from "./frame_subset";
 
 export interface MsdFrameResult {
   /** System-average MSD in angstrom^2. */
   mean: number;
-  /** Per-particle squared displacements in angstrom^2. */
-  perParticle: Float32Array;
 }
 
 export interface MsdResult {
@@ -17,6 +13,14 @@ export interface MsdResult {
   frames: MsdFrameResult[];
   /** Number of frames processed. */
   count: number;
+}
+
+/** Plain payload of `MSDAccumulator.finalize()`. */
+interface MsdStreamOut {
+  direct: number[];
+  windowed: number[];
+  window: number;
+  nFrames: number;
 }
 
 /**
@@ -44,38 +48,20 @@ export class MsdAnalyzer {
 
   /** Feed a frame. First frame becomes reference. */
   feed(frame: Frame, atomIndices?: readonly number[]): void {
-    if (!atomIndices) {
-      this.inner.feed(frame);
-      return;
-    }
-    const subFrame = buildAtomSubFrame(frame, atomIndices);
-    if (!subFrame) {
-      throw new Error("MSD: could not build selected-atom frame");
-    }
-    try {
-      this.inner.feed(subFrame);
-    } finally {
-      subFrame.free();
-    }
+    const group = atomIndices ? Uint32Array.from(atomIndices) : undefined;
+    this.inner.feed(frame, group);
   }
 
   /** Number of frames fed so far. */
   get count(): number {
-    return this.inner.count;
+    return this.inner.nFrames;
   }
 
   /** Get accumulated results. */
   result(): MsdResult {
-    const wasmResults: WasmMSDResult[] = this.inner.results();
-    const frames: MsdFrameResult[] = wasmResults.map((r) => ({
-      mean: r.mean,
-      perParticle: new Float32Array(r.perParticle()),
-    }));
-    // Free WASM result objects
-    for (const r of wasmResults) {
-      r.free();
-    }
-    return { frames, count: frames.length };
+    const out = this.inner.finalize() as MsdStreamOut;
+    const frames: MsdFrameResult[] = out.direct.map((mean) => ({ mean }));
+    return { frames, count: out.nFrames };
   }
 
   /** Reset analyzer (clear reference and results). */

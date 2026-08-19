@@ -1,9 +1,8 @@
 /**
- * Sketch surface — Activity Bar view and Sketch Quick View share this entry.
+ * Sketch surface — editor tab and Sketch Quick View share this entry.
  *
  * Does **not** import `page/` (page depends on sketch; hosts never reverse that).
  * Chrome is package-owned via `SketchComposer({ gui: true })`.
- * Quick View host messages: init / loadFile / triggerSave (see attachSketchQuickViewHost).
  */
 
 import { SketchComposer } from "@molcrafts/molvis-sketch";

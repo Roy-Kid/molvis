@@ -119,19 +119,18 @@ function materializeDataSource(entry: ProjectPipelineEntry): DataSource {
     portableToFrame(pf, `project.dataSource[${entry.id}].frames[${i}]`),
   );
 
-  if (frames.length === 1) {
-    return new MemoryDataSource(frames[0], {
-      filename: payload.filename || "Scene",
-      sourceType:
-        payload.sourceType === "empty" ? "backend" : payload.sourceType,
+  if (payload.typeName === "FileDataSource" || frames.length > 1) {
+    const traj = new Trajectory(frames);
+    return new FileDataSource(traj, {
+      filename: payload.filename || "trajectory",
+      sourceType: payload.sourceType === "file" ? "file" : "backend",
       contributedBlocks: payload.contributedBlocks,
     });
   }
 
-  const traj = new Trajectory(frames);
-  return new FileDataSource(traj, {
-    filename: payload.filename || "trajectory",
-    sourceType: payload.sourceType === "file" ? "file" : "backend",
+  return new MemoryDataSource(frames[0], {
+    filename: payload.filename || "Scene",
+    sourceType: payload.sourceType === "empty" ? "backend" : payload.sourceType,
     contributedBlocks: payload.contributedBlocks,
   });
 }

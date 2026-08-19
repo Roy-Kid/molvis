@@ -33,8 +33,7 @@ export class HideHydrogensModifier extends BaseModifier {
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
 
-    if (!atoms.dtype("element")) return input;
-    const elements = atoms.copyColStr("element") as string[];
+    const elements = atoms.getStr("element") as string[];
 
     const nrows = atoms.nrows();
     const indexMap = new Int32Array(nrows);
@@ -71,7 +70,7 @@ export class HideHydrogensModifier extends BaseModifier {
     const bonds = input.getBlock("bonds");
     let newBonds: Block | undefined;
 
-    if (bonds) {
+    if (bonds && bonds.nrows() > 0) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
 

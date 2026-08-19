@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { StructureOutlinePayload } from "../../protocol";
 import { createInitMessage } from "../configuration";
 import { resolveActiveUri } from "../loading/activeUri";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
@@ -24,6 +25,9 @@ export async function openSketchQuickViewPanel(
   logger: Logger,
   fileLoader: MolecularFileLoader,
   uri?: vscode.Uri,
+  options?: {
+    onStructureOutline?: (outline: StructureOutlinePayload | null) => void;
+  },
 ): Promise<void> {
   const targetUri = resolveActiveUri(uri);
 
@@ -71,6 +75,9 @@ export async function openSketchQuickViewPanel(
           break;
         case "dropUri":
           await handleDropUri(message.uri, panel.webview, fileLoader, logger);
+          break;
+        case "structureOutline":
+          options?.onStructureOutline?.(message.outline);
           break;
         case "dirtyStateChanged":
           panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;

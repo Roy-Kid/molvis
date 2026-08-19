@@ -5,10 +5,13 @@ import type {
   LoadMode,
   WebviewToHostMessage,
 } from "../../protocol";
+import { FileRangeReader } from "../loading/fileRangeReader";
 import { resolveFileFormat } from "../loading/formatResolver";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
-import { getDisplayName } from "../loading/pathUtils";
+import { getDisplayName, isZarrUriPath } from "../loading/pathUtils";
 import type { Logger } from "../types";
+
+const rangeReader = new FileRangeReader();
 
 /**
  * Send a message from extension host to webview.
@@ -28,19 +31,34 @@ export async function sendLoadedFile(
   mode?: LoadMode,
 ): Promise<void> {
   try {
-    const loaded = await fileLoader.load(uri);
-    // Text (string) and byte (Uint8Array) payloads both need a format hint;
-    // zarr `Record` payloads dispatch on shape and never do.
-    const needsFormat =
-      typeof loaded.payload === "string" ||
-      loaded.payload instanceof Uint8Array;
-    const format = needsFormat
-      ? await resolveFileFormat(loaded.filename)
-      : null;
-    if (needsFormat && !format) {
-      logger.info(
-        `MolVis: user cancelled format picker for ${loaded.filename}`,
-      );
+    const filename = getDisplayName(uri);
+    const stat = await vscode.workspace.fs.stat(uri);
+    const isZarr = isZarrUriPath(uri, stat.type);
+    const format = isZarr ? null : await resolveFileFormat(filename);
+    if (!isZarr && !format) {
+      logger.info(`MolVis: user cancelled format picker for ${filename}`);
+      return;
+    }
+    const loaded = await fileLoader.load(uri, format ?? undefined);
+    if (loaded.openUri && format) {
+      let index: Uint8Array | undefined;
+      try {
+        index = await vscode.workspace.fs.readFile(
+          vscode.Uri.parse(`${uri.toString()}.molidx`),
+        );
+      } catch {
+        // no sibling sidecar
+      }
+      sendToWebview(webview, {
+        type: "openUri",
+        uri: uri.toString(),
+        filename: loaded.filename,
+        format,
+        size: loaded.openUri.size,
+        mtime: loaded.openUri.mtime,
+        ...(mode ? { mode } : {}),
+        ...(index ? { index } : {}),
+      });
       return;
     }
     sendToWebview(webview, {
@@ -53,6 +71,8 @@ export async function sendLoadedFile(
     });
   } catch (error) {
     logger.error(`MolVis: Failed to load file: ${error}`);
+    const message = error instanceof Error ? error.message : String(error);
+    void vscode.window.showErrorMessage(`MolVis: ${message}`);
   }
 }
 
@@ -64,6 +84,40 @@ export function onWebviewMessage(
   handler: (message: WebviewToHostMessage) => void,
 ): vscode.Disposable {
   return webview.onDidReceiveMessage(handler);
+}
+
+/**
+ * Handle `readRange` / `cancelRange` from the webview. Returns true when
+ * the message was consumed.
+ */
+export async function handleRangeMessage(
+  webview: vscode.Webview,
+  message: WebviewToHostMessage,
+  logger: Logger,
+): Promise<boolean> {
+  if (message.type === "cancelRange") {
+    rangeReader.cancel(message.fetchId);
+    return true;
+  }
+  if (message.type !== "readRange") return false;
+  try {
+    const uri = vscode.Uri.parse(message.uri);
+    if (uri.scheme !== "file") {
+      throw new Error(
+        `range read is only supported for file: URIs (${uri.scheme})`,
+      );
+    }
+    const data = await rangeReader.read(
+      uri.fsPath,
+      message.start,
+      message.end,
+      message.fetchId,
+    );
+    sendToWebview(webview, { type: "bytes", fetchId: message.fetchId, data });
+  } catch (error) {
+    logger.error(`MolVis: range read failed: ${error}`);
+  }
+  return true;
 }
 
 /**

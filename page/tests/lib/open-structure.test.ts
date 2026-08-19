@@ -1,5 +1,7 @@
+import { TRAJECTORY_WHOLE_FILE_CAP_BYTES } from "@molcrafts/molvis-stage/io/formats";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import {
+  fetchStructureFile,
   filenameFromUrl,
   normalizePdbId,
   parseStructureSourceFromParams,
@@ -36,6 +38,36 @@ describe("normalizePdbId", () => {
 describe("rcsbPdbUrl", () => {
   it("builds the download URL", () => {
     expect(rcsbPdbUrl("1crn")).toBe("https://files.rcsb.org/download/1CRN.pdb");
+  });
+});
+
+describe("fetchStructureFile", () => {
+  it("refuses a huge trajectory when Content-Length is announced", async () => {
+    const fetchImpl = (async () =>
+      new Response(null, {
+        status: 200,
+        headers: {
+          "content-length": String(TRAJECTORY_WHOLE_FILE_CAP_BYTES),
+        },
+      })) as typeof fetch;
+    await expect(
+      fetchStructureFile("https://ex.test/run.dcd", "run.dcd", fetchImpl),
+    ).rejects.toThrow(/buffer|memory/i);
+  });
+
+  it("downloads a small structure", async () => {
+    const fetchImpl = (async () =>
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "chemical/x-xyz" },
+      })) as typeof fetch;
+    const file = await fetchStructureFile(
+      "https://ex.test/tiny.xyz",
+      "tiny.xyz",
+      fetchImpl,
+    );
+    expect(file.name).toBe("tiny.xyz");
+    expect(file.size).toBe(3);
   });
 });
 

@@ -581,6 +581,22 @@ export class SketchBoard {
     this.markDirty();
   }
 
+  /** Sorted atom indices in the current selection. */
+  selectedAtomIndices(): number[] {
+    return [...this.selectedAtoms].sort((a, b) => a - b);
+  }
+
+  /** Replace the atom selection. Out-of-range indices are ignored. */
+  replaceSelectedAtoms(indices: readonly number[]): void {
+    this.clearSelection();
+    const n = this.graph.atomCount();
+    for (const i of indices) {
+      if (Number.isInteger(i) && i >= 0 && i < n) this.selectedAtoms.add(i);
+    }
+    this.emitState();
+    this.markDirty();
+  }
+
   toFrame(): Frame {
     return this.graph.toFrame();
   }

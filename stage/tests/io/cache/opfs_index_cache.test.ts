@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect } from "@rstest/core";
-import type { CachedIndex } from "../../../src/io/cache/molidx_codec";
+import {
+  type CachedIndexInput,
+  encodeMolidx,
+} from "../../../src/io/cache/molidx_codec";
 import { OpfsIndexCache } from "../../../src/io/cache/opfs_index_cache";
 import { clearBucket, opfsIt } from "./opfs_test_helpers";
 
-const fixture: CachedIndex = {
+const fixture: CachedIndexInput = {
   format: "xyz",
   totalBytes: 1024,
   entries: [
@@ -26,12 +29,31 @@ describe("OpfsIndexCache", () => {
     expect(loaded).not.toBeNull();
     expect(loaded?.format).toBe(fixture.format);
     expect(loaded?.totalBytes).toBe(fixture.totalBytes);
+    expect(loaded?.fileSize).toBe(fixture.totalBytes);
+    expect(loaded?.complete).toBe(true);
     expect(loaded?.entries).toEqual(fixture.entries);
+  });
+
+  opfsIt("treats a previous-layout sidecar as a miss", async () => {
+    const { getOpfsBucket, safeKey } = await import(
+      "@molcrafts/molvis-core/opfs"
+    );
+    const dir = await getOpfsBucket("idx");
+    if (!dir) return;
+    const stale = encodeMolidx(fixture);
+    new DataView(stale).setUint32(4, 1, true);
+    const handle = await dir.getFileHandle(`${safeKey("fp-stale")}.molidx`, {
+      create: true,
+    });
+    const writable = await handle.createWritable();
+    await writable.write(stale);
+    await writable.close();
+    expect(await OpfsIndexCache.get("fp-stale")).toBeNull();
   });
 
   opfsIt("set overwrites a previous entry under the same key", async () => {
     await OpfsIndexCache.set("fp-overwrite", fixture);
-    const updated: CachedIndex = {
+    const updated: CachedIndexInput = {
       format: "pdb",
       totalBytes: 9999,
       entries: [{ byteOffset: 100, byteLen: 9899 }],

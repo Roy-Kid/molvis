@@ -31,6 +31,8 @@ export const BEAD_TYPE = "bead_type";
 export const NAME = "name";
 /** Force-field / atom type label. */
 export const TYPE = "type";
+/** LAMMPS (and similar) numeric atom-type ordinal. */
+export const TYPE_ID = "type_id";
 
 /** Partial charge. */
 export const CHARGE = "charge";

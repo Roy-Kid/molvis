@@ -22,19 +22,6 @@ function cloneBond(b: Bond2D): Bond2D {
   };
 }
 
-type BondBlock = {
-  copyColU32: (name: string) => Uint32Array | undefined;
-};
-
-function readU32Col(block: BondBlock, name: string): number[] | null {
-  try {
-    const col = block.copyColU32(name);
-    return col ? Array.from(col) : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Sketch topology stores integer Kekulé orders 1–3.
  * Frame columns are molrs bond_type + bond_number only.
@@ -149,10 +136,10 @@ export class MoleculeGraph {
       this.bonds = [];
       return;
     }
-    const elements = atomBlock.copyColStr("element") as string[];
+    const elements = atomBlock.getStr("element") as string[];
     const n = elements.length;
     const atoms = elements.map((element, idx) => ({
-      element: element || "C",
+      element,
       x: idx * 1.4,
       y: 0,
     }));
@@ -160,10 +147,8 @@ export class MoleculeGraph {
     const bonds: Bond2D[] = [];
     const bondBlock = frame.getBlock("bonds");
     if (bondBlock && bondBlock.nrows() > 0) {
-      const atomi =
-        readU32Col(bondBlock, "atomi") ?? readU32Col(bondBlock, "i") ?? [];
-      const atomj =
-        readU32Col(bondBlock, "atomj") ?? readU32Col(bondBlock, "j") ?? [];
+      const atomi = Array.from(bondBlock.getU32("atomi"));
+      const atomj = Array.from(bondBlock.getU32("atomj"));
       const orders = readBondOrders(bondBlock);
       const m = bondBlock.nrows();
       for (let k = 0; k < m; k++) {

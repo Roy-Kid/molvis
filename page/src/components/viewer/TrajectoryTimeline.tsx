@@ -8,6 +8,8 @@ import { TrajectoryScrub } from "./TrajectoryScrub";
 interface TrajectoryTimelineProps {
   app: Molvis | null;
   totalFrames?: number;
+  /** When false, last-frame jumps to the last *indexed* frame. */
+  indexComplete?: boolean;
   /**
    * Narrow layout: drop speed + first/last so the scrub keeps usable width.
    * Play + step remain.
@@ -62,6 +64,7 @@ function frameReadoutWidth(totalFrames: number): string {
 export const TrajectoryTimeline: React.FC<TrajectoryTimelineProps> = ({
   app,
   totalFrames = 1,
+  indexComplete = true,
   compact = false,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -229,11 +232,14 @@ export const TrajectoryTimeline: React.FC<TrajectoryTimelineProps> = ({
           "text-right font-mono text-[11px] tabular-nums leading-none",
         )}
         style={{ width: frameReadoutWidth(totalFrames) }}
-        title={`Frame ${displayFrame} of ${totalFrames}`}
+        title={`Frame ${displayFrame} of ${totalFrames}${indexComplete ? "" : " (indexing)"}`}
         aria-live="off"
       >
         <span className="font-semibold text-foreground">{displayFrame}</span>
-        <span className="text-muted-foreground">/{totalFrames}</span>
+        <span className="text-muted-foreground">
+          /{totalFrames}
+          {indexComplete ? "" : "…"}
+        </span>
       </div>
 
       <TrajectoryPlaybackControls
@@ -247,6 +253,9 @@ export const TrajectoryTimeline: React.FC<TrajectoryTimelineProps> = ({
         onTogglePlayback={togglePlay}
         onNextFrame={stepForward}
         onLastFrame={goToEnd}
+        lastFrameLabel={
+          indexComplete ? "Last frame" : "Last indexed frame"
+        }
       />
     </div>
   );

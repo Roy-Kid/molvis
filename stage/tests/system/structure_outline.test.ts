@@ -13,7 +13,7 @@ describe("buildStructureOutline", () => {
     atoms.setColStr("element", ["N", "CA", "C"]);
     atoms.setColStr("name", ["N", "CA", "C"]);
     atoms.setColStr("chain_id", ["A", "A", "A"]);
-    atoms.setColF("res_seq", new Float64Array([1, 1, 1]));
+    atoms.setColU32("res_id", new Uint32Array([1, 1, 1]));
     atoms.setColStr("res_name", ["ALA", "ALA", "ALA"]);
     frame.insertBlock("atoms", atoms);
 
@@ -28,5 +28,34 @@ describe("buildStructureOutline", () => {
 
   it("returns empty roots for empty frame", () => {
     expect(buildStructureOutline(new Frame()).roots).toEqual([]);
+  });
+
+  it("lists atoms flat when there is no res_id (LAMMPS data)", () => {
+    const frame = new Frame();
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0, 1]));
+    atoms.setColF("y", new Float64Array([0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0]));
+    atoms.setColU32("type_id", new Uint32Array([1, 2]));
+    frame.insertBlock("atoms", atoms);
+
+    const outline = buildStructureOutline(frame);
+    expect(outline.roots).toHaveLength(1);
+    expect(outline.roots[0].kind).toBe("source");
+    expect(outline.roots[0].children).toHaveLength(2);
+  });
+
+  it("does not consume res_seq — ribbon-only field stays unread", () => {
+    const frame = new Frame();
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0]));
+    atoms.setColF("y", new Float64Array([0]));
+    atoms.setColF("z", new Float64Array([0]));
+    atoms.setColI32("res_seq", new Int32Array([7]));
+    frame.insertBlock("atoms", atoms);
+
+    const outline = buildStructureOutline(frame);
+    expect(outline.roots[0].kind).toBe("source");
+    expect(outline.roots[0].children?.[0].kind).toBe("atom");
   });
 });

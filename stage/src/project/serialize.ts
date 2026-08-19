@@ -29,7 +29,7 @@ async function captureDataSource(
     frames.push(frameToPortable(frame));
   }
   return {
-    kind: ds.kind,
+    typeName: ds.constructor.name,
     filename: ds.filename,
     sourceType: ds.sourceType,
     contributedBlocks: [...ds.contributedBlocks],

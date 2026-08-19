@@ -3,6 +3,25 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+<!-- mol:note:topic:molrs-traj-streaming -->
+## [2026-08-18] MolRS owns trajectory streaming
+
+**Rule**: Frame boundary + one-frame decode live only in MolRS (`Wasm*Stream` /
+successors). MolVis hosts supply `readRange`. Never reimplement ITEM:TIMESTEP /
+XYZ-N / DCD stride in page, vsc-ext, or Python. DCD/XTC/TRR streaming is a
+MolRS acceptance bar, not a molvis parser. SSH/HTTP/DataSource are molvis-only.
+
+**Supersedes**: traj-ingest-05 draft of a JS `TrajectoryBoundaryIndexer`.
+
+<!-- mol:note:topic:datasource-no-kind -->
+## [2026-08-18] DataSource has no kind
+
+**Rule**: Subclasses convert a source into `Trajectory`/`Frame`. Branch with
+`instanceof`. Do not add `DataSourceKind` members (`ssh`/`http` were deleted
+and stay deleted). Those transports are not MolRS types.
+
+See spec `traj-ingest-06-source`.
+
 ## 2026-08-14 — Product themes are tab10 | ovito
 
 Categorical type colors come from `Tab10Strategy` (default) or `OvitoStrategy`.

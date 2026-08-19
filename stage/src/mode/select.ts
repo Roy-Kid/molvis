@@ -107,36 +107,17 @@ function atomIdsForResidue(
   const frame = app.system.frame;
   const atoms = frame?.getBlock("atoms");
   if (!atoms) return [];
-  try {
-    if (
-      atoms.dtype("chain_id") !== "string" ||
-      atoms.dtype("res_seq") === undefined
-    ) {
-      return [];
+  const chains = atoms.getStr("chain_id") as string[];
+  const seqs = atoms.getI32("res_seq");
+  const n = atoms.nrows();
+  const candidates: number[] = [];
+  for (let i = 0; i < n; i++) {
+    if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
+      candidates.push(i);
     }
-    const chains = atoms.copyColStr("chain_id") as string[];
-    const n = atoms.nrows();
-    const candidates: number[] = [];
-    if (atoms.dtype("res_seq") === "i32") {
-      const seqs = atoms.copyColI32("res_seq");
-      for (let i = 0; i < n; i++) {
-        if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
-          candidates.push(i);
-        }
-      }
-    } else if (atoms.dtype("res_seq") === "u32") {
-      const seqs = atoms.copyColU32("res_seq");
-      for (let i = 0; i < n; i++) {
-        if ((chains[i] || "").trim() === chainId && seqs[i] === resSeq) {
-          candidates.push(i);
-        }
-      }
-    }
-    const sceneAtoms = app.world.sceneIndex.metaRegistry.atoms;
-    return candidates.filter((id) => sceneAtoms.getMeta(id) != null);
-  } catch {
-    return [];
   }
+  const sceneAtoms = app.world.sceneIndex.metaRegistry.atoms;
+  return candidates.filter((id) => sceneAtoms.getMeta(id) != null);
 }
 
 /**

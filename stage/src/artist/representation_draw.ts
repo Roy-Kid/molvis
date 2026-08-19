@@ -14,7 +14,6 @@ import {
   COLOR_OVERRIDE_R,
 } from "../color_override_keys";
 import { normalizeElement } from "../system/elements";
-import { DType } from "../utils/dtype";
 import {
   type AtomBufferOptions,
   buildAtomBuffers,
@@ -43,8 +42,8 @@ export interface RepresentationDrawHost {
 }
 
 function readElements(atomsBlock: Block): string[] | undefined {
-  return atomsBlock.dtype("element") === DType.String
-    ? (atomsBlock.copyColStr("element") as string[])
+  return atomsBlock.hasStr("element")
+    ? (atomsBlock.getStr("element") as string[])
     : undefined;
 }
 
@@ -55,10 +54,9 @@ export function carbonBoundHydrogens(
 ): Set<number> {
   const hidden = new Set<number>();
   const elements = readElements(atomsBlock);
-  if (!elements || !bondsBlock) return hidden;
+  if (!elements || !bondsBlock || bondsBlock.nrows() === 0) return hidden;
   const iAtoms = bondsBlock.viewColU32("atomi");
   const jAtoms = bondsBlock.viewColU32("atomj");
-  if (!iAtoms || !jAtoms) return hidden;
 
   for (let b = 0; b < bondsBlock.nrows(); b++) {
     const i = iAtoms[b];
