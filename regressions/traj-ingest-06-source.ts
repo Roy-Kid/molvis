@@ -26,10 +26,10 @@ const serialize = readFileSync(
 assert(!serialize.includes("kind: ds.kind"), "snapshot does not write ds.kind");
 assert(serialize.includes("typeName"), "snapshot writes constructor typeName");
 
-const types = readFileSync(
-  join(here, "../stage/src/project/types.ts"),
-  "utf8",
+const types = readFileSync(join(here, "../stage/src/project/types.ts"), "utf8");
+assert(
+  !types.includes("DataSourceKind"),
+  "project payload has no DataSourceKind",
 );
-assert(!types.includes("DataSourceKind"), "project payload has no DataSourceKind");
 
 console.log("traj-ingest-06-source ok");

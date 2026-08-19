@@ -228,8 +228,7 @@ export function MsdPanel({
     cancelRef.current = true;
   }, []);
 
-  const computeDisabled =
-    computing || trajectoryLength < 2 || scopeBlocked;
+  const computeDisabled = computing || trajectoryLength < 2 || scopeBlocked;
 
   return (
     <AnalysisPanelShell

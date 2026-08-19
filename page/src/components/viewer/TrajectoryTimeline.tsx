@@ -253,9 +253,7 @@ export const TrajectoryTimeline: React.FC<TrajectoryTimelineProps> = ({
         onTogglePlayback={togglePlay}
         onNextFrame={stepForward}
         onLastFrame={goToEnd}
-        lastFrameLabel={
-          indexComplete ? "Last frame" : "Last indexed frame"
-        }
+        lastFrameLabel={indexComplete ? "Last frame" : "Last indexed frame"}
       />
     </div>
   );

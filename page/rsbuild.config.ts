@@ -45,7 +45,8 @@ export default defineConfig({
     // app.molcrafts.org/molvis/ the edge router treats `wasm` as a
     // product slug and returns HTML, so WebAssembly.instantiate fails.
     // `./` resolves against the page URL, so `/` and `/molvis/` both
-    // find `wasm/` next to `js/`.
+    // find `wasm/` next to `js/`. Jupyter / vscode-webview hosts still
+    // override via `page/src/public-path.ts` (`__MOLVIS_ASSET_BASE__`).
     assetPrefix: "./",
     // Native ESM output (stable since Rsbuild 1.6 for web): entry + chunks
     // are real ES modules (`<script type="module">`), async chunks load via

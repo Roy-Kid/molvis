@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-stage",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "type": "module",
   "exports": {
     ".": {
@@ -50,7 +50,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MolCrafts/molvis.git",
+    "url": "https://github.com/MolCrafts/molvis.git",
     "directory": "stage"
   },
   "homepage": "https://github.com/MolCrafts/molvis#readme",
@@ -89,7 +89,7 @@
     "@babylonjs/gui": "^9.10.1",
     "@babylonjs/materials": "^9.10.1",
     "@babylonjs/serializers": "^9.10.1",
-    "@molcrafts/molvis-core": "0.2.0"
+    "@molcrafts/molvis-core": "0.2.2"
   },
   "directories": {
     "test": "tests"

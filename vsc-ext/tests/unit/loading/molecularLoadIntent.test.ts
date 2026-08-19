@@ -1,8 +1,8 @@
-import * as assert from "assert";
 import {
   STREAMING_FILE_THRESHOLD_BYTES,
   TRAJECTORY_WHOLE_FILE_CAP_BYTES,
 } from "@molcrafts/molvis-stage/io/formats";
+import * as assert from "assert";
 import { decideMolecularLoadIntent } from "../../../src/extension/loading/molecularLoadIntent";
 
 suite("molecularLoadIntent", () => {

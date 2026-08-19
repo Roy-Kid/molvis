@@ -6,11 +6,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { decideIngest } from "../stage/src/io/formats.ts";
 import {
   decodeMolidx,
   encodeMolidx,
 } from "../stage/src/io/cache/molidx_codec.ts";
+import { decideIngest } from "../stage/src/io/formats.ts";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);

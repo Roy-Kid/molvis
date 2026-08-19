@@ -62,9 +62,7 @@ export class System {
     this._activeLoad = null;
     this._currentFrame =
       value.indexedLength > 0 ? value.currentFrame : new Frame();
-    logger.info(
-      `[System] Trajectory set with ${value.indexedLength} frame(s)`,
-    );
+    logger.info(`[System] Trajectory set with ${value.indexedLength} frame(s)`);
     this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
     this.setExploration(null);
     this.events?.emit("trajectory-change", value);

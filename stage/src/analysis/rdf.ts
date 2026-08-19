@@ -1,7 +1,5 @@
-import {
-  type Frame,
-  RDFAccumulator as WasmRDF,
-} from "@molcrafts/molvis-core/molrs";
+import { type Frame, RDF as WasmRDF } from "@molcrafts/molvis-core/molrs";
+import { buildAtomSubFrame } from "./frame_subset";
 import {
   type RdfParams,
   type RdfResult,
@@ -22,8 +20,8 @@ const DUMMY_VOLUME_FOR_COUNTS = 1;
 /**
  * Compute a radial pair histogram and present it as g(r), p(r), or ρ(r).
  *
- * **Single path:** molrs `RDFAccumulator.feed(frame[, groupA[, groupB]])`
- * then `finalize()`. The accumulator indexes at `rMax` — a NeighborList is
+ * **Single path:** molrs `RDF.compute(frame)` streams pairs through a
+ * cell-list index (`build_index` + `visit_pairs`) — a full NeighborList is
  * never materialised. Memory is O(N + nBins), not O(P).
  *
  * Group selection:
@@ -188,41 +186,32 @@ function pickY(
   }
 }
 
-/** Plain payload of `RDFAccumulator.finalize()`. */
-interface RdfOut {
-  binCenters: Float64Array;
-  binEdges: Float64Array;
-  rdf: Float64Array;
-  pairCounts: Float64Array;
-  numPoints: number;
-  volume: number;
-}
-
 /**
- * Run the molrs RDF accumulator: `feed` one frame (optional groups), then
- * `finalize`. Optional `groupA`/`groupB` select the self or cross path.
+ * Run the single molrs RDF API: `new RDF(...).compute(frame)` which streams
+ * pairs (no NeighborList). Optional `queryFrame` selects the cross path.
  */
 function runWasmRdf(
   frame: Frame,
   opts: RdfRunOpts,
-  groupA?: number[],
-  groupB?: number[],
+  queryFrame?: Frame,
 ): RdfResult {
   let rdfObj: WasmRDF | null = null;
   try {
     rdfObj = new WasmRDF(opts.nBins, opts.rMax, opts.rMin, opts.volumeOverride);
-    rdfObj.feed(
-      frame,
-      groupA ? Uint32Array.from(groupA) : undefined,
-      groupB ? Uint32Array.from(groupB) : undefined,
-    );
-    const wasmResult = rdfObj.finalize() as RdfOut;
-    const grRaw = new Float64Array(wasmResult.rdf);
-    const counts = new Float64Array(wasmResult.pairCounts);
+    // Streaming API: self = compute(frame); cross = computeCross(ref, query).
+    const wasmResult = queryFrame
+      ? rdfObj.computeCross(frame, queryFrame)
+      : rdfObj.compute(frame);
+    const grRaw = new Float64Array(wasmResult.rdf());
+    const counts = new Float64Array(wasmResult.pairCounts());
     const nParticles = wasmResult.numPoints;
     const volumeRaw = wasmResult.volume;
     const dr = (opts.rMax - opts.rMin) / opts.nBins;
-    const r = new Float64Array(wasmResult.binCenters);
+    const r = new Float64Array(opts.nBins);
+    for (let i = 0; i < opts.nBins; i++) {
+      r[i] = opts.rMin + (i + 0.5) * dr;
+    }
+    wasmResult.free();
 
     const hasReferenceVolume = opts.hasReferenceVolume;
     const gr = hasReferenceVolume ? grRaw : new Float64Array(opts.nBins); // zeros — g(r) not meaningful
@@ -263,10 +252,16 @@ function computeSelfGroupRdf(
   opts: RdfRunOpts,
 ): RdfResult | null {
   if (group.length < 2) return null;
-  return runWasmRdf(frame, opts, group);
+  const subFrame = buildAtomSubFrame(frame, group);
+  if (!subFrame) return null;
+  try {
+    return computeFullRdf(subFrame, opts);
+  } finally {
+    subFrame.free();
+  }
 }
 
-/** Cross-histogram between two groups of the same frame. */
+/** Cross-histogram between two groups (streaming cell index on ref, visit query). */
 function computeCrossGroupRdf(
   frame: Frame,
   groupA: number[],
@@ -274,5 +269,19 @@ function computeCrossGroupRdf(
   opts: RdfRunOpts,
 ): RdfResult | null {
   if (groupA.length < 1 || groupB.length < 1) return null;
-  return runWasmRdf(frame, opts, groupA, groupB);
+
+  const refFrame = buildAtomSubFrame(frame, groupA);
+  const queryFrame = buildAtomSubFrame(frame, groupB);
+  if (!refFrame || !queryFrame) {
+    refFrame?.free();
+    queryFrame?.free();
+    return null;
+  }
+
+  try {
+    return runWasmRdf(refFrame, opts, queryFrame);
+  } finally {
+    refFrame.free();
+    queryFrame.free();
+  }
 }

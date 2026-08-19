@@ -1,6 +1,6 @@
-import * as assert from "assert";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as assert from "assert";
 import { RemoteMolrsIndexer } from "../../../src/extension/loading/remoteMolrsIndexer";
 
 suite("remoteMolrsIndexer", () => {

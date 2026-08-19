@@ -40,10 +40,22 @@ assert(
 );
 
 const io = readFileSync(join(root, "stage/src/io/index.ts"), "utf8");
-assert(io.includes("length-changed"), "loadFileStream must emit length-changed");
-assert(io.includes("index-complete"), "loadFileStream must emit index-complete");
+assert(
+  io.includes("length-changed"),
+  "loadFileStream must emit length-changed",
+);
+assert(
+  io.includes("index-complete"),
+  "loadFileStream must emit index-complete",
+);
 const ev = readFileSync(join(root, "stage/src/events.ts"), "utf8");
-assert(ev.includes('"length-changed"'), "MolvisEventMap missing length-changed");
-assert(ev.includes('"index-complete"'), "MolvisEventMap missing index-complete");
+assert(
+  ev.includes('"length-changed"'),
+  "MolvisEventMap missing length-changed",
+);
+assert(
+  ev.includes('"index-complete"'),
+  "MolvisEventMap missing index-complete",
+);
 
 console.log("traj-ingest-01-index ok");

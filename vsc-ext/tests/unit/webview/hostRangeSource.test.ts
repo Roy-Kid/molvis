@@ -3,7 +3,11 @@ import { WebviewHostRangeSource } from "../../../src/webview/hostRangeSource";
 
 suite("hostRangeSource", () => {
   test("kind is host and size is the declared byte length", async () => {
-    const src = new WebviewHostRangeSource("file:///tmp/a.dump", 4096, () => {});
+    const src = new WebviewHostRangeSource(
+      "file:///tmp/a.dump",
+      4096,
+      () => {},
+    );
     assert.strictEqual(src.kind, "host");
     assert.strictEqual(await src.size(), 4096);
   });

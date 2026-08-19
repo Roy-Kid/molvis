@@ -1,7 +1,7 @@
-import * as assert from "assert";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as assert from "assert";
 import { FileRangeReader } from "../../../src/extension/loading/fileRangeReader";
 
 suite("fileRangeReader", () => {

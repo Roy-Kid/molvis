@@ -39,10 +39,7 @@ assert(
   overlay.includes("ViewerStatusOverlay"),
   "status overlay still owns scanning copy",
 );
-const ingest = readFileSync(
-  join(here, "../stage/src/io/formats.ts"),
-  "utf8",
-);
+const ingest = readFileSync(join(here, "../stage/src/io/formats.ts"), "utf8");
 assert(ingest.includes("decideIngest"), "decideIngest stays the ingest router");
 const picker = readFileSync(
   join(here, "../page/src/components/format-picker-dialog.tsx"),
@@ -53,8 +50,7 @@ assert(
   "stream open reports frame(s) ready, not Indexed success",
 );
 assert(
-  !picker.includes("`Indexed ${file.name}`") &&
-    !picker.includes("Indexed ${file.name}"),
+  !/Indexed \$\{file\.name\}/.test(picker),
   "must not emit success Indexed before the scan finishes",
 );
 

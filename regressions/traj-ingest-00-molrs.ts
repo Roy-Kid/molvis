@@ -11,12 +11,15 @@
  * Run: `node regressions/traj-ingest-00-molrs.ts`
  */
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const dts = readFileSync(require.resolve("@molcrafts/molrs/molrs.d.ts"), "utf8");
+const dts = readFileSync(
+  require.resolve("@molcrafts/molrs/molrs.d.ts"),
+  "utf8",
+);
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -37,7 +40,11 @@ for (const name of textStreams) {
   );
 }
 
-const binaryStreams = ["WasmDcdStream", "WasmXtcStream", "WasmTrrStream"] as const;
+const binaryStreams = [
+  "WasmDcdStream",
+  "WasmXtcStream",
+  "WasmTrrStream",
+] as const;
 const missing = binaryStreams.filter(
   (name) => !dts.includes(`export class ${name}`),
 );
@@ -48,7 +55,10 @@ assert(
 
 const here = dirname(fileURLToPath(import.meta.url));
 const vscSrc = join(here, "../vsc-ext/src");
-const vscText = readFileSync(join(vscSrc, "extension/loading/molecularFileLoader.ts"), "utf8");
+const vscText = readFileSync(
+  join(vscSrc, "extension/loading/molecularFileLoader.ts"),
+  "utf8",
+);
 assert(
   !vscText.includes("ITEM: TIMESTEP"),
   "vsc-ext MolecularFileLoader must not scan ITEM: TIMESTEP",
