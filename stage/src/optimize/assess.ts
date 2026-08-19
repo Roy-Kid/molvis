@@ -630,9 +630,13 @@ export function assessFrameForOptimize(
     return assessOptimizeAtomTypes([], potential);
   }
   const n = atoms.nrows();
-  const col = atoms.hasStr("element")
-    ? (atoms.getStr("element") as string[])
-    : null;
+  let col: string[] | null = null;
+  try {
+    // molrs throws when the column is absent or not string dtype.
+    col = atoms.copyColStr("element");
+  } catch {
+    col = null;
+  }
   if (!col || col.length !== n) {
     return {
       level: "block",
