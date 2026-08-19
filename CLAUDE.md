@@ -109,6 +109,11 @@ history (the commit immediately before the harness rebuild).
   format scanner in page / vsc-ext / Python. `.molidx` is only a cache
   of MolRS `FrameIndexEntry[]`. Details: `.claude/notes/notes.md`
   (molrs-traj-streaming).
+- **VS Code trajectory worker WASM is posted, never fetched** — main thread
+  fetches worker.js + wasm; blob worker inlines the script and instantiates
+  from `postMessage` bytes. Never `new Worker(cdnUrl)`, never worker-side
+  `fetch`/`import()` of vscode-cdn or blob wasm. Details:
+  `.claude/notes/notes.md` (webview-worker-wasm).
 - **Pipeline path** — open/reset: empty pipeline + length-1 `System.trajectory`.
   User adds Source(s) via Open / Add source / Stream; compose with zero sources
   is empty Frame. Ingress is still `DataSource(s) → compose → transforms → draws`
