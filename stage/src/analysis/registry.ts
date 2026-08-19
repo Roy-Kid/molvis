@@ -20,9 +20,6 @@ export type AnalysisInputKind =
   | "accumulate"
   | "series";
 
-/** Which method hands back the result. Mirrors `read_call` in the Rust catalog. */
-export type AnalysisReadCall = "compute" | "fit" | "fitTransform" | "finalize";
-
 /** Shape of an analysis payload, for picking a renderer. */
 export type AnalysisResultKind =
   | "lineSeries"
@@ -113,10 +110,6 @@ export interface AnalysisDefinition {
   /** Class exported by `@molcrafts/molvis-core/molrs`. Guaranteed to exist. */
   wasmExport: string;
   inputKind: AnalysisInputKind;
-  /** Which method returns the result. Defaults to `compute` when omitted. */
-  readCall?: AnalysisReadCall;
-  /** How many optional `feed` groups the binding accepts. */
-  maxGroups?: number;
   resultKind: AnalysisResultKind;
   requires: AnalysisRequirement[];
   params: AnalysisParamSpec[];
@@ -153,13 +146,6 @@ const RESULT_KINDS: ReadonlySet<string> = new Set<AnalysisResultKind>([
   "grid3",
   "scalar",
   "custom",
-]);
-
-const READ_CALLS: ReadonlySet<string> = new Set<AnalysisReadCall>([
-  "compute",
-  "fit",
-  "fitTransform",
-  "finalize",
 ]);
 
 const PARAM_KINDS: ReadonlySet<string> = new Set<AnalysisParamKind>([
@@ -266,17 +252,6 @@ function validateAnalysis(raw: unknown): AnalysisDefinition {
   if (typeof a.resultKind !== "string" || !RESULT_KINDS.has(a.resultKind)) {
     fail(`${id}: unknown resultKind ${String(a.resultKind)}`);
   }
-  let readCall: AnalysisReadCall | undefined;
-  if (a.readCall !== undefined) {
-    if (typeof a.readCall !== "string" || !READ_CALLS.has(a.readCall)) {
-      fail(`${id}: unknown readCall ${String(a.readCall)}`);
-    }
-    readCall = a.readCall as AnalysisReadCall;
-  }
-  const maxGroups =
-    typeof a.maxGroups === "number" && Number.isFinite(a.maxGroups)
-      ? a.maxGroups
-      : undefined;
   const requires = Array.isArray(a.requires) ? a.requires : [];
   const params = Array.isArray(a.params) ? a.params : [];
   return {
@@ -285,8 +260,6 @@ function validateAnalysis(raw: unknown): AnalysisDefinition {
     label: a.label,
     wasmExport: a.wasmExport,
     inputKind: a.inputKind as AnalysisInputKind,
-    readCall,
-    maxGroups,
     resultKind: a.resultKind as AnalysisResultKind,
     requires: requires as AnalysisRequirement[],
     params: params.map((param) => validateParam(param, id)),
