@@ -1,11 +1,16 @@
 /**
- * Wire protocol between the trajectory worker (which owns the
- * `TrajectorySource` and the WASM streaming reader) and the main-thread
- * `TrajectoryRuntime`.
+ * Typed parameters for the trajectory workload channel.
+ *
+ * The trajectory worker (which owns the `TrajectorySource` and the
+ * WebAssembly (WASM) streaming reader) and the main-thread `TrajectoryRuntime` talk over the
+ * core workload channel; this module supplies the job, result, progress,
+ * and host-call payload types that parameterize that channel. It is not a
+ * wire protocol — envelopes, correlation ids, readiness, and cancellation
+ * belong to the channel itself.
  *
  * All numeric byte offsets are JS `number` (safe-int up to 2^53). The
- * streaming protocol caps trajectory size at 1 TB, well within safe-int —
- * see docs/specs/streaming-trajectory.md for the rationale.
+ * streaming pipeline caps trajectory size at 1 TB, well within safe-int —
+ * byte offsets stay exact without BigInt on either side of the channel.
  *
  * Every typed-array field in a `FrameMessage` is added to the
  * `postMessage` transfer list — ownership moves to the receiver, the
@@ -31,8 +36,8 @@ export type Format =
  * `Blob` directly through `postMessage` — Chrome (especially in dev
  * mode under HMR wrapping) silently drops or stalls main→worker
  * messages whose payload references very large Blobs. Instead the
- * worker is told the source size + kind, then issues `request-bytes`
- * messages back to the main thread for each byte range it needs. The
+ * worker is told the source size + kind, then issues `RequestBytes`
+ * host-calls back to the main thread for each byte range it needs. The
  * main thread holds the live Blob and answers with transferable
  * `ArrayBuffer`s — zero clone, zero size limit.
  */
@@ -45,7 +50,7 @@ export interface BlobSourceHandle {
  * OPFS-backed source. The worker resolves the path under
  * `/molvis/v1/blob/<filename>` and opens a
  * `FileSystemSyncAccessHandle` for it. Reads happen synchronously
- * inside the worker — no `request-bytes` round trip — so this path is
+ * inside the worker — no host-call round trip — so this path is
  * substantially cheaper than the blob path on hot frame loads.
  */
 export interface OpfsSourceHandle {
@@ -57,7 +62,7 @@ export interface OpfsSourceHandle {
 export type SourceHandle = BlobSourceHandle | OpfsSourceHandle;
 
 // ---------------------------------------------------------------------------
-//  Frame payload — the wire format for a single Frame
+//  Frame payload — the transferable encoding of a single Frame
 // ---------------------------------------------------------------------------
 
 export type ColumnPayload =
@@ -91,144 +96,81 @@ export interface GridPayload {
   arrays: { name: string; data: Float64Array }[];
 }
 
-// ---------------------------------------------------------------------------
-//  Main → worker requests
-// ---------------------------------------------------------------------------
-
-export interface OpenRequest {
-  kind: "open";
-  requestId: number;
-  source: SourceHandle;
-  format: Format;
-  /** Bytes per indexer feed call. Default 8 MiB.
-   *
-   *  Smaller values reduce peak WASM memory at the cost of more wasm-bindgen
-   *  round trips. Larger values improve indexer throughput but raise the
-   *  floor on WASM linear memory and on the indexing-progress refresh
-   *  granularity. */
-  chunkSize?: number;
-  /** Cache key used to consult the `.molidx` sidecar before scanning
-   *  and to write a fresh sidecar after a successful index pass. When
-   *  omitted (e.g. for ad-hoc Blobs without identity), the worker
-   *  always re-indexes from scratch. */
-  fingerprint?: string;
-}
-
-export interface LoadFrameRequest {
-  kind: "load-frame";
-  requestId: number;
-  frameId: number;
-}
-
-export interface CancelRequest {
-  kind: "cancel";
-  requestId: number;
-  /** The `requestId` of the original open / load-frame request to cancel. */
-  targetRequestId: number;
-}
-
-export interface CloseRequest {
-  kind: "close";
-  requestId: number;
-}
-
-/**
- * Worker → main: ask for a byte range from the source. The main thread
- * answers with a `BytesResponse` whose `data` is the transferred
- * `ArrayBuffer`.
- */
-export interface RequestBytes {
-  kind: "request-bytes";
-  /** Worker-chosen id; main thread echoes it on the response. */
-  fetchId: number;
-  byteOffset: number;
-  byteLen: number;
-}
-
-/**
- * Main → worker: bytes for an earlier `request-bytes`. The
- * `ArrayBuffer` is transferred (zero copy). On read errors the
- * `error` field is set instead.
- */
-export interface BytesResponse {
-  kind: "bytes";
-  fetchId: number;
-  data: ArrayBuffer | null;
-  error?: string;
-}
-
-export type WorkerRequest =
-  | OpenRequest
-  | LoadFrameRequest
-  | CancelRequest
-  | CloseRequest
-  | BytesResponse;
-
-// ---------------------------------------------------------------------------
-//  Worker → main responses
-// ---------------------------------------------------------------------------
-
-export interface IndexProgress {
-  kind: "index-progress";
-  requestId: number;
-  bytesScanned: number;
-  totalBytes: number;
-  framesIndexedSoFar: number;
-}
-
-export interface IndexReady {
-  kind: "index-ready";
-  requestId: number;
-  frameCount: number;
-  totalBytes: number;
-}
-
-export interface OpenError {
-  kind: "open-error";
-  requestId: number;
-  message: string;
-}
-
 export interface FrameMessage {
   kind: "frame";
-  requestId: number;
   frameId: number;
   blocks: BlockPayload[];
   box: BoxPayload | null;
   grids: GridPayload[];
 }
 
-export interface FrameError {
-  kind: "frame-error";
-  requestId: number;
-  frameId: number;
-  message: string;
-}
+// ---------------------------------------------------------------------------
+//  Workload channel parameters
+// ---------------------------------------------------------------------------
 
-export interface ClosedAck {
-  kind: "closed";
-  requestId: number;
+/**
+ * Job submitted by `TrajectoryRuntime` to the trajectory worker over the
+ * workload channel.
+ *
+ * - `open` — attach a source, index it, and stream indexing progress.
+ *   `chunkSize` is bytes per indexer feed call (default 8 MiB): smaller
+ *   values reduce peak WASM memory at the cost of more wasm-bindgen round
+ *   trips; larger values improve indexer throughput but raise the floor on
+ *   WASM linear memory and on the indexing-progress refresh granularity.
+ *   `fingerprint` is the cache key used to consult the `.molidx` sidecar
+ *   before scanning and to write a fresh sidecar after a successful index
+ *   pass; when omitted (e.g. for ad-hoc Blobs without identity), the
+ *   worker always re-indexes from scratch.
+ * - `load-frame` — decode one indexed frame; resolves with a
+ *   `FrameMessage`.
+ * - `close` — release the WASM streams and the source.
+ */
+export type TrajectoryJob =
+  | {
+      kind: "open";
+      source: SourceHandle;
+      format: Format;
+      chunkSize?: number;
+      fingerprint?: string;
+    }
+  | { kind: "load-frame"; frameId: number }
+  | { kind: "close" };
+
+/**
+ * Result the worker returns for a `TrajectoryJob`, matched by kind:
+ * `open` → `open-result`, `load-frame` → `FrameMessage`, `close` →
+ * `closed`. `indexComplete: false` marks an early-resolved open whose
+ * index scan is still running.
+ */
+export type TrajectoryJobResult =
+  | {
+      kind: "open-result";
+      frameCount: number;
+      totalBytes: number;
+      indexComplete: boolean;
+    }
+  | FrameMessage
+  | { kind: "closed" };
+
+/**
+ * Streaming progress reported while an `open` job indexes the source.
+ */
+export interface TrajectoryIndexProgress {
+  bytesScanned: number;
+  totalBytes: number;
+  framesIndexedSoFar: number;
 }
 
 /**
- * Worker → main: posted once at the end of worker module init. The
- * runtime defers all outbound business messages until this arrives —
- * Chrome dev-mode module workers silently drop pre-init messages
- * instead of buffering them.
+ * Worker → main host-call payload: ask for a byte range from the source.
+ * Correlation is carried by the workload channel's callId — no id field
+ * here. The host replies with an `ArrayBuffer` holding exactly the
+ * requested bytes, transferred (zero copy).
  */
-export interface WorkerHeartbeat {
-  kind: "worker-heartbeat";
+export interface RequestBytes {
+  byteOffset: number;
+  byteLen: number;
 }
-
-export type WorkerResponse =
-  | IndexProgress
-  | IndexReady
-  | OpenError
-  | FrameMessage
-  | FrameError
-  | ClosedAck
-  | RequestBytes
-  | WorkerHeartbeat;
 
 // ---------------------------------------------------------------------------
 //  Transfer-list helpers

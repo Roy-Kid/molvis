@@ -12,13 +12,12 @@ spec's tasks off and prunes the entry (and file) on completion.
 - [traj-ingest-04-range](traj-ingest-04-range.md) — vsc-ext `openUri` / `readRange`，轨迹不再整文件拷贝 [approved]
 - [traj-ingest-05-remote](traj-ingest-05-remote.md) — Remote：EH 调 **同一份 MolRS** 建表 + 三级 `.molidx` 放置 [approved]
 - [traj-ingest-06-source](traj-ingest-06-source.md) — DataSource 删除 kind；子类做来源→内部对象；ssh/http 不是 DS、不进 MolRS [approved]
-- [worker-arch-unify-02-runtime](worker-arch-unify-02-runtime.md) — TrajectoryRuntime 重建在 workload 信道上，删除第二套手写生命周期 [approved]
 - [worker-arch-unify-03-spawn](worker-arch-unify-03-spawn.md) — 单一 spawn 模块 + `./worker-spawner` 出口，vsc-ext alias 替换 rewrites 正则 [approved]
 - [worker-arch-unify-04-bootstrap](worker-arch-unify-04-bootstrap.md) — webview blob bootstrap 实机验证（陷阱 2 疑点）并收敛为单一路径 [approved]
 
 Chain `traj-ingest`: **00（molrs 面）** → 01 → 02；03 可与 02 并行；04 依赖 01 `kind: "host"`；05 依赖 00+02+04；06 可与 01 后并行。Phase 0 已在树里。`.molidx` = 帧偏移缓存，不是 sidecar 格式体系。
 
-Chain `worker-arch-unify`: 01 → 02 → 03 → 04（严格串行；03 为 stage+vsc-ext 最小原子 seam，04 依赖 alias 已就位）。01-channel 已 done（2026-08-20 shipped：host-call/host-reply、interleaved 调度、submit 票据、cancelMode、readyTimeoutMs）。与 `traj-ingest` 的交点：`TrajectorySource.readRange` seam 形状冻结（04-range/05-remote 依赖）。
+Chain `worker-arch-unify`: 01 → 02 → 03 → 04（严格串行；03 为 stage+vsc-ext 最小原子 seam，04 依赖 alias 已就位）。01-channel、02-runtime 已 done（2026-08-20 shipped：信道扩展 + TrajectoryRuntime/worker 重建，`./trajectory-protocol` 死 wire 类型已删 = declared breaking）。02 路由债：DCD `.molidx` hit 路径不喂 decoder context（既有行为，`/mol:debug` 候选）；OPFS source `filename` 类型逃逸（pm 候选）。与 `traj-ingest` 的交点：`TrajectorySource.readRange` seam 形状冻结（04-range/05-remote 依赖）。
 
 ## Shipped (recent)
 

@@ -8,7 +8,6 @@ import type {
 function emptyMessage(): FrameMessage {
   return {
     kind: "frame",
-    requestId: 1,
     frameId: 0,
     blocks: [],
     box: null,

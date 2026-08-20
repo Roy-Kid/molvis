@@ -1,21 +1,24 @@
 /**
  * Main-thread side of the streaming trajectory pipeline.
  *
- * `TrajectoryRuntime` owns the worker, manages requestId correlation,
- * and exposes a small async API surface on the main thread. The
- * underlying `TrajectorySource` and the WASM streaming reader live in
- * the worker; the main thread only ever sees Frames it reconstitutes
- * from typed-array payloads via {@link rehydrateFrame}.
+ * `TrajectoryRuntime` owns the worker and drives it over the core workload
+ * channel ({@link WorkloadHost}): job correlation, the ready handshake, the
+ * 30 s boot deadline, cancellation, and progress streaming all belong to the
+ * channel — this module only supplies the trajectory job types
+ * (`./protocol`) and maps channel results onto its frozen public API. The
+ * underlying `TrajectorySource` and the WebAssembly (WASM) streaming reader live in the
+ * worker; the main thread only ever sees Frames it reconstitutes from
+ * typed-array payloads via {@link rehydrateFrame}.
  *
  * Lifecycle:
  *   1. Construct with an injected `Worker` and the file `format`.
- *   2. `await open(source)` — runs the (blocking) indexing pass and
- *      reports the resulting `frameCount`. Optional `onProgress` callback
- *      is invoked with byte / frame counters during the pass.
+ *   2. `await open(source)` — submits the indexing job. Resolves early on
+ *      the first indexed frame so playback can start; the terminal result
+ *      arrives via `whenIndexComplete` / `onIndexComplete`.
  *   3. `await loadFrame(i)` — returns a real molrs `Frame`. Caller
  *      owns the Frame and should `frame.free()` it (typically via the
  *      `Trajectory` LRU cache).
- *   4. `close()` — terminates the worker.
+ *   4. `close()` — releases worker resources and terminates.
  *
  * The Worker is dependency-injected so tests can substitute a
  * structured-cloning fake. Production callers use the spawning helper
@@ -23,20 +26,20 @@
  */
 
 import type { Frame } from "@molcrafts/molvis-core/molrs";
+import {
+  WorkloadCancelledError,
+  WorkloadHost,
+} from "@molcrafts/molvis-core/workload";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
 import { logger } from "../../utils/logger";
 import { rehydrateFrame } from "./frame_codec";
 import type {
-  CancelRequest,
-  CloseRequest,
   Format,
-  IndexProgress,
-  IndexReady,
-  LoadFrameRequest,
-  OpenError,
-  OpenRequest,
+  RequestBytes,
   SourceHandle,
-  WorkerResponse,
+  TrajectoryIndexProgress,
+  TrajectoryJob,
+  TrajectoryJobResult,
 } from "./protocol";
 
 export interface OpenResult {
@@ -59,7 +62,7 @@ export type IndexProgressCallback = (event: {
 export interface OpenOptions {
   /** Streaming-progress callback during the (blocking) indexing pass. */
   onProgress?: IndexProgressCallback;
-  /** Fires once when the worker reports `index-ready`. */
+  /** Fires once when the index scan completes. */
   onIndexComplete?: (result: OpenResult) => void;
   /** Per-chunk feed size in bytes. Default 8 MiB. */
   chunkSize?: number;
@@ -70,8 +73,8 @@ export interface OpenOptions {
 
 /** Build the worker-side source descriptor for a given main-thread
  *  source. Blob sources never cross the wire as a Blob — the worker
- *  pulls bytes via `request-bytes`. OPFS sources cross as a path the
- *  worker resolves to its own sync handle. */
+ *  pulls bytes via `RequestBytes` host-calls. OPFS sources cross as a
+ *  path the worker resolves to its own sync handle. */
 function workerSourceFor(
   source: TrajectorySource,
   totalBytes: number,
@@ -98,97 +101,110 @@ export interface WorkerLike {
   terminate(): void;
 }
 
-interface PendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (err: Error) => void;
-  /** Optional progress callback (open requests only). */
-  onProgress?: IndexProgressCallback;
-  onIndexComplete?: (result: OpenResult) => void;
-  openSettled?: boolean;
+/**
+ * Bridge from the frozen addEventListener-style {@link WorkerLike} surface
+ * to the property-style Worker face {@link WorkloadHost} consumes
+ * (`onmessage` / `onerror` setters, `postMessage`, `terminate`).
+ * Module-private: hosts and tests keep injecting `WorkerLike`; the adapter
+ * never leaves this file.
+ */
+class WorkerLikeAdapter {
+  private messageListener: ((e: Event) => void) | null = null;
+  private errorListener: ((e: Event) => void) | null = null;
+
+  constructor(private readonly inner: WorkerLike) {}
+
+  set onmessage(handler: ((ev: MessageEvent) => void) | null) {
+    if (this.messageListener) {
+      this.inner.removeEventListener("message", this.messageListener);
+      this.messageListener = null;
+    }
+    if (handler) {
+      this.messageListener = (e) => handler(e as MessageEvent);
+      this.inner.addEventListener("message", this.messageListener);
+    }
+  }
+
+  set onerror(handler: ((ev: ErrorEvent) => void) | null) {
+    if (this.errorListener) {
+      this.inner.removeEventListener("error", this.errorListener);
+      this.errorListener = null;
+    }
+    if (handler) {
+      this.errorListener = (e) => handler(e as ErrorEvent);
+      this.inner.addEventListener("error", this.errorListener);
+    }
+  }
+
+  postMessage(message: unknown, transfer?: Transferable[]): void {
+    this.inner.postMessage(message, transfer);
+  }
+
+  terminate(): void {
+    this.inner.terminate();
+  }
 }
 
+/** The workload host specialized to the trajectory job envelope. */
+type TrajectoryWorkloadHost = WorkloadHost<
+  TrajectoryJob,
+  TrajectoryJobResult,
+  TrajectoryIndexProgress,
+  RequestBytes,
+  ArrayBuffer
+>;
+
 export class TrajectoryRuntime {
-  private nextRequestId = 1;
-  private pending = new Map<number, PendingRequest>();
-  private listener: (e: Event) => void;
+  private readonly host: TrajectoryWorkloadHost;
   private closed = false;
-  private openRequestId: number | null = null;
+  /** Channel job id of the in-flight `open()` index pass, or null. Cleared
+   *  when the open early-resolves (so `cancelOpen` only targets an open that
+   *  has not produced a playable index yet — pre-channel behavior) and at
+   *  terminal settle. */
+  private openJobId: number | null = null;
+  private indexing = false;
   /** Correlation id of the most recent {@link loadFrameLatest} request, or
    *  null when none is in flight — used to cancel a superseded streaming load
    *  during latest-wins scrubbing. */
   private latestFrameRequestId: number | null = null;
-  private indexing = false;
-  private indexCompleteResolvers: Array<{
-    resolve: (value: OpenResult) => void;
-    reject: (err: Error) => void;
-  }> = [];
+  private indexCompleteResolvers: Array<(result: OpenResult) => void> = [];
   private lastIndexComplete: OpenResult | null = null;
   /** Live source held on the main thread. The worker never sees the
-   *  Blob — it asks for byte ranges via `request-bytes` and we answer
-   *  with transferable ArrayBuffers, which sidesteps the silent
+   *  Blob — it asks for byte ranges via `RequestBytes` host-calls and we
+   *  answer with transferable ArrayBuffers, which sidesteps the silent
    *  drop-large-Blob bug Chrome exhibits in dev-mode worker channels. */
   private source: TrajectorySource | null = null;
-  /** Resolves when the worker has fully initialized and registered its
-   *  message listener. The runtime defers all outbound `postMessage`
-   *  calls until this resolves — Chrome module workers have a
-   *  long-standing issue where messages posted before module init
-   *  completes are silently dropped instead of buffered. We rely on the
-   *  worker emitting a `worker-heartbeat` from its module top-level. */
-  private readonly workerReady: Promise<void>;
-  private resolveWorkerReady!: () => void;
-  private rejectWorkerReady!: (err: Error) => void;
-  private workerReadySettled = false;
-  private workerReadyTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
-    private readonly worker: WorkerLike,
+    worker: WorkerLike,
     private readonly format: Format,
   ) {
-    this.workerReady = new Promise<void>((resolve, reject) => {
-      this.resolveWorkerReady = resolve;
-      this.rejectWorkerReady = reject;
-      this.workerReadyTimer = setTimeout(() => {
-        this.failWorkerReady(
-          new Error(
-            "Trajectory worker failed to start (WASM). See the webview console.",
-          ),
-        );
-      }, 30_000);
-    });
-    this.listener = (e) =>
-      this.dispatch((e as MessageEvent).data as WorkerResponse);
-    this.worker.addEventListener("message", this.listener);
-    this.worker.addEventListener("error", (event) => {
-      const message =
-        event instanceof ErrorEvent && event.message
-          ? event.message
-          : "worker error";
-      this.failWorkerReady(new Error(`Trajectory worker: ${message}`));
+    this.host = new WorkloadHost<
+      TrajectoryJob,
+      TrajectoryJobResult,
+      TrajectoryIndexProgress,
+      RequestBytes,
+      ArrayBuffer
+    >({
+      name: `trajectory-${format}`,
+      // The double assertion is confined to this seam: WorkloadHost only
+      // touches onmessage/onerror/postMessage/terminate, exactly the
+      // surface the adapter implements.
+      createWorker: () => new WorkerLikeAdapter(worker) as unknown as Worker,
+      readyTimeoutMs: 30_000,
+      onHostCall: (call) => this.serveBytes(call),
     });
   }
 
-  private markWorkerReady(): void {
-    if (this.workerReadySettled) return;
-    this.workerReadySettled = true;
-    clearTimeout(this.workerReadyTimer);
-    this.resolveWorkerReady();
-  }
-
-  private failWorkerReady(err: Error): void {
-    if (this.workerReadySettled) return;
-    this.workerReadySettled = true;
-    clearTimeout(this.workerReadyTimer);
-    this.rejectWorkerReady(err);
-  }
-
-  /** Run the (blocking) indexing pass on the source. Resolves once the
-   *  worker reports `index-ready`. Rejects on `open-error` or if the
-   *  runtime is closed before the pass completes.
+  /** Submit the indexing job for the source. Resolves early on the first
+   *  indexed frame (`indexComplete: false`, `length: null`) so playback can
+   *  start while the scan keeps running; when the scan finishes first, it
+   *  resolves with the terminal result directly. Rejects with
+   *  {@link CancellationError} when cancelled via {@link cancelOpen}.
    *
    *  When `opts.fingerprint` is set, the worker consults the
    *  `.molidx` sidecar in OPFS before scanning and writes it back
-   *  after. Pass `null` (or omit) for ephemeral Blobs without stable
-   *  identity. */
+   *  after. Omit it for ephemeral Blobs without stable identity. */
   async open(
     source: TrajectorySource,
     opts: OpenOptions = {},
@@ -196,38 +212,69 @@ export class TrajectoryRuntime {
     if (this.closed) {
       throw new Error("TrajectoryRuntime: already closed");
     }
-    if (this.openRequestId !== null || this.indexing) {
+    if (this.openJobId !== null || this.indexing) {
       throw new Error("TrajectoryRuntime: another open is in flight");
     }
 
     this.source = source;
     const totalBytes = await source.size();
 
-    // Wait for the worker to finish module init + register its message
-    // listener before posting. Chrome module workers drop pre-init
-    // messages instead of buffering them.
-    await this.workerReady;
+    const job: TrajectoryJob = {
+      kind: "open",
+      source: workerSourceFor(source, totalBytes),
+      format: this.format,
+      ...(opts.chunkSize !== undefined ? { chunkSize: opts.chunkSize } : {}),
+      ...(opts.fingerprint !== undefined
+        ? { fingerprint: opts.fingerprint }
+        : {}),
+    };
 
-    const requestId = this.nextRequestId++;
-    this.openRequestId = requestId;
-
-    return new Promise<OpenResult>((resolve, reject) => {
-      this.pending.set(requestId, {
-        resolve: resolve as (v: unknown) => void,
-        reject,
-        onProgress: opts.onProgress,
-        onIndexComplete: opts.onIndexComplete,
-      });
-      const req: OpenRequest = {
-        kind: "open",
-        requestId,
-        source: workerSourceFor(source, totalBytes),
-        format: this.format,
-        chunkSize: opts.chunkSize,
-        fingerprint: opts.fingerprint,
-      };
-      this.worker.postMessage(req);
+    const ticket = this.host.submit(job, {
+      onProgress: opts.onProgress,
+      earlyResolve: (p) => {
+        if (p.framesIndexedSoFar < 1) return undefined;
+        // Early open: the index has playable frames, the scan keeps going.
+        this.openJobId = null;
+        this.indexing = true;
+        return {
+          kind: "open-result",
+          frameCount: p.framesIndexedSoFar,
+          totalBytes: p.totalBytes,
+          indexComplete: false,
+        };
+      },
+      cancelMode: "reject",
     });
+    this.openJobId = ticket.id;
+
+    // The terminal completion drives the index-complete surface no matter
+    // whether the result promise settled early.
+    this.translated(ticket.id, ticket.completion).then(
+      (result) => {
+        this.indexing = false;
+        if (this.openJobId === ticket.id) this.openJobId = null;
+        if (result.kind !== "open-result") return;
+        const terminal = this.toOpenResult(result);
+        this.lastIndexComplete = terminal;
+        opts.onIndexComplete?.(terminal);
+        for (const resolve of this.indexCompleteResolvers) resolve(terminal);
+        this.indexCompleteResolvers = [];
+      },
+      () => {
+        // Cancelled / failed opens only clear in-flight state here — the
+        // rejection reaches the caller through the result promise.
+        this.indexing = false;
+        if (this.openJobId === ticket.id) this.openJobId = null;
+      },
+    );
+
+    const result = await this.translated(ticket.id, ticket.result);
+    if (result.kind !== "open-result") {
+      throw new Error(
+        `TrajectoryRuntime open: unexpected result '${result.kind}'`,
+      );
+    }
+    return this.toOpenResult(result);
   }
 
   /** Request the Frame at `frameId`. The returned Frame is a real molrs
@@ -258,7 +305,7 @@ export class TrajectoryRuntime {
     return promise;
   }
 
-  /** Issue a `load-frame` request, returning both its correlation id (so it
+  /** Submit a `load-frame` job, returning both its correlation id (so it
    *  can be cancelled) and the Frame promise. */
   private loadFrameTracked(frameId: number): {
     requestId: number;
@@ -270,36 +317,35 @@ export class TrajectoryRuntime {
         promise: Promise.reject(new Error("TrajectoryRuntime: already closed")),
       };
     }
-    const requestId = this.nextRequestId++;
-    const promise = new Promise<Frame>((resolve, reject) => {
-      this.pending.set(requestId, {
-        resolve: resolve as (v: unknown) => void,
-        reject,
-      });
-      const req: LoadFrameRequest = {
-        kind: "load-frame",
-        requestId,
-        frameId,
-      };
-      this.worker.postMessage(req);
+    const ticket = this.host.submit(
+      { kind: "load-frame", frameId },
+      { cancelMode: "reject" },
+    );
+    const promise = this.translated(ticket.id, ticket.result).then((result) => {
+      if (result.kind !== "frame") {
+        throw new Error(
+          `TrajectoryRuntime frame ${frameId}: unexpected result '${result.kind}'`,
+        );
+      }
+      return rehydrateFrame(result);
     });
-    return { requestId, promise };
+    return { requestId: ticket.id, promise };
   }
 
-  /** Resolves when the current index scan reports `index-ready`. */
+  /** Resolves when the current index scan completes. */
   get whenIndexComplete(): Promise<OpenResult> {
     if (this.lastIndexComplete?.indexComplete) {
       return Promise.resolve(this.lastIndexComplete);
     }
-    return new Promise((resolve, reject) => {
-      this.indexCompleteResolvers.push({ resolve, reject });
+    return new Promise((resolve) => {
+      this.indexCompleteResolvers.push(resolve);
     });
   }
 
   /** Cancel the in-flight {@link open} index pass, if any. */
   cancelOpen(): void {
-    if (this.openRequestId !== null) {
-      this.cancel(this.openRequestId);
+    if (this.openJobId !== null) {
+      this.cancel(this.openJobId);
     }
   }
 
@@ -308,21 +354,7 @@ export class TrajectoryRuntime {
    *  promise with `CancellationError`. */
   cancel(targetRequestId: number): void {
     if (this.closed) return;
-    const requestId = this.nextRequestId++;
-    const req: CancelRequest = {
-      kind: "cancel",
-      requestId,
-      targetRequestId,
-    };
-    this.worker.postMessage(req);
-    const pending = this.pending.get(targetRequestId);
-    if (pending) {
-      pending.reject(new CancellationError(targetRequestId));
-      this.pending.delete(targetRequestId);
-    }
-    if (this.openRequestId === targetRequestId) {
-      this.openRequestId = null;
-    }
+    this.host.cancel(targetRequestId);
   }
 
   /** Terminate the worker and reject any in-flight requests. Idempotent. */
@@ -330,176 +362,69 @@ export class TrajectoryRuntime {
     if (this.closed) return;
     this.closed = true;
 
-    // Send a polite close before terminating so the worker can release
-    // its source / WASM resources. Don't wait long — terminate is the
-    // backstop.
-    try {
-      const requestId = this.nextRequestId++;
-      const req: CloseRequest = { kind: "close", requestId };
-      this.worker.postMessage(req);
-    } catch {
-      // worker may already be unreachable
-    }
-
-    for (const pending of this.pending.values()) {
-      pending.reject(new Error("TrajectoryRuntime: closed"));
-    }
-    this.pending.clear();
-    this.worker.removeEventListener("message", this.listener);
-    this.worker.terminate();
+    // Polite close first so the worker can release its source / WASM
+    // resources; dispose() is the terminate backstop. submit() never throws
+    // synchronously — a dead host hands back an already-rejected ticket
+    // whose built-in catch swallows the rejection.
+    this.host.submit({ kind: "close" });
+    // One microtask so an already-ready host actually posts the close job
+    // before dispose() marks it dead.
+    await Promise.resolve();
+    this.host.dispose();
   }
 
   // ------------------------------------------------------------------
 
-  private dispatch(msg: WorkerResponse): void {
-    switch (msg.kind) {
-      case "worker-heartbeat":
-        // The worker's ready signal — resolve the workerReady promise
-        // so deferred outbound posts can fire.
-        this.markWorkerReady();
-        return;
-      case "index-progress":
-        this.onIndexProgress(msg);
-        return;
-      case "index-ready":
-        this.onIndexReady(msg);
-        return;
-      case "open-error":
-        this.onOpenError(msg);
-        return;
-      case "frame":
-        this.onFrame(msg);
-        return;
-      case "frame-error":
-        this.onFrameError(msg);
-        return;
-      case "closed":
-        return;
-      case "request-bytes":
-        void this.serveBytes(msg);
-        return;
-    }
-  }
-
-  /** Worker asked for a byte range. Slice the Blob, transfer the
-   *  ArrayBuffer back. The worker promise on the other side resolves
-   *  when the `bytes` message arrives. */
-  private async serveBytes(
-    req: import("./protocol").RequestBytes,
-  ): Promise<void> {
-    if (!this.source) {
-      this.worker.postMessage({
-        kind: "bytes",
-        fetchId: req.fetchId,
-        data: null,
-        error: "runtime: no source",
-      });
-      return;
-    }
-    try {
-      const bytes = await this.source.readRange(
-        req.byteOffset,
-        req.byteOffset + req.byteLen,
-      );
-      if (!(bytes instanceof Uint8Array)) {
-        throw new Error("runtime: readRange did not return Uint8Array");
+  /** Translate the channel's cancel rejection into the public
+   *  {@link CancellationError} at the module boundary —
+   *  `WorkloadCancelledError` never escapes this file. */
+  private translated<T>(jobId: number, p: Promise<T>): Promise<T> {
+    return p.catch((err: unknown) => {
+      if (err instanceof WorkloadCancelledError) {
+        throw new CancellationError(jobId);
       }
-      // Copy into a packed buffer before transfer. Hosts (VS Code IPC)
-      // often hand back a view onto a larger pooled buffer; transferring
-      // `bytes.buffer` would send the wrong bytes and detach the pool.
-      const packed = new Uint8Array(bytes.byteLength);
-      packed.set(bytes);
-      const buf = packed.buffer;
-      this.worker.postMessage(
-        {
-          kind: "bytes",
-          fetchId: req.fetchId,
-          data: buf,
-        },
-        [buf],
-      );
-    } catch (err) {
-      this.worker.postMessage({
-        kind: "bytes",
-        fetchId: req.fetchId,
-        data: null,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  private onIndexProgress(msg: IndexProgress): void {
-    const pending = this.pending.get(msg.requestId);
-    pending?.onProgress?.({
-      bytesScanned: msg.bytesScanned,
-      totalBytes: msg.totalBytes,
-      framesIndexedSoFar: msg.framesIndexedSoFar,
+      throw err;
     });
-    if (pending && !pending.openSettled && msg.framesIndexedSoFar >= 1) {
-      pending.openSettled = true;
-      this.openRequestId = null;
-      this.indexing = true;
-      pending.resolve({
-        frameCount: msg.framesIndexedSoFar,
-        indexedLength: msg.framesIndexedSoFar,
-        length: null,
-        indexComplete: false,
-        totalBytes: msg.totalBytes,
-      } satisfies OpenResult);
-    }
   }
 
-  private onIndexReady(msg: IndexReady): void {
-    const pending = this.pending.get(msg.requestId);
-    const result: OpenResult = {
-      frameCount: msg.frameCount,
-      indexedLength: msg.frameCount,
-      length: msg.frameCount,
-      indexComplete: true,
-      totalBytes: msg.totalBytes,
+  /** Map a worker `open-result` payload onto the public {@link OpenResult}.
+   *  A not-yet-complete index has no known total length. */
+  private toOpenResult(result: {
+    frameCount: number;
+    totalBytes: number;
+    indexComplete: boolean;
+  }): OpenResult {
+    return {
+      frameCount: result.frameCount,
+      indexedLength: result.frameCount,
+      length: result.indexComplete ? result.frameCount : null,
+      indexComplete: result.indexComplete,
+      totalBytes: result.totalBytes,
     };
-    this.indexing = false;
-    this.lastIndexComplete = result;
-    if (this.openRequestId === msg.requestId) this.openRequestId = null;
-    if (pending) {
-      this.pending.delete(msg.requestId);
-      if (!pending.openSettled) {
-        pending.openSettled = true;
-        pending.resolve(result);
-      }
-      pending.onIndexComplete?.(result);
+  }
+
+  /** Answer a worker `RequestBytes` host-call: read the range from the live
+   *  source and hand the bytes back as a transferable packed buffer. Throws
+   *  (→ `ok: false` reply) when no source is attached or the read fails. */
+  private async serveBytes(
+    call: RequestBytes,
+  ): Promise<{ result: ArrayBuffer; transfer: Transferable[] }> {
+    if (!this.source) {
+      throw new Error("runtime: no source");
     }
-    for (const waiter of this.indexCompleteResolvers) waiter.resolve(result);
-    this.indexCompleteResolvers = [];
-  }
-
-  private onOpenError(msg: OpenError): void {
-    const pending = this.pending.get(msg.requestId);
-    if (!pending) return;
-    this.pending.delete(msg.requestId);
-    if (this.openRequestId === msg.requestId) this.openRequestId = null;
-    pending.reject(new Error(`TrajectoryRuntime open: ${msg.message}`));
-  }
-
-  private onFrame(msg: import("./protocol").FrameMessage): void {
-    const pending = this.pending.get(msg.requestId);
-    if (!pending) return;
-    this.pending.delete(msg.requestId);
-    try {
-      const frame = rehydrateFrame(msg);
-      pending.resolve(frame);
-    } catch (err) {
-      pending.reject(err as Error);
-    }
-  }
-
-  private onFrameError(msg: import("./protocol").FrameError): void {
-    const pending = this.pending.get(msg.requestId);
-    if (!pending) return;
-    this.pending.delete(msg.requestId);
-    pending.reject(
-      new Error(`TrajectoryRuntime frame ${msg.frameId}: ${msg.message}`),
+    const bytes = await this.source.readRange(
+      call.byteOffset,
+      call.byteOffset + call.byteLen,
     );
+    if (!(bytes instanceof Uint8Array)) {
+      throw new Error("runtime: readRange did not return Uint8Array");
+    }
+    // Copy into a packed buffer before transfer. Hosts (VS Code IPC)
+    // often hand back a view onto a larger pooled buffer; transferring
+    // `bytes.buffer` would send the wrong bytes and detach the pool.
+    const packed = new Uint8Array(bytes.byteLength);
+    packed.set(bytes);
+    return { result: packed.buffer, transfer: [packed.buffer] };
   }
 }
 
@@ -511,7 +436,7 @@ export class CancellationError extends Error {
 }
 
 /** Throws if the user-agent doesn't support module workers. */
-function _assertWorkerCtor(): void {
+function assertWorkerCtor(): void {
   if (typeof Worker === "undefined") {
     throw new Error("TrajectoryRuntime: Worker is not available");
   }
@@ -531,7 +456,7 @@ function _assertWorkerCtor(): void {
  *  Tests should NOT call this — construct `TrajectoryRuntime` directly
  *  with an injected fake worker instead. */
 export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
-  _assertWorkerCtor();
+  assertWorkerCtor();
   // The `new Worker(new URL(…))` form must stay literal here — rspack only
   // folds worker chunks when it sees that static expression in this file.
   // VS Code webviews replace this module via `NormalModuleReplacementPlugin`.
