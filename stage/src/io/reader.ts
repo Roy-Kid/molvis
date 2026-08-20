@@ -31,6 +31,7 @@ export {
   canStream,
   decideIngest,
   describeFormat,
+  dropLoadMode,
   FILE_FORMAT_REGISTRY,
   type FileFormat,
   type FileFormatDescriptor,

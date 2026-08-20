@@ -15,7 +15,7 @@ The Activity Bar **Files** view scans the workspace for molecular formats and
 keeps a Recent section. Click a coordinate/trajectory file to open Stage; click
 a `.mol` / `.sdf` file to open Sketch. The view title bar has **Open
 Structure…** (picker, routed by format) and **Refresh**. Right-click a row for
-Quick View.
+Quick look.
 
 Empty workspace: **Open Structure…** from the welcome.
 
@@ -47,8 +47,8 @@ atoms/bonds (Sketch). Click a node to select those atoms on that tab.
 
 | Command | Role |
 |---------|------|
-| Quick View | 3D peek beside the source file |
-| Quick View (Sketch) | 2D peek beside a MOL/SDF file |
+| Quick look | 3D peek beside the source file |
+| Quick look (Sketch) | 2D peek beside a MOL/SDF file |
 | Open Structure… | Pick a file; Stage or Sketch by format |
 | Reload View | Rebuild the active Stage or Sketch tab |
 

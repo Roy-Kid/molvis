@@ -61,6 +61,7 @@ describe("ModifierRegistry — OVITO-aligned menu", () => {
       "Hide Selection",
       "Invert Selection",
       "Select Type",
+      "Select from mask",
       "Select overlapping",
     ]);
   });

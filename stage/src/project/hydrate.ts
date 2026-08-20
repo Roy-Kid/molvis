@@ -6,6 +6,7 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import { setCameraPose } from "../camera/control";
+import { SelectMaskModifier } from "../modifiers/SelectMaskModifier";
 import {
   type DataSource,
   FileDataSource,
@@ -74,6 +75,15 @@ export async function hydrateProject(
     }
     const mod = factory();
     mod.enabled = entry.enabled;
+    if (
+      typeof entry.params?.highlightColor === "string" &&
+      /^#[0-9a-fA-F]{6}$/.test(entry.params.highlightColor)
+    ) {
+      mod.highlightColor = entry.params.highlightColor;
+    }
+    if (mod instanceof SelectMaskModifier && entry.params) {
+      mod.fromProjectParams(entry.params);
+    }
     if (entry.selection_scope_id) {
       mod.selectionScopeId =
         idMap.get(entry.selection_scope_id) ?? entry.selection_scope_id;

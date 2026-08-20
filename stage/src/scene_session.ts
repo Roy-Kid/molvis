@@ -148,22 +148,18 @@ export class SceneSession {
    * - Auto-attach runs against this DS's frame 0 so default Draw modifiers
    *   (DrawAtom / DrawBond / DrawBox) get installed for the block kinds the
    *   source contributes.
-   * - If this is the *first* FileDataSource in the pipeline, System adopts
-   *   its trajectory so navigation, frame-change events, and the seek state
-   *   machine keep working.
+   * - System follows the longest FileDataSource so a DCD stacked onto a
+   *   length-1 structure owns the timeline (HUD, seek). Length-1 sources
+   *   broadcast.
    */
   async addDataSource(ds: DataSource): Promise<void> {
     this.host.pipeline.addSource(ds);
 
-    // If this is the first FileDataSource, promote System to follow it.
-    // Earlier MemoryDataSources stay in place and broadcast across the
-    // newly grown timeline (their `getFrame(_)` ignores the index).
+    // Promote System when this source grows the timeline (structure + DCD).
+    // Length-1 MemoryDataSources stay put and broadcast.
     if (ds instanceof FileDataSource) {
-      const trajDSs = this.host.pipeline
-        .sources()
-        .filter((m): m is FileDataSource => m instanceof FileDataSource);
-      const isFirstTraj = trajDSs.length === 1;
-      if (isFirstTraj) {
+      const currentLen = this.host.system.trajectory.indexedLength;
+      if (ds.frameCount > currentLen) {
         await this.host.system.setTrajectory(ds.trajectory);
         this.host.setFrameIndex(this.host.system.trajectory.currentIndex);
         this.host.clearLastRenderedFrame();

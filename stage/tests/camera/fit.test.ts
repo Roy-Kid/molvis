@@ -3,6 +3,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   aabbToObb,
   anglesFromForward,
+  FIT_BOX_PADDING,
   FIT_MIN_DISTANCE,
   FIT_PADDING,
   fitBoxToView,
@@ -58,6 +59,21 @@ describe("fitBoxToView — per-axis, radius-aware, auto-view", () => {
     const fit = fitBoxToView(slab, FOV, 1, { viewDirection: "iso" });
     expect(fit.direction.alpha).toBeCloseTo(Math.PI / 4, 9);
     expect(fit.direction.beta).toBeCloseTo(Math.PI / 3, 9);
+  });
+
+  it("frames a simulation cell tighter than the atom-fit padding", () => {
+    expect(FIT_BOX_PADDING).toBeLessThan(FIT_PADDING);
+    const cube = aabbToObb({
+      min: { x: 0, y: 0, z: 0 },
+      max: { x: 20, y: 20, z: 20 },
+    });
+    const atoms = fitBoxToView(cube, FOV, 1);
+    const cell = fitBoxToView(cube, FOV, 1, { padding: FIT_BOX_PADDING });
+    expect(cell.radius).toBeLessThan(atoms.radius);
+    expect(cell.radius / atoms.radius).toBeCloseTo(
+      FIT_BOX_PADDING / FIT_PADDING,
+      6,
+    );
   });
 
   it("clamps to FIT_MIN_DISTANCE for a tiny scene", () => {

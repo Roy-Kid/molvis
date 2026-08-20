@@ -378,6 +378,7 @@ export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 export { InvertSelectionModifier } from "./modifiers/InvertSelectionModifier";
 export { RadiusOfGyrationModifier } from "./modifiers/RadiusOfGyrationModifier";
 export { ReplicateModifier } from "./modifiers/ReplicateModifier";
+export { SelectMaskModifier } from "./modifiers/SelectMaskModifier";
 export {
   ClearSelectionModifier,
   SelectModifier,
@@ -586,6 +587,14 @@ export {
   pointInPolygon,
   simplifyPolyline,
 } from "./selection/fence";
+export {
+  MASK_FILE_ACCEPT,
+  MASK_FILE_EXTENSION,
+  type MaskFileParseResult,
+  MaskFileSyntaxError,
+  parseMaskFile,
+  serializeMaskFile,
+} from "./selection/mask_file";
 export {
   parseSelectionKey,
   SelectionManager,

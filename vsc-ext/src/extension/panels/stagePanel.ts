@@ -60,7 +60,13 @@ export function openStagePanel(
           }
           break;
         case "dropUri":
-          await handleDropUri(message.uri, panel.webview, fileLoader, logger);
+          await handleDropUri(
+            message.uri,
+            panel.webview,
+            fileLoader,
+            logger,
+            message.mode,
+          );
           break;
         case "structureOutline":
           onStructureOutline?.(message.outline);

@@ -2,6 +2,7 @@ import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import type { MolvisApp } from "../../src/app";
+import { HideSelectionModifier } from "../../src/modifiers/HideSelectionModifier";
 import { SelectModifier } from "../../src/modifiers/SelectModifier";
 import { MemoryDataSource } from "../../src/pipeline/data_source";
 import { BaseModifier, ModifierCapability } from "../../src/pipeline/modifier";
@@ -61,5 +62,21 @@ describe("pipeline selection scopes", () => {
 
     expect(pipeline.getChildren(source.id).map((m) => m.id)).toEqual([spy.id]);
     expect(spy.seen).toEqual([0, 1, 2]);
+  });
+
+  it("runs a consuming transform after its scoped selection producer", async () => {
+    const pipeline = new ModifierPipeline();
+    pipeline.addSource(new MemoryDataSource(frame()));
+    const select = new SelectModifier("select", [1]);
+    pipeline.addModifier(select);
+    const hide = new HideSelectionModifier();
+    pipeline.addModifier(hide);
+
+    expect(pipeline.setSelectionScope(hide.id, select.id)).toBe(true);
+    const out = await pipeline.compute(0, mockApp);
+
+    // Select [1] then Hide must leave atoms 0 and 2, not hide everything.
+    expect(out.getBlock("atoms")?.nrows()).toBe(2);
+    expect(out.getBlock("atoms")?.copyColStr("element")).toEqual(["C", "N"]);
   });
 });

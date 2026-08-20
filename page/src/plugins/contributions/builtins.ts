@@ -29,6 +29,7 @@ import {
   HideSelectionModifier as CoreHideModifier,
   RadiusOfGyrationModifier as CoreRadiusOfGyrationModifier,
   ReplicateModifier as CoreReplicateModifier,
+  SelectMaskModifier as CoreSelectMaskModifier,
   SelectModifier as CoreSelectModifier,
   SelectOverlappingModifier as CoreSelectOverlappingModifier,
   SelectTypeModifier as CoreSelectTypeModifier,
@@ -68,6 +69,7 @@ import { GaussianDensitySurfaceModifier } from "@/ui/modes/view/modifiers/Gaussi
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
 import { RadiusOfGyrationModifier } from "@/ui/modes/view/modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
+import { SelectMaskModifier } from "@/ui/modes/view/modifiers/SelectMaskModifier";
 import { SelectModifierProps } from "@/ui/modes/view/modifiers/SelectModifierProps";
 import { SelectOverlappingModifier } from "@/ui/modes/view/modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier";
@@ -125,6 +127,11 @@ export function registerBuiltinModifierPanels(): void {
       id: "builtin:SelectType",
       match: (m) => m instanceof CoreSelectTypeModifier,
       component: asPanel(SelectTypeModifier),
+    },
+    {
+      id: "builtin:SelectMask",
+      match: (m) => m instanceof CoreSelectMaskModifier,
+      component: asPanel(SelectMaskModifier),
     },
     {
       id: "builtin:ExpandSelection",

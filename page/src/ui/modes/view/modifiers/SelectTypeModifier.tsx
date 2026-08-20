@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
+import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
 interface Props {
   modifier: CoreSelectTypeModifier;
@@ -173,6 +174,12 @@ export const SelectTypeModifier: React.FC<Props> = ({
           }}
         />
       </div>
+
+      <SelectionHighlightColor
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
     </fieldset>
   );
 };

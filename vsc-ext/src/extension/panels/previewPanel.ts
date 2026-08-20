@@ -32,8 +32,8 @@ export async function openQuickViewPanel(
   const targetUri = resolveActiveUri(uri);
 
   const title = targetUri
-    ? `Quick View: ${getDisplayName(targetUri)}`
-    : "Quick View";
+    ? `Quick look: ${getDisplayName(targetUri)}`
+    : "Quick look";
 
   const panel = vscode.window.createWebviewPanel(
     "molvis.quickView",
@@ -57,6 +57,7 @@ export async function openQuickViewPanel(
   panelRegistry.register(panel, {
     getHtml: () => getPreviewHtml(panel.webview, context.extensionUri),
     reload: reloadPreview,
+    sourceUri: targetUri,
   });
 
   const baseTitle = panel.title;
@@ -74,7 +75,13 @@ export async function openQuickViewPanel(
           await handleSaveFile(message.data, message.suggestedName, logger);
           break;
         case "dropUri":
-          await handleDropUri(message.uri, panel.webview, fileLoader, logger);
+          await handleDropUri(
+            message.uri,
+            panel.webview,
+            fileLoader,
+            logger,
+            message.mode,
+          );
           break;
         case "structureOutline":
           options?.onStructureOutline?.(message.outline, panel.webview);

@@ -1,5 +1,5 @@
 /**
- * Normative host bridge for Quick View (stage-only surface).
+ * Normative host bridge for Quick look (stage-only surface).
  * Thin wrapper over {@link attachStageHost} for stage-only surfaces.
  */
 

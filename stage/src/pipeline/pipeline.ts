@@ -69,9 +69,10 @@ export const PipelineEvents = {
  * phases.
  *
  * Phase A composes every enabled {@link DataSource} into a single frame
- * (`system/source_composition.ts`). Sources are unordered — composition merges
- * by block, not by list position — so where a source sits in the list is a
- * display concern only.
+ * (`system/source_composition.ts`). A length-1 source plus an N-frame
+ * trajectory compose as topology + coordinates regardless of list order.
+ * Same-kind overlapping columns still later-win. List position is otherwise
+ * a display concern.
  *
  * Phase B runs every enabled {@link Modifier} in {@link executionOrder}. Here
  * order *is* the semantics.
@@ -533,39 +534,99 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
 }
 
 /**
- * Stable partition for pipeline execution (three bands):
+ * Stable execution order for pipeline modifiers.
  *
- * 1. **Frame-box providers** — manual {@link DrawBoxModifier} that write
- *    `frame.box` (user-defined lattice). Must run first so pure geometry
- *    transforms can read the cell from the frame alone.
- * 2. **Pure `TransformsData`** (no `Draws`) — WrapPBC, Slice, Color, …
- * 3. **Everything else** — Draws, dual-capability (e.g. DrawRibbon), Select.
+ * Two forces drive ordering:
  *
- * Relative order within each band is preserved.
+ * 1. **Capability bands** (for unrelated modifiers, preserves the legacy
+ *    semantics): box providers → pure transforms → selection producers →
+ *    selection-consuming transforms → draws / dual-capability.
+ * 2. **Selection-scope dependencies**: a modifier whose
+ *    `selectionScopeId` references a producer must run after that producer.
+ *    This is the only execution dependency between modifiers (see
+ *    {@link ModifierPipeline.setSelectionScope}).
+ *
+ * The result is a stable topological sort over `selectionScopeId` edges.
+ * When several unrelated modifiers are runnable, the lowest band wins and
+ * within a band the original list order is preserved.
  */
 export function executionOrder(
   modifiers: readonly Modifier[],
 ): readonly Modifier[] {
-  const boxProviders: Modifier[] = [];
-  const transforms: Modifier[] = [];
-  const rest: Modifier[] = [];
+  const byId = new Map<string, Modifier>();
+  for (const m of modifiers) byId.set(m.id, m);
+
+  const indegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
   for (const m of modifiers) {
-    if (isFrameBoxProvider(m)) {
-      boxProviders.push(m);
-      continue;
-    }
-    const isTransform = m.capabilities.has(ModifierCapability.TransformsData);
-    const isDraw = m.capabilities.has(ModifierCapability.Draws);
-    if (isTransform && !isDraw) {
-      transforms.push(m);
-    } else {
-      rest.push(m);
+    indegree.set(m.id, 0);
+    dependents.set(m.id, []);
+  }
+  for (const m of modifiers) {
+    const scope = m.selectionScopeId;
+    if (scope !== null && byId.has(scope)) {
+      indegree.set(m.id, (indegree.get(m.id) ?? 0) + 1);
+      dependents.get(scope)?.push(m.id);
     }
   }
-  if (boxProviders.length === 0 && transforms.length === 0) {
-    return modifiers;
+
+  const remaining = new Set(modifiers.map((m) => m.id));
+  const ordered: Modifier[] = [];
+
+  while (remaining.size > 0) {
+    let next: Modifier | null = null;
+    let nextIndex = -1;
+    for (let i = 0; i < modifiers.length; i++) {
+      const m = modifiers[i];
+      if (!remaining.has(m.id) || (indegree.get(m.id) ?? 0) > 0) continue;
+      if (
+        next === null ||
+        bandPriority(m) < bandPriority(next) ||
+        (bandPriority(m) === bandPriority(next) && i < nextIndex)
+      ) {
+        next = m;
+        nextIndex = i;
+      }
+    }
+    if (next === null) {
+      // Invalid cyclic scope graph — fall back to list order for the rest so
+      // no modifier is silently dropped.
+      for (const m of modifiers) {
+        if (remaining.has(m.id)) ordered.push(m);
+      }
+      break;
+    }
+    ordered.push(next);
+    remaining.delete(next.id);
+    for (const dep of dependents.get(next.id) ?? []) {
+      indegree.set(dep, (indegree.get(dep) ?? 0) - 1);
+    }
   }
-  return [...boxProviders, ...transforms, ...rest];
+
+  return ordered;
+}
+
+function bandPriority(m: Modifier): number {
+  if (isFrameBoxProvider(m)) return 0;
+  const caps = m.capabilities;
+  const transforms = caps.has(ModifierCapability.TransformsData);
+  const draws = caps.has(ModifierCapability.Draws);
+  const consumes = caps.has(ModifierCapability.ConsumesSelection);
+  const produces = caps.has(ModifierCapability.ProducesSelection);
+
+  // Pure geometry/topology transforms run before any selection is computed so
+  // producers index the frame the user actually sees.
+  if (transforms && !draws && !consumes && !produces) return 1;
+  // Producers that only emit a mask (Expression, Type, Mask, Overlapping).
+  if (produces && !consumes && !draws) return 2;
+  // Derived producers (Select add/remove/toggle, Invert, Expand) consume an
+  // upstream mask before emitting their own; scope edges order them after it.
+  if (produces && consumes && !draws && !transforms) return 3;
+  // Consumers that rewrite the frame (Hide, Delete, Transparent, …) must see
+  // the producer's mask but still run before draws.
+  if (consumes && transforms && !draws) return 4;
+  // Draws and dual-capability modifiers render last.
+  return 5;
 }
 
 function isFrameBoxProvider(modifier: Modifier): boolean {

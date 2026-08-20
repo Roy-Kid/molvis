@@ -4,11 +4,12 @@ export class MolvisTrajectoryPanel extends HTMLElement {
   }
 
   private static readonly WIDTH_RATIO = 0.62;
-  private static readonly BOTTOM_RATIO = 0.065;
+  /** Fraction of viewport height from the bottom edge. */
+  private static readonly BOTTOM_RATIO = 0.03;
   private static readonly MIN_WIDTH = 280;
   private static readonly MAX_WIDTH = 980;
-  private static readonly MIN_BOTTOM = 14;
-  private static readonly MAX_BOTTOM = 96;
+  private static readonly MIN_BOTTOM = 8;
+  private static readonly MAX_BOTTOM = 28;
 
   private shadow: ShadowRoot;
   private slider: HTMLInputElement;
@@ -29,7 +30,7 @@ export class MolvisTrajectoryPanel extends HTMLElement {
             <style>
                 :host {
                     --traj-width: 560px;
-                    --traj-bottom: 36px;
+                    --traj-bottom: 12px;
                     position: absolute;
                     bottom: var(--traj-bottom);
                     left: 50%;

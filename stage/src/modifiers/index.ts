@@ -44,6 +44,7 @@ export { HideSelectionModifier } from "./HideSelectionModifier";
 export { InvertSelectionModifier } from "./InvertSelectionModifier";
 export { RadiusOfGyrationModifier } from "./RadiusOfGyrationModifier";
 export { ReplicateModifier } from "./ReplicateModifier";
+export { SelectMaskModifier } from "./SelectMaskModifier";
 export { ClearSelectionModifier, SelectModifier } from "./SelectModifier";
 export { SelectOverlappingModifier } from "./SelectOverlappingModifier";
 export { SelectTypeModifier } from "./SelectTypeModifier";

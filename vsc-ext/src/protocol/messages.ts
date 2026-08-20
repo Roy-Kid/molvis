@@ -1,7 +1,7 @@
 /**
  * Single host ↔ webview postMessage protocol for the MolVis VS Code extension.
  *
- * Stage and Sketch editor tabs share this protocol with Quick View.
+ * Stage and Sketch editor tabs share this protocol with Quick look.
  * Never a second schema in `page/`.
  *
  * This module is **host-safe**: no stage runtime imports, so the extension
@@ -109,7 +109,7 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "saveFile"; data: string; suggestedName: string }
-  | { type: "dropUri"; uri: string }
+  | { type: "dropUri"; uri: string; mode?: LoadMode }
   | { type: "dirtyStateChanged"; isDirty: boolean }
   | { type: "error"; message: string }
   | { type: "structureOutline"; outline: StructureOutlinePayload }
@@ -130,7 +130,7 @@ export type WebviewToHostMessage =
     }
   | { type: "cancelRange"; fetchId: number };
 
-/** Message types handled by Quick View (stage-only surface). */
+/** Message types handled by Quick look (stage-only surface). */
 export const QUICK_VIEW_HOST_MESSAGE_TYPES = [
   "init",
   "applySettings",
@@ -160,7 +160,7 @@ function isTypedHostMessage(
   );
 }
 
-/** Type guard for host → webview messages that Quick View accepts. */
+/** Type guard for host → webview messages that Quick look accepts. */
 export function isQuickViewHostMessage(
   data: unknown,
 ): data is HostToWebviewMessage {

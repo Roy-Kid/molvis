@@ -113,6 +113,7 @@ export class MolvisBinaryEditorProvider
               webviewPanel.webview,
               this.fileLoader,
               this.logger,
+              message.mode,
             );
             break;
           case "dirtyStateChanged":

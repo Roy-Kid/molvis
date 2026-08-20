@@ -44,6 +44,8 @@ export interface SelectionState {
   atoms: Set<number>;
   bonds: Set<number>;
   revision: number;
+  /** Optional `#RRGGBB` highlight override; null = theme default. */
+  highlightColor?: string | null;
 }
 
 export interface SelectedEntity {
@@ -125,6 +127,7 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
     atoms: new Set(),
     bonds: new Set(),
     revision: 0,
+    highlightColor: null,
   };
   private sceneIndex: SceneIndex;
   private source: SelectionSource = "manual";
@@ -197,6 +200,7 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
       case "clear":
         this.state.atoms.clear();
         this.state.bonds.clear();
+        this.state.highlightColor = null;
         break;
     }
 
@@ -242,7 +246,17 @@ export class SelectionManager extends EventEmitter<SelectionEventMap> {
       atoms: new Set(this.state.atoms),
       bonds: new Set(this.state.bonds),
       revision: this.state.revision,
+      highlightColor: this.state.highlightColor,
     };
+  }
+
+  /**
+   * Set the highlight color override for the current selection without
+   * emitting. Callers emit through the next {@link apply} so a single
+   * `selection-change` event carries both the set and its color.
+   */
+  setHighlightColor(color: string | null): void {
+    this.state.highlightColor = color;
   }
 
   /**

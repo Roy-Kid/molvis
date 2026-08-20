@@ -5,7 +5,11 @@ import {
 } from "./configuration";
 import { resolveActiveUri } from "./loading/activeUri";
 import { MolecularFileLoader } from "./loading/molecularFileLoader";
-import { isMolecularPath, isSketchPath } from "./loading/molecularMatch";
+import {
+  isBinaryTrajectoryPath,
+  isMolecularPath,
+  isSketchPath,
+} from "./loading/molecularMatch";
 import { pickMolecularUri } from "./loading/openStructure";
 import { RecentFilesStore } from "./loading/recentFiles";
 import { MolvisBinaryEditorProvider } from "./panels/binaryEditorProvider";
@@ -211,6 +215,16 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
+    vscode.commands.registerCommand("molvis.showSource", async () => {
+      let source: vscode.Uri | undefined;
+      await panelRegistry.forEachVisible((_panel, meta) => {
+        if (!source && meta.sourceUri) source = meta.sourceUri;
+      });
+      source = source ?? resolveActiveUri();
+      if (!source) return;
+      if (isBinaryTrajectoryPath(source.fsPath)) return;
+      await vscode.window.showTextDocument(source);
+    }),
     vscode.commands.registerCommand(
       "molvis.quickViewSketch",
       async (arg?: unknown) => {

@@ -29,14 +29,14 @@ Requires VS Code 1.120.0 or newer.
 | **Stage** | `MolVis: Open Stage` | 3D session in an editor tab |
 | **Sketch** | `MolVis: Open Sketch` | 2D session in an editor tab |
 | **Page** | `MolVis: Open Page` | Full product shell (same as the web app) |
-| **Quick View** | `MolVis: Quick View` | 3D peek beside the source file |
+| **Quick look** | `Quick look` | 3D peek beside the source file |
 | **Files** | Activity Bar | Workspace + recent files |
 
 Same engines as the web product. Each command opens one surface.
 
 ## Formats
 
-Text structures open as Quick View (optional editor): PDB, XYZ/ExtXYZ, CIF/mmCIF,
+Text structures open as Quick look (optional editor): PDB, XYZ/ExtXYZ, CIF/mmCIF,
 LAMMPS data and dump, SDF/MOL, Cube, CHGCAR, GRO, MOL2, POSCAR/CONTCAR.
 
 Binary trajectories (DCD, TRR, XTC) open as the trajectory viewer. Zarr
@@ -48,7 +48,7 @@ directories load through **MolVis: Open Structure…**.
 - `MolVis: Open Sketch`
 - `MolVis: Open Page`
 - `MolVis: Open Structure…`
-- `MolVis: Quick View`
+- `Quick look`
 - `MolVis: Reload View` (when a MolVis editor is active)
 
 Settings: `molvis.config` (mount) and `molvis.settings` (runtime). See

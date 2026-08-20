@@ -94,6 +94,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
               webviewPanel.webview,
               this.fileLoader,
               this.logger,
+              message.mode,
             );
             break;
           case "dirtyStateChanged":

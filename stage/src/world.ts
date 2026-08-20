@@ -14,11 +14,18 @@ import {
 } from "@babylonjs/core";
 import type { MolvisApp } from "./app";
 import { CameraAnimator } from "./camera/animator";
-import { fitBoxToView, ISO_ALPHA, ISO_BETA } from "./camera/fit";
+import {
+  FIT_BOX_PADDING,
+  FIT_PADDING,
+  fitBoxToView,
+  ISO_ALPHA,
+  ISO_BETA,
+} from "./camera/fit";
 import { computeObb } from "./camera/obb";
 import { AxisHelper } from "./gizmo/axis_helper";
 import { GridGround } from "./grid";
 import { Highlighter } from "./highlighter";
+import { shouldDrawBox } from "./io/box_presence";
 import type { ModeManager } from "./mode";
 import { Picker } from "./picker";
 import { SceneIndex } from "./scene_index";
@@ -228,8 +235,9 @@ export class World {
   /**
    * Frame the scene.
    *
-   * Builds a radius-aware oriented bounding box of the atoms (optionally
-   * including the PBC cell corners), then fits it per-axis to the viewport.
+   * Builds a radius-aware oriented bounding box, then fits it per-axis to
+   * the viewport. A real simulation cell (not a 1×1×1 placeholder) is the
+   * default framing target so Reset camera fills the view with the box.
    * `viewDirection: "auto"` looks down the structure's minor axis for the
    * largest silhouette; the default `"iso"` keeps the stable α=45°/β=60° view.
    *
@@ -243,7 +251,8 @@ export class World {
     frameBox?: boolean;
   }): void {
     const viewDirection = options?.viewDirection ?? "iso";
-    const merged = this.collectFramingPoints(options?.frameBox ?? false);
+    const useBox = options?.frameBox ?? shouldDrawBox(this._app.frame?.box);
+    const merged = this.collectFramingPoints(useBox);
 
     if (!merged) {
       this.reset();
@@ -255,7 +264,10 @@ export class World {
       obb,
       this.camera.fov,
       this._engine.getAspectRatio(this.camera),
-      { viewDirection },
+      {
+        viewDirection,
+        padding: useBox ? FIT_BOX_PADDING : FIT_PADDING,
+      },
     );
 
     this.camera.setTarget(result.center);
@@ -281,34 +293,25 @@ export class World {
   }
 
   /**
-   * Gather the point cloud (centers + radii) used to frame the scene: the
-   * radius-aware atom data, optionally augmented with the eight PBC cell
-   * corners (radius 0). Returns `null` when there is nothing to frame.
+   * Gather the point cloud used to frame the scene. A real simulation cell
+   * contributes only its eight corners (radius 0) so the box fills the
+   * view. Otherwise the radius-aware atom data. Returns `null` when there
+   * is nothing to frame.
    */
   private collectFramingPoints(
     frameBox: boolean,
   ): { points: Float64Array; radii: Float64Array } | null {
-    const atoms = this.sceneIndex.getBoundsData();
-    const corners =
-      frameBox && this._app.frame?.box
-        ? copyAndFreeF64(this._app.frame.box.get_corners())
-        : null;
-
-    if (!corners || corners.length < 24) {
-      return atoms;
+    const box = this._app.frame?.box;
+    if (frameBox && shouldDrawBox(box)) {
+      const corners = copyAndFreeF64(box.get_corners());
+      if (corners.length >= 24) {
+        return {
+          points: new Float64Array(corners.subarray(0, 24)),
+          radii: new Float64Array(8),
+        };
+      }
     }
-
-    const cornerCount = 8;
-    const atomCount = atoms ? atoms.radii.length : 0;
-    const total = atomCount + cornerCount;
-    const points = new Float64Array(total * 3);
-    const radii = new Float64Array(total); // corners contribute radius 0
-    if (atoms) {
-      points.set(atoms.points, 0);
-      radii.set(atoms.radii, 0);
-    }
-    points.set(corners.subarray(0, cornerCount * 3), atomCount * 3);
-    return { points, radii };
+    return this.sceneIndex.getBoundsData();
   }
 
   public takeScreenShot() {

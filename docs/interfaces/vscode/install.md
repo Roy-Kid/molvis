@@ -31,4 +31,4 @@ After installation:
 The Activity Bar views are native trees. They do not allocate a WebGL
 canvas until you open a Stage or Sketch tab.
 
-Continue with [Quick View](quick-view.md).
+Continue with [Quick look](quick-view.md).

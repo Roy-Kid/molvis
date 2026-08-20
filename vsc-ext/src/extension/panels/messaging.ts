@@ -198,13 +198,13 @@ export async function handleDropUri(
   webview: vscode.Webview,
   fileLoader: MolecularFileLoader,
   logger: Logger,
+  mode: LoadMode = "replace",
 ): Promise<void> {
-  // Drag/drop is conservative: replace the current scene. Multi-source augment
-  // and atom-set extend are explicit load modes in the webview UI.
   await sendLoadedFile(
     webview,
     vscode.Uri.parse(uriString),
     fileLoader,
     logger,
+    mode,
   );
 }

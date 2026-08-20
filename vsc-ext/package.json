@@ -95,12 +95,12 @@
       },
       {
         "command": "molvis.quickView",
-        "title": "MolVis: Quick View",
-        "icon": "$(eye)"
+        "title": "Quick look",
+        "icon": "$(open-preview)"
       },
       {
         "command": "molvis.quickViewSketch",
-        "title": "MolVis: Quick View (Sketch)",
+        "title": "Quick look (Sketch)",
         "icon": "$(edit)"
       },
       {
@@ -144,6 +144,11 @@
       {
         "command": "molvis.save",
         "title": "MolVis: Save"
+      },
+      {
+        "command": "molvis.showSource",
+        "title": "Show Source",
+        "icon": "$(go-to-file)"
       }
     ],
     "keybindings": [
@@ -157,7 +162,7 @@
     "customEditors": [
       {
         "viewType": "molvis.editor",
-        "displayName": "MolVis Quick View",
+        "displayName": "Quick look",
         "selector": [
           {
             "filenamePattern": "*.pdb"
@@ -260,21 +265,22 @@
       },
       {
         "viewType": "molvis.binaryEditor",
-        "displayName": "MolVis Trajectory Viewer",
+        "displayName": "Quick look",
         "selector": [
           {
-            "filenamePattern": "*.dcd"
-          },
-          {
-            "filenamePattern": "*.trr"
-          },
-          {
-            "filenamePattern": "*.xtc"
+            "filenamePattern": "*.{dcd,trr,xtc}"
           }
         ],
         "priority": "default"
       }
     ],
+    "configurationDefaults": {
+      "workbench.editorAssociations": {
+        "*.dcd": "molvis.binaryEditor",
+        "*.trr": "molvis.binaryEditor",
+        "*.xtc": "molvis.binaryEditor"
+      }
+    },
     "menus": {
       "commandPalette": [
         {
@@ -332,6 +338,10 @@
         {
           "command": "molvis.save",
           "when": "false"
+        },
+        {
+          "command": "molvis.showSource",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -371,7 +381,12 @@
       "editor/title": [
         {
           "command": "molvis.quickView",
-          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
+          "when": "!activeCustomEditorId && activeWebviewPanelId != molvis.quickView && (resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR)",
+          "group": "navigation"
+        },
+        {
+          "command": "molvis.showSource",
+          "when": "activeWebviewPanelId == molvis.quickView",
           "group": "navigation"
         },
         {
@@ -563,7 +578,7 @@
         "molvis.plugins": {
           "type": "array",
           "default": [],
-          "markdownDescription": "Reserved for a future Stage plugin capability. Not loaded by current Quick View / Stage / Sketch surfaces.",
+          "markdownDescription": "Reserved for a future Stage plugin capability. Not loaded by current Quick look / Stage / Sketch surfaces.",
           "items": {
             "type": "string",
             "minLength": 1

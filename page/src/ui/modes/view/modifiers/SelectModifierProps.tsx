@@ -6,6 +6,7 @@ import type React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
+import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
 interface ModifierProps {
   modifier: CoreSelectModifier;
@@ -66,6 +67,12 @@ export const SelectModifierProps: React.FC<ModifierProps> = ({
           onCheckedChange={(checked) => handleToggleHighlight(checked === true)}
         />
       </div>
+
+      <SelectionHighlightColor
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
     </fieldset>
   );
 };

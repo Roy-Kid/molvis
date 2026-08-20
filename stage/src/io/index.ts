@@ -15,6 +15,7 @@ import {
 import { DrawBondModifier } from "../pipeline/draw_bond";
 import {
   type CompositionSource,
+  compatibleAugmentLengths,
   extendSourcesToTrajectory,
 } from "../system/source_composition";
 import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
@@ -56,6 +57,7 @@ export {
   canStream,
   decideIngest,
   describeFormat,
+  dropLoadMode,
   extractMessage,
   FILE_FORMAT_REGISTRY,
   type FileFormat,
@@ -175,7 +177,7 @@ async function augmentTrajectoryAsDataSource(
   },
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
-  const N_file = trajectory.length;
+  const N_file = trajectory.length ?? trajectory.indexedLength;
   const existingTraj = app.modifierPipeline
     .sources()
     .find((m): m is FileDataSource => m instanceof FileDataSource);
@@ -208,21 +210,20 @@ async function augmentTrajectoryAsDataSource(
   );
 
   let ds: DataSource;
-  if (N_file === 1) {
+  if (N_file <= 1) {
     // Single-frame file → MemoryDataSource. Broadcasts across whatever
     // trajectory length the pipeline already has (or stays at 1 if
     // there's no trajectory yet). `contributedBlocks` defaults to empty
     // → composition propagates every block the frame actually has.
     ds = new MemoryDataSource(probeFrame, meta);
-  } else if (existingTraj === undefined || existingTraj.frameCount === N_file) {
-    // Multi-frame file: either becomes the primary trajectory (no
-    // existing one) or stacks onto an existing trajectory of equal
-    // length. Frame-count mismatches are caught here OR in
-    // addDataSource — both produce the same error class.
+  } else if (compatibleAugmentLengths(existingTraj?.frameCount, N_file)) {
+    // Multi-frame file: primary when none exists, stacks onto a
+    // length-1 structure (topology + DCD), or onto an equal-length
+    // trajectory. Unequal multi-frame lengths throw.
     ds = new FileDataSource(trajectory, meta);
   } else {
     throw new Error(
-      `Cannot augment "${meta.filename}": file has ${N_file} frame(s); existing trajectory has ${existingTraj.frameCount}. File must be single-frame or match existing frame count.`,
+      `Cannot augment "${meta.filename}": file has ${N_file} frame(s); existing trajectory has ${existingTraj?.frameCount}. File must be single-frame or match existing frame count.`,
     );
   }
 
@@ -439,7 +440,7 @@ async function extendIntoScene(
  * stamps the pipeline head with a `DataSource`, swaps in the
  * new trajectory, and replays user-added modifiers on it. All file
  * entry points — page drag-drop, DataSource panel "Load File", vsc-ext
- * "Open Editor" / "Quick View" — converge here.
+ * "Open Editor" / "Quick look" — converge here.
  */
 export async function loadFileContent(
   app: Molvis,
@@ -556,12 +557,16 @@ export async function loadFileStream(
       `Format "${format}" cannot stream (descriptor.streaming = "eager-only"). Route this load through loadFileContent / loadFileSmart's eager path instead.`,
     );
   }
-  // HUD first — emit before spawning so a stuck worker still shows `0/0…`.
-  app.events.emit("length-changed", {
-    indexedLength: 0,
-    length: null,
-    indexComplete: false,
-  });
+  // HUD first on replace — emit before spawning so a stuck worker still
+  // shows `0/0…`. Augment keeps the existing timeline until the new
+  // source reports progress (data + DCD must not flash back to 0/0).
+  if (mode !== "augment") {
+    app.events.emit("length-changed", {
+      indexedLength: 0,
+      length: null,
+      indexComplete: false,
+    });
+  }
   // canStream narrows `format` to the worker's `Format` type, so
   // spawnTrajectoryWorker accepts it without a cast.
   const runtime = await Promise.resolve(spawnTrajectoryWorker(format));

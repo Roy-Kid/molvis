@@ -26,6 +26,7 @@ export class Highlighter {
     atoms: new Set(),
     bonds: new Set(),
     revision: 0,
+    highlightColor: null,
   };
   private previewKeys: Set<string> = new Set();
   private pendingColorMeshes = new Set<Mesh>();
@@ -41,20 +42,25 @@ export class Highlighter {
    * Set the current selection state (redrawn immediately).
    */
   highlightSelection(state: SelectionState): void {
-    const selectionColor = this.selectionColor();
+    const selectionColor = this.selectionColor(state.highlightColor);
+    const colorChanged =
+      state.highlightColor !== this.lastSelectionState.highlightColor;
+
     for (const atomId of this.lastSelectionState.atoms) {
       if (!state.atoms.has(atomId)) this.restoreAtom(atomId);
     }
     for (const bondId of this.lastSelectionState.bonds) {
       if (!state.bonds.has(bondId)) this.restoreBond(bondId);
     }
+    // Re-apply to already-selected entities too when only the color changed —
+    // the diff below would otherwise skip them and leave the old tint in place.
     for (const atomId of state.atoms) {
-      if (!this.lastSelectionState.atoms.has(atomId)) {
+      if (!this.lastSelectionState.atoms.has(atomId) || colorChanged) {
         this.highlightAtom(atomId, selectionColor);
       }
     }
     for (const bondId of state.bonds) {
-      if (!this.lastSelectionState.bonds.has(bondId)) {
+      if (!this.lastSelectionState.bonds.has(bondId) || colorChanged) {
         this.highlightBond(bondId, selectionColor);
       }
     }
@@ -63,6 +69,7 @@ export class Highlighter {
       atoms: new Set(state.atoms),
       bonds: new Set(state.bonds),
       revision: state.revision,
+      highlightColor: state.highlightColor,
     };
   }
 
@@ -93,7 +100,9 @@ export class Highlighter {
     }
 
     // 2. Apply Selection
-    const selectionColor = this.selectionColor();
+    const selectionColor = this.selectionColor(
+      this.lastSelectionState.highlightColor,
+    );
 
     for (const atomId of this.lastSelectionState.atoms) {
       this.highlightAtom(atomId, selectionColor);
@@ -104,8 +113,11 @@ export class Highlighter {
     this.flushColorBuffers();
   }
 
-  private selectionColor(): number[] {
-    const selectionColorHex = this.app.styleManager.getTheme().selectionColor;
+  private selectionColor(overrideHex?: string | null): number[] {
+    const selectionColorHex =
+      overrideHex && overrideHex.length > 0
+        ? overrideHex
+        : this.app.styleManager.getTheme().selectionColor;
     if (selectionColorHex.length > 7) {
       const c4 = Color4.FromHexString(selectionColorHex);
       return [c4.r ** 2.2, c4.g ** 2.2, c4.b ** 2.2, 1.0];
@@ -294,6 +306,7 @@ export class Highlighter {
       atoms: new Set(),
       bonds: new Set(),
       revision: 0,
+      highlightColor: null,
     };
   }
 
@@ -312,6 +325,7 @@ export class Highlighter {
       atoms: new Set(),
       bonds: new Set(),
       revision: 0,
+      highlightColor: null,
     };
     this.highlightSelection(this.app.world.selectionManager.getState());
   }

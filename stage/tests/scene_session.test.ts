@@ -74,6 +74,25 @@ describe("SceneSession.replaceScene", () => {
   });
 });
 
+describe("SceneSession.addDataSource", () => {
+  it("promotes System to the longer trajectory when stacking DCD onto a structure", async () => {
+    const { host, system } = hostStub();
+    const session = new SceneSession(host);
+    const structure = new Trajectory([oneOxygenFrame()]);
+    const frames = [oneOxygenFrame(), oneOxygenFrame(), oneOxygenFrame()];
+    const traj = new Trajectory(frames);
+
+    await session.replaceScene(structure, { filename: "sys.data" });
+    expect(system.trajectory.indexedLength).toBe(1);
+
+    await session.addDataSource(
+      new FileDataSource(traj, { filename: "sys.dcd" }),
+    );
+    expect(system.trajectory).toBe(traj);
+    expect(system.trajectory.indexedLength).toBe(3);
+  });
+});
+
 describe("SceneSession.appendFrame", () => {
   it("installs a trajectory source on the first append to an empty scene", async () => {
     // Boot is empty pipeline — first append installs a File Loader.

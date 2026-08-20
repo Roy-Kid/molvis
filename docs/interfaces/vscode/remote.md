@@ -35,7 +35,7 @@ Normal workspace permissions still apply.
 - Hundred-GB dumps can play after the first frame is indexed. The first
   open still scans near the data (index-near-data writes `.molidx` beside
   the file or in workspace cache).
-- Avoid opening many independent Quick Views because every interactive viewer
+- Avoid opening many independent Quick look panels because every interactive viewer
   owns a WebGL context.
 
 Use the MolVis Output channel to distinguish remote read failures from local

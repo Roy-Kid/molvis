@@ -3,17 +3,17 @@ import type {
   KeyboardInfo,
   Observer,
   PointerInfo,
+  Vector3,
 } from "@babylonjs/core";
 import {
   KeyboardEventTypes,
   PointerEventTypes,
   Vector2,
-  Vector3,
 } from "@babylonjs/core";
 import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
-import { formatBondLabel } from "../utils/bond_order";
+import { formatHitInfo } from "./hit_info";
 import type { ModeId } from "./mode_type";
 import { resolvePointerSpacePosition } from "./placement_position";
 import type { SceneHit } from "./types";
@@ -355,51 +355,7 @@ abstract class BaseMode {
   }
 
   protected formatHitInfo(hit: SceneHit | null): string {
-    if (!hit || hit.type === "empty") {
-      return "";
-    }
-    if (hit.type === "ribbon") {
-      return `Residue ${hit.resName} ${hit.resSeq} · chain ${hit.chainId}`;
-    }
-    if (hit.type === "atom") {
-      const { element, position, atomId } = hit.metadata;
-      const residue = this.residueLabelForAtom(atomId);
-      const el = element?.trim() || "Atom";
-      const xyz = `(${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) Å`;
-      const atomPart = `Atom ${el} · ID ${atomId} · ${xyz}`;
-      return residue ? `${residue} · ${atomPart}` : atomPart;
-    }
-    const { start, end, atomId1, atomId2, bondType, bondNumber } = hit.metadata;
-    const length = Vector3.Distance(
-      new Vector3(start.x, start.y, start.z),
-      new Vector3(end.x, end.y, end.z),
-    );
-    const kind = formatBondLabel(bondType, bondNumber);
-    return `Bond ${atomId1}–${atomId2} · ${length.toFixed(2)} Å · ${kind}`;
-  }
-
-  /**
-   * `THR 222 · chain A` when trajectory Frame carries `res_name` + `res_id`.
-   * Atom must exist on SceneIndex (canvas); columns are reverse-lookup only.
-   */
-  private residueLabelForAtom(atomId: number): string | null {
-    if (this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomId) == null) {
-      return null;
-    }
-    const frame = this.app.system.frame;
-    const atoms = frame?.getBlock("atoms");
-    if (!atoms || atomId < 0 || atomId >= atoms.nrows()) return null;
-    const resName = atoms.hasStr("res_name")
-      ? atoms.getStr("res_name")[atomId]?.trim()
-      : undefined;
-    const chainId = atoms.hasStr("chain_id")
-      ? atoms.getStr("chain_id")[atomId]?.trim() || "A"
-      : "A";
-    const resId = atoms.hasU32("res_id")
-      ? atoms.getU32("res_id")[atomId]
-      : undefined;
-    if (!resName || resId === undefined) return null;
-    return `${resName} ${resId} · chain ${chainId}`;
+    return formatHitInfo(hit, this.app.system.frame?.getBlock("atoms") ?? null);
   }
 
   _on_pointer_wheel(_pointerInfo: PointerInfo): void {}

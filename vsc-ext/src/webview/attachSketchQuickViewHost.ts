@@ -1,5 +1,5 @@
 /**
- * Host bridge for the Sketch editor tab and Sketch Quick View.
+ * Host bridge for the Sketch editor tab and Sketch Quick look.
  *
  * Parallel to {@link attachQuickViewHost} for stage — no `page/` imports.
  * Handles init / loadFile / selectAtoms and publishes the sidebar outline.

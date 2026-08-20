@@ -1,5 +1,5 @@
 /**
- * Quick View bootstrap — stage only, deferred by `webview/index.ts`.
+ * Quick look bootstrap — stage only, deferred by `webview/index.ts`.
  *
  * Host messaging lives in {@link attachQuickViewHost}; this file only
  * mounts the engine and starts it.

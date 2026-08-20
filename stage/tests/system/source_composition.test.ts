@@ -2,6 +2,7 @@ import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import {
+  compatibleAugmentLengths,
   composeSources,
   extendFrames,
 } from "../../src/system/source_composition";
@@ -28,6 +29,12 @@ function setAtomStr(frame: Frame, key: string, values: string[]): void {
   const block = frame.getBlock("atoms");
   if (!block) throw new Error("missing atoms block");
   block.setColStr(key, values);
+}
+
+function setAtomU32(frame: Frame, key: string, values: number[]): void {
+  const block = frame.getBlock("atoms");
+  if (!block) throw new Error("missing atoms block");
+  block.setColU32(key, Uint32Array.from(values));
 }
 
 function bonds(pairs: Array<[number, number]>): Frame {
@@ -108,6 +115,81 @@ describe("composeSources augment", () => {
     ).rejects.toThrow(/atom count/);
   });
 
+  it("takes coords from the trajectory and identity from the structure in either order", async () => {
+    const traj = new Trajectory([atoms(["C", "O"], 0), atoms(["C", "O"], 10)]);
+    const topo = atoms(["N", "H"], 0);
+    topo.insertBlock("bonds", bonds([[0, 1]]).getBlock("bonds")!);
+    const topology = new Trajectory([topo]);
+
+    const expectComposed = async (
+      sources: Parameters<typeof composeSources>[0],
+    ) => {
+      const out = await composeSources(sources, 1);
+      expect(Array.from(out.getBlock("atoms")?.copyColF("x") ?? [])).toEqual([
+        10, 11,
+      ]);
+      expect(out.getBlock("atoms")?.copyColStr("element")).toEqual(["N", "H"]);
+      expect(out.getBlock("bonds")?.nrows()).toBe(1);
+    };
+
+    await expectComposed([
+      { id: "topo", trajectory: topology },
+      { id: "traj", trajectory: traj },
+    ]);
+    await expectComposed([
+      { id: "traj", trajectory: traj },
+      { id: "topo", trajectory: topology },
+    ]);
+  });
+
+  it("scatters DCD coords onto LAMMPS data rows by atom id, not file order", async () => {
+    // data file order: ids 3,1,2 — bonds index *rows*. DCD is id order 1,2,3.
+    const topo = atoms(["C", "N", "O"], 0);
+    setAtomU32(topo, "id", [3, 1, 2]);
+    topo.insertBlock("bonds", bonds([[0, 1]]).getBlock("bonds")!);
+    const topology = new Trajectory([topo]);
+
+    const frame0 = atoms(["X", "X", "X"], 0);
+    setAtomU32(frame0, "id", [1, 2, 3]);
+    setAtomF(frame0, "x", [10, 20, 30]);
+    const frame1 = atoms(["X", "X", "X"], 0);
+    setAtomU32(frame1, "id", [1, 2, 3]);
+    setAtomF(frame1, "x", [11, 21, 31]);
+    const traj = new Trajectory([frame0, frame1]);
+
+    const expectComposed = async (
+      sources: Parameters<typeof composeSources>[0],
+    ) => {
+      const out = await composeSources(sources, 1);
+      expect(Array.from(out.getBlock("atoms")?.copyColU32("id") ?? [])).toEqual(
+        [3, 1, 2],
+      );
+      expect(Array.from(out.getBlock("atoms")?.copyColF("x") ?? [])).toEqual([
+        31, 11, 21,
+      ]);
+      expect(out.getBlock("atoms")?.copyColStr("element")).toEqual([
+        "C",
+        "N",
+        "O",
+      ]);
+      expect(
+        Array.from(out.getBlock("bonds")?.copyColU32("atomi") ?? []),
+      ).toEqual([0]);
+      expect(
+        Array.from(out.getBlock("bonds")?.copyColU32("atomj") ?? []),
+      ).toEqual([1]);
+    };
+
+    await expectComposed([
+      { id: "topo", trajectory: topology },
+      { id: "traj", trajectory: traj },
+    ]);
+    await expectComposed([
+      { id: "traj", trajectory: traj },
+      { id: "topo", trajectory: topology },
+    ]);
+  });
+
   it("rejects unequal multi-frame source lengths", async () => {
     await expect(
       composeSources(
@@ -125,6 +207,16 @@ describe("composeSources augment", () => {
         0,
       ),
     ).rejects.toThrow(/timeline/);
+  });
+});
+
+describe("compatibleAugmentLengths", () => {
+  it("lets a trajectory stack onto a length-1 structure and the reverse", () => {
+    expect(compatibleAugmentLengths(1, 3001)).toBe(true);
+    expect(compatibleAugmentLengths(3001, 1)).toBe(true);
+    expect(compatibleAugmentLengths(undefined, 3001)).toBe(true);
+    expect(compatibleAugmentLengths(3001, 3001)).toBe(true);
+    expect(compatibleAugmentLengths(3001, 100)).toBe(false);
   });
 });
 

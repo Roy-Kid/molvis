@@ -35,6 +35,15 @@ const pkg = JSON.parse(readFileSync(extensionManifestPath(), "utf8")) as {
     viewsContainers?: { activitybar?: Array<{ id: string }> };
     viewsWelcome?: Array<{ view: string }>;
     menus?: Record<string, Array<{ command: string; when?: string }>>;
+    customEditors?: Array<{
+      viewType: string;
+      displayName: string;
+      selector: Array<{ filenamePattern: string }>;
+      priority?: string;
+    }>;
+    configurationDefaults?: {
+      "workbench.editorAssociations"?: Record<string, string>;
+    };
   };
 };
 
@@ -204,5 +213,22 @@ suite("contribution manifest", () => {
         "molvis.reload",
       ].sort(),
     );
+  });
+
+  test("binary trajectories default to one Quick look editor, not a picker list", () => {
+    const editors = contributes.customEditors ?? [];
+    const binary = editors.find((e) => e.viewType === "molvis.binaryEditor");
+    const text = editors.find((e) => e.viewType === "molvis.editor");
+    assert.strictEqual(binary?.displayName, "Quick look");
+    assert.strictEqual(text?.displayName, "Quick look");
+    assert.deepStrictEqual(binary?.selector, [
+      { filenamePattern: "*.{dcd,trr,xtc}" },
+    ]);
+    assert.strictEqual(binary?.priority, "default");
+    const associations =
+      contributes.configurationDefaults?.["workbench.editorAssociations"] ?? {};
+    assert.strictEqual(associations["*.dcd"], "molvis.binaryEditor");
+    assert.strictEqual(associations["*.trr"], "molvis.binaryEditor");
+    assert.strictEqual(associations["*.xtc"], "molvis.binaryEditor");
   });
 });

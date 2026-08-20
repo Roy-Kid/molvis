@@ -1,5 +1,5 @@
 /**
- * Sketch Quick View MOL V2000 peek parser (no VS Code host).
+ * Sketch Quick look MOL V2000 peek parser (no VS Code host).
  */
 
 import * as assert from "assert";

@@ -11,7 +11,7 @@ import type { RecentFilesStore } from "../loading/recentFiles";
 
 /**
  * Activity-bar Files tree: Recent + workspace molecular files.
- * Click opens Stage, or Sketch for MOL/SDF. Quick View is a context action.
+ * Click opens Stage, or Sketch for MOL/SDF. Quick look is a context action.
  */
 
 export type FilesNode =

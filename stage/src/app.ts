@@ -944,26 +944,57 @@ export class MolvisApp implements App {
    * (pipeline recompute must not clobber an orphan live highlight).
    * Explicit {@link activateSelection}(null) clears highlight.
    */
-  syncHighlightFromActive(): void {
+  syncHighlightFromActive(frame?: Frame | null): void {
     const sm = this._world.selectionManager;
     const id = this._activeSelectionId;
     if (!id) return;
 
     const mask = this._lastSelectionSet.get(id);
-    let bonds: number[] = [];
     const mod = this._modifierPipeline.modifiers().find((m) => m.id === id);
-    if (mod instanceof SelectModifier) {
-      bonds = [...mod.selectedBondIds];
-      if (!mask && mod.isManual) {
-        const src = mod.selectionSource;
-        if (Array.isArray(src)) {
-          sm.apply({ type: "replace", atoms: src, bonds });
-          return;
-        }
+    sm.setHighlightColor(mod?.highlightColor ?? null);
+
+    const explicitBonds =
+      mod instanceof SelectModifier ? [...mod.selectedBondIds] : [];
+
+    if (mod instanceof SelectModifier && !mask && mod.isManual) {
+      const src = mod.selectionSource;
+      if (Array.isArray(src)) {
+        sm.apply({ type: "replace", atoms: src, bonds: explicitBonds });
+        return;
       }
     }
+
     const atoms = mask ? mask.getIndices() : [];
+    // Highlight bonds whose both endpoints are selected so an atom selection
+    // carries its backbone/connectivity, not only manual bond picks.
+    const bonds = mergeBonds(explicitBonds, this.bondsWithinMask(mask, frame));
     sm.apply({ type: "replace", atoms, bonds });
+  }
+
+  /**
+   * Bond rows whose both `atomi`/`atomj` endpoints fall inside the atom mask.
+   * Uses the given (computed) frame when available so multi-source / modified
+   * frames resolve against what is actually rendered; falls back to the live
+   * system frame.
+   */
+  private bondsWithinMask(
+    mask: SelectionMask | undefined,
+    frame?: Frame | null,
+  ): number[] {
+    if (!mask) return [];
+    const bondsFrame = frame ?? this._system.frame;
+    const bonds = bondsFrame?.getBlock("bonds");
+    if (!bonds) return [];
+    const iCol = bonds.viewColU32("atomi");
+    const jCol = bonds.viewColU32("atomj");
+    if (!iCol || !jCol) return [];
+    const result: number[] = [];
+    for (let b = 0; b < bonds.nrows(); b++) {
+      if (mask.isSelected(iCol[b]) && mask.isSelected(jCol[b])) {
+        result.push(b);
+      }
+    }
+    return result;
   }
 
   /**
@@ -1500,7 +1531,7 @@ export class MolvisApp implements App {
     // the highlight overlay from those clean buffers.
     if (changeKind === "full") {
       if (this._activeSelectionId) {
-        this.syncHighlightFromActive();
+        this.syncHighlightFromActive(computed);
       }
       this._world.highlighter.invalidateAndRebuild();
     }
@@ -1600,4 +1631,13 @@ export class MolvisApp implements App {
       this.queueTrajectoryFrameRender();
     }
   }
+}
+
+/** Merge explicit and mask-derived bond rows, deduplicated and ascending. */
+function mergeBonds(...groups: readonly (readonly number[])[]): number[] {
+  const seen = new Set<number>();
+  for (const group of groups) {
+    for (const bond of group) seen.add(bond);
+  }
+  return [...seen].sort((a, b) => a - b);
 }

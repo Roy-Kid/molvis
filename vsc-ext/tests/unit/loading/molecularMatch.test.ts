@@ -1,5 +1,6 @@
 import * as assert from "assert";
 import {
+  isBinaryTrajectoryPath,
   isMolecularPath,
   isSketchPath,
   workspaceMolecularIncludeGlobs,
@@ -17,6 +18,12 @@ suite("molecularMatch", () => {
   test("isMolecularPath rejects non-molecular paths", () => {
     assert.strictEqual(isMolecularPath("/tmp/notes.md"), false);
     assert.strictEqual(isMolecularPath("/tmp/package.json"), false);
+  });
+
+  test("isBinaryTrajectoryPath is DCD/TRR/XTC", () => {
+    assert.strictEqual(isBinaryTrajectoryPath("/tmp/msd1.dcd"), true);
+    assert.strictEqual(isBinaryTrajectoryPath("/tmp/run.xtc"), true);
+    assert.strictEqual(isBinaryTrajectoryPath("/tmp/eq.data"), false);
   });
 
   test("isSketchPath is only MOL/SDF connection tables", () => {

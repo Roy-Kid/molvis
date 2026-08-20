@@ -107,7 +107,7 @@ section instead of sharing a mixed quickstart.
   </a>
   <a href="interfaces/vscode/">
     <strong>VS Code</strong>
-    <em>Install the extension, use Quick View, work in the full workspace, and configure remote projects.</em>
+    <em>Install the extension, use Quick look, work in the full workspace, and configure remote projects.</em>
   </a>
 </div>
 

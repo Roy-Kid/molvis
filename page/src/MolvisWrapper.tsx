@@ -5,7 +5,7 @@ import {
   type MolvisSetting,
   mountMolvis,
 } from "@molcrafts/molvis-stage";
-import type { LoadMode } from "@molcrafts/molvis-stage/io";
+import { dropLoadMode, type LoadMode } from "@molcrafts/molvis-stage/io";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
@@ -307,12 +307,12 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     if (!queuedDropFile) return;
     const file = queuedDropFile;
     setQueuedDropFile(null);
-    // Queued drops also replace — no combine dialog.
+    const mode = dropLoadMode(app.modifierPipeline.sources().length);
     if (sceneHasUnsavedEdits(app)) {
-      pendingDirtyModeRef.current = "replace";
+      pendingDirtyModeRef.current = mode;
       setPendingDirtyDrop(file);
     } else {
-      void loadDroppedFileRef.current(file, "replace", DROP_COPY);
+      void loadDroppedFileRef.current(file, mode, DROP_COPY);
     }
   }, [
     queuedDropFile,
@@ -564,8 +564,8 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
       e.stopPropagation();
       const file = e.dataTransfer?.files?.[0];
       if (!file) return;
-      // Drop = replace. Extend / add live only on Data Source overflow menu.
-      enqueueOrLoadFileRef.current(file, "replace");
+      const sources = molvisRef.current?.modifierPipeline.sources().length ?? 0;
+      enqueueOrLoadFileRef.current(file, dropLoadMode(sources));
     };
     container.addEventListener("dragover", handleDragOver);
     container.addEventListener("drop", handleDrop);

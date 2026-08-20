@@ -143,4 +143,25 @@ describe("HideSelectionModifier", () => {
     expect(is[0]).toBe(0);
     expect(js[0]).toBe(1);
   });
+
+  test("Should preserve non-coordinate columns (including the molrs id column)", () => {
+    const frame = new Frame();
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0, 1, 2]));
+    atoms.setColF("y", new Float64Array([0, 0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0, 0]));
+    atoms.setColStr("element", ["C", "O", "N"]);
+    atoms.setColU32("id", new Uint32Array([10, 20, 30]));
+    frame.insertBlock("atoms", atoms);
+
+    const context = createDefaultContext(frame, mockApp);
+    context.currentSelection = SelectionMask.fromIndices(3, [1]);
+
+    const out = new HideSelectionModifier().apply(frame, context);
+    const outAtoms = out.getBlock("atoms")!;
+    expect(outAtoms.nrows()).toBe(2);
+
+    const ids = outAtoms.copyColU32("id");
+    expect(ids).toEqual(new Uint32Array([10, 30]));
+  });
 });

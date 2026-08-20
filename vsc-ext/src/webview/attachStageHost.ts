@@ -1,7 +1,7 @@
 /**
  * Shared stage ↔ VS Code host bridge.
  *
- * Stage surfaces (Quick View and the Stage editor tab) share
+ * Stage surfaces (Quick look and the Stage editor tab) share
  * load/settings/save/drop. Extra host messages (selectAtoms) go through
  * {@link AttachStageHostOptions.onExtraMessage} or the core switch.
  */
@@ -10,6 +10,7 @@ import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   decideIngest,
   decodeMolidx,
+  dropLoadMode,
   exportFrame,
   type FileFormat,
   HostRangeSource,
@@ -42,12 +43,12 @@ export interface AttachStageHostOptions {
   enableDrop?: boolean;
   /**
    * When false, only {@link StageHostHandle.handleMessage} is used.
-   * Default true for Stage / Quick View.
+   * Default true for Stage / Quick look.
    */
   listenWindow?: boolean;
   /**
    * Which host messages this surface accepts.
-   * Default: Quick View set only.
+   * Default: Quick look set only.
    */
   isHostMessage?: (data: unknown) => data is HostToWebviewMessage;
   /**
@@ -103,12 +104,15 @@ export function attachStageHost(
         }
         return true;
       case "openUri": {
-        // Show `0/0…` immediately — do not wait for the worker to spawn.
-        app.events.emit("length-changed", {
-          indexedLength: 0,
-          length: null,
-          indexComplete: false,
-        });
+        // Show `0/0…` immediately on replace — do not wait for the worker.
+        // Augment (data + DCD) must not wipe the timeline already on screen.
+        if (message.mode !== "augment") {
+          app.events.emit("length-changed", {
+            indexedLength: 0,
+            length: null,
+            indexComplete: false,
+          });
+        }
         app.events.emit("status-message", {
           text: `Opening ${message.filename}…`,
           type: "info",
@@ -240,13 +244,14 @@ export function attachStageHost(
       event.stopPropagation();
 
       const uriList = event.dataTransfer?.getData("text/uri-list");
+      const mode = dropLoadMode(app.modifierPipeline.sources().length);
       if (uriList) {
         const uri = uriList
           .split("\n")
           .filter((l) => l.trim())[0]
           ?.trim();
         if (uri) {
-          host.postMessage({ type: "dropUri", uri });
+          host.postMessage({ type: "dropUri", uri, mode });
           return;
         }
       }
@@ -262,7 +267,7 @@ export function attachStageHost(
             throw new Error(decision.reason);
           }
           if (decision?.path === "stream" && inferred) {
-            await loadFileStream(app, file, file.name, inferred, {}, "replace");
+            await loadFileStream(app, file, file.name, inferred, {}, mode);
             return;
           }
           const content =
@@ -274,7 +279,7 @@ export function attachStageHost(
             content,
             file.name,
             inferred ?? undefined,
-            "replace",
+            mode,
           );
         } catch (error) {
           reportError(host, `Failed to load dropped file ${file.name}`, error);

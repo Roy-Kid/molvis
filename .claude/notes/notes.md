@@ -3,6 +3,37 @@
 Passive memory for MolVis. `/mol:note` syncs decisions here; every agent reads
 recent entries for context.
 
+<!-- mol:note:topic:drop-augment -->
+## [2026-08-19] Drop onto a loaded scene stacks sources
+
+**Rule**: Explorer / canvas drop uses `dropLoadMode(sourceCount)`:
+empty pipeline → `replace`; already-has-sources → `augment`. Topology
+(LAMMPS `.data`) and trajectory (DCD/XTC/TRR) compose in either order:
+coords from the N-frame source, identity/bonds from the length-1 source.
+Align atom rows by `id` (LAMMPS data is file-order; DCD is id-order) —
+never overlay xyz by row index or bonds explode.
+A length-1 FileDataSource is broadcast, not “1-frame traj that must match N”.
+System follows the longest FileDataSource.
+
+Code: `stage/src/io/formats.ts` `dropLoadMode`,
+`stage/src/system/source_composition.ts`, `vsc-ext` / `page` drop handlers.
+
+<!-- mol:note:topic:molrs-identity-convention -->
+## [2026-08-20] molrs and molvis share one atom-identity convention
+
+**Rule**: an atom's identity is the molrs `id` column (u32 — molrs
+`Block::insert` pins that key; rows stay in read order, not id order). molvis
+consumes molrs data as-is: reads never reindex ids, and any file that names
+atoms — the mask file in particular — stores those `id` values verbatim. No
+id↔row-index conversion crosses the molrs/molvis boundary. A row-indexed
+`SelectionMask` is a molvis render artifact built only at apply time by
+looking ids up in the frame's `id` column; unknown ids are a loud error.
+
+Code: `stage/src/selection/mask_file.ts`,
+`stage/src/modifiers/SelectMaskModifier.ts`,
+`stage/src/pipeline/bond_column_remap.ts`,
+`stage/src/system/source_composition.ts`.
+
 <!-- mol:note:topic:webview-worker-wasm -->
 ## [2026-08-19] VS Code trajectory worker WASM is posted, never fetched
 

@@ -17,6 +17,20 @@ export interface CompositionValidationResult {
   warnings: string[];
 }
 
+/**
+ * Length-1 sources broadcast; a multi-frame source may stack onto them.
+ * Two multi-frame sources must share a length. Used by compose and by
+ * file-augment (LAMMPS data + DCD in either order).
+ */
+export function compatibleAugmentLengths(
+  existingCount: number | undefined,
+  incomingCount: number,
+): boolean {
+  if (incomingCount <= 1) return true;
+  if (existingCount === undefined || existingCount <= 1) return true;
+  return existingCount === incomingCount;
+}
+
 export async function composeSources(
   sources: readonly CompositionSource[],
   frameIndex: number,
@@ -27,12 +41,15 @@ export async function composeSources(
   if (sources.length === 1) return projectSource(sources[0], frames[0]);
 
   const composedBlocks = new Map<string, Block>();
+  const blockFromBroadcast = new Map<string, boolean>();
   let atomCount: number | null = null;
   let composedBox: Box | undefined;
+  let boxFromBroadcast = false;
 
   for (let i = 0; i < sources.length; i++) {
     const source = sources[i];
     const frame = frames[i];
+    const broadcast = isBroadcastSource(source);
     for (const name of contributedNames(source, frame)) {
       const block = frame.getBlock(name);
       if (!block || block.nrows() === 0) continue;
@@ -52,16 +69,32 @@ export async function composeSources(
             `Source composition: block '${name}' from source '${source.id}' has ${block.nrows()} rows but the composed block has ${existing.nrows()}; same-name augment blocks must align row-for-row`,
           );
         }
-        composedBlocks.set(name, mergeBlocks(existing, block));
+        const existingBroadcast = blockFromBroadcast.get(name) === true;
+        composedBlocks.set(
+          name,
+          mergeBlocks(existing, block, {
+            existingBroadcast,
+            incomingBroadcast: broadcast,
+            atoms: name === "atoms",
+          }),
+        );
+        if (!broadcast) blockFromBroadcast.set(name, false);
       } else {
         composedBlocks.set(name, cloneBlock(block));
+        blockFromBroadcast.set(name, broadcast);
       }
     }
     const box = frame.box;
     if (box !== undefined) {
-      composedBox?.free();
       try {
-        composedBox = cloneBox(box);
+        if (composedBox === undefined) {
+          composedBox = cloneBox(box);
+          boxFromBroadcast = broadcast;
+        } else if (!broadcast && boxFromBroadcast) {
+          composedBox.free();
+          composedBox = cloneBox(box);
+          boxFromBroadcast = false;
+        }
       } finally {
         box.free();
       }
@@ -156,6 +189,16 @@ export async function extendSourcesToTrajectory(
   return new Trajectory(frames, boxes);
 }
 
+function sourcePlayableLength(source: CompositionSource): number {
+  const known = source.trajectory.length;
+  if (typeof known === "number") return known;
+  return source.trajectory.indexedLength;
+}
+
+function isBroadcastSource(source: CompositionSource): boolean {
+  return sourcePlayableLength(source) <= 1;
+}
+
 function timelineLength(sources: readonly CompositionSource[]): number {
   return sources.reduce(
     (max, source) => Math.max(max, source.trajectory.indexedLength),
@@ -179,8 +222,8 @@ async function resolveFrames(
   const maxLength = timelineLength(sources);
   return Promise.all(
     sources.map((source) => {
-      const length = source.trajectory.length;
-      if (length === 1) return source.trajectory.frame(0);
+      const length = sourcePlayableLength(source);
+      if (length <= 1) return source.trajectory.frame(0);
       if (length === maxLength) return source.trajectory.frame(frameIndex);
       throw new Error(
         `Source composition: source '${source.id}' has ${length} frames but the timeline has ${maxLength}; only length-1 broadcast sources or length-${maxLength} sources can be combined`,
@@ -313,7 +356,24 @@ function concatColumn(
   }
 }
 
-function mergeBlocks(existing: Block, incoming: Block): Block {
+function mergeBlocks(
+  existing: Block,
+  incoming: Block,
+  opts?: {
+    existingBroadcast: boolean;
+    incomingBroadcast: boolean;
+    atoms: boolean;
+  },
+): Block {
+  const mixed =
+    opts !== undefined && opts.existingBroadcast !== opts.incomingBroadcast;
+  if (mixed && opts.atoms) {
+    return mergeAtomTopologyAndTrajectory(
+      existing,
+      incoming,
+      opts.incomingBroadcast,
+    );
+  }
   const merged = new Block();
   const incomingKeys = new Set(incoming.keys());
   for (const key of existing.keys()) {
@@ -322,6 +382,151 @@ function mergeBlocks(existing: Block, incoming: Block): Block {
   for (const key of incoming.keys()) {
     copyColumn(merged, key, incoming);
   }
+  applyMergedShape(merged, existing, incoming);
+  return merged;
+}
+
+/** Coords from the time-varying source; identity / topology from the length-1 source. */
+function mergeAtomTopologyAndTrajectory(
+  existing: Block,
+  incoming: Block,
+  incomingBroadcast: boolean,
+): Block {
+  const topology = incomingBroadcast ? incoming : existing;
+  const trajectory = incomingBroadcast ? existing : incoming;
+  const alignedTraj = AtomIdAlignment.between(topology, trajectory).apply(
+    trajectory,
+  );
+  const merged = new Block();
+  const keys = new Set([...existing.keys(), ...incoming.keys()]);
+  for (const key of keys) {
+    const prefer = isTimeVaryingAtomColumn(key) ? alignedTraj : topology;
+    const fallback = prefer === alignedTraj ? topology : alignedTraj;
+    if (columnPresent(prefer, key)) copyColumn(merged, key, prefer);
+    else if (columnPresent(fallback, key)) copyColumn(merged, key, fallback);
+  }
+  applyMergedShape(merged, existing, incoming);
+  return merged;
+}
+
+/**
+ * Map trajectory atom rows onto topology rows by `id`.
+ *
+ * LAMMPS `write_data` keeps file order (ids are a permutation). DCD/XTC/TRR
+ * write coordinates in increasing atom-id order and stamp `id` = 1..N.
+ * Overlaying xyz by row leaves bonds (row indices into the data file)
+ * pointing at the wrong atoms — the topology looks exploded.
+ */
+class AtomIdAlignment {
+  private constructor(private readonly srcOfDest: Int32Array | null) {}
+
+  static between(topology: Block, trajectory: Block): AtomIdAlignment {
+    const topoIds = atomIdColumn(topology);
+    if (!topoIds) return new AtomIdAlignment(null);
+    const n = topology.nrows();
+    const trajIds = atomIdColumn(trajectory);
+    const destOfSrc = new Int32Array(n);
+    const topoRowById = new Map<number, number>();
+    for (let i = 0; i < n; i++) {
+      const id = Number(topoIds[i]);
+      if (topoRowById.has(id)) {
+        throw new Error(`Source composition: duplicate atom id ${id}`);
+      }
+      topoRowById.set(id, i);
+    }
+    if (trajIds) {
+      if (trajIds.length !== n) {
+        throw new Error(
+          `Source composition: trajectory has ${trajIds.length} atom ids but topology has ${n}`,
+        );
+      }
+      for (let src = 0; src < n; src++) {
+        const dest = topoRowById.get(Number(trajIds[src]));
+        if (dest === undefined) {
+          throw new Error(
+            `Source composition: trajectory atom id ${Number(trajIds[src])} is missing from the topology`,
+          );
+        }
+        destOfSrc[src] = dest;
+      }
+    } else {
+      const order = Array.from({ length: n }, (_, i) => i);
+      order.sort((a, b) => Number(topoIds[a]) - Number(topoIds[b]));
+      for (let rank = 0; rank < n; rank++) destOfSrc[rank] = order[rank];
+    }
+    const srcOfDest = new Int32Array(n);
+    srcOfDest.fill(-1);
+    for (let src = 0; src < n; src++) {
+      const dest = destOfSrc[src];
+      if (dest < 0 || dest >= n || srcOfDest[dest] !== -1) {
+        throw new Error(
+          "Source composition: atom id alignment is not a permutation",
+        );
+      }
+      srcOfDest[dest] = src;
+    }
+    for (let i = 0; i < n; i++) {
+      if (srcOfDest[i] !== i) return new AtomIdAlignment(srcOfDest);
+    }
+    return new AtomIdAlignment(null);
+  }
+
+  apply(block: Block): Block {
+    if (!this.srcOfDest) return block;
+    return permuteAtomRows(block, this.srcOfDest);
+  }
+}
+
+function atomIdColumn(block: Block): ArrayLike<number> | null {
+  const dtype = block.dtype("id");
+  if (dtype === DType.U32) return block.viewColU32("id");
+  if (dtype === DType.I32) return block.viewColI32("id");
+  return null;
+}
+
+function permuteAtomRows(block: Block, srcOfDest: Int32Array): Block {
+  const n = srcOfDest.length;
+  const out = new Block();
+  for (const key of block.keys()) {
+    const dtype = block.dtype(key);
+    if (dtype === DType.String) {
+      const src = block.copyColStr(key) ?? [];
+      const dst = new Array<string>(n);
+      for (let i = 0; i < n; i++) dst[i] = src[srcOfDest[i]] ?? "";
+      out.setColStr(key, dst);
+    } else if (isFloatDtype(dtype)) {
+      const src = block.viewColF(key);
+      if (!src) continue;
+      const dst = new Float64Array(n);
+      for (let i = 0; i < n; i++) dst[i] = src[srcOfDest[i]];
+      out.setColF(key, dst);
+    } else if (dtype === DType.U32) {
+      const src = block.viewColU32(key);
+      if (!src) continue;
+      const dst = new Uint32Array(n);
+      for (let i = 0; i < n; i++) dst[i] = src[srcOfDest[i]];
+      out.setColU32(key, dst);
+    } else if (dtype === DType.I32) {
+      const src = block.viewColI32(key);
+      if (!src) continue;
+      const dst = new Int32Array(n);
+      for (let i = 0; i < n; i++) dst[i] = src[srcOfDest[i]];
+      out.setColI32(key, dst);
+    }
+  }
+  out.setShape(new Uint32Array(block.shape()));
+  return out;
+}
+
+function columnPresent(block: Block, key: string): boolean {
+  return block.dtype(key) !== undefined;
+}
+
+function applyMergedShape(
+  merged: Block,
+  existing: Block,
+  incoming: Block,
+): void {
   const incomingShape = incoming.shape();
   const existingShape = existing.shape();
   const sameShape =
@@ -335,7 +540,21 @@ function mergeBlocks(existing: Block, incoming: Block): Block {
     );
   }
   merged.setShape(new Uint32Array(incomingShape));
-  return merged;
+}
+
+function isTimeVaryingAtomColumn(key: string): boolean {
+  return (
+    isCoordinateColumn(key) ||
+    key === "vx" ||
+    key === "vy" ||
+    key === "vz" ||
+    key === "fx" ||
+    key === "fy" ||
+    key === "fz" ||
+    key === "xu" ||
+    key === "yu" ||
+    key === "zu"
+  );
 }
 
 function copyColumn(target: Block, key: string, source: Block): void {

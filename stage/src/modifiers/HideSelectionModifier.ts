@@ -10,6 +10,8 @@ import { DType, isFloatDtype } from "../utils/dtype";
  * This is topology-changing: it removes atoms and remaps bond indices.
  */
 export class HideSelectionModifier extends BaseModifier {
+  private _lastCount = 0;
+
   constructor(id = "hide-selection-default") {
     super(
       id,
@@ -21,6 +23,11 @@ export class HideSelectionModifier extends BaseModifier {
     );
   }
 
+  /** Atoms hidden by the last pipeline run (0 before the first run). */
+  get hiddenCount(): number {
+    return this._lastCount;
+  }
+
   getCacheKey(): string {
     return `${super.getCacheKey()}`;
   }
@@ -28,6 +35,7 @@ export class HideSelectionModifier extends BaseModifier {
   apply(input: Frame, context: PipelineContext): Frame {
     const selection = context.currentSelection;
     const hiddenIndices = new Set(selection.getIndices());
+    this._lastCount = hiddenIndices.size;
     if (hiddenIndices.size === 0) return input;
 
     const atoms = input.getBlock("atoms");
@@ -61,47 +69,52 @@ export class HideSelectionModifier extends BaseModifier {
       return new Frame();
     }
 
+    // Filter atoms — copy every column by dtype so derived columns (notably
+    // the molrs `id` column) survive hiding, matching DeleteSelectedModifier.
     const newAtoms = new Block();
-
-    // Helper to copy generic column
-    const copyColF32 = (name: string) => {
-      const src = isFloatDtype(atoms.dtype(name))
-        ? atoms.viewColF(name)
-        : undefined;
-      if (src) {
-        const dst = new Float64Array(newCount);
-        let ptr = 0;
-        for (let i = 0; i < nrows; i++) {
-          if (indexMap[i] !== -1) dst[ptr++] = src[i];
+    for (const key of atoms.keys()) {
+      const dtype = atoms.dtype(key);
+      if (dtype === DType.String) {
+        const src = atoms.copyColStr(key) as string[] | undefined;
+        if (src) {
+          const dst: string[] = [];
+          for (let i = 0; i < nrows; i++) {
+            if (indexMap[i] !== -1) dst.push(src[i]);
+          }
+          newAtoms.setColStr(key, dst);
         }
-        newAtoms.setColF(name, dst);
-      }
-    };
-
-    const copyColStr = (name: string) => {
-      const src =
-        atoms.dtype(name) === DType.String ? atoms.copyColStr(name) : undefined;
-      if (src) {
-        const dst: string[] = [];
-        for (let i = 0; i < nrows; i++) {
-          if (indexMap[i] !== -1) dst.push(src[i]);
+      } else if (isFloatDtype(dtype)) {
+        const src = atoms.viewColF(key);
+        if (src) {
+          const dst = new Float64Array(newCount);
+          let ptr = 0;
+          for (let i = 0; i < nrows; i++) {
+            if (indexMap[i] !== -1) dst[ptr++] = src[i];
+          }
+          newAtoms.setColF(key, dst);
         }
-        newAtoms.setColStr(name, dst);
+      } else if (dtype === DType.U32) {
+        const src = atoms.viewColU32(key);
+        if (src) {
+          const dst = new Uint32Array(newCount);
+          let ptr = 0;
+          for (let i = 0; i < nrows; i++) {
+            if (indexMap[i] !== -1) dst[ptr++] = src[i];
+          }
+          newAtoms.setColU32(key, dst);
+        }
+      } else if (dtype === DType.I32) {
+        const src = atoms.viewColI32(key);
+        if (src) {
+          const dst = new Int32Array(newCount);
+          let ptr = 0;
+          for (let i = 0; i < nrows; i++) {
+            if (indexMap[i] !== -1) dst[ptr++] = src[i];
+          }
+          newAtoms.setColI32(key, dst);
+        }
       }
-    };
-
-    copyColF32("x");
-    copyColF32("y");
-    copyColF32("z");
-    copyColStr("element");
-
-    // Optional columns
-    copyColF32("vx");
-    copyColF32("vy");
-    copyColF32("vz");
-    copyColF32("occupancy");
-    copyColF32("tempFactor");
-    copyColF32("charge");
+    }
 
     // -- Filter Bonds --
     const bonds = input.getBlock("bonds");

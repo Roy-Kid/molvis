@@ -17,6 +17,11 @@ export interface ViewFit {
 
 /** Padding factor applied so the scene does not touch the viewport edges. */
 export const FIT_PADDING = 1.2;
+/**
+ * Tighter padding when framing a real simulation cell so the box fills
+ * the viewport. Still leaves a sliver so the wireframe is not clipped.
+ */
+export const FIT_BOX_PADDING = 1.05;
 /** Floor on the framing distance, so tiny/degenerate scenes stay viewable. */
 export const FIT_MIN_DISTANCE = 5.0;
 

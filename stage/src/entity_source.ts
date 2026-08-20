@@ -315,8 +315,12 @@ export class BondSource {
 
     const iAtoms = bb.viewColU32("atomi");
     const jAtoms = bb.viewColU32("atomj");
-    const typeCol = bb.viewColU32("bond_type");
-    const numberCol = bb.viewColU32("bond_number");
+    const typeCol = bb.hasU32("bond_type")
+      ? bb.viewColU32("bond_type")
+      : undefined;
+    const numberCol = bb.hasU32("bond_number")
+      ? bb.viewColU32("bond_number")
+      : undefined;
 
     const coords = viewAtomCoords(ab);
     const ax = coords?.x;

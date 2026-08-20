@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 import {
   decideIngest,
+  dropLoadMode,
   FILE_FORMAT_REGISTRY,
   ingestKind,
   STREAMING_FILE_THRESHOLD_BYTES,
@@ -24,6 +25,14 @@ describe("ingestKind", () => {
     for (const entry of FILE_FORMAT_REGISTRY) {
       expect(entry.ingest).toBe(ingestKind(entry.format));
     }
+  });
+});
+
+describe("dropLoadMode", () => {
+  it("installs the first drop and stacks the next (data + dcd)", () => {
+    expect(dropLoadMode(0)).toBe("replace");
+    expect(dropLoadMode(1)).toBe("augment");
+    expect(dropLoadMode(2)).toBe("augment");
   });
 });
 

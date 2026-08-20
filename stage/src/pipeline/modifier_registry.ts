@@ -20,6 +20,7 @@ import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
 import { RadiusOfGyrationModifier } from "../modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "../modifiers/ReplicateModifier";
+import { SelectMaskModifier } from "../modifiers/SelectMaskModifier";
 import { ClearSelectionModifier } from "../modifiers/SelectModifier";
 import { SelectOverlappingModifier } from "../modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
@@ -183,6 +184,11 @@ export class ModifierRegistry {
       ExpandSelectionModifier.NAME,
       "Selection",
       () => new ExpandSelectionModifier(nextModifierId("expand-sel")),
+    );
+    ModifierRegistry.register(
+      SelectMaskModifier.NAME,
+      "Selection",
+      () => new SelectMaskModifier(nextModifierId("select-mask")),
     );
     ModifierRegistry.register(
       SelectOverlappingModifier.NAME,

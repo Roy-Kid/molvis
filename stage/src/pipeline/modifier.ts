@@ -35,6 +35,12 @@ export interface Modifier {
   /** Whether this modifier is currently enabled. */
   enabled: boolean;
 
+  /**
+   * Optional `#RRGGBB` highlight color for selection-producing modifiers.
+   * Null = theme default. Non-producers ignore it.
+   */
+  highlightColor: string | null;
+
   /** Runtime capabilities. See {@link ModifierCapability}. */
   readonly capabilities: ReadonlySet<ModifierCapability>;
 
@@ -138,6 +144,12 @@ export abstract class BaseModifier implements Modifier {
   public enabled = true;
   public selectionScopeId: string | null = null;
   public sourceOwnerId: string | null = null;
+  /**
+   * Optional hex color (`#RRGGBB`) that overrides the theme selection color
+   * for this selection producer's highlight. `null` falls back to the theme.
+   * Non-producer modifiers ignore it.
+   */
+  public highlightColor: string | null = null;
   protected _name: string;
 
   constructor(

@@ -8,6 +8,7 @@
 
 import type { MolvisApp } from "../app";
 import { readCameraPose } from "../camera/control";
+import { SelectMaskModifier } from "../modifiers/SelectMaskModifier";
 import { DataSource } from "../pipeline/data_source";
 import type { Modifier } from "../pipeline/modifier";
 import { frameToPortable } from "./portable_frame";
@@ -72,13 +73,30 @@ export async function serializeProject(
     }
 
     const mod = entry as Modifier;
-    pipeline.push({
+    const base = {
       id: mod.id,
       type: pipelineTypeName(mod),
       enabled: mod.enabled,
       selection_scope_id: mod.selectionScopeId,
       source_owner_id: mod.sourceOwnerId,
-    });
+    };
+    const colorParams =
+      mod.highlightColor !== null ? { highlightColor: mod.highlightColor } : {};
+    pipeline.push(
+      mod instanceof SelectMaskModifier
+        ? {
+            ...base,
+            params: {
+              ids: [...mod.ids],
+              expectedCount: mod.expectedCount,
+              sourceLabel: mod.sourceLabel,
+              ...colorParams,
+            },
+          }
+        : Object.keys(colorParams).length > 0
+          ? { ...base, params: colorParams }
+          : base,
+    );
   }
 
   const hasDs = pipeline.some((e) => e.type === "DataSource");

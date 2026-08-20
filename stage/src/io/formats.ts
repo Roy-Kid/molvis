@@ -75,6 +75,18 @@ export type IngestDecision =
   | { path: "whole-file" }
   | { path: "refuse"; reason: string };
 
+/**
+ * Canvas / explorer drop onto a live viewer. An empty pipeline installs the
+ * file as primary (`replace`); a scene that already has sources stacks the
+ * file (`augment`) so topology (LAMMPS data) and trajectory (DCD) compose
+ * in either drop order.
+ */
+export function dropLoadMode(
+  existingSourceCount: number,
+): "replace" | "augment" {
+  return existingSourceCount > 0 ? "augment" : "replace";
+}
+
 export interface FileFormatDescriptor {
   readonly format: FileFormat;
   readonly label: string;

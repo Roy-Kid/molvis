@@ -25,7 +25,6 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
 import { logger } from "../../utils/logger";
-import { spawnModuleWorker } from "../spawn_module_worker";
 import { rehydrateFrame } from "./frame_codec";
 import type {
   CancelRequest,
@@ -533,10 +532,13 @@ function _assertWorkerCtor(): void {
  *  with an injected fake worker instead. */
 export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
   _assertWorkerCtor();
-  const worker = spawnModuleWorker(
-    new URL("./worker.js", import.meta.url),
-    `trajectory-${format}`,
-  );
+  // The `new Worker(new URL(…))` form must stay literal here — rspack only
+  // folds worker chunks when it sees that static expression in this file.
+  // VS Code webviews replace this module via `NormalModuleReplacementPlugin`.
+  const worker = new Worker(new URL("./worker.js", import.meta.url), {
+    type: "module",
+    name: `trajectory-${format}`,
+  });
   logger.info(`[trajectory-runtime] spawned worker for ${format}`);
   return new TrajectoryRuntime(worker as WorkerLike, format);
 }

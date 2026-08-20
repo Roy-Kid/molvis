@@ -73,6 +73,13 @@ export function isMolecularPath(filePath: string): boolean {
   return ext.length > 0 && EXTENSION_SET.has(ext);
 }
 
+const BINARY_TRAJECTORY_EXTENSIONS = new Set(["dcd", "trr", "xtc"]);
+
+/** DCD/TRR/XTC — must not open as a text document. */
+export function isBinaryTrajectoryPath(filePath: string): boolean {
+  return BINARY_TRAJECTORY_EXTENSIONS.has(extensionOf(filePath));
+}
+
 /** Connection-table files belong on Sketch, not Stage. */
 export function isSketchPath(filePath: string): boolean {
   const ext = extensionOf(filePath);
