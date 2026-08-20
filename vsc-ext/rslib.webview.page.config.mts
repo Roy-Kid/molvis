@@ -5,19 +5,10 @@
 import path from "node:path";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rslib/core";
-import {
-  ComputeSpawnRewrite,
-  TrajectoryRuntimeRewrite,
-} from "./rslib.webview.worker-rewrites.mts";
 
 const sharedDefine = {
   "process.env.NODE_ENV": '"production"',
 };
-
-const trajectoryRuntimeRewrite = new TrajectoryRuntimeRewrite(
-  import.meta.dirname,
-);
-const computeSpawnRewrite = new ComputeSpawnRewrite(import.meta.dirname);
 
 export default defineConfig({
   lib: [
@@ -54,6 +45,14 @@ export default defineConfig({
     alias: {
       // Page sources only. Engines resolve as @molcrafts/* packages.
       "@": path.resolve(import.meta.dirname, "../page/src"),
+      // Exact-match swap of stage's spawn seam for the webview graph:
+      // the isolated chunks/worker.js + chunks/compute-worker.js load
+      // via the vsc-ext blob bootstrap instead of in-graph literal
+      // `new Worker(new URL(...))` folding.
+      "@molcrafts/molvis-stage/worker-spawner$": path.resolve(
+        import.meta.dirname,
+        "./src/webview/worker_spawner.ts",
+      ),
     },
   },
 
@@ -112,11 +111,6 @@ export default defineConfig({
         ...config.experiments,
         asyncWebAssembly: true,
       };
-      config.plugins = [
-        ...(config.plugins ?? []),
-        trajectoryRuntimeRewrite.plugin(),
-        computeSpawnRewrite.plugin(),
-      ];
     },
   },
 });

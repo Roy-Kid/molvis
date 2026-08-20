@@ -1,6 +1,6 @@
 /**
- * Compute worker lifecycle (spawn / warm / test injection). Domain jobs
- * do not live here.
+ * Compute worker lifecycle (warm / test injection; spawning lives in
+ * `@molcrafts/molvis-stage/worker-spawner`). Domain jobs do not live here.
  *
  * Three layers — do not mix them:
  *
@@ -34,4 +34,3 @@ export {
   setComputeRuntimeForTests,
   warmComputeWorker,
 } from "./runtime";
-export { spawnComputeWorker } from "./spawn";

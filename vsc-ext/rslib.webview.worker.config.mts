@@ -28,8 +28,8 @@ const computeWorkerEntry = require.resolve(
  * hoist their common modules into shared `out/*.js` chunks, breaking the
  * self-contained-file requirement.
  *
- * Loaded by `src/webview/spawnTrajectoryWorker.ts` /
- * `src/webview/spawnComputeWorker.ts` via
+ * Loaded by `src/webview/worker_spawner.ts` (the alias target for
+ * `@molcrafts/molvis-stage/worker-spawner`) via
  * `new URL("./<file>.js", import.meta.url)` from the shared chunks.
  */
 

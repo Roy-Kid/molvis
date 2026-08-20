@@ -1,8 +1,5 @@
+import path from "node:path";
 import { defineConfig } from "@rslib/core";
-import {
-  ComputeSpawnRewrite,
-  TrajectoryRuntimeRewrite,
-} from "./rslib.webview.worker-rewrites.mts";
 
 /**
  * VS Code webview — main-thread bundle
@@ -33,7 +30,8 @@ import {
  *
  * 4. **No worker extraction** (`worker: false`). Main loads
  *    `chunks/worker.js` via a runtime-relative URL (see
- *    `src/webview/spawnTrajectoryWorker.ts`).
+ *    `src/webview/worker_spawner.ts`, aliased over the stage
+ *    `@molcrafts/molvis-stage/worker-spawner` subpath below).
  *
  * ## Output (after both builds)
  *
@@ -57,11 +55,6 @@ const sharedDefine = {
 // still lands under monorepo package dirs — match dist only, never src).
 const sharedModulesPattern =
   /[\\/](node_modules|core[\\/]dist|stage[\\/]dist|sketch[\\/]dist)[\\/]/;
-
-const trajectoryRuntimeRewrite = new TrajectoryRuntimeRewrite(
-  import.meta.dirname,
-);
-const computeSpawnRewrite = new ComputeSpawnRewrite(import.meta.dirname);
 
 export default defineConfig({
   lib: [
@@ -121,6 +114,17 @@ export default defineConfig({
       };
       config.resolve = {
         ...(config.resolve || {}),
+        alias: {
+          ...(config.resolve?.alias || {}),
+          // Exact-match swap of stage's spawn seam for the webview graph:
+          // the isolated chunks/worker.js + chunks/compute-worker.js load
+          // via the vsc-ext blob bootstrap instead of in-graph literal
+          // `new Worker(new URL(...))` folding.
+          "@molcrafts/molvis-stage/worker-spawner$": path.resolve(
+            import.meta.dirname,
+            "./src/webview/worker_spawner.ts",
+          ),
+        },
         fallback: {
           ...(config.resolve?.fallback || {}),
           vm: false,
@@ -192,14 +196,6 @@ export default defineConfig({
         maxAssetSize: 15 * 1024 * 1024,
         maxEntrypointSize: 15 * 1024 * 1024,
       };
-
-      // Main-graph imports of the engines' worker spawns → VS Code wrappers
-      // that load the isolated chunks/worker.js + chunks/compute-worker.js.
-      config.plugins = [
-        ...(config.plugins ?? []),
-        trajectoryRuntimeRewrite.plugin(),
-        computeSpawnRewrite.plugin(),
-      ];
     },
   },
 });

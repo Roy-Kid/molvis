@@ -1,11 +1,14 @@
 /**
  * Main-thread lifecycle for the shared compute worker.
  *
- * Spawning needs no host wiring: {@link spawnComputeWorker} uses the static
- * `new Worker(new URL("./worker.js", import.meta.url))` form, which every
- * rspack-based host folds into its own build (same pattern as the trajectory
- * worker) — the one exception is the VS Code webview, which builds the worker
- * separately and swaps the spawn module out at build time (see `./spawn`).
+ * Spawning needs no host wiring: {@link spawnComputeWorker} (from
+ * `@molcrafts/molvis-stage/worker-spawner`) keeps the static
+ * `new Worker(new URL(..., import.meta.url))` form, which every rspack-based
+ * host folds into its own build (same pattern as the trajectory worker) —
+ * the one exception is the VS Code webview, which builds the worker
+ * separately and aliases the whole worker-spawner subpath at build time.
+ * The async spawn bridges into core's synchronous `createWorker` factory
+ * through {@link DeferredWorker}.
  * Tests inject a fake host via {@link setComputeRuntimeForTests}.
  * Domain adapters (e.g. `optimize/worker_client`) build on this module —
  * never the other way around.
@@ -15,8 +18,13 @@ import {
   createWorkloadSingleton,
   WorkloadHost,
 } from "@molcrafts/molvis-core/workload";
+// Only the spawn function crosses the replaceable seam (hosts alias the
+// worker-spawner specifier to swap spawning). DeferredWorker is shared
+// bridging code every graph needs verbatim — imported relatively so an
+// aliasing host does not have to re-export it.
+import { spawnComputeWorker } from "@molcrafts/molvis-stage/worker-spawner";
+import { DeferredWorker } from "../worker_spawner";
 import type { ComputeJob, ComputeProgress, ComputeResult } from "./protocol";
-import { spawnComputeWorker } from "./spawn";
 
 /** The workload host specialized to this package's compute job envelope. */
 export type ComputeWorkloadHost = WorkloadHost<
@@ -73,7 +81,12 @@ const singleton = createWorkloadSingleton<
   () =>
     new WorkloadHost({
       name: "molvis-compute",
-      createWorker: spawnComputeWorker,
+      // The double assertion is confined to this seam: WorkloadHost only
+      // touches onmessage/onerror/postMessage/terminate, exactly the
+      // surface DeferredWorker implements (same precedent as the
+      // WorkerLikeAdapter in the trajectory runtime).
+      createWorker: () =>
+        new DeferredWorker(spawnComputeWorker()) as unknown as Worker,
       // Fail fast on a broken worker URL / chunk. Boot includes the molrs
       // WASM fetch (cached after the main bundle loads it), so allow a slow
       // first hit.

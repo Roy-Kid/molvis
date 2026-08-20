@@ -41,6 +41,11 @@
       "import": "./dist/compute/worker.js",
       "default": "./dist/compute/worker.js"
     },
+    "./worker-spawner": {
+      "types": "./dist/worker_spawner.d.ts",
+      "import": "./dist/worker_spawner.js",
+      "default": "./dist/worker_spawner.js"
+    },
     "./plugin": {
       "types": "./dist/plugin.d.ts",
       "import": "./dist/plugin.js",

@@ -1,4 +1,11 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
+// The package self-reference (not a relative path) is deliberate: the
+// worker-spawner subpath is the one specifier host builds alias to swap
+// the spawn implementation (VS Code webview). TrajectoryRuntime's type
+// comes from the same dist-backed surface so the spawned runtime and the
+// declared result share one nominal class.
+import type { TrajectoryRuntime } from "@molcrafts/molvis-stage/trajectory-runtime";
+import { spawnTrajectoryWorker } from "@molcrafts/molvis-stage/worker-spawner";
 import type { MolvisApp as Molvis } from "../app";
 import { applyAutoAttach } from "../pipeline/auto_attach";
 import {
@@ -22,8 +29,6 @@ import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
 import {
   CancellationError,
   type IndexProgressCallback,
-  spawnTrajectoryWorker,
-  type TrajectoryRuntime,
 } from "../transport/trajectory_worker";
 import { fingerprintFile } from "./cache";
 import {
@@ -568,8 +573,8 @@ export async function loadFileStream(
     });
   }
   // canStream narrows `format` to the worker's `Format` type, so
-  // spawnTrajectoryWorker accepts it without a cast.
-  const runtime = await Promise.resolve(spawnTrajectoryWorker(format));
+  // the spawn accepts it without a cast.
+  const runtime = await spawnTrajectoryWorker(format);
   const source = isTrajectorySource(file) ? file : new BlobRangeSource(file);
   // Real Files have stable identity (size + lastModified) so we can
   // key the OPFS index sidecar against them. Network-fetched Blobs

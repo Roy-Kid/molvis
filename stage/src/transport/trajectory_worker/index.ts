@@ -30,7 +30,6 @@ export {
   type IndexProgressCallback,
   type OpenOptions,
   type OpenResult,
-  spawnTrajectoryWorker,
   TrajectoryRuntime,
   type WorkerLike,
 } from "./runtime";

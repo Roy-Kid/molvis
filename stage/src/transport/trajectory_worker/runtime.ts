@@ -21,8 +21,8 @@
  *   4. `close()` — releases worker resources and terminates.
  *
  * The Worker is dependency-injected so tests can substitute a
- * structured-cloning fake. Production callers use the spawning helper
- * `spawnTrajectoryWorker()` below.
+ * structured-cloning fake. Production callers spawn via
+ * `spawnTrajectoryWorker` from `@molcrafts/molvis-stage/worker-spawner`.
  */
 
 import type { Frame } from "@molcrafts/molvis-core/molrs";
@@ -31,7 +31,6 @@ import {
   WorkloadHost,
 } from "@molcrafts/molvis-core/workload";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
-import { logger } from "../../utils/logger";
 import { rehydrateFrame } from "./frame_codec";
 import type {
   Format,
@@ -433,37 +432,4 @@ export class CancellationError extends Error {
     super(`request ${cancelledRequestId} cancelled`);
     this.name = "CancellationError";
   }
-}
-
-/** Throws if the user-agent doesn't support module workers. */
-function assertWorkerCtor(): void {
-  if (typeof Worker === "undefined") {
-    throw new Error("TrajectoryRuntime: Worker is not available");
-  }
-}
-
-/** Spawn a real worker pointing at the colocated worker module. The URL
- *  pattern is the rsbuild / rspack-supported "new URL(..., import.meta.url)"
- *  form so the worker is bundled with the stage package graph.
- *
- *  The reference is `./worker.js`, not `./worker.ts`: rslib builds this package
- *  bundleless, transpiling `worker.ts` → `worker.js` while leaving this URL
- *  string verbatim. Pointing at `.js` makes the published dist resolve to the
- *  emitted `worker.js`. Hosts that need a custom worker entry (e.g. VS Code
- *  webview) import `@molcrafts/molvis-stage/trajectory-runtime` and supply
- *  their own Worker via `TrajectoryRuntime` / a spawn wrapper.
- *
- *  Tests should NOT call this — construct `TrajectoryRuntime` directly
- *  with an injected fake worker instead. */
-export function spawnTrajectoryWorker(format: Format): TrajectoryRuntime {
-  assertWorkerCtor();
-  // The `new Worker(new URL(…))` form must stay literal here — rspack only
-  // folds worker chunks when it sees that static expression in this file.
-  // VS Code webviews replace this module via `NormalModuleReplacementPlugin`.
-  const worker = new Worker(new URL("./worker.js", import.meta.url), {
-    type: "module",
-    name: `trajectory-${format}`,
-  });
-  logger.info(`[trajectory-runtime] spawned worker for ${format}`);
-  return new TrajectoryRuntime(worker as WorkerLike, format);
 }
