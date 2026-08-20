@@ -176,3 +176,263 @@ describe("installWorkloadHandler", () => {
     expect(cancelledAtStart.get(2)).toBe(true);
   });
 });
+
+interface HostCallMessage {
+  type: "host-call";
+  callId: number;
+  call: unknown;
+}
+
+/** Worker → host `host-call` posts. */
+function hostCallsOf(scope: RecordingScope): HostCallMessage[] {
+  const out: HostCallMessage[] = [];
+  for (const msg of scope.posted) {
+    if (
+      msg !== null &&
+      typeof msg === "object" &&
+      (msg as { type?: unknown }).type === "host-call"
+    ) {
+      out.push(msg as HostCallMessage);
+    }
+  }
+  return out;
+}
+
+function errorMessagesOf(scope: RecordingScope): string[] {
+  const out: string[] = [];
+  for (const msg of scope.responses()) {
+    if (msg.type === "error") out.push(msg.message);
+  }
+  return out;
+}
+
+describe("installWorkloadHandler fifo default", () => {
+  it("settles two jobs in submission order even when the first is slower", async () => {
+    const gate = deferred();
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        async run(job, ctx) {
+          if (job.n === 1) await gate.promise;
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } }); // slow
+    scope.send({ type: "run", id: 2, job: { n: 2 } }); // instant once started
+    await flush();
+    // scheduling omitted → strictly serial: job 2 waits its turn.
+    expect(scope.doneIds()).toEqual([]);
+
+    gate.resolve();
+    await flush();
+    expect(scope.doneIds()).toEqual([1, 2]);
+  });
+
+  it("cancel of a queued id is visible on the run's first check", async () => {
+    const gate = deferred();
+    const cancelledAtStart = new Map<number, boolean>();
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        async run(_job, ctx) {
+          cancelledAtStart.set(ctx.id, ctx.isCancelled());
+          if (ctx.id === 1) await gate.promise;
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } });
+    scope.send({ type: "run", id: 2, job: { n: 2 } });
+    scope.send({ type: "cancel", id: 2 });
+    gate.resolve();
+    await flush();
+
+    expect(cancelledAtStart.get(2)).toBe(true);
+  });
+});
+
+describe('installWorkloadHandler scheduling: "interleaved"', () => {
+  it("completes a short job while a long job is still pending", async () => {
+    const gate = deferred();
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        scheduling: "interleaved",
+        async run(job, ctx) {
+          if (job.n === 1) await gate.promise;
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } }); // long
+    scope.send({ type: "run", id: 2, job: { n: 2 } }); // short
+    await flush();
+
+    // The short job's done must land while the long job is still awaiting.
+    expect(scope.doneIds()).toEqual([2]);
+
+    gate.resolve();
+    await flush();
+    expect(scope.doneIds()).toEqual([2, 1]);
+  });
+
+  it("cancel of a running id mid-await flips ctx.isCancelled()", async () => {
+    const gate = deferred();
+    const cancelledSeen: boolean[] = [];
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        scheduling: "interleaved",
+        async run(job, ctx) {
+          if (job.n === 1) {
+            cancelledSeen.push(ctx.isCancelled()); // before cancel: false
+            await gate.promise;
+            cancelledSeen.push(ctx.isCancelled()); // after cancel: true
+          }
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } });
+    scope.send({ type: "run", id: 2, job: { n: 2 } });
+    await flush();
+    // Interleaving is in effect: the short job finished mid-long-job.
+    expect(scope.doneIds()).toEqual([2]);
+
+    scope.send({ type: "cancel", id: 1 });
+    gate.resolve();
+    await flush();
+    expect(cancelledSeen).toEqual([false, true]);
+  });
+});
+
+describe("WorkloadWorkerContext.callHost", () => {
+  it("posts host-call and resolves with the host-reply result", async () => {
+    const results: unknown[] = [];
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        async run(_job, ctx) {
+          results.push(await ctx.callHost({ byteOffset: 0, byteLen: 4 }));
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } });
+    await flush();
+
+    const calls = hostCallsOf(scope);
+    expect(calls.length).toBe(1);
+    const call = calls[0];
+    if (!call) throw new Error("host-call was not posted");
+    expect(typeof call.callId).toBe("number");
+    expect(call.call).toEqual({ byteOffset: 0, byteLen: 4 });
+
+    scope.send({
+      type: "host-reply",
+      callId: call.callId,
+      ok: true,
+      result: 42,
+    });
+    await flush();
+
+    expect(results).toEqual([42]);
+    expect(scope.doneIds()).toEqual([1]);
+  });
+
+  it("rejects when the host replies ok: false", async () => {
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        async run(_job, ctx) {
+          await ctx.callHost({ byteOffset: 8, byteLen: 2 });
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } });
+    await flush();
+    const calls = hostCallsOf(scope);
+    expect(calls.length).toBe(1);
+    const call = calls[0];
+    if (!call) throw new Error("host-call was not posted");
+
+    scope.send({
+      type: "host-reply",
+      callId: call.callId,
+      ok: false,
+      error: "boom",
+    });
+    await flush();
+
+    const errors = errorMessagesOf(scope);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain("boom");
+    expect(scope.doneIds()).toEqual([]);
+  });
+
+  it("silently ignores a host-reply with an unknown callId", async () => {
+    const results: unknown[] = [];
+    const scope = new RecordingScope();
+
+    installWorkloadHandler<TestJob, TestResult>(
+      {
+        heartbeatMs: 0,
+        async run(_job, ctx) {
+          results.push(await ctx.callHost({ byteOffset: 0, byteLen: 1 }));
+          return { result: { id: ctx.id } };
+        },
+      },
+      scope,
+    );
+
+    scope.send({ type: "run", id: 1, job: { n: 1 } });
+    await flush();
+    const calls = hostCallsOf(scope);
+    expect(calls.length).toBe(1);
+    const call = calls[0];
+    if (!call) throw new Error("host-call was not posted");
+
+    // A stray reply for a callId nobody registered: no throw, no settle.
+    scope.send({ type: "host-reply", callId: 9999, ok: true, result: -1 });
+    await flush();
+    expect(scope.doneIds()).toEqual([]);
+    expect(errorMessagesOf(scope)).toEqual([]);
+
+    // The pending call is unaffected and still resolves normally.
+    scope.send({
+      type: "host-reply",
+      callId: call.callId,
+      ok: true,
+      result: 42,
+    });
+    await flush();
+    expect(results).toEqual([42]);
+    expect(scope.doneIds()).toEqual([1]);
+  });
+});
