@@ -5,11 +5,15 @@ export class MolvisTrajectoryPanel extends HTMLElement {
 
   private static readonly WIDTH_RATIO = 0.62;
   /** Fraction of viewport height from the bottom edge. */
-  private static readonly BOTTOM_RATIO = 0.03;
+  private static readonly BOTTOM_RATIO = 0.05;
   private static readonly MIN_WIDTH = 280;
   private static readonly MAX_WIDTH = 980;
-  private static readonly MIN_BOTTOM = 8;
-  private static readonly MAX_BOTTOM = 28;
+  /** Floor keeps the capsule clear of the bottom-left hover info readout
+   *  (`.molvis-info-panel`, bottom 12px + one monospace line ≈ 40px) on
+   *  narrow hosts like the VS Code webview, where the centered capsule
+   *  reaches into the readout's column. */
+  private static readonly MIN_BOTTOM = 44;
+  private static readonly MAX_BOTTOM = 64;
 
   private shadow: ShadowRoot;
   private slider: HTMLInputElement;

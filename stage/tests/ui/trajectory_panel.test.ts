@@ -80,9 +80,15 @@ describe("MolvisTrajectoryPanel scanning HUD", () => {
     expect(readout(el)).toEqual({ current: "1", total: "12…", hidden: false });
   });
 
-  it("sits near the bottom edge of the viewport", () => {
+  it("sits above the bottom-left hover info readout", () => {
     const el = mount();
     el.setViewportSize(800, 900);
-    expect(el.style.getPropertyValue("--traj-bottom")).toBe("27px");
+    expect(el.style.getPropertyValue("--traj-bottom")).toBe("45px");
+  });
+
+  it("never drops below the info-readout clearance floor", () => {
+    const el = mount();
+    el.setViewportSize(800, 400);
+    expect(el.style.getPropertyValue("--traj-bottom")).toBe("44px");
   });
 });

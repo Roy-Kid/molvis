@@ -12,6 +12,7 @@ import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dial
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
 import {
+  type PanelImperativeHandle,
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -61,6 +62,25 @@ const LeftSidebar = lazy(() =>
 
 const INLINE_PANEL_BREAKPOINT = 1280;
 const COARSE_POINTER_INLINE_PANEL_BREAKPOINT = 1580;
+
+/**
+ * Collapsed state of a side-panel slot, or `null` while the panel has not
+ * registered its constraints with the group yet.
+ *
+ * react-resizable-panels throws "Panel constraints not found" when the
+ * imperative handle is asked before a conditionally-mounted panel finishes
+ * registering (observed on the VS Code webview's first commit, where a
+ * persisted layout restores before the tools panel mounts). Callers treat
+ * `null` as "state unknown — skip this pass"; the next effect run converges.
+ */
+function slotCollapsed(slot: PanelImperativeHandle | null): boolean | null {
+  if (!slot) return null;
+  try {
+    return slot.isCollapsed();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Main page application shell for the MolVis viewer.
@@ -205,8 +225,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (toolsInlineOpen || isNarrow || uiHidden || !chrome.rightSidebar) return;
     const slot = toolsSlotRef.current;
-    if (slot && !slot.isCollapsed()) {
-      slot.collapse();
+    if (slotCollapsed(slot) === false) {
+      slot?.collapse();
     }
     applyOverlayWidth("tools", 0);
   }, [
@@ -227,14 +247,15 @@ const App: React.FC = () => {
         const width = Math.max(lastComputeWidthRef.current, railMinPct);
         setComputeWidthPct(width);
         applyOverlayWidth("compute", width);
-        if (slot) {
-          if (slot.isCollapsed()) slot.expand();
+        const collapsed = slotCollapsed(slot);
+        if (slot && collapsed !== null) {
+          if (collapsed) slot.expand();
           slot.resize(`${width}%`);
         }
       } else {
         setComputeWidthPct(0);
         applyOverlayWidth("compute", 0);
-        if (slot && !slot.isCollapsed()) slot.collapse();
+        if (slotCollapsed(slot) === false) slot?.collapse();
       }
     },
     [computeSlotRef, applyOverlayWidth, railMinPct],
@@ -248,14 +269,15 @@ const App: React.FC = () => {
         const width = Math.max(lastToolsWidthRef.current, railMinPct);
         setToolsWidthPct(width);
         applyOverlayWidth("tools", width);
-        if (slot) {
-          if (slot.isCollapsed()) slot.expand();
+        const collapsed = slotCollapsed(slot);
+        if (slot && collapsed !== null) {
+          if (collapsed) slot.expand();
           slot.resize(`${width}%`);
         }
       } else {
         setToolsWidthPct(0);
         applyOverlayWidth("tools", 0);
-        if (slot && !slot.isCollapsed()) slot.collapse();
+        if (slotCollapsed(slot) === false) slot?.collapse();
       }
     },
     [toolsSlotRef, applyOverlayWidth, railMinPct],
