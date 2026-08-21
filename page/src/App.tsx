@@ -5,6 +5,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -79,6 +80,23 @@ function slotCollapsed(slot: PanelImperativeHandle | null): boolean | null {
     return slot.isCollapsed();
   } catch {
     return null;
+  }
+}
+
+/**
+ * Run an imperative panel mutation only when constraints are registered.
+ * `expand` / `resize` / `collapse` throw the same "Panel constraints not
+ * found" error as `isCollapsed` when called across the registration race.
+ */
+function withPanelSlot(
+  slot: PanelImperativeHandle | null,
+  run: (slot: PanelImperativeHandle) => void,
+): void {
+  if (!slot || slotCollapsed(slot) === null) return;
+  try {
+    run(slot);
+  } catch {
+    /* registration raced between the probe and the mutation — next pass */
   }
 }
 
@@ -224,10 +242,9 @@ const App: React.FC = () => {
   // a blank column beside an invisible overlay.
   useEffect(() => {
     if (toolsInlineOpen || isNarrow || uiHidden || !chrome.rightSidebar) return;
-    const slot = toolsSlotRef.current;
-    if (slotCollapsed(slot) === false) {
-      slot?.collapse();
-    }
+    withPanelSlot(toolsSlotRef.current, (slot) => {
+      if (!slot.isCollapsed()) slot.collapse();
+    });
     applyOverlayWidth("tools", 0);
   }, [
     toolsInlineOpen,
@@ -247,15 +264,16 @@ const App: React.FC = () => {
         const width = Math.max(lastComputeWidthRef.current, railMinPct);
         setComputeWidthPct(width);
         applyOverlayWidth("compute", width);
-        const collapsed = slotCollapsed(slot);
-        if (slot && collapsed !== null) {
-          if (collapsed) slot.expand();
-          slot.resize(`${width}%`);
-        }
+        withPanelSlot(slot, (handle) => {
+          if (handle.isCollapsed()) handle.expand();
+          handle.resize(`${width}%`);
+        });
       } else {
         setComputeWidthPct(0);
         applyOverlayWidth("compute", 0);
-        if (slotCollapsed(slot) === false) slot?.collapse();
+        withPanelSlot(slot, (handle) => {
+          if (!handle.isCollapsed()) handle.collapse();
+        });
       }
     },
     [computeSlotRef, applyOverlayWidth, railMinPct],
@@ -269,15 +287,16 @@ const App: React.FC = () => {
         const width = Math.max(lastToolsWidthRef.current, railMinPct);
         setToolsWidthPct(width);
         applyOverlayWidth("tools", width);
-        const collapsed = slotCollapsed(slot);
-        if (slot && collapsed !== null) {
-          if (collapsed) slot.expand();
-          slot.resize(`${width}%`);
-        }
+        withPanelSlot(slot, (handle) => {
+          if (handle.isCollapsed()) handle.expand();
+          handle.resize(`${width}%`);
+        });
       } else {
         setToolsWidthPct(0);
         applyOverlayWidth("tools", 0);
-        if (slotCollapsed(slot) === false) slot?.collapse();
+        withPanelSlot(slot, (handle) => {
+          if (!handle.isCollapsed()) handle.collapse();
+        });
       }
     },
     [toolsSlotRef, applyOverlayWidth, railMinPct],
@@ -296,10 +315,14 @@ const App: React.FC = () => {
     computeSize: defaultComputeSize,
     canvasSize: defaultCanvasSize,
     toolsSize: defaultToolsSize,
-  } = resolveViewerPanelLayout({
-    showCompute: showInlineCompute,
-    showTools: showInlineTools,
-  });
+  } = useMemo(
+    () =>
+      resolveViewerPanelLayout({
+        showCompute: showInlineCompute,
+        showTools: showInlineTools,
+      }),
+    [showInlineCompute, showInlineTools],
+  );
   /**
    * Canvas floor for this row. {@link CANVAS_MIN_PCT} assumes rails at
    * {@link SIDE_PANEL.minPct}; when the 240px form floor pushes `railMinPct`

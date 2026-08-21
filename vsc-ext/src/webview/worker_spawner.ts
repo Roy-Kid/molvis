@@ -11,8 +11,9 @@
  * entries (`rslib.webview.worker.config.mts` → `out/chunks/worker.js` +
  * `out/chunks/compute-worker.js`), colocated with `chunks/shared.js`.
  *
- * Internally both spawns still ride the two existing blob bootstrap paths
- * in `./spawnWebviewWorker`; their convergence belongs to
+ * Internally both spawns ride the posted-wasm blob bootstrap
+ * (`spawnWebviewWorkerLoadingWasm`). Retiring the unused FromHref helper
+ * and consolidating the module export name belongs to
  * worker-arch-unify-04-bootstrap.
  *
  * Types/runtime resolve from `@molcrafts/molvis-stage` package exports →
@@ -25,10 +26,7 @@ import {
   TrajectoryRuntime,
   type WorkerLike,
 } from "@molcrafts/molvis-stage/trajectory-runtime";
-import {
-  spawnWebviewWorkerFromHref,
-  spawnWebviewWorkerLoadingWasm,
-} from "./spawnWebviewWorker";
+import { spawnWebviewWorkerLoadingWasm } from "./spawnWebviewWorker";
 
 export async function spawnTrajectoryWorker(
   format: Format,
@@ -45,10 +43,12 @@ export async function spawnTrajectoryWorker(
 }
 
 export async function spawnComputeWorker(): Promise<Worker> {
-  // Non-literal path, same reasoning as above. Resolves relative to this
-  // module's chunk URL (`…/chunks/*.js` → `…/chunks/compute-worker.js`).
+  // Same posted-wasm bootstrap as trajectory. Opening the left Compute rail
+  // calls warmComputeWorker(); the old FromHref blob (`import` CDN script,
+  // worker-side wasm fetch) is trap #2 and can kill the webview when that
+  // rail mounts. Full FromHref retirement remains worker-arch-unify-04.
   const workerScript = "./compute-worker.js";
-  return spawnWebviewWorkerFromHref(
+  return spawnWebviewWorkerLoadingWasm(
     new URL(workerScript, import.meta.url).href,
     "molvis-compute",
   );

@@ -11,11 +11,10 @@
  * the repo has no module-mocking infra (no proxyquire/esmock; node:test
  * `mock.module` is unavailable under mocha). A static import would break
  * `test:compile` for the whole suite; text-level assertions bind the same
- * contract — async exports with seam-identical signatures, compute →
- * spawnWebviewWorkerFromHref ("…/compute-worker.js", "molvis-compute"),
- * trajectory → spawnWebviewWorkerLoadingWasm ("…/worker.js",
- * `trajectory-${format}`) returning a TrajectoryRuntime — without pulling
- * the module into the CJS compile graph.
+ * contract — async exports with seam-identical signatures, both compute
+ * and trajectory → spawnWebviewWorkerLoadingWasm ("…/compute-worker.js" /
+ * "…/worker.js"), trajectory returning a TrajectoryRuntime — without
+ * pulling the module into the CJS compile graph.
  *
  * The source is read lazily inside each test so a missing module fails
  * these tests with a clear message instead of aborting suite collection.
@@ -70,26 +69,25 @@ suite("webview worker_spawner (alias target)", () => {
     );
   });
 
-  test("delegates to the existing blob bootstrap paths in ./spawnWebviewWorker", () => {
+  test("delegates to the posted-wasm bootstrap in ./spawnWebviewWorker", () => {
     const src = workerSpawnerSource();
-    assert.match(
-      src,
-      /import\s*\{[^}]*spawnWebviewWorkerFromHref[^}]*\}\s*from\s*["']\.\/spawnWebviewWorker["']/s,
-      "must import spawnWebviewWorkerFromHref from ./spawnWebviewWorker",
-    );
     assert.match(
       src,
       /import\s*\{[^}]*spawnWebviewWorkerLoadingWasm[^}]*\}\s*from\s*["']\.\/spawnWebviewWorker["']/s,
       "must import spawnWebviewWorkerLoadingWasm from ./spawnWebviewWorker",
     );
+    assert.ok(
+      !src.includes("spawnWebviewWorkerFromHref"),
+      "compute must not use FromHref (trap #2: worker-side wasm fetch)",
+    );
   });
 
-  test("compute path spawns ./compute-worker.js named molvis-compute via FromHref", () => {
+  test("compute path spawns ./compute-worker.js named molvis-compute via LoadingWasm", () => {
     const src = workerSpawnerSource();
     assert.match(
       src,
-      /spawnWebviewWorkerFromHref\(/,
-      "spawnComputeWorker must call spawnWebviewWorkerFromHref",
+      /spawnWebviewWorkerLoadingWasm\(/,
+      "spawnComputeWorker must call spawnWebviewWorkerLoadingWasm",
     );
     assert.ok(
       src.includes('"./compute-worker.js"'),

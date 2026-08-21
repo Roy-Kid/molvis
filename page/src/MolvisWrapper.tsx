@@ -502,19 +502,46 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
 
     // Resize is owned by MolvisApp (container ResizeObserver). Hosts only
     // opt into visibility pause for multi-cell notebook embeds.
+    //
+    // Debounce hide→stop: opening a side rail briefly collapses the canvas
+    // flex slot to a non-intersecting box during layout. Immediate stop()
+    // then resume→start() re-runs renderActiveTrajectoryFrame(true) and
+    // looks like a full page refresh after a file is already loaded.
+    let hideStopTimer: ReturnType<typeof setTimeout> | undefined;
+    let intersecting = true;
+    let enginePausedForHide = false;
     const visibilityObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          const wasVisible = viewportVisible;
-          viewportVisible = entry.isIntersecting;
-          setViewerVisible(entry.isIntersecting);
+          intersecting = entry.isIntersecting;
           const m = molvisRef.current;
-          if (!m || !startupComplete) continue;
-          if (entry.isIntersecting) {
-            if (!wasVisible) setResumeState("requested");
+          if (!m || !startupComplete) {
+            viewportVisible = intersecting;
+            setViewerVisible(intersecting);
+            continue;
+          }
+          if (intersecting) {
+            if (hideStopTimer !== undefined) {
+              clearTimeout(hideStopTimer);
+              hideStopTimer = undefined;
+            }
+            viewportVisible = true;
+            setViewerVisible(true);
+            if (enginePausedForHide) {
+              enginePausedForHide = false;
+              setResumeState("requested");
+            }
           } else {
-            setResumeState("idle");
-            m.stop();
+            if (hideStopTimer !== undefined) clearTimeout(hideStopTimer);
+            hideStopTimer = setTimeout(() => {
+              hideStopTimer = undefined;
+              if (intersecting) return;
+              viewportVisible = false;
+              setViewerVisible(false);
+              setResumeState("idle");
+              enginePausedForHide = true;
+              molvisRef.current?.stop();
+            }, 150);
           }
         }
       },
@@ -571,6 +598,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     container.addEventListener("drop", handleDrop);
 
     return () => {
+      if (hideStopTimer !== undefined) clearTimeout(hideStopTimer);
       container.removeEventListener("dragover", handleDragOver);
       container.removeEventListener("drop", handleDrop);
       visibilityObserver.disconnect();
