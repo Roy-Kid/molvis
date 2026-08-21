@@ -63,4 +63,3 @@ export {
 export { TrajectoryLinesModifier } from "./TrajectoryLinesModifier";
 export { TransparentSelectionModifier } from "./TransparentSelectionModifier";
 export { UnwrapTrajectoriesModifier } from "./UnwrapTrajectoriesModifier";
-export { WrapPBCModifier } from "./WrapPBCModifier";

@@ -1,19 +1,12 @@
 /**
- * Contract: full-frame wrap is the coordinate-policy path only.
- * Draw code (ribbon / bonds) uses MI *delta* on post-policy coordinates —
- * it must not re-apply wrapAtoms / wrapMolecules itself.
- *
- * (Browser unit env cannot walk the tree with node:fs; the public API surface
- * is the enforceable boundary here.)
+ * Contract: full-frame wrap is the system gate only (`applyWrapIfEnabled`).
+ * Draw code (ribbon / bonds) uses MI *delta* on post-gate coordinates —
+ * it must not re-apply wrapAtoms itself.
  */
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
-import {
-  applyCoordinatePolicy,
-  wrapAtoms,
-  wrapMolecules,
-} from "../../src/coords";
+import { applyWrapIfEnabled, wrapAtoms } from "../../src/coords";
 
 function frameWith(
   positions: [number, number, number][],
@@ -38,15 +31,13 @@ function frameWith(
   return frame;
 }
 
-describe("post-policy wrap vs draw MI contract", () => {
-  it("exports wrap only through the coords policy surface", () => {
-    // Public API: full-frame wrap is named on the coords module.
+describe("post-gate wrap vs draw MI contract", () => {
+  it("exports wrap only through the coords gate surface", () => {
     expect(typeof wrapAtoms).toBe("function");
-    expect(typeof wrapMolecules).toBe("function");
-    expect(typeof applyCoordinatePolicy).toBe("function");
+    expect(typeof applyWrapIfEnabled).toBe("function");
   });
 
-  it("as-deposited leaves coords for draw-time MI to resolve", () => {
+  it("wrap off leaves coords for draw-time MI to resolve", () => {
     const box = Box.ortho(
       new Float64Array([10, 10, 10]),
       new Float64Array([0, 0, 0]),
@@ -62,16 +53,14 @@ describe("post-policy wrap vs draw MI contract", () => {
       box,
       [[0, 1]],
     );
-    const out = applyCoordinatePolicy(frame, "as-deposited");
+    const out = applyWrapIfEnabled(frame, false);
     expect(out).toBe(frame);
-    // Raw deposited positions still span the boundary — bond MI (draw path)
-    // is free to shorten the stick without mutating columns.
     const x = out.getBlock("atoms")!.viewColF("x")!;
     expect(x[0]).toBeCloseTo(9.5, 6);
     expect(x[1]).toBeCloseTo(10.8, 6);
   });
 
-  it("wrap-molecules shortens the dimer so draw MI is a no-op for the pair", () => {
+  it("wrap on folds both dimer ends into the cell", () => {
     const box = Box.ortho(
       new Float64Array([10, 10, 10]),
       new Float64Array([0, 0, 0]),
@@ -87,8 +76,9 @@ describe("post-policy wrap vs draw MI contract", () => {
       box,
       [[0, 1]],
     );
-    const out = applyCoordinatePolicy(frame, "wrap-molecules");
+    const out = applyWrapIfEnabled(frame, true);
     const x = out.getBlock("atoms")!.viewColF("x")!;
-    expect(Math.abs(x[1] - x[0])).toBeLessThan(2);
+    expect(x[0]).toBeCloseTo(9.5, 6);
+    expect(x[1]).toBeCloseTo(0.8, 6);
   });
 });

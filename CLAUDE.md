@@ -93,6 +93,11 @@ sidebar design language) was intentionally not re-embedded here; repopulate
 `.claude/notes/architecture.md` via `/mol:map`, or recover specifics from git
 history (the commit immediately before the harness rebuild).
 
+- **PBC wrap single gate** — after compose, only `wrapEnabled` may fold atom
+  columns (`Box.wrap` via `applyWrapIfEnabled`). Bonds / ribbon are not wrap
+  objects; cross-boundary continuity is draw-time `Box.delta(MI)` only.
+  Do not reintroduce molecule-aware column rewrites or a second Wrap
+  modifier path. Details: `.claude/notes/open-questions.md` (coordinate wrap).
 - **Immutability** — every data transform returns a new object; never mutate in
   place.
 - **Command `do()`/`undo()` symmetry** — every reversible operation captures the

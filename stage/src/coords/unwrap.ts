@@ -1,6 +1,6 @@
 /**
- * Trajectory unwrap state for the pipeline coordinate policy
- * (`unwrap-trajectory`) and {@link UnwrapTrajectoriesModifier}.
+ * Trajectory unwrap state for {@link UnwrapTrajectoriesModifier}.
+ * Unwrapping is an Add-menu modifier — not part of the system wrap gate.
  */
 
 import { type Box, WasmArray } from "@molcrafts/molvis-core/molrs";

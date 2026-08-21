@@ -99,7 +99,7 @@ export function molpyDocsForAnalysis(analysisId: string): string {
 const MODIFIER_DOC_PATH: Readonly<Record<string, string>> = {
   "Create bonds": "tutorials/01_atomistic_and_topology",
   "Simulation cell": "tutorials/03_box_and_periodicity",
-  "Wrap PBC": "tutorials/03_box_and_periodicity",
+  Slice: "tutorials/03_box_and_periodicity",
   "Unwrap trajectories": "tutorials/03_box_and_periodicity",
   Cluster: "compute/cluster",
   "Center of mass": "compute/shape",

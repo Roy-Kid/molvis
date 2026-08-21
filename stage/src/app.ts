@@ -21,7 +21,7 @@ import {
 import { CommandManager } from "./commands/manager";
 import { SetRepresentationCommand } from "./commands/representation";
 import { defaultMolvisConfig, type MolvisConfig } from "./config";
-import type { CoordinatePolicy } from "./coords";
+
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { FrameRenderScheduler } from "./frame_render_scheduler";
@@ -349,13 +349,13 @@ export class MolvisApp implements App {
     return this._modifierPipeline;
   }
 
-  /** Post-compose coordinate policy (as-deposited | wrap-* | unwrap-trajectory). */
-  get coordinatePolicy(): CoordinatePolicy {
-    return this._modifierPipeline.coordinatePolicy;
+  /** Post-compose wrap gate — fold atom columns into `frame.box` when on. */
+  get wrapEnabled(): boolean {
+    return this._modifierPipeline.wrapEnabled;
   }
 
-  setCoordinatePolicy(policy: CoordinatePolicy): void {
-    this._modifierPipeline.setCoordinatePolicy(policy);
+  setWrapEnabled(enabled: boolean): void {
+    this._modifierPipeline.setWrapEnabled(enabled);
   }
 
   /** Named selections from the last pipeline run. */

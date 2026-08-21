@@ -1,6 +1,6 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { WrapPBCModifier } from "../../src/modifiers/WrapPBCModifier";
+import { SliceModifier } from "../../src/modifiers/SliceModifier";
 import {
   DataSource,
   type DataSourceOptions,
@@ -173,7 +173,7 @@ describe("Acquisition-kind DataSource subtypes", () => {
   it("the pipeline sorts sources and modifiers into disjoint views", () => {
     const pipeline = new ModifierPipeline();
     const source = new MemoryDataSource(new Frame());
-    const modifier = new WrapPBCModifier("wrap");
+    const modifier = new SliceModifier();
     pipeline.addSource(source);
     pipeline.addModifier(modifier);
 

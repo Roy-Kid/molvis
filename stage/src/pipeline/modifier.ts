@@ -69,7 +69,7 @@ export interface Modifier {
    * - Auto-attaching modifiers (Particles, Ribbon, Simulation cell,
    *   Create isosurface) override to return true based on frame contents
    *   (e.g., `frame.box` defined).
-   * - User-opt-in modifiers (Slice, WrapPBC, ExpressionSelect, ...)
+   * - User-opt-in modifiers (Slice, ExpressionSelect, ...)
    *   inherit the BaseModifier default of `false`.
    *
    * MUST NOT mutate the frame. Throws are caught upstream and treated

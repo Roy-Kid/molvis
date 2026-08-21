@@ -78,7 +78,7 @@ suite("binary custom editor range", () => {
       "connect-src must include blob: so leftover worker blob fetches are not a CSP 400",
     );
     assert.ok(
-      src.includes('WEBVIEW_ASSET_REV = "dcd-preview-8"'),
+      src.includes('WEBVIEW_ASSET_REV = "wrap-atoms-10"'),
       "bump WEBVIEW_ASSET_REV when webview worker bootstrap changes",
     );
   });

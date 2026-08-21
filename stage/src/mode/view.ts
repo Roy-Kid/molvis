@@ -4,7 +4,6 @@ import {
   type BondCriterion,
   ComputeBondsModifier,
 } from "../modifiers/ComputeBondsModifier";
-import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
@@ -88,14 +87,10 @@ class ViewModeContextMenu extends ContextMenuController {
     );
 
     const gridEnabled = this.mode.isGridEnabled();
-    const pbcEnabled = this.mode.isPbcEnabled();
     items.push(
       CommonMenuItems.submenu("Display", [
         CommonMenuItems.toggle("Grid", gridEnabled, () => {
           this.mode.setGridEnabled(!gridEnabled);
-        }),
-        CommonMenuItems.toggle("Wrap PBC", pbcEnabled, () => {
-          this.mode.setPbcEnabled(!pbcEnabled);
         }),
       ]),
     );
@@ -160,45 +155,6 @@ class ViewMode extends BaseMode {
       this._diameterRafId = null;
       this.app.renderFrame(this.app.system.frame);
     });
-  }
-
-  public isPbcEnabled(): boolean {
-    for (const modifier of this.getWrapPbcModifiers()) {
-      if (modifier.enabled) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public setPbcEnabled(enabled: boolean): void {
-    const pipeline = this.app.modifierPipeline;
-    const modifiers = this.getWrapPbcModifiers();
-
-    if (enabled) {
-      if (modifiers.length === 0) {
-        pipeline.addModifier(new WrapPBCModifier(`wrap-pbc-${Date.now()}`));
-      } else {
-        for (const modifier of modifiers) {
-          modifier.enabled = true;
-        }
-      }
-    } else {
-      for (const modifier of modifiers) {
-        modifier.enabled = false;
-      }
-    }
-
-    void this.app.applyPipeline({ fullRebuild: true });
-  }
-
-  private getWrapPbcModifiers(): WrapPBCModifier[] {
-    return this.app.modifierPipeline
-      .modifiers()
-      .filter(
-        (modifier): modifier is WrapPBCModifier =>
-          modifier instanceof WrapPBCModifier,
-      );
   }
 
   // ---- Dynamic bonding -----------------------------------------------------

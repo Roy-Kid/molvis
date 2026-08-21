@@ -25,22 +25,30 @@ protein outside.
 **atom AABB + pad, pbc=false** as the density domain, same world coords
 as Particles. Crystal `frame.box` remains Simulation cell only.
 
-### Coordinate policy (shipped 2026-08-11)
+### Coordinate wrap (settled 2026-08-21 — single gate)
 
-System-level policy on `ModifierPipeline` after compose:
-`as-deposited` (default) | `wrap-atoms` | `wrap-molecules` | `unwrap-trajectory`.
-Control lives on Simulation cell (Draw Box) wrap. WrapPBC / Unwrap modifiers
-still work and share pure helpers under `stage/src/coords/`.
+System boolean `wrapEnabled` on `modifierPipeline` after compose:
+`false` (as-deposited, default) | `true` (`Box.wrap` atom columns once).
+Control is a Switch on Simulation cell (Draw Box). **No** wrap-atoms /
+wrap-molecules split; **no** Wrap PBC modifier. Unwrap trajectories remains
+an Add-menu modifier only.
 
-### Draw-time MI vs full wrap (settled 2026-08-11)
+Edge bonds are not wrap objects: Draws use `Box.delta(..., MI)` on the
+post-gate frame. Forbidden: any second column-fold algorithm for “pretty
+bonds” (former `wrap-molecules`).
 
-Full-frame `Box.wrap` lives only in `stage/src/coords/wrap.ts` (+ WrapPBC
-binding). Cartoon chain-split and bond `miDisplacements` use **minimum-image
-delta** on the already post-policy frame for draw continuity — they do not
-re-wrap atom columns. Guarded by `stage/tests/coords/wrap_locality.test.ts`.
+### Draw-time MI vs full wrap (settled 2026-08-11, restated 2026-08-21)
+
+Full-frame `Box.wrap` lives only in `stage/src/coords/wrap.ts` via
+`applyWrapIfEnabled`. Cartoon chain-split and bond `miDisplacements` use
+**minimum-image delta** on the already post-gate frame — they do not
+re-wrap atom columns. Guarded by `stage/tests/coords/wrap_locality.test.ts`
+and the straddling-dimer MI length case in `apply_wrap.test.ts`.
 
 ### Remaining debt
 
 1. Volumetric files (CHGCAR/CUBE) use the file box + periodic MC when
-   the grid is natively cell-aligned. **Accepted** for 0.2.0 — coordinate
-   policy does not rewrite grids; isosurface places voxels with `hMatrix()`.
+   the grid is natively cell-aligned. **Accepted** for 0.2.x — the wrap
+   gate does not rewrite grids; isosurface places voxels with `hMatrix()`.
+   Gaussian density stays atom-AABB + `pbc=false` so surfaces follow atoms
+   (whether wrapped or deposited).

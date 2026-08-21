@@ -388,7 +388,6 @@ app.pipeline.setEnabled(id, false);
 | `ExpandSelectionModifier` | Selection | Grow selection by bonds and/or cutoff neighbors. |
 | `SelectOverlappingModifier` | Selection | Atoms with a neighbor within cutoff. |
 | `SliceModifier` | Modification | Keeps atoms inside a half-space. |
-| `WrapPBCModifier` | Modification | Wraps atoms into the primary cell. |
 | `AffineTransformationModifier` | Modification | x′ = M·x + t; optional cell transform. |
 | `ReplicateModifier` | Modification | Tile images along cell vectors. |
 | `UnwrapTrajectoriesModifier` | Modification | Remove PBC jumps across frames. |
@@ -505,8 +504,9 @@ Blocks use molpy / molrs names. Format readers normalize aliases on the way in.
   `DataSource(s) → compose → transforms → draws` when sources exist.
 - **Manual `DrawBoxModifier`** writes the user-defined cell onto `frame.box`
   (frame data, not only a wireframe). Geometry transforms run before Draw
-  modifiers so the visual sees transformed positions.
-- **`WrapPBCModifier`** wraps atom coordinates into `frame.box`.
+  modifiers so the visual sees transformed positions. Its **Wrap** switch
+  sets pipeline `wrapEnabled` (post-compose `Box.wrap` on atom columns;
+  edge bonds use draw-time MI).
 - **`DataSourceModifier`** visibility toggles are UI state only — the
   modifier always passes data through.
 - **Canvas selection is SceneIndex** — pick / fence / live selection resolve

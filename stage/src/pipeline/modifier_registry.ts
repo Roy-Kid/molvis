@@ -32,7 +32,6 @@ import { TrajectoryLinesModifier } from "../modifiers/TrajectoryLinesModifier";
 import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
 import { UnwrapTrajectoriesModifier } from "../modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "../modifiers/VectorFieldModifier";
-import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { DrawAtomModifier } from "./draw_atom";
 import { DrawBondModifier } from "./draw_bond";
 import { DrawBoxModifier } from "./draw_box";
@@ -206,11 +205,6 @@ export class ModifierRegistry {
       "Slice",
       "Modification",
       () => new SliceModifier(),
-    );
-    ModifierRegistry.register(
-      "Wrap PBC",
-      "Modification",
-      () => new WrapPBCModifier(nextModifierId("wrap-pbc")),
     );
     ModifierRegistry.register(
       AffineTransformationModifier.NAME,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 import { MolvisApp } from "../src/app";
-import { WrapPBCModifier } from "../src/modifiers/WrapPBCModifier";
+import { SliceModifier } from "../src/modifiers/SliceModifier";
 import { DrawAtomModifier } from "../src/pipeline/draw_atom";
 import { DrawBoxModifier } from "../src/pipeline/draw_box";
 import { DrawRibbonModifier } from "../src/pipeline/draw_ribbon";
@@ -53,11 +53,9 @@ describe("MolvisApp.modifierToggleIsVisibilityOnly", () => {
   });
 
   it("is false for data transforms that rewrite the frame", () => {
-    expect(
-      MolvisApp.modifierToggleIsVisibilityOnly(
-        new WrapPBCModifier("wrap-test"),
-      ),
-    ).toBe(false);
+    expect(MolvisApp.modifierToggleIsVisibilityOnly(new SliceModifier())).toBe(
+      false,
+    );
   });
 
   it("is false without Draws", () => {

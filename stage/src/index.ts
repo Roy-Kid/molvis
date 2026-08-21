@@ -282,16 +282,11 @@ export {
   type MolvisConfig,
 } from "./config";
 export {
-  applyCoordinatePolicy,
-  COORDINATE_POLICIES,
-  COORDINATE_POLICY_LABELS,
-  type CoordinatePolicy,
+  applyWrapIfEnabled,
   frameWithCoords,
-  isCoordinatePolicy,
   type UnwrapState,
   wrapAtoms,
-  wrapMoleculeAware,
-  wrapMolecules,
+  wrapEnabledFromLegacy,
 } from "./coords";
 export {
   type AtomRow,

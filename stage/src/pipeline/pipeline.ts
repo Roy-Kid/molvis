@@ -1,10 +1,6 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
-import {
-  applyCoordinatePolicy,
-  type CoordinatePolicy,
-  type UnwrapState,
-} from "../coords";
+import { applyWrapIfEnabled } from "../coords";
 import { EventEmitter } from "../events";
 import {
   type CompositionSource,
@@ -85,24 +81,19 @@ export const PipelineEvents = {
 export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   private entries: PipelineEntry[] = [];
   /**
-   * System-level coordinate policy applied after DataSource compose and
-   * before transform/draw modifiers. Default: leave deposited coordinates.
+   * System wrap gate after DataSource compose. When true, atom columns are
+   * folded with {@link applyWrapIfEnabled} once; edge bonds use draw-time MI.
    */
-  private _coordinatePolicy: CoordinatePolicy = "as-deposited";
-  private _unwrapState: UnwrapState | null = null;
+  private _wrapEnabled = false;
 
-  get coordinatePolicy(): CoordinatePolicy {
-    return this._coordinatePolicy;
+  get wrapEnabled(): boolean {
+    return this._wrapEnabled;
   }
 
-  /**
-   * Set the post-compose coordinate policy. Changing policy clears unwrap
-   * state so the next scrub re-seeds cleanly.
-   */
-  setCoordinatePolicy(policy: CoordinatePolicy): void {
-    if (this._coordinatePolicy === policy) return;
-    this._coordinatePolicy = policy;
-    this._unwrapState = null;
+  /** Enable or disable the post-compose atom wrap gate. */
+  setWrapEnabled(enabled: boolean): void {
+    if (this._wrapEnabled === enabled) return;
+    this._wrapEnabled = enabled;
   }
 
   /** Assign the pipeline-owned NATO id. Ids belong to the list, not the caller. */
@@ -181,7 +172,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   /**
    * Add a modifier to the pipeline.
    *
-   * **Auto-positioning**: a `TransformsData`-only modifier (e.g. WrapPBC,
+   * **Auto-positioning**: a `TransformsData`-only modifier (e.g. Slice,
    * a future RecenterBox, a topology-rewriter) is inserted *before* the
    * first `Draws`-capability modifier already in the pipeline. Otherwise
    * it would land after DrawAtoms / DrawBonds / DrawBox and the
@@ -438,19 +429,13 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     }
     let frame = await composeSources(sources, frameIndex);
 
-    // --- Phase A2: system coordinate policy (compose → policy → modifiers) ---
-    // Draws and MI-aware visuals consume only post-policy coordinates.
+    // --- Phase A2: system wrap gate (compose → wrap? → modifiers) ---
+    // Draws and MI-aware visuals consume only post-gate coordinates.
     // Volume grids (CHGCAR/CUBE) are untouched — they ride as separate blocks.
-    frame = applyCoordinatePolicy(frame, this._coordinatePolicy, {
-      frameIndex,
-      unwrapState: this._unwrapState,
-      onUnwrapState: (state) => {
-        this._unwrapState = state;
-      },
-    });
+    frame = applyWrapIfEnabled(frame, this._wrapEnabled);
 
     // --- Phase B: apply non-DS modifiers ---
-    // Pure TransformsData modifiers (WrapPBC, Slice, …) always run before
+    // Pure TransformsData modifiers (Slice, …) always run before
     // any Draws-capable modifier, even if the user reordered the list so a
     // transform sits after Particles. Otherwise the visual would render
     // un-transformed coordinates and the transform would appear broken.

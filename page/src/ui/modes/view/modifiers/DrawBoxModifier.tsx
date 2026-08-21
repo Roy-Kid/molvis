@@ -1,10 +1,6 @@
 import {
-  COORDINATE_POLICIES,
-  COORDINATE_POLICY_LABELS,
-  type CoordinatePolicy,
   type DrawBoxModifier as CoreDrawBoxModifier,
   type DrawBoxSpec,
-  isCoordinatePolicy,
   lammpsCellFromBox,
   type Molvis,
 } from "@molcrafts/molvis-stage";
@@ -13,13 +9,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
@@ -78,8 +67,8 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
   const [manual, setManual] = useState<DrawBoxSpec>(() =>
     normalizeSpec(modifier.manualBox ?? defaultManualBox(app)),
   );
-  const [wrap, setWrap] = useState<CoordinatePolicy>(
-    () => app?.coordinatePolicy ?? "as-deposited",
+  const [wrapEnabled, setWrapEnabled] = useState(
+    () => app?.wrapEnabled ?? false,
   );
   const { applyPipeline, pipelineRunning } = useApplyPipelineOperation(
     app,
@@ -103,7 +92,7 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
     const sync = () => {
       setShowBox(app.styleManager.getShowBox());
       setBoxColor(app.styleManager.getTheme().boxColor ?? "#ffffff");
-      setWrap(app.coordinatePolicy);
+      setWrapEnabled(app.wrapEnabled);
       const next = modifier.manualBox;
       if (next) setManual(normalizeSpec(next));
     };
@@ -158,10 +147,10 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
   };
 
   const handleWrap = useCallback(
-    (value: string) => {
-      if (!isCoordinatePolicy(value) || !app) return;
-      setWrap(value);
-      app.setCoordinatePolicy(value);
+    (enabled: boolean) => {
+      if (!app) return;
+      setWrapEnabled(enabled);
+      app.setWrapEnabled(enabled);
       applyPipeline({ fullRebuild: true });
     },
     [app, applyPipeline],
@@ -190,25 +179,16 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
             </span>
           </TooltipTrigger>
           <TooltipContent side="left">
-            Fold coordinates into the simulation cell after sources compose. As
-            deposited leaves them as loaded.
+            Fold atom coordinates into the simulation cell after sources
+            compose. Edge bonds stay continuous via minimum-image drawing.
           </TooltipContent>
         </Tooltip>
-        <Select value={wrap} onValueChange={handleWrap} disabled={!app}>
-          <SelectTrigger
-            aria-label="Coordinate wrap"
-            className="h-8 w-[11.5rem]"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {COORDINATE_POLICIES.map((id) => (
-              <SelectItem key={id} value={id}>
-                {COORDINATE_POLICY_LABELS[id]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Switch
+          aria-label="Wrap atoms into cell"
+          checked={wrapEnabled}
+          onCheckedChange={handleWrap}
+          disabled={!app}
+        />
       </div>
 
       {/* Appearance + lattice knobs only matter while the box is drawn. */}

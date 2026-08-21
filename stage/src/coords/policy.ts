@@ -1,28 +1,20 @@
 /**
- * Product coordinate policies applied after DataSource compose and before
- * transform/draw modifiers. Default is as-deposited (no silent wrap).
+ * System wrap gate — a boolean on the pipeline after DataSource compose.
+ *
+ * Edge bonds are not folded here: Draws use {@code Box.delta} minimum-image
+ * geometry on the post-gate frame. Do not reintroduce molecule-aware column
+ * rewrites to "fix" straddling sticks.
  */
 
-export type CoordinatePolicy =
-  | "as-deposited"
-  | "wrap-atoms"
-  | "wrap-molecules"
-  | "unwrap-trajectory";
+/** Legacy session / UI strings from the 2026-08 four-value policy. */
+const LEGACY_WRAP_ON = new Set(["wrap", "wrap-atoms", "wrap-molecules"]);
 
-export const COORDINATE_POLICIES: readonly CoordinatePolicy[] = [
-  "as-deposited",
-  "wrap-atoms",
-  "wrap-molecules",
-  "unwrap-trajectory",
-] as const;
-
-export const COORDINATE_POLICY_LABELS: Record<CoordinatePolicy, string> = {
-  "as-deposited": "As deposited",
-  "wrap-atoms": "Wrap atoms",
-  "wrap-molecules": "Wrap molecules",
-  "unwrap-trajectory": "Unwrap trajectory",
-};
-
-export function isCoordinatePolicy(value: string): value is CoordinatePolicy {
-  return (COORDINATE_POLICIES as readonly string[]).includes(value);
+/**
+ * Map a stored or UI string to {@link wrapEnabled}.
+ *
+ * Unknown values and `"as-deposited"` / `"unwrap-trajectory"` → `false`
+ * (unwrap is a separate Add-menu modifier, not a wrap state).
+ */
+export function wrapEnabledFromLegacy(value: string): boolean {
+  return LEGACY_WRAP_ON.has(value);
 }

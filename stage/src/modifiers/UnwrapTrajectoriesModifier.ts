@@ -5,8 +5,8 @@
  * State is kept on the modifier instance across `apply` calls. Scrubbing
  * backward (frameIndex ≤ last) re-seeds from the current frame.
  *
- * Core step logic lives in {@link stepUnwrap} so the pipeline
- * `unwrap-trajectory` coordinate policy can share it.
+ * Core step logic lives in {@link stepUnwrap}. Unwrapping is an Add-menu
+ * modifier only — not part of the system wrap gate.
  */
 
 import type { Frame } from "@molcrafts/molvis-core/molrs";
