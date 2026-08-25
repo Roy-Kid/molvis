@@ -1,7 +1,5 @@
 import type { MolvisApp as Molvis } from "../../app";
 import type { MenuItem, SceneHit } from "../../mode/types";
-import type { MolvisButton } from "../components/button";
-import type { MolvisFolder } from "../components/folder";
 import type { MolvisContextMenu } from "./context_menu";
 import { contextMenuRegistry } from "./registry";
 
@@ -22,7 +20,6 @@ export class ContextMenuHost {
   private menu: MolvisContextMenu | null = null;
   private isVisible_ = false;
   private onCloseCallback: (() => void) | null = null;
-  private focusIndex = -1;
 
   private readonly boundHandleDocumentClick: (e: MouseEvent) => void;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
@@ -59,7 +56,7 @@ export class ContextMenuHost {
       hit: options?.hit ?? null,
       items,
     });
-    if (resolved.length === 0) {
+    if (!hasAction(resolved)) {
       return false;
     }
 
@@ -71,15 +68,7 @@ export class ContextMenuHost {
     contextMenuRegistry.activate(this.menuId, () => this.hide());
     this.menu.show(x, y, this.wrapMenuItems(resolved));
     this.isVisible_ = true;
-    this.focusIndex = -1;
-
-    setTimeout(() => {
-      if (this.isVisible_) {
-        this.addDocumentListeners();
-        this.moveFocus(1);
-      }
-    }, 0);
-
+    this.addDocumentListeners();
     return true;
   }
 
@@ -92,7 +81,6 @@ export class ContextMenuHost {
 
     const wasVisible = this.isVisible_;
     this.isVisible_ = false;
-    this.focusIndex = -1;
     contextMenuRegistry.deactivate(this.menuId);
 
     if (wasVisible && this.onCloseCallback) {
@@ -174,58 +162,12 @@ export class ContextMenuHost {
     });
   }
 
-  private focusables(): HTMLElement[] {
-    return this.menu?.focusableItems() ?? [];
-  }
-
   private moveFocus(delta: number): void {
-    const items = this.focusables();
-    if (items.length === 0) return;
-
-    if (this.focusIndex < 0) {
-      this.focusIndex = delta > 0 ? 0 : items.length - 1;
-    } else {
-      this.focusIndex =
-        (this.focusIndex + delta + items.length * 8) % items.length;
-    }
-    this.applyFocusHighlight(items);
-  }
-
-  private applyFocusHighlight(items: HTMLElement[]): void {
-    for (const el of items) {
-      el.removeAttribute("data-focused");
-      const inner = el.shadowRoot?.querySelector(
-        ".button, .folder-row, .binding",
-      ) as HTMLElement | null;
-      if (inner) {
-        inner.style.background = "";
-      }
-    }
-    const current = items[this.focusIndex];
-    if (!current) return;
-    current.setAttribute("data-focused", "");
-    const inner = current.shadowRoot?.querySelector(
-      ".button, .folder-row, .binding",
-    ) as HTMLElement | null;
-    if (inner) {
-      inner.style.background = "var(--hover-color)";
-      // Prefer native focus for a11y when possible.
-      inner.focus?.({ preventScroll: true });
-    }
+    this.menu?.moveFocus(delta);
   }
 
   private activateFocused(): void {
-    const items = this.focusables();
-    const el = items[this.focusIndex];
-    if (!el) return;
-
-    if (el.tagName.toLowerCase() === "molvis-button") {
-      (el as MolvisButton).activate();
-      return;
-    }
-    if (el.tagName.toLowerCase() === "molvis-folder") {
-      (el as MolvisFolder).openFlyout();
-    }
+    this.menu?.activateFocused();
   }
 
   private handleDocumentClick(e: MouseEvent): void {
@@ -264,33 +206,23 @@ export class ContextMenuHost {
         e.stopPropagation();
         break;
       case "ArrowRight":
+        this.menu?.openFocusedFolder();
+        e.preventDefault();
+        e.stopPropagation();
+        break;
       case "Enter":
-      case " ": {
-        const items = this.focusables();
-        const el = items[this.focusIndex];
-        if (el?.tagName.toLowerCase() === "molvis-folder" && e.key !== " ") {
-          (el as MolvisFolder).openFlyout();
-          e.preventDefault();
-          e.stopPropagation();
-          break;
-        }
-        if (e.key === "Enter" || e.key === " ") {
-          this.activateFocused();
+      case " ":
+        this.activateFocused();
+        e.preventDefault();
+        e.stopPropagation();
+        break;
+      case "ArrowLeft":
+        if (this.menu?.isFlyoutOpen()) {
+          this.menu.closeFlyout();
           e.preventDefault();
           e.stopPropagation();
         }
         break;
-      }
-      case "ArrowLeft": {
-        const items = this.focusables();
-        const el = items[this.focusIndex];
-        if (el?.tagName.toLowerCase() === "molvis-folder") {
-          (el as MolvisFolder).closeFlyout();
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        break;
-      }
       default:
         break;
     }
@@ -309,4 +241,14 @@ export class ContextMenuHost {
     document.removeEventListener("click", this.boundHandleDocumentClick, true);
     document.removeEventListener("keydown", this.boundHandleKeyDown, true);
   }
+}
+
+function hasAction(items: readonly MenuItem[]): boolean {
+  for (const item of items) {
+    if (item.type === "button" && !item.disabled) return true;
+    if (item.type === "folder" && !item.disabled && hasAction(item.items)) {
+      return true;
+    }
+  }
+  return false;
 }

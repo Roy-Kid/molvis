@@ -1,10 +1,4 @@
 import type { MolvisConfig } from "./config";
-import {
-  MolvisButton,
-  MolvisFolder,
-  MolvisSeparator,
-  MolvisSlider,
-} from "./ui/components";
 import { MolvisContextMenu } from "./ui/menus/context_menu";
 
 export interface MolvisDOMElements {
@@ -16,10 +10,6 @@ export interface MolvisDOMElements {
 export function registerWebComponents(): void {
   const defs: [string, CustomElementConstructor][] = [
     ["molvis-context-menu", MolvisContextMenu],
-    ["molvis-button", MolvisButton],
-    ["molvis-separator", MolvisSeparator],
-    ["molvis-folder", MolvisFolder],
-    ["molvis-slider", MolvisSlider],
   ];
   for (const [name, ctor] of defs) {
     if (!customElements.get(name)) {

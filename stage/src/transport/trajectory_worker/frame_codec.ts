@@ -9,9 +9,14 @@
  * checking, and no encode direction to mirror. Schema judgment belongs to
  * neither — `Validator::canonical` runs molrs-side.
  *
- * The returned `Frame` owns its WASM memory. Disposal is the caller's
- * responsibility (the `Trajectory` LRU cache calls `frame.free()` on
- * eviction; tests typically rely on GC).
+ * The returned `Frame` owns its WASM memory, but no consumer on this path
+ * frees it explicitly. Both `Trajectory` caches — the async LRU and the
+ * retention-capped head (`dropOldestFrame`) — only drop their reference on
+ * eviction, because canvas consumers (`AtomSource`, `SceneIndex`, `Artist`)
+ * can still be bound to a frame the cache is done with. The wasm-bindgen
+ * `FinalizationRegistry` reclaims the WASM memory once nothing holds the
+ * wrapper. `Trajectory.dispose()` is the one place an explicit `free()` is
+ * safe, because it runs when nothing can still be looking.
  */
 
 import { Box, Frame } from "@molcrafts/molvis-core/molrs";

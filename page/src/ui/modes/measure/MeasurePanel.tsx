@@ -27,7 +27,7 @@ export const MeasurePanel: React.FC<MeasurePanelProps> = ({ app: _app }) => {
           <span className="text-foreground">4 atoms</span> — dihedral
         </li>
         <li>Click empty space to clear all measurements</li>
-        <li>Right-click for units, precision, and Clear All</li>
+        <li>Right-click for units and Clear</li>
       </ul>
     </section>
   );

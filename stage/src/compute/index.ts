@@ -30,6 +30,7 @@ export type {
 } from "./protocol";
 export {
   type ComputeWorkloadHost,
+  disposeComputeRuntime,
   getComputeRuntime,
   setComputeRuntimeForTests,
   warmComputeWorker,

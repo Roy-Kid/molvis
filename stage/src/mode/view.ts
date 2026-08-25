@@ -33,12 +33,8 @@ class ViewModeContextMenu extends ContextMenuController {
     const items: MenuItem[] = [];
 
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
-    if (header) {
-      items.push(header);
-      items.push(CommonMenuItems.separator());
-    }
+    if (header) items.push(header);
 
-    // Hit atom/bond → select that entity.
     if (hit?.type === "atom") {
       const atomId = hit.metadata.atomId;
       items.push(
@@ -61,6 +57,7 @@ class ViewModeContextMenu extends ContextMenuController {
       );
     }
 
+    if (items.length > 0) items.push(CommonMenuItems.separator());
     items.push(CommonMenuItems.fitCamera(this.app));
 
     const bondingOn = this.mode.isDynamicBondingEnabled();
@@ -84,18 +81,10 @@ class ViewModeContextMenu extends ContextMenuController {
           this.mode.setBondingCriterion("distance");
         }),
       ]),
+      CommonMenuItems.toggle("Grid", this.mode.isGridEnabled(), () => {
+        this.mode.setGridEnabled(!this.mode.isGridEnabled());
+      }),
     );
-
-    const gridEnabled = this.mode.isGridEnabled();
-    items.push(
-      CommonMenuItems.submenu("Display", [
-        CommonMenuItems.toggle("Grid", gridEnabled, () => {
-          this.mode.setGridEnabled(!gridEnabled);
-        }),
-      ]),
-    );
-
-    items.push(CommonMenuItems.separator());
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

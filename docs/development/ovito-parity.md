@@ -1,16 +1,16 @@
 # OVITO modifier parity
 
-MolVis’s Add-modifier menu follows OVITO’s folder layout (Selection /
-Modification / Coloring / Structure identification / Visualization / Analysis).
-Not every OVITO modifier exists here. Chart-only analyses and some viewport
-graphics live outside the pipeline (only steps that change the canvas are
-modifiers).
+MolVis’s Add-modifier menu follows OVITO’s folder layout, shown as
+one-word nouns (Selection / Modification / Color / Structure /
+Visualization / Analysis). Not every OVITO modifier exists here.
+Chart-only analyses and some viewport graphics live outside the pipeline
+(only steps that change the canvas are modifiers).
 
 ## Placement
 
 | Where | What |
 |-------|------|
-| Pipeline Add menu | Selection, Modification, Coloring, Structure identification, Visualization, Analysis |
+| Pipeline Add menu | Source, Selection, Modification, Color, Structure, Visualization, Analysis (searchable; Wrap PBC is a pipeline flag under Modification) |
 | Left Analysis panel | Chart-only RDF / MSD / histograms; optional “Add pipeline modifier” when results can paint the scene |
 | Left compute / right draw | Structure ID and mesh steps that set `usesLeftConfig` |
 | Settings | Viewport graphics (for example ambient occlusion) |
@@ -21,10 +21,10 @@ There is no separate Python-only modifier folder in the UI.
 
 | Folder | Modifiers |
 |--------|-----------|
-| Selection | Expression Select, Clear, Invert, Select Type, Expand, Select overlapping, Hide Selection |
-| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute property, Freeze property, Edit types, Delete Selected, Hide Hydrogens, Edit lattice (multi-file = multiple DataSources, not Combine modifier) |
-| Coloring | Color by Property, Color by Type, Assign Color |
-| Structure identification | Steinhardt order, Solid–liquid |
+| Selection | Expression select, Clear, Invert, Select type, Expand, Select overlapping, Hide selection |
+| Modification | Slice, Wrap PBC (pipeline `wrapEnabled` flag, listed in the add menu), Affine, Replicate, Unwrap, Smooth trajectory, Compute property, Freeze property, Edit types, Delete selected, Hide hydrogens, Edit lattice (multi-file = multiple DataSources, not Combine modifier) |
+| Color | Color by property, Color by type, Assign color |
+| Structure | Steinhardt order, Solid–liquid |
 | Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density / Construct surface mesh, Coordination polyhedra, Generate trajectory lines |
 | Analysis | Displacement vectors |
 

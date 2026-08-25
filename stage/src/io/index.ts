@@ -323,6 +323,16 @@ function remapTrajectoryBonds(
 // WASM-owned resources exactly once.
 const appCleanups = new WeakMap<Molvis, () => void>();
 
+/** In-flight {@link loadFileStream} worker cleanups — not yet committed to the pipeline. */
+const streamInFlightCleanups = new WeakMap<Molvis, () => void>();
+
+function disposeInFlightStream(app: Molvis): void {
+  const cleanup = streamInFlightCleanups.get(app);
+  if (!cleanup) return;
+  streamInFlightCleanups.delete(app);
+  cleanup();
+}
+
 /**
  * Release the parser/reader resources owned by the active
  * {@link loadFileContent} call for `app`.
@@ -336,6 +346,7 @@ export function disposeLoadedFile(app: Molvis): void {
   if (!cleanup) return;
   appCleanups.delete(app);
   cleanup();
+  disposeInFlightStream(app);
 }
 
 /**
@@ -351,6 +362,7 @@ async function installPrimaryTrajectory(
   filename: string,
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
+  disposeInFlightStream(app);
   disposeLoadedFile(app);
   appCleanups.set(app, dispose);
 
@@ -601,6 +613,11 @@ export async function loadFileStream(
   const streamDispose = () => {
     trajectory.dispose();
   };
+  // Register before `open()` so destroy / a superseding stream load during
+  // indexing still terminates the worker. Keep this separate from
+  // `appCleanups` — augment/replace must not dispose the committed scene.
+  disposeInFlightStream(app);
+  streamInFlightCleanups.set(app, streamDispose);
 
   const emitLength = (): void => {
     app.events.emit("length-changed", {
@@ -633,8 +650,9 @@ export async function loadFileStream(
       fingerprint,
     });
   } catch (err) {
+    streamDispose();
+    streamInFlightCleanups.delete(app);
     if (err instanceof CancellationError || options.signal?.aborted) {
-      await runtime.close();
       throw err instanceof CancellationError ? err : new CancellationError(-1);
     }
     throw err;
@@ -652,6 +670,7 @@ export async function loadFileStream(
 
   if (mode === "extend") {
     await runtime.whenIndexComplete;
+    streamInFlightCleanups.delete(app);
     await extendIntoScene(
       app,
       trajectory,
@@ -677,7 +696,18 @@ export async function loadFileStream(
       );
     } catch (err) {
       streamDispose();
+      streamInFlightCleanups.delete(app);
       throw err;
+    }
+
+    const augmentedFrames = trajectory.length ?? trajectory.indexedLength;
+    if (augmentedFrames <= 1) {
+      // MemoryDataSource owns frame 0 only — release the worker now.
+      streamDispose();
+      streamInFlightCleanups.delete(app);
+    } else {
+      // FileDataSource owns the async trajectory; pipeline.clear on destroy.
+      streamInFlightCleanups.delete(app);
     }
 
     app.events.emit("status-message", {
@@ -695,6 +725,7 @@ export async function loadFileStream(
       : `Showing frame 1; indexing ${filename}…`,
     type: "info",
   });
+  streamInFlightCleanups.delete(app);
   await installPrimaryTrajectory(
     app,
     trajectory,

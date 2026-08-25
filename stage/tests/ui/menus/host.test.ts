@@ -186,16 +186,22 @@ describe("ContextMenuHost", () => {
     ]);
     await flushOpen();
 
-    // Menu items live in molvis-context-menu's shadow root.
-    const buttonHost =
-      menuEl("test-menu-btn")?.shadowRoot?.querySelector("molvis-button");
-    expect(buttonHost).not.toBeNull();
-    // Click the button host's shadow .button row (stops propagation on it).
-    const row = buttonHost!.shadowRoot?.querySelector(".button") as HTMLElement;
+    const row = menuEl("test-menu-btn")?.shadowRoot?.querySelector(
+      ".row.is-action",
+    ) as HTMLElement;
     expect(row).not.toBeNull();
     row.click();
 
     expect(clicked).toBe(1);
+    expect(host.isVisible).toBe(false);
+    host.dispose();
+  });
+
+  it("does not show a label-only menu", () => {
+    const app = track(createStubApp());
+    const host = new ContextMenuHost(asApp(app), "test-menu-a");
+    const shown = host.show(1, 1, [{ type: "label", title: "C 12" }]);
+    expect(shown).toBe(false);
     expect(host.isVisible).toBe(false);
     host.dispose();
   });
@@ -259,24 +265,85 @@ describe("ContextMenuHost", () => {
     ]);
     await flushOpen();
 
-    const buttons =
-      menuEl("test-menu-btn")?.shadowRoot?.querySelectorAll("molvis-button");
-    expect(buttons?.length).toBe(2);
-    const check = buttons![0].shadowRoot?.querySelector(".check");
-    expect(check?.textContent).toBe("✓");
+    const rows =
+      menuEl("test-menu-btn")?.shadowRoot?.querySelectorAll<HTMLElement>(
+        ".row.is-action",
+      );
+    expect(rows?.length).toBe(2);
+    expect(rows![0].querySelector(".check")?.textContent).toBe("✓");
 
-    const disabledRow = buttons![1].shadowRoot?.querySelector(
-      ".button",
-    ) as HTMLElement;
-    disabledRow.click();
+    rows![1].click();
     expect(disabledClicks).toBe(0);
     expect(host.isVisible).toBe(true);
 
-    const enabledRow = buttons![0].shadowRoot?.querySelector(
-      ".button",
-    ) as HTMLElement;
-    enabledRow.click();
+    rows![0].click();
     expect(enabledClicks).toBe(1);
+    expect(host.isVisible).toBe(false);
+    host.dispose();
+  });
+
+  it("renders identity as a label row in the same shadow tree", async () => {
+    const app = track(createStubApp());
+    const host = new ContextMenuHost(asApp(app), "test-menu-btn");
+    host.show(5, 5, [
+      { type: "label", title: "C 12" },
+      { type: "separator" },
+      { type: "button", title: "Select", action: () => {} },
+    ]);
+    await flushOpen();
+
+    const root = menuEl("test-menu-btn")?.shadowRoot;
+    expect(root?.querySelector(".row.is-label .label")?.textContent).toBe(
+      "C 12",
+    );
+    expect(root?.querySelectorAll(".row.is-action")).toHaveLength(1);
+    expect(root?.querySelector("molvis-button")).toBeNull();
+    host.dispose();
+  });
+
+  it("opens a flyout on folder click and activates the child", async () => {
+    const app = track(createStubApp());
+    const host = new ContextMenuHost(asApp(app), "test-menu-btn");
+    let chosen = "";
+    host.show(5, 5, [
+      {
+        type: "folder",
+        title: "Bond",
+        items: [
+          {
+            type: "button",
+            title: "Single",
+            checked: true,
+            action: () => {
+              chosen = "1";
+            },
+          },
+          {
+            type: "button",
+            title: "Double",
+            checked: false,
+            action: () => {
+              chosen = "2";
+            },
+          },
+        ],
+      },
+    ]);
+    await flushOpen();
+
+    const root = menuEl("test-menu-btn")?.shadowRoot;
+    const folder = root?.querySelector(".row.is-folder") as HTMLElement;
+    expect(folder.querySelector(".meta")?.textContent).toBe("Single");
+    folder.click();
+
+    const flyout = root?.querySelector(".flyout") as HTMLElement;
+    expect(flyout.classList.contains("is-open")).toBe(true);
+    const double = Array.from(
+      flyout.querySelectorAll<HTMLElement>(".row.is-action"),
+    ).find((row) => row.querySelector(".label")?.textContent === "Double");
+    expect(double).toBeDefined();
+    double?.click();
+    expect(chosen).toBe("2");
     expect(host.isVisible).toBe(false);
     host.dispose();
   });

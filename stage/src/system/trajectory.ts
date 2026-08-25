@@ -47,8 +47,12 @@ export class Trajectory {
   private _providerOverrides = new Map<number, Frame>();
 
   constructor(frames: Frame[] = [], boxes: (Box | undefined)[] = []) {
-    this._frames = frames;
-    this._boxes = boxes;
+    // Copy, never alias: `dropOldestFrame` and `addFrame` mutate these arrays,
+    // and callers hand us arrays they still own (`renderer.ts` takes a user's
+    // `Frame[]`, `state_sync.ts` passes a live state object's arrays). The
+    // Frames themselves are still shared — only the containers are ours.
+    this._frames = [...frames];
+    this._boxes = [...boxes];
     this._indexedLength = frames.length;
     this._knownLength = frames.length;
     this._indexComplete = true;
@@ -352,21 +356,30 @@ export class Trajectory {
   }
 
   /**
-   * Drop the oldest frame, freeing it.
+   * Drop the oldest frame, releasing our reference to it.
    *
    * The counterpart to {@link addFrame} for a trajectory that is bounded at
    * the head — a live stream under a retention cap. Every remaining index
    * shifts down by one, so callers that hold an index must treat it as a
    * position in the retained window rather than a step number.
    *
+   * Deliberately does **not** call `frame.free()`, for the same reason the
+   * async LRU eviction path above does not: the canvas consumers
+   * (`AtomSource`, `SceneIndex`, `Artist`) can still be bound to the evicted
+   * frame — a user paused on the retained head while the producer keeps
+   * appending is the ordinary case, not a corner one. Freeing here hands
+   * them a dangling pointer ("null pointer passed to rust"). Dropping the
+   * reference lets the wasm-bindgen `FinalizationRegistry` reclaim the WASM
+   * memory once nothing holds the wrapper. Explicit frees belong in
+   * {@link dispose}, which runs when nothing can still be looking.
+   *
    * Returns `false` when there is nothing to drop, or when the trajectory is
    * provider-backed (a lazily-read file has no head to evict).
    */
   dropOldestFrame(): boolean {
     if (this._provider || this._frames.length === 0) return false;
-    const [oldest] = this._frames.splice(0, 1);
+    this._frames.splice(0, 1);
     this._boxes.splice(0, 1);
-    oldest?.free?.();
     this._indexedLength = this._frames.length;
     if (this._indexComplete) this._knownLength = this._indexedLength;
     if (this._currentIndex > 0) this._currentIndex--;

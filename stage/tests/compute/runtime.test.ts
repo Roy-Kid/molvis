@@ -17,6 +17,8 @@ import { afterEach, describe, expect, it, rstest } from "@rstest/core";
 import {
   awaitComputeHostReady,
   type ComputeWorkloadHost,
+  disposeComputeRuntime,
+  setComputeRuntimeForTests,
 } from "../../src/compute/runtime";
 
 function fakeHost(whenReady: () => Promise<void>): ComputeWorkloadHost {
@@ -128,5 +130,25 @@ describe("awaitComputeHostReady", () => {
 
     await rstest.advanceTimersByTimeAsync(31_000);
     expect(settled).toBeNull();
+  });
+});
+
+describe("disposeComputeRuntime", () => {
+  afterEach(() => {
+    disposeComputeRuntime();
+  });
+
+  it("disposes the installed singleton host", () => {
+    let disposed = false;
+    setComputeRuntimeForTests({
+      whenReady: () => Promise.resolve(),
+      dispose: () => {
+        disposed = true;
+      },
+      isDead: false,
+    } as unknown as ComputeWorkloadHost);
+
+    disposeComputeRuntime();
+    expect(disposed).toBe(true);
   });
 });

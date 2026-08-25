@@ -31,22 +31,19 @@ class SelectModeContextMenu extends ContextMenuController {
   protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
-    if (header) {
-      items.push(header);
-      items.push(CommonMenuItems.separator());
-    }
+    if (header) items.push(header);
 
     if (hit?.type === "atom") {
       const atomId = hit.metadata.atomId;
       items.push(
-        CommonMenuItems.button("Select Only", () => {
+        CommonMenuItems.button("Select", () => {
           this.app.world.selectionManager.apply({
             type: "replace",
             atoms: [atomId],
           });
           void this.app.writeLiveSelectionToActive();
         }),
-        CommonMenuItems.button("Add Atom", () => {
+        CommonMenuItems.button("Add", () => {
           this.app.world.selectionManager.apply({
             type: "add",
             atoms: [atomId],
@@ -57,14 +54,14 @@ class SelectModeContextMenu extends ContextMenuController {
     } else if (hit?.type === "bond") {
       const bondId = hit.metadata.bondId;
       items.push(
-        CommonMenuItems.button("Select Only", () => {
+        CommonMenuItems.button("Select", () => {
           this.app.world.selectionManager.apply({
             type: "replace",
             bonds: [bondId],
           });
           void this.app.writeLiveSelectionToActive();
         }),
-        CommonMenuItems.button("Add Bond", () => {
+        CommonMenuItems.button("Add", () => {
           this.app.world.selectionManager.apply({
             type: "add",
             bonds: [bondId],
@@ -74,7 +71,7 @@ class SelectModeContextMenu extends ContextMenuController {
       );
     } else if (hit?.type === "ribbon") {
       items.push(
-        CommonMenuItems.button("Select Residue", () => {
+        CommonMenuItems.button("Select residue", () => {
           const atoms = atomIdsForResidue(this.app, hit.chainId, hit.resSeq);
           if (atoms.length === 0) return;
           this.app.world.selectionManager.apply({
@@ -86,8 +83,8 @@ class SelectModeContextMenu extends ContextMenuController {
       );
     }
 
+    if (items.length > 0) items.push(CommonMenuItems.separator());
     items.push(CommonMenuItems.clearSelection(this.app));
-    items.push(CommonMenuItems.separator());
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

@@ -144,6 +144,46 @@ describe("Trajectory", () => {
     });
   });
 
+  describe("dropOldestFrame", () => {
+    it("does not free the evicted frame — consumers may still hold it", () => {
+      const frames = makeFrames(3);
+      const traj = new Trajectory(frames);
+      const evicted = frames[0];
+
+      expect(traj.dropOldestFrame()).toBe(true);
+      expect(traj.length).toBe(2);
+      // The canvas (SceneIndex / Artist / AtomSource) can still be bound to
+      // the evicted frame when a live stream trims its head. Freeing here
+      // races those consumers exactly as the async LRU comment describes,
+      // so eviction must only drop the reference.
+      expect(() => evicted.getBlock("atoms")).not.toThrow();
+    });
+
+    it("shifts indices down and keeps currentIndex on the same frame", () => {
+      const frames = makeFrames(3);
+      const traj = new Trajectory(frames);
+      traj.seek(2);
+
+      expect(traj.dropOldestFrame()).toBe(true);
+      expect(traj.currentIndex).toBe(1);
+      expect(traj.currentFrame).toBe(frames[2]);
+    });
+
+    it("returns false when there is nothing to drop", () => {
+      expect(new Trajectory([]).dropOldestFrame()).toBe(false);
+    });
+
+    it("returns false for provider-backed trajectories", () => {
+      const frames = makeFrames(2);
+      const traj = Trajectory.fromProvider({
+        length: frames.length,
+        get: (index: number) => frames[index],
+      });
+      expect(traj.dropOldestFrame()).toBe(false);
+      expect(traj.length).toBe(2);
+    });
+  });
+
   describe("fromAsyncProvider prefetch", () => {
     it("populates LRU for neighbors without changing currentIndex", async () => {
       const frames = makeFrames(4);

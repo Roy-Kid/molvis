@@ -175,7 +175,7 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
             <span className="cursor-help text-micro text-muted-foreground">
-              Wrap
+              Wrap PBC
             </span>
           </TooltipTrigger>
           <TooltipContent side="left">
@@ -184,7 +184,7 @@ export const DrawBoxModifier: React.FC<DrawBoxModifierProps> = ({
           </TooltipContent>
         </Tooltip>
         <Switch
-          aria-label="Wrap atoms into cell"
+          aria-label="Wrap PBC"
           checked={wrapEnabled}
           onCheckedChange={handleWrap}
           disabled={!app}

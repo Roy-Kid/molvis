@@ -128,3 +128,11 @@ export function setComputeRuntimeForTests(
 export function warmComputeWorker(): Promise<void> {
   return getComputeRuntime().whenReady();
 }
+
+/**
+ * Terminate the process-wide compute worker, if one was spawned.
+ * Idempotent — safe to call from {@link MolvisApp.destroy} and tests.
+ */
+export function disposeComputeRuntime(): void {
+  singleton.setForTests(null);
+}

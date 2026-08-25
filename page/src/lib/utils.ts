@@ -74,6 +74,7 @@ const SPACING = [
   "analysis-list",
   "pipeline-menu-min",
   "pipeline-menu-max",
+  "pipeline-add-list",
   // molexp extras
   "command-offset",
   "canvas-min",

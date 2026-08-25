@@ -42,8 +42,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (tag === "input" || tag === "textarea" || tag === "select") return true;
   if (el.isContentEditable) return true;
   // Shadow hosts (element picker, menu bindings)
-  if (el.closest?.("molvis-element-picker, molvis-slider, molvis-context-menu"))
-    return true;
+  if (el.closest?.("molvis-element-picker, molvis-context-menu")) return true;
   return false;
 }
 

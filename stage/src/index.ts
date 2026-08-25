@@ -273,7 +273,7 @@ export {
   RemoveOverlayCommand,
   UpdateOverlayCommand,
 } from "./commands/overlays";
-export { warmComputeWorker } from "./compute";
+export { disposeComputeRuntime, warmComputeWorker } from "./compute";
 export type { ContextMenuBuildContext, ContextMenuConfig } from "./config";
 export {
   DEFAULT_CONFIG,

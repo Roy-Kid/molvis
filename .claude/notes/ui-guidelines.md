@@ -166,6 +166,52 @@ plus the existing viewer needs `label`, `slider`, `badge`, `empty-state`,
 
 <!-- mol:ui:end -->
 
+## Canvas context menu
+
+Lives in `stage/` as one web component (`molvis-context-menu`) that paints
+plain rows in a single shadow tree. It is **not** the React `context-menu`
+primitive in molcrafts-ui and must not be lifted there.
+
+Rows share one 4-column track (`1.25rem 1fr 4.25rem 1rem`: check · label ·
+meta · chevron) so titles line up across identity, actions, and folders.
+Hover / focus / open-folder highlight uses the product accent (and
+`--accent-fg` on the row). Folders preview the current value in `meta`
+and open a flyout on hover or click, positioned against the host
+(`left: 100%`) so the canvas `overflow` does not swallow them.
+
+Mode contents (plus Export submenu + Screenshot on every mode):
+
+- View — identity, Select (on hit), Fit View, Dynamic Bond, Grid
+- Select — identity, Select / Add, Clear
+- Edit — identity, Delete (on hit), Element, Bond, Fit View
+- Measure — Distance / Angle / Digits, Clear
+- Manipulate — Save / Discard (if dirty), Move / Rotate, Clear
+
+## Pipeline add menu
+
+Lives in `page/` as `PipelineAddMenu` (popover, not the canvas
+`molvis-context-menu` WC and not nested `DropdownMenu` flyouts).
+
+Same compact density as the canvas context menu: 28px rows
+(`h-control-compact`), check · label · meta track, accent hover/focus,
+no per-row icons. A search field is the first row so items like Wrap PBC
+are type-reachable.
+
+First-level groups are **one-word nouns, Title Case**:
+
+Source · Selection · Modification · Color · Structure · Visualization ·
+Analysis · Other
+
+Registry categories stay OVITO-shaped (`Coloring`, `Structure
+identification`) so plugins keep registering against that key; the menu
+maps them onto the noun list. Item labels are sentence case (identity
+keys unchanged).
+
+**Wrap PBC** is a pipeline flag (`wrapEnabled`), not a modifier step. It
+appears under Modification (after Slice), is found by wrap / pbc /
+periodic, and paints a check when on. The Simulation cell inspector
+switch uses the same name.
+
 ## Right inspector copy (View-aligned)
 
 All mode tabs (View / Select / Edit / Measure / Manipulate) and pipeline

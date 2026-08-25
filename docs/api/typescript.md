@@ -418,9 +418,23 @@ but are not listed in the Add-modifier menu.
 ```typescript
 import { ModifierRegistry } from "@molcrafts/molvis-stage";
 
-ModifierRegistry.register("my-modifier", () => new MyModifier());
-ModifierRegistry.list();   // all registered factories
+// register(name, category, factory, options?)
+ModifierRegistry.register("my-modifier", "Modification", () => new MyModifier());
+
+// Kept for load / RPC resolution but omitted from the Add-modifier menu:
+ModifierRegistry.register("my-overlay", "Visualization", () => new MyOverlay(), {
+  userAddable: false,
+});
+
+ModifierRegistry.getAvailableModifiers();   // every registered entry
+ModifierRegistry.getUserAddableModifiers(); // only those in the Add menu
+ModifierRegistry.unregister("my-modifier");
 ```
+
+`category` is required and must be one of `MODIFIER_CATEGORIES`: `"Selection"`,
+`"Modification"`, `"Coloring"`, `"Structure identification"`, `"Visualization"`,
+`"Analysis"`. Omitting it registers the modifier with no category, and it will
+not appear in the Add-modifier menu.
 
 ## Readers and writers
 

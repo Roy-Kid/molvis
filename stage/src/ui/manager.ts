@@ -321,11 +321,18 @@ export class GUIManager {
     }
   }
 
-  private handleLengthChange(event: {
+  private handleLengthChange(_event: {
     indexedLength: number;
     indexComplete: boolean;
   }): void {
-    this.applyExtent(event);
+    // Play/next drive `System.trajectory`. The stream may emit DCD progress
+    // before that trajectory is promoted (data + DCD augment). Reading the
+    // payload would show N frames while nextFrame is still clamped to 0.
+    const traj = this.app.system.trajectory;
+    this.applyExtent({
+      indexedLength: traj.indexedLength,
+      indexComplete: traj.indexComplete,
+    });
   }
 
   private applyExtent(event: {

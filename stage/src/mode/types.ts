@@ -79,6 +79,11 @@ export type MenuItem =
       type: "separator";
     }
   | {
+      /** Non-interactive header (hit identity). Not a disabled button. */
+      type: "label";
+      title: string;
+    }
+  | {
       type: "folder";
       title: string;
       items: MenuItem[];

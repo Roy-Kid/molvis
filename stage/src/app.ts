@@ -20,8 +20,8 @@ import {
 } from "./commands";
 import { CommandManager } from "./commands/manager";
 import { SetRepresentationCommand } from "./commands/representation";
+import { disposeComputeRuntime } from "./compute/runtime";
 import { defaultMolvisConfig, type MolvisConfig } from "./config";
-
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { FrameRenderScheduler } from "./frame_render_scheduler";
@@ -797,9 +797,11 @@ export class MolvisApp implements App {
     this._resizeObserver?.disconnect();
     this._resizeObserver = null;
     disposeLoadedFile(this);
-    for (const source of this._modifierPipeline.sources()) {
-      source.dispose();
-    }
+    // Full pipeline teardown — disposes every DataSource (streaming
+    // trajectories / workers), runs Session.onRemoved (WebSocket), and
+    // clears modifier observers. Source-only dispose left Sessions alive.
+    this._modifierPipeline.clear();
+    disposeComputeRuntime();
     this.overlayManager.dispose();
     this._guiManager?.unmount();
     this._lastRenderedFrame = null;
@@ -1490,8 +1492,14 @@ export class MolvisApp implements App {
     };
     this._modifierPipeline.on(PipelineEvents.COMPUTED, captureContext);
 
+    // Compose at the System playhead. `_currentFrame` is a cache of that
+    // index for UI; if a seek updated the trajectory without going through
+    // `MolvisApp.seekFrame`, using the cache would keep drawing frame 0
+    // (topology + DCD augment looks loaded but next/play do nothing).
+    const frameIndex = this._system.trajectory.currentIndex;
+    this._currentFrame = frameIndex;
     const computed = await this._modifierPipeline.compute(
-      this._currentFrame,
+      frameIndex,
       this,
       changeKind,
     );

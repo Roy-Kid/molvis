@@ -15,9 +15,11 @@
  *   2. `await open(source)` — submits the indexing job. Resolves early on
  *      the first indexed frame so playback can start; the terminal result
  *      arrives via `whenIndexComplete` / `onIndexComplete`.
- *   3. `await loadFrame(i)` — returns a real molrs `Frame`. Caller
- *      owns the Frame and should `frame.free()` it (typically via the
- *      `Trajectory` LRU cache).
+ *   3. `await loadFrame(i)` — returns a real molrs `Frame`. The caller owns
+ *      it, but must not `free()` it on cache eviction: the `Trajectory`
+ *      caches only drop their reference, because canvas consumers may still
+ *      be bound to the frame. `Trajectory.dispose()` is the only safe place
+ *      for an explicit free; otherwise the `FinalizationRegistry` reclaims.
  *   4. `close()` — releases worker resources and terminates.
  *
  * The Worker is dependency-injected so tests can substitute a

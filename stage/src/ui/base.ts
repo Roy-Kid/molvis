@@ -47,14 +47,17 @@ export const SHARED_CSS = `
             --molvis-ui-muted,
             oklch(0.74 0.012 255)
         );
-        --radius: var(--molvis-ui-radius, 0.5rem);
+        --radius: var(--molvis-ui-radius, 0.625rem);
+        --radius-control: var(--molvis-ui-radius-control, 0.375rem);
         --shadow: var(
             --molvis-ui-shadow,
             0 0.75rem 2rem oklch(0.08 0.01 255 / 0.4)
         );
         --row-min-h: var(--molvis-ui-row-min-h, 1.75rem);
         --row-pad-x: var(--molvis-ui-row-pad-x, 0.5rem);
-        --row-pad-y: var(--molvis-ui-row-pad-y, 0.375rem);
+        --row-pad-y: var(--molvis-ui-row-pad-y, 0.25rem);
+        --menu-min-w: var(--molvis-ui-menu-min-w, 12rem);
+        --menu-max-w: var(--molvis-ui-menu-max-w, 16rem);
         --motion-fast: var(--molvis-ui-motion-fast, 120ms);
         --motion-ease: var(
             --molvis-ui-motion-ease,
