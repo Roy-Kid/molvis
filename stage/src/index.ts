@@ -352,7 +352,6 @@ export {
   ComputeBondsModifier,
 } from "./modifiers/ComputeBondsModifier";
 export { ComputePropertyModifier } from "./modifiers/ComputePropertyModifier";
-export { ConstructSurfaceMeshModifier } from "./modifiers/ConstructSurfaceMeshModifier";
 export { CoordinationPolyhedraModifier } from "./modifiers/CoordinationPolyhedraModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export {
@@ -371,6 +370,15 @@ export { FreezePropertyModifier } from "./modifiers/FreezePropertyModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 export { InvertSelectionModifier } from "./modifiers/InvertSelectionModifier";
+export {
+  DEFAULT_GAUSSIAN_PARAMS,
+  DEFAULT_SOLVENT_PARAMS,
+  type GaussianSurfaceParams,
+  MolecularSurfaceModifier,
+  type SolventSurfaceParams,
+  type SurfaceAlgorithm,
+  type SurfaceReport,
+} from "./modifiers/MolecularSurfaceModifier";
 export { RadiusOfGyrationModifier } from "./modifiers/RadiusOfGyrationModifier";
 export { ReplicateModifier } from "./modifiers/ReplicateModifier";
 export { SelectMaskModifier } from "./modifiers/SelectMaskModifier";
@@ -524,7 +532,6 @@ export {
   primaryDataSource,
 } from "./pipeline/empty_scene";
 export type { PipelineEntry } from "./pipeline/entry";
-export { GaussianDensitySurfaceModifier } from "./pipeline/gaussian_density_surface";
 export type { Modifier } from "./pipeline/modifier";
 export {
   BaseModifier,

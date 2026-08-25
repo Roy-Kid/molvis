@@ -7,7 +7,6 @@ import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
 import { ComputePropertyModifier } from "../modifiers/ComputePropertyModifier";
-import { ConstructSurfaceMeshModifier } from "../modifiers/ConstructSurfaceMeshModifier";
 import { CoordinationPolyhedraModifier } from "../modifiers/CoordinationPolyhedraModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { DisplacementVectorsModifier } from "../modifiers/DisplacementVectorsModifier";
@@ -18,6 +17,7 @@ import { FreezePropertyModifier } from "../modifiers/FreezePropertyModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
+import { MolecularSurfaceModifier } from "../modifiers/MolecularSurfaceModifier";
 import { RadiusOfGyrationModifier } from "../modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "../modifiers/ReplicateModifier";
 import { SelectMaskModifier } from "../modifiers/SelectMaskModifier";
@@ -37,7 +37,6 @@ import { DrawBondModifier } from "./draw_bond";
 import { DrawBoxModifier } from "./draw_box";
 import { DrawIsosurfaceModifier } from "./draw_isosurface";
 import { DrawRibbonModifier } from "./draw_ribbon";
-import { GaussianDensitySurfaceModifier } from "./gaussian_density_surface";
 import type { Modifier } from "./modifier";
 
 // Type for a modifier factory function
@@ -100,6 +99,25 @@ let _idCounter = 0;
 export function nextModifierId(prefix: string): string {
   return `${prefix}-${++_idCounter}`;
 }
+
+/**
+ * Surface modifiers that were absorbed into {@link MolecularSurfaceModifier}.
+ * `Gaussian density surface` and OVITO's `Construct surface mesh` were the
+ * same Gaussian-density code path with different default grids; they survive
+ * as named presets rather than as separate classes.
+ */
+const LEGACY_SURFACE_PRESETS = [
+  {
+    name: "Gaussian density surface",
+    idPrefix: "gaussian-density-surface",
+    gaussian: { resolution: 0.6, sigma: 1 },
+  },
+  {
+    name: "Construct surface mesh",
+    idPrefix: "construct-surface",
+    gaussian: { resolution: 0.4, sigma: 1.2 },
+  },
+] as const;
 
 // biome-ignore lint/complexity/noStaticOnlyClass: ModifierRegistry is a singleton registry pattern used across the app
 export class ModifierRegistry {
@@ -330,19 +348,29 @@ export class ModifierRegistry {
       () => new VectorFieldModifier(nextModifierId("vector-field")),
     );
     ModifierRegistry.register(
-      GaussianDensitySurfaceModifier.NAME,
+      MolecularSurfaceModifier.NAME,
       "Visualization",
-      () =>
-        new GaussianDensitySurfaceModifier(
-          nextModifierId("gaussian-density-surface"),
-        ),
+      () => new MolecularSurfaceModifier(nextModifierId("molecular-surface")),
     );
-    ModifierRegistry.register(
-      ConstructSurfaceMeshModifier.DISPLAY_NAME,
-      "Visualization",
-      () =>
-        new ConstructSurfaceMeshModifier(nextModifierId("construct-surface")),
-    );
+    // Legacy names for what are now two presets of Molecular surface. Kept
+    // registered (and out of the Add menu) so saved projects, backend
+    // state-sync, and RPC calls that name them still resolve — all three
+    // rebuild modifiers by registry display name.
+    for (const preset of LEGACY_SURFACE_PRESETS) {
+      ModifierRegistry.register(
+        preset.name,
+        "Visualization",
+        () => {
+          const modifier = new MolecularSurfaceModifier(
+            nextModifierId(preset.idPrefix),
+          );
+          modifier.setAlgorithm("gaussian");
+          modifier.setGaussianParams(preset.gaussian);
+          return modifier;
+        },
+        { userAddable: false },
+      );
+    }
     ModifierRegistry.register(
       CoordinationPolyhedraModifier.NAME,
       "Visualization",

@@ -1,0 +1,107 @@
+/**
+ * MolecularSurfaceModifier tests.
+ *
+ * Field math lives in `tests/algo/surface/`; this file covers the modifier
+ * contract — gating, the algorithm discriminant, per-algorithm parameter
+ * isolation, and the cache key.
+ *
+ * Absorbs the gating and cache-key coverage of the deleted
+ * `gaussian_density_surface.test.ts`.
+ */
+
+import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { describe, expect, it } from "@rstest/core";
+import { MolecularSurfaceModifier } from "../../src/modifiers/MolecularSurfaceModifier";
+
+function atomsInBox(): Frame {
+  const frame = new Frame();
+  const atoms = frame.createBlock("atoms");
+  atoms.setColF("x", new Float64Array([1, 2, 3]));
+  atoms.setColF("y", new Float64Array([1, 2, 3]));
+  atoms.setColF("z", new Float64Array([1, 2, 3]));
+  atoms.setColStr("element", ["C", "C", "O"]);
+  frame.box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+  return frame;
+}
+
+describe("MolecularSurfaceModifier", () => {
+  it("never auto-attaches — a surface is opt-in Visualization", () => {
+    const mod = new MolecularSurfaceModifier();
+    const frame = atomsInBox();
+    expect(mod.matches(frame)).toBe(false);
+    expect(mod.isApplicable(frame)).toBe(true);
+    frame.free();
+  });
+
+  it("is not applicable without atoms", () => {
+    const mod = new MolecularSurfaceModifier();
+    const frame = new Frame();
+    expect(mod.isApplicable(frame)).toBe(false);
+    frame.free();
+  });
+
+  it("is applicable with atoms only — the box is not required", () => {
+    const mod = new MolecularSurfaceModifier();
+    const frame = new Frame();
+    const atoms = frame.createBlock("atoms");
+    atoms.setColF("x", new Float64Array([1]));
+    atoms.setColF("y", new Float64Array([2]));
+    atoms.setColF("z", new Float64Array([3]));
+    expect(mod.isApplicable(frame)).toBe(true);
+    expect(mod.matches(frame)).toBe(false);
+    frame.free();
+  });
+
+  it("defaults to the solvent-excluded surface", () => {
+    expect(new MolecularSurfaceModifier().algorithm).toBe("ses");
+  });
+
+  it("switching algorithm keeps every algorithm's own parameters", () => {
+    const mod = new MolecularSurfaceModifier();
+    mod.setSolventParams({ probeRadius: 1.8 });
+    mod.setAlgorithm("gaussian");
+    mod.setGaussianParams({ sigma: 2.5 });
+    mod.setAlgorithm("sas");
+
+    expect(mod.solventParams.probeRadius).toBe(1.8);
+    expect(mod.gaussianParams.sigma).toBe(2.5);
+  });
+
+  it("parameter setters patch rather than replace the record", () => {
+    const mod = new MolecularSurfaceModifier();
+    const before = mod.solventParams.radiusScale;
+    mod.setSolventParams({ probeRadius: 2 });
+    expect(mod.solventParams.radiusScale).toBe(before);
+  });
+
+  it("cache key changes with the algorithm", () => {
+    const mod = new MolecularSurfaceModifier();
+    const ses = mod.getCacheKey();
+    mod.setAlgorithm("vdw");
+    expect(mod.getCacheKey()).not.toBe(ses);
+  });
+
+  it("cache key tracks the active algorithm's parameters", () => {
+    const mod = new MolecularSurfaceModifier();
+    mod.setAlgorithm("gaussian");
+    const before = mod.getCacheKey();
+    mod.setGaussianParams({ sigma: 2 });
+    expect(mod.getCacheKey()).not.toBe(before);
+  });
+
+  it("cache key ignores parameters of inactive algorithms", () => {
+    // Otherwise editing a hidden arm would force a pointless recompute.
+    const mod = new MolecularSurfaceModifier();
+    mod.setAlgorithm("vdw");
+    const before = mod.getCacheKey();
+    mod.setGaussianParams({ sigma: 3.7 });
+    expect(mod.getCacheKey()).toBe(before);
+  });
+
+  it("style patches keep the density channel", () => {
+    const mod = new MolecularSurfaceModifier();
+    mod.setStyle({ opacity: 0.3 });
+    expect(mod.style.opacity).toBe(0.3);
+    expect(mod.style.channel).toBe("density");
+  });
+});

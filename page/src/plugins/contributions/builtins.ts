@@ -13,7 +13,6 @@ import {
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   ComputeBondsModifier as CoreComputeBondsModifier,
   ComputePropertyModifier as CoreComputePropertyModifier,
-  ConstructSurfaceMeshModifier as CoreConstructSurfaceMeshModifier,
   CoordinationPolyhedraModifier as CoreCoordinationPolyhedraModifier,
   DisplacementVectorsModifier as CoreDisplacementVectorsModifier,
   DrawAtomModifier as CoreDrawAtomModifier,
@@ -25,8 +24,8 @@ import {
   ExpandSelectionModifier as CoreExpandSelectionModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   FreezePropertyModifier as CoreFreezePropertyModifier,
-  GaussianDensitySurfaceModifier as CoreGaussianDensitySurfaceModifier,
   HideSelectionModifier as CoreHideModifier,
+  MolecularSurfaceModifier as CoreMolecularSurfaceModifier,
   RadiusOfGyrationModifier as CoreRadiusOfGyrationModifier,
   ReplicateModifier as CoreReplicateModifier,
   SelectMaskModifier as CoreSelectMaskModifier,
@@ -65,8 +64,8 @@ import { EditTypesModifier } from "@/ui/modes/view/modifiers/EditTypesModifier";
 import { ExpandSelectionModifier } from "@/ui/modes/view/modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/ExpressionSelectionModifier";
 import { FreezePropertyModifier } from "@/ui/modes/view/modifiers/FreezePropertyModifier";
-import { GaussianDensitySurfaceModifier } from "@/ui/modes/view/modifiers/GaussianDensitySurfaceModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
+import { MolecularSurfaceModifier } from "@/ui/modes/view/modifiers/MolecularSurfaceModifier";
 import { RadiusOfGyrationModifier } from "@/ui/modes/view/modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
 import { SelectMaskModifier } from "@/ui/modes/view/modifiers/SelectMaskModifier";
@@ -246,17 +245,9 @@ export function registerBuiltinModifierPanels(): void {
       usesLeftConfig: true,
     },
     {
-      id: "builtin:GaussianDensitySurface",
-      match: (m) =>
-        m instanceof CoreGaussianDensitySurfaceModifier &&
-        !(m instanceof CoreConstructSurfaceMeshModifier),
-      component: asPanel(GaussianDensitySurfaceModifier),
-      usesLeftConfig: true,
-    },
-    {
-      id: "builtin:ConstructSurfaceMesh",
-      match: (m) => m instanceof CoreConstructSurfaceMeshModifier,
-      component: asPanel(GaussianDensitySurfaceModifier),
+      id: "builtin:MolecularSurface",
+      match: (m) => m instanceof CoreMolecularSurfaceModifier,
+      component: asPanel(MolecularSurfaceModifier),
       usesLeftConfig: true,
     },
     {

@@ -23,7 +23,6 @@ export {
   ComputeBondsModifier,
 } from "./ComputeBondsModifier";
 export { ComputePropertyModifier } from "./ComputePropertyModifier";
-export { ConstructSurfaceMeshModifier } from "./ConstructSurfaceMeshModifier";
 export { CoordinationPolyhedraModifier } from "./CoordinationPolyhedraModifier";
 export { DeleteSelectedModifier } from "./DeleteSelectedModifier";
 export {
@@ -42,6 +41,15 @@ export { FreezePropertyModifier } from "./FreezePropertyModifier";
 export { HideHydrogensModifier } from "./HideHydrogensModifier";
 export { HideSelectionModifier } from "./HideSelectionModifier";
 export { InvertSelectionModifier } from "./InvertSelectionModifier";
+export {
+  DEFAULT_GAUSSIAN_PARAMS,
+  DEFAULT_SOLVENT_PARAMS,
+  type GaussianSurfaceParams,
+  MolecularSurfaceModifier,
+  type SolventSurfaceParams,
+  type SurfaceAlgorithm,
+  type SurfaceReport,
+} from "./MolecularSurfaceModifier";
 export { RadiusOfGyrationModifier } from "./RadiusOfGyrationModifier";
 export { ReplicateModifier } from "./ReplicateModifier";
 export { SelectMaskModifier } from "./SelectMaskModifier";

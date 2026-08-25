@@ -107,7 +107,7 @@ const MODIFIER_DOC_PATH: Readonly<Record<string, string>> = {
   "Steinhardt order": "compute/order",
   "Solid-liquid": "compute/order",
   "Coordination polyhedra": "compute/environment",
-  "Gaussian density surface": "compute/density",
+  "Molecular surface": "compute/density",
   "Vector field": "compute",
   "Smooth trajectory": "tutorials/05_trajectory",
   "Generate trajectory lines": "tutorials/05_trajectory",
