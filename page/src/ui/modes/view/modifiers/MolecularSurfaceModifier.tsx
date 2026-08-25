@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/select";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import type { ModifierPanelSurface } from "@/plugins/types";
-import { hexToRgb, rgbToHex } from "./color_hex";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface Props {
@@ -77,11 +76,9 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
     onUpdate,
     PIPELINE_COPY,
   );
-  const style = modifier.style;
   const algorithm = modifier.algorithm;
   const report = modifier.report;
   const showCompute = surface === "full" || surface === "compute";
-  const showDraw = surface === "full" || surface === "draw";
 
   const isGaussian = algorithm === "gaussian";
   const isHull = algorithm === "hull";
@@ -226,6 +223,21 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
                 }}
                 onCommit={commit}
               />
+              <ScalarSliderRow
+                label="Isovalue"
+                value={gaussian.isovalue ?? 0}
+                min={0}
+                max={Math.max((gaussian.isovalue ?? 0) * 2, 1)}
+                step={Math.max((gaussian.isovalue ?? 0.02) / 50, 0.001)}
+                format={(v) => (v > 0 ? v.toFixed(3) : "Auto")}
+                onPreview={(isovalue) => {
+                  modifier.setGaussianParams({
+                    isovalue: isovalue > 0 ? isovalue : null,
+                  });
+                  onUpdate();
+                }}
+                onCommit={commit}
+              />
               <div className="space-y-1">
                 <Label className="text-xs font-semibold" htmlFor="ms-cutoff">
                   Cutoff (Å)
@@ -280,58 +292,6 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
               No element column — using a uniform radius
             </p>
           )}
-        </>
-      )}
-
-      {showDraw && (
-        <>
-          {/* The solvent envelopes are defined by their radii; only the
-              density surface has a threshold worth exposing. */}
-          {isGaussian && (
-            <ScalarSliderRow
-              label="Isovalue"
-              value={style.isovalue}
-              min={0}
-              max={Math.max(style.isovalue * 2, 1)}
-              step={Math.max(style.isovalue / 50, 0.001)}
-              onPreview={(isovalue) => {
-                modifier.setStyle({ isovalue });
-                onUpdate();
-              }}
-              onCommit={commit}
-            />
-          )}
-
-          <ScalarSliderRow
-            label="Opacity"
-            value={style.opacity}
-            min={0}
-            max={1}
-            step={0.05}
-            onPreview={(opacity) => {
-              modifier.setStyle({ opacity });
-              onUpdate();
-            }}
-            onCommit={commit}
-          />
-
-          <div className="space-y-1.5">
-            <Label className="text-micro" htmlFor="ms-color">
-              Color
-            </Label>
-            <Input
-              id="ms-color"
-              type="color"
-              value={rgbToHex(style.color)}
-              className="h-8 w-full p-1"
-              onChange={(e) => {
-                modifier.setStyle({
-                  color: hexToRgb(e.target.value, [0.4, 0.65, 1.0]),
-                });
-                commit();
-              }}
-            />
-          </div>
         </>
       )}
     </fieldset>

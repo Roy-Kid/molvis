@@ -19,6 +19,7 @@ tetrahedra, so no alpha complex is derivable from it.
 | Pipeline modifier | Changes frame data and/or canvas |
 | Left Analysis panel | Chart-only series (RDF/MSD/…); optional **Add pipeline modifier** when results can paint |
 | Left compute / right draw | Structure ID / mesh steps: left = compute; pipeline bottom = draw (`usesLeftConfig`) |
+| Producer + draw pair | Surfaces: a `ProducesGeometry` modifier publishes triangles and carries a `Draw surface` companion, the way a DataSource carries Particles / Bonds. A new surface algorithm is one producer and no rendering work |
 | Settings | Viewport graphics (e.g. SSAO) — not a pipeline step |
 
 **Status legend:** `done` · `partial` · `gap` · `oos` (out of scope / no molrs) · `n/a` (different product model)
@@ -76,12 +77,13 @@ tetrahedra, so no alpha complex is derivable from it.
 | Create bonds | `Create bonds` | done | |
 | (Bonds visual) | `Bonds` | done | Auto-attach + user-addable |
 | Simulation cell | `Simulation cell` | done | |
-| Create isosurface | `Create isosurface` | done | Grid block from CUBE/CHGCAR/XSF; left compute / right draw. **Not** part of Molecular surface — its input is a volumetric file, not a molecule |
+| Create isosurface | `Isosurface` + `Draw surface` | done | Grid block from CUBE/CHGCAR/XSF. A separate producer from `Molecular surface` — its input is a volumetric file, not a molecule — but it publishes the same `SurfacePart[]` and shares the same draw step |
+| (isosurface cloud mode) | `Volume cloud` | done | Was `renderMode: "cloud"` on the old combined modifier. A full-field point-sprite cloud is not a level set, so it could not ride the shared draw and became its own step; `"both"` is now simply both modifiers |
 | Particles | `Particles` | done | Auto-attach only |
 | — | `Cartoon` | n/a | Auto-attach protein path |
 | — | `Vector field` | n/a | MolVis; also displacement draw path |
 | — | ~~`Gaussian density surface`~~ | absorbed | Now the `gaussian` arm of `Molecular surface`. Registry name kept, `userAddable: false`, so saved projects / state-sync / RPC still resolve it |
-| Construct surface mesh | `Molecular surface` | done | Supersedes it, and covers **both** OVITO methods: alpha-shape and Gaussian density. Six algorithms in one flat picker — union of balls (vdW), SAS, SES, Gaussian density, convex hull, alpha shape. The old `Construct surface mesh` name is kept `userAddable: false` as a Gaussian preset |
+| Construct surface mesh | `Molecular surface` + `Draw surface` | done | Supersedes it, and covers **both** OVITO methods: alpha-shape and Gaussian density. Six algorithms in one flat picker — union of balls (vdW), SAS, SES, Gaussian density, convex hull, alpha shape. Computes only; the paired draw owns colour and opacity, so restyling never re-runs marching cubes or a Delaunay. The old `Construct surface mesh` name is kept `userAddable: false` as a Gaussian preset |
 | Coordination polyhedra | `Coordination polyhedra` | done | Neighbor wireframes; overlay |
 | Generate trajectory lines | `Generate trajectory lines` | done | Multi-frame polylines; overlay |
 
@@ -137,11 +139,12 @@ Coloring: Color by Property, Color by Type, Assign Color
 
 Structure identification: Steinhardt order, Solid-liquid  
 
-Visualization: Create bonds, Bonds, Simulation cell, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines, Create isosurface  
+Visualization: Create bonds, Bonds, Simulation cell, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines, Isosurface, Volume cloud  
 
-Registered but hidden (`userAddable: false`), resolvable by name only:
-Gaussian density surface, Construct surface mesh — both Gaussian presets of
-Molecular surface.  
+Registered but hidden (`userAddable: false`): Gaussian density surface and
+Construct surface mesh (Gaussian presets of Molecular surface, resolvable by
+name for saved projects), and **Draw surface** — producers attach one
+automatically, and an orphan draw would have nothing to paint.  
 
 Analysis: Displacement vectors, Cluster, Center of mass, Radius of gyration  
 

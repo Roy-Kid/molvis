@@ -10,7 +10,12 @@ import { logger } from "../utils/logger";
 import { DataSource } from "./data_source";
 import { DrawBoxModifier } from "./draw_box";
 import type { PipelineEntry } from "./entry";
-import { type Modifier, ModifierCapability } from "./modifier";
+import {
+  type GeometryProducer,
+  type Modifier,
+  ModifierCapability,
+  producesGeometry,
+} from "./modifier";
 import {
   generateNatoId,
   isSelectionProducer,
@@ -158,6 +163,23 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     return this.entries.find((e): e is Session => e instanceof Session) ?? null;
   }
 
+  /**
+   * Give a geometry producer its draw companion, owned by it.
+   *
+   * Ownership does double duty: the pipeline tree already nests entries by
+   * `sourceOwnerId`, so the draw renders indented under its producer, and
+   * {@link removeEntry}'s descendant sweep takes it away when the producer
+   * goes — no bespoke cascade for either.
+   */
+  private attachDraw(producer: Modifier & GeometryProducer): void {
+    const draw = producer.createDraw();
+    this.assignId(draw);
+    draw.sourceOwnerId = producer.id;
+    const index = this.entries.indexOf(producer) + 1;
+    this.entries.splice(index, 0, draw);
+    this.emit(PipelineEvents.ENTRY_ADDED, { entry: draw, index });
+  }
+
   /** Index of the first `Draws`-capability modifier, or `null` if there is none. */
   private firstDrawIndex(): number | null {
     const i = this.entries.findIndex(
@@ -189,9 +211,12 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       ModifierCapability.TransformsData,
     );
     const isDraw = modifier.capabilities.has(ModifierCapability.Draws);
+    const isProducer = modifier.capabilities.has(
+      ModifierCapability.ProducesGeometry,
+    );
 
     let insertIndex = this.entries.length;
-    if (isTransform && !isDraw) {
+    if ((isTransform || isProducer) && !isDraw) {
       const firstDraw = this.firstDrawIndex();
       if (firstDraw !== null) insertIndex = firstDraw;
     }
@@ -200,6 +225,8 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       entry: modifier,
       index: insertIndex,
     });
+
+    if (producesGeometry(modifier)) this.attachDraw(modifier);
   }
 
   /**
@@ -610,8 +637,11 @@ function bandPriority(m: Modifier): number {
   // Consumers that rewrite the frame (Hide, Delete, Transparent, …) must see
   // the producer's mask but still run before draws.
   if (consumes && transforms && !draws) return 4;
+  // Geometry producers compute from the finished frame, so they run after
+  // every edit to it — and before the draws that paint what they produced.
+  if (caps.has(ModifierCapability.ProducesGeometry) && !draws) return 5;
   // Draws and dual-capability modifiers render last.
-  return 5;
+  return 6;
 }
 
 function isFrameBoxProvider(modifier: Modifier): boolean {

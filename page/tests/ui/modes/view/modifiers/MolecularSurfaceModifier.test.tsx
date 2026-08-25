@@ -27,14 +27,12 @@ function fakeModifier({
     algorithm,
     report,
     solventParams: { resolution: 0.5, probeRadius: 1.4, radiusScale: 1 },
-    gaussianParams: { resolution: 0.5, sigma: 1, cutoff: null },
+    gaussianParams: { resolution: 0.5, sigma: 1, cutoff: null, isovalue: 0.05 },
     alphaParams: { probeRadius: 3, smoothing: 2 },
-    style: { isovalue: 0.05, opacity: 0.6, color: [0.4, 0.65, 1] },
     setAlgorithm: () => undefined,
     setSolventParams: () => undefined,
     setGaussianParams: () => undefined,
     setAlphaParams: () => undefined,
-    setStyle: () => undefined,
   };
 }
 
@@ -42,17 +40,14 @@ function fakeApp() {
   return { applyPipeline: async () => null } as unknown as Molvis;
 }
 
-async function mountPanel(
-  overrides: FakeOverrides = {},
-  surface: "compute" | "draw" = "compute",
-) {
+async function mountPanel(overrides: FakeOverrides = {}) {
   return mountComponent(
     <PipelineOperationProvider>
       <MolecularSurfaceModifier
         modifier={fakeModifier(overrides) as never}
         app={fakeApp()}
         onUpdate={() => undefined}
-        surface={surface}
+        surface="compute"
       />
     </PipelineOperationProvider>,
   );
@@ -114,22 +109,32 @@ describe("TestMolecularSurfaceModifier", () => {
     }
   });
 
-  it("exposes isovalue on draw only for the density surface", async () => {
-    const density = await mountPanel({ algorithm: "gaussian" }, "draw");
+  it("isovalue is a Gaussian compute knob, not an appearance one", async () => {
+    // It moves the geometry, so it sits with the algorithm. The solvent
+    // envelopes have no equivalent: their surface is defined by radii.
+    const density = await mountPanel({ algorithm: "gaussian" });
     try {
       expect(has(density.host, "Isovalue slider")).toBe(true);
     } finally {
       await density.cleanup();
     }
 
-    // The solvent envelopes are defined by their radii; a threshold there
-    // would be a second, redundant way to say the same thing.
-    const ses = await mountPanel({ algorithm: "ses" }, "draw");
+    const ses = await mountPanel({ algorithm: "ses" });
     try {
       expect(has(ses.host, "Isovalue slider")).toBe(false);
-      expect(has(ses.host, "Opacity slider")).toBe(true);
     } finally {
       await ses.cleanup();
+    }
+  });
+
+  it("carries no appearance controls — those belong to Draw surface", async () => {
+    // Colour and opacity must not re-run a Delaunay tetrahedralisation.
+    const mounted = await mountPanel({ algorithm: "ses" });
+    try {
+      expect(has(mounted.host, "Opacity slider")).toBe(false);
+      expect(mounted.host.querySelector('input[type="color"]')).toBeNull();
+    } finally {
+      await mounted.cleanup();
     }
   });
 

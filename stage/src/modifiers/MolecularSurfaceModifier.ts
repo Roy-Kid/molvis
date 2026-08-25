@@ -15,16 +15,23 @@
  * | `hull`     | convex envelope of the van der Waals spheres |
  * | `alpha`    | alpha shape: Delaunay tetrahedra smaller than α |
  *
- * Every algorithm produces a scalar field that is **positive inside**, so the
- * solvent modes mesh at 0 while `gaussian` meshes at its own isovalue.
+ * The field algorithms produce a scalar field that is **positive inside**, so
+ * the solvent modes mesh at 0 while `gaussian` meshes at its own isovalue;
+ * hull and alpha shape emit triangles directly. Either way the output is one
+ * {@link SurfaceMesh}, published for the paired
+ * {@link ../pipeline/draw_surface Draw surface} step to paint.
+ *
+ * This modifier computes; it does not draw. Colour and opacity live on the
+ * draw step, so restyling a surface never re-runs marching cubes — or, for
+ * alpha shape, a Delaunay tetrahedralisation.
  *
  * The field domain is the atom AABB + pad with `pbc = false`, never
  * `frame.box`: depositing on the crystal cell folds ASU atoms into the
  * primary cell while Particles still draw at deposited Cartn — the "surface
  * wrapped, protein not" bug. See `.claude/notes/open-questions.md`.
  *
- * Does not mutate the pipeline frame, and never auto-attaches: a surface is
- * opt-in Visualization.
+ * Does not mutate the pipeline frame, and never auto-attaches: a molecular
+ * surface is opt-in Visualization.
  */
 
 import {
@@ -33,6 +40,7 @@ import {
   Frame as MolrsFrame,
   WasmGaussianDensity,
 } from "@molcrafts/molvis-core/molrs";
+import { marchingCubes } from "../algo/marching_cubes";
 import { AlphaShape } from "../algo/surface/alpha_shape";
 import { GridDomain } from "../algo/surface/grid_domain";
 import { HullSurface } from "../algo/surface/hull_surface";
@@ -41,11 +49,17 @@ import {
   type SolventSurfaceMode,
 } from "../algo/surface/solvent_surface";
 import {
-  DEFAULT_ISOSURFACE_STYLE,
-  type IsosurfaceStyle,
-} from "../artist/isosurface/isosurface_renderer";
+  primaryPart,
+  type SurfaceMesh,
+  type SurfacePart,
+} from "../algo/surface_mesh";
 import { viewAtomCoords } from "../io/atom_coords";
-import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
+import { DrawSurfaceModifier } from "../pipeline/draw_surface";
+import {
+  BaseModifier,
+  type GeometryProducer,
+  ModifierCapability,
+} from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { type ProjectParams, readEnum, readNumber } from "../project/params";
 import { DType } from "../utils/dtype";
@@ -88,6 +102,14 @@ export interface GaussianSurfaceParams {
   readonly sigma: number;
   /** Kernel truncation radius, Å. `null` lets molrs choose. */
   readonly cutoff: number | null;
+  /**
+   * Level set to mesh. `null` picks a tenth of the peak on each run.
+   *
+   * A compute parameter, not a style one: moving it moves the geometry. The
+   * solvent and geometric algorithms have no equivalent — their surface is
+   * defined by radii, not by a threshold.
+   */
+  readonly isovalue: number | null;
 }
 
 export const DEFAULT_SOLVENT_PARAMS: SolventSurfaceParams = {
@@ -119,6 +141,7 @@ export const DEFAULT_GAUSSIAN_PARAMS: GaussianSurfaceParams = {
   resolution: 0.5,
   sigma: 1,
   cutoff: null,
+  isovalue: null,
 };
 
 /** What a builder hands back for meshing. */
@@ -138,30 +161,28 @@ interface AtomInput {
   elements?: string[];
 }
 
-export class MolecularSurfaceModifier extends BaseModifier {
+export class MolecularSurfaceModifier
+  extends BaseModifier
+  implements GeometryProducer
+{
   static readonly NAME = "Molecular surface";
 
   private _algorithm: SurfaceAlgorithm = "ses";
   private _solvent: SolventSurfaceParams = DEFAULT_SOLVENT_PARAMS;
   private _gaussian: GaussianSurfaceParams = DEFAULT_GAUSSIAN_PARAMS;
   private _alpha: AlphaShapeParams = DEFAULT_ALPHA_PARAMS;
-  private _style: IsosurfaceStyle = {
-    ...DEFAULT_ISOSURFACE_STYLE,
-    channel: "density",
-    showNegative: false,
-  };
-  /** Gaussian only: pick the isovalue from the data until the user sets one. */
-  private _isovalueAuto = true;
   private _lastReport: SurfaceReport | null = null;
-  /** Cached so {@link onRemoved} can drop this modifier's meshes. */
-  private _app: import("../app").MolvisApp | null = null;
 
   constructor(id = "molecular-surface") {
     super(
       id,
       MolecularSurfaceModifier.NAME,
-      new Set([ModifierCapability.Draws]),
+      new Set([ModifierCapability.ProducesGeometry]),
     );
+  }
+
+  createDraw(): DrawSurfaceModifier {
+    return new DrawSurfaceModifier("draw-surface", this.id);
   }
 
   get algorithm(): SurfaceAlgorithm {
@@ -175,9 +196,6 @@ export class MolecularSurfaceModifier extends BaseModifier {
   }
   get alphaParams(): AlphaShapeParams {
     return this._alpha;
-  }
-  get style(): IsosurfaceStyle {
-    return this._style;
   }
   /** What the last run actually did — grid shape, clamping, radius fallback. */
   get report(): SurfaceReport | null {
@@ -204,11 +222,6 @@ export class MolecularSurfaceModifier extends BaseModifier {
     this._alpha = { ...this._alpha, ...patch };
   }
 
-  setStyle(patch: Partial<IsosurfaceStyle>): void {
-    if (patch.isovalue !== undefined) this._isovalueAuto = false;
-    this._style = { ...this._style, ...patch, channel: "density" };
-  }
-
   /**
    * Persisted across project save/load and backend state-sync. Without this
    * the modifier would rebuild from the registry defaults, so a surface saved
@@ -221,9 +234,6 @@ export class MolecularSurfaceModifier extends BaseModifier {
       solvent: { ...this._solvent },
       gaussian: { ...this._gaussian },
       alpha: { ...this._alpha },
-      isovalue: this._isovalueAuto ? null : this._style.isovalue,
-      opacity: this._style.opacity,
-      color: [...this._style.color],
     };
   }
 
@@ -249,26 +259,18 @@ export class MolecularSurfaceModifier extends BaseModifier {
         typeof gaussian.cutoff === "number" && Number.isFinite(gaussian.cutoff)
           ? gaussian.cutoff
           : null,
+      // null is meaningful: it means "keep picking automatically".
+      isovalue:
+        typeof gaussian.isovalue === "number" &&
+        Number.isFinite(gaussian.isovalue)
+          ? gaussian.isovalue
+          : null,
     };
 
     const alpha = asRecord(params.alpha);
     this._alpha = {
       probeRadius: readNumber(alpha.probeRadius, this._alpha.probeRadius),
       smoothing: readNumber(alpha.smoothing, this._alpha.smoothing),
-    };
-
-    // A null isovalue means it was never pinned, so auto-picking resumes.
-    if (
-      typeof params.isovalue === "number" &&
-      Number.isFinite(params.isovalue)
-    ) {
-      this._isovalueAuto = false;
-      this._style = { ...this._style, isovalue: params.isovalue };
-    }
-    this._style = {
-      ...this._style,
-      opacity: readNumber(params.opacity, this._style.opacity),
-      color: readColor(params.color, this._style.color),
     };
   }
 
@@ -283,9 +285,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
   }
 
   getCacheKey(): string {
-    const s = this._style;
-    const params = this.paramsCacheKey(s.isovalue);
-    return `${super.getCacheKey()}:${this._algorithm}:${params}:o=${s.opacity}:rgb=${s.color.join(",")}`;
+    return `${super.getCacheKey()}:${this._algorithm}:${this.paramsCacheKey()}`;
   }
 
   apply(input: Frame, ctx: PipelineContext): Frame {
@@ -310,63 +310,49 @@ export class MolecularSurfaceModifier extends BaseModifier {
           : undefined,
     };
 
-    this._app = ctx.app;
     const algorithm = this._algorithm;
-    if (isMeshAlgorithm(algorithm)) {
-      this.drawMeshAlgorithm(algorithm, atomInput, ctx);
-      return input;
-    }
-
-    let drawFrame: Frame | null = null;
     try {
-      const field =
-        algorithm === "gaussian"
-          ? this.buildGaussianField(atomInput)
-          : this.buildSolventField(atomInput, algorithm);
-      if (!field) return input;
-
-      drawFrame = new MolrsFrame();
-      drawFrame.box = new Box(
-        new Float64Array(field.cell),
-        new Float64Array(field.origin),
-        false,
-        false,
-        false,
-      );
-      const grid = drawFrame.createBlock("grid");
-      grid.setColF("density", field.values);
-      grid.setShape(new Uint32Array(field.shape));
-
-      ctx.app.artist.drawIsosurface(this.id, drawFrame, {
-        ...this._style,
-        isovalue: field.isovalue,
-      });
+      const mesh = isMeshAlgorithm(algorithm)
+        ? this.buildMeshAlgorithm(algorithm, atomInput)
+        : this.buildFieldMesh(algorithm, atomInput);
+      ctx.surfaces.set(this.id, mesh ? primaryPart(mesh) : []);
     } catch (err) {
-      logger.warn("[Molecular surface] compute/draw failed", err as Error);
-    } finally {
-      drawFrame?.free();
+      logger.warn("[Molecular surface] compute failed", err as Error);
+      ctx.surfaces.set(this.id, []);
     }
     return input;
   }
 
-  applyVisibility(app: import("../app").MolvisApp, visible: boolean): void {
-    app.artist.surfaceLayer(this.id).setVisible(visible);
-  }
-
   /**
-   * Removal is not a visibility change: nothing calls `applyVisibility` for a
-   * modifier that is gone, so the mesh has to be dropped here or it outlives
-   * its owner.
+   * Field algorithms mesh their own level set. Marching cubes runs here
+   * rather than in the renderer so that every algorithm hands the draw step
+   * the same thing — triangles — whatever it did upstream.
    */
-  onRemoved(): void {
-    this._app?.artist.releaseSurfaceLayer(this.id);
-    this._app = null;
+  private buildFieldMesh(
+    algorithm: Exclude<SurfaceAlgorithm, MeshAlgorithm>,
+    atoms: AtomInput,
+  ): SurfaceMesh | null {
+    const field =
+      algorithm === "gaussian"
+        ? this.buildGaussianField(atoms)
+        : this.buildSolventField(atoms, algorithm);
+    if (!field) return null;
+    return marchingCubes(
+      field.values,
+      field.shape,
+      field.cell,
+      field.origin,
+      field.isovalue,
+      // The domain is the atom AABB with pbc = false, so a boundary-wrapping
+      // pass would seam the surface across empty space.
+      "general",
+    );
   }
 
-  private paramsCacheKey(isovalue: number): string {
+  private paramsCacheKey(): string {
     if (this._algorithm === "gaussian") {
       const g = this._gaussian;
-      return `r=${g.resolution}:σ=${g.sigma}:c=${g.cutoff ?? "auto"}:iv=${isovalue}`;
+      return `r=${g.resolution}:σ=${g.sigma}:c=${g.cutoff ?? "auto"}:iv=${g.isovalue ?? "auto"}`;
     }
     if (this._algorithm === "alpha") {
       return `a=${this._alpha.probeRadius}:sm=${this._alpha.smoothing}`;
@@ -375,16 +361,16 @@ export class MolecularSurfaceModifier extends BaseModifier {
     return `r=${v.resolution}:p=${v.probeRadius}:s=${v.radiusScale}`;
   }
 
-  private drawMeshAlgorithm(
+  private buildMeshAlgorithm(
     algorithm: MeshAlgorithm,
     atoms: AtomInput,
-    ctx: PipelineContext,
-  ): void {
-    if (algorithm === "alpha") this.drawAlphaShape(atoms, ctx);
-    else this.drawHull(atoms, ctx);
+  ): SurfaceMesh | null {
+    return algorithm === "alpha"
+      ? this.buildAlphaShape(atoms)
+      : this.buildHull(atoms);
   }
 
-  private drawAlphaShape(atoms: AtomInput, ctx: PipelineContext): void {
+  private buildAlphaShape(atoms: AtomInput): SurfaceMesh | null {
     if (atoms.count > MAX_ALPHA_SHAPE_ATOMS) {
       this._lastReport = {
         shape: null,
@@ -398,8 +384,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
       logger.warn(
         `[Molecular surface] alpha shape needs a Delaunay tetrahedralisation; ${atoms.count} atoms exceeds the ${MAX_ALPHA_SHAPE_ATOMS} limit`,
       );
-      ctx.app.artist.surfaceLayer(this.id).dispose();
-      return;
+      return null;
     }
 
     const shape = new AlphaShape(atoms, {
@@ -419,13 +404,12 @@ export class MolecularSurfaceModifier extends BaseModifier {
       logger.warn(
         "[Molecular surface] no tetrahedron survived the alpha filter; raise the probe radius",
       );
-      ctx.app.artist.surfaceLayer(this.id).dispose();
-      return;
+      return null;
     }
-    ctx.app.artist.drawSurfaceMesh(this.id, shape.mesh, this._style);
+    return shape.mesh;
   }
 
-  private drawHull(atoms: AtomInput, ctx: PipelineContext): void {
+  private buildHull(atoms: AtomInput): SurfaceMesh | null {
     const hull = new HullSurface(atoms, {
       radiusScale: this._solvent.radiusScale,
     });
@@ -440,12 +424,11 @@ export class MolecularSurfaceModifier extends BaseModifier {
     };
     if (hull.degenerate) {
       logger.warn(
-        "[Molecular surface] atoms do not span a volume; convex hull has nothing to draw",
+        "[Molecular surface] atoms do not span a volume; convex hull has nothing to enclose",
       );
-      ctx.app.artist.surfaceLayer(this.id).dispose();
-      return;
+      return null;
     }
-    ctx.app.artist.drawSurfaceMesh(this.id, hull.mesh, this._style);
+    return hull.mesh;
   }
 
   private buildSolventField(
@@ -528,15 +511,13 @@ export class MolecularSurfaceModifier extends BaseModifier {
         triangleCount: null,
         tooManyAtoms: null,
       };
-      if (this._isovalueAuto) {
-        this._style = { ...this._style, isovalue: autoIsovalue(values.data) };
-      }
+      const isovalue = this._gaussian.isovalue ?? autoIsovalue(values.data);
       return {
         origin: domain.origin,
         cell: domain.cell,
         shape: values.shape,
         values: values.data,
-        isovalue: this._style.isovalue,
+        isovalue,
       };
     } finally {
       density?.free();

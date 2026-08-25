@@ -18,6 +18,7 @@ function testContext(): PipelineContext {
     suppressHighlight: false,
     postRenderEffects: [],
     selectionCache: new Map(),
+    surfaces: new Map(),
     app: stubApp,
     changeKind: "full",
   };

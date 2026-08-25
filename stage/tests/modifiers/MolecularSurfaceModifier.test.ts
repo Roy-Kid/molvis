@@ -15,6 +15,8 @@ import {
   isMeshAlgorithm,
   MolecularSurfaceModifier,
 } from "../../src/modifiers/MolecularSurfaceModifier";
+import { DrawSurfaceModifier } from "../../src/pipeline/draw_surface";
+import { ModifierCapability } from "../../src/pipeline/modifier";
 
 function atomsInBox(): Frame {
   const frame = new Frame();
@@ -152,7 +154,6 @@ describe("MolecularSurfaceModifier", () => {
     });
     saved.setGaussianParams({ sigma: 2.2, cutoff: 6 });
     saved.setAlphaParams({ probeRadius: 4.5, smoothing: 7 });
-    saved.setStyle({ opacity: 0.35, color: [0.1, 0.2, 0.3] });
 
     const restored = new MolecularSurfaceModifier();
     restored.fromProjectParams(saved.toProjectParams());
@@ -161,8 +162,6 @@ describe("MolecularSurfaceModifier", () => {
     expect(restored.solventParams).toEqual(saved.solventParams);
     expect(restored.gaussianParams).toEqual(saved.gaussianParams);
     expect(restored.alphaParams).toEqual(saved.alphaParams);
-    expect(restored.style.opacity).toBeCloseTo(0.35, 6);
-    expect(restored.style.color).toEqual([0.1, 0.2, 0.3]);
   });
 
   it("ignores junk in a persisted record instead of adopting it", () => {
@@ -174,31 +173,38 @@ describe("MolecularSurfaceModifier", () => {
       solvent: "nonsense",
       gaussian: null,
       alpha: 42,
-      opacity: "0.5",
-      color: [1, 2],
     });
 
     expect(mod.algorithm).toBe("ses");
     expect(mod.solventParams).toEqual(defaults);
-    expect(mod.style.color.length).toBe(3);
   });
 
   it("an unpinned isovalue stays automatic across a round trip", () => {
+    // Isovalue is a Gaussian *compute* parameter — it moves the geometry —
+    // so it persists with the algorithm, not with the appearance.
     const saved = new MolecularSurfaceModifier();
+    expect(saved.gaussianParams.isovalue).toBeNull();
+
+    saved.setGaussianParams({ isovalue: 0.42 });
     const restored = new MolecularSurfaceModifier();
     restored.fromProjectParams(saved.toProjectParams());
-    // Explicitly setting one is what pins it; nothing else should.
-    expect(saved.toProjectParams().isovalue).toBeNull();
-
-    saved.setStyle({ isovalue: 0.42 });
-    restored.fromProjectParams(saved.toProjectParams());
-    expect(restored.style.isovalue).toBeCloseTo(0.42, 6);
+    expect(restored.gaussianParams.isovalue).toBeCloseTo(0.42, 6);
   });
 
-  it("style patches keep the density channel", () => {
+  it("computes geometry rather than drawing it", () => {
+    // Appearance belongs to the paired Draw surface, so restyling a surface
+    // never re-runs marching cubes — or a Delaunay tetrahedralisation.
     const mod = new MolecularSurfaceModifier();
-    mod.setStyle({ opacity: 0.3 });
-    expect(mod.style.opacity).toBe(0.3);
-    expect(mod.style.channel).toBe("density");
+    expect(mod.capabilities.has(ModifierCapability.ProducesGeometry)).toBe(
+      true,
+    );
+    expect(mod.capabilities.has(ModifierCapability.Draws)).toBe(false);
+  });
+
+  it("brings a Draw surface bound to itself", () => {
+    const mod = new MolecularSurfaceModifier("surface-1");
+    const draw = mod.createDraw();
+    expect(draw).toBeInstanceOf(DrawSurfaceModifier);
+    expect(draw.producerId).toBe("surface-1");
   });
 });

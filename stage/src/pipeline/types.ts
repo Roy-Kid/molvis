@@ -151,6 +151,7 @@ export class SelectionMask {
   }
 }
 
+import type { SurfacePart } from "../algo/surface_mesh";
 import type { MolvisApp } from "../app";
 
 /**
@@ -206,6 +207,19 @@ export interface PipelineContext {
   selectionCache: Map<string, SelectionMask>;
 
   /**
+   * Surface geometry published this run, keyed by the producing modifier's
+   * id. `ProducesGeometry` modifiers write; their paired draw modifier reads.
+   *
+   * It lives on the context rather than on the frame because a triangle mesh
+   * is view geometry, not molecular data — round-tripping megabytes through
+   * WASM to reach a renderer that runs in JS would buy nothing. The context
+   * is rebuilt every run, which also makes the channel self-clearing: a
+   * disabled producer publishes nothing and its draw goes dark on the same
+   * pass.
+   */
+  surfaces: Map<string, SurfacePart[]>;
+
+  /**
    * Frame index in trajectory (if applicable).
    */
   frameIndex?: number;
@@ -240,6 +254,7 @@ export function createDefaultContext(
     suppressHighlight: false,
     postRenderEffects: [],
     selectionCache: new Map(),
+    surfaces: new Map(),
     frameIndex,
     app,
     changeKind,

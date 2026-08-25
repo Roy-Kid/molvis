@@ -8,20 +8,21 @@
 
 import { NullEngine, Scene } from "@babylonjs/core";
 import { describe, expect, it } from "@rstest/core";
-import type { MCMesh } from "../../../src/algo/marching_cubes";
+import type { SurfaceMesh } from "../../../src/algo/surface_mesh";
 import {
+  type SurfaceDrawStyle,
   SurfaceMeshRenderer,
-  type SurfaceMeshStyle,
-} from "../../../src/artist/isosurface/surface_mesh_renderer";
+} from "../../../src/artist/surface/surface_mesh_renderer";
 
-const STYLE: SurfaceMeshStyle = {
+const STYLE: SurfaceDrawStyle = {
+  color: [1, 0, 0],
   opacity: 1,
-  surfaceStyle: "solid",
+  finish: "solid",
   contourSpacing: 0.45,
 };
 
 /** Two triangles sharing an edge — four unique source vertices. */
-function quad(): MCMesh {
+function quad(): SurfaceMesh {
   return {
     positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]),
     normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]),
@@ -29,7 +30,7 @@ function quad(): MCMesh {
   };
 }
 
-const EMPTY: MCMesh = {
+const EMPTY: SurfaceMesh = {
   positions: new Float32Array(0),
   normals: new Float32Array(0),
   indices: new Uint32Array(0),

@@ -13,6 +13,8 @@
  *   data[ix * ny * nz + iy * nz + iz]
  */
 
+import type { SurfaceMesh } from "./surface_mesh";
+
 // ── Lookup tables (Lorensen–Cline, Bourke numbering) ─────────────────────────
 //
 // Cube vertex numbering:
@@ -327,15 +329,6 @@ const TRI_TABLE: readonly (readonly number[])[] = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface MCMesh {
-  /** Flat xyz triples, length = 3 * nVertices. */
-  positions: Float32Array;
-  /** Triangle corner indices, length = 3 * nTriangles. */
-  indices: Uint32Array;
-  /** Per-vertex flat face normals, same length as positions. */
-  normals: Float32Array;
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Convert fractional grid coordinates to world space. */
@@ -402,7 +395,7 @@ export function marchingCubes(
   origin: Float64Array,
   isovalue: number,
   gridType: "general" | "periodic" = "general",
-): MCMesh {
+): SurfaceMesh {
   const [nx, ny, nz] = shape;
   const iMax = gridType === "periodic" ? nx : nx - 1;
   const jMax = gridType === "periodic" ? ny : ny - 1;

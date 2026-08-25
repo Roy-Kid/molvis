@@ -18,8 +18,40 @@ export enum ModifierCapability {
   ProducesSelection = "produces-selection",
   /** Returns a Frame distinct from input (filters atoms, adds blocks, etc). */
   TransformsData = "transforms-data",
+  /**
+   * Publishes surface geometry into `context.surfaces` for a paired draw
+   * step to paint. Runs after every frame edit and before any draw, so the
+   * geometry it computes is the geometry the user is looking at.
+   */
+  ProducesGeometry = "produces-geometry",
   /** Performs render side-effects via ctx.app.artist. */
   Draws = "draws",
+}
+
+/**
+ * A modifier that computes geometry but does not paint it.
+ *
+ * The pair is the point: an algorithm modifier publishes a {@link SurfacePart}
+ * list and the draw companion it creates here owns colour, opacity, and
+ * visibility. Adding a seventh surface algorithm is then one more producer and
+ * no renderer work — the same split that lets a DataSource bring Particles and
+ * Bonds along with it.
+ */
+export interface GeometryProducer {
+  /**
+   * Build the draw companion to attach beneath this modifier.
+   * {@link ModifierPipeline.addModifier} calls it; nothing else should.
+   */
+  createDraw(): Modifier;
+}
+
+export function producesGeometry(
+  modifier: Modifier,
+): modifier is Modifier & GeometryProducer {
+  return (
+    modifier.capabilities.has(ModifierCapability.ProducesGeometry) &&
+    typeof (modifier as Partial<GeometryProducer>).createDraw === "function"
+  );
 }
 
 /**

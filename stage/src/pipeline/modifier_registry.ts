@@ -35,9 +35,11 @@ import { VectorFieldModifier } from "../modifiers/VectorFieldModifier";
 import { DrawAtomModifier } from "./draw_atom";
 import { DrawBondModifier } from "./draw_bond";
 import { DrawBoxModifier } from "./draw_box";
-import { DrawIsosurfaceModifier } from "./draw_isosurface";
 import { DrawRibbonModifier } from "./draw_ribbon";
+import { DrawSurfaceModifier } from "./draw_surface";
+import { IsosurfaceModifier } from "./isosurface";
 import type { Modifier } from "./modifier";
+import { VolumeCloudModifier } from "./volume_cloud";
 
 // Type for a modifier factory function
 export type ModifierFactory = () => Modifier;
@@ -401,12 +403,28 @@ export class ModifierRegistry {
       () => new DrawRibbonModifier(),
       { userAddable: false },
     );
-    // Grid → marching-cubes surface. Auto-attaches when a grid block is
-    // present; also user-addable so empty pipelines can stage the step.
+    // Grid → marching-cubes level set. Auto-attaches when a grid block is
+    // present; also user-addable so empty pipelines can stage the step. It
+    // computes only — `addModifier` gives it a Draw surface companion.
     ModifierRegistry.register(
-      DrawIsosurfaceModifier.NAME, // "Create isosurface"
+      IsosurfaceModifier.NAME,
       "Visualization",
-      () => new DrawIsosurfaceModifier(),
+      () => new IsosurfaceModifier(nextModifierId("isosurface")),
+    );
+    // Every voxel as a point sprite. Not a surface, so not the shared draw:
+    // a level set and a full-field cloud are different pictures.
+    ModifierRegistry.register(
+      VolumeCloudModifier.NAME,
+      "Visualization",
+      () => new VolumeCloudModifier(nextModifierId("volume-cloud")),
+    );
+    // The shared painter. Producers attach one automatically, so it stays out
+    // of the Add menu — an orphan Draw surface would have nothing to paint.
+    ModifierRegistry.register(
+      DrawSurfaceModifier.NAME,
+      "Visualization",
+      () => new DrawSurfaceModifier(nextModifierId("draw-surface")),
+      { userAddable: false },
     );
     // Transparency is particle display property, not an Add-menu item.
     ModifierRegistry.register(

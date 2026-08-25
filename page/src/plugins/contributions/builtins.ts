@@ -18,13 +18,14 @@ import {
   DrawAtomModifier as CoreDrawAtomModifier,
   DrawBondModifier as CoreDrawBondModifier,
   DrawBoxModifier as CoreDrawBoxModifier,
-  DrawIsosurfaceModifier as CoreDrawIsosurfaceModifier,
   DrawRibbonModifier as CoreDrawRibbonModifier,
+  DrawSurfaceModifier as CoreDrawSurfaceModifier,
   EditTypesModifier as CoreEditTypesModifier,
   ExpandSelectionModifier as CoreExpandSelectionModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   FreezePropertyModifier as CoreFreezePropertyModifier,
   HideSelectionModifier as CoreHideModifier,
+  IsosurfaceModifier as CoreIsosurfaceModifier,
   MolecularSurfaceModifier as CoreMolecularSurfaceModifier,
   RadiusOfGyrationModifier as CoreRadiusOfGyrationModifier,
   ReplicateModifier as CoreReplicateModifier,
@@ -40,6 +41,7 @@ import {
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
   UnwrapTrajectoriesModifier as CoreUnwrapTrajectoriesModifier,
   VectorFieldModifier as CoreVectorFieldModifier,
+  VolumeCloudModifier as CoreVolumeCloudModifier,
   DataSource,
   type PipelineEntry,
   Session,
@@ -58,13 +60,14 @@ import { DisplacementVectorsModifier } from "@/ui/modes/view/modifiers/Displacem
 import { DrawAtomModifier } from "@/ui/modes/view/modifiers/DrawAtomModifier";
 import { DrawBondModifier } from "@/ui/modes/view/modifiers/DrawBondModifier";
 import { DrawBoxModifier } from "@/ui/modes/view/modifiers/DrawBoxModifier";
-import { DrawIsosurfaceModifier } from "@/ui/modes/view/modifiers/DrawIsosurfaceModifier";
 import { DrawRibbonModifier } from "@/ui/modes/view/modifiers/DrawRibbonModifier";
+import { DrawSurfaceModifier } from "@/ui/modes/view/modifiers/DrawSurfaceModifier";
 import { EditTypesModifier } from "@/ui/modes/view/modifiers/EditTypesModifier";
 import { ExpandSelectionModifier } from "@/ui/modes/view/modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/ExpressionSelectionModifier";
 import { FreezePropertyModifier } from "@/ui/modes/view/modifiers/FreezePropertyModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
+import { IsosurfaceModifier } from "@/ui/modes/view/modifiers/IsosurfaceModifier";
 import { MolecularSurfaceModifier } from "@/ui/modes/view/modifiers/MolecularSurfaceModifier";
 import { RadiusOfGyrationModifier } from "@/ui/modes/view/modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
@@ -81,6 +84,7 @@ import { TrajectoryLinesModifier } from "@/ui/modes/view/modifiers/TrajectoryLin
 import { TransparentSelectionModifier } from "@/ui/modes/view/modifiers/TransparentSelectionModifier";
 import { UnwrapTrajectoriesModifier } from "@/ui/modes/view/modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "@/ui/modes/view/modifiers/VectorFieldModifier";
+import { VolumeCloudModifier } from "@/ui/modes/view/modifiers/VolumeCloudModifier";
 import type { ModifierPanelComponent } from "../types";
 import { registerModifierPanelMatcher } from "./modifier_panels";
 
@@ -233,10 +237,23 @@ export function registerBuiltinModifierPanels(): void {
       component: asPanel(DrawRibbonModifier),
     },
     {
-      id: "builtin:DrawIsosurface",
-      match: (m) => m instanceof CoreDrawIsosurfaceModifier,
-      component: asPanel(DrawIsosurfaceModifier),
+      id: "builtin:Isosurface",
+      match: (m) => m instanceof CoreIsosurfaceModifier,
+      component: asPanel(IsosurfaceModifier),
       usesLeftConfig: true,
+    },
+    {
+      id: "builtin:VolumeCloud",
+      match: (m) => m instanceof CoreVolumeCloudModifier,
+      component: asPanel(VolumeCloudModifier),
+      usesLeftConfig: true,
+    },
+    {
+      // Appearance only — it belongs in the pipeline row beside its producer,
+      // not in the left compute rail.
+      id: "builtin:DrawSurface",
+      match: (m) => m instanceof CoreDrawSurfaceModifier,
+      component: asPanel(DrawSurfaceModifier),
     },
     {
       id: "builtin:VectorField",

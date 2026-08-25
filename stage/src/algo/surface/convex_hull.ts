@@ -13,7 +13,7 @@
  * by a visible face.
  */
 
-import type { MCMesh } from "../marching_cubes";
+import type { SurfaceMesh } from "../surface_mesh";
 
 export interface HullPoints {
   x: ArrayLike<number>;
@@ -22,7 +22,7 @@ export interface HullPoints {
   count: number;
 }
 
-const EMPTY_MESH: MCMesh = {
+const EMPTY_MESH: SurfaceMesh = {
   positions: new Float32Array(0),
   indices: new Uint32Array(0),
   normals: new Float32Array(0),
@@ -44,7 +44,7 @@ interface Face {
 
 /** Construct from points, then read {@link mesh}. */
 export class ConvexHull {
-  readonly mesh: MCMesh;
+  readonly mesh: SurfaceMesh;
   /**
    * True when the points are collinear, coplanar, or too few for a solid.
    * The hull then has no volume and {@link mesh} is empty.
@@ -341,7 +341,7 @@ function centroid(
 }
 
 /** One vertex per face corner — flat shading, matching marching cubes. */
-function toMesh(points: HullPoints, faces: Face[]): MCMesh {
+function toMesh(points: HullPoints, faces: Face[]): SurfaceMesh {
   const positions = new Float32Array(faces.length * 9);
   const normals = new Float32Array(faces.length * 9);
   const indices = new Uint32Array(faces.length * 3);

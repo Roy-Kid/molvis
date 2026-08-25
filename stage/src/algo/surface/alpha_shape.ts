@@ -19,7 +19,7 @@
  * than it measured.
  */
 
-import type { MCMesh } from "../marching_cubes";
+import type { SurfaceMesh } from "../surface_mesh";
 import { Delaunay3D, type DelaunayPoints } from "./delaunay_3d";
 
 /** Taubin's shrink/unshrink pair; |μ| > λ is what cancels the shrinkage. */
@@ -34,7 +34,7 @@ export interface AlphaShapeOptions {
 }
 
 export class AlphaShape {
-  readonly mesh: MCMesh;
+  readonly mesh: SurfaceMesh;
   /** True when no tetrahedron survived — flat input, or α below the spacing. */
   readonly degenerate: boolean;
   readonly triangleCount: number;
@@ -127,7 +127,7 @@ function buildMesh(
   points: DelaunayPoints,
   faces: Array<[number, number, number]>,
   smoothing: number,
-): MCMesh {
+): SurfaceMesh {
   const used = [...new Set(faces.flat())];
   const slot = new Map(used.map((index, at) => [index, at]));
 
@@ -239,7 +239,7 @@ function emit(
   py: Float64Array,
   pz: Float64Array,
   tris: ReadonlyArray<readonly [number, number, number]>,
-): MCMesh {
+): SurfaceMesh {
   const vnx = new Float64Array(px.length);
   const vny = new Float64Array(px.length);
   const vnz = new Float64Array(px.length);

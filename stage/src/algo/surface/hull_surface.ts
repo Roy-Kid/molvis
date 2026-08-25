@@ -13,7 +13,7 @@
  * {@link SAMPLES_PER_ATOM} points that is under 0.1 Å.
  */
 
-import type { MCMesh } from "../marching_cubes";
+import type { SurfaceMesh } from "../surface_mesh";
 import { AtomRadii } from "./atom_radii";
 import { ConvexHull } from "./convex_hull";
 
@@ -35,7 +35,7 @@ export interface HullSurfaceOptions {
 
 /** Construct, then read {@link mesh}. */
 export class HullSurface {
-  readonly mesh: MCMesh;
+  readonly mesh: SurfaceMesh;
   readonly usedFallbackRadius: boolean;
   /** True when the atoms cannot span a volume — fewer than two, say. */
   readonly degenerate: boolean;

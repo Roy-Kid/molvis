@@ -39,6 +39,17 @@ export {
   type SpatialNeighborQueryOptions,
 } from "./algo/neighbor_list";
 export {
+  type ChannelStats,
+  channelStats,
+  gridChannels,
+  hasMeshableGrid,
+} from "./algo/surface/grid_field";
+export type {
+  SurfaceMesh,
+  SurfacePart,
+  SurfaceRole,
+} from "./algo/surface_mesh";
+export {
   AnalysisAbortError,
   type AnalysisAtomSelection,
   type AnalysisAvailability,
@@ -168,12 +179,6 @@ export {
   Tab10Strategy,
 } from "./artist/categorical_theme";
 export {
-  DEFAULT_ISOSURFACE_STYLE,
-  type IsosurfaceRenderMode,
-  type IsosurfaceStyle,
-  type SurfaceStyle,
-} from "./artist/isosurface/isosurface_renderer";
-export {
   DEFAULT_LABEL_CONFIG,
   type LabelConfig,
   type LabelMode,
@@ -227,6 +232,15 @@ export type {
   RibbonStyle,
 } from "./artist/ribbon/ribbon_style";
 export type { CategoricalThemeId } from "./artist/style_manager";
+export {
+  DEFAULT_SURFACE_DRAW_STYLE,
+  type SurfaceDrawStyle,
+  type SurfaceFinish,
+} from "./artist/surface/surface_mesh_renderer";
+export {
+  DEFAULT_VOLUME_CLOUD_STYLE,
+  type VolumeCloudStyle,
+} from "./artist/surface/volume_cloud_renderer";
 export { type AtomTypeSource, readAtomTypeKeys } from "./atom_type";
 export {
   CameraAnimator,
@@ -526,8 +540,8 @@ export {
   DrawBoxModifier,
   type DrawBoxSpec,
 } from "./pipeline/draw_box";
-export { DrawIsosurfaceModifier } from "./pipeline/draw_isosurface";
 export { DrawRibbonModifier } from "./pipeline/draw_ribbon";
+export { DrawSurfaceModifier } from "./pipeline/draw_surface";
 export {
   bootstrapEmptyPipeline,
   createEmptyPrimaryDataSource,
@@ -537,6 +551,7 @@ export {
   primaryDataSource,
 } from "./pipeline/empty_scene";
 export type { PipelineEntry } from "./pipeline/entry";
+export { IsosurfaceModifier } from "./pipeline/isosurface";
 export type { Modifier } from "./pipeline/modifier";
 export {
   BaseModifier,
@@ -564,6 +579,7 @@ export {
 } from "./pipeline/stream_data_source";
 export type { PipelineContext } from "./pipeline/types";
 export { SelectionMask } from "./pipeline/types";
+export { VolumeCloudModifier } from "./pipeline/volume_cloud";
 export {
   isNamespacedPluginId,
   namespacePluginId,

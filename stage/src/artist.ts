@@ -9,7 +9,8 @@ import {
 } from "@babylonjs/core";
 import type { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { WasmArray } from "@molcrafts/molvis-core/molrs";
-import type { MCMesh } from "./algo/marching_cubes";
+import type { GridField } from "./algo/surface/grid_field";
+import type { SurfacePart } from "./algo/surface_mesh";
 import type { MolvisApp } from "./app";
 import type { AtomBufferOptions } from "./artist/atom_buffer";
 import {
@@ -17,11 +18,6 @@ import {
   refreshBondPositions,
   subBondCount,
 } from "./artist/bond_buffer";
-import {
-  DEFAULT_ISOSURFACE_STYLE,
-  IsosurfaceRenderer,
-  type IsosurfaceStyle,
-} from "./artist/isosurface/isosurface_renderer";
 import { LabelRenderer } from "./artist/label_renderer";
 import {
   compileShaderMaterial,
@@ -39,6 +35,16 @@ import {
   resolveAtomColorForBondsFallback,
 } from "./artist/representation_draw";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
+import {
+  colorForRole,
+  DEFAULT_SURFACE_DRAW_STYLE,
+  type SurfaceDrawStyle,
+  SurfaceMeshRenderer,
+} from "./artist/surface/surface_mesh_renderer";
+import {
+  VolumeCloudRenderer,
+  type VolumeCloudStyle,
+} from "./artist/surface/volume_cloud_renderer";
 import { findSliceModifier, updateVisualGuide } from "./artist/visual_guide";
 import { createWarmupMesh } from "./artist/warmup";
 import type { AtomMeta, BondMeta } from "./entity_source";
@@ -211,7 +217,8 @@ export class Artist {
   public bondMesh: Mesh;
   public ribbonRenderer: RibbonRenderer;
   /** One surface renderer per owning modifier — see {@link surfaceLayer}. */
-  private surfaceLayers = new Map<string, IsosurfaceRenderer>();
+  private surfaceLayers = new Map<string, SurfaceMeshRenderer>();
+  private cloudLayers = new Map<string, VolumeCloudRenderer>();
   public labelRenderer: LabelRenderer;
 
   get globalOpacity(): number {
@@ -978,42 +985,39 @@ export class Artist {
    * tracks frame changes and modifier-style edits. Frames without a 3-D
    * `grid` block produce no mesh (IsosurfaceRenderer is no-op safe).
    */
-  public drawIsosurface(
-    ownerId: string,
-    frame: Frame,
-    style: IsosurfaceStyle = DEFAULT_ISOSURFACE_STYLE,
-  ): void {
-    const layer = this.surfaceLayer(ownerId);
-    layer.rebuild(frame, style);
-    layer.setVisible(true);
-  }
-
   /**
-   * Draw a triangle mesh that did not come from a grid — a convex hull or an
-   * alpha shape. Same styling and lifecycle as an isosurface.
+   * Paint one producer's surface parts. The producer's own id keys the layer,
+   * so several surfaces coexist without overwriting each other.
    */
-  public drawSurfaceMesh(
+  public drawSurfaceParts(
     ownerId: string,
-    mesh: MCMesh,
-    style: IsosurfaceStyle = DEFAULT_ISOSURFACE_STYLE,
+    parts: readonly SurfacePart[],
+    style: SurfaceDrawStyle = DEFAULT_SURFACE_DRAW_STYLE,
   ): void {
     const layer = this.surfaceLayer(ownerId);
-    layer.drawMesh(mesh, style.color, style);
+    layer.dispose();
+    for (const [index, part] of parts.entries()) {
+      layer.add(
+        `surface_${index}#${ownerId}`,
+        part.mesh,
+        colorForRole(style, part),
+        style,
+      );
+    }
     layer.setVisible(true);
   }
 
   /**
    * The surface renderer owned by `ownerId`, created on first use.
    *
-   * Keyed by owner because a pipeline can hold several surface-drawing
-   * modifiers at once — a CUBE file's `Create isosurface` next to a
-   * `Molecular surface`, say. A single shared renderer made the second one
-   * silently erase the first.
+   * Keyed by owner because a pipeline holds several surface draws at once — a
+   * CUBE file's isosurface next to a molecular surface, say. A single shared
+   * renderer made the second one silently erase the first.
    */
-  public surfaceLayer(ownerId: string): IsosurfaceRenderer {
+  public surfaceLayer(ownerId: string): SurfaceMeshRenderer {
     const existing = this.surfaceLayers.get(ownerId);
     if (existing) return existing;
-    const created = new IsosurfaceRenderer(this.app.world.scene, ownerId);
+    const created = new SurfaceMeshRenderer(this.app.world.scene);
     this.surfaceLayers.set(ownerId, created);
     return created;
   }
@@ -1026,9 +1030,43 @@ export class Artist {
     this.surfaceLayers.delete(ownerId);
   }
 
+  public drawVolumeCloud(
+    ownerId: string,
+    field: GridField,
+    style: VolumeCloudStyle,
+  ): void {
+    const layer = this.cloudLayer(ownerId);
+    layer.rebuild(
+      field.data,
+      field.shape,
+      field.cell,
+      field.origin,
+      style,
+      field.allPeriodic,
+    );
+    layer.setVisible(true);
+  }
+
+  public cloudLayer(ownerId: string): VolumeCloudRenderer {
+    const existing = this.cloudLayers.get(ownerId);
+    if (existing) return existing;
+    const created = new VolumeCloudRenderer(this.app.world.scene, ownerId);
+    this.cloudLayers.set(ownerId, created);
+    return created;
+  }
+
+  public releaseCloudLayer(ownerId: string): void {
+    const layer = this.cloudLayers.get(ownerId);
+    if (!layer) return;
+    layer.dispose();
+    this.cloudLayers.delete(ownerId);
+  }
+
   private disposeSurfaceLayers(): void {
     for (const layer of this.surfaceLayers.values()) layer.dispose();
     this.surfaceLayers.clear();
+    for (const layer of this.cloudLayers.values()) layer.dispose();
+    this.cloudLayers.clear();
   }
 
   public redrawFromSceneIndex(frame?: Frame): void {

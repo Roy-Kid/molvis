@@ -1,7 +1,7 @@
 import { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { applyAutoAttach } from "../../src/pipeline/auto_attach";
-import { DrawIsosurfaceModifier } from "../../src/pipeline/draw_isosurface";
+import { IsosurfaceModifier } from "../../src/pipeline/isosurface";
 import { ModifierPipeline } from "../../src/pipeline/pipeline";
 
 /** Build a frame whose atoms block carries the four PDB residue-identity
@@ -113,12 +113,12 @@ describe("applyAutoAttach isosurface", () => {
   it("attaches Create isosurface for grid-bearing frames", () => {
     const pipeline = new ModifierPipeline();
     const attached = applyAutoAttach(pipeline, syntheticGridFrame());
-    expect(attached).toContain(DrawIsosurfaceModifier.NAME);
+    expect(attached).toContain(IsosurfaceModifier.NAME);
   });
 
   it("does not attach Create isosurface for atoms-only frames", () => {
     const pipeline = new ModifierPipeline();
     const attached = applyAutoAttach(pipeline, xyzShapedFrame());
-    expect(attached).not.toContain(DrawIsosurfaceModifier.NAME);
+    expect(attached).not.toContain(IsosurfaceModifier.NAME);
   });
 });

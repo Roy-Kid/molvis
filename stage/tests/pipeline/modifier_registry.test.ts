@@ -3,8 +3,8 @@ import { MolecularSurfaceModifier } from "../../src/modifiers/MolecularSurfaceMo
 import { DrawAtomModifier } from "../../src/pipeline/draw_atom";
 import { DrawBondModifier } from "../../src/pipeline/draw_bond";
 import { DrawBoxModifier } from "../../src/pipeline/draw_box";
-import { DrawIsosurfaceModifier } from "../../src/pipeline/draw_isosurface";
 import { DrawRibbonModifier } from "../../src/pipeline/draw_ribbon";
+import { IsosurfaceModifier } from "../../src/pipeline/isosurface";
 import {
   MODIFIER_CATEGORIES,
   ModifierRegistry,
@@ -33,12 +33,12 @@ describe("ModifierRegistry — OVITO-aligned menu", () => {
 
     expect(allNames.has(DrawAtomModifier.NAME)).toBe(true);
     expect(allNames.has(DrawRibbonModifier.NAME)).toBe(true);
-    expect(allNames.has(DrawIsosurfaceModifier.NAME)).toBe(true);
+    expect(allNames.has(IsosurfaceModifier.NAME)).toBe(true);
     expect(allNames.has("Transparent")).toBe(true);
 
     expect(menuNames.has(DrawAtomModifier.NAME)).toBe(false);
     expect(menuNames.has(DrawRibbonModifier.NAME)).toBe(false);
-    expect(menuNames.has(DrawIsosurfaceModifier.NAME)).toBe(true);
+    expect(menuNames.has(IsosurfaceModifier.NAME)).toBe(true);
     expect(menuNames.has("Transparent")).toBe(false);
 
     expect(menuNames.has(DrawBoxModifier.NAME)).toBe(true);

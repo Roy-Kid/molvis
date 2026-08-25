@@ -20,21 +20,34 @@ import {
   Vector3,
   VertexData,
 } from "@babylonjs/core";
-import type { MCMesh } from "../../algo/marching_cubes";
+import type { SurfaceMesh, SurfacePart } from "../../algo/surface_mesh";
 import { registerSurfaceShaders } from "../../shaders/surface";
 
-/** Real-time fragment treatment applied to an extracted surface. */
-export type SurfaceStyle = "solid" | "mesh" | "contour" | "dot";
+/** Real-time fragment treatment applied to a surface. */
+export type SurfaceFinish = "solid" | "mesh" | "contour" | "dot";
 
-/** The subset of a style that reaches the mesh — no grid concepts here. */
-export interface SurfaceMeshStyle {
+/**
+ * How a surface looks. Owned by the artist because it is the rendering
+ * vocabulary; `Draw surface` holds one of these and nothing else does.
+ */
+export interface SurfaceDrawStyle {
+  /** Linear RGB in [0, 1]. */
+  color: [number, number, number];
+  /** 0..1. Below 1 enables alpha blending and the depth pre-pass. */
   opacity: number;
-  surfaceStyle: SurfaceStyle;
+  finish: SurfaceFinish;
   /** Distance in Å between view-depth contour bands. */
   contourSpacing: number;
 }
 
-const SURFACE_STYLE_CODE: Readonly<Record<SurfaceStyle, number>> = {
+export const DEFAULT_SURFACE_DRAW_STYLE: SurfaceDrawStyle = {
+  color: [0.4, 0.65, 1.0],
+  opacity: 0.6,
+  finish: "solid",
+  contourSpacing: 0.45,
+};
+
+const FINISH_CODE: Readonly<Record<SurfaceFinish, number>> = {
   solid: 0,
   mesh: 1,
   contour: 2,
@@ -64,9 +77,9 @@ export class SurfaceMeshRenderer {
    */
   add(
     name: string,
-    source: MCMesh,
+    source: SurfaceMesh,
     color: readonly [number, number, number],
-    style: SurfaceMeshStyle,
+    style: SurfaceDrawStyle,
   ): Mesh | null {
     if (source.positions.length === 0 || source.indices.length === 0) {
       return null;
@@ -91,6 +104,18 @@ export class SurfaceMeshRenderer {
     }
   }
 
+  /**
+   * Live colour update. Splitting compute from draw is what makes this
+   * possible: repainting a surface must not re-run marching cubes, let alone
+   * a Delaunay tetrahedralisation.
+   */
+  setColor(color: readonly [number, number, number]): void {
+    for (const mesh of this.meshes) {
+      const mat = mesh.material as ShaderMaterial | null;
+      mat?.setColor3("surfaceColor", new Color3(color[0], color[1], color[2]));
+    }
+  }
+
   dispose(): void {
     for (const mesh of this.meshes) {
       mesh.material?.dispose();
@@ -102,7 +127,7 @@ export class SurfaceMeshRenderer {
   private buildMaterial(
     name: string,
     color: readonly [number, number, number],
-    style: SurfaceMeshStyle,
+    style: SurfaceDrawStyle,
   ): ShaderMaterial {
     const mat = new ShaderMaterial(
       `${name}_mat`,
@@ -126,7 +151,7 @@ export class SurfaceMeshRenderer {
     );
     mat.backFaceCulling = false;
     mat.setColor3("surfaceColor", new Color3(color[0], color[1], color[2]));
-    mat.setFloat("surfaceStyle", SURFACE_STYLE_CODE[style.surfaceStyle] ?? 0);
+    mat.setFloat("surfaceStyle", FINISH_CODE[style.finish] ?? 0);
     mat.setFloat("contourSpacing", Math.max(0.01, style.contourSpacing));
     mat.setVector3("lightDir", new Vector3(-0.45, 0.6, 0.72).normalize());
 
@@ -152,7 +177,7 @@ export class SurfaceMeshRenderer {
  * draw their edges from, and the expansion also makes those edges
  * deterministic instead of dependent on how the producer shared vertices.
  */
-function applyGeometry(mesh: Mesh, source: MCMesh): void {
+function applyGeometry(mesh: Mesh, source: SurfaceMesh): void {
   const positions: number[] = [];
   const normals: number[] = [];
   const barycentric: number[] = [];
@@ -206,4 +231,20 @@ function applyOpacity(mat: ShaderMaterial, opacity: number): void {
     mat.needDepthPrePass = false;
     mat.separateCullingPass = false;
   }
+}
+
+/** The complement lobe of a signed field, so the two lobes read apart. */
+export function complementColor(
+  color: readonly [number, number, number],
+): [number, number, number] {
+  return [1 - color[0], 1 - color[1], 1 - color[2]];
+}
+
+export function colorForRole(
+  style: SurfaceDrawStyle,
+  part: SurfacePart,
+): [number, number, number] {
+  return part.role === "complement"
+    ? complementColor(style.color)
+    : [...style.color];
 }
