@@ -40,6 +40,7 @@ const ALGORITHMS: ReadonlyArray<{ value: SurfaceAlgorithm; label: string }> = [
   { value: "sas", label: "Solvent-accessible (SAS)" },
   { value: "ses", label: "Solvent-excluded (SES)" },
   { value: "gaussian", label: "Gaussian density" },
+  { value: "hull", label: "Convex hull" },
 ];
 
 function rgbToHex(rgb: readonly [number, number, number]): string {
@@ -57,15 +58,24 @@ function hexToRgb(hex: string): [number, number, number] {
   return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 }
 
-/** One muted meta line: what the run actually built, never a locked input. */
-function describeGrid(report: SurfaceReport): string {
-  const [nx, ny, nz] = report.shape;
-  const voxels = nx * ny * nz;
-  const count =
-    voxels >= 1e6
-      ? `${(voxels / 1e6).toFixed(1)}M`
-      : `${Math.round(voxels / 1000)}k`;
-  return `grid ${nx}×${ny}×${nz} · ${report.spacing.toFixed(2)} Å · ${count} voxels`;
+/**
+ * One muted meta line: what the run actually built, never a locked input.
+ * Field algorithms report their grid; mesh algorithms report their triangles.
+ */
+function describeRun(report: SurfaceReport): string | null {
+  if (report.shape && report.spacing !== null) {
+    const [nx, ny, nz] = report.shape;
+    const voxels = nx * ny * nz;
+    const count =
+      voxels >= 1e6
+        ? `${(voxels / 1e6).toFixed(1)}M`
+        : `${Math.round(voxels / 1000)}k`;
+    return `grid ${nx}×${ny}×${nz} · ${report.spacing.toFixed(2)} Å · ${count} voxels`;
+  }
+  if (report.triangleCount) {
+    return `${report.triangleCount.toLocaleString()} triangles`;
+  }
+  return null;
 }
 
 export const MolecularSurfaceModifier: React.FC<Props> = ({
@@ -86,7 +96,11 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
   const showDraw = surface === "full" || surface === "draw";
 
   const isGaussian = algorithm === "gaussian";
+  const isHull = algorithm === "hull";
   const usesProbe = algorithm === "sas" || algorithm === "ses";
+  // The hull is built from the spheres themselves; there is no grid to
+  // resolve, so it has no resolution knob.
+  const usesGrid = !isHull;
   const solvent = modifier.solventParams;
   const gaussian = modifier.gaussianParams;
   const resolution = isGaussian ? gaussian.resolution : solvent.resolution;
@@ -134,15 +148,17 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
             </Select>
           </div>
 
-          <ScalarSliderRow
-            label="Resolution (Å)"
-            value={resolution}
-            min={0.1}
-            max={2}
-            step={0.05}
-            onPreview={setResolution}
-            onCommit={commit}
-          />
+          {usesGrid && (
+            <ScalarSliderRow
+              label="Resolution (Å)"
+              value={resolution}
+              min={0.1}
+              max={2}
+              step={0.05}
+              onPreview={setResolution}
+              onCommit={commit}
+            />
+          )}
 
           {usesProbe && (
             <ScalarSliderRow
@@ -214,14 +230,19 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
             </>
           )}
 
-          {report && (
+          {report && describeRun(report) && (
             <p className="text-micro text-muted-foreground font-mono tabular-nums">
-              {describeGrid(report)}
+              {describeRun(report)}
             </p>
           )}
           {report?.resolutionClamped && (
             <p className="text-micro text-status-failed-foreground">
               Resolution coarsened to stay within the voxel limit
+            </p>
+          )}
+          {report?.degenerate && (
+            <p className="text-micro text-status-failed-foreground">
+              These atoms do not span a volume — nothing to enclose
             </p>
           )}
           {report?.usedFallbackRadius && !isGaussian && (

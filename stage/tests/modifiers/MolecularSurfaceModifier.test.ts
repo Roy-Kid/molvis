@@ -11,7 +11,10 @@
 
 import { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { MolecularSurfaceModifier } from "../../src/modifiers/MolecularSurfaceModifier";
+import {
+  isMeshAlgorithm,
+  MolecularSurfaceModifier,
+} from "../../src/modifiers/MolecularSurfaceModifier";
 
 function atomsInBox(): Frame {
   const frame = new Frame();
@@ -96,6 +99,22 @@ describe("MolecularSurfaceModifier", () => {
     const before = mod.getCacheKey();
     mod.setGaussianParams({ sigma: 3.7 });
     expect(mod.getCacheKey()).toBe(before);
+  });
+
+  it("classifies which algorithms bypass the grid entirely", () => {
+    expect(isMeshAlgorithm("hull")).toBe(true);
+    for (const field of ["vdw", "sas", "ses", "gaussian"] as const) {
+      expect(isMeshAlgorithm(field)).toBe(false);
+    }
+  });
+
+  it("convex hull shares the solvent radius scale", () => {
+    // Both read van der Waals radii, so a scale set in one arm should still
+    // be in force after switching to the other.
+    const mod = new MolecularSurfaceModifier();
+    mod.setSolventParams({ radiusScale: 1.3 });
+    mod.setAlgorithm("hull");
+    expect(mod.solventParams.radiusScale).toBe(1.3);
   });
 
   it("style patches keep the density channel", () => {

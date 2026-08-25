@@ -12,6 +12,7 @@
  * | `sas`      | solvent-accessible: balls grown by the probe|
  * | `ses`      | solvent-excluded (Connolly): probe rolled   |
  * | `gaussian` | molrs Gaussian density, meshed at an isovalue|
+ * | `hull`     | convex envelope of the van der Waals spheres |
  *
  * Every algorithm produces a scalar field that is **positive inside**, so the
  * solvent modes mesh at 0 while `gaussian` meshes at its own isovalue.
@@ -32,6 +33,7 @@ import {
   WasmGaussianDensity,
 } from "@molcrafts/molvis-core/molrs";
 import { GridDomain } from "../algo/surface/grid_domain";
+import { HullSurface } from "../algo/surface/hull_surface";
 import {
   SolventSurface,
   type SolventSurfaceMode,
@@ -46,7 +48,16 @@ import type { PipelineContext } from "../pipeline/types";
 import { DType } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
-export type SurfaceAlgorithm = SolventSurfaceMode | "gaussian";
+export type SurfaceAlgorithm = SolventSurfaceMode | "gaussian" | "hull";
+
+/** Algorithms that emit triangles directly, with no grid in between. */
+export type MeshAlgorithm = "hull";
+
+export function isMeshAlgorithm(
+  algorithm: SurfaceAlgorithm,
+): algorithm is MeshAlgorithm {
+  return algorithm === "hull";
+}
 
 /** Shared by `vdw` / `sas` / `ses`; `vdw` ignores `probeRadius`. */
 export interface SolventSurfaceParams {
@@ -201,12 +212,18 @@ export class MolecularSurfaceModifier extends BaseModifier {
     };
 
     this._app = ctx.app;
+    const algorithm = this._algorithm;
+    if (isMeshAlgorithm(algorithm)) {
+      this.drawHull(atomInput, ctx);
+      return input;
+    }
+
     let drawFrame: Frame | null = null;
     try {
       const field =
-        this._algorithm === "gaussian"
+        algorithm === "gaussian"
           ? this.buildGaussianField(atomInput)
-          : this.buildSolventField(atomInput, this._algorithm);
+          : this.buildSolventField(atomInput, algorithm);
       if (!field) return input;
 
       drawFrame = new MolrsFrame();
@@ -247,6 +264,28 @@ export class MolecularSurfaceModifier extends BaseModifier {
     this._app = null;
   }
 
+  private drawHull(atoms: AtomInput, ctx: PipelineContext): void {
+    const hull = new HullSurface(atoms, {
+      radiusScale: this._solvent.radiusScale,
+    });
+    this._lastReport = {
+      shape: null,
+      spacing: null,
+      resolutionClamped: false,
+      usedFallbackRadius: hull.usedFallbackRadius,
+      degenerate: hull.degenerate,
+      triangleCount: hull.mesh.indices.length / 3,
+    };
+    if (hull.degenerate) {
+      logger.warn(
+        "[Molecular surface] atoms do not span a volume; convex hull has nothing to draw",
+      );
+      ctx.app.artist.surfaceLayer(this.id).dispose();
+      return;
+    }
+    ctx.app.artist.drawSurfaceMesh(this.id, hull.mesh, this._style);
+  }
+
   private buildSolventField(
     atoms: AtomInput,
     mode: SolventSurfaceMode,
@@ -263,6 +302,8 @@ export class MolecularSurfaceModifier extends BaseModifier {
       spacing: domain.spacing,
       resolutionClamped: surface.clamped,
       usedFallbackRadius: surface.usedFallbackRadius,
+      degenerate: false,
+      triangleCount: null,
     };
     return {
       origin: domain.origin,
@@ -320,6 +361,8 @@ export class MolecularSurfaceModifier extends BaseModifier {
         spacing: domain.spacing,
         resolutionClamped: domain.clamped,
         usedFallbackRadius: false,
+        degenerate: false,
+        triangleCount: null,
       };
       if (this._isovalueAuto) {
         this._style = { ...this._style, isovalue: autoIsovalue(values.data) };
@@ -340,10 +383,16 @@ export class MolecularSurfaceModifier extends BaseModifier {
 
 /** What the last run did, for the panel's derived caption and alerts. */
 export interface SurfaceReport {
-  shape: [number, number, number];
-  spacing: number;
+  /** Grid shape, or `null` for the algorithms that never build a grid. */
+  shape: [number, number, number] | null;
+  /** Voxel spacing in Å, or `null` when there is no grid. */
+  spacing: number | null;
   resolutionClamped: boolean;
   usedFallbackRadius: boolean;
+  /** True when the atoms could not span a volume, so nothing was drawn. */
+  degenerate: boolean;
+  /** Triangles drawn, for the algorithms that report a mesh directly. */
+  triangleCount: number | null;
 }
 
 interface Grid3 {

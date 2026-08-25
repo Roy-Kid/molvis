@@ -4,15 +4,17 @@ import { PipelineOperationProvider } from "../../../../../src/components/viewer/
 import { MolecularSurfaceModifier } from "../../../../../src/ui/modes/view/modifiers/MolecularSurfaceModifier";
 import { mountComponent } from "../../../../react_harness";
 
-type Algorithm = "vdw" | "sas" | "ses" | "gaussian";
+type Algorithm = "vdw" | "sas" | "ses" | "gaussian" | "hull";
 
 interface FakeOverrides {
   algorithm?: Algorithm;
   report?: {
-    shape: [number, number, number];
-    spacing: number;
+    shape: [number, number, number] | null;
+    spacing: number | null;
     resolutionClamped: boolean;
     usedFallbackRadius: boolean;
+    degenerate: boolean;
+    triangleCount: number | null;
   } | null;
 }
 
@@ -136,6 +138,8 @@ describe("TestMolecularSurfaceModifier", () => {
         spacing: 0.5,
         resolutionClamped: false,
         usedFallbackRadius: false,
+        degenerate: false,
+        triangleCount: null,
       },
     });
     try {
@@ -157,6 +161,8 @@ describe("TestMolecularSurfaceModifier", () => {
         spacing: 0.82,
         resolutionClamped: true,
         usedFallbackRadius: false,
+        degenerate: false,
+        triangleCount: null,
       },
     });
     try {
@@ -172,6 +178,8 @@ describe("TestMolecularSurfaceModifier", () => {
       spacing: 0.5,
       resolutionClamped: false,
       usedFallbackRadius: true,
+      degenerate: false,
+      triangleCount: null,
     };
 
     const solvent = await mountPanel({ algorithm: "vdw", report });
@@ -188,6 +196,58 @@ describe("TestMolecularSurfaceModifier", () => {
       expect(density.host.textContent ?? "").not.toMatch(/uniform radius/);
     } finally {
       await density.cleanup();
+    }
+  });
+
+  it("convex hull keeps radius scale but drops the grid resolution", async () => {
+    const mounted = await mountPanel({ algorithm: "hull" });
+    try {
+      expect(has(mounted.host, "Radius scale slider")).toBe(true);
+      expect(has(mounted.host, "Resolution (Å) slider")).toBe(false);
+      expect(has(mounted.host, "Probe radius (Å) slider")).toBe(false);
+      expect(has(mounted.host, "Sigma (Å) slider")).toBe(false);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("reports triangles for a mesh algorithm, not a grid", async () => {
+    const mounted = await mountPanel({
+      algorithm: "hull",
+      report: {
+        shape: null,
+        spacing: null,
+        resolutionClamped: false,
+        usedFallbackRadius: false,
+        degenerate: false,
+        triangleCount: 1284,
+      },
+    });
+    try {
+      const copy = mounted.host.textContent ?? "";
+      expect(copy).toMatch(/1,284 triangles/);
+      expect(copy).not.toMatch(/voxels/);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("says so when the atoms cannot span a volume", async () => {
+    const mounted = await mountPanel({
+      algorithm: "hull",
+      report: {
+        shape: null,
+        spacing: null,
+        resolutionClamped: false,
+        usedFallbackRadius: false,
+        degenerate: true,
+        triangleCount: 0,
+      },
+    });
+    try {
+      expect(mounted.host.textContent ?? "").toMatch(/do not span a volume/);
+    } finally {
+      await mounted.cleanup();
     }
   });
 

@@ -45,6 +45,8 @@ export {
   DEFAULT_GAUSSIAN_PARAMS,
   DEFAULT_SOLVENT_PARAMS,
   type GaussianSurfaceParams,
+  isMeshAlgorithm,
+  type MeshAlgorithm,
   MolecularSurfaceModifier,
   type SolventSurfaceParams,
   type SurfaceAlgorithm,
