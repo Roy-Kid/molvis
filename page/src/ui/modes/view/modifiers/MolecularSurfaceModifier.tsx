@@ -1,8 +1,9 @@
-import type {
-  MolecularSurfaceModifier as CoreMolecularSurfaceModifier,
-  Molvis,
-  SurfaceAlgorithm,
-  SurfaceReport,
+import {
+  type MolecularSurfaceModifier as CoreMolecularSurfaceModifier,
+  MAX_ALPHA_SHAPE_ATOMS,
+  type Molvis,
+  type SurfaceAlgorithm,
+  type SurfaceReport,
 } from "@molcrafts/molvis-stage";
 import type React from "react";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ const ALGORITHMS: ReadonlyArray<{ value: SurfaceAlgorithm; label: string }> = [
   { value: "ses", label: "Solvent-excluded (SES)" },
   { value: "gaussian", label: "Gaussian density" },
   { value: "hull", label: "Convex hull" },
+  { value: "alpha", label: "Alpha shape" },
 ];
 
 function rgbToHex(rgb: readonly [number, number, number]): string {
@@ -97,10 +99,14 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
 
   const isGaussian = algorithm === "gaussian";
   const isHull = algorithm === "hull";
+  const isAlpha = algorithm === "alpha";
   const usesProbe = algorithm === "sas" || algorithm === "ses";
   // The hull is built from the spheres themselves; there is no grid to
   // resolve, so it has no resolution knob.
-  const usesGrid = !isHull;
+  const usesGrid = !isHull && !isAlpha;
+  // Alpha shape works on atom centres — α is the scale knob, not radii.
+  const usesRadii = !isGaussian && !isAlpha;
+  const alpha = modifier.alphaParams;
   const solvent = modifier.solventParams;
   const gaussian = modifier.gaussianParams;
   const resolution = isGaussian ? gaussian.resolution : solvent.resolution;
@@ -175,7 +181,7 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
             />
           )}
 
-          {!isGaussian && (
+          {usesRadii && (
             <ScalarSliderRow
               label="Radius scale"
               value={solvent.radiusScale}
@@ -188,6 +194,36 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
               }}
               onCommit={commit}
             />
+          )}
+
+          {isAlpha && (
+            <>
+              <ScalarSliderRow
+                label="Probe radius (Å)"
+                value={alpha.probeRadius}
+                min={0.5}
+                max={12}
+                step={0.1}
+                onPreview={(probeRadius) => {
+                  modifier.setAlphaParams({ probeRadius });
+                  onUpdate();
+                }}
+                onCommit={commit}
+              />
+              <ScalarSliderRow
+                label="Smoothing"
+                value={alpha.smoothing}
+                min={0}
+                max={10}
+                step={1}
+                format={(v) => v.toFixed(0)}
+                onPreview={(smoothing) => {
+                  modifier.setAlphaParams({ smoothing });
+                  onUpdate();
+                }}
+                onCommit={commit}
+              />
+            </>
           )}
 
           {isGaussian && (
@@ -240,10 +276,18 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
               Resolution coarsened to stay within the voxel limit
             </p>
           )}
-          {report?.degenerate && (
+          {report?.tooManyAtoms ? (
             <p className="text-micro text-status-failed-foreground">
-              These atoms do not span a volume — nothing to enclose
+              {`Alpha shape is limited to ${MAX_ALPHA_SHAPE_ATOMS.toLocaleString()} atoms; this frame has ${report.tooManyAtoms.toLocaleString()}. Use a solvent surface instead.`}
             </p>
+          ) : (
+            report?.degenerate && (
+              <p className="text-micro text-status-failed-foreground">
+                {isAlpha
+                  ? "No tetrahedron survived the probe radius — try a larger one"
+                  : "These atoms do not span a volume — nothing to enclose"}
+              </p>
+            )
           )}
           {report?.usedFallbackRadius && !isGaussian && (
             <p className="text-micro text-status-failed-foreground">

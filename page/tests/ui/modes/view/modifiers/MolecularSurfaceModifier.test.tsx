@@ -4,7 +4,7 @@ import { PipelineOperationProvider } from "../../../../../src/components/viewer/
 import { MolecularSurfaceModifier } from "../../../../../src/ui/modes/view/modifiers/MolecularSurfaceModifier";
 import { mountComponent } from "../../../../react_harness";
 
-type Algorithm = "vdw" | "sas" | "ses" | "gaussian" | "hull";
+type Algorithm = "vdw" | "sas" | "ses" | "gaussian" | "hull" | "alpha";
 
 interface FakeOverrides {
   algorithm?: Algorithm;
@@ -15,6 +15,7 @@ interface FakeOverrides {
     usedFallbackRadius: boolean;
     degenerate: boolean;
     triangleCount: number | null;
+    tooManyAtoms: number | null;
   } | null;
 }
 
@@ -27,10 +28,12 @@ function fakeModifier({
     report,
     solventParams: { resolution: 0.5, probeRadius: 1.4, radiusScale: 1 },
     gaussianParams: { resolution: 0.5, sigma: 1, cutoff: null },
+    alphaParams: { probeRadius: 3, smoothing: 2 },
     style: { isovalue: 0.05, opacity: 0.6, color: [0.4, 0.65, 1] },
     setAlgorithm: () => undefined,
     setSolventParams: () => undefined,
     setGaussianParams: () => undefined,
+    setAlphaParams: () => undefined,
     setStyle: () => undefined,
   };
 }
@@ -140,6 +143,7 @@ describe("TestMolecularSurfaceModifier", () => {
         usedFallbackRadius: false,
         degenerate: false,
         triangleCount: null,
+        tooManyAtoms: null,
       },
     });
     try {
@@ -163,6 +167,7 @@ describe("TestMolecularSurfaceModifier", () => {
         usedFallbackRadius: false,
         degenerate: false,
         triangleCount: null,
+        tooManyAtoms: null,
       },
     });
     try {
@@ -180,6 +185,7 @@ describe("TestMolecularSurfaceModifier", () => {
       usedFallbackRadius: true,
       degenerate: false,
       triangleCount: null,
+      tooManyAtoms: null,
     };
 
     const solvent = await mountPanel({ algorithm: "vdw", report });
@@ -221,6 +227,7 @@ describe("TestMolecularSurfaceModifier", () => {
         usedFallbackRadius: false,
         degenerate: false,
         triangleCount: 1284,
+        tooManyAtoms: null,
       },
     });
     try {
@@ -242,10 +249,68 @@ describe("TestMolecularSurfaceModifier", () => {
         usedFallbackRadius: false,
         degenerate: true,
         triangleCount: 0,
+        tooManyAtoms: null,
       },
     });
     try {
       expect(mounted.host.textContent ?? "").toMatch(/do not span a volume/);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("alpha shape gets its own probe radius and a smoothing level", async () => {
+    const mounted = await mountPanel({ algorithm: "alpha" });
+    try {
+      expect(has(mounted.host, "Probe radius (Å) slider")).toBe(true);
+      expect(has(mounted.host, "Smoothing slider")).toBe(true);
+      // It runs on atom centres, so radii and grids do not apply.
+      expect(has(mounted.host, "Radius scale slider")).toBe(false);
+      expect(has(mounted.host, "Resolution (Å) slider")).toBe(false);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("names the atom limit when alpha shape refuses a large frame", async () => {
+    const mounted = await mountPanel({
+      algorithm: "alpha",
+      report: {
+        shape: null,
+        spacing: null,
+        resolutionClamped: false,
+        usedFallbackRadius: false,
+        degenerate: true,
+        triangleCount: 0,
+        tooManyAtoms: 48000,
+      },
+    });
+    try {
+      const copy = mounted.host.textContent ?? "";
+      expect(copy).toMatch(/48,000/);
+      expect(copy).toMatch(/solvent surface/);
+      // The size message replaces the generic one rather than stacking.
+      expect(copy).not.toMatch(/do not span a volume/);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("tells an alpha user to raise the probe when nothing survived", async () => {
+    const mounted = await mountPanel({
+      algorithm: "alpha",
+      report: {
+        shape: null,
+        spacing: null,
+        resolutionClamped: false,
+        usedFallbackRadius: false,
+        degenerate: true,
+        triangleCount: 0,
+        tooManyAtoms: null,
+      },
+    });
+    try {
+      expect(mounted.host.textContent ?? "").toMatch(/larger one/);
     } finally {
       await mounted.cleanup();
     }

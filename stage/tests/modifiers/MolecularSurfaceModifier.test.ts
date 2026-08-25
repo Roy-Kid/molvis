@@ -102,10 +102,32 @@ describe("MolecularSurfaceModifier", () => {
   });
 
   it("classifies which algorithms bypass the grid entirely", () => {
-    expect(isMeshAlgorithm("hull")).toBe(true);
+    for (const mesh of ["hull", "alpha"] as const) {
+      expect(isMeshAlgorithm(mesh)).toBe(true);
+    }
     for (const field of ["vdw", "sas", "ses", "gaussian"] as const) {
       expect(isMeshAlgorithm(field)).toBe(false);
     }
+  });
+
+  it("alpha shape keeps its own probe radius, separate from SAS/SES", () => {
+    // Both are called "probe radius" but they mean different things: one
+    // rolls a solvent ball over spheres, the other filters circumradii.
+    const mod = new MolecularSurfaceModifier();
+    mod.setSolventParams({ probeRadius: 1.4 });
+    mod.setAlgorithm("alpha");
+    mod.setAlphaParams({ probeRadius: 4 });
+
+    expect(mod.alphaParams.probeRadius).toBe(4);
+    expect(mod.solventParams.probeRadius).toBe(1.4);
+  });
+
+  it("cache key tracks alpha parameters when alpha is active", () => {
+    const mod = new MolecularSurfaceModifier();
+    mod.setAlgorithm("alpha");
+    const before = mod.getCacheKey();
+    mod.setAlphaParams({ smoothing: 5 });
+    expect(mod.getCacheKey()).not.toBe(before);
   });
 
   it("convex hull shares the solvent radius scale", () => {

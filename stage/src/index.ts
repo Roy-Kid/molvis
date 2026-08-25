@@ -371,10 +371,13 @@ export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 export { InvertSelectionModifier } from "./modifiers/InvertSelectionModifier";
 export {
+  type AlphaShapeParams,
+  DEFAULT_ALPHA_PARAMS,
   DEFAULT_GAUSSIAN_PARAMS,
   DEFAULT_SOLVENT_PARAMS,
   type GaussianSurfaceParams,
   isMeshAlgorithm,
+  MAX_ALPHA_SHAPE_ATOMS,
   type MeshAlgorithm,
   MolecularSurfaceModifier,
   type SolventSurfaceParams,

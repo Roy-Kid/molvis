@@ -13,6 +13,7 @@
  * | `ses`      | solvent-excluded (Connolly): probe rolled   |
  * | `gaussian` | molrs Gaussian density, meshed at an isovalue|
  * | `hull`     | convex envelope of the van der Waals spheres |
+ * | `alpha`    | alpha shape: Delaunay tetrahedra smaller than α |
  *
  * Every algorithm produces a scalar field that is **positive inside**, so the
  * solvent modes mesh at 0 while `gaussian` meshes at its own isovalue.
@@ -32,6 +33,7 @@ import {
   Frame as MolrsFrame,
   WasmGaussianDensity,
 } from "@molcrafts/molvis-core/molrs";
+import { AlphaShape } from "../algo/surface/alpha_shape";
 import { GridDomain } from "../algo/surface/grid_domain";
 import { HullSurface } from "../algo/surface/hull_surface";
 import {
@@ -48,15 +50,19 @@ import type { PipelineContext } from "../pipeline/types";
 import { DType } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
-export type SurfaceAlgorithm = SolventSurfaceMode | "gaussian" | "hull";
+export type SurfaceAlgorithm =
+  | SolventSurfaceMode
+  | "gaussian"
+  | "hull"
+  | "alpha";
 
 /** Algorithms that emit triangles directly, with no grid in between. */
-export type MeshAlgorithm = "hull";
+export type MeshAlgorithm = "hull" | "alpha";
 
 export function isMeshAlgorithm(
   algorithm: SurfaceAlgorithm,
 ): algorithm is MeshAlgorithm {
-  return algorithm === "hull";
+  return algorithm === "hull" || algorithm === "alpha";
 }
 
 /** Shared by `vdw` / `sas` / `ses`; `vdw` ignores `probeRadius`. */
@@ -82,6 +88,25 @@ export const DEFAULT_SOLVENT_PARAMS: SolventSurfaceParams = {
   resolution: 0.5,
   probeRadius: 1.4,
   radiusScale: 1,
+};
+
+export interface AlphaShapeParams {
+  /** Probe sphere radius α, Å. Tetrahedra smaller than this are solid. */
+  readonly probeRadius: number;
+  /** Smoothing passes over the extracted surface. 0 leaves raw facets. */
+  readonly smoothing: number;
+}
+
+/**
+ * Delaunay runs on the main thread and costs about 2.8 s at this size on a
+ * current laptop, rising steeply after; past it the freeze reads as a hang.
+ * Measured on a uniform random cloud at protein density.
+ */
+export const MAX_ALPHA_SHAPE_ATOMS = 20_000;
+
+export const DEFAULT_ALPHA_PARAMS: AlphaShapeParams = {
+  probeRadius: 3,
+  smoothing: 2,
 };
 
 export const DEFAULT_GAUSSIAN_PARAMS: GaussianSurfaceParams = {
@@ -113,6 +138,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
   private _algorithm: SurfaceAlgorithm = "ses";
   private _solvent: SolventSurfaceParams = DEFAULT_SOLVENT_PARAMS;
   private _gaussian: GaussianSurfaceParams = DEFAULT_GAUSSIAN_PARAMS;
+  private _alpha: AlphaShapeParams = DEFAULT_ALPHA_PARAMS;
   private _style: IsosurfaceStyle = {
     ...DEFAULT_ISOSURFACE_STYLE,
     channel: "density",
@@ -141,6 +167,9 @@ export class MolecularSurfaceModifier extends BaseModifier {
   get gaussianParams(): GaussianSurfaceParams {
     return this._gaussian;
   }
+  get alphaParams(): AlphaShapeParams {
+    return this._alpha;
+  }
   get style(): IsosurfaceStyle {
     return this._style;
   }
@@ -165,6 +194,10 @@ export class MolecularSurfaceModifier extends BaseModifier {
     this._gaussian = { ...this._gaussian, ...patch };
   }
 
+  setAlphaParams(patch: Partial<AlphaShapeParams>): void {
+    this._alpha = { ...this._alpha, ...patch };
+  }
+
   setStyle(patch: Partial<IsosurfaceStyle>): void {
     if (patch.isovalue !== undefined) this._isovalueAuto = false;
     this._style = { ...this._style, ...patch, channel: "density" };
@@ -182,10 +215,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
 
   getCacheKey(): string {
     const s = this._style;
-    const params =
-      this._algorithm === "gaussian"
-        ? `r=${this._gaussian.resolution}:σ=${this._gaussian.sigma}:c=${this._gaussian.cutoff ?? "auto"}:iv=${s.isovalue}`
-        : `r=${this._solvent.resolution}:p=${this._solvent.probeRadius}:s=${this._solvent.radiusScale}`;
+    const params = this.paramsCacheKey(s.isovalue);
     return `${super.getCacheKey()}:${this._algorithm}:${params}:o=${s.opacity}:rgb=${s.color.join(",")}`;
   }
 
@@ -214,7 +244,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
     this._app = ctx.app;
     const algorithm = this._algorithm;
     if (isMeshAlgorithm(algorithm)) {
-      this.drawHull(atomInput, ctx);
+      this.drawMeshAlgorithm(algorithm, atomInput, ctx);
       return input;
     }
 
@@ -264,6 +294,68 @@ export class MolecularSurfaceModifier extends BaseModifier {
     this._app = null;
   }
 
+  private paramsCacheKey(isovalue: number): string {
+    if (this._algorithm === "gaussian") {
+      const g = this._gaussian;
+      return `r=${g.resolution}:σ=${g.sigma}:c=${g.cutoff ?? "auto"}:iv=${isovalue}`;
+    }
+    if (this._algorithm === "alpha") {
+      return `a=${this._alpha.probeRadius}:sm=${this._alpha.smoothing}`;
+    }
+    const v = this._solvent;
+    return `r=${v.resolution}:p=${v.probeRadius}:s=${v.radiusScale}`;
+  }
+
+  private drawMeshAlgorithm(
+    algorithm: MeshAlgorithm,
+    atoms: AtomInput,
+    ctx: PipelineContext,
+  ): void {
+    if (algorithm === "alpha") this.drawAlphaShape(atoms, ctx);
+    else this.drawHull(atoms, ctx);
+  }
+
+  private drawAlphaShape(atoms: AtomInput, ctx: PipelineContext): void {
+    if (atoms.count > MAX_ALPHA_SHAPE_ATOMS) {
+      this._lastReport = {
+        shape: null,
+        spacing: null,
+        resolutionClamped: false,
+        usedFallbackRadius: false,
+        degenerate: true,
+        triangleCount: 0,
+        tooManyAtoms: atoms.count,
+      };
+      logger.warn(
+        `[Molecular surface] alpha shape needs a Delaunay tetrahedralisation; ${atoms.count} atoms exceeds the ${MAX_ALPHA_SHAPE_ATOMS} limit`,
+      );
+      ctx.app.artist.surfaceLayer(this.id).dispose();
+      return;
+    }
+
+    const shape = new AlphaShape(atoms, {
+      probeRadius: this._alpha.probeRadius,
+      smoothing: this._alpha.smoothing,
+    });
+    this._lastReport = {
+      shape: null,
+      spacing: null,
+      resolutionClamped: false,
+      usedFallbackRadius: false,
+      degenerate: shape.degenerate,
+      triangleCount: shape.triangleCount,
+      tooManyAtoms: null,
+    };
+    if (shape.degenerate) {
+      logger.warn(
+        "[Molecular surface] no tetrahedron survived the alpha filter; raise the probe radius",
+      );
+      ctx.app.artist.surfaceLayer(this.id).dispose();
+      return;
+    }
+    ctx.app.artist.drawSurfaceMesh(this.id, shape.mesh, this._style);
+  }
+
   private drawHull(atoms: AtomInput, ctx: PipelineContext): void {
     const hull = new HullSurface(atoms, {
       radiusScale: this._solvent.radiusScale,
@@ -275,6 +367,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
       usedFallbackRadius: hull.usedFallbackRadius,
       degenerate: hull.degenerate,
       triangleCount: hull.mesh.indices.length / 3,
+      tooManyAtoms: null,
     };
     if (hull.degenerate) {
       logger.warn(
@@ -304,6 +397,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
       usedFallbackRadius: surface.usedFallbackRadius,
       degenerate: false,
       triangleCount: null,
+      tooManyAtoms: null,
     };
     return {
       origin: domain.origin,
@@ -363,6 +457,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
         usedFallbackRadius: false,
         degenerate: false,
         triangleCount: null,
+        tooManyAtoms: null,
       };
       if (this._isovalueAuto) {
         this._style = { ...this._style, isovalue: autoIsovalue(values.data) };
@@ -393,6 +488,8 @@ export interface SurfaceReport {
   degenerate: boolean;
   /** Triangles drawn, for the algorithms that report a mesh directly. */
   triangleCount: number | null;
+  /** Atom count when the run was refused for being too large; else null. */
+  tooManyAtoms: number | null;
 }
 
 interface Grid3 {
