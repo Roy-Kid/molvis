@@ -23,6 +23,9 @@ import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
 
 export class DrawIsosurfaceModifier extends BaseModifier {
+  /** Cached so {@link onRemoved} can drop this modifier's meshes. */
+  private _app: import("../app").MolvisApp | null = null;
+
   /** OVITO "Create isosurface"; auto-attach only when a grid is present. */
   static readonly NAME = "Create isosurface";
 
@@ -165,12 +168,19 @@ export class DrawIsosurfaceModifier extends BaseModifier {
     logger.info(
       `[DrawIsosurface] apply: channel='${this._style.channel}' iso=${this._style.isovalue.toExponential(3)} showNeg=${this._style.showNegative}`,
     );
-    ctx.app.artist.drawIsosurface(input, this._style);
+    this._app = ctx.app;
+    ctx.app.artist.drawIsosurface(this.id, input, this._style);
     return input;
   }
 
   applyVisibility(app: import("../app").MolvisApp, visible: boolean): void {
-    app.artist.isosurfaceRenderer.setVisible(visible);
+    app.artist.surfaceLayer(this.id).setVisible(visible);
+  }
+
+  /** Removal never triggers `applyVisibility`, so drop the mesh here. */
+  onRemoved(): void {
+    this._app?.artist.releaseSurfaceLayer(this.id);
+    this._app = null;
   }
 
   private pickChannel(frame: Frame): void {

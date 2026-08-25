@@ -110,6 +110,8 @@ export class MolecularSurfaceModifier extends BaseModifier {
   /** Gaussian only: pick the isovalue from the data until the user sets one. */
   private _isovalueAuto = true;
   private _lastReport: SurfaceReport | null = null;
+  /** Cached so {@link onRemoved} can drop this modifier's meshes. */
+  private _app: import("../app").MolvisApp | null = null;
 
   constructor(id = "molecular-surface") {
     super(
@@ -198,6 +200,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
           : undefined,
     };
 
+    this._app = ctx.app;
     let drawFrame: Frame | null = null;
     try {
       const field =
@@ -218,7 +221,7 @@ export class MolecularSurfaceModifier extends BaseModifier {
       grid.setColF("density", field.values);
       grid.setShape(new Uint32Array(field.shape));
 
-      ctx.app.artist.drawIsosurface(drawFrame, {
+      ctx.app.artist.drawIsosurface(this.id, drawFrame, {
         ...this._style,
         isovalue: field.isovalue,
       });
@@ -231,7 +234,17 @@ export class MolecularSurfaceModifier extends BaseModifier {
   }
 
   applyVisibility(app: import("../app").MolvisApp, visible: boolean): void {
-    app.artist.isosurfaceRenderer.setVisible(visible);
+    app.artist.surfaceLayer(this.id).setVisible(visible);
+  }
+
+  /**
+   * Removal is not a visibility change: nothing calls `applyVisibility` for a
+   * modifier that is gone, so the mesh has to be dropped here or it outlives
+   * its owner.
+   */
+  onRemoved(): void {
+    this._app?.artist.releaseSurfaceLayer(this.id);
+    this._app = null;
   }
 
   private buildSolventField(

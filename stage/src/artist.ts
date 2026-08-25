@@ -9,8 +9,8 @@ import {
 } from "@babylonjs/core";
 import type { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { WasmArray } from "@molcrafts/molvis-core/molrs";
+import type { MCMesh } from "./algo/marching_cubes";
 import type { MolvisApp } from "./app";
-
 import type { AtomBufferOptions } from "./artist/atom_buffer";
 import {
   buildSubBondInstanceBuffers,
@@ -210,7 +210,8 @@ export class Artist {
   public atomMesh: Mesh;
   public bondMesh: Mesh;
   public ribbonRenderer: RibbonRenderer;
-  public isosurfaceRenderer: IsosurfaceRenderer;
+  /** One surface renderer per owning modifier — see {@link surfaceLayer}. */
+  private surfaceLayers = new Map<string, IsosurfaceRenderer>();
   public labelRenderer: LabelRenderer;
 
   get globalOpacity(): number {
@@ -338,7 +339,6 @@ export class Artist {
       scene,
     );
     this.ribbonRenderer = new RibbonRenderer(scene);
-    this.isosurfaceRenderer = new IsosurfaceRenderer(scene);
     this.labelRenderer = new LabelRenderer(scene);
     this.registerRuntimeLayers();
   }
@@ -408,7 +408,7 @@ export class Artist {
     // Without these calls, Clear leaves ghost ribbons/labels
     // floating over an otherwise empty viewport.
     this.ribbonRenderer.dispose();
-    this.isosurfaceRenderer.dispose();
+    this.disposeSurfaceLayers();
     this.labelRenderer.clearLabels();
 
     this.app.world.sceneIndex.clear();
@@ -430,7 +430,7 @@ export class Artist {
     this.atomMesh.dispose();
     this.bondMesh.dispose();
     this.ribbonRenderer.dispose();
-    this.isosurfaceRenderer.dispose();
+    this.disposeSurfaceLayers();
     this.labelRenderer.dispose();
   }
 
@@ -979,11 +979,56 @@ export class Artist {
    * `grid` block produce no mesh (IsosurfaceRenderer is no-op safe).
    */
   public drawIsosurface(
+    ownerId: string,
     frame: Frame,
     style: IsosurfaceStyle = DEFAULT_ISOSURFACE_STYLE,
   ): void {
-    this.isosurfaceRenderer.rebuild(frame, style);
-    this.isosurfaceRenderer.setVisible(true);
+    const layer = this.surfaceLayer(ownerId);
+    layer.rebuild(frame, style);
+    layer.setVisible(true);
+  }
+
+  /**
+   * Draw a triangle mesh that did not come from a grid — a convex hull or an
+   * alpha shape. Same styling and lifecycle as an isosurface.
+   */
+  public drawSurfaceMesh(
+    ownerId: string,
+    mesh: MCMesh,
+    style: IsosurfaceStyle = DEFAULT_ISOSURFACE_STYLE,
+  ): void {
+    const layer = this.surfaceLayer(ownerId);
+    layer.drawMesh(mesh, style.color, style);
+    layer.setVisible(true);
+  }
+
+  /**
+   * The surface renderer owned by `ownerId`, created on first use.
+   *
+   * Keyed by owner because a pipeline can hold several surface-drawing
+   * modifiers at once — a CUBE file's `Create isosurface` next to a
+   * `Molecular surface`, say. A single shared renderer made the second one
+   * silently erase the first.
+   */
+  public surfaceLayer(ownerId: string): IsosurfaceRenderer {
+    const existing = this.surfaceLayers.get(ownerId);
+    if (existing) return existing;
+    const created = new IsosurfaceRenderer(this.app.world.scene, ownerId);
+    this.surfaceLayers.set(ownerId, created);
+    return created;
+  }
+
+  /** Drop `ownerId`'s meshes. Called when its modifier leaves the pipeline. */
+  public releaseSurfaceLayer(ownerId: string): void {
+    const layer = this.surfaceLayers.get(ownerId);
+    if (!layer) return;
+    layer.dispose();
+    this.surfaceLayers.delete(ownerId);
+  }
+
+  private disposeSurfaceLayers(): void {
+    for (const layer of this.surfaceLayers.values()) layer.dispose();
+    this.surfaceLayers.clear();
   }
 
   public redrawFromSceneIndex(frame?: Frame): void {

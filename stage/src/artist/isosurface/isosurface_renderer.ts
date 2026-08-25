@@ -27,8 +27,11 @@ import {
 } from "@babylonjs/core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { type MCMesh, marchingCubes } from "../../algo/marching_cubes";
-import { registerSurfaceShaders } from "../../shaders/surface";
 import { logger } from "../../utils/logger";
+import {
+  SurfaceMeshRenderer,
+  type SurfaceStyle,
+} from "./surface_mesh_renderer";
 
 /**
  * How to display the volumetric field.
@@ -38,7 +41,7 @@ import { logger } from "../../utils/logger";
  *               a sense of the underlying density distribution.
  */
 export type IsosurfaceRenderMode = "surface" | "cloud" | "both";
-export type SurfaceStyle = "solid" | "mesh" | "contour" | "dot";
+export type { SurfaceStyle } from "./surface_mesh_renderer";
 
 /** Channel selector + visual parameters for a single isosurface modifier. */
 export interface IsosurfaceStyle {
@@ -133,20 +136,46 @@ function copyAndFreeF64(wa: {
 
 export class IsosurfaceRenderer {
   private scene: Scene;
-  private posMesh: Mesh | null = null;
-  private negMesh: Mesh | null = null;
+  /** The +iso / -iso triangle meshes. */
+  private surfaces: SurfaceMeshRenderer;
   private cloudMesh: Mesh | null = null;
+  /** Suffix keeping one owner's meshes distinguishable from another's. */
+  private readonly suffix: string;
 
-  constructor(scene: Scene) {
-    registerSurfaceShaders();
+  /**
+   * @param namespace - Owner id. Several surface-drawing modifiers can live
+   * in one pipeline, so each gets its own renderer and its own mesh names.
+   */
+  constructor(scene: Scene, namespace = "") {
     this.scene = scene;
+    this.surfaces = new SurfaceMeshRenderer(scene);
+    this.suffix = namespace ? `#${namespace}` : "";
   }
 
   /** True iff at least one mesh is currently installed in the scene. */
   public get hasData(): boolean {
-    return (
-      this.posMesh !== null || this.negMesh !== null || this.cloudMesh !== null
-    );
+    return this.surfaces.hasData || this.cloudMesh !== null;
+  }
+
+  /** Install a triangle mesh built outside marching cubes (hull, alpha shape). */
+  public drawMesh(
+    mesh: MCMesh,
+    color: readonly [number, number, number],
+    style: IsosurfaceStyle,
+  ): void {
+    this.dispose();
+    if (
+      !this.surfaces.add(
+        `${ISOSURFACE_MESH_NAME}${this.suffix}`,
+        mesh,
+        color,
+        style,
+      )
+    ) {
+      logger.warn(
+        "[Isosurface] surface mesh had no triangles; nothing to draw",
+      );
+    }
   }
 
   /**
@@ -247,13 +276,13 @@ export class IsosurfaceRenderer {
         style.isovalue,
         gridType,
       );
-      this.posMesh = this.installMesh(
-        ISOSURFACE_MESH_NAME,
+      const posMesh = this.surfaces.add(
+        `${ISOSURFACE_MESH_NAME}${this.suffix}`,
         posMcMesh,
         style.color,
         style,
       );
-      if (!this.posMesh) {
+      if (!posMesh) {
         logger.warn(
           `[Isosurface] +iso=${style.isovalue.toExponential(3)} produced no triangles (data range [${dataMin.toExponential(3)}, ${dataMax.toExponential(3)}]); try lowering the isovalue or switching channel`,
         );
@@ -277,13 +306,13 @@ export class IsosurfaceRenderer {
           1 - style.color[1],
           1 - style.color[2],
         ];
-        this.negMesh = this.installMesh(
-          ISOSURFACE_MESH_NAME_NEG,
+        const negMesh = this.surfaces.add(
+          `${ISOSURFACE_MESH_NAME_NEG}${this.suffix}`,
           negMcMesh,
           negColor,
           style,
         );
-        if (this.negMesh) {
+        if (negMesh) {
           logger.info(
             `[Isosurface] -iso mesh: ${negMcMesh.positions.length / 3} verts, ${negMcMesh.indices.length / 3} tris`,
           );
@@ -481,8 +510,7 @@ export class IsosurfaceRenderer {
   }
 
   public setVisible(visible: boolean): void {
-    this.posMesh?.setEnabled(visible);
-    this.negMesh?.setEnabled(visible);
+    this.surfaces.setVisible(visible);
     this.cloudMesh?.setEnabled(visible);
   }
 
@@ -495,138 +523,17 @@ export class IsosurfaceRenderer {
    * behind the cloud disappear at certain camera angles.
    */
   public setOpacity(opacity: number): void {
-    for (const mesh of [this.posMesh, this.negMesh]) {
-      if (!mesh) continue;
-      const mat = mesh.material as ShaderMaterial | null;
-      if (mat) this.applyOpacity(mat, opacity);
-    }
+    this.surfaces.setOpacity(opacity);
     // Cloud opacity slider is reflected on next pipeline rebuild —
     // keeping additive cloud blending stable trumps live cloud opacity.
   }
 
   public dispose(): void {
-    for (const meshRef of [
-      { mesh: this.posMesh, name: "posMesh" as const },
-      { mesh: this.negMesh, name: "negMesh" as const },
-      { mesh: this.cloudMesh, name: "cloudMesh" as const },
-    ]) {
-      if (meshRef.mesh) {
-        meshRef.mesh.material?.dispose();
-        meshRef.mesh.dispose();
-      }
+    this.surfaces.dispose();
+    if (this.cloudMesh) {
+      this.cloudMesh.material?.dispose();
+      this.cloudMesh.dispose();
     }
-    this.posMesh = null;
-    this.negMesh = null;
     this.cloudMesh = null;
-  }
-
-  private installMesh(
-    name: string,
-    mc: MCMesh,
-    color: [number, number, number],
-    style: IsosurfaceStyle,
-  ): Mesh | null {
-    if (mc.positions.length === 0 || mc.indices.length === 0) {
-      return null;
-    }
-    const mesh = new Mesh(name, this.scene);
-
-    // Barycentric coordinates require one vertex per triangle corner. The
-    // expansion also makes anti-aliased mesh edges deterministic instead of
-    // depending on marching-cubes vertex sharing.
-    const positions: number[] = [];
-    const normals: number[] = [];
-    const barycentric: number[] = [];
-    const indices: number[] = [];
-    const corners = [
-      [1, 0, 0],
-      [0, 1, 0],
-      [0, 0, 1],
-    ] as const;
-    for (let t = 0; t < mc.indices.length; t += 3) {
-      for (let corner = 0; corner < 3; corner++) {
-        const source = mc.indices[t + corner] * 3;
-        positions.push(
-          mc.positions[source],
-          mc.positions[source + 1],
-          mc.positions[source + 2],
-        );
-        normals.push(
-          mc.normals[source],
-          mc.normals[source + 1],
-          mc.normals[source + 2],
-        );
-        barycentric.push(...corners[corner]);
-        indices.push(indices.length);
-      }
-    }
-
-    const vertexData = new VertexData();
-    vertexData.positions = positions;
-    vertexData.normals = normals;
-    vertexData.indices = indices;
-    vertexData.applyToMesh(mesh);
-    mesh.setVerticesData("barycentric", barycentric, false, 3);
-
-    const mat = new ShaderMaterial(
-      `${name}_mat`,
-      this.scene,
-      { vertex: "molvisSurface", fragment: "molvisSurface" },
-      {
-        attributes: ["position", "normal", "barycentric"],
-        uniforms: [
-          "world",
-          "worldViewProjection",
-          "view",
-          "surfaceColor",
-          "backgroundColor",
-          "lightDir",
-          "opacity",
-          "surfaceStyle",
-          "contourSpacing",
-        ],
-        needAlphaBlending: true,
-      },
-    );
-    mat.backFaceCulling = false;
-    mat.setColor3("surfaceColor", new Color3(color[0], color[1], color[2]));
-    mat.setFloat("surfaceStyle", this.surfaceStyleValue(style.surfaceStyle));
-    mat.setFloat("contourSpacing", Math.max(0.01, style.contourSpacing));
-    const lightDir = new Vector3(-0.45, 0.6, 0.72).normalize();
-    const backgroundColor = new Color3();
-    mat.setVector3("lightDir", lightDir);
-    const syncBackground = () => {
-      const background = this.scene.clearColor;
-      backgroundColor.set(background.r, background.g, background.b);
-      mat.setColor3("backgroundColor", backgroundColor);
-    };
-    syncBackground();
-    mat.onBindObservable.add(syncBackground);
-    this.applyOpacity(mat, style.opacity);
-    mesh.material = mat;
-
-    mesh.isPickable = false;
-    return mesh;
-  }
-
-  private applyOpacity(mat: ShaderMaterial, opacity: number): void {
-    const a = Math.max(0, Math.min(1, opacity));
-    mat.setFloat("opacity", a);
-    if (a < 1) {
-      mat.transparencyMode = Material.MATERIAL_ALPHABLEND;
-      mat.needDepthPrePass = true;
-      mat.separateCullingPass = true;
-    } else {
-      mat.transparencyMode = Material.MATERIAL_OPAQUE;
-      mat.needDepthPrePass = false;
-      mat.separateCullingPass = false;
-    }
-  }
-
-  private surfaceStyleValue(style: SurfaceStyle): number {
-    if (style === "mesh") return 1;
-    if (style === "contour") return 2;
-    if (style === "dot") return 3;
-    return 0;
   }
 }

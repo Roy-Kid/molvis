@@ -296,12 +296,12 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
             format={(v) => `${Math.round(v * 100)}%`}
             onPreview={(v) => {
               modifier.setStyle({ opacity: v });
-              app?.artist.isosurfaceRenderer.setOpacity(v);
+              app?.artist.surfaceLayer(modifier.id).setOpacity(v);
               onUpdate();
             }}
             onCommit={(v) => {
               modifier.setStyle({ opacity: v });
-              app?.artist.isosurfaceRenderer.setOpacity(v);
+              app?.artist.surfaceLayer(modifier.id).setOpacity(v);
               onUpdate();
             }}
           />
