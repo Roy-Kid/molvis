@@ -4,6 +4,13 @@ Passive inventory. Updated when a parity wave ships.
 **Excluded by product decision:** all Python-related OVITO modifiers; all
 Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 
+The Voronoi exclusion is about Voronoi *analyses* — per-cell volumes, face
+graphs, void detection. It is not a ban on Delaunay as an internal primitive:
+`Molecular surface`'s alpha-shape algorithm owns a TS Delaunay
+tetrahedralisation (`stage/src/algo/surface/delaunay_3d.ts`) and ships. molrs
+exposes only Voronoi cell volumes plus a face graph, never the dual
+tetrahedra, so no alpha complex is derivable from it.
+
 **Placement iron law**
 
 | Placement | Criterion |
@@ -69,12 +76,12 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | Create bonds | `Create bonds` | done | |
 | (Bonds visual) | `Bonds` | done | Auto-attach + user-addable |
 | Simulation cell | `Simulation cell` | done | |
-| Create isosurface | `Create isosurface` | done | Grid block; left compute / right draw |
+| Create isosurface | `Create isosurface` | done | Grid block from CUBE/CHGCAR/XSF; left compute / right draw. **Not** part of Molecular surface — its input is a volumetric file, not a molecule |
 | Particles | `Particles` | done | Auto-attach only |
 | — | `Cartoon` | n/a | Auto-attach protein path |
 | — | `Vector field` | n/a | MolVis; also displacement draw path |
-| — | `Gaussian density surface` | n/a | Closest to Construct surface mesh |
-| Construct surface mesh | `Construct surface mesh` | done | Gaussian denser grid → MC; left compute / right draw |
+| — | ~~`Gaussian density surface`~~ | absorbed | Now the `gaussian` arm of `Molecular surface`. Registry name kept, `userAddable: false`, so saved projects / state-sync / RPC still resolve it |
+| Construct surface mesh | `Molecular surface` | done | Supersedes it, and covers **both** OVITO methods: alpha-shape and Gaussian density. Six algorithms in one flat picker — union of balls (vdW), SAS, SES, Gaussian density, convex hull, alpha shape. The old `Construct surface mesh` name is kept `userAddable: false` as a Gaussian preset |
 | Coordination polyhedra | `Coordination polyhedra` | done | Neighbor wireframes; overlay |
 | Generate trajectory lines | `Generate trajectory lines` | done | Multi-frame polylines; overlay |
 
@@ -85,6 +92,7 @@ Voronoi-related features (Voronoi analysis, Voronoi voids, VoroTop).
 | (order parameters) | Steinhardt order / Solid–liquid | partial | Pipeline Coloring + left config |
 | Ackland–Jones / CNA / PTM / CSP / Chill+ / Diamond | — | oos | No molrs backends |
 | VoroTop | — | oos | Voronoi excluded |
+| (alpha shape) | `Molecular surface` → Alpha shape | done | TS Delaunay; atom centres, α = probe radius. Guarded at 20 000 atoms (~2.8 s on the main thread) |
 
 ## Analysis (OVITO modifiers that are chart/compute)
 
@@ -112,6 +120,7 @@ Iron law: **left Analysis**, not Add-modifier menu (unless scene-changing).
 | P1a | Compute/Freeze/Edit types/Select overlapping/Displacement | **shipped** |
 | P1b | Coordination polyhedra; Trajectory lines; Construct surface mesh | **shipped** |
 | P2 | Smooth trajectory; SSAO; Edit lattice UX | **shipped** |
+| P3 | Molecular surface (vdW / SAS / SES / Gaussian / convex hull / alpha shape) | **shipped** |
 | OOS | Python; Voronoi\*; CNA/PTM/CSP/DXA without molrs | never without deliberate note |
 
 \* Voronoi voids / analysis / VoroTop explicitly excluded.
@@ -128,7 +137,11 @@ Coloring: Color by Property, Color by Type, Assign Color
 
 Structure identification: Steinhardt order, Solid-liquid  
 
-Visualization: Create bonds, Bonds, Simulation cell, Vector field, Gaussian density surface, Construct surface mesh, Coordination polyhedra, Generate trajectory lines, Create isosurface  
+Visualization: Create bonds, Bonds, Simulation cell, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines, Create isosurface  
+
+Registered but hidden (`userAddable: false`), resolvable by name only:
+Gaussian density surface, Construct surface mesh — both Gaussian presets of
+Molecular surface.  
 
 Analysis: Displacement vectors, Cluster, Center of mass, Radius of gyration  
 

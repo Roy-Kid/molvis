@@ -2,6 +2,7 @@ import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
 import { SelectionMask } from "../pipeline/types";
+import type { ProjectParams } from "../project/params";
 import {
   type MaskFileParseResult,
   parseMaskFile,
@@ -74,6 +75,15 @@ export class SelectMaskModifier extends BaseModifier {
     this._expectedCount = parsed.expectedCount;
     this._sourceLabel = opts?.sourceName ?? null;
     return parsed;
+  }
+
+  /** @see {@link ../project/params ProjectParamsCarrier} */
+  toProjectParams(): ProjectParams {
+    return {
+      ids: [...this._ids],
+      expectedCount: this._expectedCount,
+      sourceLabel: this._sourceLabel,
+    };
   }
 
   /** Hydration-only setter used by project load. */

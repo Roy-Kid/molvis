@@ -47,14 +47,20 @@ import {
 import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { type ProjectParams, readEnum, readNumber } from "../project/params";
 import { DType } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
-export type SurfaceAlgorithm =
-  | SolventSurfaceMode
-  | "gaussian"
-  | "hull"
-  | "alpha";
+export const SURFACE_ALGORITHMS = [
+  "vdw",
+  "sas",
+  "ses",
+  "gaussian",
+  "hull",
+  "alpha",
+] as const;
+
+export type SurfaceAlgorithm = (typeof SURFACE_ALGORITHMS)[number];
 
 /** Algorithms that emit triangles directly, with no grid in between. */
 export type MeshAlgorithm = "hull" | "alpha";
@@ -201,6 +207,69 @@ export class MolecularSurfaceModifier extends BaseModifier {
   setStyle(patch: Partial<IsosurfaceStyle>): void {
     if (patch.isovalue !== undefined) this._isovalueAuto = false;
     this._style = { ...this._style, ...patch, channel: "density" };
+  }
+
+  /**
+   * Persisted across project save/load and backend state-sync. Without this
+   * the modifier would rebuild from the registry defaults, so a surface saved
+   * as SES would reload as the default algorithm — see
+   * {@link ../project/params}.
+   */
+  toProjectParams(): ProjectParams {
+    return {
+      algorithm: this._algorithm,
+      solvent: { ...this._solvent },
+      gaussian: { ...this._gaussian },
+      alpha: { ...this._alpha },
+      isovalue: this._isovalueAuto ? null : this._style.isovalue,
+      opacity: this._style.opacity,
+      color: [...this._style.color],
+    };
+  }
+
+  fromProjectParams(params: ProjectParams): void {
+    this._algorithm = readEnum(
+      params.algorithm,
+      SURFACE_ALGORITHMS,
+      this._algorithm,
+    );
+
+    const solvent = asRecord(params.solvent);
+    this._solvent = {
+      resolution: readNumber(solvent.resolution, this._solvent.resolution),
+      probeRadius: readNumber(solvent.probeRadius, this._solvent.probeRadius),
+      radiusScale: readNumber(solvent.radiusScale, this._solvent.radiusScale),
+    };
+
+    const gaussian = asRecord(params.gaussian);
+    this._gaussian = {
+      resolution: readNumber(gaussian.resolution, this._gaussian.resolution),
+      sigma: readNumber(gaussian.sigma, this._gaussian.sigma),
+      cutoff:
+        typeof gaussian.cutoff === "number" && Number.isFinite(gaussian.cutoff)
+          ? gaussian.cutoff
+          : null,
+    };
+
+    const alpha = asRecord(params.alpha);
+    this._alpha = {
+      probeRadius: readNumber(alpha.probeRadius, this._alpha.probeRadius),
+      smoothing: readNumber(alpha.smoothing, this._alpha.smoothing),
+    };
+
+    // A null isovalue means it was never pinned, so auto-picking resumes.
+    if (
+      typeof params.isovalue === "number" &&
+      Number.isFinite(params.isovalue)
+    ) {
+      this._isovalueAuto = false;
+      this._style = { ...this._style, isovalue: params.isovalue };
+    }
+    this._style = {
+      ...this._style,
+      opacity: readNumber(params.opacity, this._style.opacity),
+      color: readColor(params.color, this._style.color),
+    };
   }
 
   /** Surfaces are opt-in Visualization, never a default layer. */
@@ -518,4 +587,25 @@ function autoIsovalue(data: Float64Array): number {
     if (a > maxAbs) maxAbs = a;
   }
   return maxAbs > 0 ? maxAbs * 0.1 : 0.05;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readColor(
+  value: unknown,
+  fallback: [number, number, number],
+): [number, number, number] {
+  if (!Array.isArray(value) || value.length !== 3) return fallback;
+  const channels = value.map((c) =>
+    typeof c === "number" && Number.isFinite(c)
+      ? Math.max(0, Math.min(1, c))
+      : null,
+  );
+  return channels.every((c) => c !== null)
+    ? (channels as [number, number, number])
+    : fallback;
 }

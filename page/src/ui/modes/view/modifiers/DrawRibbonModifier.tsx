@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import type { ModifierPanelSurface } from "@/plugins/types";
+import { hexToRgb, rgbToHex } from "./color_hex";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawRibbonModifierProps {
@@ -29,21 +30,6 @@ const COLOR_MODES: ReadonlyArray<{ value: RibbonColorMode; label: string }> = [
   { value: "spectrum", label: "Spectrum (N→C)" },
   { value: "uniform", label: "Uniform" },
 ];
-
-function rgbToHex(rgb: readonly [number, number, number]): string {
-  const to8 = (v: number) => {
-    const i = Math.max(0, Math.min(255, Math.round(v * 255)));
-    return i.toString(16).padStart(2, "0");
-  };
-  return `#${to8(rgb[0])}${to8(rgb[1])}${to8(rgb[2])}`;
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return [0.5, 0.5, 0.5];
-  const n = Number.parseInt(m[1], 16);
-  return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
-}
 
 const PIPELINE_COPY = {
   running: "Updating the cartoon…",
@@ -148,7 +134,9 @@ export const DrawRibbonModifier: React.FC<DrawRibbonModifierProps> = ({
                 type="color"
                 value={rgbToHex(modifier.uniformColor)}
                 onChange={(e) => {
-                  modifier.setUniformColor(hexToRgb(e.target.value));
+                  modifier.setUniformColor(
+                    hexToRgb(e.target.value, [0.5, 0.5, 0.5]),
+                  );
                   applyPipeline();
                 }}
                 className="size-control-compact rounded-control cursor-pointer border-0 p-0"

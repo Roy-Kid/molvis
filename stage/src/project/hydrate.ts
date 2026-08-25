@@ -6,7 +6,6 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import { setCameraPose } from "../camera/control";
-import { SelectMaskModifier } from "../modifiers/SelectMaskModifier";
 import {
   type DataSource,
   FileDataSource,
@@ -15,6 +14,7 @@ import {
 import { bootstrapEmptyPipeline } from "../pipeline/empty_scene";
 import { ModifierRegistry } from "../pipeline/modifier_registry";
 import { Trajectory } from "../system/trajectory";
+import { carriesProjectParams } from "./params";
 import { portableToFrame } from "./portable_frame";
 import { isMolvisProject } from "./serialize";
 import type { MolvisProject, ProjectPipelineEntry } from "./types";
@@ -81,7 +81,7 @@ export async function hydrateProject(
     ) {
       mod.highlightColor = entry.params.highlightColor;
     }
-    if (mod instanceof SelectMaskModifier && entry.params) {
+    if (carriesProjectParams(mod) && entry.params) {
       mod.fromProjectParams(entry.params);
     }
     if (entry.selection_scope_id) {

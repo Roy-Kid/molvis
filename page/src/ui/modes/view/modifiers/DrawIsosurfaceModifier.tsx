@@ -17,6 +17,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import type { ModifierPanelSurface } from "@/plugins/types";
+import { hexToRgb, rgbToHex } from "./color_hex";
 import { ScalarSliderRow } from "./ScalarSliderRow";
 
 interface DrawIsosurfaceModifierProps {
@@ -24,21 +25,6 @@ interface DrawIsosurfaceModifierProps {
   app: Molvis | null;
   onUpdate: () => void;
   surface?: ModifierPanelSurface;
-}
-
-function rgbToHex(rgb: readonly [number, number, number]): string {
-  const to8 = (v: number) => {
-    const i = Math.max(0, Math.min(255, Math.round(v * 255)));
-    return i.toString(16).padStart(2, "0");
-  };
-  return `#${to8(rgb[0])}${to8(rgb[1])}${to8(rgb[2])}`;
-}
-
-function hexToRgb(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return [0.4, 0.65, 1.0];
-  const n = Number.parseInt(m[1], 16);
-  return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
 }
 
 /**
@@ -279,7 +265,9 @@ export const DrawIsosurfaceModifier: React.FC<DrawIsosurfaceModifierProps> = ({
               type="color"
               value={rgbToHex(style.color)}
               onChange={(e) => {
-                modifier.setStyle({ color: hexToRgb(e.target.value) });
+                modifier.setStyle({
+                  color: hexToRgb(e.target.value, [0.4, 0.65, 1.0]),
+                });
                 applyPipeline();
               }}
               className="size-control-compact rounded-control cursor-pointer border-0 p-0"

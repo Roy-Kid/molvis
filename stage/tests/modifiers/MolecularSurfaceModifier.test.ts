@@ -139,6 +139,62 @@ describe("MolecularSurfaceModifier", () => {
     expect(mod.solventParams.radiusScale).toBe(1.3);
   });
 
+  it("round-trips every arm through project params", () => {
+    // Project save, backend state-sync, and RPC all rebuild modifiers from
+    // the registry with default params — a surface saved as SES must not
+    // come back as the default algorithm.
+    const saved = new MolecularSurfaceModifier();
+    saved.setAlgorithm("sas");
+    saved.setSolventParams({
+      resolution: 0.25,
+      probeRadius: 1.8,
+      radiusScale: 1.1,
+    });
+    saved.setGaussianParams({ sigma: 2.2, cutoff: 6 });
+    saved.setAlphaParams({ probeRadius: 4.5, smoothing: 7 });
+    saved.setStyle({ opacity: 0.35, color: [0.1, 0.2, 0.3] });
+
+    const restored = new MolecularSurfaceModifier();
+    restored.fromProjectParams(saved.toProjectParams());
+
+    expect(restored.algorithm).toBe("sas");
+    expect(restored.solventParams).toEqual(saved.solventParams);
+    expect(restored.gaussianParams).toEqual(saved.gaussianParams);
+    expect(restored.alphaParams).toEqual(saved.alphaParams);
+    expect(restored.style.opacity).toBeCloseTo(0.35, 6);
+    expect(restored.style.color).toEqual([0.1, 0.2, 0.3]);
+  });
+
+  it("ignores junk in a persisted record instead of adopting it", () => {
+    // Project files come off disk and may be older or hand-edited.
+    const mod = new MolecularSurfaceModifier();
+    const defaults = mod.solventParams;
+    mod.fromProjectParams({
+      algorithm: "not-an-algorithm",
+      solvent: "nonsense",
+      gaussian: null,
+      alpha: 42,
+      opacity: "0.5",
+      color: [1, 2],
+    });
+
+    expect(mod.algorithm).toBe("ses");
+    expect(mod.solventParams).toEqual(defaults);
+    expect(mod.style.color.length).toBe(3);
+  });
+
+  it("an unpinned isovalue stays automatic across a round trip", () => {
+    const saved = new MolecularSurfaceModifier();
+    const restored = new MolecularSurfaceModifier();
+    restored.fromProjectParams(saved.toProjectParams());
+    // Explicitly setting one is what pins it; nothing else should.
+    expect(saved.toProjectParams().isovalue).toBeNull();
+
+    saved.setStyle({ isovalue: 0.42 });
+    restored.fromProjectParams(saved.toProjectParams());
+    expect(restored.style.isovalue).toBeCloseTo(0.42, 6);
+  });
+
   it("style patches keep the density channel", () => {
     const mod = new MolecularSurfaceModifier();
     mod.setStyle({ opacity: 0.3 });
