@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master, nightly, dev]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -97,6 +101,10 @@ jobs:
 
       - run: npm install
 
+      # manifest.test asserts vsc-ext/out/extension.js exists. A leftover
+      # local `out/` hid this from developers; CI is a clean tree, so build
+      # first. Same order as pre-push `build-vsc-ext` then `test-vsc-ext`.
+      - run: npm run build:vsc-ext
       - run: npm run test:vsc-ext
 
   test-python:

@@ -41,6 +41,12 @@ dev = [
     "build>=1.0",
     "hatchling",
     "pytest>=7.0",
+    # Direct extra so [tool.uv.sources] molcrafts-molrs actually applies.
+    # uv only overrides *direct* deps; molpy's molrs pin is transitive and
+    # would otherwise still resolve from PyPI (0.13.2), which cannot satisfy
+    # molpy 0.14. Runtime pin stays molpy-only so the published wheel does
+    # not require unpublished molrs.
+    "molcrafts-molrs>=0.14.0",
     "pytest-cov",
     "imageio-ffmpeg>=0.6",
     "pillow>=10",

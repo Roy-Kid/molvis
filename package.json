@@ -64,6 +64,7 @@
     "vsc-ext"
   ],
   "scripts": {
+    "prepare": "node -e \"process.exit(process.env.CI ? 0 : 1)\" || pre-commit install --hook-type pre-commit --hook-type pre-push",
     "dev:core": "npm run dev -w @molcrafts/molvis-core",
     "dev:stage": "npm run dev -w @molcrafts/molvis-stage",
     "dev:sketch": "npm run dev -w @molcrafts/molvis-sketch",
@@ -93,7 +94,7 @@
     "typecheck:vsc-ext": "npm run typecheck -w vsc-ext",
     "typecheck": "npm run build:engines && npm run build:stage && npm run typecheck:core && npm run typecheck:stage && npm run typecheck:sketch && npm run typecheck:plugin && npm run typecheck:stage-viewer && npm run typecheck:sketch-viewer && npm run typecheck:page && npm run typecheck:vsc-ext",
     "test:core": "npm run test -w @molcrafts/molvis-core",
-    "test:stage": "npm run build:core && npm run test -w @molcrafts/molvis-stage",
+    "test:stage": "npm run build:stage && npm run test -w @molcrafts/molvis-stage",
     "test:sketch": "npm run build:sketch && npm run test -w @molcrafts/molvis-sketch",
     "test:stage-viewer": "npm run build:stage && npm run test -w @molcrafts/molvis-stage-viewer",
     "test:sketch-viewer": "npm run build:sketch && npm run test -w @molcrafts/molvis-sketch-viewer",
