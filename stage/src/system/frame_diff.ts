@@ -26,8 +26,8 @@ function decision(
 }
 
 function equalNumberArray(
-  left: Float32Array | Uint32Array,
-  right: Float32Array | Uint32Array,
+  left: Float32Array | Uint32Array | BigUint64Array,
+  right: Float32Array | Uint32Array | BigUint64Array,
 ): boolean {
   if (left.length !== right.length) return false;
   for (let i = 0; i < left.length; i++) {
@@ -101,8 +101,8 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
 
   const count = leftBonds.nrows();
   for (let i = 0; i < count; i++) {
-    if ((leftType?.[i] ?? 0) !== (rightType?.[i] ?? 0)) return false;
-    if ((leftNumber?.[i] ?? 0) !== (rightNumber?.[i] ?? 0)) return false;
+    if ((leftType?.[i] ?? 0n) !== (rightType?.[i] ?? 0n)) return false;
+    if ((leftNumber?.[i] ?? 0n) !== (rightNumber?.[i] ?? 0n)) return false;
   }
   return true;
 }

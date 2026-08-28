@@ -1,4 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import { viewAtomCoords } from "../io/atom_coords";
@@ -153,14 +154,16 @@ export class PlaceMoleculeCommand extends Command<void> {
         : undefined;
 
       for (let b = 0; b < nBonds; b++) {
-        const ai = is[b];
-        const aj = js[b];
+        const ai = toRowIndex(is[b]);
+        const aj = toRowIndex(js[b]);
         if (ai >= nAtoms || aj >= nAtoms) continue;
 
-        const bondType = typeCol?.[b] ?? BOND_TYPE_SINGLE;
-        const bondNumber =
-          numberCol?.[b] ??
-          (bondType >= BOND_TYPE_SINGLE && bondType <= 3 ? bondType : 0);
+        const bondType = typeCol ? toRowIndex(typeCol[b]) : BOND_TYPE_SINGLE;
+        const bondNumber = numberCol
+          ? toRowIndex(numberCol[b])
+          : bondType >= BOND_TYPE_SINGLE && bondType <= 3
+            ? bondType
+            : 0;
 
         bondCommands.push(
           new DrawBondCommand(

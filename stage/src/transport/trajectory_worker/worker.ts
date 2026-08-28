@@ -404,13 +404,13 @@ function readBlocks(s: MolrsTrajStream): BlockPayload[] {
           });
           break;
         }
-        case "u32": {
+        case "u64": {
           const ptr = s.columnPtrU32(bi, ci);
-          const view = new Uint32Array(wasmMemory().buffer, ptr, len);
+          const view = new BigUint64Array(wasmMemory().buffer, ptr, len);
           columns.push({
             name: colName,
-            dtype: "u32",
-            data: new Uint32Array(view),
+            dtype: "u64",
+            data: new BigUint64Array(view),
           });
           break;
         }

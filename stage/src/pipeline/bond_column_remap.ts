@@ -1,5 +1,6 @@
+import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
 
@@ -98,62 +99,63 @@ export class BondColumnRemapModifier extends BaseModifier {
 }
 
 function lookupViaIdMap(
-  raw: Uint32Array,
+  raw: BigUint64Array,
   idMap: Map<number, number>,
-): Uint32Array {
+): BigUint64Array {
   // Unknown IDs map to row 0 — keeps the bond renderable instead of
   // crashing, and shows up as a visibly wrong endpoint that's easy to
   // spot rather than silently skipping the bond.
-  const out = new Uint32Array(raw.length);
-  for (let k = 0; k < raw.length; k++) out[k] = idMap.get(raw[k]) ?? 0;
+  const out = new BigUint64Array(raw.length);
+  for (let k = 0; k < raw.length; k++) {
+    out[k] = BigInt(idMap.get(toRowIndex(raw[k])) ?? 0);
+  }
   return out;
 }
 
-function applyOffset(raw: Uint32Array, offset: number): Uint32Array {
+function applyOffset(raw: BigUint64Array, offset: number): BigUint64Array {
   if (offset === 0) return raw;
-  const out = new Uint32Array(raw.length);
-  for (let k = 0; k < raw.length; k++) out[k] = raw[k] + offset;
+  const out = new BigUint64Array(raw.length);
+  const delta = BigInt(offset);
+  for (let k = 0; k < raw.length; k++) out[k] = raw[k] + delta;
   return out;
 }
 
 function buildAtomIdMap(
   atomsBlock: import("@molcrafts/molvis-core/molrs").Block,
 ): Map<number, number> | null {
-  // molrs pins the canonical "id" column to u32 (Block::insert refuses any
-  // other dtype under that key), so U32-or-absent is exhaustive here.
-  if (atomsBlock.dtype("id") !== DType.U32) return null;
+  // molrs pins the canonical "id" column to domain uint / u64
+  // (Block::insert refuses any other dtype under that key).
+  if (!isDomainUintDtype(atomsBlock.dtype("id"))) return null;
   const ids = atomsBlock.copyColU32("id");
   if (!ids) return null;
   const map = new Map<number, number>();
-  for (let r = 0; r < ids.length; r++) map.set(ids[r], r);
+  for (let r = 0; r < ids.length; r++) map.set(toRowIndex(ids[r]), r);
   return map;
 }
 
 function readNumericColumnAsU32(
   block: import("@molcrafts/molvis-core/molrs").Block,
   column: string,
-): Uint32Array | null {
+): BigUint64Array | null {
   const dt = block.dtype(column);
   if (dt === undefined) return null;
-  if (dt === DType.U32) {
+  if (isDomainUintDtype(dt)) {
     return block.copyColU32(column) ?? null;
   }
   if (dt === DType.I32) {
     const src = block.copyColI32(column);
     if (src === undefined) return null;
-    const out = new Uint32Array(src.length);
-    for (let k = 0; k < src.length; k++) out[k] = src[k];
-    return out;
+    return toDomainUint(src);
   }
   if (isFloatDtype(dt)) {
     // viewColF is a zero-copy view into WASM memory; safe here because
-    // we drain it into the new Uint32Array immediately, before any
+    // we drain it into the domain-uint buffer immediately, before any
     // operation that could grow WASM memory and invalidate the view.
     const src = block.viewColF(column);
     if (src === undefined) return null;
-    const out = new Uint32Array(src.length);
-    for (let k = 0; k < src.length; k++) out[k] = Math.trunc(src[k]);
-    return out;
+    const truncated = new Int32Array(src.length);
+    for (let k = 0; k < src.length; k++) truncated[k] = Math.trunc(src[k]);
+    return toDomainUint(truncated);
   }
   return null;
 }
@@ -184,7 +186,7 @@ export function bondsIntegerColumns(frame: Frame): string[] {
   const out: string[] = [];
   for (const key of bonds.keys() as string[]) {
     const dt = bonds.dtype(key);
-    if (dt === DType.U32 || dt === DType.I32 || isFloatDtype(dt)) {
+    if (isDomainUintDtype(dt) || dt === DType.I32 || isFloatDtype(dt)) {
       out.push(key);
     }
   }

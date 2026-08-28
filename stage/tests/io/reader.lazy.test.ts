@@ -108,8 +108,12 @@ describe("loadTextTrajectory", () => {
     try {
       const bonds = bundle.trajectory.get(0)?.getBlock("bonds");
       expect(bonds?.nrows()).toBe(2);
-      expect([...(bonds?.copyColU32("atomi") ?? [])]).toEqual([0, 0]);
-      expect([...(bonds?.copyColU32("atomj") ?? [])]).toEqual([1, 2]);
+      expect(Array.from(bonds?.copyColU32("atomi") ?? [], Number)).toEqual([
+        0, 0,
+      ]);
+      expect(Array.from(bonds?.copyColU32("atomj") ?? [], Number)).toEqual([
+        1, 2,
+      ]);
     } finally {
       bundle.dispose();
     }

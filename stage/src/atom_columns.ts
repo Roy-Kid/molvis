@@ -17,7 +17,7 @@ import { DType } from "./utils/dtype";
 /**
  * Read side of a column store — molrs `Block`'s read API, narrowed.
  *
- * `dtype` returns molrs's dtype string (`"f64"` / `"f32"` / `"u32"` / `"i32"` /
+ * `dtype` returns molrs's dtype string (`"f64"` / `"f32"` / `"u64"` / `"i32"` /
  * `"string"`), and the `copyCol*` readers are only valid for the matching
  * dtype — molrs throws when a reader is used against the wrong column, which is
  * why {@link AtomColumnCarrier} always dispatches on `dtype` first.
@@ -33,8 +33,8 @@ export interface ColumnSource {
   copyColF(key: string): Float64Array | Float32Array | undefined;
   /** Owned copy of a `"string"` column. */
   copyColStr(key: string): string[] | undefined;
-  /** Owned copy of a `"u32"` column. */
-  copyColU32(key: string): Uint32Array | undefined;
+  /** Owned copy of a domain-uint (`"u64"`) column. JS name stays `copyColU32`. */
+  copyColU32(key: string): BigUint64Array | undefined;
   /** Owned copy of an `"i32"` column. */
   copyColI32(key: string): Int32Array | undefined;
 }
@@ -43,7 +43,7 @@ export interface ColumnSource {
 export interface ColumnSink {
   setColF(key: string, value: Float64Array): void;
   setColStr(key: string, value: string[]): void;
-  setColU32(key: string, value: Uint32Array): void;
+  setColU32(key: string, value: BigUint64Array): void;
   setColI32(key: string, value: Int32Array): void;
 }
 
@@ -63,21 +63,21 @@ const UNMAPPED = -1;
  * allocator already put there.
  *
  * `Ctor` decides the destination width, which is what keeps each
- * {@link ColumnSink} setter's buffer type exact (f64 / u32 / i32) rather than
+ * {@link ColumnSink} setter's buffer type exact (f64 / u64 / i32) rather than
  * collapsing the three into one. String columns deliberately do not come
  * through here — their default is `""`, a different kind of empty than a
  * zeroed buffer.
  */
-function scatter<T extends Float64Array | Uint32Array | Int32Array>(
+function scatter<T extends Float64Array | BigUint64Array | Int32Array>(
   rows: number,
   sourceRows: Int32Array,
-  col: ArrayLike<number>,
+  col: ArrayLike<T extends BigUint64Array ? bigint : number>,
   Ctor: new (length: number) => T,
 ): T {
   const out = new Ctor(rows);
   for (let row = 0; row < rows; row++) {
     const from = sourceRows[row];
-    if (from !== UNMAPPED) out[row] = col[from];
+    if (from !== UNMAPPED) out[row] = col[from] as T[number];
   }
   return out;
 }
@@ -133,10 +133,10 @@ export class AtomColumnCarrier {
           dst.setColF(key, scatter(rows, sourceRows, col, Float64Array));
           break;
         }
-        case DType.U32: {
+        case DType.U64: {
           const col = this.source.copyColU32(key);
           if (!col) break;
-          dst.setColU32(key, scatter(rows, sourceRows, col, Uint32Array));
+          dst.setColU32(key, scatter(rows, sourceRows, col, BigUint64Array));
           break;
         }
         case DType.I32: {

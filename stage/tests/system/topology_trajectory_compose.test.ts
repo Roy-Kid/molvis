@@ -1,6 +1,7 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { composeSources } from "../../src/system/source_composition";
 import { Trajectory } from "../../src/system/trajectory";
 
@@ -8,7 +9,7 @@ function topoFrame(): Frame {
   const f = new Frame();
   const b = f.createBlock("atoms");
   // LAMMPS data: file order is NOT id order (ids permuted).
-  b.setColU32("id", new Uint32Array([3, 1, 2]));
+  b.setColU32("id", toDomainUint([3, 1, 2]));
   b.setColStr("element", ["C", "O", "H"]);
   return f;
 }
@@ -27,7 +28,7 @@ function trajFrame(seed: number): Frame {
     y[i] = seed + i * 0.2;
     z[i] = seed + i * 0.3;
   }
-  b.setColU32("id", id);
+  b.setColU32("id", toDomainUint(id));
   b.setColF("x", x);
   b.setColF("y", y);
   b.setColF("z", z);
@@ -51,7 +52,9 @@ describe("topology + trajectory composition", () => {
       expect(atoms?.nrows()).toBe(3);
       const x = atoms?.viewColF("x");
       // Composition keeps the topology's row order, not the trajectory's.
-      expect(Array.from(atoms?.viewColU32("id") ?? [])).toEqual([3, 1, 2]);
+      expect(Array.from(atoms?.viewColU32("id") ?? [], Number)).toEqual([
+        3, 1, 2,
+      ]);
       // Topology id order [3,1,2] maps trajectory rows [1,2,3] -> [3,1,2].
       // x[trajectory row for id 3] = seed + 2*0.1 must land at topology row 0.
       expect(x?.[0]).toBeCloseTo(i + 0.2, 5);

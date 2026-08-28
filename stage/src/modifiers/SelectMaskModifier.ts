@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext, ValidationResult } from "../pipeline/types";
@@ -173,12 +174,12 @@ export class SelectMaskModifier extends BaseModifier {
  */
 function atomIdToRowMap(atoms: Block | undefined): Map<number, number> | null {
   if (atoms === undefined || atoms.nrows() === 0) return null;
-  // molrs pins the canonical "id" column to u32 (Block::insert refuses any
-  // other dtype under that key), so U32-or-absent is exhaustive here.
-  if (atoms.dtype("id") !== DType.U32) return null;
+  // molrs pins the canonical "id" column to domain uint / u64
+  // (Block::insert refuses any other dtype under that key).
+  if (atoms.dtype("id") !== DType.U64) return null;
   const ids = atoms.copyColU32("id");
   if (!ids) return null;
   const map = new Map<number, number>();
-  for (let r = 0; r < ids.length; r++) map.set(ids[r], r);
+  for (let r = 0; r < ids.length; r++) map.set(toRowIndex(ids[r]), r);
   return map;
 }

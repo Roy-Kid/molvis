@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { HideSelectionModifier } from "../../src/modifiers/HideSelectionModifier";
 import { createDefaultContext, SelectionMask } from "../../src/pipeline/types";
@@ -80,10 +81,10 @@ describe("HideSelectionModifier", () => {
 
     const bonds = new Block();
     // Bonds: 0-1, 1-2
-    bonds.setColU32("atomi", new Uint32Array([0, 1]));
-    bonds.setColU32("atomj", new Uint32Array([1, 2]));
-    bonds.setColU32("bond_type", new Uint32Array([1, 1]));
-    bonds.setColU32("bond_number", new Uint32Array([1, 1]));
+    bonds.setColU32("atomi", toDomainUint([0, 1]));
+    bonds.setColU32("atomj", toDomainUint([1, 2]));
+    bonds.setColU32("bond_type", toDomainUint([1, 1]));
+    bonds.setColU32("bond_number", toDomainUint([1, 1]));
     frame.insertBlock("bonds", bonds);
 
     const context = createDefaultContext(frame, mockApp);
@@ -111,8 +112,8 @@ describe("HideSelectionModifier", () => {
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
     frame.insertBlock("bonds", bonds);
 
     const context = createDefaultContext(frame, mockApp);
@@ -140,8 +141,8 @@ describe("HideSelectionModifier", () => {
     if (!js) {
       throw new Error('Expected bonds column "atomj"');
     }
-    expect(is[0]).toBe(0);
-    expect(js[0]).toBe(1);
+    expect(Number(is[0])).toBe(0);
+    expect(Number(js[0])).toBe(1);
   });
 
   test("Should preserve non-coordinate columns (including the molrs id column)", () => {
@@ -151,7 +152,7 @@ describe("HideSelectionModifier", () => {
     atoms.setColF("y", new Float64Array([0, 0, 0]));
     atoms.setColF("z", new Float64Array([0, 0, 0]));
     atoms.setColStr("element", ["C", "O", "N"]);
-    atoms.setColU32("id", new Uint32Array([10, 20, 30]));
+    atoms.setColU32("id", toDomainUint([10, 20, 30]));
     frame.insertBlock("atoms", atoms);
 
     const context = createDefaultContext(frame, mockApp);
@@ -162,6 +163,6 @@ describe("HideSelectionModifier", () => {
     expect(outAtoms.nrows()).toBe(2);
 
     const ids = outAtoms.copyColU32("id");
-    expect(ids).toEqual(new Uint32Array([10, 30]));
+    expect(Array.from(ids, Number)).toEqual([10, 30]);
   });
 });

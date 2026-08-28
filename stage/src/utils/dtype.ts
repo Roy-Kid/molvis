@@ -13,6 +13,18 @@ export const DType = {
    */
   F32: "f32",
   I32: "i32",
+  /**
+   * Domain uint / Idx (`id`, `mol_id`, `type_id`, `res_id`, bond endpoints,
+   * `bond_type`, `bond_number`). molrs `Block.dtype()` reports `"u64"`;
+   * the JS readers stay `copyColU32` / `setColU32` / `viewColU32` and
+   * take/return `BigUint64Array`.
+   */
+  U64: "u64",
+  /**
+   * Storage-width uint32 for columns that arrived as uint32 and were not
+   * promoted to Idx. Not readable via `copyColU32` (that path is domain
+   * UInt / `"u64"` only).
+   */
   U32: "u32",
   String: "string",
 } as const;
@@ -32,4 +44,17 @@ export function isFloatDtype(
   dtype: string | undefined,
 ): dtype is typeof DType.F64 | typeof DType.F32 {
   return dtype === DType.F64 || dtype === DType.F32;
+}
+
+/**
+ * True when `dtype` names a molrs domain-uint / Idx column (`"u64"`).
+ *
+ * `copyColU32` / `setColU32` / `viewColU32` only accept this dtype.
+ * `"u32"` is a leftover storage-width spelling and is not a domain-uint
+ * reader.
+ */
+export function isDomainUintDtype(
+  dtype: string | undefined,
+): dtype is typeof DType.U64 {
+  return dtype === DType.U64;
 }

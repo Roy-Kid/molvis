@@ -13,7 +13,7 @@ export interface AtomTypeSource {
   hasU32(name: string): boolean;
   dtype(name: string): string | undefined;
   getStr(name: string): string[];
-  getU32(name: string): Uint32Array;
+  getU32(name: string): BigUint64Array;
 }
 
 /**
@@ -34,7 +34,7 @@ export function readAtomTypeKeys(atoms: AtomTypeSource): string[] | undefined {
   }
   const idDtype = atoms.dtype(TYPE_ID);
   if (idDtype !== undefined) {
-    throw new Error(`column '${TYPE_ID}' must be u32, got '${idDtype}'`);
+    throw new Error(`column '${TYPE_ID}' must be u64, got '${idDtype}'`);
   }
   return undefined;
 }

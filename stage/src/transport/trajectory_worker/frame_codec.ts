@@ -33,7 +33,7 @@ export function rehydrateFrame(msg: FrameMessage): Frame {
         case "f64":
           handle.setColF(col.name, col.data);
           break;
-        case "u32":
+        case "u64":
           handle.setColU32(col.name, col.data);
           break;
         case "i32":

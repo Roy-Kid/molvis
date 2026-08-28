@@ -55,11 +55,11 @@ export interface AnalysisFrameSnapshot {
    * have moved from a reference frame) and friends — instead of trusting row
    * order.
    *
-   * `Uint32Array` is the only dtype needed: molrs binds `id` to `UInt` in its
-   * column schema and refuses a signed or float column under that key, so a
-   * frame's `Block.dtype("id")` is `u32` or the column is absent.
+   * `BigUint64Array` is the only dtype needed: molrs binds `id` to domain
+   * uint (`u64` / Idx) and refuses a signed or float column under that key,
+   * so a frame's `Block.dtype("id")` is `u64` or the column is absent.
    */
-  ids?: Uint32Array;
+  ids?: BigUint64Array;
   /**
    * The LAMMPS (Large-scale Atomic/Molecular Massively Parallel Simulator) cell diagonal `[lx, ly, lz]` (Å) of the simulation cell — the
    * periodically repeating box the frame's atoms live in.
@@ -235,19 +235,20 @@ function copyCoordColumn(
 /**
  * The canonical `id` column when the frame carries one.
  *
- * molrs binds `id` to `UInt`, so a present column is `u32` — a differently
- * typed `id` is a real schema break and says so instead of being dropped.
+ * molrs binds `id` to domain uint, so a present column is `u64` — a
+ * differently typed `id` is a real schema break and says so instead of
+ * being dropped.
  */
 function copyIdColumn(
   atoms: Block,
   frameIndex: number,
-): Uint32Array | undefined {
+): BigUint64Array | undefined {
   const dtype = atoms.dtype("id");
   if (dtype === undefined) return undefined;
-  if (dtype !== DType.U32) {
+  if (dtype !== DType.U64) {
     throw new Error(
       `Analysis snapshot: frame ${frameIndex} has an "id" column of dtype ` +
-        `${dtype}; molrs binds "id" to u32`,
+        `${dtype}; molrs binds "id" to u64`,
     );
   }
   return atoms.copyColU32("id");

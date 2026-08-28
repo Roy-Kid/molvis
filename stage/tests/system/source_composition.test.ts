@@ -1,6 +1,7 @@
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import {
   compatibleAugmentLengths,
   composeSources,
@@ -34,16 +35,22 @@ function setAtomStr(frame: Frame, key: string, values: string[]): void {
 function setAtomU32(frame: Frame, key: string, values: number[]): void {
   const block = frame.getBlock("atoms");
   if (!block) throw new Error("missing atoms block");
-  block.setColU32(key, Uint32Array.from(values));
+  block.setColU32(key, toDomainUint(values));
 }
 
 function bonds(pairs: Array<[number, number]>): Frame {
   const frame = new Frame();
   const block = new Block();
-  block.setColU32("atomi", Uint32Array.from(pairs.map((p) => p[0])));
-  block.setColU32("atomj", Uint32Array.from(pairs.map((p) => p[1])));
-  block.setColU32("bond_type", new Uint32Array(pairs.length).fill(1));
-  block.setColU32("bond_number", new Uint32Array(pairs.length).fill(1));
+  block.setColU32("atomi", toDomainUint(pairs.map((p) => p[0])));
+  block.setColU32("atomj", toDomainUint(pairs.map((p) => p[1])));
+  block.setColU32(
+    "bond_type",
+    toDomainUint(new Uint32Array(pairs.length).fill(1)),
+  );
+  block.setColU32(
+    "bond_number",
+    toDomainUint(new Uint32Array(pairs.length).fill(1)),
+  );
   frame.insertBlock("bonds", block);
   return frame;
 }
@@ -161,9 +168,9 @@ describe("composeSources augment", () => {
       sources: Parameters<typeof composeSources>[0],
     ) => {
       const out = await composeSources(sources, 1);
-      expect(Array.from(out.getBlock("atoms")?.copyColU32("id") ?? [])).toEqual(
-        [3, 1, 2],
-      );
+      expect(
+        Array.from(out.getBlock("atoms")?.copyColU32("id") ?? [], Number),
+      ).toEqual([3, 1, 2]);
       expect(Array.from(out.getBlock("atoms")?.copyColF("x") ?? [])).toEqual([
         31, 11, 21,
       ]);
@@ -173,10 +180,10 @@ describe("composeSources augment", () => {
         "O",
       ]);
       expect(
-        Array.from(out.getBlock("bonds")?.copyColU32("atomi") ?? []),
+        Array.from(out.getBlock("bonds")?.copyColU32("atomi") ?? [], Number),
       ).toEqual([0]);
       expect(
-        Array.from(out.getBlock("bonds")?.copyColU32("atomj") ?? []),
+        Array.from(out.getBlock("bonds")?.copyColU32("atomj") ?? [], Number),
       ).toEqual([1]);
     };
 
@@ -236,8 +243,12 @@ describe("loader-time extend", () => {
     expect(Array.from(atomsBlock?.copyColI32("source_id") ?? [])).toEqual([
       0, 0, 1,
     ]);
-    expect(Array.from(bondsBlock?.copyColU32("atomi") ?? [])).toEqual([0, 2]);
-    expect(Array.from(bondsBlock?.copyColU32("atomj") ?? [])).toEqual([1, 2]);
+    expect(Array.from(bondsBlock?.copyColU32("atomi") ?? [], Number)).toEqual([
+      0, 2,
+    ]);
+    expect(Array.from(bondsBlock?.copyColU32("atomj") ?? [], Number)).toEqual([
+      1, 2,
+    ]);
     expect(atomsBlock?.copyColStr("resname")).toEqual(["", "", "LIG"]);
   });
 

@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { SelectMaskModifier } from "../../src/modifiers/SelectMaskModifier";
 import { createDefaultContext } from "../../src/pipeline/types";
@@ -9,7 +10,7 @@ import { MaskFileSyntaxError } from "../../src/selection/mask_file";
 function threeAtomFrame(): Frame {
   const frame = new Frame();
   const atoms = new Block();
-  atoms.setColU32("id", new Uint32Array([10, 20, 30]));
+  atoms.setColU32("id", toDomainUint([10, 20, 30]));
   atoms.setColF("x", new Float64Array([0, 1, 2]));
   atoms.setColF("y", new Float64Array([0, 0, 0]));
   atoms.setColF("z", new Float64Array([0, 0, 0]));

@@ -1,6 +1,12 @@
+import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { BOND_TYPE_SINGLE, setBondTopology } from "../utils/bond_order";
-import { type ColumnDType, DType, isFloatDtype } from "../utils/dtype";
+import {
+  type ColumnDType,
+  DType,
+  isDomainUintDtype,
+  isFloatDtype,
+} from "../utils/dtype";
 import type { Trajectory } from "./trajectory";
 
 const SOURCE_ID = "source_id";
@@ -333,8 +339,8 @@ function concatColumn(
       offset += counts[sourceIndex];
     }
     target.setColF(key, dst);
-  } else if (dtype === DType.U32) {
-    const dst = new Uint32Array(total);
+  } else if (isDomainUintDtype(dtype)) {
+    const dst = new BigUint64Array(total);
     let offset = 0;
     for (let sourceIndex = 0; sourceIndex < blocks.length; sourceIndex++) {
       assertCompatibleDType(blocks[sourceIndex], sourceIndex, key, dtype);
@@ -477,9 +483,9 @@ class AtomIdAlignment {
   }
 }
 
-function atomIdColumn(block: Block): ArrayLike<number> | null {
+function atomIdColumn(block: Block): ArrayLike<number | bigint> | null {
   const dtype = block.dtype("id");
-  if (dtype === DType.U32) return block.viewColU32("id");
+  if (isDomainUintDtype(dtype)) return block.viewColU32("id");
   if (dtype === DType.I32) return block.viewColI32("id");
   return null;
 }
@@ -500,10 +506,10 @@ function permuteAtomRows(block: Block, srcOfDest: Int32Array): Block {
       const dst = new Float64Array(n);
       for (let i = 0; i < n; i++) dst[i] = src[srcOfDest[i]];
       out.setColF(key, dst);
-    } else if (dtype === DType.U32) {
+    } else if (isDomainUintDtype(dtype)) {
       const src = block.viewColU32(key);
       if (!src) continue;
-      const dst = new Uint32Array(n);
+      const dst = new BigUint64Array(n);
       for (let i = 0; i < n; i++) dst[i] = src[srcOfDest[i]];
       out.setColU32(key, dst);
     } else if (dtype === DType.I32) {
@@ -564,9 +570,9 @@ function copyColumn(target: Block, key: string, source: Block): void {
   } else if (isFloatDtype(dtype)) {
     const src = source.viewColF(key);
     if (src) target.setColF(key, new Float64Array(src));
-  } else if (dtype === DType.U32) {
+  } else if (isDomainUintDtype(dtype)) {
     const src = source.viewColU32(key);
-    if (src) target.setColU32(key, new Uint32Array(src));
+    if (src) target.setColU32(key, new BigUint64Array(src));
   } else if (dtype === DType.I32) {
     const src = source.viewColI32(key);
     if (src) target.setColI32(key, new Int32Array(src));
@@ -595,6 +601,7 @@ function isColumnDType(dtype: string | undefined): dtype is ColumnDType {
   return (
     dtype === DType.String ||
     isFloatDtype(dtype) ||
+    isDomainUintDtype(dtype) ||
     dtype === DType.U32 ||
     dtype === DType.I32
   );
@@ -631,11 +638,11 @@ function concatBonds(
       if (iCol && jCol) {
         any = true;
         for (let row = 0; row < bonds.nrows(); row++) {
-          atomi.push(iCol[row] + offset);
-          atomj.push(jCol[row] + offset);
-          const t = typeCol?.[row] ?? BOND_TYPE_SINGLE;
+          atomi.push(toRowIndex(iCol[row]) + offset);
+          atomj.push(toRowIndex(jCol[row]) + offset);
+          const t = typeCol ? toRowIndex(typeCol[row]) : BOND_TYPE_SINGLE;
           bondType.push(t);
-          bondNumber.push(numberCol?.[row] ?? t);
+          bondNumber.push(numberCol ? toRowIndex(numberCol[row]) : t);
         }
       }
     }
@@ -646,10 +653,10 @@ function concatBonds(
   const block = new Block();
   setBondTopology(
     block,
-    Uint32Array.from(atomi),
-    Uint32Array.from(atomj),
-    Uint32Array.from(bondType),
-    Uint32Array.from(bondNumber),
+    toDomainUint(atomi),
+    toDomainUint(atomj),
+    toDomainUint(bondType),
+    toDomainUint(bondNumber),
   );
   return block;
 }

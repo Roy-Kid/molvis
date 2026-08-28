@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { SelectTypeModifier } from "../../src/modifiers/SelectTypeModifier";
 import { createDefaultContext } from "../../src/pipeline/types";
@@ -39,7 +40,7 @@ describe("SelectTypeModifier", () => {
     atoms.setColStr("element", ["H", "C", "H"]);
     // LAMMPS ordinals live in `type_id` (UInt); `type` is reserved for the
     // String force-field label.
-    atoms.setColU32("type_id", new Uint32Array([1, 2, 1]));
+    atoms.setColU32("type_id", toDomainUint([1, 2, 1]));
     frame.insertBlock("atoms", atoms);
 
     const context = createDefaultContext(frame, mockApp);
@@ -75,7 +76,7 @@ describe("SelectTypeModifier", () => {
     atoms.setColF("y", new Float64Array([0, 0, 0]));
     atoms.setColF("z", new Float64Array([0, 0, 0]));
     atoms.setColStr("element", ["H", "C", "O"]);
-    atoms.setColU32("type_id", new Uint32Array([1, 2, 3]));
+    atoms.setColU32("type_id", toDomainUint([1, 2, 3]));
     frame.insertBlock("atoms", atoms);
 
     const context = createDefaultContext(frame, mockApp);

@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { BondSource } from "../src/entity_source";
 import { BOND_TYPE_AROMATIC, BOND_TYPE_SINGLE } from "../src/utils/bond_order";
 
@@ -14,13 +15,13 @@ function diatomicFrame(bondType?: number, bondNumber?: number): Frame {
   frame.insertBlock("atoms", atoms);
 
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([1]));
-  bonds.setColU32("atomj", new Uint32Array([0]));
+  bonds.setColU32("atomi", toDomainUint([1]));
+  bonds.setColU32("atomj", toDomainUint([0]));
   if (bondType !== undefined) {
-    bonds.setColU32("bond_type", new Uint32Array([bondType]));
+    bonds.setColU32("bond_type", toDomainUint([bondType]));
   }
   if (bondNumber !== undefined) {
-    bonds.setColU32("bond_number", new Uint32Array([bondNumber]));
+    bonds.setColU32("bond_number", toDomainUint([bondNumber]));
   }
   frame.insertBlock("bonds", bonds);
   return frame;

@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { ComputeBondsModifier } from "../../src/modifiers/ComputeBondsModifier";
 import { createDefaultContext } from "../../src/pipeline/types";
@@ -37,8 +38,8 @@ function bondSet(frame: Frame): Set<string> {
   const i = bonds.viewColU32("atomi")!;
   const j = bonds.viewColU32("atomj")!;
   for (let b = 0; b < bonds.nrows(); b++) {
-    const lo = Math.min(i[b], j[b]);
-    const hi = Math.max(i[b], j[b]);
+    const lo = Math.min(Number(i[b]), Number(j[b]));
+    const hi = Math.max(Number(i[b]), Number(j[b]));
     out.add(`${lo}-${hi}`);
   }
   return out;
@@ -109,8 +110,8 @@ describe("ComputeBondsModifier", () => {
   it("replaces any pre-existing bonds block", () => {
     const frame = makeFrame(["C", "C"], [0, 0, 0, 5.0, 0, 0]);
     const stale = new Block();
-    stale.setColU32("atomi", new Uint32Array([0]));
-    stale.setColU32("atomj", new Uint32Array([1]));
+    stale.setColU32("atomi", toDomainUint([0]));
+    stale.setColU32("atomj", toDomainUint([1]));
     frame.insertBlock("bonds", stale);
 
     const mod = new ComputeBondsModifier();

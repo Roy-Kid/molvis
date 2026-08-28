@@ -1,5 +1,5 @@
 /**
- * molrs bond columns: `bond_type` + `bond_number` (u32).
+ * molrs bond columns: `bond_type` + `bond_number` (u64 / Idx).
  *
  * - bond_type: 0 unknown, 1 single, 2 double, 3 triple, 4 aromatic
  * - bond_number: localized Lewis integer (0 unknown; 1/2/3 for Kekulé)
@@ -10,6 +10,7 @@
  * already-correct columns to stick counts and labels.
  */
 
+import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
 import type { Block } from "@molcrafts/molvis-core/molrs";
 
 export const BOND_TYPE_SINGLE = 1;
@@ -20,7 +21,7 @@ export const BOND_TYPE_AROMATIC = 4;
 type BondColsBlock = {
   nrows(): number;
   hasU32(key: string): boolean;
-  viewColU32(key: string): Uint32Array;
+  viewColU32(key: string): BigUint64Array;
 };
 
 /**
@@ -80,7 +81,10 @@ export function resolveBondOrders(bonds: BondColsBlock): Float64Array | null {
 
   const out = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    out[i] = displayBondOrder(bondType?.[i] ?? 0, bondNumber?.[i] ?? 0);
+    out[i] = displayBondOrder(
+      bondType ? toRowIndex(bondType[i]) : 0,
+      bondNumber ? toRowIndex(bondNumber[i]) : 0,
+    );
   }
   return out;
 }
@@ -106,15 +110,15 @@ export function lewisOrderToBondCols(order: number): {
 /** Write atomi/atomj + bond_type + bond_number onto a new or existing block. */
 export function setBondTopology(
   block: Block,
-  atomi: Uint32Array,
-  atomj: Uint32Array,
-  bondType: Uint32Array,
-  bondNumber: Uint32Array,
+  atomi: ArrayLike<number | bigint>,
+  atomj: ArrayLike<number | bigint>,
+  bondType: ArrayLike<number | bigint>,
+  bondNumber: ArrayLike<number | bigint>,
 ): void {
-  block.setColU32("atomi", atomi);
-  block.setColU32("atomj", atomj);
-  block.setColU32("bond_type", bondType);
-  block.setColU32("bond_number", bondNumber);
+  block.setColU32("atomi", toDomainUint(atomi));
+  block.setColU32("atomj", toDomainUint(atomj));
+  block.setColU32("bond_type", toDomainUint(bondType));
+  block.setColU32("bond_number", toDomainUint(bondNumber));
 }
 
 /**
@@ -137,8 +141,8 @@ export function remapBondSubset(
   const newJ = new Uint32Array(nb);
   for (let k = 0; k < nb; k++) {
     const orig = keepRows[k];
-    newI[k] = atomIndexMap[iCol[orig]];
-    newJ[k] = atomIndexMap[jCol[orig]];
+    newI[k] = atomIndexMap[toRowIndex(iCol[orig])];
+    newJ[k] = atomIndexMap[toRowIndex(jCol[orig])];
   }
 
   const bondType = source.hasU32("bond_type")
@@ -152,8 +156,8 @@ export function remapBondSubset(
   const numbers = new Uint32Array(nb);
   for (let k = 0; k < nb; k++) {
     const orig = keepRows[k];
-    types[k] = bondType?.[orig] ?? BOND_TYPE_SINGLE;
-    numbers[k] = bondNumber?.[orig] ?? types[k];
+    types[k] = bondType ? toRowIndex(bondType[orig]) : BOND_TYPE_SINGLE;
+    numbers[k] = bondNumber ? toRowIndex(bondNumber[orig]) : types[k];
   }
 
   const out = new BlockCtor();

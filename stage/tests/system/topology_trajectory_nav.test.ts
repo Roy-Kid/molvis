@@ -1,6 +1,7 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { System } from "../../src/system";
 import { composeSources } from "../../src/system/source_composition";
 import { Trajectory } from "../../src/system/trajectory";
@@ -8,7 +9,7 @@ import { Trajectory } from "../../src/system/trajectory";
 function topoFrame(): Frame {
   const f = new Frame();
   const b = f.createBlock("atoms");
-  b.setColU32("id", new Uint32Array([3, 1, 2]));
+  b.setColU32("id", toDomainUint([3, 1, 2]));
   b.setColStr("element", ["C", "O", "H"]);
   return f;
 }
@@ -28,7 +29,7 @@ function trajFrame(seed: number, withId: boolean): Frame {
   if (withId) {
     const id = new Uint32Array(n);
     for (let i = 0; i < n; i++) id[i] = i + 1;
-    b.setColU32("id", id);
+    b.setColU32("id", toDomainUint(id));
   }
   b.setColF("x", x);
   b.setColF("y", y);

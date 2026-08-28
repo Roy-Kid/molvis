@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "./io/atom_coords";
 import { BOND_TYPE_SINGLE } from "./utils/bond_order";
@@ -329,15 +330,17 @@ export class BondSource {
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 
-    const i = iAtoms[index];
-    const j = jAtoms[index];
+    const i = toRowIndex(iAtoms[index]);
+    const j = toRowIndex(jAtoms[index]);
 
-    const bondType = typeCol?.[index] ?? BOND_TYPE_SINGLE;
+    const bondType = typeCol ? toRowIndex(typeCol[index]) : BOND_TYPE_SINGLE;
     // Prefer bond_number; if missing, Lewis number matches type for 1–3,
     // and 0 for aromatic / unknown (same as molrs aromatic without Kekulé).
-    const bondNumber =
-      numberCol?.[index] ??
-      (bondType >= BOND_TYPE_SINGLE && bondType <= 3 ? bondType : 0);
+    const bondNumber = numberCol
+      ? toRowIndex(numberCol[index])
+      : bondType >= BOND_TYPE_SINGLE && bondType <= 3
+        ? bondType
+        : 0;
     return {
       type: "bond",
       bondId: index,

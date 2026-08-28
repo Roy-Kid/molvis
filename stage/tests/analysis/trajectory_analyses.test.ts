@@ -1,6 +1,7 @@
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { computeRdf } from "../../src/analysis/rdf";
 import type { RdfResult } from "../../src/analysis/rdf_params";
 import {
@@ -31,7 +32,7 @@ function makeFrame(positions: readonly Position[], ids?: readonly number[]) {
     "element",
     positions.map(() => "Ar"),
   );
-  if (ids) atoms.setColU32("id", Uint32Array.from(ids));
+  if (ids) atoms.setColU32("id", toDomainUint(ids));
   frame.insertBlock("atoms", atoms);
   return frame;
 }

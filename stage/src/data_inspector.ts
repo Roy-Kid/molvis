@@ -3,9 +3,15 @@
  * Pure functions that convert Frame Block data into table-friendly structures.
  */
 
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { resolveBondOrders } from "./utils/bond_order";
-import { type ColumnDType, DType, isFloatDtype } from "./utils/dtype";
+import {
+  type ColumnDType,
+  DType,
+  isDomainUintDtype,
+  isFloatDtype,
+} from "./utils/dtype";
 
 export interface ColumnDescriptor {
   name: string;
@@ -57,7 +63,7 @@ export function discoverAtomColumns(block: Block): ColumnDescriptor[] {
 type PrefetchedColumn = {
   dtype: ColumnDType;
   f64?: Float64Array;
-  u32?: Uint32Array;
+  u64?: BigUint64Array;
   i32?: Int32Array;
   string?: string[];
 };
@@ -80,10 +86,10 @@ function prefetchColumns(
         dtype: dt,
         f64: block.viewColF(col.name),
       });
-    } else if (dt === DType.U32) {
+    } else if (isDomainUintDtype(dt)) {
       columnData.set(col.name, {
-        dtype: DType.U32,
-        u32: block.viewColU32(col.name),
+        dtype: DType.U64,
+        u64: block.viewColU32(col.name),
       });
     } else if (dt === DType.I32) {
       columnData.set(col.name, {
@@ -109,8 +115,8 @@ function materializeRow(
     }
     if (isFloatDtype(data.dtype) && data.f64) {
       values.set(col.name, formatNumber(data.f64[index]));
-    } else if (data.dtype === DType.U32 && data.u32) {
-      values.set(col.name, String(data.u32[index]));
+    } else if (isDomainUintDtype(data.dtype) && data.u64) {
+      values.set(col.name, String(data.u64[index]));
     } else if (data.dtype === DType.I32 && data.i32) {
       values.set(col.name, String(data.i32[index]));
     } else if (data.dtype === DType.String && data.string) {
@@ -180,9 +186,11 @@ export function extractAtomSortKeys(
       const view = block.viewColF(column.name);
       return view ? { kind: "numeric", values: Float64Array.from(view) } : null;
     }
-    case DType.U32: {
+    case DType.U64: {
       const view = block.viewColU32(column.name);
-      return view ? { kind: "numeric", values: Float64Array.from(view) } : null;
+      return view
+        ? { kind: "numeric", values: Float64Array.from(view, Number) }
+        : null;
     }
     case DType.I32: {
       const view = block.viewColI32(column.name);
@@ -214,8 +222,8 @@ export function extractBondColumns(frame: Frame): BondColumns | null {
   const bonds = frame.getBlock("bonds");
   if (!bonds) return null;
   if (
-    bonds.dtype("atomi") !== DType.U32 ||
-    bonds.dtype("atomj") !== DType.U32
+    !isDomainUintDtype(bonds.dtype("atomi")) ||
+    !isDomainUintDtype(bonds.dtype("atomj"))
   ) {
     return null;
   }
@@ -225,8 +233,8 @@ export function extractBondColumns(frame: Frame): BondColumns | null {
   const orderCol = resolveBondOrders(bonds);
   return {
     count: bonds.nrows(),
-    i: Uint32Array.from(iCol),
-    j: Uint32Array.from(jCol),
+    i: Uint32Array.from(iCol, toRowIndex),
+    j: Uint32Array.from(jCol, toRowIndex),
     order: orderCol ? Uint32Array.from(orderCol) : null,
   };
 }
@@ -239,8 +247,8 @@ export function extractBondRows(frame: Frame): BondRow[] {
   if (!bonds) return [];
 
   if (
-    bonds.dtype("atomi") !== DType.U32 ||
-    bonds.dtype("atomj") !== DType.U32
+    !isDomainUintDtype(bonds.dtype("atomi")) ||
+    !isDomainUintDtype(bonds.dtype("atomj"))
   ) {
     return [];
   }
@@ -253,8 +261,8 @@ export function extractBondRows(frame: Frame): BondRow[] {
   for (let b = 0; b < bonds.nrows(); b++) {
     rows.push({
       index: b,
-      i: iCol[b],
-      j: jCol[b],
+      i: toRowIndex(iCol[b]),
+      j: toRowIndex(jCol[b]),
       order: orderCol ? orderCol[b] : 1,
     });
   }

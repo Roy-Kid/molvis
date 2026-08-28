@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { buildStructureOutline } from "../../src/system/structure_outline";
 
 describe("buildStructureOutline", () => {
@@ -13,7 +14,7 @@ describe("buildStructureOutline", () => {
     atoms.setColStr("element", ["N", "CA", "C"]);
     atoms.setColStr("name", ["N", "CA", "C"]);
     atoms.setColStr("chain_id", ["A", "A", "A"]);
-    atoms.setColU32("res_id", new Uint32Array([1, 1, 1]));
+    atoms.setColU32("res_id", toDomainUint([1, 1, 1]));
     atoms.setColStr("res_name", ["ALA", "ALA", "ALA"]);
     frame.insertBlock("atoms", atoms);
 
@@ -36,7 +37,7 @@ describe("buildStructureOutline", () => {
     atoms.setColF("x", new Float64Array([0, 1]));
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
-    atoms.setColU32("type_id", new Uint32Array([1, 2]));
+    atoms.setColU32("type_id", toDomainUint([1, 2]));
     frame.insertBlock("atoms", atoms);
 
     const outline = buildStructureOutline(frame);

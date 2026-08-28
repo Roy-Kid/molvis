@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import {
   type Frame,
   Topology as WasmTopology,
@@ -38,8 +39,8 @@ function topologyFromFrame(frame: Frame): WasmTopology | null {
 
   const nb = bonds.nrows();
   for (let b = 0; b < nb; b++) {
-    const i = atomi[b];
-    const j = atomj[b];
+    const i = toRowIndex(atomi[b]);
+    const j = toRowIndex(atomj[b]);
     if (i >= 0 && i < nAtoms && j >= 0 && j < nAtoms && i !== j) {
       topo.addBond(i, j);
     }

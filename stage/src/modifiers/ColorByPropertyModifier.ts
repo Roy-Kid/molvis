@@ -7,7 +7,7 @@ import {
 } from "../color_override_keys";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
 export interface ColorByPropertyConfig {
@@ -122,10 +122,10 @@ export class ColorByPropertyModifier extends BaseModifier {
         return;
       }
     }
-    if (dtype === DType.U32) {
-      const u32 = atoms.viewColU32(this._config.columnName);
-      const f32 = new Float64Array(u32.length);
-      for (let i = 0; i < u32.length; i++) f32[i] = u32[i];
+    if (isDomainUintDtype(dtype)) {
+      const u64 = atoms.viewColU32(this._config.columnName);
+      const f32 = new Float64Array(u64.length);
+      for (let i = 0; i < u64.length; i++) f32[i] = Number(u64[i]);
       this.detectedRange = detectRange(f32, atoms.nrows());
       return;
     }
@@ -155,7 +155,10 @@ export class ColorByPropertyModifier extends BaseModifier {
     const colorB = new Float64Array(atomCount);
 
     const isNumericDtype =
-      isFloatDtype(dtype) || dtype === DType.U32 || dtype === DType.I32;
+      isFloatDtype(dtype) ||
+      isDomainUintDtype(dtype) ||
+      dtype === DType.U32 ||
+      dtype === DType.I32;
     // String columns are always categorical; numeric columns are categorical
     // only when opted in (e.g. coloring by the integer source_id ordinal).
     const useCategorical =
@@ -191,10 +194,10 @@ export class ColorByPropertyModifier extends BaseModifier {
       let numData: Float64Array | null = null;
       if (isFloatDtype(dtype)) {
         numData = atoms.viewColF(this._config.columnName);
-      } else if (dtype === DType.U32) {
-        const u32 = atoms.viewColU32(this._config.columnName);
-        numData = new Float64Array(u32.length);
-        for (let j = 0; j < u32.length; j++) numData[j] = u32[j];
+      } else if (isDomainUintDtype(dtype)) {
+        const u64 = atoms.viewColU32(this._config.columnName);
+        numData = new Float64Array(u64.length);
+        for (let j = 0; j < u64.length; j++) numData[j] = Number(u64[j]);
       } else if (dtype === DType.I32) {
         const i32 = atoms.viewColI32(this._config.columnName);
         numData = new Float64Array(i32.length);
@@ -247,7 +250,7 @@ export class ColorByPropertyModifier extends BaseModifier {
 
 /**
  * Read a column as categorical string keys. String columns map nullish → "UNK";
- * numeric columns (F64/U32/I32) are stringified so distinct values become
+ * numeric columns (F64/U64/I32) are stringified so distinct values become
  * distinct categories. Returns null when the column is absent/unsupported.
  */
 function readCategoricalKeys(
@@ -263,7 +266,7 @@ function readCategoricalKeys(
     const data = block.viewColF(columnName);
     return data ? Array.from(data, (v) => String(v)) : null;
   }
-  if (dtype === DType.U32) {
+  if (isDomainUintDtype(dtype)) {
     const data = block.viewColU32(columnName);
     return data ? Array.from(data, (v) => String(v)) : null;
   }

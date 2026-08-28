@@ -20,7 +20,7 @@ function atomsBlock(): FrameMessage["blocks"][number] {
     { name: "x", dtype: "f64", data: new Float64Array([0, 1, 2]) },
     { name: "y", dtype: "f64", data: new Float64Array([3, 4, 5]) },
     { name: "z", dtype: "f64", data: new Float64Array([6, 7, 8]) },
-    { name: "id", dtype: "u32", data: new Uint32Array([10, 11, 12]) },
+    { name: "id", dtype: "u64", data: new BigUint64Array([10n, 11n, 12n]) },
     // The i32 carrier has to be a key the schema leaves unconstrained: no
     // canonical column is Int (every identifier is unsigned, every physical
     // quantity float), so a canonical key like `type_id` (UInt) would be
@@ -51,7 +51,7 @@ describe("rehydrateFrame", () => {
 
     expect(atoms.nrows()).toBe(3);
     expect(Array.from(atoms.copyColF("x"))).toEqual([0, 1, 2]);
-    expect(Array.from(atoms.copyColU32("id"))).toEqual([10, 11, 12]);
+    expect(Array.from(atoms.copyColU32("id"), Number)).toEqual([10, 11, 12]);
     expect(Array.from(atoms.copyColI32("source_id"))).toEqual([-1, 0, 1]);
     expect(atoms.copyColStr("element")).toEqual(["C", "O", "H"]);
   });
@@ -80,8 +80,8 @@ describe("rehydrateFrame", () => {
     msg.blocks.push({
       name: "bonds",
       columns: [
-        { name: "atomi", dtype: "u32", data: new Uint32Array([0, 1]) },
-        { name: "atomj", dtype: "u32", data: new Uint32Array([1, 2]) },
+        { name: "atomi", dtype: "u64", data: new BigUint64Array([0n, 1n]) },
+        { name: "atomj", dtype: "u64", data: new BigUint64Array([1n, 2n]) },
         { name: "order", dtype: "f64", data: new Float64Array([1, 1.5]) },
       ],
     });

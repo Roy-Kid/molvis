@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
@@ -230,7 +231,7 @@ describe("decodeFrame — binary buffers", () => {
     );
     const atoms = frame.getBlock("atoms");
     expect(Array.from(atoms?.copyColF("x") ?? [])).toEqual([1.5, 2.5]);
-    expect(Array.from(atoms?.copyColU32("id") ?? [])).toEqual([7, 8]);
+    expect(Array.from(atoms?.copyColU32("id") ?? [], Number)).toEqual([7, 8]);
     frame.free();
   });
 
@@ -295,10 +296,10 @@ describe("encodeFrame", () => {
     atoms.setColF("x", new Float64Array([0, 1]));
     atoms.setColF("charge", new Float64Array([-0.5, 0.5]));
     atoms.setColStr("element", ["C", "O"]);
-    atoms.setColU32("mol_id", new Uint32Array([1, 1]));
+    atoms.setColU32("mol_id", toDomainUint([1, 1]));
     const bonds = frame.createBlock("bonds");
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
 
     const { frame: wire } = encodeFrame(frame);
     expect(Object.keys(wire.blocks).sort()).toEqual(["atoms", "bonds"]);
@@ -309,7 +310,7 @@ describe("encodeFrame", () => {
       "x",
     ]);
     expect(wire.blocks.atoms.columns.charge.dtype).toBe("f64");
-    expect(wire.blocks.atoms.columns.mol_id.dtype).toBe("u32");
+    expect(wire.blocks.atoms.columns.mol_id.dtype).toBe("u64");
     expect(wire.blocks.atoms.columns.element).toEqual({
       dtype: "string",
       data: ["C", "O"],

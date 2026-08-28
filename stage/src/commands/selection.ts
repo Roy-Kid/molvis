@@ -1,4 +1,5 @@
 import { Matrix, type Mesh, type Scene, Vector3 } from "@babylonjs/core";
+import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
 import * as keys from "@molcrafts/molvis-core/keys";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { type Block, Frame as MolrsFrame } from "@molcrafts/molvis-core/molrs";
@@ -258,12 +259,9 @@ function gatherRows(source: Block, target: Block, indices: number[]): void {
         );
         break;
       }
-      case "u32": {
+      case "u64": {
         const column = source.viewColU32(key);
-        target.setColU32(
-          key,
-          Uint32Array.from(rows, (i) => column[i]),
-        );
+        target.setColU32(key, toDomainUint(rows.map((i) => column[i])));
         break;
       }
       case "string": {
@@ -377,13 +375,13 @@ export function getSelectedCommand(app: MolvisApp): { frame: Frame } {
       const sourceJ = sourceBonds.viewColU32(keys.ATOMJ);
       const keptRows =
         sourceI && sourceJ
-          ? bondRows.filter(
-              (row) =>
-                row >= 0 &&
-                row < sourceBonds.nrows() &&
-                remap.has(sourceI[row]) &&
-                remap.has(sourceJ[row]),
-            )
+          ? bondRows.filter((row) => {
+              if (row < 0 || row >= sourceBonds.nrows()) return false;
+              return (
+                remap.has(toRowIndex(sourceI[row])) &&
+                remap.has(toRowIndex(sourceJ[row]))
+              );
+            })
           : bondRows;
 
       if (keptRows.length > 0) {
@@ -392,16 +390,14 @@ export function getSelectedCommand(app: MolvisApp): { frame: Frame } {
         if (sourceI && sourceJ) {
           bonds.setColU32(
             keys.ATOMI,
-            Uint32Array.from(
-              keptRows,
-              (row) => remap.get(sourceI[row]) as number,
+            toDomainUint(
+              keptRows.map((row) => remap.get(toRowIndex(sourceI[row])) ?? 0),
             ),
           );
           bonds.setColU32(
             keys.ATOMJ,
-            Uint32Array.from(
-              keptRows,
-              (row) => remap.get(sourceJ[row]) as number,
+            toDomainUint(
+              keptRows.map((row) => remap.get(toRowIndex(sourceJ[row])) ?? 0),
             ),
           );
         }

@@ -4,6 +4,7 @@
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import {
   applyWrapIfEnabled,
   wrapAtoms,
@@ -25,10 +26,10 @@ function makeFrame(
   frame.insertBlock("atoms", atoms);
   if (bonds && bonds.length > 0) {
     const b = new Block();
-    b.setColU32("atomi", new Uint32Array(bonds.map((p) => p[0])));
-    b.setColU32("atomj", new Uint32Array(bonds.map((p) => p[1])));
-    b.setColU32("bond_type", new Uint32Array(bonds.map(() => 1)));
-    b.setColU32("bond_number", new Uint32Array(bonds.map(() => 1)));
+    b.setColU32("atomi", toDomainUint(bonds.map((p) => p[0])));
+    b.setColU32("atomj", toDomainUint(bonds.map((p) => p[1])));
+    b.setColU32("bond_type", toDomainUint(bonds.map(() => 1)));
+    b.setColU32("bond_number", toDomainUint(bonds.map(() => 1)));
     frame.insertBlock("bonds", b);
   }
   if (box) frame.box = box;

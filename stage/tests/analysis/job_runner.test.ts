@@ -146,7 +146,7 @@ function msdSnapshot(frameIndex: number): AnalysisFrameSnapshot {
     y: Float64Array.from([0]),
     z: Float64Array.from([0]),
     elements: ["Ar"],
-    ids: Uint32Array.from([1]),
+    ids: BigUint64Array.from([1n]),
   };
 }
 

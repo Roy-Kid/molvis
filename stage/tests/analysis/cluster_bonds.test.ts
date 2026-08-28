@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { computeClusters } from "../../src/analysis/cluster";
 
 /** Two separate dimers (0-1) and (2-3) via bonds. */
@@ -11,8 +12,8 @@ function twoMolecules(): Frame {
   atoms.setColF("z", new Float64Array([0, 0, 0, 0]));
   atoms.setColStr("element", ["C", "C", "O", "O"]);
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([0, 2]));
-  bonds.setColU32("atomj", new Uint32Array([1, 3]));
+  bonds.setColU32("atomi", toDomainUint([0, 2]));
+  bonds.setColU32("atomj", toDomainUint([1, 3]));
   const frame = new Frame();
   frame.insertBlock("atoms", atoms);
   frame.insertBlock("bonds", bonds);

@@ -4,6 +4,7 @@
 import { Block, Frame, Perceive } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 
 function bareCarbon(): Frame {
   const frame = new Frame();
@@ -25,10 +26,10 @@ function ethaneSkeleton(): Frame {
   atoms.setColStr("element", ["C", "C"]);
   frame.insertBlock("atoms", atoms);
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([0]));
-  bonds.setColU32("atomj", new Uint32Array([1]));
-  bonds.setColU32("bond_type", new Uint32Array([1]));
-  bonds.setColU32("bond_number", new Uint32Array([1]));
+  bonds.setColU32("atomi", toDomainUint([0]));
+  bonds.setColU32("atomj", toDomainUint([1]));
+  bonds.setColU32("bond_type", toDomainUint([1]));
+  bonds.setColU32("bond_number", toDomainUint([1]));
   frame.insertBlock("bonds", bonds);
   return frame;
 }

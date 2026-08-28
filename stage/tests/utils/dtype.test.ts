@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
-import { DType, isFloatDtype } from "../../src/utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../../src/utils/dtype";
 
 /**
  * Unit under test: stage/src/utils/dtype.ts (note topic `dtype-float-dispatch`).
@@ -40,6 +40,7 @@ describe("isFloatDtype", () => {
   it("rejects the integer dtypes", () => {
     expect(isFloatDtype(DType.I32)).toBe(false);
     expect(isFloatDtype(DType.U32)).toBe(false);
+    expect(isFloatDtype(DType.U64)).toBe(false);
   });
 
   it("rejects the string dtype", () => {
@@ -56,5 +57,24 @@ describe("isFloatDtype", () => {
     expect(isFloatDtype("bool")).toBe(false);
     expect(isFloatDtype("u8")).toBe(false);
     expect(isFloatDtype("")).toBe(false);
+  });
+});
+
+describe("isDomainUintDtype", () => {
+  it("accepts u64 — the molrs 0.14 identity / Idx spelling", () => {
+    expect(isDomainUintDtype(DType.U64)).toBe(true);
+    expect(isDomainUintDtype("u64")).toBe(true);
+  });
+
+  it("rejects storage-width u32 — copyColU32 only reads domain uint", () => {
+    expect(isDomainUintDtype(DType.U32)).toBe(false);
+    expect(isDomainUintDtype("u32")).toBe(false);
+  });
+
+  it("rejects floats, i32, string, and missing columns", () => {
+    expect(isDomainUintDtype(DType.F64)).toBe(false);
+    expect(isDomainUintDtype(DType.I32)).toBe(false);
+    expect(isDomainUintDtype(DType.String)).toBe(false);
+    expect(isDomainUintDtype(undefined)).toBe(false);
   });
 });

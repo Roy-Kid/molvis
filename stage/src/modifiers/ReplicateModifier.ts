@@ -3,12 +3,13 @@
  * periodic images `nx × ny × nz` along the simulation cell vectors.
  */
 
+import { toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { BOND_TYPE_SINGLE, setBondTopology } from "../utils/bond_order";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
 export class ReplicateModifier extends BaseModifier {
@@ -170,10 +171,10 @@ function tileAtomsBlock(atoms: Block, n0: number, images: number): Block {
         dst.set(src.subarray(0, n0), g * n0);
       }
       out.setColI32(key, dst);
-    } else if (dtype === DType.U32) {
+    } else if (isDomainUintDtype(dtype)) {
       const src = atoms.viewColU32(key);
       if (!src) continue;
-      const dst = new Uint32Array(nOut);
+      const dst = new BigUint64Array(nOut);
       for (let g = 0; g < images; g++) {
         dst.set(src.subarray(0, n0), g * n0);
       }
@@ -198,8 +199,8 @@ function tileBondsBlock(
   for (let g = 0; g < images; g++) {
     const off = g * n0;
     for (let b = 0; b < nb; b++) {
-      outI[g * nb + b] = atomi[b] + off;
-      outJ[g * nb + b] = atomj[b] + off;
+      outI[g * nb + b] = toRowIndex(atomi[b]) + off;
+      outJ[g * nb + b] = toRowIndex(atomj[b]) + off;
     }
   }
   const bondType = bonds.dtype("bond_type")
@@ -212,9 +213,9 @@ function tileBondsBlock(
   const outN = new Uint32Array(nb * images);
   for (let g = 0; g < images; g++) {
     for (let b = 0; b < nb; b++) {
-      const t = bondType?.[b] ?? BOND_TYPE_SINGLE;
+      const t = bondType ? toRowIndex(bondType[b]) : BOND_TYPE_SINGLE;
       outT[g * nb + b] = t;
-      outN[g * nb + b] = bondNumber?.[b] ?? t;
+      outN[g * nb + b] = bondNumber ? toRowIndex(bondNumber[b]) : t;
     }
   }
   setBondTopology(out, outI, outJ, outT, outN);

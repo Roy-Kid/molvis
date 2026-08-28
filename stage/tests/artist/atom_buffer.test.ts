@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { buildAtomBuffers } from "../../src/artist/atom_buffer";
@@ -64,7 +65,7 @@ describe("buildAtomBuffers", () => {
     atoms.setColF("x", new Float64Array([0, 1, 2]));
     atoms.setColF("y", new Float64Array(3));
     atoms.setColF("z", new Float64Array(3));
-    atoms.setColU32("type_id", new Uint32Array([1, 2, 1]));
+    atoms.setColU32("type_id", toDomainUint([1, 2, 1]));
     const colors = buildAtomBuffers(atoms, makeStyleManager(), 7).get(
       "instanceColor",
     )!;

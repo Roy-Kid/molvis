@@ -69,7 +69,7 @@ class LiteralColumns implements ColumnSource {
 
   dtype(key: string): string | undefined {
     if (key === "charge") return "f64";
-    if (key === "mol_id") return "u32";
+    if (key === "mol_id") return "u64";
     if (key === "res_name") return "string";
     return undefined;
   }
@@ -79,9 +79,9 @@ class LiteralColumns implements ColumnSource {
     return Float64Array.from(CHARGE);
   }
 
-  copyColU32(key: string): Uint32Array | undefined {
-    if (key !== "mol_id") throw new Error(`${key} is not a u32 column`);
-    return Uint32Array.from(MOL_ID);
+  copyColU32(key: string): BigUint64Array | undefined {
+    if (key !== "mol_id") throw new Error(`${key} is not a u64 column`);
+    return BigUint64Array.from(MOL_ID, (v) => BigInt(v));
   }
 
   copyColStr(key: string): string[] | undefined {
@@ -98,13 +98,13 @@ class LiteralColumns implements ColumnSource {
 class CollectedColumns implements ColumnSink {
   floats: Map<string, Float64Array>;
   strings: Map<string, string[]>;
-  u32s: Map<string, Uint32Array>;
+  u32s: Map<string, BigUint64Array>;
   i32s: Map<string, Int32Array>;
 
   constructor() {
     this.floats = new Map<string, Float64Array>();
     this.strings = new Map<string, string[]>();
-    this.u32s = new Map<string, Uint32Array>();
+    this.u32s = new Map<string, BigUint64Array>();
     this.i32s = new Map<string, Int32Array>();
   }
 
@@ -116,7 +116,7 @@ class CollectedColumns implements ColumnSink {
     this.strings.set(key, value);
   }
 
-  setColU32(key: string, value: Uint32Array): void {
+  setColU32(key: string, value: BigUint64Array): void {
     this.u32s.set(key, value);
   }
 
@@ -130,9 +130,9 @@ class CollectedColumns implements ColumnSink {
     return col;
   }
 
-  u32Col(key: string): Uint32Array {
+  u32Col(key: string): BigUint64Array {
     const col = this.u32s.get(key);
-    if (!col) throw new Error(`u32 column ${key} was never written`);
+    if (!col) throw new Error(`u64 column ${key} was never written`);
     return col;
   }
 
@@ -162,9 +162,9 @@ assert(charge[2] === 0.417, `charge row 2 ${charge[2]}`);
 
 const molId = sink.u32Col("mol_id");
 assert(molId.length === DEST_ROWS, `mol_id rows ${molId.length}`);
-assert(molId[0] === 1, `mol_id row 0 ${molId[0]}`);
-assert(molId[1] === 1, `mol_id row 1 ${molId[1]}`);
-assert(molId[2] === 1, `mol_id row 2 ${molId[2]}`);
+assert(molId[0] === 1n, `mol_id row 0 ${molId[0]}`);
+assert(molId[1] === 1n, `mol_id row 1 ${molId[1]}`);
+assert(molId[2] === 1n, `mol_id row 2 ${molId[2]}`);
 
 const resName = sink.strCol("res_name");
 assert(resName.length === DEST_ROWS, `res_name rows ${resName.length}`);
@@ -175,7 +175,7 @@ assert(resName[2] === "HOH", `res_name row 2 ${resName[2]}`);
 // --- The added atom has no source row: neutral, never row 2 repeated ---------
 
 assert(charge[3] === 0, `added atom charge ${charge[3]}`);
-assert(molId[3] === 0, `added atom mol_id ${molId[3]}`);
+assert(molId[3] === 0n, `added atom mol_id ${molId[3]}`);
 assert(resName[3] === "", `added atom res_name "${resName[3]}"`);
 
 console.log("optimize-staging-02-columns ok");

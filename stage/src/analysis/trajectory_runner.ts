@@ -23,7 +23,7 @@ export type AnalysisAtomSelection =
   | { kind: "mask"; mask: SelectionMask };
 
 export type AtomTrackingMode = "all" | "id-column" | "row-index";
-export type AtomTrackingKey = string | number;
+export type AtomTrackingKey = string | number | bigint;
 
 export interface TrackedAtomSelection {
   mode: AtomTrackingMode;
@@ -338,9 +338,9 @@ function readAtomKeys(
   const dtype = atoms.dtype(column) as ColumnDType | undefined;
   if (!dtype) return null;
 
-  // Only ever called with STABLE_ATOM_ID_COLUMNS ("id"), which molrs pins to
-  // u32 — U32-or-absent is exhaustive.
-  if (dtype === DType.U32) {
+  // Only ever called with STABLE_ATOM_ID_COLUMNS ("id"), which molrs pins
+  // to domain uint / u64 — U64-or-absent is exhaustive.
+  if (dtype === DType.U64) {
     const values = atoms.copyColU32(column);
     return values ? { dtype, values: Array.from(values) } : null;
   }

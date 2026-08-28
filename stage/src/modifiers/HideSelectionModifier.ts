@@ -1,8 +1,9 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { remapBondSubset } from "../utils/bond_order";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 
 /**
  * Modifier that hides atoms based on the current pipeline selection.
@@ -93,10 +94,10 @@ export class HideSelectionModifier extends BaseModifier {
           }
           newAtoms.setColF(key, dst);
         }
-      } else if (dtype === DType.U32) {
+      } else if (isDomainUintDtype(dtype)) {
         const src = atoms.viewColU32(key);
         if (src) {
-          const dst = new Uint32Array(newCount);
+          const dst = new BigUint64Array(newCount);
           let ptr = 0;
           for (let i = 0; i < nrows; i++) {
             if (indexMap[i] !== -1) dst[ptr++] = src[i];
@@ -131,7 +132,10 @@ export class HideSelectionModifier extends BaseModifier {
         for (let b = 0; b < bondCount; b++) {
           const oldI = iCol[b];
           const oldJ = jCol[b];
-          if (indexMap[oldI] !== -1 && indexMap[oldJ] !== -1) {
+          if (
+            indexMap[toRowIndex(oldI)] !== -1 &&
+            indexMap[toRowIndex(oldJ)] !== -1
+          ) {
             validBonds.push(b);
           }
         }

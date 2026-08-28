@@ -1,4 +1,5 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { App } from "@molcrafts/molvis-core/app";
 import {
   cropToContent,
@@ -992,7 +993,10 @@ export class MolvisApp implements App {
     if (!iCol || !jCol) return [];
     const result: number[] = [];
     for (let b = 0; b < bonds.nrows(); b++) {
-      if (mask.isSelected(iCol[b]) && mask.isSelected(jCol[b])) {
+      if (
+        mask.isSelected(toRowIndex(iCol[b])) &&
+        mask.isSelected(toRowIndex(jCol[b]))
+      ) {
         result.push(b);
       }
     }

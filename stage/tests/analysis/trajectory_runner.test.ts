@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
@@ -25,7 +26,7 @@ function makeFrame(xs: number[], ids?: number[]): Frame {
     "element",
     Array.from({ length: xs.length }, () => "Ar"),
   );
-  if (ids) atoms.setColU32("id", Uint32Array.from(ids));
+  if (ids) atoms.setColU32("id", toDomainUint(ids));
   frame.insertBlock("atoms", atoms);
   return frame;
 }
@@ -45,7 +46,7 @@ function makeFrame(xs: number[], ids?: number[]): Frame {
 interface FakeAtomsBlock {
   nrows(): number;
   dtype(column: string): ColumnDType | undefined;
-  copyColU32(column: string): Uint32Array | undefined;
+  copyColU32(column: string): BigUint64Array | undefined;
 }
 
 interface FakeFrame {
@@ -54,14 +55,16 @@ interface FakeFrame {
 
 /**
  * A frame with `atomCount` rows and, when `ids` is given, a molrs-canonical
- * `id` column (u32) for id-based atom tracking.
+ * `id` column (u64) for id-based atom tracking.
  */
 function fakeFrame(atomCount: number, ids?: readonly number[]): Frame {
   const atoms: FakeAtomsBlock = {
     nrows: () => atomCount,
-    dtype: (column) => (column === "id" && ids ? DType.U32 : undefined),
+    dtype: (column) => (column === "id" && ids ? DType.U64 : undefined),
     copyColU32: (column) =>
-      column === "id" && ids ? Uint32Array.from(ids) : undefined,
+      column === "id" && ids
+        ? BigUint64Array.from(ids, (v) => BigInt(v))
+        : undefined,
   };
   const frame: FakeFrame = {
     getBlock: (name) => (name === "atoms" ? atoms : undefined),

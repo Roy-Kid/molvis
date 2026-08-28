@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
@@ -66,7 +67,7 @@ function chargedSourceFrame(
   block.setColF("z", new Float64Array(count));
   block.setColStr("element", [...elements]);
   block.setColF("charge", Float64Array.from(charge));
-  block.setColU32("mol_id", Uint32Array.from(molId));
+  block.setColU32("mol_id", toDomainUint(molId));
   frame.insertBlock("atoms", block);
   return frame;
 }
@@ -85,8 +86,8 @@ describe("buildFrameFromScene", () => {
     expect(x && Array.from(x)).toEqual([1, 4]);
     const b = frame.getBlock("bonds");
     expect(b?.nrows()).toBe(1);
-    expect(b?.viewColU32("bond_type")?.[0]).toBe(2);
-    expect(b?.viewColU32("bond_number")?.[0]).toBe(2);
+    expect(Number(b?.viewColU32("bond_type")?.[0])).toBe(2);
+    expect(Number(b?.viewColU32("bond_number")?.[0])).toBe(2);
   });
 
   it("preserves BondMeta aromatic bond_type=4, bond_number=0", () => {
@@ -117,8 +118,8 @@ describe("buildFrameFromScene", () => {
 
     const frame = buildFrameFromScene(mockSceneIndex(atoms, bonds));
     const b = frame.getBlock("bonds");
-    expect(b?.viewColU32("bond_type")?.[0]).toBe(4);
-    expect(b?.viewColU32("bond_number")?.[0]).toBe(0);
+    expect(Number(b?.viewColU32("bond_type")?.[0])).toBe(4);
+    expect(Number(b?.viewColU32("bond_number")?.[0])).toBe(0);
   });
 
   it("preserves the simulation box from the source frame", () => {
@@ -183,8 +184,12 @@ describe("buildFrameFromScene", () => {
     expect(built.atomIdToFrameIndex.get(20)).toBe(1);
     expect(built.bondIdToFrameIndex.get(7)).toBe(0);
     // Endpoints renumbered into dense atom rows.
-    expect(built.frame.getBlock("bonds")?.viewColU32("atomi")?.[0]).toBe(0);
-    expect(built.frame.getBlock("bonds")?.viewColU32("atomj")?.[0]).toBe(1);
+    expect(
+      Number(built.frame.getBlock("bonds")?.viewColU32("atomi")?.[0]),
+    ).toBe(0);
+    expect(
+      Number(built.frame.getBlock("bonds")?.viewColU32("atomj")?.[0]),
+    ).toBe(1);
   });
 
   // ── spec optimize-staging-02-columns ──────────────────────────────────────
@@ -227,7 +232,7 @@ describe("buildFrameFromScene", () => {
     expect(charge?.[3]).toBeCloseTo(0, 6);
 
     const molId = out?.copyColU32("mol_id");
-    expect(molId && Array.from(molId)).toEqual([1, 1, 1, 0]);
+    expect(molId && Array.from(molId, Number)).toEqual([1, 1, 1, 0]);
 
     // The columns the commit path owns still win — the carrier runs first and
     // x/y/z/element are written over it.
@@ -276,7 +281,7 @@ describe("buildFrameFromScene", () => {
     // Off-by-one (dense row read straight out of the source) would give
     // [10, 11, 12] / [-0.834, 0.417, 0.417] here.
     const molId = out?.copyColU32("mol_id");
-    expect(molId && Array.from(molId)).toEqual([10, 12, 13]);
+    expect(molId && Array.from(molId, Number)).toEqual([10, 12, 13]);
 
     const charge = out?.copyColF("charge");
     expect(charge?.[0]).toBeCloseTo(-0.834, 6);

@@ -7,6 +7,7 @@ import {
   type ShaderMaterial,
   Vector3,
 } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { WasmArray } from "@molcrafts/molvis-core/molrs";
 import type { GridField } from "./algo/surface/grid_field";
@@ -159,8 +160,8 @@ function computeBondMIDisplacements(
   const aBuf = MI_A_SCRATCH;
   const bBuf = MI_B_SCRATCH;
   for (let b = 0; b < nbonds; b++) {
-    const i = iAtoms[b];
-    const j = jAtoms[b];
+    const i = toRowIndex(iAtoms[b]);
+    const j = toRowIndex(jAtoms[b]);
     const o = 3 * b;
     aBuf[o] = x[i];
     aBuf[o + 1] = y[i];
@@ -288,7 +289,9 @@ export class Artist {
         this.app.styleManager.getRepresentation().bondOrderMode === "multiple"
           ? subBondCount(orderCol?.[b] ?? 1)
           : 1;
-      const hit = atomIndices.has(iAtoms[b]) || atomIndices.has(jAtoms[b]);
+      const hit =
+        atomIndices.has(toRowIndex(iAtoms[b])) ||
+        atomIndices.has(toRowIndex(jAtoms[b]));
       for (let s = 0; s < sticks && renderIdx < bondState.frameOffset; s++) {
         if (hit) {
           c0.data[renderIdx * 4 + 3] = clamped;
@@ -1343,7 +1346,10 @@ export class Artist {
         this.app.styleManager.getRepresentation().bondOrderMode === "multiple"
           ? subBondCount(orderCol?.[b] ?? 1)
           : 1;
-      const alpha = !visMask[iAtoms[b]] || !visMask[jAtoms[b]] ? 0.0 : 1.0;
+      const alpha =
+        !visMask[toRowIndex(iAtoms[b])] || !visMask[toRowIndex(jAtoms[b])]
+          ? 0.0
+          : 1.0;
       for (let s = 0; s < sticks && renderIdx < bondState.frameOffset; s++) {
         bondColor0.data[renderIdx * 4 + 3] = alpha;
         bondColor1.data[renderIdx * 4 + 3] = alpha;

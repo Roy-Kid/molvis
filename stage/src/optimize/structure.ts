@@ -6,6 +6,7 @@
  * never runs on the main thread, and the relaxed geometry lands in the working
  * tree as one undoable edit instead of overwriting the DataSource HEAD.
  */
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import {
@@ -262,8 +263,8 @@ function materializeWorkingFromSource(source: Frame): WorkingSnapshot {
       ? bondBlock.viewColU32("bond_type")
       : undefined;
     for (let b = 0; b < bondBlock.nrows(); b++) {
-      bonds.push([iCol[b], jCol[b]]);
-      bondTypes.push(typeCol?.[b] ?? BOND_TYPE_SINGLE);
+      bonds.push([toRowIndex(iCol[b]), toRowIndex(jCol[b])]);
+      bondTypes.push(typeCol ? toRowIndex(typeCol[b]) : BOND_TYPE_SINGLE);
     }
   }
 

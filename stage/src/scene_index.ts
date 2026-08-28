@@ -1,4 +1,5 @@
 import type { Mesh, Vector3 } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BondPlaneAxis } from "./artist/bond_plane";
 import { ATOM_IMPOSTOR_SPEC, BOND_IMPOSTOR_SPEC } from "./artist/material_spec";
@@ -809,7 +810,7 @@ export class SceneIndex {
     const jAtoms = block.viewColU32("atomj");
     if (!iAtoms || !jAtoms) return;
     for (let b = 0; b < bondCount; b++) {
-      this.topology.addBond(b, iAtoms[b], jAtoms[b]);
+      this.topology.addBond(b, toRowIndex(iAtoms[b]), toRowIndex(jAtoms[b]));
     }
   }
 

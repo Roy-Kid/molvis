@@ -5,10 +5,11 @@
  * SceneIndex canvas position on the hit meta — never block `x`/`y`/`z`.
  */
 
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block } from "@molcrafts/molvis-core/molrs";
 import type { AtomMeta, BondMeta } from "../entity_source";
 import { formatBondLabel } from "../utils/bond_order";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 
 /**
  * Pick result for {@link formatHitInfo}. {@link import("./types").SceneHit} is
@@ -83,8 +84,8 @@ function atomDisplayId(
   row: number,
 ): number {
   if (!atoms) return meta.atomId;
-  // molrs pins `id` to u32 (schema rejects an i32 write); no i32 branch.
-  if (atoms.hasU32("id")) return atoms.viewColU32("id")[row];
+  // molrs pins `id` to domain uint / u64 (schema rejects an i32 write).
+  if (atoms.hasU32("id")) return toRowIndex(atoms.viewColU32("id")[row]);
   return meta.atomId;
 }
 
@@ -148,7 +149,7 @@ function formatCell(
 ): string | undefined {
   const dtype = atoms.dtype(key);
   if (isFloatDtype(dtype)) return formatFloat(atoms.viewColF(key)[row]);
-  if (dtype === DType.U32) return String(atoms.viewColU32(key)[row]);
+  if (isDomainUintDtype(dtype)) return String(atoms.viewColU32(key)[row]);
   if (dtype === DType.I32) return String(atoms.viewColI32(key)[row]);
   if (dtype === DType.String) {
     const value = atoms.getStr(key)[row];

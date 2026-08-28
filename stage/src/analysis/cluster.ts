@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import {
   Cluster,
   type Frame,
@@ -182,8 +183,8 @@ function computeClustersByBonds(
     if (atomi && atomj) {
       const nb = Math.min(atomi.length, atomj.length, bonds.nrows());
       for (let b = 0; b < nb; b++) {
-        const i = atomi[b];
-        const j = atomj[b];
+        const i = toRowIndex(atomi[b]);
+        const j = toRowIndex(atomj[b]);
         if (i < nParticles && j < nParticles) unite(i, j);
       }
     }

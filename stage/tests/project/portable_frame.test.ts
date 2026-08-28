@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
@@ -16,10 +17,10 @@ function waterFrame(): Frame {
   atoms.setColF("z", new Float64Array([0, 0, 0]));
   frame.insertBlock("atoms", atoms);
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([0, 0]));
-  bonds.setColU32("atomj", new Uint32Array([1, 2]));
-  bonds.setColU32("bond_type", new Uint32Array([1, 1]));
-  bonds.setColU32("bond_number", new Uint32Array([1, 1]));
+  bonds.setColU32("atomi", toDomainUint([0, 0]));
+  bonds.setColU32("atomj", toDomainUint([1, 2]));
+  bonds.setColU32("bond_type", toDomainUint([1, 1]));
+  bonds.setColU32("bond_number", toDomainUint([1, 1]));
   frame.insertBlock("bonds", bonds);
   return frame;
 }
@@ -33,7 +34,7 @@ describe("portable frame wire for project files", () => {
     const els = dst.getBlock("atoms")?.copyColStr("element");
     expect(els).toEqual(["O", "H", "H"]);
     const types = dst.getBlock("bonds")?.viewColU32("bond_type");
-    expect(types && Array.from(types)).toEqual([1, 1]);
+    expect(types && Array.from(types, Number)).toEqual([1, 1]);
     src.free();
     dst.free();
   });

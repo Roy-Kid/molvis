@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { BOND_TYPE_SINGLE } from "../utils/bond_order";
 
@@ -54,9 +55,9 @@ export function copyBondColumns(frame: Frame): {
   const bondJ = new Uint32Array(n);
   const bondType = new Uint32Array(n);
   for (let b = 0; b < n; b++) {
-    bondI[b] = i[b] ?? 0;
-    bondJ[b] = j[b] ?? 0;
-    bondType[b] = t?.[b] ?? BOND_TYPE_SINGLE;
+    bondI[b] = toRowIndex(i[b] ?? 0n);
+    bondJ[b] = toRowIndex(j[b] ?? 0n);
+    bondType[b] = t ? toRowIndex(t[b]) : BOND_TYPE_SINGLE;
   }
   return { bondI, bondJ, bondType };
 }

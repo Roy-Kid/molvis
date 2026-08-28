@@ -2,6 +2,7 @@ import { Vector3 } from "@babylonjs/core";
 import { Block, Box, WasmArray } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import {
   type BondBufferResult,
   buildBondBuffers,
@@ -38,8 +39,8 @@ function makeBlocks(
   atoms.setColStr("element", Array(atomCount).fill("C"));
 
   const bondsBlock = new Block();
-  bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b.i)));
-  bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b.j)));
+  bondsBlock.setColU32("atomi", toDomainUint(bonds.map((b) => b.i)));
+  bondsBlock.setColU32("atomj", toDomainUint(bonds.map((b) => b.j)));
   // molrs bond_type / bond_number. order 1.5 in fixtures → aromatic (type 4).
   const types = new Uint32Array(
     bonds.map((b) =>
@@ -51,8 +52,8 @@ function makeBlocks(
       b.order === 1.5 ? 0 : Math.max(1, Math.min(3, Math.round(b.order))),
     ),
   );
-  bondsBlock.setColU32("bond_type", types);
-  bondsBlock.setColU32("bond_number", numbers);
+  bondsBlock.setColU32("bond_type", toDomainUint(types));
+  bondsBlock.setColU32("bond_number", toDomainUint(numbers));
 
   return { atoms, bonds: bondsBlock };
 }
@@ -166,10 +167,10 @@ describe("countBondInstances", () => {
     atoms.setColF("z", new Float64Array([0, 0]));
     atoms.setColStr("element", ["C", "C"]);
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
-    bonds.setColU32("bond_type", new Uint32Array([4]));
-    bonds.setColU32("bond_number", new Uint32Array([2]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
+    bonds.setColU32("bond_type", toDomainUint([4]));
+    bonds.setColU32("bond_number", toDomainUint([2]));
     expect(countBondInstances(bonds)).toBe(2);
   });
 
@@ -373,8 +374,8 @@ describe("buildBondBuffers with bond order", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
     // No order column
     const atomColor = makeAtomColor(2);
     const result = buildBondBuffers(bondsBlock, atoms, atomColor, 42);
@@ -485,8 +486,8 @@ function miDisplacementsViaBox(
   const a = new Float64Array(n * 3);
   const b = new Float64Array(n * 3);
   for (let k = 0; k < n; k++) {
-    const i = iAtoms[k];
-    const j = jAtoms[k];
+    const i = Number(iAtoms[k]);
+    const j = Number(jAtoms[k]);
     a[3 * k] = x[i];
     a[3 * k + 1] = y[i];
     a[3 * k + 2] = z[i];
@@ -517,10 +518,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -545,10 +546,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -569,10 +570,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 9]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.ortho(
       new Float64Array([10, 10, 10]),
@@ -629,10 +630,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([2.165, 6.495]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
 
     const disp = miDisplacementsViaBox(box, atoms, bondsBlock);

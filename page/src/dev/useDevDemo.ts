@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { Molvis } from "@molcrafts/molvis-stage";
 import { useEffect } from "react";
 import type { MountOpts } from "@/lib/mount-opts";
@@ -97,18 +98,18 @@ export function useDevDemo(
       const bondsBlock = new Block();
       bondsBlock.setColU32(
         "atomi",
-        new Uint32Array([
+        toDomainUint([
           0, 0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 9,
         ]),
       );
       bondsBlock.setColU32(
         "atomj",
-        new Uint32Array([
+        toDomainUint([
           8, 20, 10, 21, 5, 18, 19, 4, 5, 11, 12, 6, 7, 13, 14, 8, 15, 9, 16,
           10, 10, 17,
         ]),
       );
-      const bondTypes = new Uint32Array([
+      const bondTypes = toDomainUint([
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1,
       ]);
       bondsBlock.setColU32("bond_type", bondTypes);

@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { PeriodicTable } from "../system/elements";
@@ -156,8 +157,8 @@ export class PerceiveBonds {
 
     if (bondI.length > 0) {
       const bonds = new Block();
-      bonds.setColU32("atomi", Uint32Array.from(bondI));
-      bonds.setColU32("atomj", Uint32Array.from(bondJ));
+      bonds.setColU32("atomi", toDomainUint(bondI));
+      bonds.setColU32("atomj", toDomainUint(bondJ));
       result.insertBlock("bonds", bonds);
     }
 

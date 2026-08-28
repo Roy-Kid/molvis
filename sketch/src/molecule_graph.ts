@@ -1,3 +1,4 @@
+import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { normalizeSketchColor } from "./style/custom_color";
 import type { Atom2D, Bond2D, MoleculeData } from "./types";
@@ -23,13 +24,13 @@ function cloneBond(b: Bond2D): Bond2D {
 }
 
 type BondBlock = {
-  copyColU32: (name: string) => Uint32Array | undefined;
+  copyColU32: (name: string) => BigUint64Array | undefined;
 };
 
 function readU32Col(block: BondBlock, name: string): number[] | null {
   try {
     const col = block.copyColU32(name);
-    return col ? Array.from(col) : null;
+    return col ? Array.from(col, toRowIndex) : null;
   } catch {
     return null;
   }
@@ -52,8 +53,9 @@ function readBondOrders(block: BondBlock): number[] {
     const types = block.copyColU32("bond_type");
     if (numbers && numbers.length > 0) {
       return Array.from(numbers, (bn, i) => {
-        if (bn > 0) return clampSketchOrder(bn);
-        const bt = types?.[i] ?? 0;
+        const number = toRowIndex(bn);
+        if (number > 0) return clampSketchOrder(number);
+        const bt = types ? toRowIndex(types[i]) : 0;
         if (bt > 0 && bt < 4) return clampSketchOrder(bt);
         // Aromatic without Kekulé phase → double for sketch sticks.
         if (bt === 4) return 2;
@@ -61,7 +63,8 @@ function readBondOrders(block: BondBlock): number[] {
       });
     }
     if (types && types.length > 0) {
-      return Array.from(types, (bt) => {
+      return Array.from(types, (raw) => {
+        const bt = toRowIndex(raw);
         if (bt === 4) return 2;
         if (bt > 0 && bt < 4) return clampSketchOrder(bt);
         return 1;
@@ -76,8 +79,8 @@ function readBondOrders(block: BondBlock): number[] {
 /**
  * 2D molecular graph: topology + document-Å coordinates.
  *
- * Frame IO: atoms.element (str); bonds.atomi/atomj (u32), bond_type +
- * bond_number (u32). Delete-atom policy: remove incident bonds and re-map
+ * Frame IO: atoms.element (str); bonds.atomi/atomj (u64), bond_type +
+ * bond_number (u64). Delete-atom policy: remove incident bonds and re-map
  * surviving bond endpoints to the post-deletion index space.
  */
 export class MoleculeGraph {
@@ -114,8 +117,8 @@ export class MoleculeGraph {
 
   /**
    * Export molrs Frame for generate3D.
-   * Columns: atoms.element (str); bonds.atomi/atomj (u32), bond_type +
-   * bond_number (u32, sketch Kekulé 1–3). No x/y (generate3D embeds coords).
+   * Columns: atoms.element (str); bonds.atomi/atomj (u64), bond_type +
+   * bond_number (u64, sketch Kekulé 1–3). No x/y (generate3D embeds coords).
    */
   toFrame(): Frame {
     const frame = new Frame();
@@ -128,9 +131,9 @@ export class MoleculeGraph {
 
     if (this.bonds.length > 0) {
       const bondBlock = new Block();
-      const orderU32 = new Uint32Array(this.bonds.map((b) => b.order));
-      bondBlock.setColU32("atomi", new Uint32Array(this.bonds.map((b) => b.i)));
-      bondBlock.setColU32("atomj", new Uint32Array(this.bonds.map((b) => b.j)));
+      const orderU32 = toDomainUint(this.bonds.map((b) => b.order));
+      bondBlock.setColU32("atomi", toDomainUint(this.bonds.map((b) => b.i)));
+      bondBlock.setColU32("atomj", toDomainUint(this.bonds.map((b) => b.j)));
       bondBlock.setColU32("bond_type", orderU32);
       bondBlock.setColU32("bond_number", orderU32);
       frame.insertBlock("bonds", bondBlock);

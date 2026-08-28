@@ -22,6 +22,7 @@
  * Nothing under `stage/src/` knows any of it.
  */
 
+import { toDomainUint } from "@molcrafts/molvis-core";
 import * as molrs from "@molcrafts/molvis-core/molrs";
 import {
   Block,
@@ -50,7 +51,7 @@ export function makeFrame(n: number, seed: number, withId = true): Frame {
   if (withId) {
     const id = new Uint32Array(n);
     for (let i = 0; i < n; i++) id[i] = i + 1;
-    block.setColU32("id", id);
+    block.setColU32("id", toDomainUint(id));
   }
   block.setColF("x", x);
   block.setColF("y", y);

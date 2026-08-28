@@ -6,6 +6,7 @@
  */
 
 import { Color3, type Mesh } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import {
@@ -59,8 +60,8 @@ export function carbonBoundHydrogens(
   const jAtoms = bondsBlock.viewColU32("atomj");
 
   for (let b = 0; b < bondsBlock.nrows(); b++) {
-    const i = iAtoms[b];
-    const j = jAtoms[b];
+    const i = toRowIndex(iAtoms[b]);
+    const j = toRowIndex(jAtoms[b]);
     const ei = normalizeElement(elements[i] ?? "");
     const ej = normalizeElement(elements[j] ?? "");
     if (ei === "C" && ej === "H") hidden.add(j);

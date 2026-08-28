@@ -67,7 +67,7 @@ export type SourceHandle = BlobSourceHandle | OpfsSourceHandle;
 
 export type ColumnPayload =
   | { name: string; dtype: "f64"; data: Float64Array }
-  | { name: string; dtype: "u32"; data: Uint32Array }
+  | { name: string; dtype: "u64"; data: BigUint64Array }
   | { name: string; dtype: "i32"; data: Int32Array }
   | { name: string; dtype: "string"; data: string[] };
 

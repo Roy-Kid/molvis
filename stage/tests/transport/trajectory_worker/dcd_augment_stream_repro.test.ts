@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../../setup_wasm";
@@ -181,7 +182,7 @@ function frameWithIds(ids: number[]): Frame {
   const x = new Float64Array([0, 0, 0]);
   const y = new Float64Array([0, 0, 0]);
   const z = new Float64Array([0, 0, 0]);
-  b.setColU32("id", new Uint32Array(ids));
+  b.setColU32("id", toDomainUint(ids));
   b.setColF("x", x);
   b.setColF("y", y);
   b.setColF("z", z);
