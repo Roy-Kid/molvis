@@ -65,6 +65,8 @@ describe("ModifierRegistry — OVITO-aligned menu", () => {
     for (const legacy of [
       "Gaussian density surface",
       "Construct surface mesh",
+      // The name the grid isosurface carried before the producer/draw split.
+      "Create isosurface",
     ]) {
       expect(all.has(legacy)).toBe(true);
       expect(menu.has(legacy)).toBe(false);

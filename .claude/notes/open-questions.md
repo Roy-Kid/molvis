@@ -8,7 +8,7 @@ Uncertainties to resolve over time; delete entries when settled.
 
 - `matches` = **auto-attach default visual layers under the file loader**,
   default on; user unchecks. Particles / Cartoon / Simulation cell / Bonds
-  (if present) / Create isosurface (grid files).
+  (if present) / Isosurface (grid files).
 - Analysis / opt-in viz: `matches() === false`, `isApplicable` for Add menu.
   Never auto-attach Steinhardt / Solid-liquid (they overwrite CPK) or
   density surfaces by default.

@@ -63,7 +63,7 @@ step you add.
 | Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute/Freeze property, Edit types, Delete selected, Hide hydrogens | Edit topology or coordinates |
 | Color | Color by property, Color by type, Assign color | Per-atom color |
 | Structure | Steinhardt order, Solid–liquid | Local structure → atom columns (molrs) |
-| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines | Scene visuals |
+| Visualization | Create bonds, Bonds, Simulation cell, Isosurface, Volume cloud, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines | Scene visuals |
 | Analysis | Displacement vectors | Pipeline property compute that feeds viz |
 
 Chart-only analyses (RDF, MSD, histograms, Rings, bond distributions, …) stay

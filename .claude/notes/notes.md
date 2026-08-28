@@ -21,13 +21,16 @@ Code: `stage/src/io/formats.ts` `dropLoadMode`,
 <!-- mol:note:topic:molrs-identity-convention -->
 ## [2026-08-20] molrs and molvis share one atom-identity convention
 
-**Rule**: an atom's identity is the molrs `id` column (u32 — molrs
+**Rule**: an atom's identity is the molrs `id` column (u64 / Idx — molrs
 `Block::insert` pins that key; rows stay in read order, not id order). molvis
 consumes molrs data as-is: reads never reindex ids, and any file that names
 atoms — the mask file in particular — stores those `id` values verbatim. No
 id↔row-index conversion crosses the molrs/molvis boundary. A row-indexed
 `SelectionMask` is a molvis render artifact built only at apply time by
 looking ids up in the frame's `id` column; unknown ids are a loud error.
+WASM `setColU32` / `copyColU32` / `viewColU32` keep those JS names but take
+and return `BigUint64Array`. GPU meshes, CSR tables, and display-row maps
+stay `Uint32Array`.
 
 Code: `stage/src/selection/mask_file.ts`,
 `stage/src/modifiers/SelectMaskModifier.ts`,
@@ -239,6 +242,28 @@ in `CLAUDE.md` **Invariants**.
 
 Do not put chart-only RDF/MSD into the pipeline. Do not put full dual forms on
 both left and right.
+
+**Amended 2026-08-28 — surfaces use a producer + draw pair instead.**
+
+Rules 2 and 3 split one modifier's form across two panels. Surfaces now split
+the *modifier*: a `ProducesGeometry` step publishes `SurfacePart[]` and carries
+its own `Draw surface` entry (`stage/src/pipeline/draw_surface.ts`), the way a
+DataSource carries Particles and Bonds.
+
+- Producer panel: `usesLeftConfig: true`, `surface="compute"` only. Algorithm
+  and its parameters, nothing about appearance.
+- `Draw surface` is a **separate pipeline row** owned by the producer
+  (`sourceOwnerId`), so it nests under it in the tree and dies with it. Its
+  panel is plain (no `usesLeftConfig`): colour, opacity, finish.
+
+Why the pair beats the two-panel form here: a seventh surface algorithm becomes
+one producer and no rendering work, two surfaces in one scene can be coloured
+and hidden apart, and appearance stops re-running the algorithm — for alpha
+shape that is a Delaunay tetrahedralisation per colour change.
+
+Anything that computes geometry a shared renderer can paint should follow this.
+The two-panel form stays correct for modifiers whose "draw" is not separable
+(Vector field, Coordination polyhedra, Trajectory lines own their overlays).
 
 ## 2026-08-11 — empty pipeline default (no Empty Scene row)
 

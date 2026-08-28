@@ -18,6 +18,7 @@ import {
   DEFAULT_SURFACE_DRAW_STYLE,
   type SurfaceDrawStyle,
 } from "../artist/surface/surface_mesh_renderer";
+import { type ProjectParams, readEnum, readNumber } from "../project/params";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
 
@@ -40,6 +41,39 @@ export class DrawSurfaceModifier extends BaseModifier {
 
   setStyle(patch: Partial<SurfaceDrawStyle>): void {
     this._style = { ...this._style, ...patch };
+  }
+
+  /**
+   * Appearance has to survive a save, and so does the producer link — a draw
+   * whose producer id was not remapped on load paints nothing forever.
+   */
+  toProjectParams(): ProjectParams {
+    return {
+      producerId: this.producerId,
+      color: [...this._style.color],
+      opacity: this._style.opacity,
+      finish: this._style.finish,
+      contourSpacing: this._style.contourSpacing,
+    };
+  }
+
+  fromProjectParams(params: ProjectParams): void {
+    if (typeof params.producerId === "string") {
+      this.producerId = params.producerId;
+    }
+    this._style = {
+      color: readColor(params.color, this._style.color),
+      opacity: readNumber(params.opacity, this._style.opacity),
+      finish: readEnum(
+        params.finish,
+        ["solid", "mesh", "contour", "dot"] as const,
+        this._style.finish,
+      ),
+      contourSpacing: readNumber(
+        params.contourSpacing,
+        this._style.contourSpacing,
+      ),
+    };
   }
 
   /** Never a default layer: it arrives with the producer that needs it. */
@@ -75,4 +109,19 @@ export class DrawSurfaceModifier extends BaseModifier {
     this._app?.artist.releaseSurfaceLayer(this.id);
     this._app = null;
   }
+}
+
+function readColor(
+  value: unknown,
+  fallback: [number, number, number],
+): [number, number, number] {
+  if (!Array.isArray(value) || value.length !== 3) return fallback;
+  const channels = value.map((c) =>
+    typeof c === "number" && Number.isFinite(c)
+      ? Math.max(0, Math.min(1, c))
+      : null,
+  );
+  return channels.every((c) => c !== null)
+    ? (channels as [number, number, number])
+    : fallback;
 }

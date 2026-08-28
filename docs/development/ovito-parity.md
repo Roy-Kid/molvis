@@ -25,7 +25,7 @@ There is no separate Python-only modifier folder in the UI.
 | Modification | Slice, Wrap PBC (pipeline `wrapEnabled` flag, listed in the add menu), Affine, Replicate, Unwrap, Smooth trajectory, Compute property, Freeze property, Edit types, Delete selected, Hide hydrogens, Edit lattice (multi-file = multiple DataSources, not Combine modifier) |
 | Color | Color by property, Color by type, Assign color |
 | Structure | Steinhardt order, Solid–liquid |
-| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines |
+| Visualization | Create bonds, Bonds, Simulation cell, Isosurface, Volume cloud, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines |
 | Analysis | Displacement vectors |
 
 ## Outside the pipeline

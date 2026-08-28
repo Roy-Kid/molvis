@@ -99,7 +99,7 @@ export interface Modifier {
    * spawn surfaces).
    *
    * - Auto-attaching modifiers (Particles, Ribbon, Simulation cell,
-   *   Create isosurface) override to return true based on frame contents
+   *   Isosurface) override to return true based on frame contents
    *   (e.g., `frame.box` defined).
    * - User-opt-in modifiers (Slice, ExpressionSelect, ...)
    *   inherit the BaseModifier default of `false`.

@@ -110,13 +110,13 @@ function syntheticGridFrame(): Frame {
 }
 
 describe("applyAutoAttach isosurface", () => {
-  it("attaches Create isosurface for grid-bearing frames", () => {
+  it("attaches Isosurface for grid-bearing frames", () => {
     const pipeline = new ModifierPipeline();
     const attached = applyAutoAttach(pipeline, syntheticGridFrame());
     expect(attached).toContain(IsosurfaceModifier.NAME);
   });
 
-  it("does not attach Create isosurface for atoms-only frames", () => {
+  it("does not attach Isosurface for atoms-only frames", () => {
     const pipeline = new ModifierPipeline();
     const attached = applyAutoAttach(pipeline, xyzShapedFrame());
     expect(attached).not.toContain(IsosurfaceModifier.NAME);

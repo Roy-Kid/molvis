@@ -11,6 +11,7 @@ import {
   FileDataSource,
   MemoryDataSource,
 } from "../pipeline/data_source";
+import { DrawSurfaceModifier } from "../pipeline/draw_surface";
 import { bootstrapEmptyPipeline } from "../pipeline/empty_scene";
 import { ModifierRegistry } from "../pipeline/modifier_registry";
 import { Trajectory } from "../system/trajectory";
@@ -92,7 +93,12 @@ export async function hydrateProject(
       mod.sourceOwnerId =
         idMap.get(entry.source_owner_id) ?? entry.source_owner_id;
     }
-    app.modifierPipeline.addModifier(mod);
+    // The saved pipeline already contains each producer's Draw surface, so
+    // pairing here would add a second one on every load.
+    if (mod instanceof DrawSurfaceModifier && mod.producerId) {
+      mod.producerId = idMap.get(mod.producerId) ?? mod.producerId;
+    }
+    app.modifierPipeline.addModifier(mod, { attachDraw: false });
     idMap.set(entry.id, mod.id);
   }
 

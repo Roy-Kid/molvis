@@ -29,6 +29,14 @@ import {
   SelectionMask,
 } from "./types";
 
+export interface AddModifierOptions {
+  /**
+   * Give a `ProducesGeometry` modifier its draw companion. Default true.
+   * Set false when the caller supplies the draw itself.
+   */
+  attachDraw?: boolean;
+}
+
 export interface PipelineEventMap {
   // Membership events cover every row in the list, sources included, so they
   // are named for `PipelineEntry` rather than for one of its two implementors.
@@ -204,7 +212,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
    * append normally, preserving the user's left-to-right ordering of
    * draw layers.
    */
-  addModifier(modifier: Modifier): void {
+  addModifier(modifier: Modifier, options?: AddModifierOptions): void {
     this.assignId(modifier);
 
     const isTransform = modifier.capabilities.has(
@@ -226,7 +234,9 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       index: insertIndex,
     });
 
-    if (producesGeometry(modifier)) this.attachDraw(modifier);
+    if (options?.attachDraw !== false && producesGeometry(modifier)) {
+      this.attachDraw(modifier);
+    }
   }
 
   /**

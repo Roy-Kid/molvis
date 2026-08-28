@@ -411,6 +411,16 @@ export class ModifierRegistry {
       "Visualization",
       () => new IsosurfaceModifier(nextModifierId("isosurface")),
     );
+    // The name this step carried before it was split into producer + draw.
+    // Saved projects, backend state-sync, and RPC all resolve modifiers by
+    // registry display name, so dropping it would lose the isosurface from
+    // every project written before the split.
+    ModifierRegistry.register(
+      "Create isosurface",
+      "Visualization",
+      () => new IsosurfaceModifier(nextModifierId("isosurface")),
+      { userAddable: false },
+    );
     // Every voxel as a point sprite. Not a surface, so not the shared draw:
     // a level set and a full-field cloud are different pictures.
     ModifierRegistry.register(

@@ -27,6 +27,7 @@ import {
   DATA_SOURCE_CATEGORY,
   MemoryDataSource,
 } from "../pipeline/data_source";
+import { DrawSurfaceModifier } from "../pipeline/draw_surface";
 import type { Modifier } from "../pipeline/modifier";
 import {
   type ModifierFactory,
@@ -136,7 +137,12 @@ export async function applyBackendState(
       modifier.sourceOwnerId =
         idMap.get(entry.source_owner_id) ?? entry.source_owner_id;
     }
-    app.modifierPipeline.addModifier(modifier);
+    // Verbatim replay: the backend's list already holds the paired draws.
+    if (modifier instanceof DrawSurfaceModifier && modifier.producerId) {
+      modifier.producerId =
+        idMap.get(modifier.producerId) ?? modifier.producerId;
+    }
+    app.modifierPipeline.addModifier(modifier, { attachDraw: false });
     idMap.set(entry.id, modifier.id);
   }
 

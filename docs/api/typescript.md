@@ -409,7 +409,7 @@ app.pipeline.setEnabled(id, false);
 | `DrawBoxModifier` | Visualization | **Simulation cell** (user-addable). |
 | `HideSelectionModifier` | Selection | Hide atoms in the current selection. |
 
-Auto-attach visual elements (`Particles`, `Cartoon`, `Create isosurface`) and
+Auto-attach visual elements (`Particles`, `Cartoon`, `Isosurface`) and
 `TransparentSelectionModifier` remain registered for load / programmatic use
 but are not listed in the Add-modifier menu.
 

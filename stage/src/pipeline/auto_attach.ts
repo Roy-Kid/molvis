@@ -10,7 +10,7 @@
  * Analysis / opt-in viz (Steinhardt, Solid-liquid, Gaussian density, …)
  * keep `matches() === false` and use `isApplicable` for the Add menu.
  * Only true default layers (Particles, Ribbon, Bonds, Simulation cell,
- * Create isosurface when a grid is present) return true from `matches`.
+ * Isosurface when a grid is present) return true from `matches`.
  */
 
 import type { Frame } from "@molcrafts/molvis-core/molrs";
