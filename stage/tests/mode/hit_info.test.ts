@@ -58,7 +58,7 @@ describe("formatHitInfo", () => {
     atoms.setColF("zu", new Float64Array([30]));
     const line = formatHitInfo(atomHit(0, "C", { x: 1, y: 2, z: 3 }), atoms);
     expect(line).toBe(
-      "Atom 7 · C · XYZ (1.00, 2.00, 3.00) · mass 12.01 · charge -0.83",
+      "Atom 7 · C · XYZ (1.00, 2.00, 3.00) · charge -0.83 · mass 12.01",
     );
     expect(line).not.toContain("__color");
     expect(line).not.toContain(" · xu ");

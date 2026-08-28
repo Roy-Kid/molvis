@@ -29,10 +29,9 @@ class TestCanonicalDtype:
             assert canonical_dtype(key) == "f64"
 
     def test_reads_relation_endpoints_as_unsigned(self):
-        # molrs::store::keys calls these "the UInt relation endpoints", and the
-        # whole renderer reads them with viewColU32.
+        # molrs 0.14 stores identity / relation endpoints as Idx = u64.
         for key in keys.ENDPOINTS:
-            assert canonical_dtype(key) == "u32"
+            assert canonical_dtype(key) == "u64"
 
     def test_reads_labels_as_strings(self):
         assert canonical_dtype(keys.ELEMENT) == "string"
@@ -51,7 +50,7 @@ class TestCanonicalDtype:
     def test_key_objects_look_up_the_same_as_strings(self):
         # molrs.keys.Key == str, but hashes differently; lookup must use the name.
         assert canonical_dtype(keys.X) == canonical_dtype("x") == "f64"
-        assert canonical_dtype(keys.ATOMI) == canonical_dtype("atomi") == "u32"
+        assert canonical_dtype(keys.ATOMI) == canonical_dtype("atomi") == "u64"
 
 
 class TestEncodeFrame:
@@ -64,7 +63,7 @@ class TestEncodeFrame:
         columns = payload["blocks"]["atoms"]["columns"]
         assert {columns[axis]["dtype"] for axis in ("x", "y", "z")} == {"f64"}
 
-    def test_bond_endpoints_are_u32_whatever_numpy_they_arrived_as(self):
+    def test_bond_endpoints_are_u64_whatever_numpy_they_arrived_as(self):
         # A raw mapping, not a Frame: molrs's Block rejects exotic integer
         # widths at construction, so this is the only way a caller can hand us
         # an int64/uint64 endpoint column.
@@ -80,7 +79,7 @@ class TestEncodeFrame:
             }
         )
         columns = payload["blocks"]["bonds"]["columns"]
-        assert {column["dtype"] for column in columns.values()} == {"u32"}
+        assert {column["dtype"] for column in columns.values()} == {"u64"}
 
     def test_emits_every_block_and_column(self):
         payload, _ = encode_frame(
@@ -119,19 +118,18 @@ class TestEncodeFrameRejectsLossyValues:
         # A raw mapping can still carry a negative before molrs sees it; the
         # wire cast must refuse rather than wrap into a huge u32. Constructing
         # a real Frame already rejects this at schema-adopt time.
-        with pytest.raises(WireError, match=r"atomi.*u32"):
+        with pytest.raises(WireError, match=r"atomi.*u64"):
             encode_frame({"blocks": {"bonds": {"atomi": [-1], "atomj": [0]}}})
 
     def test_fractional_value_in_an_integer_field_raises(self):
         # `id` is uint in the Frame schema; a fractional value cannot cast.
-        with pytest.raises(WireError, match="fractional|u32|uint"):
+        with pytest.raises(WireError, match="fractional|u64|uint"):
             encode_frame({"blocks": {"atoms": {"id": [1.5]}}})
 
     def test_out_of_range_integer_id_raises(self):
-        # Schema (new molrs) declares `id` as uint; older fields tables used i32.
-        # Either way the wire must refuse a value that does not fit the carrier.
-        with pytest.raises(WireError, match=r"u32|i32"):
-            encode_frame({"blocks": {"atoms": {"id": [2**40]}}})
+        # `id` is Idx = u64; a value that does not fit the carrier must raise.
+        with pytest.raises(WireError, match=r"u64"):
+            encode_frame({"blocks": {"atoms": {"id": [-1]}}})
 
 
 class TestEncodeFrameNaming:
@@ -167,7 +165,7 @@ class TestRoundTrip:
         assert blocks["atoms"]["x"].dtype == np.float64
         assert blocks["atoms"]["x"].tolist() == [0.0, 1.5]
         assert blocks["atoms"]["element"].tolist() == ["C", "O"]
-        assert blocks["bonds"]["atomi"].dtype == np.uint32
+        assert blocks["bonds"]["atomi"].dtype == np.uint64
         assert blocks["bonds"]["order"].tolist() == [2.0]
 
     def test_preserves_a_custom_block_and_column(self):
