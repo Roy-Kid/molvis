@@ -29,12 +29,20 @@ class FrameCommandsMixin:
     """
 
     @frames_arg
-    def set_trajectory(self: "Molvis", frames: list[Any]) -> "Molvis":
+    def set_trajectory(
+        self: "Molvis",
+        frames: list[Any],
+        *,
+        wait: bool = False,
+    ) -> "Molvis":
         """Replace the viewer's trajectory.
 
         Each frame carries its own box (``frame.box``). The old parallel
         ``boxes=`` argument is gone: it was never length-checked against
         ``frames``, so a short list silently left later frames unboxed.
+
+        Fire-and-forget by default. Pass ``wait=True`` to block on the
+        frontend ACK and refresh the local modifier pipeline mirror.
         """
         payloads: list[dict[str, Any]] = []
         buffers: list[Any] = []
@@ -49,11 +57,12 @@ class FrameCommandsMixin:
             FrontendCommands.SET_TRAJECTORY.method,
             {"frames": payloads},
             buffers=buffers,
-            wait_for_response=True,
+            wait_for_response=wait,
         )
 
         self._record_trajectory(frames)
-        self.list_modifiers()
+        if wait:
+            self.list_modifiers()
         return self
 
     @frame_arg

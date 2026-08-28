@@ -191,6 +191,49 @@ def test_fire_and_forget_returns_self_for_chaining() -> None:
     assert returned is scene
 
 
+def _one_atom_frame():
+    import molpy as mp
+    import numpy as np
+
+    frame = mp.Frame()
+    atoms = mp.Block()
+    atoms["element"] = np.array(["C"])
+    atoms["x"] = np.array([0.0])
+    atoms["y"] = np.array([0.0])
+    atoms["z"] = np.array([0.0])
+    frame["atoms"] = atoms
+    return frame
+
+
+def test_draw_frame_is_fire_and_forget_by_default() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="draw-fnf", transport=fake)
+    scene.draw_frame(_one_atom_frame())
+    assert len(fake.sent) == 1
+    method, _params, meta = fake.sent[0]
+    assert method == "scene.draw_frame"
+    assert meta["wait"] is False
+
+
+def test_draw_frame_wait_true_acks_and_lists_modifiers() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="draw-wait", transport=fake)
+    scene.draw_frame(_one_atom_frame(), wait=True)
+    methods = [row[0] for row in fake.sent]
+    assert methods[0] == "scene.draw_frame"
+    assert fake.sent[0][2]["wait"] is True
+    assert "pipeline.list" in methods
+
+
+def test_clear_is_fire_and_forget_by_default() -> None:
+    fake = FakeTransport()
+    scene = Molvis(name="clear-fnf", transport=fake)
+    scene.clear()
+    method, _params, meta = fake.sent[0]
+    assert method == "scene.clear"
+    assert meta["wait"] is False
+
+
 def test_visual_style_is_global_not_a_draw_argument() -> None:
     for method_name in ("draw_frame", "draw_atomistic", "draw_atoms"):
         parameters = inspect.signature(getattr(Molvis, method_name)).parameters
