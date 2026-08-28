@@ -1,0 +1,32 @@
+name: setup-molrs-wasm
+description: >
+  Check out MolCrafts/molrs (nightly, else dev) and build the bundler WASM
+  package at ../molrs/molrs-wasm/pkg so file:../molrs/molrs-wasm/pkg resolves.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: MolCrafts/molrs
+        ref: nightly
+        path: .nightly-molrs
+
+    - name: Link as the sibling molvis expects
+      shell: bash
+      run: |
+        set -euo pipefail
+        ln -sfn "$GITHUB_WORKSPACE/.nightly-molrs" "$GITHUB_WORKSPACE/../molrs"
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack
+
+    - name: Build @molcrafts/molrs wasm
+      shell: bash
+      working-directory: ${{ github.workspace }}/../molrs/molrs-wasm
+      run: wasm-pack build --release --target bundler --scope molcrafts --out-name molrs

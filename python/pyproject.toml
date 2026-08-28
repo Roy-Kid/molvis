@@ -68,6 +68,12 @@ molvis = "molvis.cli:main"
 Homepage = "https://github.com/molcrafts/molvis"
 Repository = "https://github.com/molcrafts/molvis"
 
+# Until molpy/molrs 0.14 are on PyPI, uv (CI) installs the 0.14 line from git.
+# The published pin above is unchanged; nightly.yml rewrites it to *-nightly.
+[tool.uv.sources]
+molcrafts-molpy = { git = "https://github.com/MolCrafts/molpy.git", rev = "dev" }
+molcrafts-molrs = { git = "https://github.com/MolCrafts/molrs.git", subdirectory = "molrs-python", rev = "dev" }
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 
