@@ -29,6 +29,8 @@ class FrameCommandsMixin:
         self: "Molvis",
         frames: Iterable[mp.Frame],
         boxes: Iterable[mp.Box | None] | None = None,
+        *,
+        wait: bool = False,
     ) -> "Molvis":
         """Replace the viewer's trajectory with a list of frames.
 
@@ -37,10 +39,14 @@ class FrameCommandsMixin:
         navigates to frame 0. Per-frame descriptors (for the PCATool
         sidebar) are set separately via :meth:`set_frame_labels`.
 
+        Fire-and-forget by default. Pass ``wait=True`` to block on the
+        frontend ACK and refresh the local modifier pipeline mirror.
+
         Args:
             frames: Sequence of molpy.Frame objects.
             boxes: Optional parallel sequence of molpy.Box objects.
                 ``None`` entries are allowed.
+            wait: Block on the frontend ACK (default ``False``).
 
         Returns:
             Self for method chaining.
@@ -68,11 +74,12 @@ class FrameCommandsMixin:
         self.send_cmd(
             FrontendCommands.SET_TRAJECTORY.method,
             params,
-            wait_for_response=True,
+            wait_for_response=wait,
         )
 
         self._record_trajectory(frame_list, box_list)
-        self.list_modifiers()
+        if wait:
+            self.list_modifiers()
         return self
 
     def set_frame_labels(

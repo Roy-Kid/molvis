@@ -101,6 +101,27 @@ def test_list_modifiers_decodes_response_and_updates_mirror() -> None:
     assert scene._mirror_pipeline[0].id == "data-source-1"
 
 
+def test_list_modifiers_tolerates_missing_category() -> None:
+    scene = Molvis(name="pipeline-list-partial")
+    _wire_send_cmd(
+        scene,
+        {
+            "pipeline.list": {
+                "modifiers": [
+                    {
+                        "id": "data-source-1",
+                        "name": "Data Source",
+                        "enabled": True,
+                    }
+                ]
+            }
+        },
+    )
+    result = scene.list_modifiers()
+    assert result[0].id == "data-source-1"
+    assert result[0].category == ""
+
+
 def test_available_modifiers_decodes_response() -> None:
     scene = Molvis(name="pipeline-available")
     _wire_send_cmd(

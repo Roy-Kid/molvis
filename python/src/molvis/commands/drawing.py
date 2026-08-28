@@ -38,16 +38,24 @@ class DrawingCommandsMixin:
         self: "Molvis",
         name: str | None = None,
         clear: bool = True,
+        *,
+        wait: bool = False,
     ) -> "Molvis":
-        """Create a new frame and set it as current."""
+        """Create a new frame and set it as current.
+
+        Fire-and-forget by default: the RPC is queued and this call
+        returns. Pass ``wait=True`` to block on the frontend ack and
+        refresh the local modifier pipeline mirror.
+        """
         self.send_cmd(
             FrontendCommands.NEW_FRAME.method,
             {"name": name, "clear": clear},
-            wait_for_response=True,
+            wait_for_response=wait,
         )
         if clear:
             self._clear_mirror()
-        self.list_modifiers()
+        if wait:
+            self.list_modifiers()
         return self
 
     def draw_frame(
@@ -55,6 +63,7 @@ class DrawingCommandsMixin:
         frame: mp.Frame,
         *,
         include_metadata: bool = False,
+        wait: bool = False,
     ) -> "Molvis":
         """
         Draw a molecular frame on the current canvas.
@@ -62,9 +71,15 @@ class DrawingCommandsMixin:
         Passes molpy Frame data directly to the frontend.  Numeric arrays
         are sent as binary buffers via the transport encoder.
 
+        Fire-and-forget by default so an agent ``exec`` cannot stall the
+        whole MCP plane waiting for a canvas ACK. Pass ``wait=True`` to
+        block until the frontend applies the frame and to refresh the
+        local modifier pipeline mirror (scripts that need a barrier).
+
         Args:
             frame: molpy Frame object containing blocks (atoms, bonds, etc.)
             include_metadata: Whether to include frame metadata
+            wait: Block on the frontend ACK (default ``False``).
 
         Returns:
             Self for method chaining
@@ -78,10 +93,11 @@ class DrawingCommandsMixin:
         self.send_cmd(
             FrontendCommands.DRAW_FRAME.method,
             {"frame": draw_data},
-            wait_for_response=True,
+            wait_for_response=wait,
         )
         self._record_trajectory([frame], None)
-        self.list_modifiers()
+        if wait:
+            self.list_modifiers()
         return self
 
     def draw_atomistic(
@@ -90,6 +106,7 @@ class DrawingCommandsMixin:
         *,
         include_metadata: bool = False,
         atom_fields: list[str] | None = None,
+        wait: bool = False,
     ) -> "Molvis":
         """
         Draw an Atomistic object (Molecule, Residue, Crystal, etc.).
@@ -98,6 +115,7 @@ class DrawingCommandsMixin:
             atomistic: molpy Atomistic object with a ``to_frame()`` method
             include_metadata: Whether to include frame metadata
             atom_fields: List of atom fields to extract
+            wait: Block on the frontend ACK (default ``False``).
 
         Returns:
             Self for method chaining
@@ -110,6 +128,7 @@ class DrawingCommandsMixin:
         return self.draw_frame(
             frame=frame,
             include_metadata=include_metadata,
+            wait=wait,
         )
 
     def draw_box(
@@ -138,6 +157,7 @@ class DrawingCommandsMixin:
         atoms: Any | list[Any],
         *,
         color: str | list[str] | None = None,
+        wait: bool = False,
     ) -> "Molvis":
         """
         Draw individual atoms or a list of atoms.
@@ -172,12 +192,16 @@ class DrawingCommandsMixin:
             atoms_block["color"] = np.array(color)
 
         frame = mp.Frame(blocks={"atoms": atoms_block})
-        return self.draw_frame(frame=frame)
+        return self.draw_frame(frame=frame, wait=wait)
 
-    def clear(self: "Molvis") -> "Molvis":
-        """Clear all content from canvas."""
+    def clear(self: "Molvis", *, wait: bool = False) -> "Molvis":
+        """Clear all content from canvas.
+
+        Fire-and-forget by default. Pass ``wait=True`` to block on the
+        frontend ACK.
+        """
         self.send_cmd(
-            FrontendCommands.CLEAR.method, {}, wait_for_response=True
+            FrontendCommands.CLEAR.method, {}, wait_for_response=wait
         )
         self._clear_mirror()
         return self
