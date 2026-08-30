@@ -56,9 +56,9 @@ function extensionOf(filePath: string): string {
   return dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
 }
 
-/** True when the path is a registered molecular file (or a `.zarr` directory). */
+/** True when the path is a registered molecular file (or a `.mrec` directory). */
 export function isMolecularPath(filePath: string): boolean {
-  if (filePath.endsWith(".zarr") || filePath.endsWith(".zarr/")) return true;
+  if (filePath.endsWith(".mrec") || filePath.endsWith(".mrec/")) return true;
   const base = basenameOf(filePath);
   if (base === "CHGCAR" || base.startsWith("CHGCAR_")) return true;
   if (
@@ -93,6 +93,7 @@ export function isSketchPath(filePath: string): boolean {
 export function workspaceMolecularIncludeGlobs(): string[] {
   return [
     `**/*.{${EXTENSIONS.join(",")}}`,
+    "**/*.mrec",
     "**/CHGCAR",
     "**/CHGCAR_*",
     "**/POSCAR",

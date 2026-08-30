@@ -12,7 +12,16 @@ suite("molecularMatch", () => {
     assert.strictEqual(isMolecularPath("/tmp/frame.extxyz"), true);
     assert.strictEqual(isMolecularPath("/tmp/CHGCAR"), true);
     assert.strictEqual(isMolecularPath("/tmp/POSCAR_relax"), true);
-    assert.strictEqual(isMolecularPath("traj.zarr"), true);
+  });
+
+  test("isMolecularPath accepts .mrec directory stores", () => {
+    assert.strictEqual(isMolecularPath("traj.mrec"), true);
+    assert.strictEqual(isMolecularPath("traj.mrec/"), true);
+  });
+
+  test("isMolecularPath rejects .zarr stores", () => {
+    assert.strictEqual(isMolecularPath("traj.zarr"), false);
+    assert.strictEqual(isMolecularPath("traj.zarr/"), false);
   });
 
   test("isMolecularPath rejects non-molecular paths", () => {

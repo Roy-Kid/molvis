@@ -486,10 +486,20 @@ await app.setTrajectory(trajectory);
 ### Zarr
 
 ```typescript
-import { loadFileContent, loadZarrFiles } from "@molcrafts/molvis-stage/io";
+import {
+  loadFileContent,
+  loadZarrFiles,
+  loadZarrSource,
+  type ZarrDirectorySource,
+} from "@molcrafts/molvis-stage/io";
 
 // fileMap: path → base64 (or pass the map straight to loadFileContent)
-await loadFileContent(app, fileMap, "dataset.zarr", "zarr");
+await loadFileContent(app, fileMap, "dataset.mrec", "zarr");
+
+// Hosts that can list/read a directory (molexp workspace.fs, vscode.workspace.fs)
+// hand a ZarrDirectorySource; molrs TrajectoryReader opens the store.
+const source: ZarrDirectorySource = { list, read };
+await loadZarrSource(app, source, "dataset.mrec");
 ```
 
 ## Canonical column names

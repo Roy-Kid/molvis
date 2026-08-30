@@ -38,7 +38,11 @@ import {
   loadTextTrajectory,
 } from "./reader";
 import { BlobRangeSource, type TrajectorySource } from "./sources";
-import { loadZarrFiles } from "./zarr";
+import {
+  loadZarrDirectory,
+  loadZarrFiles,
+  type ZarrDirectorySource,
+} from "./zarr";
 
 export { CancellationError } from "../transport/trajectory_worker";
 export {
@@ -104,7 +108,15 @@ export {
   writePDBFrame,
   writeXYZFrame,
 } from "./writer";
-export { loadZarrFiles, type ZarrLoadResult } from "./zarr";
+export {
+  collectZarrDirectory,
+  loadZarrDirectory,
+  loadZarrFiles,
+  loadZarrStore,
+  type ZarrDirectorySource,
+  type ZarrDirent,
+  type ZarrLoadResult,
+} from "./zarr";
 
 /**
  * Payload shape accepted by {@link loadFileContent}.
@@ -451,6 +463,45 @@ async function extendIntoScene(
   );
 }
 
+async function commitLoadedTrajectory(
+  app: Molvis,
+  trajectory: Trajectory,
+  dispose: () => void,
+  filename: string,
+  mode: LoadMode,
+  pickBondMapping?: PickBondMapping,
+): Promise<void> {
+  if (mode === "extend") {
+    await extendIntoScene(app, trajectory, dispose, filename, pickBondMapping);
+    return;
+  }
+
+  if (mode === "augment") {
+    try {
+      await augmentTrajectoryAsDataSource(
+        app,
+        trajectory,
+        { sourceType: "file", filename },
+        pickBondMapping,
+      );
+    } catch (err) {
+      dispose();
+      throw err;
+    }
+    app.world.fit();
+    app.setMode("view");
+    return;
+  }
+
+  await installPrimaryTrajectory(
+    app,
+    trajectory,
+    dispose,
+    filename,
+    pickBondMapping,
+  );
+}
+
 /**
  * Canonical file ingress for `@molcrafts/molvis-stage`. Dispatches to the right
  * reader based on payload shape (string → text format, object → zarr),
@@ -484,33 +535,34 @@ export async function loadFileContent(
     dispose = bundle.dispose;
   }
 
-  if (mode === "extend") {
-    await extendIntoScene(app, trajectory, dispose, filename, pickBondMapping);
-    return;
-  }
-
-  if (mode === "augment") {
-    try {
-      await augmentTrajectoryAsDataSource(
-        app,
-        trajectory,
-        { sourceType: "file", filename },
-        pickBondMapping,
-      );
-    } catch (err) {
-      dispose();
-      throw err;
-    }
-    app.world.fit();
-    app.setMode("view");
-    return;
-  }
-
-  await installPrimaryTrajectory(
+  await commitLoadedTrajectory(
     app,
     trajectory,
     dispose,
     filename,
+    mode,
+    pickBondMapping,
+  );
+}
+
+/**
+ * Directory-source Zarr ingress. Hosts (molexp, VS Code, page) hand a
+ * {@link ZarrDirectorySource}; molrs `TrajectoryReader` opens the store.
+ */
+export async function loadZarrSource(
+  app: Molvis,
+  source: ZarrDirectorySource,
+  filename: string,
+  mode: LoadMode = "replace",
+  pickBondMapping?: PickBondMapping,
+): Promise<void> {
+  const bundle = await loadZarrDirectory(source);
+  await commitLoadedTrajectory(
+    app,
+    bundle.trajectory,
+    bundle.dispose,
+    filename,
+    mode,
     pickBondMapping,
   );
 }

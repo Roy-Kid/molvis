@@ -9,6 +9,6 @@ export function getDisplayName(uri: vscode.Uri): string {
 export function isZarrUriPath(uri: vscode.Uri, type: number): boolean {
   const isDirectory = (type & FILE_TYPE_DIRECTORY) !== 0;
   return (
-    isDirectory && (uri.path.endsWith(".zarr") || uri.path.endsWith(".zarr/"))
+    isDirectory && (uri.path.endsWith(".mrec") || uri.path.endsWith(".mrec/"))
   );
 }
