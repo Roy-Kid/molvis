@@ -1,5 +1,6 @@
 # Managed by prek: `prek install`
 default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit, pre-push]
 
 # Mirrors every job in .github/workflows/ci.yml. Any divergence is a bug
 # — when you add/modify a CI job, update this file in the same commit.
@@ -23,8 +24,31 @@ default_install_hook_types: [pre-commit, pre-push]
 #   pre-commit install --hook-type pre-commit --hook-type pre-push
 
 repos:
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      # Catches `if: secrets.*` at job level (workflow starts 0 jobs) and
+      # other GHA parse errors that `check-yaml` will not see.
+      - id: actionlint
+
   - repo: local
     hooks:
+      # ─── ci.yml::setup-molrs-wasm ─────────────────────────────────────────
+      # CI always builds this; a molvis-only clone otherwise fails typecheck
+      # / browser tests with a missing `@molcrafts/molrs` that looks unrelated.
+      - id: molrs-wasm-pkg
+        name: sibling @molcrafts/molrs wasm pkg
+        entry: >
+          bash -c 'test -f ../molrs/molrs-wasm/pkg/package.json || {
+            echo "BLOCK: ../molrs/molrs-wasm/pkg missing.";
+            echo "CI builds it via .github/actions/setup-molrs-wasm.";
+            echo "Locally: (cd ../molrs/molrs-wasm && wasm-pack build --release --target bundler --scope molcrafts --out-name molrs)";
+            exit 1;
+          }'
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # ─── ci.yml::lint ─────────────────────────────────────────────────────
       # Run biome on the whole repo (matches `npx biome check` in CI),
       # not just changed files — biome's own includes/excludes config
@@ -165,8 +189,8 @@ repos:
         stages: [pre-push]
 
       - id: test-vsc-ext
-        name: test vsc-ext (mocha, unit only)
-        entry: npm run test:vsc-ext
+        name: test vsc-ext (build + mocha)
+        entry: bash -c 'npm run build:vsc-ext && npm run test:vsc-ext'
         language: system
         pass_filenames: false
         always_run: true
@@ -179,3 +203,12 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+
+      # Stale python/uv.lock pinning PyPI molpy 0.13.2 hid the git 0.14
+      # sources from `uv run` until the lock was regenerated.
+      - id: python-uv-lock
+        name: python uv.lock matches pyproject
+        entry: bash -c 'cd python && uv lock --check'
+        language: system
+        pass_filenames: false
+        always_run: true

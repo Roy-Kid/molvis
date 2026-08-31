@@ -1,0 +1,152 @@
+name: Nightly
+
+# Two artefacts from the same `nightly` branch:
+#   1. PyPI `molcrafts-molvis-nightly` (dev version), pinned to
+#      `molcrafts-molpy-nightly` so the 0.14 molrs/molpy line is used.
+#   2. The page bundle at app.molcrafts.org/nightly/molvis/ (Cloudflare Pages
+#      project `molvis`, production-equivalent preview branch `nightly`).
+#
+# Trigger: every push to `nightly`, plus manual dispatch.
+# Version: <python package version>.dev<UTC timestamp> (PEP 440).
+
+on:
+  push:
+    branches: [nightly]
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    if: github.repository == 'MolCrafts/molvis'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          set -euo pipefail
+          BASE=$(sed -n 's/^version = "\(.*\)"/\1/p' python/pyproject.toml | head -n1)
+          DEV="${BASE}.dev$(date -u +%Y%m%d%H%M)"
+          echo "Nightly version: $DEV"
+          echo "version=$DEV" >> "$GITHUB_OUTPUT"
+
+  page:
+    needs: prepare
+    if: github.repository == 'MolCrafts/molvis'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-molrs-wasm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install
+
+      - name: Build page bound to /nightly/molvis/
+        env:
+          MOLVIS_ASSET_BASE: /nightly/molvis/
+        run: npm run build:page
+
+      - name: Require injected asset base
+        run: |
+          set -euo pipefail
+          grep -F 'window.__MOLVIS_ASSET_BASE__="/nightly/molvis/"' page/dist/index.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molvis-nightly-page
+          path: page/dist
+
+      # Git-connected Pages also builds `nightly` as a preview. This upload
+      # ships the already-stamped /nightly/molvis/ bundle (CF git builds
+      # would miss MOLVIS_ASSET_BASE unless set in the dashboard).
+      - name: Deploy Cloudflare Pages branch nightly
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy page/dist --project-name=molvis --branch=nightly
+
+  python:
+    needs: prepare
+    if: github.repository == 'MolCrafts/molvis'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/molcrafts-molvis-nightly
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-molrs-wasm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install
+
+      - name: Build page bundle into the Python package
+        env:
+          MOLVIS_ASSET_BASE: /nightly/molvis/
+        run: npm run build:page
+
+      - name: Stamp nightly Python distribution
+        env:
+          DEV: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          python - "$DEV" <<'PY'
+          import re, sys, pathlib
+          dev = sys.argv[1]
+          p = pathlib.Path("python/pyproject.toml")
+          t = p.read_text()
+          t = re.sub(
+              r'^name\s*=\s*"molcrafts-molvis"',
+              'name = "molcrafts-molvis-nightly"',
+              t,
+              count=1,
+              flags=re.M,
+          )
+          t = re.sub(
+              r'^version\s*=\s*".*?"',
+              f'version = "{dev}"',
+              t,
+              count=1,
+              flags=re.M,
+          )
+          t = re.sub(
+              r'"molcrafts-molpy>=[^"]+"',
+              '"molcrafts-molpy-nightly>=0.14.0.dev0"',
+              t,
+              count=1,
+          )
+          p.write_text(t)
+          PY
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build Python wheel
+        working-directory: python
+        env:
+          MOLVIS_SKIP_UI_BUILD: "1"
+        run: pip install build && python -m build
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
+          skip-existing: true

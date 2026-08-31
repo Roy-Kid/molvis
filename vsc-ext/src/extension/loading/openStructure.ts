@@ -24,8 +24,8 @@ export function molecularOpenDialogFilters(): {
     for (const ext of exts) allExts.add(ext);
   }
 
-  allExts.add("zarr");
-  filters["Zarr directory - .zarr"] = ["zarr"];
+  allExts.add("mrec");
+  filters["mrec directory - .mrec"] = ["mrec"];
   filters.All = [...allExts];
   filters["All files"] = ["*"];
 
@@ -33,7 +33,7 @@ export function molecularOpenDialogFilters(): {
 }
 
 /**
- * Prompt the user to pick a structure / trajectory file (or Zarr folder).
+ * Prompt the user to pick a structure / trajectory file (or mrec folder).
  * Returns `undefined` if the dialog is cancelled.
  */
 export async function pickMolecularUri(): Promise<vscode.Uri | undefined> {

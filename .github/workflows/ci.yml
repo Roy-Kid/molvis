@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, nightly]
   pull_request:
-    branches: [master]
+    branches: [master, nightly, dev]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -25,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-molrs-wasm
 
       - uses: actions/setup-node@v4
         with:
@@ -63,6 +69,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-molrs-wasm
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -85,12 +93,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-molrs-wasm
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - run: npm install
 
+      # manifest.test asserts vsc-ext/out/extension.js exists. A leftover
+      # local `out/` hid this from developers; CI is a clean tree, so build
+      # first. Same order as pre-push `build-vsc-ext` then `test-vsc-ext`.
+      - run: npm run build:vsc-ext
       - run: npm run test:vsc-ext
 
   test-python:
@@ -118,6 +132,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-molrs-wasm
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -132,6 +148,8 @@ jobs:
     needs: [lint, typecheck, test]
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-molrs-wasm
 
       - uses: actions/setup-node@v4
         with:
@@ -151,6 +169,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-molrs-wasm
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -168,6 +188,8 @@ jobs:
     needs: [lint, typecheck, test]
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-molrs-wasm
 
       - uses: actions/setup-node@v4
         with:
@@ -190,6 +212,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ./.github/actions/setup-molrs-wasm
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -207,6 +231,8 @@ jobs:
     needs: [lint, typecheck]
     steps:
       - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-molrs-wasm
 
       - uses: actions/setup-node@v4
         with:
