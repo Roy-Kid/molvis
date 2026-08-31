@@ -50,14 +50,15 @@ class AvailableModifier:
 
 
 def _to_modifier_info(raw: Any) -> ModifierInfo:
+    data = raw if isinstance(raw, dict) else {}
     return ModifierInfo(
-        id=str(raw["id"]),
-        name=str(raw["name"]),
-        category=str(raw.get("category") or ""),
-        enabled=bool(raw["enabled"]),
-        selection_scope_id=raw.get("selection_scope_id"),
-        source_owner_id=raw.get("source_owner_id"),
-        kind=raw.get("kind") if isinstance(raw.get("kind"), str) else None,
+        id=str(data.get("id") or ""),
+        name=str(data.get("name") or ""),
+        category=str(data.get("category") or ""),
+        enabled=bool(data.get("enabled", True)),
+        selection_scope_id=data.get("selection_scope_id"),
+        source_owner_id=data.get("source_owner_id"),
+        kind=data.get("kind") if isinstance(data.get("kind"), str) else None,
     )
 
 
