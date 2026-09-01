@@ -283,6 +283,13 @@ function buildLazyTrajectory(
   }
 
   const trajectory = Trajectory.fromProvider(provider);
+  // Teardown-only free. `evictOldest` above refuses to free a mid-life frame
+  // (it races `_lastRenderedFrame` / SceneIndex); this closure frees the whole
+  // cache and must run only AFTER the scene has been swapped off these frames.
+  // `installPrimaryTrajectory` (io/index.ts) defers the outgoing file's cleanup
+  // until `replaceScene` has moved `_lastRenderedFrame` onto the incoming
+  // trajectory, so no render can deref a freed handle here. See
+  // `.claude/notes/molrs-handles.md`.
   const dispose = () => {
     for (const frame of cache.values()) {
       frame.free();

@@ -143,7 +143,9 @@ export class MolvisContextMenu extends MolvisElement {
         box-shadow: var(--shadow);
         padding: 0.25rem;
         pointer-events: auto;
-        color: var(--molvis-ui-fg, inherit);
+        /* Never inherit light-DOM ink: overlay defaults to dark text, while
+         * the menu surface is dark gun-metal (SHARED_CSS). Match SHARED_CSS. */
+        color: var(--molvis-ui-fg, oklch(0.93 0.008 255));
       }
       .menu, .flyout {
         display: flex;

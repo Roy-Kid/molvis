@@ -12,7 +12,10 @@ import type { AtomStyle } from "../../src/artist/theme";
 
 function makeTypeOnlyBlock(types: string[]): Block {
   const atoms = new Block();
-  atoms.setColF("x", new Float64Array(types.length));
+  atoms.setColF(
+    "x",
+    Float64Array.from(types, (_t, i) => i * 1.4),
+  );
   atoms.setColF("y", new Float64Array(types.length));
   atoms.setColF("z", new Float64Array(types.length));
   atoms.setColStr("type", types);
@@ -52,7 +55,7 @@ function readColor(
 describe("buildAtomBuffers", () => {
   it("uses dataset-level categorical colors for type-only frames", () => {
     const block = makeTypeOnlyBlock(["opls_146", "opls_145", "opls_146"]);
-    const buffers = buildAtomBuffers(block, makeStyleManager(), 7);
+    const buffers = buildAtomBuffers(block, makeStyleManager(), 7).buffers;
     const colors = buffers.get("instanceColor")!;
     expect(buffers.get("instanceStyle")?.[0]).toBe(1);
 
@@ -63,10 +66,10 @@ describe("buildAtomBuffers", () => {
   it("uses type_id ordinals when LAMMPS wrote no type label", () => {
     const atoms = new Block();
     atoms.setColF("x", new Float64Array([0, 1, 2]));
-    atoms.setColF("y", new Float64Array(3));
-    atoms.setColF("z", new Float64Array(3));
+    atoms.setColF("y", new Float64Array([0.1, 0.1, 0.1]));
+    atoms.setColF("z", new Float64Array([0.1, 0.1, 0.1]));
     atoms.setColU32("type_id", toDomainUint([1, 2, 1]));
-    const colors = buildAtomBuffers(atoms, makeStyleManager(), 7).get(
+    const colors = buildAtomBuffers(atoms, makeStyleManager(), 7).buffers.get(
       "instanceColor",
     )!;
     expect(readColor(colors, 0)).toEqual(readColor(colors, 2));
@@ -78,14 +81,28 @@ describe("buildAtomBuffers", () => {
       makeTypeOnlyBlock(["opls_145", "opls_146"]),
       makeStyleManager(),
       7,
-    ).get("instanceColor")!;
+    ).buffers.get("instanceColor")!;
     const second = buildAtomBuffers(
       makeTypeOnlyBlock(["opls_146", "opls_145"]),
       makeStyleManager(),
       7,
-    ).get("instanceColor")!;
+    ).buffers.get("instanceColor")!;
 
     expect(readColor(first, 0)).toEqual(readColor(second, 1));
     expect(readColor(first, 1)).toEqual(readColor(second, 0));
+  });
+
+  it("omits a pile of exact-origin sentinels from GPU instances", () => {
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([1.4, 2.8, 0, 0, 0, 0]));
+    atoms.setColF("y", new Float64Array(6));
+    atoms.setColF("z", new Float64Array(6));
+    atoms.setColStr("element", ["C", "C", "C", "C", "C", "C"]);
+    const built = buildAtomBuffers(atoms, makeStyleManager(), 7);
+    const data = built.buffers.get("instanceData")!;
+    expect(data.length / 4).toBe(2);
+    expect(built.instanceMap).toEqual(new Uint32Array([0, 1]));
+    expect(data[0]).toBeCloseTo(1.4);
+    expect(data[4]).toBeCloseTo(2.8);
   });
 });

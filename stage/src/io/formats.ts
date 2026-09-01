@@ -40,7 +40,7 @@ export type FormatPayload = "text" | "binary";
  *
  * - `"eager-only"` — no streaming reader exists; the whole file must be
  *   materialized before parsing. Used by formats whose payload is
- *   structurally indivisible (zarr directory, volumetric grids).
+ *   structurally indivisible (mrec store, volumetric grids).
  * - `"streaming-preferred"` — both an eager (`loadFileContent`) and a
  *   streaming (`loadFileStream`) reader exist. Hosts pick by file size /
  *   user intent. The default for everything multi-frame.
@@ -258,6 +258,73 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
   },
 ];
 
+/**
+ * A directory-store product that is deliberately **not** a
+ * {@link FileFormat}. mrec is a Zarr-v3 *encoding*; molvis opens the whole
+ * store through molrs's `TrajectoryReader`, never a per-extension parser.
+ * Keeping it out of the parser-dispatch {@link FileFormat} union is a pinned
+ * invariant (`regressions/mrec-format-06-molvis.ts`): hosts recognise the
+ * `.mrec` directory suffix and stream the store — they never route its bytes
+ * to a format reader.
+ */
+export interface DirectoryFormatDescriptor {
+  /** Product name molvis shows the user (never the `zarr` encoding). */
+  readonly product: "mrec";
+  readonly label: string;
+  readonly description: string;
+  /** Directory-name suffix that identifies the store, including the dot. */
+  readonly suffix: string;
+  /** Directory stores are always streamed as trajectories. */
+  readonly ingest: IngestKind;
+}
+
+/** Directory-name suffix of an mrec store (a Zarr-v3 tree), including the dot. */
+export const MREC_DIR_SUFFIX = ".mrec";
+
+/**
+ * Directory-store products — the directory-shaped sibling of
+ * {@link FILE_FORMAT_REGISTRY}. Unioned into {@link getAllAcceptExtensions}
+ * so an open dialog / `accept` list offers `.mrec` alongside the file formats.
+ */
+export const directoryFormats: readonly DirectoryFormatDescriptor[] = [
+  {
+    product: "mrec",
+    label: "mrec store",
+    description:
+      "molpy record — a Zarr-v3 directory opened as a streaming trajectory (*.mrec/)",
+    suffix: MREC_DIR_SUFFIX,
+    ingest: "trajectory",
+  },
+];
+
+/**
+ * Store root of a `*.mrec` directory record, or `undefined`. THE single
+ * source of truth for "is this an mrec store?" — every host (the VS Code path
+ * matcher, the store-URI collapser, the open dialog) funnels through here
+ * instead of re-deriving the `.mrec` rule.
+ *
+ * Accepts the store itself (`growth.mrec`) and any path inside it
+ * (`growth.mrec/zarr.json`, `growth.mrec/trajectory/atoms/x/c/0`), with or
+ * without a trailing slash and with either path separator. A packed
+ * `*.mrec.zip` archive is a file, not a directory store, and returns
+ * `undefined`.
+ */
+export function mrecStoreRootPath(filePath: string): string | undefined {
+  const posix = filePath.replaceAll("\\", "/");
+  const trimmed =
+    posix.length > 1 && posix.endsWith("/") ? posix.slice(0, -1) : posix;
+  const lower = trimmed.toLowerCase();
+  const insideMarker = `${MREC_DIR_SUFFIX}/`;
+  const inside = lower.lastIndexOf(insideMarker);
+  if (inside >= 0) {
+    return trimmed.slice(0, inside + MREC_DIR_SUFFIX.length);
+  }
+  if (lower.endsWith(MREC_DIR_SUFFIX)) {
+    return trimmed;
+  }
+  return undefined;
+}
+
 /** Returns the descriptor for a canonical FileFormat. */
 export function describeFormat(format: FileFormat): FileFormatDescriptor {
   const descriptor = FILE_FORMAT_REGISTRY.find((d) => d.format === format);
@@ -278,6 +345,11 @@ export function getAllAcceptExtensions(): string {
     for (const ext of entry.extensions) {
       exts.push(`.${ext}`);
     }
+  }
+  // Directory stores contribute their dotted suffix (`.mrec`) so hosts that
+  // build an `accept` list from this offer the store folder too.
+  for (const dir of directoryFormats) {
+    exts.push(dir.suffix);
   }
   return exts.join(",");
 }

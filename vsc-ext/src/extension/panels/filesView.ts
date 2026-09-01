@@ -7,6 +7,7 @@ import {
   WORKSPACE_FILE_EXCLUDE,
   workspaceMolecularIncludeGlobs,
 } from "../loading/molecularMatch";
+import { collapseMrecStoreUri } from "../loading/pathUtils";
 import type { RecentFilesStore } from "../loading/recentFiles";
 
 /**
@@ -216,10 +217,11 @@ export class MolvisFilesViewProvider
         SCAN_CAP_PER_GLOB,
       );
       for (const uri of batch) {
-        const key = uri.toString();
+        const store = collapseMrecStoreUri(uri);
+        const key = store.toString();
         if (seen.has(key)) continue;
         seen.add(key);
-        found.push(uri);
+        found.push(store);
       }
     }
     this.workspaceUris = found.sort((a, b) => a.fsPath.localeCompare(b.fsPath));

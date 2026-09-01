@@ -49,6 +49,11 @@ describe("ComputeBondsModifier", () => {
   // The modifier never reads `context.app`; the seam only has to exist.
   const mockApp = {} as MolvisApp;
 
+  it("does not auto-match; Create bonds is opt-in", () => {
+    const bondless = makeFrame(["C", "O"], [0, 0, 0, 1.2, 0, 0]);
+    expect(new ComputeBondsModifier().matches(bondless)).toBe(false);
+  });
+
   it("passes through frames with fewer than two atoms", () => {
     const mod = new ComputeBondsModifier();
     const frame = makeFrame(["C"], [0, 0, 0]);

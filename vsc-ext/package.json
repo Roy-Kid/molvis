@@ -96,7 +96,7 @@
       {
         "command": "molvis.quickView",
         "title": "Quick look",
-        "icon": "$(open-preview)"
+        "icon": "$(eye)"
       },
       {
         "command": "molvis.quickViewSketch",

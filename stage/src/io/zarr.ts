@@ -4,26 +4,26 @@ import { logger } from "../utils/logger";
 
 const FRAME_CACHE_SIZE = 16;
 
-export interface ZarrLoadResult {
+export interface MrecLoadResult {
   trajectory: Trajectory;
   dispose: () => void;
 }
 
-/** One entry from a host directory listing of a Zarr store. */
-export interface ZarrDirent {
+/** One entry from a host directory listing of an mrec store. */
+export interface MrecDirent {
   name: string;
   kind: "file" | "directory";
 }
 
 /**
- * Host I/O for a Zarr V3 directory store.
+ * Host I/O for an mrec directory store (a Zarr-v3 tree on disk).
  *
  * Paths are POSIX, relative to the store root, and never start with `/`.
  * `list("")` lists the store root. molrs `TrajectoryReader` opens the store;
  * the host only supplies bytes.
  */
-export interface ZarrDirectorySource {
-  list(path: string): Promise<readonly ZarrDirent[]>;
+export interface MrecDirectorySource {
+  list(path: string): Promise<readonly MrecDirent[]>;
   read(path: string): Promise<Uint8Array>;
 }
 
@@ -50,12 +50,15 @@ function storeRelativeKey(path: string, root: string): string {
 function evictOldest(cache: Map<number, Frame>): void {
   const oldest = cache.keys().next().value as number | undefined;
   if (oldest !== undefined) {
-    cache.get(oldest)?.free();
+    // Do not `frame.free()` here. The async trajectory LRU already
+    // refuses to: wasm-bindgen FinalizationRegistry releases the
+    // wrapper, and an explicit free races `_lastRenderedFrame` /
+    // SceneIndex during reverse scrub.
     cache.delete(oldest);
   }
 }
 
-function trajectoryFromReader(reader: TrajectoryReader): ZarrLoadResult {
+function trajectoryFromReader(reader: TrajectoryReader): MrecLoadResult {
   const frameCount = reader.countFrames();
   const cache = new Map<number, Frame>();
 
@@ -65,7 +68,7 @@ function trajectoryFromReader(reader: TrajectoryReader): ZarrLoadResult {
       const cached = cache.get(index);
       if (cached) return cached;
       const frame = reader.readFrame(index);
-      if (!frame) throw new Error(`Zarr frame ${index} out of range`);
+      if (!frame) throw new Error(`mrec frame ${index} out of range`);
       if (cache.size >= FRAME_CACHE_SIZE) evictOldest(cache);
       cache.set(index, frame);
       return frame;
@@ -74,47 +77,54 @@ function trajectoryFromReader(reader: TrajectoryReader): ZarrLoadResult {
 
   const trajectory = Trajectory.fromProvider(provider);
 
+  // Teardown-only free. `evictOldest` deliberately refuses to free a
+  // mid-life frame (it races `_lastRenderedFrame` / SceneIndex), and this
+  // closure must run only AFTER the scene has been swapped off these frames:
+  // `installPrimaryTrajectory` (io/index.ts) defers the outgoing file's
+  // cleanup until `replaceScene` has moved `_lastRenderedFrame` onto the
+  // incoming trajectory, so by the time we free here no render can deref a
+  // freed molrs handle. See `.claude/notes/molrs-handles.md`.
   const dispose = () => {
     for (const frame of cache.values()) frame.free();
     cache.clear();
     reader.free();
   };
 
-  logger.info(`[zarr] Loaded ${frameCount} frame(s)`);
+  logger.info(`[mrec] Loaded ${frameCount} frame(s)`);
   return { trajectory, dispose };
 }
 
 /**
- * Load a zarr directory already materialized as store-relative path → bytes.
+ * Load an mrec store already materialized as store-relative path → bytes.
  * Keys must not start with `/`. Backed by molrs `TrajectoryReader`.
  */
-export function loadZarrStore(files: Map<string, Uint8Array>): ZarrLoadResult {
+export function loadMrecStore(files: Map<string, Uint8Array>): MrecLoadResult {
   if (files.size === 0) {
-    throw new Error("Zarr store is empty");
+    throw new Error("mrec store is empty");
   }
   return trajectoryFromReader(new TrajectoryReader(files));
 }
 
 /**
- * Load a zarr directory (supplied as a file-path → base64 map) into a
+ * Load an mrec store (supplied as a file-path → base64 map) into a
  * lazy Trajectory backed by molrs's TrajectoryReader. The returned `dispose`
- * frees the reader and its frame cache; the io ingress calls it before
+ * frees the reader and its frame cache; the io ingress calls it after
  * swapping in the next trajectory.
  */
-export function loadZarrFiles(files: Record<string, string>): ZarrLoadResult {
+export function loadMrecFiles(files: Record<string, string>): MrecLoadResult {
   const fileMap = new Map<string, Uint8Array>();
   for (const [filePath, contentB64] of Object.entries(files)) {
     fileMap.set(filePath, decodeBase64ToBytes(contentB64));
   }
-  return loadZarrStore(fileMap);
+  return loadMrecStore(fileMap);
 }
 
 /**
- * Recursively read a {@link ZarrDirectorySource} into store-relative path → bytes.
+ * Recursively read an {@link MrecDirectorySource} into store-relative path → bytes.
  * `root` is listed first; keys are relative to that root.
  */
-export async function collectZarrDirectory(
-  source: ZarrDirectorySource,
+export async function collectMrecDirectory(
+  source: MrecDirectorySource,
   root = "",
 ): Promise<Map<string, Uint8Array>> {
   const files = new Map<string, Uint8Array>();
@@ -135,18 +145,57 @@ export async function collectZarrDirectory(
 
   await visit(root);
   if (files.size === 0) {
-    throw new Error("Zarr store is empty");
+    throw new Error("mrec store is empty");
   }
   return files;
 }
 
 /**
- * Open a Zarr V3 directory source through molrs `TrajectoryReader`.
+ * Open an mrec directory source through molrs `TrajectoryReader`.
  * The host lists and reads; this function walks the tree and decodes frames.
  */
-export async function loadZarrDirectory(
-  source: ZarrDirectorySource,
+export async function loadMrecDirectory(
+  source: MrecDirectorySource,
   root = "",
-): Promise<ZarrLoadResult> {
-  return loadZarrStore(await collectZarrDirectory(source, root));
+): Promise<MrecLoadResult> {
+  return loadMrecStore(await collectMrecDirectory(source, root));
 }
+
+/**
+ * @deprecated Renamed to {@link MrecLoadResult} — mrec is the product, zarr
+ * the encoding. Kept for one deprecation window; will be removed.
+ */
+export type ZarrLoadResult = MrecLoadResult;
+
+/**
+ * @deprecated Renamed to {@link MrecDirent}. Kept for one deprecation window.
+ */
+export type ZarrDirent = MrecDirent;
+
+/**
+ * @deprecated Renamed to {@link MrecDirectorySource}. Kept for one deprecation
+ * window.
+ */
+export type ZarrDirectorySource = MrecDirectorySource;
+
+/**
+ * @deprecated Renamed to {@link loadMrecStore}. Kept for one deprecation window.
+ */
+export const loadZarrStore = loadMrecStore;
+
+/**
+ * @deprecated Renamed to {@link loadMrecFiles}. Kept for one deprecation window.
+ */
+export const loadZarrFiles = loadMrecFiles;
+
+/**
+ * @deprecated Renamed to {@link collectMrecDirectory}. Kept for one deprecation
+ * window.
+ */
+export const collectZarrDirectory = collectMrecDirectory;
+
+/**
+ * @deprecated Renamed to {@link loadMrecDirectory}. Kept for one deprecation
+ * window.
+ */
+export const loadZarrDirectory = loadMrecDirectory;

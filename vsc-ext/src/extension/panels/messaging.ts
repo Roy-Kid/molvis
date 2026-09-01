@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { FILE_FORMAT_REGISTRY } from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
 import type {
@@ -8,10 +9,21 @@ import type {
 import { FileRangeReader } from "../loading/fileRangeReader";
 import { resolveFileFormat } from "../loading/formatResolver";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
-import { getDisplayName, isZarrUriPath } from "../loading/pathUtils";
+import {
+  collapseMrecStoreUri,
+  getDisplayName,
+  isMrecUriPath,
+} from "../loading/pathUtils";
 import type { Logger } from "../types";
 
 const rangeReader = new FileRangeReader();
+
+/**
+ * Upper bound on a single `readRange` request. Legitimate streaming chunks
+ * are far smaller; the cap stops a webview from driving `Buffer.alloc` with
+ * an arbitrary length.
+ */
+export const MAX_RANGE_BYTES = 512 * 1024 * 1024;
 
 /**
  * Send a message from extension host to webview.
@@ -31,11 +43,12 @@ export async function sendLoadedFile(
   mode?: LoadMode,
 ): Promise<void> {
   try {
+    uri = collapseMrecStoreUri(uri);
     const filename = getDisplayName(uri);
     const stat = await vscode.workspace.fs.stat(uri);
-    const isZarr = isZarrUriPath(uri, stat.type);
-    const format = isZarr ? null : await resolveFileFormat(filename);
-    if (!isZarr && !format) {
+    const isMrec = isMrecUriPath(uri, stat.type);
+    const format = isMrec ? null : await resolveFileFormat(filename);
+    if (!isMrec && !format) {
       logger.info(`MolVis: user cancelled format picker for ${filename}`);
       return;
     }
@@ -111,6 +124,20 @@ export async function handleRangeMessage(
         `range read is only supported for file: URIs (${uri.scheme})`,
       );
     }
+    const { start, end } = message;
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < 0 ||
+      end < start
+    ) {
+      throw new Error(`invalid range [${start}, ${end})`);
+    }
+    if (end - start > MAX_RANGE_BYTES) {
+      throw new Error(
+        `range of ${end - start} bytes exceeds the ${MAX_RANGE_BYTES}-byte limit`,
+      );
+    }
     const data = await rangeReader.read(
       uri.fsPath,
       message.start,
@@ -141,14 +168,18 @@ export async function handleSaveFile(
   logger: Logger,
 ): Promise<void> {
   try {
+    // Strip any directory part so a `../…` suggested name can't pre-fill the
+    // dialog outside the workspace. The final save location is whatever the
+    // user confirms in the native dialog.
+    const safeName = path.basename(suggestedName);
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
     const defaultUri = workspaceFolder
-      ? vscode.Uri.joinPath(workspaceFolder, suggestedName)
-      : vscode.Uri.file(suggestedName);
+      ? vscode.Uri.joinPath(workspaceFolder, safeName)
+      : vscode.Uri.file(safeName);
 
     const uri = await vscode.window.showSaveDialog({
       defaultUri,
-      filters: saveDialogFilters(suggestedName),
+      filters: saveDialogFilters(safeName),
     });
     if (!uri) return;
 
@@ -200,11 +231,18 @@ export async function handleDropUri(
   logger: Logger,
   mode: LoadMode = "replace",
 ): Promise<void> {
-  await sendLoadedFile(
-    webview,
-    vscode.Uri.parse(uriString),
-    fileLoader,
-    logger,
-    mode,
-  );
+  const uri = vscode.Uri.parse(uriString);
+  // Loading reads through `vscode.workspace.fs` / byte ranges, which only
+  // serve `file:` URIs (mirrors the guard in `handleRangeMessage`). Reject
+  // anything else instead of failing obscurely deeper in the load path.
+  if (uri.scheme !== "file") {
+    logger.error(
+      `MolVis: drop is only supported for file: URIs (${uri.scheme})`,
+    );
+    void vscode.window.showErrorMessage(
+      `MolVis: cannot open a ${uri.scheme}: URI — only local files are supported.`,
+    );
+    return;
+  }
+  await sendLoadedFile(webview, uri, fileLoader, logger, mode);
 }

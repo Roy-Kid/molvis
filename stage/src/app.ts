@@ -30,6 +30,7 @@ import { disposeLoadedFile } from "./io";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { MenuItem, SceneHit } from "./mode/types";
+import { ComputeBondsModifier } from "./modifiers/ComputeBondsModifier";
 import { SelectModifier } from "./modifiers/SelectModifier";
 import { OverlayManager } from "./overlays/overlay_manager";
 import type { AtomAnchored, Overlay } from "./overlays/types";
@@ -60,6 +61,7 @@ import {
   classifyFrameTransition,
   type FrameTransitionDecision,
   type FrameUpdateKind,
+  resolvePlaybackChangeKind,
 } from "./system/frame_diff";
 import type { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
@@ -1348,14 +1350,16 @@ export class MolvisApp implements App {
       decision = classifyFrameTransition(this._lastRenderedFrame, frame);
     }
 
-    const isPositionOnly = decision.kind === "position";
+    const perceiveBonds = this._modifierPipeline
+      .modifiers()
+      .some((m) => m.enabled && m instanceof ComputeBondsModifier);
+    const changeKind = resolvePlaybackChangeKind(decision, perceiveBonds);
+    const isPositionOnly = changeKind === "position";
     const selectionSnapshot = isPositionOnly
       ? null
       : captureStructuralSelectionSnapshot(this._world.selectionManager);
 
-    await this.applyPipeline({
-      changeKind: isPositionOnly ? "position" : "full",
-    });
+    await this.applyPipeline({ changeKind });
 
     if (!isPositionOnly && selectionSnapshot) {
       reconcileSelectionAfterStructuralUpdate(

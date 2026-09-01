@@ -4,6 +4,7 @@ import {
   type BondCriterion,
   ComputeBondsModifier,
 } from "../modifiers/ComputeBondsModifier";
+import { DrawBondModifier } from "../pipeline/draw_bond";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
@@ -61,7 +62,8 @@ class ViewModeContextMenu extends ContextMenuController {
     items.push(CommonMenuItems.fitCamera(this.app));
 
     const bondingOn = this.mode.isDynamicBondingEnabled();
-    const criterion = this.mode.getBondingCriterion();
+    // Criterion radios stay unchecked while Dynamic Bond is off (default).
+    const criterion = bondingOn ? this.mode.getBondingCriterion() : null;
     const canCovalent = this.mode.canUseCovalentBonding();
     items.push(
       CommonMenuItems.submenu("Dynamic Bond", [
@@ -73,14 +75,21 @@ class ViewModeContextMenu extends ContextMenuController {
           "Covalent",
           criterion === "covalent",
           () => {
-            if (canCovalent) this.mode.setBondingCriterion("covalent");
+            if (!canCovalent) return;
+            if (!bondingOn) this.mode.setDynamicBondingEnabled(true);
+            this.mode.setBondingCriterion("covalent");
           },
           { disabled: !canCovalent },
         ),
         CommonMenuItems.toggle("Distance", criterion === "distance", () => {
+          if (!bondingOn) this.mode.setDynamicBondingEnabled(true);
           this.mode.setBondingCriterion("distance");
         }),
       ]),
+      CommonMenuItems.toggle("Wrap PBC", this.app.wrapEnabled, () => {
+        this.app.setWrapEnabled(!this.app.wrapEnabled);
+        void this.app.applyPipeline({ fullRebuild: true });
+      }),
       CommonMenuItems.toggle("Grid", this.mode.isGridEnabled(), () => {
         this.mode.setGridEnabled(!this.mode.isGridEnabled());
       }),
@@ -169,6 +178,9 @@ class ViewMode extends BaseMode {
         // addModifier auto-positions a TransformsData-only modifier before the
         // first Draw modifier, so the perceived bonds reach DrawBond.
         pipeline.addModifier(mod);
+        if (!pipeline.modifiers().some((m) => m instanceof DrawBondModifier)) {
+          pipeline.addModifier(new DrawBondModifier());
+        }
       } else {
         for (const modifier of modifiers) modifier.enabled = true;
       }

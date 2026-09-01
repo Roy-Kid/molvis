@@ -11,6 +11,7 @@ import {
   isSketchPath,
 } from "./loading/molecularMatch";
 import { pickMolecularUri } from "./loading/openStructure";
+import { mrecStoreRootPath } from "./loading/pathUtils";
 import { RecentFilesStore } from "./loading/recentFiles";
 import { MolvisBinaryEditorProvider } from "./panels/binaryEditorProvider";
 import { MolvisEditorProvider } from "./panels/editorProvider";
@@ -223,6 +224,7 @@ export function activate(context: vscode.ExtensionContext): void {
       source = source ?? resolveActiveUri();
       if (!source) return;
       if (isBinaryTrajectoryPath(source.fsPath)) return;
+      if (mrecStoreRootPath(source.path)) return;
       await vscode.window.showTextDocument(source);
     }),
     vscode.commands.registerCommand(

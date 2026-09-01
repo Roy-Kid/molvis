@@ -119,9 +119,11 @@ Trajectory filmstrip floats **centered on the canvas bottom** when length > 1.
 ## 2026-08-21 — Single wrap gate (proposal C)
 
 - **pbc-wrap-single-gate:** `wrapEnabled` boolean after compose → one
-  `wrapAtoms` / `Box.wrap` on atom columns. Simulation cell Switch only.
-  Retired: four-value `CoordinatePolicy`, `wrap-molecules`, `WrapPBCModifier`,
-  context-menu Wrap PBC dual entry. Edge bonds = draw-time MI only.
+  `wrapAtoms` / `Box.wrap` on atom columns. UI entries (Simulation cell
+  Switch, pipeline Add menu, View canvas context menu) all toggle the
+  same flag — not a second Wrap modifier path. Retired: four-value
+  `CoordinatePolicy`, `wrap-molecules`, `WrapPBCModifier`. Edge bonds =
+  draw-time MI only.
 - Unwrap trajectories stays Add-menu modifier (not a wrap state).
 
 ## 2026-08-11 — Series first-class + post-policy MI audit

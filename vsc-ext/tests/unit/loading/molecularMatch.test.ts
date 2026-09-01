@@ -17,6 +17,7 @@ suite("molecularMatch", () => {
   test("isMolecularPath accepts .mrec directory stores", () => {
     assert.strictEqual(isMolecularPath("traj.mrec"), true);
     assert.strictEqual(isMolecularPath("traj.mrec/"), true);
+    assert.strictEqual(isMolecularPath("traj.mrec/zarr.json"), true);
   });
 
   test("isMolecularPath rejects .zarr stores", () => {
@@ -44,6 +45,8 @@ suite("molecularMatch", () => {
   test("workspaceMolecularIncludeGlobs covers extensions and VASP names", () => {
     const globs = workspaceMolecularIncludeGlobs();
     assert.ok(globs.some((g) => g.includes("pdb") && g.includes("xtc")));
+    assert.ok(globs.includes("**/*.mrec/zarr.json"));
+    assert.ok(!globs.includes("**/*.mrec"));
     assert.ok(globs.includes("**/CHGCAR"));
     assert.ok(globs.includes("**/POSCAR_*"));
   });

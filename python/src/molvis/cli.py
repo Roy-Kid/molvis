@@ -7,7 +7,6 @@ Open a molecular structure file straight in the browser::
     molvis open run.lammpstrj             # trajectory → playable in the viewer
     molvis open growth.mrec               # molpy mrec trajectory store
     molvis open growth.mrec --every 10    # keep every 10th frame
-    molvis open growth.mrec.zip           # packed store (CLI only)
 
 ``open`` reads the file with :mod:`molpy`, pushes it to a fresh
 :class:`~molvis.Molvis` viewer (which starts a local server and opens the
@@ -15,9 +14,8 @@ default browser), then blocks until the page is closed or ``Ctrl+C``.
 
 A ``.mrec`` store is a directory, not a file, and may be ragged — frames are
 free to differ in atom count (a growing system stays a single trajectory).
-``*.mrec.zip`` is a packed archive of the same store (CLI only; GUI / stage
-open directories). Large stores are strided down automatically (``--every 0``,
-the default, targets ≲600 frames).
+Large stores are strided down automatically (``--every 0``, the default,
+targets ≲600 frames).
 """
 
 from __future__ import annotations
@@ -59,19 +57,19 @@ _TRAJECTORY_READERS: dict[str, Callable[[Path], object]] = {
     ".extxyz": mp.io.read_xyz_trajectory,
 }
 
-# mrec trajectory stores are directories (``growth.mrec/``) or a packed
-# ``*.mrec.zip`` archive (CLI only). Dispatched separately from the file
-# readers above.
+# mrec trajectory stores are directories (``growth.mrec/``). Dispatched
+# separately from the file readers above. (A packed ``*.mrec.zip`` archive
+# needs molrs ``open_packed`` bound to Python; not wired yet.)
 _MREC_DIR_SUFFIX = ".mrec"
-_MREC_ZIP_SUFFIX = ".mrec.zip"
-_MREC_SUFFIXES = (_MREC_DIR_SUFFIX, _MREC_ZIP_SUFFIX)
+_MREC_SUFFIXES = (_MREC_DIR_SUFFIX,)
 
 # ``--every 0`` (auto) strides a large store down to at most this many frames.
-_ZARR_TARGET_FRAMES = 600
+_MREC_TARGET_FRAMES = 600
 
-# Stores larger than this are streamed frame-by-frame (``append_frame``)
+# Trajectories longer than this are streamed frame-by-frame (``append_frame``)
 # instead of one ``set_trajectory`` message carrying every buffer at once.
-_ZARR_SET_TRAJECTORY_MAX = 64
+# Governs every trajectory transport, not just mrec.
+_TRAJECTORY_STREAM_THRESHOLD = 64
 
 
 def _supported_extensions() -> str:
@@ -80,14 +78,9 @@ def _supported_extensions() -> str:
     return " ".join(sorted(exts))
 
 
-def _mrec_suffix(path: Path) -> str | None:
-    """Return ``.mrec`` / ``.mrec.zip`` when ``path`` is an mrec store."""
-    name = path.name.lower()
-    if name.endswith(_MREC_ZIP_SUFFIX):
-        return _MREC_ZIP_SUFFIX
-    if name.endswith(_MREC_DIR_SUFFIX):
-        return _MREC_DIR_SUFFIX
-    return None
+def _is_mrec_store(path: Path) -> bool:
+    """True when ``path`` names an mrec store directory (``*.mrec``)."""
+    return path.name.lower().endswith(_MREC_DIR_SUFFIX)
 
 
 def _load_single_frame(path: Path, atom_style: str) -> "Frame":
@@ -118,52 +111,68 @@ def _load_trajectory(path: Path) -> list["Frame"]:
     return list(reader.read_all())
 
 
-def _load_zarr_trajectory(
+def _mrec_stride_indices(n: int, every: int) -> list[int]:
+    """Frame indices for ``--every``; ``every<=0`` auto-caps at ``_MREC_TARGET_FRAMES``."""
+    if n <= 0:
+        return []
+    stride = every if every > 0 else max(1, -(-n // _MREC_TARGET_FRAMES))
+    indices = list(range(0, n, stride))
+    if indices[-1] != n - 1:
+        indices.append(n - 1)
+    return indices
+
+
+def _load_mrec_trajectory(
     path: Path, every: int = 0
 ) -> tuple[list["Frame"], list[int] | None]:
     """Read a molpy ``*.mrec`` trajectory store → ``(frames, steps)``.
 
     Frames may be ragged (per-frame atom counts differ — e.g. a chain-growth
     trajectory where atoms exist only once placed). ``every=0`` auto-strides
-    a large store down to ≤ ``_ZARR_TARGET_FRAMES`` frames; any positive value
+    a large store down to ≤ ``_MREC_TARGET_FRAMES`` frames; any positive value
     keeps every ``every``-th frame (the last frame is always kept).
 
-    Frames come from :class:`molpy.io.mrec.TrajectoryReader` and are upgraded
-    to :class:`molpy.Frame` for the wire serializer. The cursor does not
-    expose the store's ``step`` axis, so frame labels are omitted.
+    Dispatches on :func:`molpy.io.mrec.sections`: a ``trajectory`` group
+    goes through :func:`molpy.io.mrec.read_trajectory` (so ``step`` rides
+    along); a snapshot ``frame`` group goes through
+    :func:`molpy.io.mrec.read_frame`. :class:`~molpy.io.mrec.TrajectoryReader`
+    is the lazy one-frame cursor — this door needs ``step``, so the
+    trajectory path stays eager. Each frame is upgraded with
+    :class:`molpy.Frame` because the cursor may yield a bare
+    ``molrs._lib.Frame``.
     """
-    from molpy.io.mrec import TrajectoryReader
+    try:
+        from molpy.io.mrec import read_frame, read_trajectory, sections
+    except ImportError as exc:  # published molpy < 0.14 has no io.mrec
+        raise ValueError(
+            "opening .mrec stores needs molpy>=0.14 (module molpy.io.mrec); "
+            f"upgrade molcrafts-molpy ({exc})"
+        ) from exc
 
-    reader = TrajectoryReader(path)
-    raw_frames: list["Frame"] = []
-    index = 0
-    while True:
-        try:
-            raw_frames.append(reader.read_frame(index))
-        except IndexError:
-            break
-        index += 1
-    n = len(raw_frames)
-    if n == 0:
-        raise ValueError(f"{path.name} holds no frames")
-    if every <= 0:
-        every = max(1, -(-n // _ZARR_TARGET_FRAMES))
-    indices = list(range(0, n, every))
-    if indices[-1] != n - 1:
-        indices.append(n - 1)
-
-    frames = [mp.Frame.from_dict(raw_frames[i]) for i in indices]
-    return frames, None
+    secs = sections(path)
+    if "trajectory" in secs:
+        traj = read_trajectory(path)
+        n = len(traj)
+        if n == 0:
+            raise ValueError(f"{path.name} holds no frames")
+        indices = _mrec_stride_indices(n, every)
+        frames = [mp.Frame(traj[i]) for i in indices]
+        raw_step = getattr(traj, "step", None)
+        steps = None if raw_step is None else [int(raw_step[i]) for i in indices]
+        return frames, steps
+    if "frame" in secs:
+        return [mp.Frame(read_frame(path))], None
+    raise ValueError(
+        f"{path.name} has no frame or trajectory section (sections: {sorted(secs)})"
+    )
 
 
 def _cmd_open(args: argparse.Namespace) -> int:
     """Handle ``molvis open <file>``."""
     path: Path = args.file.expanduser()
-    mrec_suffix = _mrec_suffix(path)
-    is_mrec = mrec_suffix is not None
+    is_mrec = _is_mrec_store(path)
     if is_mrec:
-        exists = path.is_file() if mrec_suffix == _MREC_ZIP_SUFFIX else path.is_dir()
-        if not exists:
+        if not path.is_dir():
             print(f"molvis: no such mrec store: {path}")
             return 1
     elif not path.is_file():
@@ -182,7 +191,7 @@ def _cmd_open(args: argparse.Namespace) -> int:
     steps: list[int] | None = None
     try:
         if is_mrec:
-            payload, steps = _load_zarr_trajectory(path, args.every)
+            payload, steps = _load_mrec_trajectory(path, args.every)
         elif is_trajectory:
             payload = _load_trajectory(path)
         else:
@@ -209,7 +218,7 @@ def _cmd_open(args: argparse.Namespace) -> int:
             print("molvis: server started; open the printed port in a browser")
 
     if is_trajectory:
-        if len(payload) > _ZARR_SET_TRAJECTORY_MAX:
+        if len(payload) > _TRAJECTORY_STREAM_THRESHOLD:
             # One set_trajectory message would carry every frame's buffers at
             # once; a long trajectory goes over as one blocking head frame
             # (which waits for the page to connect) plus a stream of appends.
@@ -270,7 +279,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help=(
             "for .mrec stores: keep every Nth frame; 0 (default) auto-strides "
-            f"large stores down to ≤{_ZARR_TARGET_FRAMES} frames"
+            f"large stores down to ≤{_MREC_TARGET_FRAMES} frames"
         ),
     )
     open_p.add_argument(

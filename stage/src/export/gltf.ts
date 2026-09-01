@@ -91,7 +91,7 @@ export async function exportFrameToGLB(
     };
 
     // Atoms → spheres. instanceData = [x, y, z, radius]; instanceColor = linear RGBA.
-    const atomBuffers = buildAtomBuffers(atomsBlock, styleManager, 0);
+    const atomBuffers = buildAtomBuffers(atomsBlock, styleManager, 0).buffers;
     const atomData = atomBuffers.get("instanceData");
     const atomColor = atomBuffers.get("instanceColor");
     if (!atomData || !atomColor) {
@@ -99,7 +99,7 @@ export async function exportFrameToGLB(
         "exportFrameToGLB: atom buffers missing expected columns",
       );
     }
-    const atomCount = atomsBlock.nrows();
+    const atomCount = atomData.length / 4;
     for (let i = 0; i < atomCount; i++) {
       const o = i * 4;
       const radius = atomData[o + 3];

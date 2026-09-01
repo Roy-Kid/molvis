@@ -39,9 +39,9 @@ import {
 } from "./reader";
 import { BlobRangeSource, type TrajectorySource } from "./sources";
 import {
-  loadZarrDirectory,
-  loadZarrFiles,
-  type ZarrDirectorySource,
+  loadMrecDirectory,
+  loadMrecFiles,
+  type MrecDirectorySource,
 } from "./zarr";
 
 export { CancellationError } from "../transport/trajectory_worker";
@@ -109,10 +109,18 @@ export {
   writeXYZFrame,
 } from "./writer";
 export {
+  collectMrecDirectory,
+  // Deprecated encoding-named aliases (one window); prefer the mrec* names.
   collectZarrDirectory,
+  loadMrecDirectory,
+  loadMrecFiles,
+  loadMrecStore,
   loadZarrDirectory,
   loadZarrFiles,
   loadZarrStore,
+  type MrecDirectorySource,
+  type MrecDirent,
+  type MrecLoadResult,
   type ZarrDirectorySource,
   type ZarrDirent,
   type ZarrLoadResult,
@@ -127,11 +135,11 @@ export {
  *   resolved descriptor must declare `payload: "binary"`. No format
  *   currently declares this; the dispatch branch is wired so that
  *   future binary readers slot in without changing call-site code.
- * - `Record<string, string>` — a zarr directory serialized as
+ * - `Record<string, string>` — an mrec store serialized as
  *   `filePath → base64` pairs.
  *
  * The discriminator at runtime is structural: `typeof === "string"`
- * for text, `instanceof Uint8Array` for binary, otherwise zarr.
+ * for text, `instanceof Uint8Array` for binary, otherwise an mrec store.
  */
 export type FileContent = string | Uint8Array | Record<string, string>;
 
@@ -375,10 +383,19 @@ async function installPrimaryTrajectory(
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
   disposeInFlightStream(app);
-  disposeLoadedFile(app);
+  // Defer the OUTGOING file's cleanup until AFTER replaceScene has swapped
+  // `_lastRenderedFrame` onto the incoming trajectory. Freeing first (the old
+  // order) let a render scheduled against the previous frame deref a
+  // just-freed molrs handle — a wasm null-ptr trap. The reader/mrec dispose
+  // closures free their whole frame cache, so this ordering is what keeps
+  // that free safe. See `.claude/notes/molrs-handles.md`.
+  const previousCleanup = appCleanups.get(app);
+  appCleanups.delete(app);
   appCleanups.set(app, dispose);
 
   await app.replaceScene(trajectory, { sourceType: "file", filename });
+
+  previousCleanup?.();
 
   // replaceScene already auto-attaches default Draws (Particles/Bonds/…).
   // Re-run is idempotent and still useful if a future load path mutates the
@@ -504,7 +521,7 @@ async function commitLoadedTrajectory(
 
 /**
  * Canonical file ingress for `@molcrafts/molvis-stage`. Dispatches to the right
- * reader based on payload shape (string → text format, object → zarr),
+ * reader based on payload shape (string → text format, object → mrec store),
  * stamps the pipeline head with a `DataSource`, swaps in the
  * new trajectory, and replays user-added modifiers on it. All file
  * entry points — page drag-drop, DataSource panel "Load File", vsc-ext
@@ -530,7 +547,7 @@ export async function loadFileContent(
     trajectory = bundle.trajectory;
     dispose = bundle.dispose;
   } else {
-    const bundle = loadZarrFiles(content);
+    const bundle = loadMrecFiles(content);
     trajectory = bundle.trajectory;
     dispose = bundle.dispose;
   }
@@ -546,17 +563,17 @@ export async function loadFileContent(
 }
 
 /**
- * Directory-source Zarr ingress. Hosts (molexp, VS Code, page) hand a
- * {@link ZarrDirectorySource}; molrs `TrajectoryReader` opens the store.
+ * Directory-source mrec ingress. Hosts (molexp, VS Code, page) hand an
+ * {@link MrecDirectorySource}; molrs `TrajectoryReader` opens the store.
  */
-export async function loadZarrSource(
+export async function loadMrecSource(
   app: Molvis,
-  source: ZarrDirectorySource,
+  source: MrecDirectorySource,
   filename: string,
   mode: LoadMode = "replace",
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
-  const bundle = await loadZarrDirectory(source);
+  const bundle = await loadMrecDirectory(source);
   await commitLoadedTrajectory(
     app,
     bundle.trajectory,
@@ -566,6 +583,12 @@ export async function loadZarrSource(
     pickBondMapping,
   );
 }
+
+/**
+ * @deprecated Renamed to {@link loadMrecSource} — mrec is the product, zarr the
+ * encoding. Kept for one deprecation window.
+ */
+export const loadZarrSource = loadMrecSource;
 
 export interface LoadFileStreamOptions {
   /** Indexing-progress callback. Called periodically (≤10 Hz) during

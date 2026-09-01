@@ -27,6 +27,8 @@ export interface RegisterAtomFrameOptions {
   mesh: Mesh;
   block: Block;
   buffers: Map<string, Float32Array>;
+  /** Render instance → original atom row when occupancy dropped sentinels. */
+  instanceMap?: Uint32Array;
 }
 
 export interface RegisterBondFrameOptions {
@@ -777,16 +779,28 @@ export class SceneIndex {
    * which go stale on frame.setMeta).
    */
   registerAtomFrame(options: RegisterAtomFrameOptions): void {
-    const { frame, mesh, block, buffers } = options;
+    const { frame, mesh, block, buffers, instanceMap } = options;
 
     this.meshRegistry.registerAtomLayer(mesh);
-    this.meshRegistry.getAtomState()?.setFrameData(buffers, block.nrows());
+    const matrixLen = buffers.get("matrix")?.length;
+    const instanceCount =
+      instanceMap?.length ??
+      (matrixLen !== undefined ? matrixLen / 16 : block.nrows());
+    this.meshRegistry
+      .getAtomState()
+      ?.setFrameData(buffers, instanceCount, instanceMap);
     this.metaRegistry.atoms.setFrame(frame);
 
     this.topology.clear();
-    const atomCount = block.nrows();
-    for (let i = 0; i < atomCount; i++) {
-      this.topology.addAtom(i);
+    if (instanceMap) {
+      for (let i = 0; i < instanceMap.length; i++) {
+        this.topology.addAtom(instanceMap[i]);
+      }
+    } else {
+      const atomCount = block.nrows();
+      for (let i = 0; i < atomCount; i++) {
+        this.topology.addAtom(i);
+      }
     }
   }
 

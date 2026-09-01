@@ -181,11 +181,15 @@ and open a flyout on hover or click, positioned against the host
 
 Mode contents (plus Export submenu + Screenshot on every mode):
 
-- View — identity, Select (on hit), Fit View, Dynamic Bond, Grid
+- View — identity, Select (on hit), Fit View, Dynamic Bond, Wrap PBC, Grid
 - Select — identity, Select / Add, Clear
 - Edit — identity, Delete (on hit), Element, Bond, Fit View
 - Measure — Distance / Angle / Digits, Clear
 - Manipulate — Save / Discard (if dirty), Move / Rotate, Clear
+
+Dynamic Bond defaults **off** (Enabled unchecked; Covalent / Distance
+unchecked until Enabled). Wrap PBC toggles the same `wrapEnabled`
+pipeline flag as the Simulation cell Switch / Add menu.
 
 ## Pipeline add menu
 

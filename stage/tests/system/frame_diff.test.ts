@@ -1,6 +1,9 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { classifyFrameTransition } from "../../src/system/frame_diff";
+import {
+  classifyFrameTransition,
+  resolvePlaybackChangeKind,
+} from "../../src/system/frame_diff";
 
 interface AtomSpec {
   x: number;
@@ -21,7 +24,7 @@ interface MockBlock {
   nrows(): number;
   dtype(name: string): string | undefined;
   viewColU32(name: string): BigUint64Array;
-  viewColF?(name: string): Float64Array | undefined;
+  viewColF(name: string): Float64Array | undefined;
   copyColStr(name: string): string[];
   copyColI32(name: string): Int32Array;
   copyColU32(name: string): BigUint64Array;
@@ -44,12 +47,22 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
     );
   }
 
+  const x = new Float64Array(atoms.map((atom) => atom.x));
+  const y = new Float64Array(atoms.map((atom) => atom.y));
+  const z = new Float64Array(atoms.map((atom) => atom.z));
+
   return {
     nrows() {
       return atoms.length;
     },
     dtype(name: string) {
       if (columnsStr.has(name)) return "string";
+      return undefined;
+    },
+    viewColF(name: string): Float64Array | undefined {
+      if (name === "x") return x;
+      if (name === "y") return y;
+      if (name === "z") return z;
       return undefined;
     },
     viewColU32(_name: string): BigUint64Array {
@@ -88,6 +101,12 @@ function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
     },
     dtype(name: string) {
       if (name === "type") return "i32";
+      return undefined;
+    },
+    viewColF(name: string): Float64Array | undefined {
+      if (name === "x") return new Float64Array(atoms.map((atom) => atom.x));
+      if (name === "y") return new Float64Array(atoms.map((atom) => atom.y));
+      if (name === "z") return new Float64Array(atoms.map((atom) => atom.z));
       return undefined;
     },
     viewColU32(_name: string): BigUint64Array {
@@ -330,5 +349,45 @@ describe("classifyFrameTransition", () => {
     );
     const decision = classifyFrameTransition(previous, next);
     expect(decision.kind).toBe("position");
+  });
+
+  it("full-rebuilds playback only when the user enabled Create bonds", () => {
+    const previous = buildFrame([
+      { x: 0.2, y: 0, z: 0, element: "C" },
+      { x: 1.5, y: 0, z: 0, element: "C" },
+    ]);
+    const next = buildFrame([
+      { x: 0.3, y: 0, z: 0, element: "C" },
+      { x: 1.6, y: 0, z: 0, element: "C" },
+    ]);
+    const decision = classifyFrameTransition(previous, next);
+    expect(decision.kind).toBe("position");
+    expect(resolvePlaybackChangeKind(decision, false)).toBe("position");
+    expect(resolvePlaybackChangeKind(decision, true)).toBe("full");
+  });
+
+  it("classifies origin-sentinel occupancy changes as full, including reverse", () => {
+    const f0 = buildFrame([
+      { x: 1.4, y: 0, z: 0, element: "C" },
+      { x: 2.8, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+    ]);
+    const f1 = buildFrame([
+      { x: 1.4, y: 0, z: 0, element: "C" },
+      { x: 2.8, y: 0, z: 0, element: "C" },
+      { x: 4.2, y: 0, z: 0, element: "C" },
+      { x: 5.6, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+    ]);
+    const forward = classifyFrameTransition(f0, f1);
+    expect(forward.kind).toBe("full");
+    expect(forward.reasons.join(" ")).toMatch(/Occupancy changed: 2 -> 4/);
+    const reverse = classifyFrameTransition(f1, f0);
+    expect(reverse.kind).toBe("full");
+    expect(reverse.reasons.join(" ")).toMatch(/Occupancy changed: 4 -> 2/);
   });
 });

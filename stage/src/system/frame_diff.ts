@@ -1,5 +1,6 @@
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { DType } from "../utils/dtype";
+import { occupiedAtomCountForFrame } from "./occupancy";
 
 export type FrameUpdateKind = "position" | "bond" | "full";
 
@@ -78,6 +79,14 @@ function compareOptionalElement(
   return equalStringArray(left, right);
 }
 
+function occupiedCount(frame: Frame, atoms: Block, n: number): number | null {
+  const x = atoms.viewColF?.("x");
+  const y = atoms.viewColF?.("y");
+  const z = atoms.viewColF?.("z");
+  if (!x || !y || !z || x.length < n) return null;
+  return occupiedAtomCountForFrame(frame, x, y, z, n);
+}
+
 function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   const leftI = leftBonds.viewColU32("atomi");
   const leftJ = leftBonds.viewColU32("atomj");
@@ -141,6 +150,17 @@ export function classifyFrameTransition(
       nextAtomCount,
       nextBondCount,
       `Atom count changed: ${prevAtomCount} -> ${nextAtomCount}`,
+    );
+  }
+
+  const prevOcc = occupiedCount(previous, prevAtoms, prevAtomCount);
+  const nextOcc = occupiedCount(next, nextAtoms, nextAtomCount);
+  if (prevOcc !== null && nextOcc !== null && prevOcc !== nextOcc) {
+    return decision(
+      "full",
+      nextAtomCount,
+      nextBondCount,
+      `Occupancy changed: ${prevOcc} -> ${nextOcc}`,
     );
   }
 
@@ -210,4 +230,23 @@ export function classifyFrameTransition(
     nextBondCount,
     "Topology unchanged; position-only update",
   );
+}
+
+/**
+ * Playback `changeKind` after {@link classifyFrameTransition}.
+ *
+ * Create bonds rebuilds topology from the current coordinates. The
+ * classifier only sees `system.frame` (pre-perceive), so a growth
+ * trajectory with a stable atom count would otherwise stay on the
+ * position fast path and keep the last frame's GPU bonds — reverse
+ * play would not drop bonds or collapse the grown structure.
+ */
+export function resolvePlaybackChangeKind(
+  decision: FrameTransitionDecision,
+  perceiveBonds: boolean,
+): "position" | "full" {
+  // Opt-in Create bonds: the user asked for a fresh perceive every frame,
+  // so the GPU topology must rebuild with it. Default (off) stays cheap.
+  if (perceiveBonds) return "full";
+  return decision.kind === "position" ? "position" : "full";
 }

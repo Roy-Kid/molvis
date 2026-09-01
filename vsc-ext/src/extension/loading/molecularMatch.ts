@@ -6,6 +6,8 @@
  * (`@molcrafts/molvis-stage/io/formats`) plus extension-less VASP names.
  */
 
+import { mrecStoreRootPath } from "./pathUtils";
+
 /** Exclude build/deps trees from the Activity Bar Files scan. */
 export const WORKSPACE_FILE_EXCLUDE =
   "**/{node_modules,.git,out,dist,out-test,.venv,venv}/**";
@@ -58,7 +60,7 @@ function extensionOf(filePath: string): string {
 
 /** True when the path is a registered molecular file (or a `.mrec` directory). */
 export function isMolecularPath(filePath: string): boolean {
-  if (filePath.endsWith(".mrec") || filePath.endsWith(".mrec/")) return true;
+  if (mrecStoreRootPath(filePath)) return true;
   const base = basenameOf(filePath);
   if (base === "CHGCAR" || base.startsWith("CHGCAR_")) return true;
   if (
@@ -93,7 +95,7 @@ export function isSketchPath(filePath: string): boolean {
 export function workspaceMolecularIncludeGlobs(): string[] {
   return [
     `**/*.{${EXTENSIONS.join(",")}}`,
-    "**/*.mrec",
+    "**/*.mrec/zarr.json",
     "**/CHGCAR",
     "**/CHGCAR_*",
     "**/POSCAR",

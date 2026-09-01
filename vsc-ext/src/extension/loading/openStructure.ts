@@ -1,4 +1,7 @@
-import { FILE_FORMAT_REGISTRY } from "@molcrafts/molvis-stage/io/formats";
+import {
+  FILE_FORMAT_REGISTRY,
+  MREC_DIR_SUFFIX,
+} from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
 import { FORMAT_MENU, formatMenuLabel } from "./formatMenu";
 
@@ -24,8 +27,10 @@ export function molecularOpenDialogFilters(): {
     for (const ext of exts) allExts.add(ext);
   }
 
-  allExts.add("mrec");
-  filters["mrec directory - .mrec"] = ["mrec"];
+  // Directory-store suffix comes from the single source in stage/io/formats.
+  const mrecExt = MREC_DIR_SUFFIX.replace(/^\./, "");
+  allExts.add(mrecExt);
+  filters[`mrec directory - ${MREC_DIR_SUFFIX}`] = [mrecExt];
   filters.All = [...allExts];
   filters["All files"] = ["*"];
 

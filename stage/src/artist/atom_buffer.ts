@@ -1,5 +1,5 @@
 import { Color3 } from "@babylonjs/core";
-import type { Block } from "@molcrafts/molvis-core/molrs";
+import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { readAtomTypeKeys } from "../atom_type";
 import {
   COLOR_OVERRIDE_B,
@@ -9,6 +9,10 @@ import {
 import { viewAtomCoords } from "../io/atom_coords";
 import { encodePickingColorInto } from "../picker";
 import { isMetalElement } from "../system/elements";
+import {
+  shouldSkipOriginSentinels,
+  shouldSkipOriginSentinelsForFrame,
+} from "../system/occupancy";
 import { buildCategoricalColorLookup, type LinearRGB } from "./palette";
 import type { StyleManager } from "./style_manager";
 
@@ -40,12 +44,21 @@ interface CachedAtomStyle {
  * see `../color_override_keys`), uses them instead of element/type colors.
  * Radius is always resolved from the style system.
  */
+export interface AtomBufferBuild {
+  buffers: Map<string, Float32Array>;
+  /** Render instance → original atom row when origin sentinels were dropped. */
+  instanceMap?: Uint32Array;
+}
+
 export function buildAtomBuffers(
   atomsBlock: Block,
   styleManager: StyleManager,
   atomMeshUniqueId: number,
   options?: AtomBufferOptions,
-): Map<string, Float32Array> {
+  /** Owning frame, when known — lets the origin-sentinel scan reuse the
+   *  per-frame memo shared with frame_diff / perceive. */
+  frame?: Frame,
+): AtomBufferBuild {
   const atomCount = atomsBlock.nrows();
   const coords = viewAtomCoords(atomsBlock);
   const xCoords = coords?.x;
@@ -94,8 +107,27 @@ export function buildAtomBuffers(
   const radiusScale = options?.radiusScale ?? 1.0;
   const visibleArr = options?.visible;
   const representation = styleManager.getRepresentation();
+  const dropSentinels = frame
+    ? shouldSkipOriginSentinelsForFrame(
+        frame,
+        xCoords,
+        yCoords,
+        zCoords,
+        atomCount,
+      )
+    : shouldSkipOriginSentinels(xCoords, yCoords, zCoords, atomCount);
+  const instanceMap = dropSentinels ? new Uint32Array(atomCount) : undefined;
+  let written = 0;
 
   for (let i = 0; i < atomCount; i++) {
+    if (
+      dropSentinels &&
+      xCoords[i] === 0 &&
+      yCoords[i] === 0 &&
+      zCoords[i] === 0
+    ) {
+      continue;
+    }
     // Always resolve style for radius (and fallback color)
     const style = resolveAtomStyle(
       i,
@@ -108,8 +140,8 @@ export function buildAtomBuffers(
 
     const radius = (customRadii?.[i] ?? style.radius) * radiusScale;
     const scale = radius * 2;
-    const matOffset = i * 16;
-    const idx4 = i * 4;
+    const matOffset = written * 16;
+    const idx4 = written * 4;
 
     // Matrix (scale + translation)
     atomMatrix[matOffset + 0] = scale;
@@ -154,15 +186,20 @@ export function buildAtomBuffers(
         ? 1
         : 0;
     atomStyle[idx4 + 2] = representation.labels === "skeletal" ? 1 : 0;
+    if (instanceMap) instanceMap[written] = i;
+    written += 1;
   }
 
   const buffers = new Map<string, Float32Array>();
-  buffers.set("matrix", atomMatrix);
-  buffers.set("instanceData", atomData);
-  buffers.set("instanceColor", atomColor);
-  buffers.set("instanceStyle", atomStyle);
-  buffers.set("instancePickingColor", atomPick);
-  return buffers;
+  buffers.set("matrix", atomMatrix.subarray(0, written * 16));
+  buffers.set("instanceData", atomData.subarray(0, written * 4));
+  buffers.set("instanceColor", atomColor.subarray(0, written * 4));
+  buffers.set("instanceStyle", atomStyle.subarray(0, written * 4));
+  buffers.set("instancePickingColor", atomPick.subarray(0, written * 4));
+  return {
+    buffers,
+    instanceMap: instanceMap?.subarray(0, written),
+  };
 }
 
 /**

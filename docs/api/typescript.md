@@ -483,24 +483,35 @@ await app.setTrajectory(trajectory);
 // later: dispose();
 ```
 
-### Zarr
+### mrec stores
+
+An `*.mrec` store is a Zarr-v3 directory that molrs opens as a trajectory.
+`mrec` is the product name; `zarr` is only the on-disk encoding. `mrec` is
+deliberately not a `FileFormat` — hosts recognise the store folder and stream
+it, they never route its bytes to a per-extension parser.
 
 ```typescript
 import {
   loadFileContent,
-  loadZarrFiles,
-  loadZarrSource,
-  type ZarrDirectorySource,
+  loadMrecFiles,
+  loadMrecSource,
+  type MrecDirectorySource,
 } from "@molcrafts/molvis-stage/io";
 
-// fileMap: path → base64 (or pass the map straight to loadFileContent)
-await loadFileContent(app, fileMap, "dataset.mrec", "zarr");
+// fileMap: path → base64 (or build a bundle with loadMrecFiles).
+// The store payload is an object, so no format argument is passed.
+await loadFileContent(app, fileMap, "dataset.mrec");
 
 // Hosts that can list/read a directory (molexp workspace.fs, vscode.workspace.fs)
-// hand a ZarrDirectorySource; molrs TrajectoryReader opens the store.
-const source: ZarrDirectorySource = { list, read };
-await loadZarrSource(app, source, "dataset.mrec");
+// hand an MrecDirectorySource; molrs TrajectoryReader opens the store.
+const source: MrecDirectorySource = { list, read };
+await loadMrecSource(app, source, "dataset.mrec");
 ```
+
+> The former encoding-named exports (`loadZarrStore`, `loadZarrFiles`,
+> `loadZarrSource`, `loadZarrDirectory`, `collectZarrDirectory`,
+> `ZarrDirectorySource`, `ZarrDirent`, `ZarrLoadResult`) remain as
+> `@deprecated` aliases for one release; prefer the `mrec*` / `Mrec*` names.
 
 ## Canonical column names
 

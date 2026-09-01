@@ -85,19 +85,28 @@ assert(
   "python molvis must not expose FrameReader",
 );
 
+// The store loader was renamed loadZarrStore -> loadMrecStore (mrec is the
+// product, zarr the encoding). The invariant is unchanged: it constructs the
+// molrs TrajectoryReader, never a RecordReader.
 const zarr = readFileSync(join(here, "../stage/src/io/zarr.ts"), "utf8");
-const loadStart = zarr.indexOf("export function loadZarrStore");
-assert(loadStart >= 0, "loadZarrStore missing");
+const loadStart = zarr.indexOf("export function loadMrecStore");
+assert(loadStart >= 0, "loadMrecStore missing");
 const loadRest = zarr.slice(loadStart);
 const loadNext = loadRest.indexOf("\nexport ", 1);
-const loadZarrStore = loadNext >= 0 ? loadRest.slice(0, loadNext) : loadRest;
+const loadMrecStore = loadNext >= 0 ? loadRest.slice(0, loadNext) : loadRest;
 assert(
-  loadZarrStore.includes("new TrajectoryReader"),
-  "loadZarrStore must construct TrajectoryReader",
+  loadMrecStore.includes("new TrajectoryReader"),
+  "loadMrecStore must construct TrajectoryReader",
 );
 assert(
-  !loadZarrStore.includes("new RecordReader"),
-  "loadZarrStore must not construct RecordReader",
+  !loadMrecStore.includes("new RecordReader"),
+  "loadMrecStore must not construct RecordReader",
+);
+// The old name stays as a deprecation alias for one window so
+// `@molcrafts/molvis-stage/io` remains non-breaking.
+assert(
+  /\bloadZarrStore\b/.test(zarr),
+  "loadZarrStore deprecation alias must remain",
 );
 
 console.log("mrec-format-06-molvis ok");
