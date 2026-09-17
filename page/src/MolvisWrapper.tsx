@@ -95,20 +95,6 @@ function mergeUiConfig(
   };
 }
 
-function readCanvasColor(source: Element): [number, number, number] {
-  const raw = getComputedStyle(source)
-    .getPropertyValue("--molvis-canvas-rgb")
-    .trim();
-  const channels = raw.split(/\s+/).map(Number);
-  if (
-    channels.length !== 3 ||
-    channels.some((channel) => !Number.isFinite(channel))
-  ) {
-    return [0.031385, 0.040408, 0.052783];
-  }
-  return [channels[0], channels[1], channels[2]];
-}
-
 function applyMolvisSettings(
   app: Molvis,
   settings: Partial<MolvisSetting>,
@@ -476,17 +462,12 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     let startupComplete = false;
     let viewportVisible = true;
 
-    const syncCanvasToTheme = () => {
-      if (!molvisRef.current || !containerRef.current) return;
-      const [r, g, b] = readCanvasColor(containerRef.current);
-      molvisRef.current.scene.clearColor.set(r, g, b, 1);
-    };
-    syncCanvasToTheme();
-
-    const handleThemeChange = () => {
-      syncCanvasToTheme();
-    };
-    window.addEventListener("molvis:theme-change", handleThemeChange);
+    // The canvas keeps Babylon's default clear colour, the same one the
+    // stage's own surfaces show (`stage/src/viewport_settings.ts` drops its
+    // clearColor for exactly this reason). Painting it from a CSS token here
+    // was the only thing making the Page and Quick look disagree about the
+    // background. A host that wants a specific colour still says so through
+    // the `background` mount option below.
 
     void runOperation(
       async () => {
@@ -642,7 +623,6 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
       container.removeEventListener("drop", handleDrop);
       visibilityObserver.disconnect();
       window.removeEventListener("message", handleHostMessage);
-      window.removeEventListener("molvis:theme-change", handleThemeChange);
       if (molvisRef.current) {
         molvisRef.current.destroy();
         molvisRef.current = null;

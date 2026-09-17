@@ -81,6 +81,28 @@ export function activate(context: vscode.ExtensionContext): void {
     "molvis.hasSketchOutline",
   );
 
+  /**
+   * Register a command whose failures are attributable.
+   *
+   * Without this an exception surfaces as a bare workbench error with no
+   * MolVis frame in the stack, which is indistinguishable from VS Code's own
+   * failures — exactly the ambiguity that made a "clicking Quick look throws"
+   * report unanswerable.
+   */
+  const command = (
+    id: string,
+    run: (...args: never[]) => unknown,
+  ): vscode.Disposable =>
+    vscode.commands.registerCommand(id, async (...args: never[]) => {
+      try {
+        return await run(...args);
+      } catch (err) {
+        const detail =
+          err instanceof Error ? (err.stack ?? err.message) : String(err);
+        logger.error(`MolVis: command ${id} failed — ${detail}`);
+      }
+    });
+
   const recordRecent = (uri: vscode.Uri | undefined): void => {
     if (!uri) return;
     void recentFiles.add(uri);
@@ -257,49 +279,40 @@ export function activate(context: vscode.ExtensionContext): void {
       treeDataProvider: sketchOutline,
       showCollapseAll: true,
     }),
-    vscode.commands.registerCommand(
-      "molvis.stageOutline.select",
-      (item?: OutlineTreeItem) => {
-        if (item) stageOutline.select(item);
-      },
-    ),
-    vscode.commands.registerCommand(
-      "molvis.sketchOutline.select",
-      (item?: OutlineTreeItem) => {
-        if (item) sketchOutline.select(item);
-      },
-    ),
-    vscode.commands.registerCommand(
-      "molvis.quickView",
-      async (arg?: unknown) => {
-        const target = uriFromFilesArg(arg) ?? resolveActiveUri();
-        recordRecent(target);
-        if (getDefaultViewer() === "page") {
-          // `molvis.defaultViewer` = page: skip Quick look entirely rather
-          // than loading the file here and again on promote.
-          openPage(target);
-          return;
-        }
-        const panel = await openQuickViewPanel(
-          context,
-          panelRegistry,
-          logger,
-          fileLoader,
-          target,
-          {
-            onStructureOutline: (payload) => stageOutline.setOutline(payload),
-          },
-        );
-        activeQuickView = { panel, uri: target };
-        panel.onDidChangeViewState(() => {
-          if (panel.active) activeQuickView = { panel, uri: target };
-        });
-        panel.onDidDispose(() => {
-          if (activeQuickView?.panel === panel) activeQuickView = undefined;
-        });
-      },
-    ),
-    vscode.commands.registerCommand("molvis.showSource", async () => {
+    command("molvis.stageOutline.select", (item?: OutlineTreeItem) => {
+      if (item) stageOutline.select(item);
+    }),
+    command("molvis.sketchOutline.select", (item?: OutlineTreeItem) => {
+      if (item) sketchOutline.select(item);
+    }),
+    command("molvis.quickView", async (arg?: unknown) => {
+      const target = uriFromFilesArg(arg) ?? resolveActiveUri();
+      recordRecent(target);
+      if (getDefaultViewer() === "page") {
+        // `molvis.defaultViewer` = page: skip Quick look entirely rather
+        // than loading the file here and again on promote.
+        openPage(target);
+        return;
+      }
+      const panel = await openQuickViewPanel(
+        context,
+        panelRegistry,
+        logger,
+        fileLoader,
+        target,
+        {
+          onStructureOutline: (payload) => stageOutline.setOutline(payload),
+        },
+      );
+      activeQuickView = { panel, uri: target };
+      panel.onDidChangeViewState(() => {
+        if (panel.active) activeQuickView = { panel, uri: target };
+      });
+      panel.onDidDispose(() => {
+        if (activeQuickView?.panel === panel) activeQuickView = undefined;
+      });
+    }),
+    command("molvis.showSource", async () => {
       let source: vscode.Uri | undefined;
       await panelRegistry.forEachVisible((_panel, meta) => {
         if (!source && meta.sourceUri) source = meta.sourceUri;
@@ -310,94 +323,69 @@ export function activate(context: vscode.ExtensionContext): void {
       if (mrecStoreRootPath(source.path)) return;
       await vscode.window.showTextDocument(source);
     }),
-    vscode.commands.registerCommand(
-      "molvis.quickViewSketch",
-      async (arg?: unknown) => {
-        const target = uriFromFilesArg(arg) ?? resolveActiveUri();
-        recordRecent(target);
-        await openSketchQuickViewPanel(
-          context,
-          panelRegistry,
-          logger,
-          fileLoader,
-          target,
-          {
-            onStructureOutline: (payload) => sketchOutline.setOutline(payload),
-          },
+    command("molvis.quickViewSketch", async (arg?: unknown) => {
+      const target = uriFromFilesArg(arg) ?? resolveActiveUri();
+      recordRecent(target);
+      await openSketchQuickViewPanel(
+        context,
+        panelRegistry,
+        logger,
+        fileLoader,
+        target,
+        {
+          onStructureOutline: (payload) => sketchOutline.setOutline(payload),
+        },
+      );
+    }),
+    command("molvis.openStage", (arg?: unknown) => {
+      const target = uriFromFilesArg(arg) ?? resolveActiveUri();
+      recordRecent(target);
+      openStage(target);
+    }),
+    command("molvis.openPage", (arg?: unknown) => {
+      // Same rule as Open Stage: whatever file is in front of the user comes
+      // along, so "open this in the Page" is one click either way.
+      const target =
+        uriFromFilesArg(arg) ??
+        (activeQuickView?.panel.active ? activeQuickView.uri : undefined) ??
+        resolveActiveUri();
+      recordRecent(target);
+      openPage(target);
+    }),
+    command("molvis.openInPage", async () => {
+      // Quick look is either our webview panel or one of the custom editors;
+      // both hand the same file to the Page, in the same column, and then go
+      // away — the Page takes over the tab.
+      const quick = activeQuickView?.panel.active ? activeQuickView : undefined;
+      const uri = quick ? quick.uri : resolveActiveUri();
+      const viewColumn =
+        quick?.panel.viewColumn ??
+        vscode.window.tabGroups.activeTabGroup.viewColumn;
+      if (quick) {
+        quick.panel.dispose();
+      } else {
+        await vscode.commands.executeCommand(
+          "workbench.action.closeActiveEditor",
         );
-      },
-    ),
-    vscode.commands.registerCommand("molvis.openStage", (arg?: unknown) => {
-      try {
-        const target = uriFromFilesArg(arg) ?? resolveActiveUri();
-        recordRecent(target);
-        openStage(target);
-      } catch (err) {
-        const text = err instanceof Error ? err.message : String(err);
-        logger.error(`MolVis: Open Stage failed: ${text}`);
       }
-    }),
-    vscode.commands.registerCommand("molvis.openPage", (arg?: unknown) => {
-      try {
-        // Same rule as Open Stage: whatever file is in front of the user
-        // comes along, so "open this in the Page" is one click either way.
-        const target =
-          uriFromFilesArg(arg) ??
-          (activeQuickView?.panel.active ? activeQuickView.uri : undefined) ??
-          resolveActiveUri();
-        recordRecent(target);
-        openPage(target);
-      } catch (err) {
-        const text = err instanceof Error ? err.message : String(err);
-        logger.error(`MolVis: Open Page failed: ${text}`);
+      if (!uri) {
+        // Nothing to carry over: say so rather than opening a blank Page and
+        // leaving the user to guess whether the file failed to load.
+        logger.warn(
+          "MolVis: Open in Page found no file on the active tab — opening an empty Page.",
+        );
       }
+      recordRecent(uri);
+      openPage(uri, viewColumn);
     }),
-    vscode.commands.registerCommand("molvis.openInPage", async () => {
-      try {
-        // Quick look is either our webview panel or one of the custom
-        // editors; both hand the same file to the Page, in the same column,
-        // and then go away — the Page takes over the tab.
-        const quick = activeQuickView?.panel.active
-          ? activeQuickView
-          : undefined;
-        const uri = quick ? quick.uri : resolveActiveUri();
-        const viewColumn =
-          quick?.panel.viewColumn ??
-          vscode.window.tabGroups.activeTabGroup.viewColumn;
-        if (quick) {
-          quick.panel.dispose();
-        } else {
-          await vscode.commands.executeCommand(
-            "workbench.action.closeActiveEditor",
-          );
-        }
-        if (!uri) {
-          // Nothing to carry over: say so rather than opening a blank Page
-          // and leaving the user to guess whether the file failed to load.
-          logger.warn(
-            "MolVis: Open in Page found no file on the active tab — opening an empty Page.",
-          );
-        }
-        recordRecent(uri);
-        openPage(uri, viewColumn);
-      } catch (err) {
-        const text = err instanceof Error ? err.message : String(err);
-        logger.error(`MolVis: Open in Page failed: ${text}`);
-      }
+    command("molvis.openSketch", (arg?: unknown) => {
+      const target = uriFromFilesArg(arg) ?? resolveActiveUri();
+      const sketchUri =
+        target && isSketchPath(target.fsPath) ? target : undefined;
+      if (sketchUri) recordRecent(sketchUri);
+      openSketch(sketchUri);
     }),
-    vscode.commands.registerCommand("molvis.openSketch", (arg?: unknown) => {
-      try {
-        const target = uriFromFilesArg(arg) ?? resolveActiveUri();
-        const sketchUri =
-          target && isSketchPath(target.fsPath) ? target : undefined;
-        if (sketchUri) recordRecent(sketchUri);
-        openSketch(sketchUri);
-      } catch (err) {
-        const text = err instanceof Error ? err.message : String(err);
-        logger.error(`MolVis: Open Sketch failed: ${text}`);
-      }
-    }),
-    vscode.commands.registerCommand("molvis.openStructure", async () => {
+    command("molvis.openStructure", async () => {
       const picked = await pickMolecularUri();
       if (!picked) return;
       if (isSketchPath(picked.fsPath)) {
@@ -406,32 +394,29 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       await loadIntoStage(picked);
     }),
-    vscode.commands.registerCommand(
-      "molvis.removeRecent",
-      async (arg?: unknown) => {
-        const target = uriFromFilesArg(arg);
-        if (!target) return;
-        await recentFiles.remove(target);
-      },
-    ),
-    vscode.commands.registerCommand("molvis.clearRecent", async () => {
+    command("molvis.removeRecent", async (arg?: unknown) => {
+      const target = uriFromFilesArg(arg);
+      if (!target) return;
+      await recentFiles.remove(target);
+    }),
+    command("molvis.clearRecent", async () => {
       await recentFiles.clear();
     }),
-    vscode.commands.registerCommand("molvis.refreshFiles", () => {
+    command("molvis.refreshFiles", () => {
       void files.refreshWorkspace();
     }),
-    vscode.commands.registerCommand("molvis.openDocs", async () => {
+    command("molvis.openDocs", async () => {
       await vscode.env.openExternal(vscode.Uri.parse(DOCS_URL));
     }),
-    vscode.commands.registerCommand("molvis.showOutput", () => {
+    command("molvis.showOutput", () => {
       logger.show();
     }),
-    vscode.commands.registerCommand("molvis.save", async () => {
+    command("molvis.save", async () => {
       await panelRegistry.forEachVisible((panel) => {
         sendToWebview(panel.webview, { type: "triggerSave" });
       });
     }),
-    vscode.commands.registerCommand("molvis.reload", async () => {
+    command("molvis.reload", async () => {
       await panelRegistry.forEachVisible(async (panel, meta) => {
         if (meta.reload) {
           await meta.reload();

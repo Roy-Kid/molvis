@@ -7,7 +7,10 @@ import {
   SIDE_PANEL,
   SIDE_PANEL_MAX_PCT,
   SIDE_PANEL_MIN_PCT,
+  SIDE_PANEL_MIN_TRAVEL_PCT,
   SIDE_PANEL_OPEN_DEFAULT_PCT,
+  sidePanelMaxPct,
+  sidePanelMinPct,
 } from "../src/lib/viewer-layout";
 
 describe("wide viewer panel layout", () => {
@@ -86,5 +89,34 @@ describe("wide viewer panel layout", () => {
     expect((minPct(1280) / 100) * 1280).toBeGreaterThanOrEqual(240);
     // A wide window needs no px rescue — the percentage floor still rules.
     expect(minPct(3000)).toBe(SIDE_PANEL.minPct);
+  });
+});
+
+describe("sidePanelMaxPct", () => {
+  /**
+   * The 240px form floor reaches the 30% cap at an 800px shell, so pairing
+   * `sidePanelMinPct` with the raw constant left the splitter with no travel —
+   * "the rails cannot be dragged open on a small screen".
+   */
+  it("keeps the cap on a shell wide enough for it", () => {
+    expect(sidePanelMaxPct(1600)).toBe(SIDE_PANEL.maxPct);
+    expect(sidePanelMinPct(1600)).toBeLessThan(sidePanelMaxPct(1600));
+  });
+
+  it("guarantees drag travel where the px floor meets the cap", () => {
+    for (const width of [400, 600, 800, 900, 1024, 1280, 1600, 2560]) {
+      // Compared at the module's own hundredth-of-a-percent precision:
+      // 36.67 - 26.67 is 9.999999999999996 in binary floating point.
+      const travel =
+        Math.round((sidePanelMaxPct(width) - sidePanelMinPct(width)) * 100) /
+        100;
+      expect(travel).toBeGreaterThanOrEqual(SIDE_PANEL_MIN_TRAVEL_PCT);
+    }
+  });
+
+  it("is never below the min for the same width", () => {
+    for (const width of [320, 800, 1440]) {
+      expect(sidePanelMaxPct(width)).toBeGreaterThan(sidePanelMinPct(width));
+    }
   });
 });

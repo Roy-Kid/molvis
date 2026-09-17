@@ -45,6 +45,7 @@ import {
   isSidePanelOpen,
   resolveViewerPanelLayout,
   SIDE_PANEL,
+  sidePanelMaxPct,
   sidePanelMinPct,
 } from "./lib/viewer-layout";
 import MolvisWrapper from "./MolvisWrapper";
@@ -200,6 +201,9 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
    * between "too narrow to use" and "closed".
    */
   const railMinPct = sidePanelMinPct(shellWidth);
+  // Never the raw 30% cap: on a narrow shell that equals `railMinPct` and the
+  // splitter cannot move at all.
+  const railMaxPct = sidePanelMaxPct(shellWidth);
   /** Rendered rail width: closed stays closed, open honours the floor. */
   const openRailWidth = (pct: number) =>
     pct <= 0 ? 0 : Math.max(pct, railMinPct);
@@ -539,7 +543,7 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
                         collapsible
                         collapsedSize="0%"
                         minSize={`${railMinPct}%`}
-                        maxSize={`${SIDE_PANEL.maxPct}%`}
+                        maxSize={`${railMaxPct}%`}
                         aria-hidden="true"
                       />
                     )}
@@ -628,7 +632,7 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
                         collapsible
                         collapsedSize="0%"
                         minSize={`${railMinPct}%`}
-                        maxSize={`${SIDE_PANEL.maxPct}%`}
+                        maxSize={`${railMaxPct}%`}
                         aria-hidden="true"
                       />
                     )}
