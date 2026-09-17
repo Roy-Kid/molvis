@@ -1,5 +1,7 @@
 import type { Molvis } from "@molcrafts/molvis-stage";
+import { Minimize, PanelsTopLeft } from "lucide-react";
 import type React from "react";
+import type { ReactNode } from "react";
 import {
   lazy,
   Suspense,
@@ -19,7 +21,7 @@ import {
   ResizablePanelGroup,
   usePanelRef,
 } from "@/components/ui/resizable";
-import { ExitFullscreenAction } from "@/components/viewer/ExitFullscreenAction";
+import { CanvasOverlayAction } from "@/components/viewer/CanvasOverlayAction";
 import { ResetMolvisDialog } from "@/components/viewer/ResetMolvisDialog";
 import { StructureInspector } from "@/components/viewer/StructureInspector";
 import { TrajectoryTimeline } from "@/components/viewer/TrajectoryTimeline";
@@ -33,7 +35,11 @@ import { BackendConnectionProvider } from "@/hooks/useBackendConnection";
 import { useBackendStateSync } from "@/hooks/useBackendStateSync";
 import { useIsNarrow } from "@/hooks/useIsNarrow";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
-import { resolveChrome, useMountOpts } from "@/lib/mount-opts";
+import {
+  type MolvisSurface,
+  resolveChrome,
+  useMountOpts,
+} from "@/lib/mount-opts";
 import { cn } from "@/lib/utils";
 import {
   CommandPalette,
@@ -109,6 +115,20 @@ export interface AppProps {
    * here — need the instance the page itself created.
    */
   onAppChange?: (app: Molvis | null) => void;
+  /**
+   * Called when the user asks for a different surface from inside the canvas.
+   * The host owns the surface bit, so it must complete the round trip by
+   * calling `MountedApp.setOpts({ surface })` — without that write-back the
+   * affordance is inert. When no host supplies this, `mountMolvisApp`
+   * composes a local fallback that patches the store directly.
+   */
+  onSurfaceChange?: (surface: MolvisSurface) => void;
+  /**
+   * Test seam: replaces the 3D canvas so a test can assert layout and surface
+   * continuity without booting Babylon and a WebGL context. No production
+   * caller passes it; an injected canvas makes `reloadViewer` a no-op.
+   */
+  canvas?: ReactNode;
 }
 
 /**
@@ -117,7 +137,7 @@ export interface AppProps {
  * When mounted with `surface: "canvas"`, all chrome is hidden and only the
  * 3D canvas is rendered (useful for embeds that supply their own UI).
  */
-const App: React.FC<AppProps> = ({ onAppChange }) => {
+const App: React.FC<AppProps> = ({ onAppChange, onSurfaceChange, canvas }) => {
   const opts = useMountOpts();
   const chrome = resolveChrome(opts);
   const canvasOnly =
@@ -462,40 +482,6 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
     [applyOverlayWidth, railMinPct, setLeftOpen, setRightOpen],
   );
 
-  if (canvasOnly) {
-    return (
-      <ErrorBoundary>
-        <BackendConnectionProvider
-          app={app}
-          initial={{
-            wsUrl: opts.wsUrl,
-            token: opts.token,
-            session: opts.session,
-          }}
-        >
-          <FormatPickerProvider>
-            <BondMappingPickerProvider>
-              <section
-                aria-label="MolVis molecular viewer"
-                className="relative h-full w-full bg-background overflow-hidden"
-                onContextMenu={(e) => e.preventDefault()}
-              >
-                <MolvisWrapper key={viewerGeneration} onMount={setApp} />
-              </section>
-              <StateSyncDialog
-                open={stateSync.pending !== null}
-                summary={stateSync.pending?.summary ?? null}
-                feedback={stateSync.feedback}
-                onKeepLocal={stateSync.keepLocal}
-                onApplyBackend={() => void stateSync.applyBackend()}
-              />
-            </BondMappingPickerProvider>
-          </FormatPickerProvider>
-        </BackendConnectionProvider>
-      </ErrorBoundary>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <BackendConnectionProvider
@@ -515,7 +501,7 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
                 className="relative h-full w-full flex flex-col bg-background text-foreground overflow-hidden safe-area-shell"
                 onContextMenu={(e) => e.preventDefault()}
               >
-                {!uiHidden && <WeChatOpenBrowserBanner />}
+                {!uiHidden && !canvasOnly && <WeChatOpenBrowserBanner />}
 
                 {!uiHidden && chrome.topBar && (
                   <ViewerToolbar
@@ -564,14 +550,31 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
                       className="flex min-w-0 flex-col"
                     >
                       <div className="relative flex-1 overflow-hidden bg-canvas">
-                        <MolvisWrapper
-                          key={viewerGeneration}
-                          onMount={setApp}
-                        />
+                        {canvas ?? (
+                          <MolvisWrapper
+                            key={viewerGeneration}
+                            onMount={setApp}
+                          />
+                        )}
                         {uiHidden && <CameraTrajectoryOverlay app={app} />}
                         {uiHidden && (
-                          <ExitFullscreenAction
-                            onExit={() => setUiHidden(false)}
+                          <CanvasOverlayAction
+                            icon={<Minimize />}
+                            label="Exit fullscreen"
+                            onClick={() => setUiHidden(false)}
+                          />
+                        )}
+                        {/*
+                          Canvas surface has no chrome to click, so this is the
+                          only way back. Reporting-only: the host owns the bit
+                          and writes it back through `setOpts`. Without a
+                          handler there is nothing to ask, so nothing renders.
+                        */}
+                        {canvasOnly && !uiHidden && onSurfaceChange && (
+                          <CanvasOverlayAction
+                            icon={<PanelsTopLeft />}
+                            label="Show controls"
+                            onClick={() => onSurfaceChange("full")}
                           />
                         )}
                         {/*
@@ -694,7 +697,9 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
                   )}
                 </div>
 
-                <WorkbenchBottomPanel app={app} hidden={uiHidden} />
+                {!canvasOnly && (
+                  <WorkbenchBottomPanel app={app} hidden={uiHidden} />
+                )}
 
                 <PluginDialogHost app={app} />
 
@@ -713,10 +718,12 @@ const App: React.FC<AppProps> = ({ onAppChange }) => {
                   onCleared={reloadViewer}
                 />
 
-                <KeyboardShortcutsDialog
-                  open={shortcutsOpen}
-                  onOpenChange={setShortcutsOpen}
-                />
+                {!canvasOnly && (
+                  <KeyboardShortcutsDialog
+                    open={shortcutsOpen}
+                    onOpenChange={setShortcutsOpen}
+                  />
+                )}
 
                 <StateSyncDialog
                   open={stateSync.pending !== null}

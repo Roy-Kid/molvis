@@ -4,7 +4,9 @@ import { createRoot, type Root } from "react-dom/client";
 import App from "@/App";
 import { PipelineOperationProvider } from "@/components/viewer/PipelineOperationProvider";
 import { registerThemeRoot, unregisterThemeRoot } from "@/hooks/useTheme";
-import { type MountOpts, MountOptsProvider } from "@/lib/mount-opts";
+import { MountOptsRoot } from "@/lib/MountOptsRoot";
+import type { MolvisSurface, MountOpts } from "@/lib/mount-opts";
+import { MountOptsStore } from "@/lib/mount-opts-store";
 import { PortalContainerProvider } from "@/lib/portal-container";
 
 /** Extra options for the host integration (not consumed by React tree). */
@@ -33,11 +35,25 @@ export interface MountHostOpts extends MountOpts {
    * the VS Code webview attaches its file/settings/save bridge here.
    */
   onAppChange?: (app: Molvis | null) => void;
+  /**
+   * Called when the user asks for a different surface from inside the canvas.
+   *
+   * Supplying this takes ownership of the surface bit: the host **must**
+   * complete the round trip by calling {@link MountedApp.setOpts} with the new
+   * surface, or the affordance does nothing. Omit it and the mount keeps the
+   * bit itself, applying the change directly.
+   */
+  onSurfaceChange?: (surface: MolvisSurface) => void;
 }
 
 /** Result of {@link mountMolvisApp}, allowing the host to tear down. */
 export interface MountedApp {
   dispose(): void;
+  /**
+   * Change the mount options of the running app — the host's half of the
+   * surface round trip. A no-op after {@link MountedApp.dispose}.
+   */
+  setOpts(next: Partial<MountOpts>): void;
 }
 
 // Notebook embeds rarely call `dispose()`. We track mounts on a WeakMap
@@ -142,16 +158,28 @@ export function mountMolvisApp(
     mountTarget = host;
   }
 
+  // The options are state from here on, not the caller's literal: a host can
+  // patch them through `setOpts` and the tree re-renders. Composing the
+  // fallback here — rather than inside `MountOptsRoot` — keeps the question of
+  // who owns the surface in exactly one place.
+  const store = new MountOptsStore(opts);
+  const onSurfaceChange =
+    opts.onSurfaceChange ??
+    ((surface: MolvisSurface) => store.patch({ surface }));
+
   const root: Root = createRoot(mountTarget);
   root.render(
     <React.StrictMode>
-      <MountOptsProvider value={opts}>
+      <MountOptsRoot store={store}>
         <PortalContainerProvider value={portalContainer}>
           <PipelineOperationProvider>
-            <App onAppChange={opts.onAppChange} />
+            <App
+              onAppChange={opts.onAppChange}
+              onSurfaceChange={onSurfaceChange}
+            />
           </PipelineOperationProvider>
         </PortalContainerProvider>
-      </MountOptsProvider>
+      </MountOptsRoot>
     </React.StrictMode>,
   );
 
@@ -166,9 +194,15 @@ export function mountMolvisApp(
         unregisterThemeRoot(host);
       }
       root.unmount();
+      // Unmount first: closing the store before teardown would let a
+      // subscriber read a closed store mid-unmount.
+      store.close();
       if (useShadow && host.shadowRoot) {
         host.shadowRoot.replaceChildren();
       }
+    },
+    setOpts(next: Partial<MountOpts>) {
+      store.patch(next);
     },
   };
   mountedApps.set(host, mounted);

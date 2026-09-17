@@ -82,14 +82,17 @@ criteria:
       canvas-surface "Show controls" affordance.
     status: pending
   - id: ac-010
-    summary: Canvas region has non-zero height under surface:"canvas"
+    summary: Canvas sizing is verified live, not in the unit harness
     type: runtime
     pass_when: |
-      In a fixed-size host in page/tests/App.test.tsx, the canvas region measures
-      non-zero height under surface:"canvas" — the embed moves from
-      section.h-full.w-full to section.flex-col > div.flex-1 > Group > Panel >
-      div.flex-1.bg-canvas, and nothing else asserts that it still sizes.
-    status: pending
+      WITHDRAWN as a unit criterion, measured and recorded: the page unit harness
+      loads no stylesheet, so every Tailwind class is inert. In an 800x600 host
+      the shell `section` measures 19px (intrinsic content) and the whole canvas
+      chain measures 0 whether the tree is right or wrong — an assertion here
+      cannot bite either way, which the "every gate must be proven to bite" rule
+      forbids. Canvas sizing under surface:"canvas" is instead verified in the
+      live VS Code check that carries link 02's ac-012, and must be named there.
+    status: withdrawn
   - id: ac-011
     summary: Both routed debts are durable artifacts, not prose
     type: docs
