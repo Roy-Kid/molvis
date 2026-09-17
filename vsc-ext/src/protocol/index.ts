@@ -1,9 +1,12 @@
 export {
   type FileFormat,
   type HostToWebviewMessage,
+  hostSurfaceOf,
   isQuickViewHostMessage,
   type LoadMode,
   type MolecularFilePayload,
+  PAGE_SURFACES,
+  type PageSurface,
   QUICK_VIEW_HOST_MESSAGE_TYPES,
   type QuickViewHostMessageType,
   type StructureOutlineNode,

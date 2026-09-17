@@ -11,11 +11,8 @@
 import { bootstrapTheme } from "@/hooks/useTheme";
 import { mountMolvisApp } from "@/lib/mount";
 import type { WebviewToHostMessage } from "../protocol";
-import {
-  attachStageHost,
-  postStageReady,
-  type StageHostHandle,
-} from "../webview/attachStageHost";
+import { attachPageHost, postPageReady } from "../webview/attachPageHost";
+import type { StageHostHandle } from "../webview/attachStageHost";
 import { installGlobalErrorHandlers } from "../webview/errorBoundary";
 import "./main.css";
 
@@ -41,7 +38,7 @@ export function bootstrapPage(
   installGlobalErrorHandlers(host);
 
   let bridge: StageHostHandle | null = null;
-  mountMolvisApp(container, {
+  const mounted = mountMolvisApp(container, {
     surface: "full",
     useShadowDOM: false,
     onAppChange: (app) => {
@@ -51,15 +48,17 @@ export function bootstrapPage(
       // Drop handling stays with the page shell (it owns the drop UI and the
       // unsaved-scene prompt), so the bridge contributes load/settings/save
       // only.
-      bridge = attachStageHost(app, {
+      bridge = attachPageHost(app, {
         host,
         enableDrop: false,
         onBusy: options.onBusy,
+        // The host owns the surface bit; the shell just applies it.
+        onSurface: (surface) => mounted.setOpts({ surface }),
       });
       options.onReady?.();
       // `onAppChange` fires after `app.start()`, so the host may load
       // immediately.
-      postStageReady(host);
+      postPageReady(host);
     },
   });
 }

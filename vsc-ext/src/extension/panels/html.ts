@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 
 /** Bump when webview JS changes under the same extension version so
  *  Chromium does not reuse a cached `shared.js` after `--force` install. */
-const WEBVIEW_ASSET_REV = "cmd-attrib-18";
+const WEBVIEW_ASSET_REV = "page-surface-19";
 
 function scriptUri(
   webview: vscode.Webview,

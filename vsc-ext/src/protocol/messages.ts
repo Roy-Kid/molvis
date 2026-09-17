@@ -13,6 +13,18 @@
  */
 
 /**
+ * Which chrome the page shell should show.
+ *
+ * Structurally re-declared rather than imported: this module is host-safe and
+ * must not pull the page runtime. Unlike `FileFormat` / `LoadMode`, which rely
+ * on the `@see` convention alone, this one is pinned at compile time.
+ * @see vsc-ext/src/webview/attachPageHost.ts `_SurfaceLockstep`
+ * @see page/src/lib/mount-opts.ts `MolvisSurface` — keep in lockstep.
+ */
+export const PAGE_SURFACES = ["full", "canvas"] as const;
+export type PageSurface = (typeof PAGE_SURFACES)[number];
+
+/**
  * Molecular file format ids.
  * @see stage/src/io/formats.ts `FileFormat` — keep in lockstep.
  */
@@ -81,6 +93,13 @@ export type HostToWebviewMessage =
       type: "init";
       config?: unknown;
       settings?: unknown;
+      /**
+       * Chrome the page shell should start with. Absent for the stage-only
+       * surfaces, which have no chrome to switch. Riding `init` — the first
+       * message a host can send — is what stops the page painting full chrome
+       * and then correcting itself.
+       */
+      surface?: PageSurface;
     }
   | { type: "applySettings"; config?: unknown; settings?: unknown }
   | {
@@ -201,6 +220,23 @@ function isTypedHostMessage(
     typeof (data as { type: unknown }).type === "string" &&
     allowed.has((data as { type: string }).type)
   );
+}
+
+/**
+ * The surface a host message declares, or `null` when it declares none.
+ *
+ * `null` rather than a default: the default belongs to the page, so a host
+ * that stays silent leaves the current surface alone.
+ */
+export function hostSurfaceOf(
+  message: HostToWebviewMessage,
+): PageSurface | null {
+  if (message.type !== "init") return null;
+  const surface = message.surface;
+  return surface !== undefined &&
+    (PAGE_SURFACES as readonly string[]).includes(surface)
+    ? surface
+    : null;
 }
 
 /** Type guard for host → webview messages that Quick look accepts. */

@@ -58,7 +58,7 @@ export function openPagePanel(
     withErrorHandler(async (message) => {
       switch (message.type) {
         case "ready":
-          sendToWebview(panel.webview, createInitMessage());
+          sendToWebview(panel.webview, createInitMessage("full"));
           if (uri) {
             await sendLoadedFile(panel.webview, uri, fileLoader, logger);
           }

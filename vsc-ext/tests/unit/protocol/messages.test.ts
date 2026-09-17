@@ -1,6 +1,8 @@
 import * as assert from "assert";
 import {
+  hostSurfaceOf,
   isQuickViewHostMessage,
+  PAGE_SURFACES,
   QUICK_VIEW_HOST_MESSAGE_TYPES,
 } from "../../../src/protocol";
 
@@ -48,5 +50,49 @@ suite("protocol/messages", () => {
     assert.strictEqual(isQuickViewHostMessage(null), false);
     assert.strictEqual(isQuickViewHostMessage("init"), false);
     assert.strictEqual(isQuickViewHostMessage({}), false);
+  });
+
+  test("PAGE_SURFACES names both chrome states", () => {
+    assert.deepStrictEqual([...PAGE_SURFACES], ["full", "canvas"]);
+  });
+
+  test("hostSurfaceOf reads the surface an init declares", () => {
+    assert.strictEqual(
+      hostSurfaceOf({ type: "init", surface: "canvas" }),
+      "canvas",
+    );
+    assert.strictEqual(
+      hostSurfaceOf({ type: "init", surface: "full" }),
+      "full",
+    );
+  });
+
+  test("hostSurfaceOf returns null when no surface is declared", () => {
+    // Silence means "leave the surface alone", not "default to full".
+    assert.strictEqual(hostSurfaceOf({ type: "init" }), null);
+    // Only `init` carries the claim.
+    assert.strictEqual(
+      hostSurfaceOf({
+        type: "applySettings",
+        surface: "canvas",
+      } as never),
+      null,
+    );
+  });
+
+  test("hostSurfaceOf rejects a value outside the union", () => {
+    assert.strictEqual(
+      hostSurfaceOf({ type: "init", surface: "compact" } as never),
+      null,
+    );
+  });
+
+  test("the Quick look guard already admits init, so page needs no second list", () => {
+    // The surface rides `init` rather than a message of its own precisely
+    // because this is true. Narrow the Quick look set and this goes red.
+    assert.strictEqual(
+      isQuickViewHostMessage({ type: "init", surface: "canvas" }),
+      true,
+    );
   });
 });

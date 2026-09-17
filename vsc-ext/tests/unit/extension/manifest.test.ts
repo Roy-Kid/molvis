@@ -101,10 +101,16 @@ suite("contribution manifest", () => {
     const bundle = extensionBundlePath();
     assert.ok(existsSync(bundle), `extension host bundle missing: ${bundle}`);
     const src = readFileSync(bundle, "utf8");
+    // Every command now goes through one `command()` wrapper that attributes
+    // failures to an id, so the id no longer sits next to `registerCommand`,
+    // and minification renames the wrapper. What stays stable in the shipped
+    // bundle is the pairing: the id followed by its handler function. Matching
+    // the bare id would not bite — `createWebviewPanel("molvis.quickView", …)`
+    // carries the same literal with a non-function argument after it.
     assert.match(
       src,
-      /registerCommand\(\s*["']molvis\.quickView["']/,
-      "activate must register molvis.quickView in the shipped bundle",
+      /["']molvis\.quickView["']\s*,\s*(async|function|\()/,
+      "activate must wire molvis.quickView to a handler in the shipped bundle",
     );
     assert.doesNotMatch(
       src,

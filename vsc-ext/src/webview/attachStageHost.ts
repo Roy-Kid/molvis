@@ -61,6 +61,17 @@ export interface AttachStageHostOptions {
    */
   onExtraMessage?: (message: HostToWebviewMessage) => boolean;
   /**
+   * Non-claiming pre-dispatch observer: sees every accepted host message
+   * before {@link handleCore}. Returns nothing, so it can never claim,
+   * reorder or suppress a message.
+   *
+   * It exists because `handleCore` claims `init` and returns `true`, which
+   * puts `init`'s payload structurally out of reach of `onExtraMessage`. The
+   * alternative — letting a surface run its own window listener — would fork
+   * message delivery into two owners that stay identical by convention alone.
+   */
+  onMessageSeen?: (message: HostToWebviewMessage) => void;
+  /**
    * Called with a label while a host-driven load is in flight and with
    * `null` once it settles. Quick look paints it over the canvas so a large
    * file is not a silent wait on an empty scene.
@@ -87,6 +98,7 @@ export function attachStageHost(
     listenWindow = true,
     isHostMessage = isQuickViewHostMessage,
     onExtraMessage,
+    onMessageSeen,
     onBusy,
   } = options;
 
@@ -304,6 +316,7 @@ export function attachStageHost(
   };
 
   const handleMessage = (message: HostToWebviewMessage): void => {
+    onMessageSeen?.(message);
     if (handleCore(message)) return;
     if (onExtraMessage?.(message)) return;
   };

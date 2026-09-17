@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import type { HostToWebviewMessage } from "../protocol";
+import type { HostToWebviewMessage, PageSurface } from "../protocol";
 
 /**
  * Stage config + runtime settings from VS Code settings.
@@ -43,12 +43,21 @@ export function getDefaultViewer(): DefaultViewer {
   return value === "page" ? "page" : "quickLook";
 }
 
-export function createInitMessage(): HostToWebviewMessage {
+/**
+ * The first message a host sends after `ready`.
+ *
+ * `surface` is optional because only the page shell has chrome to switch; the
+ * stage-only surfaces call this with no argument and are unaffected. Riding
+ * `init` is what keeps the page from painting full chrome and then correcting
+ * itself.
+ */
+export function createInitMessage(surface?: PageSurface): HostToWebviewMessage {
   const options = getMolvisWebviewOptions();
   return {
     type: "init",
     config: options.config,
     settings: options.settings,
+    ...(surface ? { surface } : {}),
   };
 }
 
