@@ -253,3 +253,70 @@ describe("running app data+dcd seek updates GPU positions", () => {
     }
   });
 });
+
+const LAMMPSTRJ = `ITEM: TIMESTEP
+0
+ITEM: NUMBER OF ATOMS
+3
+ITEM: BOX BOUNDS pp pp pp
+0.0 10.0
+0.0 10.0
+0.0 10.0
+ITEM: ATOMS id type x y z
+3 1 1.0 2.0 3.0
+1 1 4.0 5.0 6.0
+2 1 7.0 8.0 9.0
+`;
+
+const DUMP_LOCAL_BONDS = `ITEM: TIMESTEP
+0
+ITEM: NUMBER OF ENTRIES
+2
+ITEM: BOX BOUNDS pp pp pp
+0.0 10.0
+0.0 10.0
+0.0 10.0
+ITEM: ENTRIES batom1 batom2
+1 2
+2 3
+`;
+
+describe("loadFileContent lammpstrj -> dump.local augment", () => {
+  it("composes bond topology onto the trajectory and maps endpoints", async () => {
+    const { app, pipeline } = fakeApp();
+    await loadFileContent(
+      app as unknown as MolvisApp,
+      LAMMPSTRJ,
+      "traj.lammpstrj",
+      "lammps-dump",
+      "replace",
+    );
+    await loadFileContent(
+      app as unknown as MolvisApp,
+      DUMP_LOCAL_BONDS,
+      "bonds.dump.local",
+      "lammps-dump",
+      "augment",
+      async () => ({
+        atomiSource: "batom1",
+        atomjSource: "batom2",
+        offset: 0,
+      }),
+    );
+
+    const sources = pipeline.sources().map((s) => ({
+      id: s.id,
+      trajectory: s.trajectory,
+    }));
+    expect(sources).toHaveLength(2);
+
+    const composed = await composeSources(sources, 0);
+    expect(composed.getBlock("atoms")?.nrows()).toBe(3);
+    const bonds = composed.getBlock("bonds");
+    expect(bonds?.nrows()).toBe(2);
+    // The reader renamed the `dump local` entries block to `bonds` so the
+    // bond-mapping / rendering pipeline sees it.
+    expect(bonds?.dtype("batom1")).toBeDefined();
+    expect(bonds?.dtype("batom2")).toBeDefined();
+  });
+});

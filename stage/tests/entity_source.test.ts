@@ -2,7 +2,7 @@ import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { BondSource } from "../src/entity_source";
+import { AtomSource, BondSource } from "../src/entity_source";
 import { BOND_TYPE_AROMATIC, BOND_TYPE_SINGLE } from "../src/utils/bond_order";
 
 /** Two atoms at (0,0,0) and (1,2,3); one bond 1→0. PerceiveBonds writes only atomi/atomj. */
@@ -82,5 +82,66 @@ describe("BondSource.getMeta", () => {
     const meta = src.getMeta(0);
     expect(meta?.bondType).toBe(BOND_TYPE_AROMATIC);
     expect(meta?.bondNumber).toBe(0);
+  });
+});
+
+describe("AtomSource copy-on-write overlay", () => {
+  /**
+   * Entering Edit mode used to copy every frame atom into the edit map so the
+   * frame source could be dropped (35.6 s for 500 000 atoms). The overlay now
+   * stays lazy, which only works if a deletion is recorded beside the frame
+   * block — a frame row cannot be removed from it.
+   */
+  function threeAtomSource(): AtomSource {
+    const frame = new Frame();
+    const atoms = new Block();
+    atoms.setColF("x", new Float64Array([0, 1, 2]));
+    atoms.setColF("y", new Float64Array([0, 0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0, 0]));
+    atoms.setColStr("element", ["C", "C", "O"]);
+    frame.insertBlock("atoms", atoms);
+    const source = new AtomSource();
+    source.setFrame(frame);
+    return source;
+  }
+
+  it("reads unedited atoms straight from the frame — no copy needed", () => {
+    const source = threeAtomSource();
+    expect(source.edits.size).toBe(0);
+    expect(source.getMeta(2)?.element).toBe("O");
+    expect([...source.getAllIds()]).toEqual([0, 1, 2]);
+  });
+
+  it("keeps a deleted frame atom deleted", () => {
+    const source = threeAtomSource();
+    source.removeEdit(1);
+
+    // Without the tombstone the frame block would hand row 1 straight back,
+    // and the next commit would resurrect the atom the user deleted.
+    expect(source.getMeta(1)).toBeNull();
+    expect([...source.getAllIds()]).toEqual([0, 2]);
+  });
+
+  it("an edit on a deleted id revives it", () => {
+    const source = threeAtomSource();
+    source.removeEdit(1);
+    source.setEdit(1, {
+      type: "atom",
+      atomId: 1,
+      element: "N",
+      position: { x: 9, y: 9, z: 9 },
+    });
+
+    expect(source.getMeta(1)?.element).toBe("N");
+    expect([...source.getAllIds()]).toEqual([0, 1, 2]);
+  });
+
+  it("a new frame clears stale tombstones", () => {
+    const source = threeAtomSource();
+    source.removeEdit(0);
+    expect([...source.getAllIds()]).toEqual([1, 2]);
+
+    source.setFrame(threeAtomSource().frame);
+    expect([...source.getAllIds()]).toEqual([0, 1, 2]);
   });
 });

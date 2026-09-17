@@ -1,3 +1,4 @@
+import type { Molvis } from "@molcrafts/molvis-stage";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import App from "@/App";
@@ -26,6 +27,12 @@ export interface MountHostOpts extends MountOpts {
    * `localStorage` via {@link bootstrapTheme}.
    */
   theme?: "light" | "dark";
+  /**
+   * Called with the engine each time the viewer mounts one, and with `null`
+   * when it is torn down. Hosts that talk to the engine directly use it —
+   * the VS Code webview attaches its file/settings/save bridge here.
+   */
+  onAppChange?: (app: Molvis | null) => void;
 }
 
 /** Result of {@link mountMolvisApp}, allowing the host to tear down. */
@@ -141,7 +148,7 @@ export function mountMolvisApp(
       <MountOptsProvider value={opts}>
         <PortalContainerProvider value={portalContainer}>
           <PipelineOperationProvider>
-            <App />
+            <App onAppChange={opts.onAppChange} />
           </PipelineOperationProvider>
         </PortalContainerProvider>
       </MountOptsProvider>

@@ -61,21 +61,48 @@ Prefer the I/O package for files. App methods act on an already-resolved
 
 | API | Purpose |
 |---|---|
-| `loadFileContent(app, content, filename, format?, mode?)` from `@molcrafts/molvis-stage/io` | Canonical file ingress (replace / augment / extend) |
+| `loadFileContent(app, content, filename, format?, mode?, pickBondMapping?)` from `@molcrafts/molvis-stage/io` | Data-file ingress (replace / augment / extend). Binary formats take `Uint8Array`. |
+| `loadMrecSource(app, source, filename, mode?)` from `/io` | Open a `*.mrec` directory or `*.mrec.zip`. Auto-overlays a `frame` section beside a `trajectory`. |
 | `loadFileStream(app, blob, filename, format, …)` from `/io` | Stream large text trajectories without materializing the whole file |
+| `loadMeshOverlay(app, bytes, filename)` from `/io` | Add an STL triangle mesh as scene geometry — no data source, no frames |
+| `sceneDropLoadMode(pipeline)` / `dropLoadMode(sources, meshes?)` | Drop occupancy: empty → replace; sources or meshes → augment |
 | `renderFrame(frame: Frame): void` | Draw one frame through the pipeline (style is global app state) |
 | `setTrajectory(traj: Trajectory): Promise<void>` | Attach a multi-frame trajectory; timeline appears automatically |
 | `seekFrame(index: number): void` | Jump to a trajectory index |
 
 ```typescript
 import { mountMolvis } from "@molcrafts/molvis-stage";
-import { loadFileContent } from "@molcrafts/molvis-stage/io";
+import {
+  loadFileContent,
+  loadMeshOverlay,
+  loadMrecSource,
+  sceneDropLoadMode,
+} from "@molcrafts/molvis-stage/io";
 
 const app = mountMolvis(document.getElementById("viewer")!);
 await app.start();
 
 await loadFileContent(app, pdbText, "structure.pdb");
 ```
+
+### Overlay a topology, a trajectory, and a mesh
+
+Drop onto a loaded scene uses `sceneDropLoadMode` (`augment`). Topology
+(LAMMPS `.data` / mrec `frame`) and coordinates (DCD / dump / mrec
+`trajectory`) compose in either order; rows align by atom `id`. An STL is
+never a data source — `loadMeshOverlay` is always additive.
+
+```typescript
+await loadFileContent(app, dataText, "sys.data"); // replace
+await loadFileContent(app, dcdBytes, "run.dcd", "dcd", "augment");
+await loadMeshOverlay(app, stlBytes, "cavity.stl");
+```
+
+A `*.mrec` that carries both `frame` and `trajectory` opens both in one
+call (`loadMrecSource`) — the same composition without two files.
+
+To concatenate two structures (more atoms, not more frames), use
+`mode: "extend"`, not augment.
 
 When you already have a molrs `Frame`, call `app.renderFrame(frame)` after
 `start()`. For a navigable single-frame trajectory, use
@@ -404,6 +431,8 @@ app.pipeline.setEnabled(id, false);
 | `SteinhardtOrderModifier` | Structure identification | Writes `steinhardt_q{l}`; optional scene color. |
 | `SolidLiquidModifier` | Structure identification | Writes `solid_liquid` / `solid_liquid_n_bonds`; optional color. |
 | `DisplacementVectorsModifier` | Analysis | Displacement.X/Y/Z vs reference frame. |
+| `BondColumnRemapModifier` | Modification | Maps dump-local endpoint columns to `atomi`/`atomj`. Loader-attached, not in the Add menu. |
+| `MeshOverlayModifier` | Visualization | Imported STL. Not a data source; not user-addable (`loadMeshOverlay`). |
 | `ComputeBondsModifier` | Visualization | Create bonds (perceive topology). |
 | `DrawBondModifier` | Visualization | **Bonds** visual element (user-addable). |
 | `DrawBoxModifier` | Visualization | **Simulation cell** (user-addable). |
@@ -485,33 +514,94 @@ await app.setTrajectory(trajectory);
 
 ### mrec stores
 
-An `*.mrec` store is a Zarr-v3 directory that molrs opens as a trajectory.
-`mrec` is the product name; `zarr` is only the on-disk encoding. `mrec` is
-deliberately not a `FileFormat` — hosts recognise the store folder and stream
-it, they never route its bytes to a per-extension parser.
+An `*.mrec` store is a Zarr-v3 directory — or its packed single-file form,
+`*.mrec.zip` (stored entries) — that molrs opens as a trajectory. `mrec` is
+the product name; `zarr` is only the on-disk encoding. `mrec` is deliberately
+not a `FileFormat` — hosts recognise the store folder / archive
+(`mrecStoreRootPath`, `isMrecZipPath` in `@molcrafts/molvis-stage/io/formats`)
+and hand it to the store ingress; they never route its bytes to a
+per-extension parser.
+
+`loadMrecSource` is that ingress. When Workers exist the molrs
+`TrajectoryReader` runs inside the trajectory worker and only the byte ranges a
+frame touches ever cross into wasm; otherwise the store opens on the main
+thread. Either way it lands in the pipeline's single ingress.
 
 ```typescript
 import {
   loadFileContent,
-  loadMrecFiles,
   loadMrecSource,
   type MrecDirectorySource,
+  type MrecStoreInput,
 } from "@molcrafts/molvis-stage/io";
 
-// fileMap: path → base64 (or build a bundle with loadMrecFiles).
-// The store payload is an object, so no format argument is passed.
+// Whole store already in memory (path → bytes, or base64 on old transports):
 await loadFileContent(app, fileMap, "dataset.mrec");
+// …or the same shape spelled as a store input:
+await loadMrecSource(app, { kind: "files", files }, "dataset.mrec");
+
+// Browser File handles of the store directory (showDirectoryPicker / a
+// dropped folder) — the lazy door: nothing but touched chunks leaves disk.
+const tree: MrecStoreInput = { kind: "file-tree", files: keyToFile };
+await loadMrecSource(app, tree, "dataset.mrec");
+
+// A packed archive is one File / Blob.
+await loadMrecSource(app, { kind: "zip", blob: zipFile }, "dataset.mrec.zip");
 
 // Hosts that can list/read a directory (molexp workspace.fs, vscode.workspace.fs)
-// hand an MrecDirectorySource; molrs TrajectoryReader opens the store.
+// hand an MrecDirectorySource; it is walked into memory first.
 const source: MrecDirectorySource = { list, read };
 await loadMrecSource(app, source, "dataset.mrec");
 ```
+
+Frames of an mrec trajectory expose the store's per-block update ids through
+`Trajectory.sectionUpdates(index)`; the playback classifier uses them to keep a
+position-only redraw whenever no topology block changed.
 
 > The former encoding-named exports (`loadZarrStore`, `loadZarrFiles`,
 > `loadZarrSource`, `loadZarrDirectory`, `collectZarrDirectory`,
 > `ZarrDirectorySource`, `ZarrDirent`, `ZarrLoadResult`) remain as
 > `@deprecated` aliases for one release; prefer the `mrec*` / `Mrec*` names.
+
+### STL meshes
+
+An `*.stl` triangle mesh is scene *geometry*, not scene data: it carries no
+atoms, no cell and no frames, so — like `mrec`, and for the opposite reason —
+it is deliberately not a `FileFormat`. Hosts recognise it with `isStlPath`
+(`@molcrafts/molvis-stage/io/formats`) and hand the bytes to `loadMeshOverlay`;
+they never route them to a `Frame` reader.
+
+molrs owns the parse (`molrs::io::mesh::stl` → `readSTL` in wasm, reached
+through `@molcrafts/molvis-core/molrs`'s `readStlMesh`) — the same reader
+molpack's `StlRegion` uses, so the container a packing run was confined to and
+the container molvis draws are read by one implementation. The wasm `Mesh`
+never escapes the gateway: its arrays are copied out and it is freed before
+`readStlMesh` returns, so a mesh costs one decode and no live handle. That is
+affordable because it happens once per file — a *computed* surface (marching
+cubes, molecular surface) is re-derived every pipeline pass and stays in JS.
+
+The load is additive and has no `LoadMode`: the mesh becomes a `Mesh`
+(`MeshOverlayModifier`) plus the `Draw surface` companion the pipeline pairs
+with every geometry producer, and never a `DataSource`. Because its triangles
+come from the file rather than from the frame, every pipeline pass republishes
+the same geometry — the mesh stands still while the trajectory plays inside it,
+and seeking or stacking a topology file on top leaves it alone.
+
+```typescript
+import { loadMeshOverlay } from "@molcrafts/molvis-stage/io";
+
+await loadMeshOverlay(app, new Uint8Array(await file.arrayBuffer()), file.name);
+```
+
+Both STL shapes are accepted: a length-matched binary file (`84 + 50n` bytes)
+first, otherwise ASCII starting with `solid`. Normals are computed from each
+facet's winding — the recorded facet normal is ignored, since writers
+(molpack's included) routinely emit `0 0 0`. Appearance — colour, opacity,
+`solid`/`mesh`/`contour`/`dot` finish — belongs to the paired `Draw surface`,
+so restyling never re-reads the file.
+
+Geometry is not written into a saved project: a restored `Mesh` row remembers
+the file it came from and paints nothing until that file is opened again.
 
 ## Canonical column names
 

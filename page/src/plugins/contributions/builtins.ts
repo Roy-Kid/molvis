@@ -7,6 +7,7 @@
 import {
   AffineTransformationModifier as CoreAffineTransformationModifier,
   AssignColorModifier as CoreAssignColorModifier,
+  BondColumnRemapModifier as CoreBondColumnRemapModifier,
   CameraTrackModifier as CoreCameraTrackModifier,
   CenterOfMassModifier as CoreCenterOfMassModifier,
   ClusterModifier as CoreClusterModifier,
@@ -26,6 +27,7 @@ import {
   FreezePropertyModifier as CoreFreezePropertyModifier,
   HideSelectionModifier as CoreHideModifier,
   IsosurfaceModifier as CoreIsosurfaceModifier,
+  MeshOverlayModifier as CoreMeshOverlayModifier,
   MolecularSurfaceModifier as CoreMolecularSurfaceModifier,
   RadiusOfGyrationModifier as CoreRadiusOfGyrationModifier,
   ReplicateModifier as CoreReplicateModifier,
@@ -48,6 +50,7 @@ import {
 } from "@molcrafts/molvis-stage";
 import { AffineTransformationModifier } from "@/ui/modes/view/modifiers/AffineTransformationModifier";
 import { AssignColorModifier } from "@/ui/modes/view/modifiers/AssignColorModifier";
+import { BondColumnRemapModifier } from "@/ui/modes/view/modifiers/BondColumnRemapModifier";
 import { CameraTrackModifier } from "@/ui/modes/view/modifiers/CameraTrackModifier";
 import { CenterOfMassModifier } from "@/ui/modes/view/modifiers/CenterOfMassModifier";
 import { ClusterModifier } from "@/ui/modes/view/modifiers/ClusterModifier";
@@ -68,6 +71,7 @@ import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/Expressio
 import { FreezePropertyModifier } from "@/ui/modes/view/modifiers/FreezePropertyModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
 import { IsosurfaceModifier } from "@/ui/modes/view/modifiers/IsosurfaceModifier";
+import { MeshOverlayModifier } from "@/ui/modes/view/modifiers/MeshOverlayModifier";
 import { MolecularSurfaceModifier } from "@/ui/modes/view/modifiers/MolecularSurfaceModifier";
 import { RadiusOfGyrationModifier } from "@/ui/modes/view/modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
@@ -202,6 +206,11 @@ export function registerBuiltinModifierPanels(): void {
       component: asPanel(ComputeBondsModifier),
     },
     {
+      id: "builtin:BondColumnRemap",
+      match: (m) => m instanceof CoreBondColumnRemapModifier,
+      component: asPanel(BondColumnRemapModifier),
+    },
+    {
       id: "builtin:AssignColor",
       match: (m) => m instanceof CoreAssignColorModifier,
       component: asPanel(AssignColorModifier),
@@ -247,6 +256,12 @@ export function registerBuiltinModifierPanels(): void {
       match: (m) => m instanceof CoreVolumeCloudModifier,
       component: asPanel(VolumeCloudModifier),
       usesLeftConfig: true,
+    },
+    {
+      // Read-only: an imported mesh has no parameters, only an identity.
+      id: "builtin:MeshOverlay",
+      match: (m) => m instanceof CoreMeshOverlayModifier,
+      component: asPanel(MeshOverlayModifier),
     },
     {
       // Appearance only — it belongs in the pipeline row beside its producer,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import molpy as mp
@@ -63,6 +64,46 @@ class FrameCommandsMixin:
         self._record_trajectory(frames)
         if wait:
             self.list_modifiers()
+        return self
+
+    @frame_arg
+    def add_data_source(
+        self: "Molvis",
+        frame: Any,
+        *,
+        filename: str | None = None,
+        wait: bool = True,
+    ) -> "Molvis":
+        """Stack a length-1 source onto the scene (topology overlay).
+
+        The same composition as dropping a LAMMPS data file onto a
+        trajectory: identity and bonds from this frame broadcast across
+        the current timeline.
+        """
+        payload, buffers = frame_payload(frame)
+        self.send_cmd(
+            FrontendCommands.ADD_DATA_SOURCE.method,
+            {"frame": payload, "filename": filename},
+            buffers=buffers,
+            wait_for_response=wait,
+        )
+        return self
+
+    def add_mesh(
+        self: "Molvis",
+        path: str | Path,
+        *,
+        wait: bool = True,
+    ) -> "Molvis":
+        """Load an STL packing container as view geometry, not a data source."""
+        file_path = Path(path)
+        data = file_path.read_bytes()
+        self.send_cmd(
+            FrontendCommands.ADD_MESH_OVERLAY.method,
+            {"filename": file_path.name},
+            buffers=[data],
+            wait_for_response=wait,
+        )
         return self
 
     @frame_arg

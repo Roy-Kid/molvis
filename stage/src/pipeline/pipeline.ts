@@ -10,6 +10,7 @@ import { logger } from "../utils/logger";
 import { DataSource } from "./data_source";
 import { DrawBoxModifier } from "./draw_box";
 import type { PipelineEntry } from "./entry";
+import { MeshOverlayModifier } from "./mesh_overlay";
 import {
   type GeometryProducer,
   type Modifier,
@@ -357,6 +358,15 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     return n;
   }
 
+  /** Live Mesh overlay rows — view geometry, not DataSources. */
+  meshOverlayCount(): number {
+    let n = 0;
+    for (const m of this.modifiers()) {
+      if (m instanceof MeshOverlayModifier) n++;
+    }
+    return n;
+  }
+
   /**
    * Get direct children of a given source owner.
    */
@@ -410,7 +420,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     if (isTopologyChanging(target)) return false;
     if (sourceOwnerId !== null) {
       const owner = this.entries.find((e) => e.id === sourceOwnerId);
-      if (!(owner instanceof DataSource)) return false;
+      if (!owner || owner instanceof Session) return false;
     }
     const oldSourceOwnerId = target.sourceOwnerId;
     target.sourceOwnerId = sourceOwnerId;
@@ -446,30 +456,40 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   }
 
   /**
-   * Compute the augment-composed frame at `frameIndex` and apply all enabled
-   * non-source modifiers in array order.
+   * Phase A: compose enabled sources at `frameIndex` and apply the wrap
+   * gate. Callers that need to classify the transition before draws run
+   * this once and pass the result into {@link compute} as `precomposed`.
    */
-  async compute(
-    frameIndex: number,
-    app: MolvisApp,
-    changeKind: FrameChangeKind = "full",
-  ): Promise<Frame> {
+  async composeHead(frameIndex: number): Promise<Frame> {
     const sources: CompositionSource[] = [];
     for (const s of this.sources()) {
       if (!s.enabled) continue;
       sources.push({
         id: s.id,
+        label: s.filename || s.name,
         trajectory: s.trajectory,
         contributedBlocks:
           s.contributedBlocks.length > 0 ? s.contributedBlocks : undefined,
       });
     }
-    let frame = await composeSources(sources, frameIndex);
+    const frame = await composeSources(sources, frameIndex);
+    return applyWrapIfEnabled(frame, this._wrapEnabled);
+  }
 
-    // --- Phase A2: system wrap gate (compose → wrap? → modifiers) ---
-    // Draws and MI-aware visuals consume only post-gate coordinates.
-    // Volume grids (CHGCAR/CUBE) are untouched — they ride as separate blocks.
-    frame = applyWrapIfEnabled(frame, this._wrapEnabled);
+  /**
+   * Compute the augment-composed frame at `frameIndex` and apply all enabled
+   * non-source modifiers in array order.
+   *
+   * Pass `precomposed` to skip a second compose when the caller already
+   * ran {@link composeHead} (playback classification).
+   */
+  async compute(
+    frameIndex: number,
+    app: MolvisApp,
+    changeKind: FrameChangeKind = "full",
+    precomposed?: Frame,
+  ): Promise<Frame> {
+    let frame = precomposed ?? (await this.composeHead(frameIndex));
 
     // --- Phase B: apply non-DS modifiers ---
     // Pure TransformsData modifiers (Slice, …) always run before
@@ -526,11 +546,27 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
    * wrapped trajectory) are released deterministically rather than waiting
    * for GC.
    */
-  clear(): void {
+  clear(options?: { keepMeshOverlays?: boolean }): void {
+    const keepIds = new Set<string>();
+    if (options?.keepMeshOverlays) {
+      const session = this.session();
+      if (session) keepIds.add(session.id);
+      for (const m of this.modifiers()) {
+        if (!(m instanceof MeshOverlayModifier)) continue;
+        keepIds.add(m.id);
+        for (const child of this.getChildren(m.id)) keepIds.add(child.id);
+      }
+    }
+
     // Teardown, same as `removeEntry` — clearing *is* removal. Without this a
     // Session kept its socket and a CameraTrackModifier kept its observers,
     // because `clear` only ever disposed sources.
+    const kept: PipelineEntry[] = [];
     for (const entry of this.entries) {
+      if (keepIds.has(entry.id)) {
+        kept.push(entry);
+        continue;
+      }
       try {
         entry.onRemoved?.();
       } catch (err) {
@@ -541,6 +577,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       }
     }
     for (const source of this.sources()) {
+      if (keepIds.has(source.id)) continue;
       try {
         source.dispose();
       } catch (err) {
@@ -550,7 +587,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
         );
       }
     }
-    this.entries = [];
+    this.entries = kept;
     this.emit(PipelineEvents.PIPELINE_CLEARED, {} as Record<string, never>);
   }
 }

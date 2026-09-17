@@ -9,9 +9,37 @@ import { FILE_TYPE_DIRECTORY } from "./zarrDirectoryReaderCore";
 // the ESM stage package (TS1479) — the same constraint that keeps
 // `molecularMatch`'s extension list local. Keep this in lockstep with stage.
 const MREC_DIR_SUFFIX = ".mrec";
+const MREC_ZIP_SUFFIX = ".mrec.zip";
+const STL_SUFFIX = ".stl";
+
+/** Scheme the workbench uses for files that live on a remote authority. */
+const REMOTE_SCHEME = "vscode-remote";
 
 export function getDisplayName(uri: vscode.Uri): string {
   return path.basename(uri.fsPath) || "unknown";
+}
+
+/**
+ * Rewrite a workbench `vscode-remote:` URI to the `file:` URI the extension
+ * host sees for the same bytes.
+ *
+ * A drag out of the Explorer carries the URI as the *workbench* names it. In
+ * a remote window (SSH, WSL, dev container) that is
+ * `vscode-remote://<kind>+<host>/path`, while the extension host — running on
+ * that very authority — reaches the same file as `file:///path`. Pass
+ * `vscode.env.remoteName` as `remoteName`; a window has exactly one remote
+ * authority, so an authority of that kind is this host. Any other kind, and
+ * any other scheme, is returned untouched so the caller still rejects what it
+ * genuinely cannot read.
+ */
+export function localizeRemoteUri(
+  uri: vscode.Uri,
+  remoteName: string | undefined,
+): vscode.Uri {
+  if (uri.scheme !== REMOTE_SCHEME || !remoteName) return uri;
+  const kind = uri.authority.split("+")[0];
+  if (kind.toLowerCase() !== remoteName.toLowerCase()) return uri;
+  return uri.with({ scheme: "file", authority: "" });
 }
 
 /**
@@ -37,6 +65,25 @@ export function mrecStoreRootPath(filePath: string): string | undefined {
     return trimmed;
   }
   return undefined;
+}
+
+/**
+ * Whether `filePath` is a packed mrec store (`*.mrec.zip`) — a file, opened
+ * by the same reader as the directory form. Mirror of `isMrecZipPath` in
+ * `@molcrafts/molvis-stage/io/formats`.
+ */
+export function isMrecZipPath(filePath: string): boolean {
+  return filePath.trim().toLowerCase().endsWith(MREC_ZIP_SUFFIX);
+}
+
+/**
+ * Whether `filePath` is an STL triangle mesh — scene geometry, opened by
+ * `loadMeshOverlay` rather than by a format parser, so it bypasses the format
+ * picker the way an mrec store does. Mirror of `isStlPath` in
+ * `@molcrafts/molvis-stage/io/formats`.
+ */
+export function isStlPath(filePath: string): boolean {
+  return filePath.trim().toLowerCase().endsWith(STL_SUFFIX);
 }
 
 /** Point any path inside a `*.mrec` directory at the store root. */

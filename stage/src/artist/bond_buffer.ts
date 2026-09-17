@@ -1,9 +1,8 @@
 import { Vector3 } from "@babylonjs/core";
-import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block } from "@molcrafts/molvis-core/molrs";
 import { encodePickingColorInto } from "../picker";
-import { resolveBondOrders } from "../utils/bond_order";
-import { type AtomCoords, BondPlaneFrame } from "./bond_plane";
+import type { AtomCoords } from "./bond_plane";
+import { BondTopology } from "./bond_topology";
 import type { BondColorMode, BondOrderMode } from "./representation";
 
 /** Stick count for ORDER_CONFIG keys; input is already 1|2|3 from displayBondOrder. */
@@ -200,7 +199,7 @@ export function countBondInstances(
   orderMode: BondOrderMode = "multiple",
 ): number {
   if (orderMode === "single") return bondsBlock.nrows();
-  const orderCol = resolveBondOrders(bondsBlock);
+  const orderCol = BondTopology.of(bondsBlock)?.orders;
   if (!orderCol) return bondsBlock.nrows();
   let total = 0;
   for (let b = 0; b < bondsBlock.nrows(); b++) {
@@ -223,16 +222,14 @@ export function buildBondBuffers(
   if (!bondsBlock || bondsBlock.nrows() === 0) return undefined;
 
   const logicalCount = bondsBlock.nrows();
-  const iAtoms = bondsBlock.viewColU32("atomi");
-  const jAtoms = bondsBlock.viewColU32("atomj");
-  if (!iAtoms || !jAtoms) return undefined;
+  const topology = BondTopology.of(bondsBlock);
+  if (!topology) return undefined;
+  const { atomi: iAtoms, atomj: jAtoms, orders: orderCol } = topology;
 
   const xCoords = atomsBlock.viewColF("x");
   const yCoords = atomsBlock.viewColF("y");
   const zCoords = atomsBlock.viewColF("z");
   if (!xCoords || !yCoords || !zCoords) return undefined;
-
-  const orderCol = resolveBondOrders(bondsBlock);
 
   // Size buffers exactly. Without an order column every bond is one instance;
   // with one, countBondInstances() sums the per-bond instance counts in a
@@ -250,7 +247,7 @@ export function buildBondBuffers(
   const coords: AtomCoords = { x: xCoords, y: yCoords, z: zCoords };
   const planeFrame =
     maxInstances > logicalCount
-      ? BondPlaneFrame.build(iAtoms, jAtoms, atomsBlock.nrows())
+      ? topology.plane(atomsBlock.nrows())
       : undefined;
 
   const bondMatrix = new Float32Array(maxInstances * 16);
@@ -272,8 +269,8 @@ export function buildBondBuffers(
   let renderIdx = 0;
 
   for (let b = 0; b < logicalCount; b++) {
-    const i = toRowIndex(iAtoms[b]);
-    const j = toRowIndex(jAtoms[b]);
+    const i = iAtoms[b];
+    const j = jAtoms[b];
     const atomsVisible = isVisible(i) && isVisible(j);
     const bondVisible = isBondVisible(b, i, j);
     const sticks =
@@ -406,6 +403,14 @@ export function buildBondBuffers(
 /**
  * In-place refresh of bond positions from updated atom coordinates.
  * Handles multi-instance bonds via order column.
+ *
+ * Only `instanceData0` / `instanceData1` are rewritten and uploaded: the bond
+ * impostor shader derives centre, axis and length from those and never reads
+ * the thin-instance `matrix`, which therefore keeps the layout the full build
+ * gave it (its length is what sets Babylon's thin-instance count).
+ *
+ * `topology` is the {@link BondTopology} the full build derived for this
+ * bonds block; passing it skips the per-frame endpoint / order / plane work.
  */
 export function refreshBondPositions(
   bondsBlock: Block,
@@ -422,18 +427,16 @@ export function refreshBondPositions(
   },
   miDisplacements?: Float64Array,
   orderMode: BondOrderMode = "multiple",
+  topology: BondTopology | undefined = BondTopology.of(bondsBlock),
 ): void {
-  const iAtoms = bondsBlock.viewColU32("atomi");
-  const jAtoms = bondsBlock.viewColU32("atomj");
-  const orderCol = resolveBondOrders(bondsBlock);
-  if (!iAtoms || !jAtoms) return;
+  if (!topology) return;
+  const { atomi: iAtoms, atomj: jAtoms, orders: orderCol } = topology;
 
   const logicalCount = bondsBlock.nrows();
-  const matB = bondState.buffers.get("matrix");
   const d0B = bondState.buffers.get("instanceData0");
   const d1B = bondState.buffers.get("instanceData1");
 
-  if (!matB || !d0B || !d1B) return;
+  if (!d0B || !d1B) return;
 
   // Frame bonds live in [0..frameOffset); edit bonds after that. Using only
   // `count` (edit pool) skips every trajectory / committed-frame bond — that
@@ -447,8 +450,8 @@ export function refreshBondPositions(
   // strokes visibly swing around the bond axis on every frame advance.
   const coords: AtomCoords = { x, y, z };
   const planeFrame =
-    orderMode === "multiple" && orderCol?.some((sticks) => sticks > 1)
-      ? BondPlaneFrame.build(iAtoms, jAtoms, x.length)
+    orderMode === "multiple" && topology.hasMultipleSticks
+      ? topology.plane(x.length)
       : undefined;
 
   let renderIdx = 0;
@@ -456,8 +459,8 @@ export function refreshBondPositions(
   for (let b = 0; b < logicalCount; b++) {
     if (renderIdx >= totalInstances) break;
 
-    const i = toRowIndex(iAtoms[b]);
-    const j = toRowIndex(jAtoms[b]);
+    const i = iAtoms[b];
+    const j = jAtoms[b];
     const sticks =
       orderMode === "multiple" && orderCol ? stickConfigKey(orderCol[b]) : 1;
     const config = ORDER_CONFIG[sticks];
@@ -499,16 +502,6 @@ export function refreshBondPositions(
         cz += (TMP_PERP1.z * ox + TMP_PERP2.z * oy) * offsetDist;
       }
 
-      const radius = d0B.data[renderIdx * 4 + 3];
-      const scale = dist + radius * 2;
-
-      matB.data[renderIdx * 16 + 0] = scale;
-      matB.data[renderIdx * 16 + 5] = scale;
-      matB.data[renderIdx * 16 + 10] = scale;
-      matB.data[renderIdx * 16 + 12] = cx;
-      matB.data[renderIdx * 16 + 13] = cy;
-      matB.data[renderIdx * 16 + 14] = cz;
-
       d0B.data[renderIdx * 4 + 0] = cx;
       d0B.data[renderIdx * 4 + 1] = cy;
       d0B.data[renderIdx * 4 + 2] = cz;
@@ -522,7 +515,6 @@ export function refreshBondPositions(
     }
   }
 
-  bondState.uploadBuffer("matrix");
   bondState.uploadBuffer("instanceData0");
   bondState.uploadBuffer("instanceData1");
 }

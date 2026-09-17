@@ -21,6 +21,7 @@ import {
   buildAtomColorOnly,
 } from "./atom_buffer";
 import { buildBondBuffers } from "./bond_buffer";
+import { BondTopology } from "./bond_topology";
 import { type LabelRenderer, skeletalLabelFontSize } from "./label_renderer";
 import type { ImpostorTarget } from "./material_spec";
 
@@ -126,11 +127,15 @@ export async function drawAtomsRepresentation(
   syncRepresentationLabels(host, frame, atomsBlock);
 }
 
+/**
+ * Full bond build. Resolves to the {@link BondTopology} the buffers were
+ * built from so the Artist can reuse it on position-only refreshes.
+ */
 export async function drawBondsRepresentation(
   host: RepresentationDrawHost,
   frame: Frame,
   options?: { radii?: number; impostor?: boolean; visible?: boolean[] },
-): Promise<void> {
+): Promise<BondTopology | undefined> {
   const atomsBlock = frame.getBlock("atoms");
   const bondsBlock = frame.getBlock("bonds");
   if (!atomsBlock || !bondsBlock || bondsBlock.nrows() === 0) return;
@@ -195,6 +200,7 @@ export async function drawBondsRepresentation(
     instanceCount: bondResult.instanceCount,
     instanceMap: bondResult.instanceMap,
   });
+  return BondTopology.of(bondsBlock);
 }
 
 function syncRepresentationLabels(

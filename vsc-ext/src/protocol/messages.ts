@@ -42,16 +42,31 @@ export type LoadMode = "replace" | "augment" | "extend";
  * Payload for `loadFile`:
  * - `string` — decoded text for small/eager loads
  * - `Uint8Array` — raw bytes for streaming trajectories and binary formats
- * - `Record` — zarr directory (name → text)
+ * - `Record` — mrec (zarr) directory, store path → raw bytes. The host posts
+ *   typed arrays (VS Code's serializer moves them as buffers, no base64);
+ *   base64 `string` values are still accepted during the transition.
  */
-export type MolecularFilePayload = string | Uint8Array | Record<string, string>;
+export type MolecularFilePayload =
+  | string
+  | Uint8Array
+  | Record<string, Uint8Array | string>;
 
-/** Hierarchy node for the native Structure Outline tree. */
+/**
+ * Hierarchy node for the native Structure Outline tree.
+ * Mirrors `stage/src/system/structure_outline.ts`: a node lists only the
+ * atoms it owns, and a group says how many it covers (plus a range when the
+ * cover is contiguous) instead of repeating its children's indices.
+ */
 export type StructureOutlineNode = {
   id: string;
   label: string;
   kind: "chain" | "residue" | "atom" | "source";
+  /** Atoms owned directly by this node. Absent on pure group nodes. */
   atomIndices?: number[];
+  /** Atoms covered, listed or not. */
+  atomCount: number;
+  /** Contiguous `[start, end)` cover, when the node has one. */
+  atomRange?: { start: number; end: number };
   children?: StructureOutlineNode[];
 };
 
@@ -82,7 +97,13 @@ export type HostToWebviewMessage =
     }
   | { type: "triggerSave" }
   | { type: "error"; message: string }
-  | { type: "selectAtoms"; indices: number[] }
+  | {
+      type: "selectAtoms";
+      /** Explicit rows. */
+      indices?: number[];
+      /** Contiguous rows `[start, end)` — whole-frame select in two numbers. */
+      range?: { start: number; end: number };
+    }
   | { type: "enableCapability"; id: string; opts?: unknown }
   | { type: "disableCapability"; id: string }
   | {
@@ -103,6 +124,20 @@ export type HostToWebviewMessage =
       fetchId: number;
       data: Uint8Array | null;
       error?: string;
+    }
+  /**
+   * Host-side load lifecycle, sent around the payload itself: `"reading"`
+   * before the host reads the file and ships `loadFile`/`openUri`,
+   * `"cancelled"` if it never gets that far (format picker dismissed, read
+   * failed). The read plus the wire hop can take seconds on Remote-SSH, and
+   * until the payload lands the webview has nothing to show but an empty
+   * scene.
+   */
+  | {
+      type: "loadPhase";
+      phase: "reading" | "cancelled";
+      filename: string;
+      bytes?: number;
     };
 
 /** Webview → host. */
@@ -128,13 +163,21 @@ export type WebviewToHostMessage =
       end: number;
       fetchId: number;
     }
-  | { type: "cancelRange"; fetchId: number };
+  | { type: "cancelRange"; fetchId: number }
+  /**
+   * How long the webview itself spent on the load that just finished
+   * (decode + parse + scene build). The host subtracts it from its own
+   * round trip to name the host→webview transfer, which on Remote-SSH is
+   * the part that crosses the network.
+   */
+  | { type: "loadStats"; filename: string; webviewMs: number };
 
 /** Message types handled by Quick look (stage-only surface). */
 export const QUICK_VIEW_HOST_MESSAGE_TYPES = [
   "init",
   "applySettings",
   "loadFile",
+  "loadPhase",
   "triggerSave",
   "error",
   "selectAtoms",

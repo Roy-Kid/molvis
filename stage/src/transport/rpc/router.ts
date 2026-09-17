@@ -22,6 +22,7 @@ import {
 } from "../../camera/control";
 import { DrawAtomCommand, DrawBondCommand } from "../../commands/draw";
 import { PlaceMoleculeCommand } from "../../commands/place_molecule";
+import { loadMeshOverlay } from "../../io";
 import { viewAtomCoords } from "../../io/atom_coords";
 import { CameraTrackModifier } from "../../modifiers/CameraTrackModifier";
 import type { MarkAtomOverlay } from "../../overlays/mark_atom";
@@ -413,6 +414,7 @@ export class RPCRouter {
       ["pipeline.set_source_owner", this.handlePipelineSetSourceOwner],
       ["pipeline.clear", this.handlePipelineClear],
       ["scene.add_data_source", this.handleAddDataSource],
+      ["scene.add_mesh_overlay", this.handleAddMeshOverlay],
       ["scene.remove_data_source", this.handleRemoveDataSource],
       ["scene.list_data_sources", this.handleListDataSources],
       ["snapshot.take", this.handleSnapshotTake],
@@ -1534,6 +1536,21 @@ export class RPCRouter {
       throw err instanceof Error ? invalidParams(err.message) : err;
     }
     return { success: true, id: ds.id };
+  };
+
+  private handleAddMeshOverlay: RPCHandler = async (params, buffers) => {
+    const filename =
+      requireString(params.filename, "filename", { allowNull: true }) ??
+      "mesh.stl";
+    const view = buffers[0];
+    if (!view) {
+      throw invalidParams(
+        "scene.add_mesh_overlay requires STL bytes as buffer 0",
+      );
+    }
+    const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    await loadMeshOverlay(this.app, bytes, filename);
+    return { success: true };
   };
 
   /**

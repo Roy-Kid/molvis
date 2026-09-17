@@ -12,9 +12,9 @@ import { FORMAT_MENU, formatMenuLabel } from "./formatMenu";
  * user dismisses the picker, which callers should treat as "do not
  * load the file".
  *
- * mrec store payloads are detected by path / stat upstream (via
- * `isMrecUriPath`) and never reach this helper, so we don't list an mrec
- * option here.
+ * mrec store payloads — the `.mrec` directory (`isMrecUriPath`) and the
+ * packed `.mrec.zip` (`isMrecZipPath`) — are detected by path / stat upstream
+ * and never reach this helper, so we don't list an mrec option here.
  */
 export async function resolveFileFormat(
   filename: string,

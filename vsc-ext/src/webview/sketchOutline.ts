@@ -17,6 +17,7 @@ export function buildSketchOutline(data: {
     label: `${atom.element}${i + 1}`,
     kind: "atom" as const,
     atomIndices: [i],
+    atomCount: 1,
   }));
 
   const roots: StructureOutlinePayload["roots"] = [
@@ -24,7 +25,7 @@ export function buildSketchOutline(data: {
       id: "atoms",
       label: "Atoms",
       kind: "chain",
-      atomIndices: atomNodes.map((n) => n.atomIndices[0]),
+      atomCount: atomNodes.length,
       children: atomNodes,
     },
   ];
@@ -34,12 +35,13 @@ export function buildSketchOutline(data: {
       id: "bonds",
       label: "Bonds",
       kind: "source",
-      atomIndices: data.bonds.flatMap((b) => [b.i, b.j]),
+      atomCount: data.bonds.length * 2,
       children: data.bonds.map((bond, i) => ({
         id: `bond:${i}`,
         label: `${data.atoms[bond.i]?.element ?? "?"}–${data.atoms[bond.j]?.element ?? "?"} (${bond.order})`,
         kind: "source" as const,
         atomIndices: [bond.i, bond.j],
+        atomCount: 2,
       })),
     });
   }

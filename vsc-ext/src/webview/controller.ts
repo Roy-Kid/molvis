@@ -24,6 +24,11 @@ export interface BootstrapOptions {
    * loop running). The host uses it to dismiss the loading overlay.
    */
   onReady?: () => void;
+  /**
+   * Called with the current phase while a host-driven load runs, and with
+   * `null` when it settles. See {@link AttachStageHostOptions.onBusy}.
+   */
+  onBusy?: (label: string | null) => void;
 }
 
 export function bootstrapWebview(
@@ -41,7 +46,7 @@ export function bootstrapWebview(
     },
   );
 
-  const bridge = attachQuickViewHost(app, { host });
+  const bridge = attachQuickViewHost(app, { host, onBusy: options.onBusy });
   const capabilities = createCapabilityRegistry({ app, host });
 
   window.addEventListener("beforeunload", () => {

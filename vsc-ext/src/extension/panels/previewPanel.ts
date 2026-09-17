@@ -28,7 +28,7 @@ export async function openQuickViewPanel(
       webview: vscode.Webview,
     ) => void;
   },
-): Promise<void> {
+): Promise<vscode.WebviewPanel> {
   const targetUri = resolveActiveUri(uri);
 
   const title = targetUri
@@ -105,4 +105,6 @@ export async function openQuickViewPanel(
     panelRegistry.unregister(panel);
     messageDisposable.dispose();
   });
+
+  return panel;
 }

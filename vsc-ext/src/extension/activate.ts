@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import {
   affectsMolvisSettings,
   createApplySettingsMessage,
+  getDefaultViewer,
 } from "./configuration";
 import { resolveActiveUri } from "./loading/activeUri";
 import { MolecularFileLoader } from "./loading/molecularFileLoader";
@@ -11,7 +12,7 @@ import {
   isSketchPath,
 } from "./loading/molecularMatch";
 import { pickMolecularUri } from "./loading/openStructure";
-import { mrecStoreRootPath } from "./loading/pathUtils";
+import { getDisplayName, mrecStoreRootPath } from "./loading/pathUtils";
 import { RecentFilesStore } from "./loading/recentFiles";
 import { MolvisBinaryEditorProvider } from "./panels/binaryEditorProvider";
 import { MolvisEditorProvider } from "./panels/editorProvider";
@@ -43,21 +44,39 @@ export function activate(context: vscode.ExtensionContext): void {
   const files = new MolvisFilesViewProvider(recentFiles);
 
   let activeStage: vscode.WebviewPanel | undefined;
+  let activePage: vscode.WebviewPanel | undefined;
+  /**
+   * File the Page tab currently shows. Re-sending it costs a whole reload —
+   * two webviews cannot share a parsed frame, so the payload crosses the host
+   * channel again (a network hop on Remote-SSH) and molrs re-parses it.
+   */
+  let activePageUri: string | undefined;
+  /**
+   * Most recently focused Quick look panel and the file it shows. A webview
+   * panel's tab carries no URI, so "promote this Quick look to the Page" has
+   * no other way to learn what to reopen.
+   */
+  let activeQuickView:
+    | { panel: vscode.WebviewPanel; uri?: vscode.Uri }
+    | undefined;
   let activeSketch: vscode.WebviewPanel | undefined;
 
   const stageOutline = new StructureOutlineProvider(
     "molvis.stageOutline.select",
-    (indices) => {
+    (selection) => {
       if (!activeStage) return;
-      sendToWebview(activeStage.webview, { type: "selectAtoms", indices });
+      sendToWebview(activeStage.webview, { type: "selectAtoms", ...selection });
     },
     "molvis.hasStageOutline",
   );
   const sketchOutline = new StructureOutlineProvider(
     "molvis.sketchOutline.select",
-    (indices) => {
+    (selection) => {
       if (!activeSketch) return;
-      sendToWebview(activeSketch.webview, { type: "selectAtoms", indices });
+      sendToWebview(activeSketch.webview, {
+        type: "selectAtoms",
+        ...selection,
+      });
     },
     "molvis.hasSketchOutline",
   );
@@ -70,7 +89,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const openStage = (uri?: vscode.Uri): vscode.WebviewPanel => {
     if (activeStage) {
       if (uri) {
-        void sendLoadedFile(activeStage.webview, uri, fileLoader, logger);
+        void sendLoadedFile(
+          activeStage.webview,
+          uri,
+          fileLoader,
+          logger,
+          "augment",
+        );
       }
       activeStage.reveal(
         activeStage.viewColumn ?? vscode.ViewColumn.One,
@@ -93,6 +118,51 @@ export function activate(context: vscode.ExtensionContext): void {
       if (activeStage === panel) {
         activeStage = undefined;
         stageOutline.clear();
+      }
+    });
+    return panel;
+  };
+
+  /**
+   * Open (or reuse) the Page tab. Reuse matters here: a fresh Page webview
+   * re-fetches ~18 MB of bundle + wasm, which over Remote-SSH is the whole
+   * "nothing happens for a while" after the click.
+   */
+  const openPage = (
+    uri?: vscode.Uri,
+    viewColumn?: vscode.ViewColumn,
+  ): vscode.WebviewPanel => {
+    if (activePage) {
+      const wanted = uri?.toString();
+      if (wanted && wanted !== activePageUri) {
+        activePageUri = wanted;
+        void sendLoadedFile(
+          activePage.webview,
+          uri as vscode.Uri,
+          fileLoader,
+          logger,
+        );
+      } else if (wanted) {
+        logger.info(
+          `MolVis: ${getDisplayName(uri as vscode.Uri)} is already open in the Page — revealing it instead of reloading.`,
+        );
+      }
+      activePage.reveal(
+        viewColumn ?? activePage.viewColumn ?? vscode.ViewColumn.One,
+        false,
+      );
+      return activePage;
+    }
+    const panel = openPagePanel(context, panelRegistry, logger, fileLoader, {
+      uri,
+      viewColumn,
+    });
+    activePage = panel;
+    activePageUri = uri?.toString();
+    panel.onDidDispose(() => {
+      if (activePage === panel) {
+        activePage = undefined;
+        activePageUri = undefined;
       }
     });
     return panel;
@@ -204,7 +274,13 @@ export function activate(context: vscode.ExtensionContext): void {
       async (arg?: unknown) => {
         const target = uriFromFilesArg(arg) ?? resolveActiveUri();
         recordRecent(target);
-        await openQuickViewPanel(
+        if (getDefaultViewer() === "page") {
+          // `molvis.defaultViewer` = page: skip Quick look entirely rather
+          // than loading the file here and again on promote.
+          openPage(target);
+          return;
+        }
+        const panel = await openQuickViewPanel(
           context,
           panelRegistry,
           logger,
@@ -214,6 +290,13 @@ export function activate(context: vscode.ExtensionContext): void {
             onStructureOutline: (payload) => stageOutline.setOutline(payload),
           },
         );
+        activeQuickView = { panel, uri: target };
+        panel.onDidChangeViewState(() => {
+          if (panel.active) activeQuickView = { panel, uri: target };
+        });
+        panel.onDidDispose(() => {
+          if (activeQuickView?.panel === panel) activeQuickView = undefined;
+        });
       },
     ),
     vscode.commands.registerCommand("molvis.showSource", async () => {
@@ -254,12 +337,52 @@ export function activate(context: vscode.ExtensionContext): void {
         logger.error(`MolVis: Open Stage failed: ${text}`);
       }
     }),
-    vscode.commands.registerCommand("molvis.openPage", () => {
+    vscode.commands.registerCommand("molvis.openPage", (arg?: unknown) => {
       try {
-        openPagePanel(context, panelRegistry, logger);
+        // Same rule as Open Stage: whatever file is in front of the user
+        // comes along, so "open this in the Page" is one click either way.
+        const target =
+          uriFromFilesArg(arg) ??
+          (activeQuickView?.panel.active ? activeQuickView.uri : undefined) ??
+          resolveActiveUri();
+        recordRecent(target);
+        openPage(target);
       } catch (err) {
         const text = err instanceof Error ? err.message : String(err);
         logger.error(`MolVis: Open Page failed: ${text}`);
+      }
+    }),
+    vscode.commands.registerCommand("molvis.openInPage", async () => {
+      try {
+        // Quick look is either our webview panel or one of the custom
+        // editors; both hand the same file to the Page, in the same column,
+        // and then go away — the Page takes over the tab.
+        const quick = activeQuickView?.panel.active
+          ? activeQuickView
+          : undefined;
+        const uri = quick ? quick.uri : resolveActiveUri();
+        const viewColumn =
+          quick?.panel.viewColumn ??
+          vscode.window.tabGroups.activeTabGroup.viewColumn;
+        if (quick) {
+          quick.panel.dispose();
+        } else {
+          await vscode.commands.executeCommand(
+            "workbench.action.closeActiveEditor",
+          );
+        }
+        if (!uri) {
+          // Nothing to carry over: say so rather than opening a blank Page
+          // and leaving the user to guess whether the file failed to load.
+          logger.warn(
+            "MolVis: Open in Page found no file on the active tab — opening an empty Page.",
+          );
+        }
+        recordRecent(uri);
+        openPage(uri, viewColumn);
+      } catch (err) {
+        const text = err instanceof Error ? err.message : String(err);
+        logger.error(`MolVis: Open in Page failed: ${text}`);
       }
     }),
     vscode.commands.registerCommand("molvis.openSketch", (arg?: unknown) => {
@@ -337,7 +460,13 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       if (!activeStage) return;
-      void sendLoadedFile(activeStage.webview, doc.uri, fileLoader, logger);
+      void sendLoadedFile(
+        activeStage.webview,
+        doc.uri,
+        fileLoader,
+        logger,
+        "augment",
+      );
     }),
   );
 }

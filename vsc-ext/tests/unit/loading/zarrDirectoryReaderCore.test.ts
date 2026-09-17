@@ -2,6 +2,7 @@ import * as assert from "assert";
 import {
   FILE_TYPE_DIRECTORY,
   FILE_TYPE_FILE,
+  packedBytes,
   readZarrDirectoryWithFs,
 } from "../../../src/extension/loading/zarrDirectoryReaderCore";
 
@@ -10,7 +11,7 @@ interface MockUri {
 }
 
 suite("zarrDirectoryReaderCore", () => {
-  test("reads nested tree and returns base64 map with relative keys", async () => {
+  test("reads nested tree and returns a bytes map with relative keys", async () => {
     const fs = {
       readDirectory: async (uri: MockUri): Promise<Array<[string, number]>> => {
         if (uri.path.endsWith("/root.zarr")) {
@@ -59,9 +60,57 @@ suite("zarrDirectoryReaderCore", () => {
       assert.ok(!key.startsWith("/"), `Unexpected absolute key: ${key}`);
     }
 
-    assert.strictEqual(
-      files["group/array/0.0"],
-      Buffer.from("content of 0.0").toString("base64"),
+    const chunk = files["group/array/0.0"];
+    assert.ok(chunk instanceof Uint8Array);
+    assert.strictEqual(Buffer.from(chunk).toString("utf8"), "content of 0.0");
+  });
+
+  test("packs pooled views so the payload carries only the file's bytes", async () => {
+    const slab = new Uint8Array(64).fill(9);
+    const pooled = slab.subarray(8, 12);
+    const fs = {
+      readDirectory: async (): Promise<Array<[string, number]>> => [
+        ["zarr.json", FILE_TYPE_FILE],
+      ],
+      readFile: async (): Promise<Uint8Array> => pooled,
+    };
+    const uriHelpers = {
+      joinPath: (base: MockUri, ...segments: string[]): MockUri => ({
+        path: `${base.path}/${segments.join("/")}`,
+      }),
+    };
+
+    const files = await readZarrDirectoryWithFs(
+      { path: "/tmp/root.zarr" },
+      fs,
+      uriHelpers,
+    );
+
+    const bytes = files["zarr.json"];
+    assert.strictEqual(bytes.byteOffset, 0);
+    assert.strictEqual(bytes.buffer.byteLength, 4);
+    assert.deepStrictEqual([...bytes], [9, 9, 9, 9]);
+    assert.strictEqual(packedBytes(bytes), bytes);
+  });
+
+  test("refuses a store past the byte cap", async () => {
+    const fs = {
+      readDirectory: async (): Promise<Array<[string, number]>> => [
+        ["a", FILE_TYPE_FILE],
+        ["b", FILE_TYPE_FILE],
+      ],
+      readFile: async (): Promise<Uint8Array> => new Uint8Array(600),
+    };
+    const uriHelpers = {
+      joinPath: (base: MockUri, ...segments: string[]): MockUri => ({
+        path: `${base.path}/${segments.join("/")}`,
+      }),
+    };
+    await assert.rejects(
+      readZarrDirectoryWithFs({ path: "/tmp/root.zarr" }, fs, uriHelpers, {
+        maxTotalBytes: 1000,
+      }),
+      /refusing to read the whole store/,
     );
   });
 });

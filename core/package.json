@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-core",
-  "version": "0.2.2",
+  "version": "0.2.12",
   "type": "module",
   "description": "MolVis shared core: molrs gateway, element data, and framework-free shared controls (transitive dependency of stage/sketch; not a product install)",
   "exports": {

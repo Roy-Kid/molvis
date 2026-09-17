@@ -100,13 +100,23 @@ function withPanelSlot(
   }
 }
 
+export interface AppProps {
+  /**
+   * Called with the engine each time the viewer mounts one, and with `null`
+   * when it is torn down (viewer reload). Hosts that speak to the engine
+   * directly — the VS Code webview attaches its file/settings/save bridge
+   * here — need the instance the page itself created.
+   */
+  onAppChange?: (app: Molvis | null) => void;
+}
+
 /**
  * Main page application shell for the MolVis viewer.
  *
  * When mounted with `surface: "canvas"`, all chrome is hidden and only the
  * 3D canvas is rendered (useful for embeds that supply their own UI).
  */
-const App: React.FC = () => {
+const App: React.FC<AppProps> = ({ onAppChange }) => {
   const opts = useMountOpts();
   const chrome = resolveChrome(opts);
   const canvasOnly =
@@ -116,7 +126,13 @@ const App: React.FC = () => {
     !chrome.statusBar &&
     !chrome.timeline;
 
-  const [app, setApp] = useState<Molvis | null>(null);
+  const [app, setAppState] = useState<Molvis | null>(null);
+  const onAppChangeRef = useRef(onAppChange);
+  onAppChangeRef.current = onAppChange;
+  const setApp = useCallback((next: Molvis | null) => {
+    setAppState(next);
+    onAppChangeRef.current?.(next);
+  }, []);
 
   // Host-supplied canvas colour (`mv.Stage(background="#FFFFFF")` or
   // `?background=`). Applied once, when the engine hands us the app; the
@@ -161,7 +177,7 @@ const App: React.FC = () => {
   const reloadViewer = useCallback(() => {
     setApp(null);
     setViewerGeneration((n) => n + 1);
-  }, []);
+  }, [setApp]);
   const openCommandPalette = useCallback(() => {
     setCommandPaletteOpen(true);
   }, []);

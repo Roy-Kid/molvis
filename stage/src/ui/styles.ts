@@ -84,4 +84,48 @@ export const MOLVIS_UI_CSS = `
   right: 0.75rem;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
+
+/* Top centre: the corners are view / mode / info / perf, and the bottom
+   centre belongs to the trajectory HUD. */
+.molvis-status-panel {
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(32rem, 70%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.molvis-status-panel.visible {
+  opacity: 1;
+}
+.molvis-status-panel__label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.molvis-status-panel__track {
+  display: none;
+  margin-top: 0.35rem;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.molvis-status-panel.has-progress .molvis-status-panel__track {
+  display: block;
+}
+.molvis-status-panel__bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: #4aa3ff;
+  transition: width 0.18s ease;
+}
+.molvis-status-panel[data-type="error"] .molvis-status-panel__label {
+  color: #ff6b6b;
+}
+.molvis-status-panel[data-type="warning"] .molvis-status-panel__label {
+  color: #ffb347;
+}
 `;

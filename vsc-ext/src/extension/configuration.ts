@@ -25,6 +25,24 @@ export function getMolvisWebviewOptions(): MolvisWebviewOptions {
   };
 }
 
+/** Which surface a molecular file opens in (`molvis.defaultViewer`). */
+export type DefaultViewer = "quickLook" | "page";
+
+/**
+ * Read `molvis.defaultViewer`.
+ *
+ * `page` exists because promoting a Quick look to the Page reloads the file:
+ * the two tabs are separate webviews with their own engine and wasm, so the
+ * parsed frame cannot be handed over and the payload crosses the host channel
+ * a second time. Opening straight into the Page skips that first load.
+ */
+export function getDefaultViewer(): DefaultViewer {
+  const value = vscode.workspace
+    .getConfiguration("molvis")
+    .get<string>("defaultViewer");
+  return value === "page" ? "page" : "quickLook";
+}
+
 export function createInitMessage(): HostToWebviewMessage {
   const options = getMolvisWebviewOptions();
   return {

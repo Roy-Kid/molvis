@@ -102,7 +102,11 @@ describe("MolvisApp.waitForNextRender", () => {
     const app = makeWaitable();
     const promise = app.waitForNextRender(1000);
     setTimeout(
-      () => app.events.emit("frame-rendered", { frame: {} as never }),
+      () =>
+        app.events.emit("frame-rendered", {
+          frame: {} as never,
+          changeKind: "full",
+        }),
       5,
     );
     await expect(promise).resolves.toBeUndefined();
@@ -123,7 +127,10 @@ describe("MolvisApp.waitForNextRender", () => {
     // would still hold a reference. We assert by checking the emitter has
     // no listeners recorded for the event.
     const promise = app.waitForNextRender(50);
-    app.events.emit("frame-rendered", { frame: {} as never });
+    app.events.emit("frame-rendered", {
+      frame: {} as never,
+      changeKind: "full",
+    });
     await expect(promise).resolves.toBeUndefined();
   });
 
@@ -133,7 +140,10 @@ describe("MolvisApp.waitForNextRender", () => {
     // A subsequent emit should not call any stale listener — easiest way to
     // verify is that a fresh wait still works normally.
     const promise = app.waitForNextRender(1000);
-    app.events.emit("frame-rendered", { frame: {} as never });
+    app.events.emit("frame-rendered", {
+      frame: {} as never,
+      changeKind: "full",
+    });
     await expect(promise).resolves.toBeUndefined();
   });
 });

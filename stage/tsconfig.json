@@ -1,7 +1,22 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    // Two specifiers inside `src` name this package rather than a relative
+    // path, because they are the seam host builds alias to swap the worker
+    // spawn implementation (see `src/io/index.ts`). Type resolution would
+    // otherwise follow package `exports` into `dist/**/*.d.ts` — files the
+    // declaration build is in the middle of emitting and `cleanDistPath` has
+    // just deleted. The `source` condition (declared alongside `types` in
+    // package.json) points type resolution at the sources those declarations
+    // are generated from.
+    //
+    // Deliberately NOT tsconfig `paths`: rslib rewrites path aliases in the
+    // emitted `.d.ts` (`output.redirect.dts`), which turned the package
+    // specifier into `../transport/trajectory_worker/runtime.ts` — a file that
+    // does not exist in `dist`. A resolution condition leaves the written
+    // specifier alone, so consumers keep resolving through `exports`.
+    "customConditions": ["source"]
   },
   "include": ["src"]
 }

@@ -1,6 +1,5 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import type { System } from "../system";
-import { Trajectory } from "../system/trajectory";
 import { DataSource, MemoryDataSource } from "./data_source";
 import type { ModifierPipeline } from "./pipeline";
 
@@ -45,9 +44,10 @@ export function bootstrapEmptyPipeline(
   system: System,
   pipeline: ModifierPipeline,
 ): void {
-  // Detach System from any shared DS trajectory *before* dispose.
-  const standalone = new Trajectory([new Frame()]);
-  system.trajectory = standalone;
+  // Detach System from any shared DS trajectory *before* dispose. System owns
+  // the empty handle (`resetToEmpty`), so boot and reset do not each allocate
+  // their own molrs Frame.
+  system.resetToEmpty();
   pipeline.clear();
 }
 

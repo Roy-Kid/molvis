@@ -391,3 +391,86 @@ describe("classifyFrameTransition", () => {
     expect(reverse.reasons.join(" ")).toMatch(/Occupancy changed: 4 -> 2/);
   });
 });
+
+describe("classifyFrameTransition with store section updates", () => {
+  const water = (dx: number): AtomSpec[] => [
+    { x: 0 + dx, y: 0, z: 0, element: "O" },
+    { x: 1 + dx, y: 0, z: 0, element: "H" },
+    { x: 2 + dx, y: 0, z: 0, element: "H" },
+  ];
+  const bonds: BondSpec[] = [
+    { i: 0, j: 1, order: 1 },
+    { i: 0, j: 2, order: 1 },
+  ];
+  const updates = (atoms: number, extra: Record<string, number> = {}) =>
+    new Map<string, number>([["atoms", atoms], ...Object.entries(extra)]);
+
+  it("keeps a position pass when only the atoms section updated", () => {
+    // Elements differ on purpose: the index says topology is unchanged, so
+    // the O(N) element compare must not even run.
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(
+      water(1).map((a) => ({ ...a, element: "X" })),
+      bonds,
+    );
+    const decision = classifyFrameTransition(previous, next, {
+      previous: updates(4, { bonds: 1 }),
+      next: updates(5, { bonds: 1 }),
+    });
+    expect(decision.kind).toBe("position");
+    expect(decision.reasons[0]).toMatch(/Store index/);
+  });
+
+  it("rebuilds when a topology section's update id changed", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(water(1), bonds);
+    const decision = classifyFrameTransition(previous, next, {
+      previous: updates(4, { bonds: 1 }),
+      next: updates(5, { bonds: 2 }),
+    });
+    expect(decision.kind).toBe("full");
+    expect(decision.reasons[0]).toMatch(/bonds block updated \(1 -> 2\)/);
+  });
+
+  it("rebuilds when a section appears or disappears", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(water(1), bonds);
+    expect(
+      classifyFrameTransition(previous, next, {
+        previous: updates(0),
+        next: updates(1, { angles: 0 }),
+      }).kind,
+    ).toBe("full");
+    expect(
+      classifyFrameTransition(previous, next, {
+        previous: updates(0, { angles: 0 }),
+        next: updates(1),
+      }).kind,
+    ).toBe("full");
+  });
+
+  it("still rebuilds on an atom-count change even with a quiet index", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(water(1).slice(0, 2), bonds);
+    const decision = classifyFrameTransition(previous, next, {
+      previous: updates(4, { bonds: 1 }),
+      next: updates(5, { bonds: 1 }),
+    });
+    expect(decision.kind).toBe("full");
+    expect(decision.reasons[0]).toMatch(/Atom count changed/);
+  });
+
+  it("falls back to value compares when either side has no index", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(
+      water(1).map((a) => ({ ...a, element: "X" })),
+      bonds,
+    );
+    const decision = classifyFrameTransition(previous, next, {
+      previous: undefined,
+      next: updates(5, { bonds: 1 }),
+    });
+    expect(decision.kind).toBe("full");
+    expect(decision.reasons[0]).toMatch(/element column changed/);
+  });
+});

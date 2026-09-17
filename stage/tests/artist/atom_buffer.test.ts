@@ -1,7 +1,10 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { buildAtomBuffers } from "../../src/artist/atom_buffer";
+import {
+  buildAtomBuffers,
+  refreshAtomPositions,
+} from "../../src/artist/atom_buffer";
 import { Tab10Strategy } from "../../src/artist/categorical_theme";
 import {
   BALL_AND_STICK,
@@ -104,5 +107,56 @@ describe("buildAtomBuffers", () => {
     expect(built.instanceMap).toEqual(new Uint32Array([0, 1]));
     expect(data[0]).toBeCloseTo(1.4);
     expect(data[4]).toBeCloseTo(2.8);
+  });
+});
+
+describe("refreshAtomPositions", () => {
+  function makeAtomState(count: number) {
+    const uploads: string[] = [];
+    const matrix = new Float32Array(count * 16).fill(7);
+    const instanceData = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) instanceData[i * 4 + 3] = 0.5; // radius
+    return {
+      uploads,
+      matrix,
+      instanceData,
+      state: {
+        getTotalCount: () => count,
+        buffers: new Map([
+          ["matrix", { data: matrix }],
+          ["instanceData", { data: instanceData }],
+        ]),
+        uploadBuffer(name: string) {
+          uploads.push(name);
+        },
+      },
+    };
+  }
+
+  it("writes xyz into instanceData, keeps the radius, and uploads only that buffer", () => {
+    const { uploads, matrix, instanceData, state } = makeAtomState(2);
+    const before = matrix.slice();
+
+    refreshAtomPositions(
+      new Float64Array([1, 4]),
+      new Float64Array([2, 5]),
+      new Float64Array([3, 6]),
+      state,
+    );
+
+    expect(Array.from(instanceData)).toEqual([1, 2, 3, 0.5, 4, 5, 6, 0.5]);
+    expect(Array.from(matrix)).toEqual(Array.from(before));
+    expect(uploads).toEqual(["instanceData"]);
+  });
+
+  it("clamps to the registered instance count", () => {
+    const { instanceData, state } = makeAtomState(1);
+    refreshAtomPositions(
+      new Float64Array([1, 9]),
+      new Float64Array([2, 9]),
+      new Float64Array([3, 9]),
+      state,
+    );
+    expect(Array.from(instanceData)).toEqual([1, 2, 3, 0.5]);
   });
 });

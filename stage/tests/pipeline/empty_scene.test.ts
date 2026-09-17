@@ -12,6 +12,7 @@ import {
 import { ModifierPipeline } from "../../src/pipeline/pipeline";
 import { System } from "../../src/system";
 import { Trajectory } from "../../src/system/trajectory";
+import { makeFrame } from "../fixtures/dcd";
 
 describe("empty pipeline bootstrap", () => {
   it("createEmptyPrimaryDataSource is a length-1 empty memory source", () => {
@@ -39,6 +40,33 @@ describe("empty pipeline bootstrap", () => {
     expect(pipeline.getEntries()).toHaveLength(0);
     expect(primaryDataSource(pipeline)).toBeUndefined();
     expect(system.trajectory.length).toBe(1);
+  });
+
+  it("bootstrapEmptyPipeline reuses System's empty trajectory across resets", () => {
+    const system = new System();
+    const pipeline = new ModifierPipeline();
+    const atBoot = system.trajectory;
+
+    bootstrapEmptyPipeline(system, pipeline);
+    bootstrapEmptyPipeline(system, pipeline);
+
+    // One molrs Frame for the empty scene, not a fresh one per reset.
+    expect(system.trajectory).toBe(atBoot);
+    expect(system.trajectory.length).toBe(1);
+    expect(system.frame.getBlock("atoms")).toBeUndefined();
+  });
+
+  it("bootstrapEmptyPipeline rebuilds the empty scene once it holds data", () => {
+    const system = new System();
+    const pipeline = new ModifierPipeline();
+    const loaded = new Trajectory([makeFrame(2, 1)]);
+    system.trajectory = loaded;
+
+    bootstrapEmptyPipeline(system, pipeline);
+
+    expect(system.trajectory).not.toBe(loaded);
+    expect(system.trajectory.length).toBe(1);
+    expect(system.frame.getBlock("atoms")).toBeUndefined();
   });
 
   it("ensurePrimaryDataSource does not auto-install when empty", () => {

@@ -16,13 +16,16 @@ import {
   XYZReader,
 } from "@molcrafts/molvis-core/molrs";
 import { type FrameProvider, Trajectory } from "../system/trajectory";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 import { logger } from "../utils/logger";
 import { normalizeFrameBox } from "./box_presence";
 import {
+  DUMP_LOCAL_BONDS_LABEL,
   describeFormat,
   type FileFormat,
   getAllAcceptExtensions,
   inferFormatFromFilename,
+  matchBondEndpointColumns,
 } from "./formats";
 import { toIoError } from "./load_error";
 import { normalizeAtomCoords, normalizeAtomElements } from "./normalize_coords";
@@ -42,7 +45,9 @@ export {
   inferFormatFromFilename,
   ingestKind,
   isBinaryFormat,
+  isStlPath,
   isStreamingOnly,
+  STL_SUFFIX,
   STREAMING_FILE_THRESHOLD_BYTES,
   type StreamingCapability,
   sniffFormatFromTextHead,
@@ -154,6 +159,65 @@ function evictOldest(cache: Map<number, Frame>): void {
   cache.delete(oldest);
 }
 
+/**
+ * A LAMMPS `dump local` file parses into an `entries` block — molrs names it
+ * that deliberately, because `dump local` carries arbitrary per-local-value
+ * rows (bonds, angles, pair distances) under column names the *user* chose.
+ * This promotes the ones that are bonds to a `bonds` block, which is what
+ * puts them in front of the bond-column mapping and the bond renderer.
+ *
+ * Two independent signals say "these rows are bonds", and either is enough:
+ *
+ * 1. **The section label.** `dump_modify … label BONDS` is what OVITO's
+ *    manual tells users to set, and molrs records it as `dump_local_label`.
+ *    This is the only signal that survives the default column naming — a
+ *    plain `dump local c_bond[1] c_bond[2]` header means nothing on its own —
+ *    so without it such a file would sit in `entries` forever: no bonds
+ *    block, hence no mapping prompt, hence a drop that appears to do nothing.
+ * 2. **Recognisable endpoint columns** ({@link matchBondEndpointColumns}),
+ *    which is how a default-labelled (`ENTRIES`) file whose columns were
+ *    named with `dump_modify … colname` still gets recognised.
+ *
+ * The promoted block does NOT yet satisfy molvis's bonds contract — its
+ * endpoints are LAMMPS atom ids under the file's own column names, not
+ * `atomi`/`atomj` row indices. `BondColumnRemapModifier` is what completes
+ * it, from an inferred or user-supplied mapping.
+ */
+function normalizeDumpLocalEntries(frame: Frame): void {
+  const entries = frame.getBlock("entries");
+  if (entries === undefined || entries.nrows() === 0) return;
+  if (frame.getBlock("bonds") !== undefined) return;
+  const labelledBonds =
+    frame.getMeta("dump_local_label") === DUMP_LOCAL_BONDS_LABEL;
+  const namedEndpoints =
+    matchBondEndpointColumns(entries.keys() as string[]) !== undefined;
+  // Default `dump local c_bond[1] c_bond[2]` is labelled ENTRIES and the
+  // columns mean nothing — still promote so the mapping picker can ask,
+  // rather than leaving topology in `entries` with no prompt.
+  const numericEndpoints =
+    frame.getBlock("atoms") === undefined && numericColumnCount(entries) >= 2;
+  if (!labelledBonds && !namedEndpoints && !numericEndpoints) return;
+  frame.renameBlock("entries", "bonds");
+}
+
+function numericColumnCount(
+  block: import("@molcrafts/molvis-core/molrs").Block,
+): number {
+  let n = 0;
+  for (const key of block.keys()) {
+    const dt = block.dtype(key);
+    if (
+      dt === DType.I32 ||
+      dt === DType.U32 ||
+      isFloatDtype(dt) ||
+      isDomainUintDtype(dt)
+    ) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
 function resolveFormat(filename: string, format?: FileFormat): FileFormat {
   const resolved = format ?? inferFormatFromFilename(filename);
   if (!resolved) {
@@ -237,6 +301,8 @@ function buildLazyTrajectory(
         normalizeAtomElements(frame);
         // Zero-size cells → no box (Simulation cell does not auto-attach).
         normalizeFrameBox(frame);
+        // Bond-only `dump local` overlays carry their topology in `entries`.
+        normalizeDumpLocalEntries(frame);
       } catch (e) {
         throw toIoError(e, `${label} (${format}) normalize frame ${index}`);
       }
@@ -247,7 +313,13 @@ function buildLazyTrajectory(
       if (formatRequiresAtoms(format)) {
         const atoms = frame.getBlock("atoms");
         const n = atoms?.nrows() ?? 0;
-        if (n === 0) {
+        // A `dump local` bond overlay has no atoms block at all — it is the
+        // topology supplement dropped onto an existing trajectory, so only
+        // fail an empty-atom frame when there is no `bonds` block either.
+        const bondOnlyOverlay =
+          format === "lammps-dump" &&
+          (frame.getBlock("bonds")?.nrows() ?? 0) > 0;
+        if (n === 0 && !bondOnlyOverlay) {
           const hints: Partial<Record<FileFormat, string>> = {
             lammps:
               "No Atoms section parsed. Confirm this is a LAMMPS data file; for dump trajectories choose “LAMMPS Dump / Trajectory”.",
@@ -298,8 +370,8 @@ function buildLazyTrajectory(
     reader.free();
   };
 
-  logger.info(
-    `[reader] Opened lazy ${format} trajectory with ${frameCount} frame(s)`,
+  logger.debug(
+    `[reader] opened lazy ${format} reader with ${frameCount} frame(s)`,
   );
   return { trajectory, dispose };
 }
@@ -399,6 +471,7 @@ export function readFrames(
       normalizeAtomCoords(frame);
       normalizeAtomElements(frame);
       normalizeFrameBox(frame);
+      normalizeDumpLocalEntries(frame);
       frames.push(frame);
     }
   } finally {

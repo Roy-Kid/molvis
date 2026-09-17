@@ -32,7 +32,7 @@ const pkg = JSON.parse(readFileSync(extensionManifestPath(), "utf8")) as {
   contributes?: {
     commands?: Array<{ command: string }>;
     views?: Record<string, Array<ViewContribution & { when?: string }>>;
-    viewsContainers?: { activitybar?: Array<{ id: string }> };
+    viewsContainers?: { activitybar?: Array<{ id: string; icon?: string }> };
     viewsWelcome?: Array<{ view: string }>;
     menus?: Record<string, Array<{ command: string; when?: string }>>;
     customEditors?: Array<{
@@ -41,6 +41,12 @@ const pkg = JSON.parse(readFileSync(extensionManifestPath(), "utf8")) as {
       selector: Array<{ filenamePattern: string }>;
       priority?: string;
     }>;
+    configuration?: {
+      properties?: Record<
+        string,
+        { type?: string; enum?: string[]; default?: unknown }
+      >;
+    };
     configurationDefaults?: {
       "workbench.editorAssociations"?: Record<string, string>;
     };
@@ -81,6 +87,7 @@ suite("contribution manifest", () => {
       "molvis.openStage",
       "molvis.openSketch",
       "molvis.openPage",
+      "molvis.openInPage",
       "molvis.openStructure",
       "molvis.refreshFiles",
       "molvis.clearRecent",
@@ -103,6 +110,34 @@ suite("contribution manifest", () => {
       src,
       /require\(["']@molcrafts\//,
       "VSIX has no node_modules — require(@molcrafts/…) makes every command not found on Remote-SSH",
+    );
+  });
+
+  test("Quick look tabs expose the promote-to-Page action", () => {
+    const titleMenus = contributes.menus?.["editor/title"] ?? [];
+    const promote = titleMenus.find((m) => m.command === "molvis.openInPage");
+    assert.ok(promote, "editor/title must offer molvis.openInPage");
+    for (const surface of [
+      "activeWebviewPanelId == molvis.quickView",
+      "activeCustomEditorId == molvis.editor",
+      "activeCustomEditorId == molvis.binaryEditor",
+    ]) {
+      assert.ok(
+        promote.when?.includes(surface),
+        `molvis.openInPage must be shown on ${surface}`,
+      );
+    }
+  });
+
+  test("defaultViewer lets a user skip the reload that promoting costs", () => {
+    const prop =
+      contributes.configuration?.properties?.["molvis.defaultViewer"];
+    assert.ok(prop, "molvis.defaultViewer must be contributed");
+    assert.deepStrictEqual(prop.enum, ["quickLook", "page"]);
+    assert.strictEqual(
+      prop.default,
+      "quickLook",
+      "the light surface stays the default; page is opt-in",
     );
   });
 
@@ -205,6 +240,7 @@ suite("contribution manifest", () => {
     assert.deepStrictEqual(
       shown.sort(),
       [
+        "molvis.openInPage",
         "molvis.openPage",
         "molvis.openSketch",
         "molvis.openStage",
@@ -215,14 +251,48 @@ suite("contribution manifest", () => {
     );
   });
 
-  test("binary trajectories default to one Quick look editor, not a picker list", () => {
+  test("the activity-bar icon is shaped the way VS Code renders one", () => {
+    // The container icon is painted as a CSS mask at 24px. VS Code's own
+    // icons declare an explicit 24x24 box with the artwork centred in it;
+    // this one came out of a tracer with no intrinsic size and a fractional,
+    // off-origin viewBox, which is the one structural difference between it
+    // and every icon that is known to render. Pin the shape, not the artwork.
+    const container = (contributes.viewsContainers?.activitybar ?? []).find(
+      (c) => c.id === "molvis",
+    );
+    assert.ok(container, "no molvis activity-bar container");
+    const iconPath = container.icon;
+    assert.ok(
+      typeof iconPath === "string" && iconPath.endsWith(".svg"),
+      `activity-bar icon must be an svg: ${iconPath}`,
+    );
+    const svg = readFileSync(
+      join(dirname(extensionManifestPath()), iconPath),
+      "utf8",
+    );
+    assert.match(svg, /<svg[^>]*\swidth="24"/, "icon needs width=24");
+    assert.match(svg, /<svg[^>]*\sheight="24"/, "icon needs height=24");
+    assert.match(
+      svg,
+      /<svg[^>]*\sviewBox="0 0 24 24"/,
+      "icon needs a 0 0 24 24 viewBox",
+    );
+    assert.ok(
+      svg.includes("currentColor"),
+      "icon must paint with currentColor so the theme drives it",
+    );
+  });
+
+  test("byte-payload formats default to one Quick look editor, not a picker list", () => {
+    // STL sits with the binary trajectories: the extension does not say which
+    // half of the format a given file is, and reading bytes is right for both.
     const editors = contributes.customEditors ?? [];
     const binary = editors.find((e) => e.viewType === "molvis.binaryEditor");
     const text = editors.find((e) => e.viewType === "molvis.editor");
     assert.strictEqual(binary?.displayName, "Quick look");
     assert.strictEqual(text?.displayName, "Quick look");
     assert.deepStrictEqual(binary?.selector, [
-      { filenamePattern: "*.{dcd,trr,xtc}" },
+      { filenamePattern: "*.{dcd,trr,xtc,stl}" },
     ]);
     assert.strictEqual(binary?.priority, "default");
     const associations =
@@ -230,5 +300,6 @@ suite("contribution manifest", () => {
     assert.strictEqual(associations["*.dcd"], "molvis.binaryEditor");
     assert.strictEqual(associations["*.trr"], "molvis.binaryEditor");
     assert.strictEqual(associations["*.xtc"], "molvis.binaryEditor");
+    assert.strictEqual(associations["*.stl"], "molvis.binaryEditor");
   });
 });

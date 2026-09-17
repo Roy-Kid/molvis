@@ -13,6 +13,8 @@ const SOURCE_ID = "source_id";
 
 export interface CompositionSource {
   id: string;
+  /** Filename / display title used in compose errors. Falls back to `id`. */
+  label?: string;
   trajectory: Trajectory;
   contributedBlocks?: ReadonlyArray<string>;
 }
@@ -64,7 +66,7 @@ export async function composeSources(
           atomCount = block.nrows();
         } else if (block.nrows() !== atomCount) {
           throw new Error(
-            `Source composition: source '${source.id}' contributes ${block.nrows()} atoms but the composed system has ${atomCount}; augment sources must share atom count`,
+            `Source composition: source '${sourceLabel(source)}' contributes ${block.nrows()} atoms but the composed system has ${atomCount}; augment sources must share atom count. To concatenate two structures, use Extend trajectory…`,
           );
         }
       }
@@ -72,7 +74,7 @@ export async function composeSources(
       if (existing) {
         if (existing.nrows() !== block.nrows()) {
           throw new Error(
-            `Source composition: block '${name}' from source '${source.id}' has ${block.nrows()} rows but the composed block has ${existing.nrows()}; same-name augment blocks must align row-for-row`,
+            `Source composition: block '${name}' from source '${sourceLabel(source)}' has ${block.nrows()} rows but the composed block has ${existing.nrows()}; same-name augment blocks must align row-for-row. To concatenate two structures, use Extend trajectory…`,
           );
         }
         const existingBroadcast = blockFromBroadcast.get(name) === true;
@@ -185,14 +187,11 @@ export async function extendSourcesToTrajectory(
   if (sources.length === 0) return new Trajectory([new Frame()]);
   const maxLength = timelineLength(sources);
   const frames: Frame[] = [];
-  const boxes = [];
   for (let frameIndex = 0; frameIndex < maxLength; frameIndex++) {
     const sourceFrames = await resolveFrames(sources, frameIndex);
-    const frame = extendFrames(sourceFrames);
-    frames.push(frame);
-    boxes.push(frame.box);
+    frames.push(extendFrames(sourceFrames));
   }
-  return new Trajectory(frames, boxes);
+  return new Trajectory(frames);
 }
 
 function sourcePlayableLength(source: CompositionSource): number {
@@ -203,6 +202,11 @@ function sourcePlayableLength(source: CompositionSource): number {
 
 function isBroadcastSource(source: CompositionSource): boolean {
   return sourcePlayableLength(source) <= 1;
+}
+
+function sourceLabel(source: CompositionSource): string {
+  const label = source.label?.trim();
+  return label && label.length > 0 ? label : source.id;
 }
 
 function timelineLength(sources: readonly CompositionSource[]): number {
@@ -232,21 +236,34 @@ async function resolveFrames(
       if (length <= 1) return source.trajectory.frame(0);
       if (length === maxLength) return source.trajectory.frame(frameIndex);
       throw new Error(
-        `Source composition: source '${source.id}' has ${length} frames but the timeline has ${maxLength}; only length-1 broadcast sources or length-${maxLength} sources can be combined`,
+        `Source composition: source '${sourceLabel(source)}' has ${length} frames but the timeline has ${maxLength}; only length-1 broadcast sources or length-${maxLength} sources can be combined`,
       );
     }),
   );
 }
 
-function contributedNames(source: CompositionSource, frame: Frame): string[] {
+function hasContributedFilter(source: CompositionSource): boolean {
   const declared = source.contributedBlocks;
-  if (declared && declared.length > 0) {
-    return declared.filter((name) => frame.getBlock(name) !== undefined);
-  }
-  return frame.blockNames();
+  return declared !== undefined && declared.length > 0;
 }
 
+function contributedNames(source: CompositionSource, frame: Frame): string[] {
+  const declared = source.contributedBlocks;
+  if (declared === undefined || declared.length === 0) {
+    return frame.blockNames();
+  }
+  return declared.filter((name) => frame.getBlock(name) !== undefined);
+}
+
+/**
+ * A single source *is* the composed system. Without a contributed-block
+ * filter the provider's own handle is returned — no per-frame clone of every
+ * block, column and box. Downstream modifiers are copy-on-write (they
+ * `insertBlock` into a fresh Frame before writing), so the cached provider
+ * frame is never mutated; see `.claude/notes/molrs-handles.md`.
+ */
 function projectSource(source: CompositionSource, frame: Frame): Frame {
+  if (!hasContributedFilter(source)) return frame;
   const result = new Frame();
   for (const name of contributedNames(source, frame)) {
     const block = frame.getBlock(name);
@@ -400,9 +417,10 @@ function mergeAtomTopologyAndTrajectory(
 ): Block {
   const topology = incomingBroadcast ? incoming : existing;
   const trajectory = incomingBroadcast ? existing : incoming;
-  const alignedTraj = AtomIdAlignment.between(topology, trajectory).apply(
+  const alignedTraj = AtomIdAlignment.between(
+    topology,
     trajectory,
-  );
+  ).applyTimeVarying(trajectory);
   const merged = new Block();
   const keys = new Set([...existing.keys(), ...incoming.keys()]);
   for (const key of keys) {
@@ -426,15 +444,28 @@ function mergeAtomTopologyAndTrajectory(
 class AtomIdAlignment {
   private constructor(private readonly srcOfDest: Int32Array | null) {}
 
+  /**
+   * Cached on the topology atoms block. Trajectory id order is stable
+   * across frames of one file (DCD/XTC/TRR/dump), so the permutation is
+   * rebuilt only when a different topology block appears.
+   */
   static between(topology: Block, trajectory: Block): AtomIdAlignment {
+    const cacheKey = topologyCacheKey(topology);
+    const cached = alignmentCache.get(cacheKey);
+    if (cached && cached.n === topology.nrows()) return cached.align;
+
     const topoIds = atomIdColumn(topology);
-    if (!topoIds) return new AtomIdAlignment(null);
+    if (!topoIds) {
+      const identity = new AtomIdAlignment(null);
+      cacheAlignment(cacheKey, topology.nrows(), identity);
+      return identity;
+    }
     const n = topology.nrows();
     const trajIds = atomIdColumn(trajectory);
     const destOfSrc = new Int32Array(n);
     const topoRowById = new Map<number, number>();
     for (let i = 0; i < n; i++) {
-      const id = Number(topoIds[i]);
+      const id = toRowIndex(topoIds[i]);
       if (topoRowById.has(id)) {
         throw new Error(`Source composition: duplicate atom id ${id}`);
       }
@@ -447,17 +478,17 @@ class AtomIdAlignment {
         );
       }
       for (let src = 0; src < n; src++) {
-        const dest = topoRowById.get(Number(trajIds[src]));
+        const dest = topoRowById.get(toRowIndex(trajIds[src]));
         if (dest === undefined) {
           throw new Error(
-            `Source composition: trajectory atom id ${Number(trajIds[src])} is missing from the topology`,
+            `Source composition: trajectory atom id ${toRowIndex(trajIds[src])} is missing from the topology`,
           );
         }
         destOfSrc[src] = dest;
       }
     } else {
       const order = Array.from({ length: n }, (_, i) => i);
-      order.sort((a, b) => Number(topoIds[a]) - Number(topoIds[b]));
+      order.sort((a, b) => toRowIndex(topoIds[a]) - toRowIndex(topoIds[b]));
       for (let rank = 0; rank < n; rank++) destOfSrc[rank] = order[rank];
     }
     const srcOfDest = new Int32Array(n);
@@ -471,16 +502,35 @@ class AtomIdAlignment {
       }
       srcOfDest[dest] = src;
     }
+    let identity = true;
     for (let i = 0; i < n; i++) {
-      if (srcOfDest[i] !== i) return new AtomIdAlignment(srcOfDest);
+      if (srcOfDest[i] !== i) {
+        identity = false;
+        break;
+      }
     }
-    return new AtomIdAlignment(null);
+    const align = new AtomIdAlignment(identity ? null : srcOfDest);
+    cacheAlignment(cacheKey, n, align);
+    return align;
   }
 
-  apply(block: Block): Block {
+  applyTimeVarying(block: Block): Block {
     if (!this.srcOfDest) return block;
-    return permuteAtomRows(block, this.srcOfDest);
+    return permuteAtomRows(block, this.srcOfDest, true);
   }
+}
+
+const alignmentCache = new Map<string, { n: number; align: AtomIdAlignment }>();
+
+function topologyCacheKey(block: Block): string {
+  const ids = atomIdColumn(block);
+  if (!ids || ids.length === 0) return `n:${block.nrows()}`;
+  return `n:${ids.length}:${toRowIndex(ids[0])}:${toRowIndex(ids[ids.length - 1])}`;
+}
+
+function cacheAlignment(key: string, n: number, align: AtomIdAlignment): void {
+  if (alignmentCache.size > 8) alignmentCache.clear();
+  alignmentCache.set(key, { n, align });
 }
 
 function atomIdColumn(block: Block): ArrayLike<number | bigint> | null {
@@ -490,10 +540,15 @@ function atomIdColumn(block: Block): ArrayLike<number | bigint> | null {
   return null;
 }
 
-function permuteAtomRows(block: Block, srcOfDest: Int32Array): Block {
+function permuteAtomRows(
+  block: Block,
+  srcOfDest: Int32Array,
+  timeVaryingOnly = false,
+): Block {
   const n = srcOfDest.length;
   const out = new Block();
   for (const key of block.keys()) {
+    if (timeVaryingOnly && !isTimeVaryingAtomColumn(key)) continue;
     const dtype = block.dtype(key);
     if (dtype === DType.String) {
       const src = block.copyColStr(key) ?? [];

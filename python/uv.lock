@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "molcrafts-molvis"
-version = "0.2.2"
+version = "0.2.12"
 source = { editable = "." }
 dependencies = [
     { name = "molcrafts-molpy" },

@@ -12,6 +12,7 @@ suite("protocol/messages", () => {
       "error",
       "init",
       "loadFile",
+      "loadPhase",
       "openUri",
       "selectAtoms",
       "triggerSave",

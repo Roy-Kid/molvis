@@ -38,6 +38,7 @@ import { DrawBoxModifier } from "./draw_box";
 import { DrawRibbonModifier } from "./draw_ribbon";
 import { DrawSurfaceModifier } from "./draw_surface";
 import { IsosurfaceModifier } from "./isosurface";
+import { MeshOverlayModifier } from "./mesh_overlay";
 import type { Modifier } from "./modifier";
 import { VolumeCloudModifier } from "./volume_cloud";
 
@@ -419,6 +420,16 @@ export class ModifierRegistry {
       "Create isosurface",
       "Visualization",
       () => new IsosurfaceModifier(nextModifierId("isosurface")),
+      { userAddable: false },
+    );
+    // An imported triangle mesh. Not user-addable: an empty one has no
+    // geometry to paint, and geometry arrives only with a file
+    // (`io.loadMeshOverlay`). Registered so project load and state-sync can
+    // still resolve the row by name.
+    ModifierRegistry.register(
+      MeshOverlayModifier.NAME,
+      "Visualization",
+      () => new MeshOverlayModifier(nextModifierId("mesh")),
       { userAddable: false },
     );
     // Every voxel as a point sprite. Not a surface, so not the shared draw:

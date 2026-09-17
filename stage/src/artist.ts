@@ -13,12 +13,16 @@ import { WasmArray } from "@molcrafts/molvis-core/molrs";
 import type { GridField } from "./algo/surface/grid_field";
 import type { SurfacePart } from "./algo/surface_mesh";
 import type { MolvisApp } from "./app";
-import type { AtomBufferOptions } from "./artist/atom_buffer";
+import {
+  type AtomBufferOptions,
+  refreshAtomPositions,
+} from "./artist/atom_buffer";
 import {
   buildSubBondInstanceBuffers,
   refreshBondPositions,
   subBondCount,
 } from "./artist/bond_buffer";
+import { BondTopology } from "./artist/bond_topology";
 import { LabelRenderer } from "./artist/label_renderer";
 import {
   compileShaderMaterial,
@@ -36,6 +40,7 @@ import {
   resolveAtomColorForBondsFallback,
 } from "./artist/representation_draw";
 import { RibbonRenderer } from "./artist/ribbon/ribbon_renderer";
+import { ShaderCompileTracker } from "./artist/shader_compile_tracker";
 import {
   colorForRole,
   DEFAULT_SURFACE_DRAW_STYLE,
@@ -136,15 +141,13 @@ function computeBondMIDisplacements(
   frame: Frame,
   atomsBlock: Block,
   bondsBlock: Block,
+  topology: BondTopology | undefined = BondTopology.of(bondsBlock),
 ): Float64Array | undefined {
   const box = frame.box;
   if (!box) return undefined;
   const nbonds = bondsBlock.nrows();
-  if (nbonds === 0) return undefined;
-
-  const iAtoms = bondsBlock.viewColU32("atomi");
-  const jAtoms = bondsBlock.viewColU32("atomj");
-  if (!iAtoms || !jAtoms) return undefined;
+  if (nbonds === 0 || !topology) return undefined;
+  const { atomi: iAtoms, atomj: jAtoms } = topology;
 
   const x = atomsBlock.viewColF("x");
   const y = atomsBlock.viewColF("y");
@@ -160,8 +163,8 @@ function computeBondMIDisplacements(
   const aBuf = MI_A_SCRATCH;
   const bBuf = MI_B_SCRATCH;
   for (let b = 0; b < nbonds; b++) {
-    const i = toRowIndex(iAtoms[b]);
-    const j = toRowIndex(jAtoms[b]);
+    const i = iAtoms[b];
+    const j = jAtoms[b];
     const o = 3 * b;
     aBuf[o] = x[i];
     aBuf[o + 1] = y[i];
@@ -212,7 +215,13 @@ function copyAndFree(wa: {
 export class Artist {
   private app: MolvisApp;
   private _globalOpacity = 1.0;
-  private shaderCompileTasks = new Map<ImpostorTarget, Promise<void>>();
+  private shaderCompiles = new ShaderCompileTracker<ImpostorTarget>();
+  /**
+   * Topology the last full bond build used. Position-only refreshes reuse
+   * it (the `"position"` changeKind guarantees identical bond columns);
+   * every full build / clear replaces it.
+   */
+  private frameBondTopology: BondTopology | null = null;
 
   public atomMesh: Mesh;
   public bondMesh: Mesh;
@@ -360,41 +369,36 @@ export class Artist {
   ): Promise<void> {
     if (targets.length === 0) return;
 
-    this.app.world.renderOnce();
+    // A render pass is what makes Babylon bind the material and start the
+    // compile; once every visible target is ready it is a wasted frame.
+    if (this.shaderCompiles.needsWarmRender(targets)) {
+      this.app.world.renderOnce();
+    }
     await Promise.all(
       targets.map((target) => this.ensureTargetShaderReady(target)),
     );
   }
 
   private ensureTargetShaderReady(target: ImpostorTarget): Promise<void> {
-    const existing = this.shaderCompileTasks.get(target);
-    if (existing) return existing;
+    return this.shaderCompiles.ensure(target, () => {
+      const scene = this.app.world.scene;
+      const spec = getImpostorMaterialSpec(target);
+      const mesh = target === "atom" ? this.atomMesh : this.bondMesh;
+      const material = mesh.material as ShaderMaterial | null;
 
-    const scene = this.app.world.scene;
-    const spec = getImpostorMaterialSpec(target);
-    const mesh = target === "atom" ? this.atomMesh : this.bondMesh;
-    const material = mesh.material as ShaderMaterial | null;
+      if (material) {
+        syncImpostorMaterialUniforms(material, scene, this.app);
+      }
 
-    if (material) {
-      syncImpostorMaterialUniforms(material, scene, this.app);
-    }
+      const warmupMesh = material
+        ? createWarmupMesh(`__molvis_warmup_${target}__`, scene, material, spec)
+        : null;
 
-    const warmupMesh = material
-      ? createWarmupMesh(`__molvis_warmup_${target}__`, scene, material, spec)
-      : null;
-
-    const compileTask = compileShaderMaterial(
-      warmupMesh ?? mesh,
-      material,
-      spec,
-    ).finally(() => {
-      warmupMesh?.dispose();
-    });
-
-    this.shaderCompileTasks.set(target, compileTask);
-    return compileTask.catch((error) => {
-      this.shaderCompileTasks.delete(target);
-      throw error;
+      return compileShaderMaterial(warmupMesh ?? mesh, material, spec).finally(
+        () => {
+          warmupMesh?.dispose();
+        },
+      );
     });
   }
 
@@ -422,6 +426,7 @@ export class Artist {
     this.labelRenderer.clearLabels();
 
     this.app.world.sceneIndex.clear();
+    this.frameBondTopology = null;
 
     this.atomMesh = this.createBaseMesh(
       "atom_base_renderer",
@@ -471,7 +476,12 @@ export class Artist {
     this.applySceneIndexToMeshes();
     this.applySliceMaskIfPresent(frame);
     this.app.world.sceneIndex.markAllSaved();
-    this.app.events.emit("frame-rendered", { frame, box: _box });
+    // A full redraw: this path clears and rebuilds both layers.
+    this.app.events.emit("frame-rendered", {
+      frame,
+      box: _box,
+      changeKind: "full",
+    });
     updateVisualGuide(
       this.app.world.scene,
       findSliceModifier(this.app.modifierPipeline),
@@ -526,11 +536,12 @@ export class Artist {
     frame: Frame,
     options?: { radii?: number; impostor?: boolean; visible?: boolean[] },
   ): Promise<void> {
-    await drawBondsRepresentation(
-      this.representationDrawHost(),
-      frame,
-      options,
-    );
+    this.frameBondTopology =
+      (await drawBondsRepresentation(
+        this.representationDrawHost(),
+        frame,
+        options,
+      )) ?? null;
   }
 
   /**
@@ -701,22 +712,7 @@ export class Artist {
     const atomState = this.app.world.sceneIndex.meshRegistry.getAtomState();
     if (!x || !y || !z || !atomState) return;
 
-    const count = Math.min(atomsBlock.nrows(), atomState.getTotalCount());
-    const matDesc = atomState.buffers.get("matrix");
-    const dataDesc = atomState.buffers.get("instanceData");
-    if (!matDesc || !dataDesc) return;
-
-    for (let i = 0; i < count; i++) {
-      matDesc.data[i * 16 + 12] = x[i];
-      matDesc.data[i * 16 + 13] = y[i];
-      matDesc.data[i * 16 + 14] = z[i];
-
-      dataDesc.data[i * 4 + 0] = x[i];
-      dataDesc.data[i * 4 + 1] = y[i];
-      dataDesc.data[i * 4 + 2] = z[i];
-    }
-    atomState.uploadBuffer("matrix");
-    atomState.uploadBuffer("instanceData");
+    refreshAtomPositions(x, y, z, atomState);
     this.labelRenderer.updatePositions(x, y, z);
   }
 
@@ -736,14 +732,24 @@ export class Artist {
     const bondState = this.app.world.sceneIndex.meshRegistry.getBondState();
     if (!x || !y || !z || !bondState) return;
 
+    // Carried from the last full build; the row-count check only guards a
+    // gross mismatch, `"position"` already means identical bond columns.
+    const carried = this.frameBondTopology;
+    const topology =
+      carried !== null && carried.bondCount === bondsBlock.nrows()
+        ? carried
+        : BondTopology.of(bondsBlock);
+    if (!topology) return;
+
     refreshBondPositions(
       bondsBlock,
       x,
       y,
       z,
       bondState,
-      computeBondMIDisplacements(frame, atomsBlock, bondsBlock),
+      computeBondMIDisplacements(frame, atomsBlock, bondsBlock, topology),
       this.app.styleManager.getRepresentation().bondOrderMode,
+      topology,
     );
   }
 
@@ -1023,6 +1029,23 @@ export class Artist {
     const created = new SurfaceMeshRenderer(this.app.world.scene);
     this.surfaceLayers.set(ownerId, created);
     return created;
+  }
+
+  /**
+   * AABB corners of every surface layer that holds geometry, or `null` when
+   * none does. `World.fit` falls back to these when there are no atoms and no
+   * cell — a scene whose only content is an imported mesh.
+   */
+  public surfaceFramingPoints(): Float64Array | null {
+    const boxes: Float64Array[] = [];
+    for (const layer of this.surfaceLayers.values()) {
+      const corners = layer.boundsCorners();
+      if (corners) boxes.push(corners);
+    }
+    if (boxes.length === 0) return null;
+    const merged = new Float64Array(boxes.length * 24);
+    for (let i = 0; i < boxes.length; i++) merged.set(boxes[i], i * 24);
+    return merged;
   }
 
   /** Drop `ownerId`'s meshes. Called when its modifier leaves the pipeline. */

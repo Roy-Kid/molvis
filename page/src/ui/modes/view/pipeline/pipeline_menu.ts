@@ -53,6 +53,7 @@ export const WRAP_PBC_LABEL = "Wrap PBC";
 export type PipelineAddKind =
   | "open"
   | "add-source"
+  | "extend"
   | "stream"
   | "modifier"
   | "wrap";
@@ -97,6 +98,14 @@ export function buildPipelineAddItems(args: {
       group: "Source",
       kind: "add-source",
       keywords: ["file", "add", "source", "augment", "stack"],
+      disabled: !args.hasSources,
+    },
+    {
+      id: "source:extend",
+      label: "Extend trajectory…",
+      group: "Source",
+      kind: "extend",
+      keywords: ["file", "extend", "concat", "append", "atoms"],
       disabled: !args.hasSources,
     },
     {

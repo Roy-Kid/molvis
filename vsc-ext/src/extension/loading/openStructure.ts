@@ -1,6 +1,7 @@
 import {
   FILE_FORMAT_REGISTRY,
   MREC_DIR_SUFFIX,
+  MREC_ZIP_SUFFIX,
 } from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
 import { FORMAT_MENU, formatMenuLabel } from "./formatMenu";
@@ -31,6 +32,10 @@ export function molecularOpenDialogFilters(): {
   const mrecExt = MREC_DIR_SUFFIX.replace(/^\./, "");
   allExts.add(mrecExt);
   filters[`mrec directory - ${MREC_DIR_SUFFIX}`] = [mrecExt];
+  // Packed store. Dialog filters take a bare extension, so the archive row
+  // matches every zip; the loader then checks the full `.mrec.zip` name.
+  allExts.add("zip");
+  filters[`mrec archive - ${MREC_ZIP_SUFFIX}`] = ["zip"];
   filters.All = [...allExts];
   filters["All files"] = ["*"];
 

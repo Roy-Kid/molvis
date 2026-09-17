@@ -5,7 +5,11 @@ import {
   type MolvisSetting,
   mountMolvis,
 } from "@molcrafts/molvis-stage";
-import { dropLoadMode, type LoadMode } from "@molcrafts/molvis-stage/io";
+import {
+  isStlPath,
+  type LoadMode,
+  sceneDropLoadMode,
+} from "@molcrafts/molvis-stage/io";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
@@ -24,6 +28,7 @@ import {
 } from "@/components/viewer/OpenStructureDialog";
 import { useReportOperationStatus } from "@/hooks/useReportOperationStatus";
 import { useViewerOperation } from "@/hooks/useViewerOperation";
+import { type OpenTarget, resolveDropTarget } from "@/lib/mrec-open";
 import {
   bindLaunchQueue,
   fetchStructureFile,
@@ -163,8 +168,10 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   const pickBondMappingRef = useRef(pickBondMapping);
   pickBondMappingRef.current = pickBondMapping;
   /** Dirty working tree must be resolved before a replace-style drop. */
-  const [pendingDirtyDrop, setPendingDirtyDrop] = useState<File | null>(null);
-  const [queuedDropFile, setQueuedDropFile] = useState<File | null>(null);
+  const [pendingDirtyDrop, setPendingDirtyDrop] = useState<OpenTarget | null>(
+    null,
+  );
+  const [queuedDropFile, setQueuedDropFile] = useState<OpenTarget | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(true);
   const [resumeState, setResumeState] = useState<ResumeState>("idle");
@@ -199,7 +206,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   }, []);
 
   const loadDroppedFile = async (
-    file: File,
+    file: OpenTarget,
     mode: LoadMode,
     copy: typeof DROP_COPY = DROP_COPY,
   ) => {
@@ -235,7 +242,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   loadDroppedFileRef.current = loadDroppedFile;
 
   const enqueueOrLoadFile = useCallback(
-    (file: File, mode: LoadMode = "replace") => {
+    (file: OpenTarget, mode: LoadMode = "replace") => {
       const app = molvisRef.current;
       if (!app) {
         setQueuedDropFile(file);
@@ -254,7 +261,11 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
         );
         return;
       }
-      if (sceneHasUnsavedEdits(app)) {
+      // A mesh is added beside the scene, never in place of it, so there is
+      // nothing for the unsaved-edits prompt to protect — and answering it
+      // with "discard" would throw away edits the drop was never going to
+      // touch.
+      if (sceneHasUnsavedEdits(app) && !isStlPath(file.name)) {
         pendingDirtyModeRef.current = mode;
         setPendingDirtyDrop(file);
       } else {
@@ -307,8 +318,8 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     if (!queuedDropFile) return;
     const file = queuedDropFile;
     setQueuedDropFile(null);
-    const mode = dropLoadMode(app.modifierPipeline.sources().length);
-    if (sceneHasUnsavedEdits(app)) {
+    const mode = sceneDropLoadMode(app.modifierPipeline);
+    if (sceneHasUnsavedEdits(app) && !isStlPath(file.name)) {
       pendingDirtyModeRef.current = mode;
       setPendingDirtyDrop(file);
     } else {
@@ -556,6 +567,9 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
         settings?: unknown;
       }>,
     ) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
       const payload = event.data;
       if (!payload || typeof payload !== "object") {
         return;
@@ -589,10 +603,35 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const file = e.dataTransfer?.files?.[0];
-      if (!file) return;
-      const sources = molvisRef.current?.modifierPipeline.sources().length ?? 0;
-      enqueueOrLoadFileRef.current(file, dropLoadMode(sources));
+      // A dropped `*.mrec` folder resolves to its File handles (read lazily
+      // in the worker); anything else is the plain File. The item accessors
+      // run synchronously inside `resolveDropTarget` before it awaits.
+      const items = e.dataTransfer?.items;
+      const files = e.dataTransfer?.files;
+      const count = Math.max(items?.length ?? 0, files?.length ?? 0);
+      const jobs: Promise<OpenTarget | null>[] = [];
+      for (let i = 0; i < count; i++) {
+        jobs.push(resolveDropTarget(items?.[i], files?.[i]));
+      }
+      void (async () => {
+        try {
+          const targets = (await Promise.all(jobs)).filter(
+            (target): target is OpenTarget => target !== null,
+          );
+          for (const target of targets) {
+            const pipeline = molvisRef.current?.modifierPipeline;
+            enqueueOrLoadFileRef.current(
+              target,
+              pipeline ? sceneDropLoadMode(pipeline) : "replace",
+            );
+          }
+        } catch (error: unknown) {
+          reportStatus(
+            error instanceof Error ? error.message : String(error),
+            "error",
+          );
+        }
+      })();
     };
     container.addEventListener("dragover", handleDragOver);
     container.addEventListener("drop", handleDrop);

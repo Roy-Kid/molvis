@@ -35,6 +35,19 @@ export default defineConfig({
         cleanDistPath: false,
         externals: [],
         minify: true,
+        // Inline every asset the page imports. An ESM library build emits a
+        // bare `import logo from "../static/image/….png"` for an emitted
+        // asset, and a browser refuses to load a PNG as a module script —
+        // which takes the whole page chunk down with it. Data URIs keep the
+        // reference inside the JS. (Wasm is not an asset module here; it
+        // still ships as a file and is fetched by the runtime chunk.)
+        dataUriLimit: {
+          image: 8 * 1024 * 1024,
+          svg: 8 * 1024 * 1024,
+          font: 8 * 1024 * 1024,
+          media: 8 * 1024 * 1024,
+          assets: 8 * 1024 * 1024,
+        },
       },
     },
   ],

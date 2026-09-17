@@ -9,7 +9,7 @@
  * versions — the version answers "will my existing calls still work", the
  * catalog answers "can I make this new call".
  */
-export const RPC_PROTOCOL_VERSION = "1.5.0";
+export const RPC_PROTOCOL_VERSION = "1.6.0";
 
 /** Ordered catalog of methods the core router implements. */
 export const RPC_METHODS = [
@@ -27,6 +27,7 @@ export const RPC_METHODS = [
   "scene.seek_frame",
   "scene.apply_state",
   "scene.add_data_source",
+  "scene.add_mesh_overlay",
   "scene.remove_data_source",
   "scene.list_data_sources",
   "selection.get",

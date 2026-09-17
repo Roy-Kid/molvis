@@ -15,16 +15,20 @@ import {
 } from "./messaging";
 
 /**
- * Read-only custom editor for binary molecular trajectories (`.dcd`, `.trr`,
- * `.xtc`).
+ * Read-only custom editor for files that must reach MolVis as bytes: the
+ * binary trajectories (`.dcd`, `.trr`, `.xtc`) and STL meshes (`.stl`).
  *
  * A {@link vscode.CustomTextEditorProvider} can't host these: its `document`
- * decodes the file as UTF-8 text, which corrupts the raw bytes. Binary formats
- * therefore get a {@link vscode.CustomReadonlyEditorProvider} that streams the
- * file straight from disk through the byte-capable {@link MolecularFileLoader},
+ * decodes the file as UTF-8 text, which corrupts the raw bytes. They therefore
+ * get a {@link vscode.CustomReadonlyEditorProvider} that streams the file
+ * straight from disk through the byte-capable {@link MolecularFileLoader},
  * exactly like the Quick Preview / Open-in-Editor commands. Registered with
- * `priority: "default"` in `package.json` so opening a binary trajectory pops
- * MolVis directly — there is nothing useful to show in a text editor.
+ * `priority: "default"` in `package.json` so opening one pops MolVis directly
+ * — there is nothing useful to show in a text editor.
+ *
+ * STL belongs here even though half of the format is ASCII: the extension does
+ * not say which half a given file is, and reading bytes is right for both.
+ * `molvis.showSource` still opens an ASCII one as text.
  */
 export class MolvisBinaryEditorProvider
   implements vscode.CustomReadonlyEditorProvider

@@ -1,13 +1,13 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { groupPathsByParent } from "../loading/filesTree";
+import { IgnoreStack } from "../loading/gitignore";
 import {
+  IGNORED_DIRECTORY_NAMES,
   isMolecularPath,
   isSketchPath,
-  WORKSPACE_FILE_EXCLUDE,
-  workspaceMolecularIncludeGlobs,
+  workspaceMolecularIncludeGlob,
 } from "../loading/molecularMatch";
-import { collapseMrecStoreUri } from "../loading/pathUtils";
+import { mrecStoreRootPath } from "../loading/pathUtils";
 import type { RecentFilesStore } from "../loading/recentFiles";
 
 /**
@@ -17,7 +17,12 @@ import type { RecentFilesStore } from "../loading/recentFiles";
 
 export type FilesNode =
   | { kind: "section"; id: "recent" | "workspace" }
-  | { kind: "folder"; folder: string }
+  /**
+   * A real directory, read only when the user opens it. `ignores` is the
+   * `.gitignore` state inherited down to here, carried on the node so
+   * descending never re-reads an ancestor.
+   */
+  | { kind: "dir"; uri: vscode.Uri; label: string; ignores: IgnoreStack }
   | { kind: "file"; uri: vscode.Uri; source: "recent" | "workspace" };
 
 /**
@@ -47,8 +52,14 @@ export function uriFromFilesArg(arg: unknown): vscode.Uri | undefined {
   return undefined;
 }
 
-const SCAN_CAP_PER_GLOB = 400;
 const REFRESH_DEBOUNCE_MS = 200;
+
+/**
+ * A directory read that came back with this many entries or more is reported
+ * truncated rather than rendered whole. A tree row the user did not ask for
+ * costs nothing to skip and a great deal to draw ten thousand of.
+ */
+const DIR_ENTRY_CAP = 2000;
 
 export class MolvisFilesViewProvider
   implements vscode.TreeDataProvider<FilesNode>, vscode.Disposable
@@ -61,8 +72,6 @@ export class MolvisFilesViewProvider
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private readonly disposables: vscode.Disposable[] = [];
-  private workspaceUris: vscode.Uri[] = [];
-  private scanned = false;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly recentFiles: RecentFilesStore) {
@@ -70,18 +79,18 @@ export class MolvisFilesViewProvider
     this.disposables.push(
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.queueRefresh()),
     );
-    for (const glob of workspaceMolecularIncludeGlobs()) {
-      const watcher = vscode.workspace.createFileSystemWatcher(glob);
-      this.disposables.push(
-        watcher,
-        watcher.onDidCreate((uri) => {
-          if (isMolecularPath(uri.fsPath)) this.queueRefresh();
-        }),
-        watcher.onDidDelete((uri) => {
-          if (isMolecularPath(uri.fsPath)) this.queueRefresh();
-        }),
-      );
-    }
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      workspaceMolecularIncludeGlob(),
+    );
+    this.disposables.push(
+      watcher,
+      watcher.onDidCreate((uri) => {
+        if (isMolecularPath(uri.fsPath)) this.queueRefresh();
+      }),
+      watcher.onDidDelete((uri) => {
+        if (isMolecularPath(uri.fsPath)) this.queueRefresh();
+      }),
+    );
   }
 
   refresh(): void {
@@ -90,22 +99,16 @@ export class MolvisFilesViewProvider
 
   queueRefresh(): void {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
-    this.refreshTimer = setTimeout(() => {
-      void this.refreshWorkspace();
-    }, REFRESH_DEBOUNCE_MS);
+    this.refreshTimer = setTimeout(() => this.refresh(), REFRESH_DEBOUNCE_MS);
   }
 
+  /** Kept for the `molvis.refreshFiles` command; the tree holds no scan to redo. */
   async refreshWorkspace(): Promise<void> {
-    await this.scanWorkspace();
     this.refresh();
   }
 
   getTreeItem(element: FilesNode): vscode.TreeItem {
     if (element.kind === "section") {
-      const count =
-        element.id === "recent"
-          ? this.recentFiles.list().length
-          : this.workspaceUris.length;
       const item = new vscode.TreeItem(
         element.id === "recent" ? "Recent" : "Workspace",
         vscode.TreeItemCollapsibleState.Expanded,
@@ -114,18 +117,21 @@ export class MolvisFilesViewProvider
       item.iconPath = new vscode.ThemeIcon(
         element.id === "recent" ? "history" : "root-folder",
       );
-      item.description = String(count);
+      if (element.id === "recent") {
+        item.description = String(this.recentFiles.list().length);
+      }
       item.contextValue = `molvis.section.${element.id}`;
       return item;
     }
 
-    if (element.kind === "folder") {
+    if (element.kind === "dir") {
       const item = new vscode.TreeItem(
-        element.folder,
-        vscode.TreeItemCollapsibleState.Expanded,
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed,
       );
-      item.id = `folder:${element.folder}`;
-      item.iconPath = new vscode.ThemeIcon("folder");
+      item.id = `dir:${element.uri.toString()}`;
+      item.resourceUri = element.uri;
+      item.iconPath = vscode.ThemeIcon.Folder;
       item.contextValue = "molvis.folder";
       return item;
     }
@@ -158,17 +164,22 @@ export class MolvisFilesViewProvider
     return item;
   }
 
+  /**
+   * One directory read per expanded node — never a walk.
+   *
+   * The tree used to scan the whole workspace before it could draw its first
+   * row, which on a large tree meant it never drew one. Nothing here looks
+   * below the node it was asked about, so opening the view costs one
+   * `readDirectory` of the workspace root and each disclosure triangle costs
+   * exactly one more.
+   */
   async getChildren(element?: FilesNode): Promise<FilesNode[]> {
-    if (!this.scanned) {
-      await this.scanWorkspace();
-    }
-
     if (!element) {
       const nodes: FilesNode[] = [];
       if (this.recentFiles.list().length > 0) {
         nodes.push({ kind: "section", id: "recent" });
       }
-      if (this.workspaceUris.length > 0) {
+      if ((vscode.workspace.workspaceFolders ?? []).length > 0) {
         nodes.push({ kind: "section", id: "workspace" });
       }
       return nodes;
@@ -181,21 +192,26 @@ export class MolvisFilesViewProvider
     }
 
     if (element.kind === "section" && element.id === "workspace") {
-      return this.workspaceChildren();
+      const folders = vscode.workspace.workspaceFolders ?? [];
+      if (folders.length === 1) {
+        return this.readDir(folders[0].uri, IgnoreStack.empty(), "");
+      }
+      return Promise.all(
+        folders.map(async (folder) => ({
+          kind: "dir" as const,
+          uri: folder.uri,
+          label: folder.name,
+          ignores: IgnoreStack.empty(),
+        })),
+      );
     }
 
-    if (element.kind === "folder") {
-      const relToUri = this.workspaceRelMap();
-      const group = groupPathsByParent([...relToUri.keys()]).find(
-        (g) => g.folder === element.folder,
+    if (element.kind === "dir") {
+      return this.readDir(
+        element.uri,
+        element.ignores,
+        workspaceRelativePath(element.uri),
       );
-      if (!group) return [];
-      return group.paths.flatMap((rel) => {
-        const uri = relToUri.get(rel);
-        return uri
-          ? [{ kind: "file" as const, uri, source: "workspace" as const }]
-          : [];
-      });
     }
 
     return [];
@@ -207,49 +223,89 @@ export class MolvisFilesViewProvider
     this._onDidChangeTreeData.dispose();
   }
 
-  private async scanWorkspace(): Promise<void> {
-    const found: vscode.Uri[] = [];
-    const seen = new Set<string>();
-    for (const glob of workspaceMolecularIncludeGlobs()) {
-      const batch = await vscode.workspace.findFiles(
-        glob,
-        WORKSPACE_FILE_EXCLUDE,
-        SCAN_CAP_PER_GLOB,
-      );
-      for (const uri of batch) {
-        const store = collapseMrecStoreUri(uri);
-        const key = store.toString();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        found.push(store);
+  /**
+   * The children of one directory: sub-directories worth opening, and the
+   * molecular files sitting in it.
+   *
+   * `.gitignore` is honoured on top of the built-in list — a generated tree
+   * the user already told git to forget has no business in a file picker —
+   * and the directory's own `.gitignore` joins the inherited rules before
+   * anything here is judged by them.
+   */
+  private async readDir(
+    dir: vscode.Uri,
+    inherited: IgnoreStack,
+    dirRel: string,
+  ): Promise<FilesNode[]> {
+    let entries: [string, vscode.FileType][];
+    try {
+      entries = await vscode.workspace.fs.readDirectory(dir);
+    } catch {
+      // An unreadable directory is a row that shows nothing, not a broken tree.
+      return [];
+    }
+
+    const ignores = await this.withGitignore(dir, inherited, dirRel, entries);
+    const dirs: FilesNode[] = [];
+    const files: FilesNode[] = [];
+
+    for (const [name, type] of entries.slice(0, DIR_ENTRY_CAP)) {
+      const uri = vscode.Uri.joinPath(dir, name);
+      const rel = dirRel ? `${dirRel}/${name}` : name;
+      const isDir = (type & vscode.FileType.Directory) !== 0;
+
+      if (isDir) {
+        // An `*.mrec` store is a directory on disk and a single record to
+        // open; it is a leaf here, never something to walk into.
+        if (mrecStoreRootPath(name)) {
+          files.push({ kind: "file", uri, source: "workspace" });
+          continue;
+        }
+        if (IGNORED_DIRECTORY_NAMES.has(name)) continue;
+        if (ignores.ignores(rel, true)) continue;
+        dirs.push({ kind: "dir", uri, label: name, ignores });
+        continue;
       }
+
+      if (!isMolecularPath(name)) continue;
+      if (ignores.ignores(rel, false)) continue;
+      files.push({ kind: "file", uri, source: "workspace" });
     }
-    this.workspaceUris = found.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
-    this.scanned = true;
+
+    const byName = (a: FilesNode, b: FilesNode) =>
+      nodeLabel(a).localeCompare(nodeLabel(b));
+    dirs.sort(byName);
+    files.sort(byName);
+    return [...dirs, ...files];
   }
 
-  private workspaceRelMap(): Map<string, vscode.Uri> {
-    const map = new Map<string, vscode.Uri>();
-    for (const uri of this.workspaceUris) {
-      map.set(workspaceRelativePath(uri), uri);
+  /** `inherited` plus this directory's own `.gitignore`, when it has one. */
+  private async withGitignore(
+    dir: vscode.Uri,
+    inherited: IgnoreStack,
+    dirRel: string,
+    entries: readonly [string, vscode.FileType][],
+  ): Promise<IgnoreStack> {
+    const has = entries.some(
+      ([name, type]) =>
+        name === ".gitignore" && (type & vscode.FileType.File) !== 0,
+    );
+    if (!has) return inherited;
+    try {
+      const bytes = await vscode.workspace.fs.readFile(
+        vscode.Uri.joinPath(dir, ".gitignore"),
+      );
+      return inherited.extend(dirRel, new TextDecoder().decode(bytes));
+    } catch {
+      return inherited;
     }
-    return map;
   }
+}
 
-  private workspaceChildren(): FilesNode[] {
-    const relToUri = this.workspaceRelMap();
-    const groups = groupPathsByParent([...relToUri.keys()]);
-    const only = groups.length === 1 ? groups[0] : undefined;
-    if (only?.folder === ".") {
-      return only.paths.flatMap((rel) => {
-        const uri = relToUri.get(rel);
-        return uri
-          ? [{ kind: "file" as const, uri, source: "workspace" as const }]
-          : [];
-      });
-    }
-    return groups.map((g) => ({ kind: "folder" as const, folder: g.folder }));
-  }
+function nodeLabel(node: FilesNode): string {
+  if (node.kind === "dir") return node.label;
+  if (node.kind === "file") return path.basename(node.uri.fsPath);
+  return "";
 }
 
 function workspaceRelativePath(uri: vscode.Uri): string {

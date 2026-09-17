@@ -140,6 +140,22 @@ history (the commit immediately before the harness rebuild).
   do **not** clobber live canvas selection. Pushing live selection into the
   pipeline auto-commits a dirty scene first. Details:
   `.claude/notes/canvas-sceneindex.md`.
+- **Topology lifetime belongs to the pass** — `SceneIndex.topology` is reset
+  once per full rebuild in `MolvisApp.applyPipeline`, before any Draw runs.
+  A layer's `register*Frame` must never reset it: draw order follows the
+  pipeline (Bonds auto-attaches ahead of Particles), so a layer that clears
+  wipes whichever half registered first and every `getBondsForAtom` /
+  `incident` answer goes empty. Details: `.claude/notes/notes.md` (编辑/绘制
+  路径的四条规则).
+- **`changeKind` is carried, never re-derived** — `frame-rendered` ships the
+  pass's own verdict. A consumer that caches per-topology must read it; a
+  row-count comparison cannot see an equal-count topology swap and serves a
+  stale result. Same note.
+- **Edit-pool meta is copy-on-write** — entering Edit mode promotes render
+  indices only. Meta stays on the frame source with edits as an overlay and
+  deletions as tombstones (`AtomSource.deleted` / `BondSource.deleted`);
+  copying every entity up front cost 35.6 s on 500k atoms. Without the
+  tombstones a deleted frame atom returns on the next commit. Same note.
 - **`core` must never depend on a charting library or own charting** — charts
   live in the separate `@molcrafts/molplot` repo.
 - **Core subpath exports (`./io`, `./io/formats`) are public API** — treat

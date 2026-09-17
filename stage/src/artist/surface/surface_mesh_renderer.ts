@@ -96,6 +96,37 @@ export class SurfaceMeshRenderer {
     for (const mesh of this.meshes) mesh.setEnabled(visible);
   }
 
+  /**
+   * The eight corners of this layer's world-space AABB, or `null` when it
+   * holds nothing.
+   *
+   * Framing input for `World.fit`: a scene whose only content is an imported
+   * mesh has no atoms and no cell, and would otherwise fall back to the
+   * default 10 Å camera and look straight past it.
+   */
+  boundsCorners(): Float64Array | null {
+    if (this.meshes.length === 0) return null;
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (const mesh of this.meshes) {
+      const box = mesh.getBoundingInfo().boundingBox;
+      const lo = box.minimumWorld.asArray();
+      const hi = box.maximumWorld.asArray();
+      for (let k = 0; k < 3; k++) {
+        if (lo[k] < min[k]) min[k] = lo[k];
+        if (hi[k] > max[k]) max[k] = hi[k];
+      }
+    }
+    if (!min.every(Number.isFinite) || !max.every(Number.isFinite)) return null;
+    const corners = new Float64Array(24);
+    for (let i = 0; i < 8; i++) {
+      corners[i * 3] = i & 1 ? max[0] : min[0];
+      corners[i * 3 + 1] = i & 2 ? max[1] : min[1];
+      corners[i * 3 + 2] = i & 4 ? max[2] : min[2];
+    }
+    return corners;
+  }
+
   /** Live opacity update, without re-extracting any geometry. */
   setOpacity(opacity: number): void {
     for (const mesh of this.meshes) {

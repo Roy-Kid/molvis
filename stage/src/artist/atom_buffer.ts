@@ -209,6 +209,38 @@ export function buildAtomBuffers(
  * so the bond bicolor pass still has a per-atom color source without
  * paying the matrix / instanceData / picking allocations.
  */
+/**
+ * In-place position refresh for the frame + edit atom segments.
+ *
+ * Only `instanceData` (xyz, radius) is rewritten and uploaded: the impostor
+ * vertex shader reads the sphere centre from `instanceData` and never touches
+ * the thin-instance `matrix` (`world0..3`), so the 16-float matrix stays as
+ * the full build left it. That keeps the per-frame upload at 4 floats per
+ * atom instead of 20 and drops the matrix re-upload entirely.
+ */
+export function refreshAtomPositions(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  z: ArrayLike<number>,
+  atomState: {
+    getTotalCount(): number;
+    uploadBuffer(name: string): void;
+    buffers: Map<string, { data: Float32Array }>;
+  },
+): void {
+  const dataDesc = atomState.buffers.get("instanceData");
+  if (!dataDesc) return;
+  const count = Math.min(x.length, atomState.getTotalCount());
+  const data = dataDesc.data;
+  for (let i = 0; i < count; i++) {
+    const o = i * 4;
+    data[o] = x[i];
+    data[o + 1] = y[i];
+    data[o + 2] = z[i];
+  }
+  atomState.uploadBuffer("instanceData");
+}
+
 export function buildAtomColorOnly(
   atomsBlock: Block,
   styleManager: StyleManager,

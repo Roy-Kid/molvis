@@ -46,12 +46,28 @@ function postState(
 }
 
 function createOutlineCapability(): Capability {
-  let onFrame: (() => void) | undefined;
+  let onFrame:
+    | ((event: { changeKind: "position" | "full" }) => void)
+    | undefined;
 
   return {
     id: "outline",
     async enable(ctx) {
       const { buildStructureOutline } = await import("@molcrafts/molvis-stage");
+
+      /**
+       * Whether an outline has been published for the structure now on screen.
+       * `frame-rendered` fires on every trajectory step and the outline only
+       * describes topology, so republishing per frame would ship the same tree
+       * across the host channel (a network hop on Remote-SSH) once per played
+       * frame.
+       *
+       * Staleness is decided by the pass's own `changeKind`, not by comparing
+       * row counts here: an equal-count topology swap (same atoms, different
+       * bonds) leaves the counts identical and would keep serving the old
+       * tree. The engine already made that call in `applyPipeline`.
+       */
+      let hasPublished = false;
 
       const publish = (): void => {
         const frame = ctx.app.system.frame;
@@ -60,6 +76,7 @@ function createOutlineCapability(): Capability {
             type: "structureOutline",
             outline: { roots: [] },
           });
+          hasPublished = false;
           return;
         }
         const outline = buildStructureOutline(frame);
@@ -69,9 +86,12 @@ function createOutlineCapability(): Capability {
             roots: outline.roots as StructureOutlineNode[],
           },
         });
+        hasPublished = true;
       };
 
-      onFrame = () => {
+      onFrame = (event: { changeKind: "position" | "full" }) => {
+        // A position-only pass moved atoms; the tree is unchanged.
+        if (event.changeKind === "position" && hasPublished) return;
         publish();
       };
       ctx.app.events.on("frame-rendered", onFrame);

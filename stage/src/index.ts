@@ -506,6 +506,13 @@ export type {
 export { VectorFieldOverlay } from "./overlays/vector_field";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
 export { applyAutoAttach } from "./pipeline/auto_attach";
+export {
+  type BondColumnMapping,
+  BondColumnRemapModifier,
+  bondsIntegerColumns,
+  bondsNeedColumnMapping,
+  inferBondColumnMapping,
+} from "./pipeline/bond_column_remap";
 // COM_ANALYSIS_ID / RG_ANALYSIS_ID are declared once in
 // `./analysis/analysis_ids` — the import-free id table — and reach the public
 // surface through `cluster_pipeline`, which also owns the two predicates over
@@ -552,6 +559,7 @@ export {
 } from "./pipeline/empty_scene";
 export type { PipelineEntry } from "./pipeline/entry";
 export { IsosurfaceModifier } from "./pipeline/isosurface";
+export { MeshOverlayModifier } from "./pipeline/mesh_overlay";
 export type { Modifier } from "./pipeline/modifier";
 export {
   BaseModifier,

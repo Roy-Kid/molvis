@@ -58,7 +58,7 @@ suite("binary custom editor range", () => {
       "utf8",
     );
     assert.ok(
-      src.includes("dropLoadMode"),
+      src.includes("sceneDropLoadMode"),
       "drop must stack topology + trajectory instead of wiping the first file",
     );
     assert.ok(
@@ -77,9 +77,14 @@ suite("binary custom editor range", () => {
       /connect-src \$\{webview\.cspSource\} https: blob:/,
       "connect-src must include blob: so leftover worker blob fetches are not a CSP 400",
     );
-    assert.ok(
-      src.includes('WEBVIEW_ASSET_REV = "wrap-atoms-10"'),
-      "bump WEBVIEW_ASSET_REV when webview worker bootstrap changes",
+    // Pin the mechanism, not the value: a literal rev here turns every
+    // legitimate bump into a failing test instead of a cache-busted asset.
+    const rev = src.match(/WEBVIEW_ASSET_REV = "([^"]+)"/)?.[1];
+    assert.ok(rev, "WEBVIEW_ASSET_REV must be a non-empty literal");
+    assert.match(
+      src,
+      /query: `v=\$\{WEBVIEW_ASSET_REV\}`/,
+      "every webview asset URL must carry the rev, or --force installs reuse a cached shared.js",
     );
   });
 });

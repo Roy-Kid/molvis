@@ -54,3 +54,44 @@ describe("molrs gateway", () => {
     f3.free();
   });
 });
+
+describe("mrec gateway", () => {
+  it("re-exports every TrajectoryReader door", async () => {
+    const { TrajectoryReader, openMrecStore } = await import("../src/molrs");
+    expect(typeof TrajectoryReader).toBe("function");
+    expect(typeof TrajectoryReader.fromZip).toBe("function");
+    expect(typeof TrajectoryReader.fromStore).toBe("function");
+    expect(typeof TrajectoryReader.prototype.readColumns).toBe("function");
+    expect(typeof TrajectoryReader.prototype.blockUpdateAt).toBe("function");
+    expect(typeof openMrecStore).toBe("function");
+  });
+
+  it("openMrecStore names a host missing a required method", async () => {
+    const { openMrecStore } = await import("../src/molrs");
+    const partial = {
+      get: () => null,
+      size: () => null,
+    } as unknown as import("../src/molrs").MrecStoreHost;
+    expect(() => openMrecStore(partial)).toThrow(/lacks list/);
+  });
+
+  it("openMrecStore reads keys through the host, not a copy", async () => {
+    const { openMrecStore } = await import("../src/molrs");
+    const seen: string[] = [];
+    const host = {
+      get: (key: string) => {
+        seen.push(`get:${key}`);
+        return null;
+      },
+      size: () => null,
+      list: (prefix: string) => {
+        seen.push(`list:${prefix}`);
+        return [];
+      },
+    };
+    // An empty store is not a sequence; the open must fail through the
+    // host's own answers rather than by never consulting it.
+    expect(() => openMrecStore(host)).toThrow();
+    expect(seen.length).toBeGreaterThan(0);
+  });
+});

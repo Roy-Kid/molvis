@@ -55,6 +55,36 @@ function bonds(pairs: Array<[number, number]>): Frame {
   return frame;
 }
 
+describe("composeSources single source", () => {
+  it("returns the provider frame handle when no contributed-block filter applies", async () => {
+    const frame = atoms(["C", "O"]);
+    const out = await composeSources(
+      [{ id: "only", trajectory: new Trajectory([frame]) }],
+      0,
+    );
+    expect(out).toBe(frame);
+  });
+
+  it("projects a copy when a contributed-block filter applies", async () => {
+    const frame = atoms(["C", "O"]);
+    frame.insertBlock("bonds", bonds([[0, 1]]).getBlock("bonds")!);
+    const out = await composeSources(
+      [
+        {
+          id: "only",
+          trajectory: new Trajectory([frame]),
+          contributedBlocks: ["atoms"],
+        },
+      ],
+      0,
+    );
+    expect(out).not.toBe(frame);
+    expect(out.getBlock("atoms")?.nrows()).toBe(2);
+    expect(out.getBlock("bonds")).toBeUndefined();
+    expect(frame.getBlock("bonds")?.nrows()).toBe(1);
+  });
+});
+
 describe("composeSources augment", () => {
   it("preserves volumetric block shapes through source projection", async () => {
     const frame = atoms(["C"]);

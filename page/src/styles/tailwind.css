@@ -107,14 +107,10 @@
   --shadow-overlay: var(--molvis-shadow-overlay);
 
   /* Product geometry extras (constitution owns control/dialog-sm/md…). */
-  /* ~24px — compact scientific chrome, not a card strip */
-  --spacing-statusbar: 1.5rem;
   --spacing-tool-rail: 2.5rem;
   --spacing-dialog-wide: 71.25rem;
   --spacing-dialog-tall: 42.5rem;
   --spacing-dialog-sidebar: 17.5rem;
-  --spacing-dialog-scroll: 80vh;
-  --spacing-overlay-viewport: calc(100% - 2rem);
   --spacing-inspector-overlay: min(85%, 20rem);
   --spacing-data-count: 3.25rem;
   --spacing-data-table: 13.75rem;

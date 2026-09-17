@@ -33,15 +33,26 @@ import {
   WorkloadHost,
 } from "@molcrafts/molvis-core/workload";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
+import type { SectionUpdates } from "../../system/trajectory";
 import { rehydrateFrame } from "./frame_codec";
 import type {
   Format,
+  MrecSourceHandle,
   RequestBytes,
   SourceHandle,
   TrajectoryIndexProgress,
   TrajectoryJob,
   TrajectoryJobResult,
 } from "./protocol";
+import { mrecSourceTransferList } from "./protocol";
+
+/**
+ * How many frames' section update ids the runtime remembers. The classifier
+ * only ever asks about the last rendered frame and the one being rendered,
+ * plus whatever prefetch loaded in between, so a small window suffices and
+ * a long scrub cannot grow the log.
+ */
+export const SECTION_UPDATE_LOG_CAPACITY = 64;
 
 export interface OpenResult {
   /** Playable frames so far (= {@link indexedLength}). */
@@ -170,6 +181,11 @@ export class TrajectoryRuntime {
   private latestFrameRequestId: number | null = null;
   private indexCompleteResolvers: Array<(result: OpenResult) => void> = [];
   private lastIndexComplete: OpenResult | null = null;
+  /** mrec: frame id → section update ids, bounded to
+   *  {@link SECTION_UPDATE_LOG_CAPACITY} most recent loads. */
+  private readonly sectionUpdateLog = new Map<number, SectionUpdates>();
+  /** Last rehydrated Frame — omitted mrec blocks are copied from here. */
+  private lastRehydrated: Frame | undefined;
   /** Live source held on the main thread. The worker never sees the
    *  Blob — it asks for byte ranges via `RequestBytes` host-calls and we
    *  answer with transferable ArrayBuffers, which sidesteps the silent
@@ -278,6 +294,51 @@ export class TrajectoryRuntime {
     return this.toOpenResult(result);
   }
 
+  /** Open an mrec store: the store carries its own frame index, so this
+   *  resolves once with the complete length (no early resolve, no progress).
+   *  `source` buffers travel in the transfer list and are detached here.
+   *  Only valid on a runtime constructed with format `"mrec"`. */
+  async openStore(source: MrecSourceHandle): Promise<OpenResult> {
+    if (this.closed) {
+      throw new Error("TrajectoryRuntime: already closed");
+    }
+    if (this.format !== "mrec") {
+      throw new Error(
+        `TrajectoryRuntime: openStore needs an mrec runtime, got '${this.format}'`,
+      );
+    }
+    if (this.openJobId !== null || this.indexing) {
+      throw new Error("TrajectoryRuntime: another open is in flight");
+    }
+    const job: TrajectoryJob = { kind: "open", source, format: "mrec" };
+    const ticket = this.host.submit(job, {
+      transfer: mrecSourceTransferList(source),
+      cancelMode: "reject",
+    });
+    this.openJobId = ticket.id;
+    try {
+      const result = await this.translated(ticket.id, ticket.result);
+      if (result.kind !== "open-result") {
+        throw new Error(
+          `TrajectoryRuntime openStore: unexpected result '${result.kind}'`,
+        );
+      }
+      const opened = this.toOpenResult(result);
+      this.lastIndexComplete = opened;
+      for (const resolve of this.indexCompleteResolvers) resolve(opened);
+      this.indexCompleteResolvers = [];
+      return opened;
+    } finally {
+      if (this.openJobId === ticket.id) this.openJobId = null;
+    }
+  }
+
+  /** Section update ids the worker sent with frame `frameId`, when that
+   *  frame was loaded recently (mrec only); `undefined` otherwise. */
+  sectionUpdates(frameId: number): SectionUpdates | undefined {
+    return this.sectionUpdateLog.get(frameId);
+  }
+
   /** Request the Frame at `frameId`. The returned Frame is a real molrs
    *  Frame reconstituted on the main thread from transferable typed
    *  arrays — caller owns it and must call `frame.free()` when done. */
@@ -328,9 +389,28 @@ export class TrajectoryRuntime {
           `TrajectoryRuntime frame ${frameId}: unexpected result '${result.kind}'`,
         );
       }
-      return rehydrateFrame(result);
+      if (result.sectionUpdates) {
+        this.recordSectionUpdates(frameId, result.sectionUpdates);
+      }
+      const frame = rehydrateFrame(result, this.lastRehydrated);
+      this.lastRehydrated = frame;
+      return frame;
     });
     return { requestId: ticket.id, promise };
+  }
+
+  /** Keep the newest {@link SECTION_UPDATE_LOG_CAPACITY} frames' ids. */
+  private recordSectionUpdates(
+    frameId: number,
+    updates: Record<string, number>,
+  ): void {
+    this.sectionUpdateLog.delete(frameId);
+    this.sectionUpdateLog.set(frameId, new Map(Object.entries(updates)));
+    while (this.sectionUpdateLog.size > SECTION_UPDATE_LOG_CAPACITY) {
+      const oldest = this.sectionUpdateLog.keys().next().value;
+      if (oldest === undefined) break;
+      this.sectionUpdateLog.delete(oldest);
+    }
   }
 
   /** Resolves when the current index scan completes. */

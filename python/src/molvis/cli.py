@@ -124,7 +124,7 @@ def _mrec_stride_indices(n: int, every: int) -> list[int]:
 
 def _load_mrec_trajectory(
     path: Path, every: int = 0
-) -> tuple[list["Frame"], list[int] | None]:
+) -> tuple[list["Frame"], list[int] | None, "Frame | None"]:
     """Read a molpy ``*.mrec`` trajectory store → ``(frames, steps)``.
 
     Frames may be ragged (per-frame atom counts differ — e.g. a chain-growth
@@ -150,6 +150,7 @@ def _load_mrec_trajectory(
         ) from exc
 
     secs = sections(path)
+    overlay: mp.Frame | None = None
     if "trajectory" in secs:
         traj = read_trajectory(path)
         n = len(traj)
@@ -159,9 +160,11 @@ def _load_mrec_trajectory(
         frames = [mp.Frame(traj[i]) for i in indices]
         raw_step = getattr(traj, "step", None)
         steps = None if raw_step is None else [int(raw_step[i]) for i in indices]
-        return frames, steps
+        if "frame" in secs:
+            overlay = mp.Frame(read_frame(path))
+        return frames, steps, overlay
     if "frame" in secs:
-        return [mp.Frame(read_frame(path))], None
+        return [mp.Frame(read_frame(path))], None, None
     raise ValueError(
         f"{path.name} has no frame or trajectory section (sections: {sorted(secs)})"
     )
@@ -170,6 +173,7 @@ def _load_mrec_trajectory(
 def _cmd_open(args: argparse.Namespace) -> int:
     """Handle ``molvis open <file>``."""
     path: Path = args.file.expanduser()
+    is_stl = path.suffix.lower() == ".stl"
     is_mrec = _is_mrec_store(path)
     if is_mrec:
         if not path.is_dir():
@@ -189,9 +193,12 @@ def _cmd_open(args: argparse.Namespace) -> int:
         )
     )
     steps: list[int] | None = None
+    overlay: object | None = None
     try:
-        if is_mrec:
-            payload, steps = _load_mrec_trajectory(path, args.every)
+        if is_stl:
+            payload = None
+        elif is_mrec:
+            payload, steps, overlay = _load_mrec_trajectory(path, args.every)
         elif is_trajectory:
             payload = _load_trajectory(path)
         else:
@@ -217,16 +224,21 @@ def _cmd_open(args: argparse.Namespace) -> int:
         except Exception:  # noqa: BLE001 — URL hint is best-effort
             print("molvis: server started; open the printed port in a browser")
 
-    if is_trajectory:
+    if is_stl:
+        scene.add_mesh(path)
+        print(f"molvis: loaded mesh from {path.name}")
+    elif is_trajectory:
         if len(payload) > _TRAJECTORY_STREAM_THRESHOLD:
             # One set_trajectory message would carry every frame's buffers at
             # once; a long trajectory goes over as one blocking head frame
             # (which waits for the page to connect) plus a stream of appends.
-            scene.set_trajectory(payload[:1])
+            scene.set_trajectory(payload[:1], wait=True)
             for frame in payload[1:]:
                 scene.append_frame(frame, follow=False)
         else:
-            scene.set_trajectory(payload)
+            scene.set_trajectory(payload, wait=True)
+        if overlay is not None:
+            scene.add_data_source(overlay, filename=f"{path.name} (frame)")
         if steps is not None:
             scene.set_frame_labels({"step": steps})
         print(f"molvis: loaded {len(payload)} frame(s) from {path.name}")

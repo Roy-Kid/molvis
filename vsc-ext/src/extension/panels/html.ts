@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 
 /** Bump when webview JS changes under the same extension version so
  *  Chromium does not reuse a cached `shared.js` after `--force` install. */
-const WEBVIEW_ASSET_REV = "wrap-atoms-10";
+const WEBVIEW_ASSET_REV = "bugfix-batch-17";
 
 function scriptUri(
   webview: vscode.Webview,
@@ -56,6 +56,8 @@ const LOADING_CSS = `
         transition: opacity .35s ease;
       }
       #molvis-loading.molvis-loading--hidden { opacity: 0; pointer-events: none; }
+      /* A load onto a scene that already has data must not black it out. */
+      #molvis-loading.molvis-loading--busy { background: rgba(0, 0, 0, .58); }
       #molvis-loading .molvis-spinner {
         width: 30px; height: 30px; border-radius: 50%;
         border: 3px solid rgba(255, 255, 255, .14); border-top-color: #4aa3ff;
@@ -130,7 +132,6 @@ export function getPageHtml(
   const src = scriptUri(webview, extensionUri, "page", "index.js");
   const css = scriptUri(webview, extensionUri, "chunks", "page-styles.css");
   const csp = buildCsp(webview, nonce);
-  const cssAlt = scriptUri(webview, extensionUri, "chunks", "styles.css");
 
   return `<!doctype html>
 <html lang="en">
@@ -140,13 +141,17 @@ export function getPageHtml(
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MolVis</title>
     <link rel="stylesheet" href="${css}">
-    <link rel="stylesheet" href="${cssAlt}">
     <style>
       html, body, #root { position: absolute; inset: 0; margin: 0; padding: 0; overflow: hidden; }
+      ${LOADING_CSS}
     </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="molvis-loading">
+      <div class="molvis-spinner"></div>
+      <div class="molvis-loading__label">Loading MolVis…</div>
+    </div>
     <script nonce="${nonce}" type="module" src="${src}"></script>
   </body>
 </html>`;
