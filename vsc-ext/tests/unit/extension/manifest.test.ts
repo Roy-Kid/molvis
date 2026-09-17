@@ -44,7 +44,12 @@ const pkg = JSON.parse(readFileSync(extensionManifestPath(), "utf8")) as {
     configuration?: {
       properties?: Record<
         string,
-        { type?: string; enum?: string[]; default?: unknown }
+        {
+          type?: string;
+          enum?: string[];
+          default?: unknown;
+          markdownDescription?: string;
+        }
       >;
     };
     configurationDefaults?: {
@@ -135,15 +140,28 @@ suite("contribution manifest", () => {
     }
   });
 
-  test("defaultViewer lets a user skip the reload that promoting costs", () => {
+  test("defaultViewer chooses whether the interface starts visible", () => {
     const prop =
       contributes.configuration?.properties?.["molvis.defaultViewer"];
     assert.ok(prop, "molvis.defaultViewer must be contributed");
+    // Enum values are kept even though the meaning changed: renaming them
+    // would silently invalidate every user's stored setting.
     assert.deepStrictEqual(prop.enum, ["quickLook", "page"]);
     assert.strictEqual(
       prop.default,
       "quickLook",
-      "the light surface stays the default; page is opt-in",
+      "the canvas-only start stays the default; the full interface is opt-in",
+    );
+    // There is one viewer now, so promoting cannot reload anything. This text
+    // ships in the settings UI — a stale rationale there is a lie to the user.
+    assert.ok(
+      prop.markdownDescription,
+      "the setting must explain itself in the settings UI",
+    );
+    assert.doesNotMatch(
+      prop.markdownDescription,
+      /reload/i,
+      "promoting is a chrome switch in the same webview, not a reload",
     );
   });
 

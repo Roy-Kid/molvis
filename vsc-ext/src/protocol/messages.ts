@@ -102,6 +102,15 @@ export type HostToWebviewMessage =
       surface?: PageSurface;
     }
   | { type: "applySettings"; config?: unknown; settings?: unknown }
+  /**
+   * Switch the page shell's chrome on a running webview.
+   *
+   * The run-time counterpart of `init.surface`: `init` sets the surface a
+   * panel opens with, this changes it in place. Promotion is therefore a
+   * message, not a new webview — the parsed frame stays in wasm memory where
+   * it already is.
+   */
+  | { type: "setSurface"; surface: PageSurface }
   | {
       type: "loadFile";
       content: MolecularFilePayload;
@@ -165,6 +174,14 @@ export type WebviewToHostMessage =
   | { type: "saveFile"; data: string; suggestedName: string }
   | { type: "dropUri"; uri: string; mode?: LoadMode }
   | { type: "dirtyStateChanged"; isDirty: boolean }
+  /**
+   * The user asked for a different surface from inside the canvas.
+   *
+   * Intent, not state: the host owns the surface bit, so it records this and
+   * answers with `setSurface`. That keeps the tab title and the replayed
+   * `init` in step with what the user sees.
+   */
+  | { type: "surfaceChanged"; surface: PageSurface }
   | { type: "error"; message: string }
   | { type: "structureOutline"; outline: StructureOutlinePayload }
   | {
@@ -231,12 +248,32 @@ function isTypedHostMessage(
 export function hostSurfaceOf(
   message: HostToWebviewMessage,
 ): PageSurface | null {
-  if (message.type !== "init") return null;
+  if (message.type !== "init" && message.type !== "setSurface") return null;
   const surface = message.surface;
   return surface !== undefined &&
     (PAGE_SURFACES as readonly string[]).includes(surface)
     ? surface
     : null;
+}
+
+/**
+ * Message types the page surface accepts: the Quick look set plus the chrome
+ * switch. Derived, so a type added for Quick look reaches the page too.
+ *
+ * `attachPageHost` must pass the matching guard — `attachStageHost` defaults to
+ * the Quick look one, which drops `setSurface` in its window listener before
+ * any observer runs.
+ */
+export const PAGE_HOST_MESSAGE_TYPES = [
+  ...QUICK_VIEW_HOST_MESSAGE_TYPES,
+  "setSurface",
+] as const;
+
+const PAGE_HOST_TYPE_SET = new Set<string>(PAGE_HOST_MESSAGE_TYPES);
+
+/** Type guard for host → webview messages that the page surface accepts. */
+export function isPageHostMessage(data: unknown): data is HostToWebviewMessage {
+  return isTypedHostMessage(data, PAGE_HOST_TYPE_SET);
 }
 
 /** Type guard for host → webview messages that Quick look accepts. */

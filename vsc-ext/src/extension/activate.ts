@@ -21,7 +21,10 @@ import { createHotReloadWatcher } from "./panels/hotReload";
 import { sendLoadedFile, sendToWebview } from "./panels/messaging";
 import { openPagePanel } from "./panels/pagePanel";
 import { InMemoryPanelRegistry } from "./panels/panelRegistry";
-import { openQuickViewPanel } from "./panels/previewPanel";
+import {
+  openQuickViewPanel,
+  type QuickLookHandle,
+} from "./panels/previewPanel";
 import { openSketchPanel } from "./panels/sketchPanel";
 import { openSketchQuickViewPanel } from "./panels/sketchQuickViewPanel";
 import { openStagePanel } from "./panels/stagePanel";
@@ -57,8 +60,27 @@ export function activate(context: vscode.ExtensionContext): void {
    * no other way to learn what to reopen.
    */
   let activeQuickView:
-    | { panel: vscode.WebviewPanel; uri?: vscode.Uri }
+    | {
+        panel: vscode.WebviewPanel;
+        uri?: vscode.Uri;
+        /** Lets "Open in Page" hand the surface over in place. */
+        quickLook: QuickLookHandle;
+      }
     | undefined;
+
+  /**
+   * Keeps the title-bar affordances honest: a promoted panel keeps its
+   * `molvis.quickView` view type, so `when` clauses that only test the view
+   * type would still offer "Open in Page" on a tab that already shows the full
+   * interface.
+   */
+  const applySurfaceContextKey = (surface: "canvas" | "full") => {
+    void vscode.commands.executeCommand(
+      "setContext",
+      "molvis.activeSurfaceIsCanvas",
+      surface === "canvas",
+    );
+  };
   let activeSketch: vscode.WebviewPanel | undefined;
 
   const stageOutline = new StructureOutlineProvider(
@@ -297,7 +319,7 @@ export function activate(context: vscode.ExtensionContext): void {
         openPage(target);
         return;
       }
-      const panel = await openQuickViewPanel(
+      const quickLook = await openQuickViewPanel(
         context,
         panelRegistry,
         logger,
@@ -308,12 +330,26 @@ export function activate(context: vscode.ExtensionContext): void {
             stageOutline.setOutline(payload, webview),
         },
       );
-      activeQuickView = { panel, uri: target };
+      const { panel } = quickLook;
+      const trackAsQuickView = () => {
+        activeQuickView = { panel, uri: target, quickLook };
+      };
+      trackAsQuickView();
       panel.onDidChangeViewState(() => {
-        if (panel.active) activeQuickView = { panel, uri: target };
+        // Promotion is terminal for the Quick look identity. Without the
+        // surface check, refocusing a promoted tab re-registered it here and
+        // left it in both trackers at once.
+        if (panel.active && quickLook.currentSurface() === "canvas") {
+          trackAsQuickView();
+        }
+        if (panel.active) applySurfaceContextKey(quickLook.currentSurface());
       });
       panel.onDidDispose(() => {
         if (activeQuickView?.panel === panel) activeQuickView = undefined;
+        if (activePage === panel) {
+          activePage = undefined;
+          activePageUri = undefined;
+        }
       });
     }),
     command("molvis.showSource", async () => {
@@ -357,21 +393,30 @@ export function activate(context: vscode.ExtensionContext): void {
       openPage(target);
     }),
     command("molvis.openInPage", async () => {
-      // Quick look is either our webview panel or one of the custom editors;
-      // both hand the same file to the Page, in the same column, and then go
-      // away — the Page takes over the tab.
+      // Two paths, and they differ. Our own webview panel switches its chrome
+      // on where it stands. A custom editor still has to be closed and a Page
+      // opened in its place — those two are not migrated yet, so promoting one
+      // still costs a reload. That half disappears with their migration.
       const quick = activeQuickView?.panel.active ? activeQuickView : undefined;
-      const uri = quick ? quick.uri : resolveActiveUri();
-      const viewColumn =
-        quick?.panel.viewColumn ??
-        vscode.window.tabGroups.activeTabGroup.viewColumn;
       if (quick) {
-        quick.panel.dispose();
-      } else {
-        await vscode.commands.executeCommand(
-          "workbench.action.closeActiveEditor",
-        );
+        // Same webview, same engine, same parsed frame — the file is not read
+        // again and nothing crosses the connection twice.
+        quick.quickLook.setSurface("full");
+        // It is a Page now. Leaving it in `activeQuickView` would keep it in
+        // two trackers, and leaving `activePage` empty would make the next
+        // "Open Page" build a second ~10.6 MB webview for the same file.
+        activePage = quick.panel;
+        activePageUri = quick.uri?.toString();
+        activeQuickView = undefined;
+        applySurfaceContextKey("full");
+        recordRecent(quick.uri);
+        return;
       }
+      const uri = resolveActiveUri();
+      const viewColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+      await vscode.commands.executeCommand(
+        "workbench.action.closeActiveEditor",
+      );
       if (!uri) {
         // Nothing to carry over: say so rather than opening a blank Page and
         // leaving the user to guess whether the file failed to load.

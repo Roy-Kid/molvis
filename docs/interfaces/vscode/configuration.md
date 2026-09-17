@@ -53,9 +53,9 @@ Unknown forward-compatible fields are allowed.
 
 ## `molvis.plugins`
 
-**Reserved.** Not loaded by the current Quick look, Stage, or Sketch
-surfaces (those hosts do not mount the page plugin runtime). Kept so a future
-Stage plugin capability can use the same setting key without a schema break.
+**Reserved.** Quick look and the Page now run the same shell, so the plugin
+runtime is present — but no surface passes this setting to it yet. Kept so
+wiring it later needs no schema break.
 
 ## Apply changes
 

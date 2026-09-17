@@ -1,7 +1,9 @@
 import * as assert from "assert";
 import {
   hostSurfaceOf,
+  isPageHostMessage,
   isQuickViewHostMessage,
+  PAGE_HOST_MESSAGE_TYPES,
   PAGE_SURFACES,
   QUICK_VIEW_HOST_MESSAGE_TYPES,
 } from "../../../src/protocol";
@@ -93,6 +95,44 @@ suite("protocol/messages", () => {
     assert.strictEqual(
       isQuickViewHostMessage({ type: "init", surface: "canvas" }),
       true,
+    );
+  });
+
+  test("PAGE_HOST_MESSAGE_TYPES is the Quick look set plus the chrome switch", () => {
+    assert.deepStrictEqual([...PAGE_HOST_MESSAGE_TYPES].sort(), [
+      "applySettings",
+      "bytes",
+      "error",
+      "init",
+      "loadFile",
+      "loadPhase",
+      "openUri",
+      "selectAtoms",
+      "setSurface",
+      "triggerSave",
+    ]);
+  });
+
+  test("the two surfaces do not converge on one list", () => {
+    const setSurface = { type: "setSurface", surface: "full" };
+    assert.strictEqual(isPageHostMessage(setSurface), true);
+    // Quick look has no chrome to switch. If this ever passes, the page guard
+    // has stopped being necessary and the page list should go with it.
+    assert.strictEqual(isQuickViewHostMessage(setSurface), false);
+  });
+
+  test("hostSurfaceOf reads setSurface as well as init", () => {
+    assert.strictEqual(
+      hostSurfaceOf({ type: "setSurface", surface: "full" }),
+      "full",
+    );
+    assert.strictEqual(
+      hostSurfaceOf({ type: "setSurface", surface: "canvas" }),
+      "canvas",
+    );
+    assert.strictEqual(
+      hostSurfaceOf({ type: "setSurface", surface: "compact" } as never),
+      null,
     );
   });
 });

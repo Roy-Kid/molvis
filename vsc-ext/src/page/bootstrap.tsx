@@ -64,6 +64,13 @@ export function bootstrapPage(
       host.postMessage({ type: "dropUri", uri, mode: "replace" });
       return true;
     },
+    // Intent, not state: the host owns the surface bit and answers with
+    // `setSurface`, which `onSurface` below applies. Supplying this callback is
+    // what hands ownership over — link 01's local fallback stops applying here,
+    // so the tab title and a replayed `init` stay in step with what is shown.
+    onSurfaceChange: (surface) => {
+      host.postMessage({ type: "surfaceChanged", surface });
+    },
     onAppChange: (app) => {
       bridge?.dispose();
       bridge = null;

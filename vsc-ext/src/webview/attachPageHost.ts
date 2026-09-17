@@ -15,7 +15,11 @@
 
 import type { Molvis } from "@molcrafts/molvis-stage";
 import type { MolvisSurface } from "@/lib/mount-opts";
-import { hostSurfaceOf, type PageSurface } from "../protocol";
+import {
+  hostSurfaceOf,
+  isPageHostMessage,
+  type PageSurface,
+} from "../protocol";
 import {
   type AttachStageHostOptions,
   attachStageHost,
@@ -37,7 +41,7 @@ const _SurfaceLockstep: AssertEq<PageSurface, MolvisSurface> = true;
 void _SurfaceLockstep;
 
 export interface AttachPageHostOptions
-  extends Omit<AttachStageHostOptions, "onMessageSeen"> {
+  extends Omit<AttachStageHostOptions, "onMessageSeen" | "isHostMessage"> {
   /** Called when the host declares a surface — today, on `init`. */
   onSurface: (surface: PageSurface) => void;
 }
@@ -49,10 +53,12 @@ export function attachPageHost(
   options: AttachPageHostOptions,
 ): PageHostHandle {
   const { onSurface, ...rest } = options;
-  // No `isHostMessage` override: `init` is already in the default allow-list,
-  // and the surface rides `init` rather than a message of its own.
   return attachStageHost(app, {
     ...rest,
+    // Without this the default Quick look guard drops `setSurface` inside
+    // `attachStageHost`'s window listener, before any observer runs — the
+    // failure looks like a message that was sent and simply did nothing.
+    isHostMessage: isPageHostMessage,
     onMessageSeen: (message) => {
       const surface = hostSurfaceOf(message);
       if (surface) onSurface(surface);
