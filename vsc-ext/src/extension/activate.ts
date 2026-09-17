@@ -63,9 +63,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const stageOutline = new StructureOutlineProvider(
     "molvis.stageOutline.select",
-    (selection) => {
-      if (!activeStage) return;
-      sendToWebview(activeStage.webview, { type: "selectAtoms", ...selection });
+    (selection, source) => {
+      // The publisher first: a Quick look outline must select in that Quick
+      // look, not in whichever Stage tab happens to be open.
+      const target = source ?? activeStage?.webview;
+      if (!target) return;
+      sendToWebview(target, { type: "selectAtoms", ...selection });
     },
     "molvis.hasStageOutline",
   );
@@ -301,7 +304,8 @@ export function activate(context: vscode.ExtensionContext): void {
         fileLoader,
         target,
         {
-          onStructureOutline: (payload) => stageOutline.setOutline(payload),
+          onStructureOutline: (payload, webview) =>
+            stageOutline.setOutline(payload, webview),
         },
       );
       activeQuickView = { panel, uri: target };

@@ -124,6 +124,11 @@ export interface AppProps {
    */
   onSurfaceChange?: (surface: MolvisSurface) => void;
   /**
+   * Offered a drag's workspace URIs before the viewer reads `dataTransfer`.
+   * Return `true` to claim it. See {@link MountHostOpts.onDropUris}.
+   */
+  onDropUris?: (uris: string[]) => boolean;
+  /**
    * Test seam: replaces the 3D canvas so a test can assert layout and surface
    * continuity without booting Babylon and a WebGL context. No production
    * caller passes it; an injected canvas makes `reloadViewer` a no-op.
@@ -137,7 +142,12 @@ export interface AppProps {
  * When mounted with `surface: "canvas"`, all chrome is hidden and only the
  * 3D canvas is rendered (useful for embeds that supply their own UI).
  */
-const App: React.FC<AppProps> = ({ onAppChange, onSurfaceChange, canvas }) => {
+const App: React.FC<AppProps> = ({
+  onAppChange,
+  onSurfaceChange,
+  onDropUris,
+  canvas,
+}) => {
   const opts = useMountOpts();
   const chrome = resolveChrome(opts);
   const canvasOnly =
@@ -554,6 +564,7 @@ const App: React.FC<AppProps> = ({ onAppChange, onSurfaceChange, canvas }) => {
                           <MolvisWrapper
                             key={viewerGeneration}
                             onMount={setApp}
+                            onDropUris={onDropUris}
                           />
                         )}
                         {uiHidden && <CameraTrajectoryOverlay app={app} />}

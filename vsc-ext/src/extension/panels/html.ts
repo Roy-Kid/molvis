@@ -1,10 +1,11 @@
 import * as vscode from "vscode";
+import { type PageMountInject, renderMountInject } from "./mountInject";
 
 // --- Asset URIs ---
 
 /** Bump when webview JS changes under the same extension version so
  *  Chromium does not reuse a cached `shared.js` after `--force` install. */
-const WEBVIEW_ASSET_REV = "page-surface-19";
+const WEBVIEW_ASSET_REV = "quicklook-page-20";
 
 function scriptUri(
   webview: vscode.Webview,
@@ -127,11 +128,13 @@ export function getSketchHtml(
 export function getPageHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
+  mount?: PageMountInject,
 ): string {
   const nonce = getNonce();
   const src = scriptUri(webview, extensionUri, "page", "index.js");
   const css = scriptUri(webview, extensionUri, "chunks", "page-styles.css");
   const csp = buildCsp(webview, nonce);
+  const inject = renderMountInject(nonce, mount);
 
   return `<!doctype html>
 <html lang="en">
@@ -147,6 +150,7 @@ export function getPageHtml(
     </style>
   </head>
   <body>
+    ${inject}
     <div id="root"></div>
     <div id="molvis-loading">
       <div class="molvis-spinner"></div>

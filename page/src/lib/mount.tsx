@@ -44,6 +44,14 @@ export interface MountHostOpts extends MountOpts {
    * bit itself, applying the change directly.
    */
   onSurfaceChange?: (surface: MolvisSurface) => void;
+  /**
+   * Offered the workspace URIs of a drag before the shell reads
+   * `dataTransfer`. A webview cannot read a workspace file, so a drag from the
+   * host's file explorer arrives as `text/uri-list` with no `File` behind it
+   * and only the host can load it. Return `true` to claim the drop; the shell
+   * then skips its own path so one drag is never loaded twice.
+   */
+  onDropUris?: (uris: string[]) => boolean;
 }
 
 /** Result of {@link mountMolvisApp}, allowing the host to tear down. */
@@ -176,6 +184,7 @@ export function mountMolvisApp(
             <App
               onAppChange={opts.onAppChange}
               onSurfaceChange={onSurfaceChange}
+              onDropUris={opts.onDropUris}
             />
           </PipelineOperationProvider>
         </PortalContainerProvider>

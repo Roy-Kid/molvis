@@ -52,4 +52,5 @@ Chain `worker-arch-unify`: 01 → 02 → 03 → 04（严格串行；03 为 stage
 - camera keyframe, RPC schema, artist representation split, VSCode outline
 - [one-viewer-surface-01-chrome-state](one-viewer-surface-01-chrome-state.md) — page: collapse the canvasOnly early return into one render tree so a surface flip never tears down Babylon, and make MountOpts live state (MountOptsStore + MountedApp.setOpts). [approved]
 - [one-viewer-surface-02-surface-message](one-viewer-surface-02-surface-message.md) — vsc-ext: carry the surface on `init` via a non-claiming `onMessageSeen` observer on attachStageHost, consumed by a new attachPageHost. [approved]
+- [one-viewer-surface-03-quicklook-surface](one-viewer-surface-03-quicklook-surface.md) — vsc-ext: Quick look serves the page bundle chrome-off, with boot-time surface injection, the capability registry moved, the outline reverse route fixed and drop parity kept. [approved]
 - [page-host-init-single-path](page-host-init-single-path.md) — page: delete MolvisWrapper's duplicate window init/applySettings handler so attachStageHost is the single path (no host outside vsc-ext ever sends those messages). [approved]

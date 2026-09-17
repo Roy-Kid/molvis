@@ -6,7 +6,7 @@ import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import { getDisplayName } from "../loading/pathUtils";
 import type { Logger, PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
-import { getPreviewHtml } from "./html";
+import { getPageHtml } from "./html";
 import {
   handleDropUri,
   handleRangeMessage,
@@ -46,7 +46,11 @@ export async function openQuickViewPanel(
     },
   );
 
-  panel.webview.html = getPreviewHtml(panel.webview, context.extensionUri);
+  // Quick look is the one viewer with its chrome switched off, not a second
+  // bundle. `surface` rides the document so the first paint is already correct.
+  const getHtml = () =>
+    getPageHtml(panel.webview, context.extensionUri, { surface: "canvas" });
+  panel.webview.html = getHtml();
 
   const reloadPreview = targetUri
     ? async () => {
@@ -55,7 +59,7 @@ export async function openQuickViewPanel(
     : undefined;
 
   panelRegistry.register(panel, {
-    getHtml: () => getPreviewHtml(panel.webview, context.extensionUri),
+    getHtml,
     reload: reloadPreview,
     sourceUri: targetUri,
   });

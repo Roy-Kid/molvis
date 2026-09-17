@@ -10,9 +10,15 @@
 
 import { bootstrapTheme } from "@/hooks/useTheme";
 import { mountMolvisApp } from "@/lib/mount";
+import { readMountOptsFromHost } from "@/lib/mount-opts";
 import type { WebviewToHostMessage } from "../protocol";
 import { attachPageHost, postPageReady } from "../webview/attachPageHost";
 import type { StageHostHandle } from "../webview/attachStageHost";
+import {
+  type CapabilityRegistry,
+  createCapabilityRegistry,
+  DEFAULT_STAGE_CAPABILITIES,
+} from "../webview/capabilities";
 import { installGlobalErrorHandlers } from "../webview/errorBoundary";
 import "./main.css";
 
@@ -38,12 +44,34 @@ export function bootstrapPage(
   installGlobalErrorHandlers(host);
 
   let bridge: StageHostHandle | null = null;
+  let capabilities: CapabilityRegistry | null = null;
+
+  // The surface has to be known at first paint. `init.surface` cannot be:
+  // it arrives only after the shell mounts and posts `ready`, so a panel that
+  // wants chrome off would paint full chrome and then collapse. The host
+  // injects it into the document instead; `init.surface` confirms it later.
+  const boot = readMountOptsFromHost();
+
   const mounted = mountMolvisApp(container, {
-    surface: "full",
+    surface: boot.surface ?? "full",
     useShadowDOM: false,
+    // A drag from the Explorer carries workspace URIs and no `File`; only the
+    // host can read those, so it claims the drop. Without this, migrating a
+    // panel to this bundle silently loses Explorer drag-and-drop.
+    onDropUris: (uris) => {
+      const uri = uris[0];
+      if (!uri) return false;
+      host.postMessage({ type: "dropUri", uri, mode: "replace" });
+      return true;
+    },
     onAppChange: (app) => {
       bridge?.dispose();
       bridge = null;
+      // The registry captures one app and subscribes to its events, and the
+      // page replaces the app on reload — so its lifetime is the app's, not
+      // the document's.
+      capabilities?.dispose();
+      capabilities = null;
       if (!app) return;
       // Drop handling stays with the page shell (it owns the drop UI and the
       // unsaved-scene prompt), so the bridge contributes load/settings/save
@@ -55,10 +83,16 @@ export function bootstrapPage(
         // The host owns the surface bit; the shell just applies it.
         onSurface: (surface) => mounted.setOpts({ surface }),
       });
+      capabilities = createCapabilityRegistry({ app, host });
       options.onReady?.();
       // `onAppChange` fires after `app.start()`, so the host may load
       // immediately.
       postPageReady(host);
+      void (async () => {
+        for (const id of DEFAULT_STAGE_CAPABILITIES) {
+          await capabilities?.enable(id);
+        }
+      })();
     },
   });
 }

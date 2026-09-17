@@ -28,6 +28,7 @@ import {
 } from "@/components/viewer/OpenStructureDialog";
 import { useReportOperationStatus } from "@/hooks/useReportOperationStatus";
 import { useViewerOperation } from "@/hooks/useViewerOperation";
+import { readDropUris } from "@/lib/drop-uris";
 import { type OpenTarget, resolveDropTarget } from "@/lib/mrec-open";
 import {
   bindLaunchQueue,
@@ -45,6 +46,12 @@ interface MolvisWrapperProps {
    * session. Defaults to coarse-pointer hosts only.
    */
   showMobileOpenHint?: boolean;
+  /**
+   * Offered a drag's workspace URIs before this component reads
+   * `dataTransfer`. Return `true` to claim the drop. See
+   * {@link MountHostOpts.onDropUris}.
+   */
+  onDropUris?: (uris: string[]) => boolean;
 }
 
 type ResumeState = "idle" | "requested" | "failed";
@@ -144,8 +151,13 @@ function applyMolvisSettings(
 const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   onMount,
   showMobileOpenHint,
+  onDropUris,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Read through a ref: the drop handler is registered once by the engine
+  // effect, which must not re-run when a host swaps the callback.
+  const onDropUrisRef = useRef(onDropUris);
+  onDropUrisRef.current = onDropUris;
   const molvisRef = useRef<Molvis | null>(null);
   const pickFormat = useFormatPicker();
   const pickFormatRef = useRef(pickFormat);
@@ -584,6 +596,12 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      // A drag from the host's file explorer carries `text/uri-list` and no
+      // `File` — a webview cannot read a workspace file, so only the host can
+      // load it. Offer it first, and stop if the host claims it, or the same
+      // drag would be loaded twice.
+      const hostUris = readDropUris(e.dataTransfer);
+      if (hostUris.length > 0 && onDropUrisRef.current?.(hostUris)) return;
       // A dropped `*.mrec` folder resolves to its File handles (read lazily
       // in the worker); anything else is the plain File. The item accessors
       // run synchronously inside `resolveDropTarget` before it awaits.

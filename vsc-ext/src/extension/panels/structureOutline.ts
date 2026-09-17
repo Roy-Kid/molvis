@@ -25,10 +25,21 @@ export class StructureOutlineProvider
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private roots: OutlineTreeItem[] = [];
+  /**
+   * The webview whose scene this outline describes.
+   *
+   * Selection has to go back to it. Routing to whichever panel happens to be
+   * "active" instead meant a Quick look outline selected atoms in an unrelated
+   * Stage tab, or — with no Stage open — did nothing at all.
+   */
+  private source: vscode.Webview | undefined;
 
   constructor(
     private readonly selectCommand: string,
-    private readonly onSelectAtoms: (selection: AtomSelection) => void,
+    private readonly onSelectAtoms: (
+      selection: AtomSelection,
+      source: vscode.Webview | undefined,
+    ) => void,
     private readonly contextKey: string,
   ) {}
 
@@ -36,8 +47,12 @@ export class StructureOutlineProvider
     this._onDidChangeTreeData.dispose();
   }
 
-  setOutline(payload: StructureOutlinePayload | null): void {
+  setOutline(
+    payload: StructureOutlinePayload | null,
+    source?: vscode.Webview,
+  ): void {
     this.roots = payload ? payload.roots.map((n) => hydrate(n)) : [];
+    this.source = payload ? source : undefined;
     void vscode.commands.executeCommand(
       "setContext",
       this.contextKey,
@@ -80,11 +95,11 @@ export class StructureOutlineProvider
     // A contiguous group travels as its range: the webview expands it there,
     // so selecting a 500 000-atom frame is two numbers, not half a million.
     if (element.atomRange) {
-      this.onSelectAtoms({ range: element.atomRange });
+      this.onSelectAtoms({ range: element.atomRange }, this.source);
       return;
     }
     if (element.atomIndices.length === 0) return;
-    this.onSelectAtoms({ indices: element.atomIndices });
+    this.onSelectAtoms({ indices: element.atomIndices }, this.source);
   }
 }
 
