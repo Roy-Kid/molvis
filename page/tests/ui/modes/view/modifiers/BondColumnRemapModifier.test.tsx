@@ -104,7 +104,14 @@ describe("TestBondColumnRemapModifier", () => {
           "value",
         )?.set?.call(offset, "-1");
         offset.dispatchEvent(new Event("input", { bubbles: true }));
-        offset.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      // Typing alone must not commit: every keystroke would otherwise drive a
+      // full pipeline rebuild. The panel commits on blur or Enter only.
+      expect(modifier.mapping.offset).toBe(0);
+      await act(async () => {
+        // React delegates `onBlur` at the root via the bubbling `focusout`
+        // event; a bare non-bubbling `blur` never reaches the handler.
+        offset.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
       });
       expect(modifier.mapping.offset).toBe(-1);
       // Endpoints must survive an offset edit — the setter replaces the
