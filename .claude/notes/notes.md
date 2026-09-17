@@ -738,3 +738,33 @@ Quick look 和 Page 是独立 webview，各有 JS 上下文与 wasm，解析结�
 在 Remote-SSH 上那是过网。可做的只有：同一文件已在 Page 就不重发（已做）、
 `molvis.defaultViewer: "page"` 让文件直接在 Page 打开从而不产生第一次（已做）。
 宿主侧字节缓存**不值得**：本地读 78 MB 仅 ~40 ms，却要常驻同等内存。
+
+<!-- mol:note:topic:regressions-lane-contract-drift -->
+## [2026-09-17] `regressions/` 的成文契约与实况矛盾（待操作者裁定）
+
+**发现**：`.claude/notes/package-architecture.md:78-86` 写明该 lane 的契约是
+「import built `dist` output only (public barrel or deep path)」。树内实况不是
+这样：
+
+- `regressions/traj-ingest-04-range.ts:9-10` 同时 import `../stage/src/io/formats.ts`
+  与 `../vsc-ext/src/extension/loading/molecularLoadIntent.ts` —— 两者都是 `src`，
+  且 `vsc-ext` 是 private 包（无 `exports`，`main: ./out/extension.js`），
+  根本没有可 import 的 `dist` 公开路径。
+- 31 个脚本中有 **21 个**调用 `readFileSync` 断言源码文本，而不是执行公开 API。
+
+**为什么这不只是文档问题**：条文被当作判据用过。`one-viewer-surface` 链条的
+设计评审两次援引它否决新增脚本；第一次援引时把「lane 只准 dist」当成既定规则，
+而那条规则与 lane 自身的内容不符。判决结论（那两个脚本确实不该加）站得住，但
+理由必须换成实质性的那条：**断言源码文本的脚本不是闸**——字符串留存而行为被删时
+它会通过，无关重命名时它会失败，违反 CLAUDE.md「每道闸必须被证明会咬人」。
+
+**待裁定（操作者）**：二选一，不要两头模糊。
+
+- **A**：lane 允许 import 仓内 `src`，条文照实况改写；同时明确「读源码文本」始终
+  不算闸，那 21 个脚本里凡是只做文本断言的都是待偿的债。
+- **B**：条文不变，`traj-ingest-04-range.ts` 等违例脚本是待修的债，需逐个改为
+  执行公开 API 或删除。
+
+在裁定之前，新链条一律**不新增** `regressions/` 脚本，契约由各包自己的单测持有
+（`one-viewer-surface-01/02` 已按此执行，并在各自 spec 的 Testing strategy 中
+写明理由）。
