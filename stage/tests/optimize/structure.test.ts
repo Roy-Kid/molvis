@@ -1,6 +1,7 @@
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import type { ComputeResult } from "../../src/compute/protocol";
 import { setComputeRuntimeForTests } from "../../src/compute/runtime";
@@ -526,13 +527,13 @@ function makeInputFrame(
   atoms.setColF("z", Float64Array.from(IN_Z));
   atoms.setColStr("element", [...ELEMENTS]);
   atoms.setColF("charge", Float64Array.from(IN_CHARGE));
-  atoms.setColU32("mol_id", Uint32Array.from(IN_MOL_ID));
+  atoms.setColU32("mol_id", toDomainUint(IN_MOL_ID));
   frame.insertBlock("atoms", atoms);
 
   const bonds = new Block();
-  bonds.setColU32("atomi", Uint32Array.from([0, 0]));
-  bonds.setColU32("atomj", Uint32Array.from([1, 2]));
-  bonds.setColU32("bond_type", Uint32Array.from(bondTypes));
+  bonds.setColU32("atomi", toDomainUint([0, 0]));
+  bonds.setColU32("atomj", toDomainUint([1, 2]));
+  bonds.setColU32("bond_type", toDomainUint(bondTypes));
   frame.insertBlock("bonds", bonds);
 
   if (box) frame.box = box;
@@ -722,7 +723,7 @@ describe("runOptimize", () => {
         // until the user saves.
         expect(x[i]).toBeCloseTo(IN_X[i], POSITION_DIGITS);
         expect(charge[i]).toBeCloseTo(IN_CHARGE[i], 10);
-        expect(molId[i]).toBe(IN_MOL_ID[i]);
+        expect(Number(molId[i])).toBe(IN_MOL_ID[i]);
       }
 
       const box = head.box;

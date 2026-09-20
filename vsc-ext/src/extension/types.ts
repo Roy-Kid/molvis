@@ -72,6 +72,8 @@ export interface WebviewPanelMeta {
   reload?: () => Promise<void>;
   /** Explicit view type for hosts that don't carry one natively (e.g. WebviewView). */
   viewType?: string;
+  /** Workspace file this Quick look panel is showing, if any. */
+  sourceUri?: vscode.Uri;
 }
 
 export interface PanelRegistry {

@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { DeleteSelectedModifier } from "../../src/modifiers/DeleteSelectedModifier";
 import { createDefaultContext, SelectionMask } from "../../src/pipeline/types";
@@ -16,8 +17,8 @@ function makeFrame(elements: string[], bonds?: [number, number][]): Frame {
 
   if (bonds) {
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b[0])));
-    bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b[1])));
+    bondsBlock.setColU32("atomi", toDomainUint(bonds.map((b) => b[0])));
+    bondsBlock.setColU32("atomj", toDomainUint(bonds.map((b) => b[1])));
     frame.insertBlock("bonds", bondsBlock);
   }
 
@@ -68,8 +69,8 @@ describe("DeleteSelectedModifier", () => {
     expect(bonds.nrows()).toBe(1);
     const iCol = bonds.viewColU32("atomi")!;
     const jCol = bonds.viewColU32("atomj")!;
-    expect(iCol[0]).toBe(0); // C stays at 0
-    expect(jCol[0]).toBe(1); // O remapped from 2 to 1
+    expect(Number(iCol[0])).toBe(0); // C stays at 0
+    expect(Number(jCol[0])).toBe(1); // O remapped from 2 to 1
   });
 
   it("should return empty frame when all atoms deleted", () => {

@@ -9,6 +9,7 @@ import {
 } from "../../src/optimize/assess";
 import { runLbfgsOptimize } from "../../src/optimize/relax";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 
 /**
  * Non-PBC cell fixture (product: shouldDrawBox === false → free boundary).
@@ -53,8 +54,8 @@ function farEthanol(nonPbcCell: boolean): Frame {
   atoms.setColStr("element", ["C", "C", "O"]);
   frame.insertBlock("atoms", atoms);
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([0, 1]));
-  bonds.setColU32("atomj", new Uint32Array([1, 2]));
+  bonds.setColU32("atomi", toDomainUint([0, 1]));
+  bonds.setColU32("atomj", toDomainUint([1, 2]));
   frame.insertBlock("bonds", bonds);
   if (nonPbcCell) {
     frame.box = Box.cube(1, new Float64Array([0, 0, 0]), true, true, true);

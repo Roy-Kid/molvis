@@ -52,15 +52,18 @@ primary when none exists.
 
 ## Common modifier categories
 
-Aligned with OVITO’s Add-modifier groups:
+Add-menu groups are one-word nouns (Source / Selection / Modification /
+Color / Structure / Visualization / Analysis). Search the catalog to
+reach an item — Wrap PBC is a pipeline flag under Modification, not a
+step you add.
 
-| Category (OVITO) | Examples | Effect |
+| Group | Examples | Effect |
 |---|---|---|
-| Selection | Expression Select, Clear / Invert / Select Type / Expand / Select overlapping, Hide Selection | Create or act on a selection set |
-| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute/Freeze property, Edit types, Delete Selected, Hide Hydrogens | Edit topology or coordinates |
-| Coloring | Color by Property, Color by Type, Assign Color | Per-atom color |
-| Structure identification | Steinhardt order, Solid–liquid | Local structure → atom columns (molrs) |
-| Visualization | Create bonds, Bonds, Simulation cell, Create isosurface, Vector field, Gaussian density / Construct surface mesh, Coordination polyhedra, Generate trajectory lines | Scene visuals |
+| Selection | Expression select, Clear / Invert / Select type / Expand / Select overlapping, Hide selection | Create or act on a selection set |
+| Modification | Slice, Wrap PBC, Affine, Replicate, Unwrap, Smooth trajectory, Compute/Freeze property, Edit types, Delete selected, Hide hydrogens | Edit topology or coordinates |
+| Color | Color by property, Color by type, Assign color | Per-atom color |
+| Structure | Steinhardt order, Solid–liquid | Local structure → atom columns (molrs) |
+| Visualization | Create bonds, Bonds, Simulation cell, Isosurface, Volume cloud, Vector field, Molecular surface, Coordination polyhedra, Generate trajectory lines | Scene visuals |
 | Analysis | Displacement vectors | Pipeline property compute that feeds viz |
 
 Chart-only analyses (RDF, MSD, histograms, Rings, bond distributions, …) stay
@@ -76,7 +79,7 @@ and pure numerical analyses (RDF, MSD, spectra, Rings, …) live in the **left
 Compute** panel, driven by the molrs compute catalog plus product entries.
 
 **Left compute / right draw:** analysis-nature pipeline modifiers (Steinhardt,
-solid–liquid, Gaussian density, vector field, isosurface, …) open the **left**
+solid–liquid, molecular surface, vector field, isosurface, …) open the **left**
 panel for algorithm parameters when added or selected. The pipeline bottom pane
 shows **drawing** parameters only (colors, isovalue, opacity, scale). Pure
 Analysis tools that can also paint the scene (e.g. Cluster) expose a button to

@@ -971,10 +971,6 @@ _BOOTSTRAP_LOADER = """\
   var scripts = {scripts};
   var opts = {opts};
   var APP_READY_TIMEOUT_MS = 15000;
-  // Tell the bundle's webpack runtime where to fetch async chunks + WASM.
-  // Without this, document-relative URLs resolve against the webview origin
-  // (e.g. vscode-webview://…) and the kernel's static routes return 401.
-  if (assetBase) {{ window.__MOLVIS_ASSET_BASE__ = assetBase; }}
   function loadScript(src) {{
     return new Promise(function(resolve, reject) {{
       var existing = document.querySelector('script[data-molvis="' + src + '"]');

@@ -17,7 +17,7 @@ import type { Trajectory } from "./trajectory";
 export function aggregateFrameLabels(
   trajectory: Trajectory,
 ): Map<string, Float64Array> {
-  const nFrames = trajectory.length;
+  const nFrames = trajectory.requireCompleteLength("frame-labels");
   const out = new Map<string, Float64Array>();
   if (nFrames === 0) return out;
 

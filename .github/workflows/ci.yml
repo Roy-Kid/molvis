@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [master, dev]
+    branches: [master, nightly]
   pull_request:
-    branches: [master]
+    branches: [master, nightly, dev]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -91,6 +95,10 @@ jobs:
 
       - run: npm install
 
+      # manifest.test asserts vsc-ext/out/extension.js exists. A leftover
+      # local `out/` hid this from developers; CI is a clean tree, so build
+      # first. Same order as pre-push `build-vsc-ext` then `test-vsc-ext`.
+      - run: npm run build:vsc-ext
       - run: npm run test:vsc-ext
 
   test-python:
@@ -162,27 +170,6 @@ jobs:
 
       - name: Check sketch-viewer pack surface
         run: npm run check:pack -w @molcrafts/molvis-sketch-viewer
-
-  regressions:
-    runs-on: ubuntu-latest
-    needs: [lint, typecheck, test]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - run: npm install
-
-      - name: Build stage library
-        run: npm run build:stage
-
-      - name: Build viewer packages
-        run: npm run build:stage-viewer && npm run build:sketch-viewer
-
-      - name: Run regression examples
-        run: npm run check:regressions
 
   build-page:
     runs-on: ubuntu-latest

@@ -217,11 +217,13 @@ export function RdfPanel({
   app,
   frameRange,
   trajectoryLength,
+  scopeBlocked = false,
   children,
 }: {
   app: Molvis | null;
   frameRange: FrameRange;
   trajectoryLength: number;
+  scopeBlocked?: boolean;
   /** Shared frame-scope control; rendered in the pinned footer, above Run. */
   children?: React.ReactNode;
 }) {
@@ -564,7 +566,11 @@ export function RdfPanel({
   const volumeBlank = volume.trim() === "";
   const volumeMissing = needsManualVolume && volumeBlank;
   const computeDisabled =
-    computing || !groupA || volumeMissing || trajectoryLength === 0;
+    computing ||
+    !groupA ||
+    volumeMissing ||
+    trajectoryLength === 0 ||
+    scopeBlocked;
 
   const autoBinsCaption = useMemo(() => {
     if (nBins.trim() !== "") return null;
@@ -617,7 +623,13 @@ export function RdfPanel({
                 ? "1 frame"
                 : `${trajectoryLength} frames`
           }
-          hint={volumeMissing ? "Need reference volume" : undefined}
+          hint={
+            scopeBlocked
+              ? "Set an explicit end frame"
+              : volumeMissing
+                ? "Need reference volume"
+                : undefined
+          }
         />
       }
     >

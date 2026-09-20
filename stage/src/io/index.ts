@@ -1,11 +1,20 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
+// The package self-reference (not a relative path) is deliberate: the
+// worker-spawner subpath is the one specifier host builds alias to swap
+// the spawn implementation (VS Code webview). TrajectoryRuntime's type
+// comes from the same dist-backed surface so the spawned runtime and the
+// declared result share one nominal class.
+import type { TrajectoryRuntime } from "@molcrafts/molvis-stage/trajectory-runtime";
+import { spawnTrajectoryWorker } from "@molcrafts/molvis-stage/worker-spawner";
 import type { MolvisApp as Molvis } from "../app";
+import type { ModifierPipeline } from "../pipeline";
 import { applyAutoAttach } from "../pipeline/auto_attach";
 import {
   type BondColumnMapping,
   BondColumnRemapModifier,
   bondsIntegerColumns,
   bondsNeedColumnMapping,
+  inferBondColumnMapping,
 } from "../pipeline/bond_column_remap";
 import {
   DataSource,
@@ -13,26 +22,42 @@ import {
   MemoryDataSource,
 } from "../pipeline/data_source";
 import { DrawBondModifier } from "../pipeline/draw_bond";
+import { MeshOverlayModifier } from "../pipeline/mesh_overlay";
 import {
   type CompositionSource,
+  compatibleAugmentLengths,
   extendSourcesToTrajectory,
 } from "../system/source_composition";
 import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
 import {
+  CancellationError,
   type IndexProgressCallback,
-  spawnTrajectoryWorker,
-  type TrajectoryRuntime,
 } from "../transport/trajectory_worker";
 import { fingerprintFile } from "./cache";
 import {
+  mrecStoreGroups,
+  openMrecTrajectory,
+  readMrecFrameSection,
+} from "./mrec_stream";
+import {
   canStream,
+  dropLoadMode,
   type FileFormat,
   loadBinaryTrajectory,
   loadTextTrajectory,
 } from "./reader";
-import { BlobRangeSource } from "./sources";
-import { loadZarrFiles } from "./zarr";
+import { BlobRangeSource, type TrajectorySource } from "./sources";
+import { parseStl } from "./stl";
+import {
+  collectMrecDirectory,
+  isMrecDirectorySource,
+  loadMrecInput,
+  type MrecDirectorySource,
+  type MrecStoreInput,
+  mrecFilesFromRecord,
+} from "./zarr";
 
+export { CancellationError } from "../transport/trajectory_worker";
 export {
   BOX_MIN_DRAW_LENGTH,
   BOX_ZERO_EPS,
@@ -41,25 +66,56 @@ export {
   shouldDrawBox,
 } from "./box_presence";
 export {
+  type CachedIndex,
+  type CachedIndexInput,
+  decideMolidxUse,
+  decodeMolidx,
+  encodeMolidx,
+  type FrameIndexLike,
+  MOLIDX_VERSION,
+  OpfsIndexCache,
+} from "./cache";
+export {
+  FileTreeMrecStoreHost,
+  MapMrecStoreHost,
+  sectionUpdatesAt,
+} from "./mrec_store";
+export { mrecSourceHandleFor, openMrecTrajectory } from "./mrec_stream";
+export {
   canStream,
+  decideIngest,
   describeFormat,
+  dropLoadMode,
   extractMessage,
   FILE_FORMAT_REGISTRY,
   type FileFormat,
   type FileFormatDescriptor,
   type FormatPayload,
   getAllAcceptExtensions,
+  type IngestDecision,
+  type IngestKind,
   inferFormatFromFilename,
+  ingestKind,
   isBinaryFormat,
+  isStlPath,
   isStreamingOnly,
   loadBinaryTrajectory,
   loadTextTrajectory,
   readFrames,
+  STL_SUFFIX,
+  STREAMING_FILE_THRESHOLD_BYTES,
   type StreamingCapability,
   sniffFormatFromTextHead,
+  TRAJECTORY_WHOLE_FILE_CAP_BYTES,
   toIoError,
+  wholeFileTrajectoryReason,
 } from "./reader";
-export { BlobRangeSource, type TrajectorySource } from "./sources";
+export {
+  BlobRangeSource,
+  HostRangeSource,
+  type TrajectorySource,
+} from "./sources";
+export { parseStl, StlParseError } from "./stl";
 export {
   defaultExtensionForFormat,
   type ExportFormat,
@@ -74,24 +130,58 @@ export {
   writePDBFrame,
   writeXYZFrame,
 } from "./writer";
-export { loadZarrFiles, type ZarrLoadResult } from "./zarr";
+export {
+  collectMrecDirectory,
+  // Deprecated encoding-named aliases (one window); prefer the mrec* names.
+  collectZarrDirectory,
+  isMrecDirectorySource,
+  loadMrecDirectory,
+  loadMrecFiles,
+  loadMrecInput,
+  loadMrecStore,
+  loadMrecZip,
+  loadZarrDirectory,
+  loadZarrFiles,
+  loadZarrStore,
+  type MrecDirectorySource,
+  type MrecDirent,
+  type MrecLoadResult,
+  type MrecStoreInput,
+  mrecFilesFromRecord,
+  readMrecFileTree,
+  type ZarrDirectorySource,
+  type ZarrDirent,
+  type ZarrLoadResult,
+} from "./zarr";
 
 /**
  * Payload shape accepted by {@link loadFileContent}.
  *
  * - `string` — a text-format file body (PDB/XYZ/LAMMPS/SDF/…). The
  *   resolved descriptor must declare `payload: "text"`.
- * - `Uint8Array` — raw bytes for a binary-format file (e.g. DCD). The
- *   resolved descriptor must declare `payload: "binary"`. No format
- *   currently declares this; the dispatch branch is wired so that
- *   future binary readers slot in without changing call-site code.
- * - `Record<string, string>` — a zarr directory serialized as
- *   `filePath → base64` pairs.
+ * - `Uint8Array` — raw bytes for a binary-format file. DCD, TRR, and XTC
+ *   declare `payload: "binary"`; `loadFileContent` dispatches them to
+ *   `loadBinaryTrajectory`.
+ * - `Record<string, Uint8Array | string>` — an mrec store as
+ *   `filePath → bytes` pairs (base64 `string` values still accepted).
  *
  * The discriminator at runtime is structural: `typeof === "string"`
- * for text, `instanceof Uint8Array` for binary, otherwise zarr.
+ * for text, `instanceof Uint8Array` for binary, otherwise an mrec store.
  */
-export type FileContent = string | Uint8Array | Record<string, string>;
+export type FileContent =
+  | string
+  | Uint8Array
+  | Record<string, Uint8Array | string>;
+
+/**
+ * Drop occupancy for a live pipeline: DataSources plus Mesh overlays.
+ * An STL-only scene is occupied — the next structure/trajectory augments.
+ */
+export function sceneDropLoadMode(
+  pipeline: Pick<ModifierPipeline, "sources" | "meshOverlayCount">,
+): "replace" | "augment" {
+  return dropLoadMode(pipeline.sources().length, pipeline.meshOverlayCount());
+}
 
 /**
  * How a file ingress combines with the existing system.
@@ -152,7 +242,7 @@ async function augmentTrajectoryAsDataSource(
   },
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
-  const N_file = trajectory.length;
+  const N_file = trajectory.length ?? trajectory.indexedLength;
   const existingTraj = app.modifierPipeline
     .sources()
     .find((m): m is FileDataSource => m instanceof FileDataSource);
@@ -169,7 +259,7 @@ async function augmentTrajectoryAsDataSource(
     const probeAtoms = probeFrame.getBlock("atoms");
     if (probeAtoms !== undefined && probeAtoms.nrows() !== currentAtomCount) {
       throw new Error(
-        `Cannot augment "${meta.filename}": file has ${probeAtoms.nrows()} atom(s); existing system has ${currentAtomCount}. Augment sources must agree on atom count when both files contribute an atoms block.`,
+        `Cannot augment "${meta.filename}": file has ${probeAtoms.nrows()} atom(s); existing system has ${currentAtomCount}. Augment sources must agree on atom count when both files contribute an atoms block. To concatenate two structures, use Extend trajectory…`,
       );
     }
   }
@@ -179,27 +269,27 @@ async function augmentTrajectoryAsDataSource(
   // a `null` reply aborts the whole augment load. Performed before constructing
   // the DS so a user-cancel doesn't leave a half-attached DS in the pipe.
   const mapping = await maybePromptBondMapping(
+    app,
     probeFrame,
     meta.filename,
     pickBondMapping,
   );
 
   let ds: DataSource;
-  if (N_file === 1) {
+  if (N_file <= 1) {
     // Single-frame file → MemoryDataSource. Broadcasts across whatever
     // trajectory length the pipeline already has (or stays at 1 if
     // there's no trajectory yet). `contributedBlocks` defaults to empty
     // → composition propagates every block the frame actually has.
     ds = new MemoryDataSource(probeFrame, meta);
-  } else if (existingTraj === undefined || existingTraj.frameCount === N_file) {
-    // Multi-frame file: either becomes the primary trajectory (no
-    // existing one) or stacks onto an existing trajectory of equal
-    // length. Frame-count mismatches are caught here OR in
-    // addDataSource — both produce the same error class.
+  } else if (compatibleAugmentLengths(existingTraj?.frameCount, N_file)) {
+    // Multi-frame file: primary when none exists, stacks onto a
+    // length-1 structure (topology + DCD), or onto an equal-length
+    // trajectory. Unequal multi-frame lengths throw.
     ds = new FileDataSource(trajectory, meta);
   } else {
     throw new Error(
-      `Cannot augment "${meta.filename}": file has ${N_file} frame(s); existing trajectory has ${existingTraj.frameCount}. File must be single-frame or match existing frame count.`,
+      `Cannot augment "${meta.filename}": file has ${N_file} frame(s); existing trajectory has ${existingTraj?.frameCount}. File must be single-frame or match existing frame count.`,
     );
   }
 
@@ -215,29 +305,56 @@ async function augmentTrajectoryAsDataSource(
 }
 
 /**
- * Probe `frame` for an unmapped bonds block and, if found, ask the
- * host (via `pickBondMapping`) how to map its columns onto the
- * canonical `atomi`/`atomj` schema.
+ * Probe `frame` for an unmapped bonds block and resolve how to map its
+ * columns onto the canonical `atomi`/`atomj` schema — by inference when the
+ * endpoints are unambiguous, otherwise by asking the host through
+ * `pickBondMapping`.
  *
  * Returns:
- * - `null` — no prompt needed (no bonds block, already canonical, or
- *   not enough integer columns to map). Caller proceeds without remap.
- * - {@link BondColumnMapping} — user-confirmed mapping. Caller attaches
+ * - `null` — nothing to map (no bonds block, already canonical, or not
+ *   enough integer columns to map) or no way to map it. Caller proceeds
+ *   without a remap.
+ * - {@link BondColumnMapping} — inferred or user-confirmed. Caller attaches
  *   a {@link BondColumnRemapModifier} downstream of the DS.
  *
- * Throws a `BondMappingCancelledError` when the host returns `null` —
+ * A host that renders its own picker passes one; a host that mounts the
+ * stage's chrome instead (`molvis-viewer`, the VS Code webview) falls back to
+ * the stage's own dialog. Only a host with neither — headless, or
+ * `showUI: false` — gets a status message rather than a scene that silently
+ * draws no bonds.
+ *
+ * Throws a `BondMappingCancelledError` when the picker returns `null` —
  * the caller catches it and aborts the load with a "cancelled" status.
  */
 async function maybePromptBondMapping(
+  app: Molvis,
   frame: Frame,
   filename: string,
   pickBondMapping: PickBondMapping | undefined,
 ): Promise<BondColumnMapping | null> {
   if (!bondsNeedColumnMapping(frame)) return null;
+  // A `dump local` overlay names its endpoints the way molrs writes them, so
+  // there is nothing for the user to choose. Inferring here is what makes the
+  // canonical `*.dump.local` drop render on every host, dialog or not.
+  const inferred = inferBondColumnMapping(frame);
+  if (inferred !== null) return inferred;
   const candidates = bondsIntegerColumns(frame);
   if (candidates.length < 2) return null;
-  if (!pickBondMapping) return null;
-  const decision = await pickBondMapping(filename, candidates);
+
+  const gui = app.guiIfMounted;
+  const prompt: PickBondMapping | undefined =
+    pickBondMapping ??
+    (gui?.canPrompt
+      ? (name, columns) => gui.pickBondMapping(name, columns)
+      : undefined);
+  if (!prompt) {
+    app.events.emit("status-message", {
+      text: `${filename}: bonds loaded but not drawn — endpoint columns (${candidates.join(", ")}) are not molvis's atomi/atomj, and this host cannot ask which to use.`,
+      type: "warning",
+    });
+    return null;
+  }
+  const decision = await prompt(filename, candidates);
   if (decision === null) {
     throw new BondMappingCancelledError(filename);
   }
@@ -283,7 +400,7 @@ function remapTrajectoryBonds(
     mapping,
   );
   return Trajectory.fromAsyncProvider({
-    length: trajectory.length,
+    length: trajectory.requireCompleteLength("remap-bonds"),
     get: async (index) =>
       (await remap.apply(await trajectory.frame(index), {} as never)) as Frame,
   });
@@ -293,6 +410,16 @@ function remapTrajectoryBonds(
 // swapping in a new trajectory frees the previous
 // WASM-owned resources exactly once.
 const appCleanups = new WeakMap<Molvis, () => void>();
+
+/** In-flight {@link loadFileStream} worker cleanups — not yet committed to the pipeline. */
+const streamInFlightCleanups = new WeakMap<Molvis, () => void>();
+
+function disposeInFlightStream(app: Molvis): void {
+  const cleanup = streamInFlightCleanups.get(app);
+  if (!cleanup) return;
+  streamInFlightCleanups.delete(app);
+  cleanup();
+}
 
 /**
  * Release the parser/reader resources owned by the active
@@ -307,6 +434,7 @@ export function disposeLoadedFile(app: Molvis): void {
   if (!cleanup) return;
   appCleanups.delete(app);
   cleanup();
+  disposeInFlightStream(app);
 }
 
 /**
@@ -322,34 +450,52 @@ async function installPrimaryTrajectory(
   filename: string,
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
-  disposeLoadedFile(app);
+  disposeInFlightStream(app);
+  // Defer the OUTGOING file's cleanup until AFTER replaceScene has swapped
+  // `_lastRenderedFrame` onto the incoming trajectory. Freeing first (the old
+  // order) let a render scheduled against the previous frame deref a
+  // just-freed molrs handle — a wasm null-ptr trap. The reader/mrec dispose
+  // closures free their whole frame cache, so this ordering is what keeps
+  // that free safe. See `.claude/notes/molrs-handles.md`.
+  const previousCleanup = appCleanups.get(app);
+  appCleanups.delete(app);
   appCleanups.set(app, dispose);
 
   await app.replaceScene(trajectory, { sourceType: "file", filename });
 
-  // replaceScene already auto-attaches default Draws (Particles/Bonds/…).
-  // Re-run is idempotent and still useful if a future load path mutates the
-  // frame after replace; keep the head DS for bond-mapping nesting.
+  previousCleanup?.();
+
+  // replaceScene already auto-attached the default Draws (Particles/Bonds/…)
+  // and, on a running app, rendered them. Both steps below are idempotent, so
+  // the scene is rebuilt again only when one of them actually adds a modifier
+  // — a second full rebuild costs another whole scene build on a large frame.
   const frame0 = app.system.frame;
   const headDS = app.modifierPipeline
     .sources()
     .find((m): m is DataSource => m instanceof DataSource);
-  if (frame0) applyAutoAttach(app.modifierPipeline, frame0, undefined, headDS);
+  const attached = frame0
+    ? applyAutoAttach(app.modifierPipeline, frame0, undefined, headDS)
+    : [];
+  let pipelineChanged = attached.length > 0;
 
   // OVITO-style bonds column mapping. Throws BondMappingCancelledError on
   // user-cancel — the outer load wrapper reports it as "cancelled".
   if (frame0 && headDS) {
     const mapping = await maybePromptBondMapping(
+      app,
       frame0,
       filename,
       pickBondMapping,
     );
     if (mapping !== null) {
       attachBondMappingChildren(app, headDS, mapping);
+      pipelineChanged = true;
     }
   }
 
-  await app.applyPipeline({ fullRebuild: true });
+  if (pipelineChanged || !app.isRunning) {
+    await app.applyPipeline({ fullRebuild: true });
+  }
   app.world.fit();
   app.setMode("view");
 }
@@ -388,6 +534,7 @@ async function extendIntoScene(
   }
 
   const mapping = await maybePromptBondMapping(
+    app,
     await trajectory.frame(0),
     filename,
     pickBondMapping,
@@ -410,39 +557,14 @@ async function extendIntoScene(
   );
 }
 
-/**
- * Canonical file ingress for `@molcrafts/molvis-stage`. Dispatches to the right
- * reader based on payload shape (string → text format, object → zarr),
- * stamps the pipeline head with a `DataSource`, swaps in the
- * new trajectory, and replays user-added modifiers on it. All file
- * entry points — page drag-drop, DataSource panel "Load File", vsc-ext
- * "Open Editor" / "Quick View" — converge here.
- */
-export async function loadFileContent(
+async function commitLoadedTrajectory(
   app: Molvis,
-  content: FileContent,
+  trajectory: Trajectory,
+  dispose: () => void,
   filename: string,
-  format?: FileFormat,
-  mode: LoadMode = "replace",
+  mode: LoadMode,
   pickBondMapping?: PickBondMapping,
 ): Promise<void> {
-  let trajectory: Trajectory;
-  let dispose: () => void;
-
-  if (typeof content === "string") {
-    const bundle = loadTextTrajectory(content, filename, format);
-    trajectory = bundle.trajectory;
-    dispose = bundle.dispose;
-  } else if (content instanceof Uint8Array) {
-    const bundle = loadBinaryTrajectory(content, filename, format);
-    trajectory = bundle.trajectory;
-    dispose = bundle.dispose;
-  } else {
-    const bundle = loadZarrFiles(content);
-    trajectory = bundle.trajectory;
-    dispose = bundle.dispose;
-  }
-
   if (mode === "extend") {
     await extendIntoScene(app, trajectory, dispose, filename, pickBondMapping);
     return;
@@ -474,12 +596,346 @@ export async function loadFileContent(
   );
 }
 
+/**
+ * Phase reporter for one file load.
+ *
+ * Every phase goes out as a `status-message`, which the app mirrors to the
+ * console (`app.ts` status-message handler) — so hosts get a visible line and
+ * a log entry from one emit, and there is no second logging path to keep in
+ * sync.
+ */
+class LoadReport {
+  private readonly started = performance.now();
+  private parsedAt: number | null = null;
+
+  constructor(
+    private readonly app: Molvis,
+    private readonly filename: string,
+    private readonly byteLength: number | undefined,
+  ) {}
+
+  /** Announce the parse before it blocks the thread on a large payload. */
+  parsing(format: FileFormat | undefined): void {
+    const size =
+      this.byteLength !== undefined ? ` (${megabytes(this.byteLength)})` : "";
+    const kind = format ? ` ${format}` : "";
+    this.say(`Reading ${this.filename}${size}${kind}…`);
+  }
+
+  /** The reader is open; the scene build is what remains. */
+  parsed(): void {
+    this.parsedAt = performance.now();
+    this.say(`Building scene from ${this.filename}…`);
+  }
+
+  /** Scene is on the GPU. Reports the split so a slow stage is identifiable. */
+  done(): void {
+    const now = performance.now();
+    const parse = (this.parsedAt ?? now) - this.started;
+    const scene = now - (this.parsedAt ?? now);
+    const frame = this.app.system.frame;
+    const atoms = frame?.getBlock("atoms")?.nrows() ?? 0;
+    const bonds = frame?.getBlock("bonds")?.nrows() ?? 0;
+    const frames = this.app.system.trajectory.indexedLength;
+    this.say(
+      `${this.filename}: ${atoms} atoms, ${bonds} bonds, ${frames} frame(s)` +
+        ` — read ${seconds(parse)}, scene ${seconds(scene)}, total ${seconds(now - this.started)}`,
+      "success",
+    );
+  }
+
+  private say(text: string, type: "info" | "success" = "info"): void {
+    this.app.events.emit("status-message", { text, type });
+  }
+}
+
+function megabytes(byteLength: number): string {
+  return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function seconds(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+/**
+ * Data-file ingress for `@molcrafts/molvis-stage`. Dispatches on payload
+ * shape (`string` → text format, `Uint8Array` → binary DCD/TRR/XTC,
+ * object → mrec store), stamps the pipeline head with a `DataSource`,
+ * and replays user-added modifiers. Optional `pickBondMapping` runs when
+ * a dump-local overlay lacks canonical `atomi`/`atomj`.
+ *
+ * This is the *data* door (replace / augment / extend). STL meshes go
+ * through {@link loadMeshOverlay}; directory/zip mrec stores through
+ * {@link loadMrecSource}. Page drag-drop and the DataSource panel funnel
+ * here via `loadFileSmart`.
+ */
+export async function loadFileContent(
+  app: Molvis,
+  content: FileContent,
+  filename: string,
+  format?: FileFormat,
+  mode: LoadMode = "replace",
+  pickBondMapping?: PickBondMapping,
+): Promise<void> {
+  if (typeof content === "string" || content instanceof Uint8Array) {
+    const report = new LoadReport(app, filename, content.length);
+    report.parsing(format);
+    const bundle =
+      typeof content === "string"
+        ? loadTextTrajectory(content, filename, format)
+        : loadBinaryTrajectory(content, filename, format);
+    report.parsed();
+    await commitLoadedTrajectory(
+      app,
+      bundle.trajectory,
+      bundle.dispose,
+      filename,
+      mode,
+      pickBondMapping,
+    );
+    report.done();
+    return;
+  }
+  // mrec store record: the same ingress as every other store shape — the
+  // worker decodes it when Workers exist, the sync provider otherwise.
+  await loadMrecSource(
+    app,
+    { kind: "files", files: mrecFilesFromRecord(content) },
+    filename,
+    mode,
+    pickBondMapping,
+  );
+}
+
+/**
+ * A record's `frame` section, read while the store is still readable.
+ *
+ * The order is load-bearing, not tidy: opening the sequence hands the store's
+ * buffers to the worker in a transfer list, which **detaches them**, so
+ * anything else the record carries has to be read first or not at all.
+ */
+async function takeMrecFrameSection(
+  input: MrecStoreInput,
+  wanted: boolean,
+): Promise<Frame | undefined> {
+  return wanted ? await readMrecFrameSection(input) : undefined;
+}
+
+/**
+ * mrec store ingress — every host door for a `*.mrec` directory or a packed
+ * `*.mrec.zip` funnels here. `source` is either the async list/read host
+ * ({@link MrecDirectorySource}: molexp, the VS Code extension host) or one of
+ * the {@link MrecStoreInput} shapes (in-memory files, browser `File` handles,
+ * a zip `Blob`).
+ *
+ * With Workers available the trajectory worker owns the molrs
+ * `TrajectoryReader` (`openMrecTrajectory`): store bytes are posted once or
+ * read lazily from `File` handles, and frames stream back as transferables
+ * carrying their section update ids. Without Workers the sync main-thread
+ * provider (`loadMrecInput`) opens the store here. Both land in
+ * `commitLoadedTrajectory`, the pipeline's single ingress.
+ */
+export async function loadMrecSource(
+  app: Molvis,
+  source: MrecDirectorySource | MrecStoreInput,
+  filename: string,
+  mode: LoadMode = "replace",
+  pickBondMapping?: PickBondMapping,
+): Promise<void> {
+  const input: MrecStoreInput = isMrecDirectorySource(source)
+    ? { kind: "files", files: await collectMrecDirectory(source) }
+    : source;
+
+  // Sections are independent, and the key set already names them — so decide
+  // what this record is before touching it. A run commonly writes the topology
+  // once as `frame` and the coordinates over time as `trajectory`; both are
+  // opened, and composition puts them back together (the frame broadcasts, the
+  // sequence owns the timeline) exactly as LAMMPS data + DCD do.
+  const groups = mrecStoreGroups(input);
+  const known = groups.size > 0;
+  const hasTrajectory = !known || groups.has("trajectory");
+  // Read the frame before the sequence: opening the sequence detaches the
+  // store's buffers into the worker.
+  const frameSection = await takeMrecFrameSection(
+    input,
+    known ? groups.has("frame") : true,
+  );
+
+  if (!hasTrajectory) {
+    if (!frameSection) {
+      throw new Error(
+        `${filename} carries no frames to show — this record holds ${[...groups].sort().join(" + ")}.`,
+      );
+    }
+    const snapshot = new Trajectory([frameSection]);
+    await commitLoadedTrajectory(
+      app,
+      snapshot,
+      () => snapshot.dispose(),
+      filename,
+      mode,
+      pickBondMapping,
+    );
+    app.events.emit("status-message", {
+      text: `Loaded a snapshot from ${filename}`,
+      type: "info",
+    });
+    return;
+  }
+
+  if (typeof Worker === "undefined") {
+    const bundle = await loadMrecInput(input);
+    await commitLoadedTrajectory(
+      app,
+      bundle.trajectory,
+      bundle.dispose,
+      filename,
+      mode,
+      pickBondMapping,
+    );
+    await addMrecFrameOverlay(app, frameSection, filename);
+    return;
+  }
+
+  // HUD first on replace, as `loadFileStream` does — a stuck worker still
+  // shows `0/0…`. Augment keeps the existing timeline.
+  if (mode !== "augment") {
+    app.events.emit("length-changed", {
+      indexedLength: 0,
+      length: null,
+      indexComplete: false,
+    });
+  }
+  const runtime = await spawnTrajectoryWorker("mrec");
+  // Register before the open so destroy / a superseding load during the
+  // open still terminates the worker (mirrors `loadFileStream`).
+  disposeInFlightStream(app);
+  streamInFlightCleanups.set(app, () => void runtime.close());
+  let bundle: Awaited<ReturnType<typeof openMrecTrajectory>>;
+  try {
+    bundle = await openMrecTrajectory(runtime, input);
+  } catch (err) {
+    streamInFlightCleanups.delete(app);
+    void runtime.close();
+    if (frameSection) {
+      // A packed store hides its keys, so its shape is only known now. It is
+      // a snapshot after all.
+      const snapshot = new Trajectory([frameSection]);
+      await commitLoadedTrajectory(
+        app,
+        snapshot,
+        () => snapshot.dispose(),
+        filename,
+        mode,
+        pickBondMapping,
+      );
+      return;
+    }
+    throw err;
+  }
+  const { trajectory, dispose } = bundle;
+  streamInFlightCleanups.set(app, dispose);
+  app.events.emit("length-changed", {
+    indexedLength: trajectory.indexedLength,
+    length: trajectory.length,
+    indexComplete: true,
+  });
+
+  streamInFlightCleanups.delete(app);
+  await commitLoadedTrajectory(
+    app,
+    trajectory,
+    dispose,
+    filename,
+    mode,
+    pickBondMapping,
+  );
+  if (mode === "augment" && (trajectory.length ?? 0) <= 1) {
+    // A single-frame augment lands as a MemoryDataSource holding frame 0;
+    // nothing keeps navigating the worker, so release it (frames stay: the
+    // data source still holds the one it copied out of the LRU).
+    void runtime.close();
+  }
+  await addMrecFrameOverlay(app, frameSection, filename);
+  app.events.emit("status-message", {
+    text: `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`,
+    type: "info",
+  });
+}
+
+/**
+ * Add the record's `frame` section beside its trajectory.
+ *
+ * Both sections describe the same system: a run writes the topology once and
+ * the coordinates every step, so the frame is a length-1 source that
+ * broadcasts across the sequence. That is the composition molvis already does
+ * for LAMMPS data + DCD, reached here without the user having to open two
+ * files.
+ */
+async function addMrecFrameOverlay(
+  app: Molvis,
+  frame: Frame | undefined,
+  filename: string,
+): Promise<void> {
+  if (!frame) return;
+  await app.addDataSource(
+    new MemoryDataSource(frame, {
+      sourceType: "file",
+      filename: `${filename} (frame)`,
+    }),
+  );
+}
+
+/**
+ * @deprecated Renamed to {@link loadMrecSource} — mrec is the product, zarr the
+ * encoding. Kept for one deprecation window.
+ */
+export const loadZarrSource = loadMrecSource;
+
+/**
+ * Mesh ingress — an STL opened as scene geometry.
+ *
+ * A door of its own rather than a branch of {@link loadFileContent}, because
+ * the payload is not scene *data*: it has no atoms, no box and no frames, so
+ * it never becomes a `DataSource` and never enters source composition. It
+ * lands as a {@link MeshOverlayModifier} (plus the `Draw surface` companion
+ * `addModifier` pairs with it) and then simply stays there — a static prop the
+ * trajectory plays inside, unaffected by seeking, playback, or a topology file
+ * arriving later.
+ *
+ * The load is always additive: dropping a mesh never clears the scene, so a
+ * `LoadMode` would have nothing to choose between.
+ *
+ * Throws `StlParseError` when the bytes are not an STL; the caller surfaces
+ * the message.
+ */
+export async function loadMeshOverlay(
+  app: Molvis,
+  bytes: Uint8Array,
+  filename: string,
+): Promise<void> {
+  const mesh = parseStl(bytes);
+  const overlay = new MeshOverlayModifier();
+  overlay.setMesh(mesh, filename);
+  app.modifierPipeline.addModifier(overlay);
+  await app.applyPipeline({ fullRebuild: true });
+  app.world.fit();
+  app.events.emit("status-message", {
+    text: `Loaded ${overlay.triangleCount} triangle(s) from ${filename}`,
+    type: "info",
+  });
+}
+
 export interface LoadFileStreamOptions {
   /** Indexing-progress callback. Called periodically (≤10 Hz) during
    *  the worker's blocking index pass. Useful for status-bar updates. */
   onProgress?: IndexProgressCallback;
   /** Bytes per indexer chunk. Default 8 MiB. */
   chunkSize?: number;
+  /** Abort the blocking index pass. The worker drops at the next chunk. */
+  signal?: AbortSignal;
+  /** Sidecar cache key. Hosts that already indexed near the data pass this. */
+  fingerprint?: string;
 }
 
 export interface LoadFileStreamResult {
@@ -491,8 +947,9 @@ export interface LoadFileStreamResult {
 }
 
 /**
- * Streaming file ingress. Used for large text-format trajectories
- * (LAMMPS dump / XYZ / PDB / LAMMPS data / SDF). The original file is
+ * Streaming file ingress. Used for large text-format *trajectories*
+ * (LAMMPS dump / XYZ / PDB / SDF). LAMMPS data is a structure and
+ * stays on the whole-file path. The original file is
  * never materialized as a JS string — a Dedicated Worker reads byte
  * ranges through `BlobRangeSource`, the molrs-wasm streaming reader
  * indexes / parses chunks, and frames flow back to the main thread one
@@ -503,9 +960,20 @@ export interface LoadFileStreamResult {
  * (e.g. `BackboneRibbonModifier`) are attached against frame 0, the
  * pipeline is rebuilt, and the camera is reset.
  */
+function isTrajectorySource(
+  value: Blob | TrajectorySource,
+): value is TrajectorySource {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    "readRange" in value
+  );
+}
+
 export async function loadFileStream(
   app: Molvis,
-  file: Blob,
+  file: Blob | TrajectorySource,
   filename: string,
   format: FileFormat,
   options: LoadFileStreamOptions = {},
@@ -517,29 +985,36 @@ export async function loadFileStream(
       `Format "${format}" cannot stream (descriptor.streaming = "eager-only"). Route this load through loadFileContent / loadFileSmart's eager path instead.`,
     );
   }
+  // HUD first on replace — emit before spawning so a stuck worker still
+  // shows `0/0…`. Augment keeps the existing timeline until the new
+  // source reports progress (data + DCD must not flash back to 0/0).
+  if (mode !== "augment") {
+    app.events.emit("length-changed", {
+      indexedLength: 0,
+      length: null,
+      indexComplete: false,
+    });
+  }
   // canStream narrows `format` to the worker's `Format` type, so
-  // spawnTrajectoryWorker accepts it without a cast.
-  const runtime = spawnTrajectoryWorker(format);
-  const source = new BlobRangeSource(file);
+  // the spawn accepts it without a cast.
+  const runtime = await spawnTrajectoryWorker(format);
+  const source = isTrajectorySource(file) ? file : new BlobRangeSource(file);
   // Real Files have stable identity (size + lastModified) so we can
   // key the OPFS index sidecar against them. Network-fetched Blobs
   // come through `loadFileContent` (eager path) instead of this
   // streaming path, so this only fingerprints user-dropped files.
   const fingerprint =
-    file instanceof File ? fingerprintFile(file, format) : undefined;
+    options.fingerprint ??
+    (file instanceof File ? fingerprintFile(file, format) : undefined);
 
-  // Indexing pass — blocking. Progress drains through the optional
-  // callback; the caller surfaces it as a status-bar message. A
-  // matching `.molidx` sidecar in OPFS short-circuits the scan
-  // entirely.
-  const { frameCount } = await runtime.open(source, {
-    onProgress: options.onProgress,
-    chunkSize: options.chunkSize,
-    fingerprint,
-  });
+  if (options.signal?.aborted) {
+    await runtime.close();
+    throw new CancellationError(-1);
+  }
+  const onAbort = () => runtime.cancelOpen();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
 
   const provider: AsyncFrameProvider = {
-    length: frameCount,
     get: (index) => runtime.loadFrameLatest(index),
     dispose: () => {
       void runtime.close();
@@ -549,8 +1024,64 @@ export async function loadFileStream(
   const streamDispose = () => {
     trajectory.dispose();
   };
+  // Register before `open()` so destroy / a superseding stream load during
+  // indexing still terminates the worker. Keep this separate from
+  // `appCleanups` — augment/replace must not dispose the committed scene.
+  disposeInFlightStream(app);
+  streamInFlightCleanups.set(app, streamDispose);
+
+  const emitLength = (): void => {
+    app.events.emit("length-changed", {
+      indexedLength: trajectory.indexedLength,
+      length: trajectory.length,
+      indexComplete: trajectory.indexComplete,
+    });
+  };
+
+  let opened: Awaited<ReturnType<typeof runtime.open>>;
+  try {
+    opened = await runtime.open(source, {
+      onProgress: (event) => {
+        options.onProgress?.(event);
+        if (event.framesIndexedSoFar > trajectory.indexedLength) {
+          trajectory.recordIndexedLength(event.framesIndexedSoFar);
+          emitLength();
+        }
+      },
+      onIndexComplete: (result) => {
+        trajectory.recordIndexedLength(result.indexedLength, result.length);
+        if (!trajectory.indexComplete) trajectory.markIndexComplete();
+        emitLength();
+        app.events.emit("index-complete", {
+          indexedLength: trajectory.indexedLength,
+          length: trajectory.length,
+        });
+      },
+      chunkSize: options.chunkSize,
+      fingerprint,
+    });
+  } catch (err) {
+    streamDispose();
+    streamInFlightCleanups.delete(app);
+    if (err instanceof CancellationError || options.signal?.aborted) {
+      throw err instanceof CancellationError ? err : new CancellationError(-1);
+    }
+    throw err;
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+  }
+
+  trajectory.recordIndexedLength(
+    opened.indexedLength,
+    opened.length === null ? undefined : opened.length,
+  );
+  if (opened.indexComplete && !trajectory.indexComplete) {
+    trajectory.markIndexComplete();
+  }
 
   if (mode === "extend") {
+    await runtime.whenIndexComplete;
+    streamInFlightCleanups.delete(app);
     await extendIntoScene(
       app,
       trajectory,
@@ -559,13 +1090,14 @@ export async function loadFileStream(
       pickBondMapping,
     );
     app.events.emit("status-message", {
-      text: `Extended current scene with ${frameCount} frame(s) from ${filename}`,
+      text: `Extended current scene with ${trajectory.indexedLength} frame(s) from ${filename}`,
       type: "info",
     });
     return { runtime };
   }
 
   if (mode === "augment") {
+    await runtime.whenIndexComplete;
     try {
       await augmentTrajectoryAsDataSource(
         app,
@@ -575,11 +1107,22 @@ export async function loadFileStream(
       );
     } catch (err) {
       streamDispose();
+      streamInFlightCleanups.delete(app);
       throw err;
     }
 
+    const augmentedFrames = trajectory.length ?? trajectory.indexedLength;
+    if (augmentedFrames <= 1) {
+      // MemoryDataSource owns frame 0 only — release the worker now.
+      streamDispose();
+      streamInFlightCleanups.delete(app);
+    } else {
+      // FileDataSource owns the async trajectory; pipeline.clear on destroy.
+      streamInFlightCleanups.delete(app);
+    }
+
     app.events.emit("status-message", {
-      text: `Loaded ${frameCount} frame(s) from ${filename}`,
+      text: `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`,
       type: "info",
     });
     app.world.fit();
@@ -588,9 +1131,12 @@ export async function loadFileStream(
   }
 
   app.events.emit("status-message", {
-    text: `Loaded ${frameCount} frame(s) from ${filename}`,
+    text: opened.indexComplete
+      ? `Loaded ${trajectory.indexedLength} frame(s) from ${filename}`
+      : `Showing frame 1; indexing ${filename}…`,
     type: "info",
   });
+  streamInFlightCleanups.delete(app);
   await installPrimaryTrajectory(
     app,
     trajectory,

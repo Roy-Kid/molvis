@@ -13,8 +13,8 @@ describe("withKekuleOrders (molrs Perceive)", () => {
 
     const out = withKekuleOrders(f3);
     const bonds = out.getBlock("bonds")!;
-    const types = Array.from(bonds.viewColU32("bond_type") ?? []);
-    const numbers = Array.from(bonds.viewColU32("bond_number") ?? []);
+    const types = Array.from(bonds.viewColU32("bond_type") ?? [], Number);
+    const numbers = Array.from(bonds.viewColU32("bond_number") ?? [], Number);
     const ring = types
       .map((t, i) => ({ t, n: numbers[i] }))
       .filter((x) => x.t === 4);

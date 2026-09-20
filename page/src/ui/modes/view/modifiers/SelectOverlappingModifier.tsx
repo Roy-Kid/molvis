@@ -5,6 +5,7 @@ import type {
 import type React from "react";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { ScalarSliderRow } from "./ScalarSliderRow";
+import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
 interface Props {
   modifier: Core;
@@ -42,6 +43,12 @@ export const SelectOverlappingModifier: React.FC<Props> = ({
           onUpdate();
         }}
         onCommit={() => void applyPipeline()}
+      />
+
+      <SelectionHighlightColor
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
       />
     </fieldset>
   );

@@ -26,5 +26,5 @@ postcss.config.*
 package-lock.json
 
 # Include only:
-# - out/ (extension + webview bundles + wasm)
+# - out/ (extension + Stage/Sketch/Page webviews + wasm)
 # - package.json, README.md, LICENSE, image/

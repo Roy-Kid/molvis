@@ -24,18 +24,30 @@ export const DEFAULT_SCOPE: ScopeState = {
   atoms: "all",
 };
 
+export type ParseScopeResult =
+  | { ok: true; range: FrameRange }
+  | { ok: false; reason: "needs-explicit-end" };
+
 export function parseScopeRange(
   scope: ScopeState,
   trajectoryLength: number,
-): FrameRange {
+  opts?: { indexComplete?: boolean },
+): ParseScopeResult {
   const last = Math.max(0, trajectoryLength - 1);
   const start = Number.parseInt(scope.start, 10);
-  const end = scope.end.trim() === "" ? last : Number.parseInt(scope.end, 10);
+  const emptyEnd = scope.end.trim() === "";
+  if (emptyEnd && opts?.indexComplete === false) {
+    return { ok: false, reason: "needs-explicit-end" };
+  }
+  const end = emptyEnd ? last : Number.parseInt(scope.end, 10);
   const stride = Number.parseInt(scope.stride, 10);
   return {
-    start: Number.isFinite(start) ? start : 0,
-    endInclusive: Number.isFinite(end) ? end : last,
-    stride: Number.isFinite(stride) && stride > 0 ? stride : 1,
+    ok: true,
+    range: {
+      start: Number.isFinite(start) ? start : 0,
+      endInclusive: Number.isFinite(end) ? end : last,
+      stride: Number.isFinite(stride) && stride > 0 ? stride : 1,
+    },
   };
 }
 
@@ -58,8 +70,11 @@ export function formatScopeSummary(
   trajectoryLength: number,
   selectedAtomCount: number,
 ): string {
-  const range = parseScopeRange(scope, trajectoryLength);
-  const visited = scopeFrameCount(range, trajectoryLength);
+  const parsed = parseScopeRange(scope, trajectoryLength);
+  const range = parsed.ok
+    ? parsed.range
+    : { start: 0, endInclusive: 0, stride: 1 };
+  const visited = parsed.ok ? scopeFrameCount(range, trajectoryLength) : 0;
   const atoms =
     scope.atoms === "selection" ? `${selectedAtomCount} selected` : "all atoms";
   return `${visited} frame${visited === 1 ? "" : "s"} · ${atoms}`;
@@ -69,6 +84,7 @@ interface AnalysisScopeProps {
   value: ScopeState;
   onChange: (next: ScopeState) => void;
   trajectoryLength: number;
+  indexComplete?: boolean;
   selectedAtomCount: number;
   /** Set when the selection cannot be followed by a stable atom id. */
   trackingWarning?: string;
@@ -84,11 +100,13 @@ export const AnalysisScope: React.FC<AnalysisScopeProps> = ({
   value,
   onChange,
   trajectoryLength,
+  indexComplete = true,
   selectedAtomCount,
   trackingWarning,
   hideAtomScope = false,
 }) => {
   const last = Math.max(0, trajectoryLength - 1);
+  const parsed = parseScopeRange(value, trajectoryLength, { indexComplete });
 
   return (
     <div className="space-y-1.5">
@@ -104,10 +122,14 @@ export const AnalysisScope: React.FC<AnalysisScopeProps> = ({
         <Input
           className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
           value={value.end}
-          placeholder={String(last)}
+          placeholder={indexComplete ? String(last) : "end"}
           onChange={(e) => onChange({ ...value, end: e.target.value })}
           aria-label="End frame"
-          title="End frame"
+          title={
+            indexComplete
+              ? "End frame"
+              : "Explicit end required while the index is still scanning"
+          }
         />
         <Input
           className="h-control-compact min-w-0 font-mono text-xs tabular-nums"
@@ -135,6 +157,12 @@ export const AnalysisScope: React.FC<AnalysisScopeProps> = ({
             Selection ({selectedAtomCount})
           </ScopeToggle>
         </div>
+      )}
+
+      {!parsed.ok && (
+        <AnalysisAlert tone="info">
+          Set an explicit end frame — the index is still scanning.
+        </AnalysisAlert>
       )}
 
       {!hideAtomScope && value.atoms === "selection" && (

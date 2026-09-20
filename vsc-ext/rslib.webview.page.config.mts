@@ -1,23 +1,14 @@
 /**
  * Separate webview build for the optional Open Page surface.
- * Isolated so React/page never enter the QV / Workbench / Sketch graph.
+ * Isolated so React/page never enter the Stage / Quick View / Sketch graph.
  */
 import path from "node:path";
 import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rslib/core";
-import {
-  ComputeSpawnRewrite,
-  TrajectoryRuntimeRewrite,
-} from "./rslib.webview.worker-rewrites.mts";
 
 const sharedDefine = {
   "process.env.NODE_ENV": '"production"',
 };
-
-const trajectoryRuntimeRewrite = new TrajectoryRuntimeRewrite(
-  import.meta.dirname,
-);
-const computeSpawnRewrite = new ComputeSpawnRewrite(import.meta.dirname);
 
 export default defineConfig({
   lib: [
@@ -44,6 +35,19 @@ export default defineConfig({
         cleanDistPath: false,
         externals: [],
         minify: true,
+        // Inline every asset the page imports. An ESM library build emits a
+        // bare `import logo from "../static/image/….png"` for an emitted
+        // asset, and a browser refuses to load a PNG as a module script —
+        // which takes the whole page chunk down with it. Data URIs keep the
+        // reference inside the JS. (Wasm is not an asset module here; it
+        // still ships as a file and is fetched by the runtime chunk.)
+        dataUriLimit: {
+          image: 8 * 1024 * 1024,
+          svg: 8 * 1024 * 1024,
+          font: 8 * 1024 * 1024,
+          media: 8 * 1024 * 1024,
+          assets: 8 * 1024 * 1024,
+        },
       },
     },
   ],
@@ -54,6 +58,14 @@ export default defineConfig({
     alias: {
       // Page sources only. Engines resolve as @molcrafts/* packages.
       "@": path.resolve(import.meta.dirname, "../page/src"),
+      // Exact-match swap of stage's spawn seam for the webview graph:
+      // the isolated chunks/worker.js + chunks/compute-worker.js load
+      // via the vsc-ext blob bootstrap instead of in-graph literal
+      // `new Worker(new URL(...))` folding.
+      "@molcrafts/molvis-stage/worker-spawner$": path.resolve(
+        import.meta.dirname,
+        "./src/webview/worker_spawner.ts",
+      ),
     },
   },
 
@@ -112,11 +124,6 @@ export default defineConfig({
         ...config.experiments,
         asyncWebAssembly: true,
       };
-      config.plugins = [
-        ...(config.plugins ?? []),
-        trajectoryRuntimeRewrite.plugin(),
-        computeSpawnRewrite.plugin(),
-      ];
     },
   },
 });

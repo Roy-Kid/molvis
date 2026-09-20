@@ -4,9 +4,10 @@ import type { MolecularFileLoader } from "../loading/molecularFileLoader";
 import type { RecentFilesStore } from "../loading/recentFiles";
 import type { Logger, PanelRegistry } from "../types";
 import { withErrorHandler } from "./errorBoundary";
-import { getPreviewHtml } from "./html";
+import { getPageHtml } from "./html";
 import {
   handleDropUri,
+  handleRangeMessage,
   handleSaveFile,
   loadTextDocumentToWebview,
   onWebviewMessage,
@@ -66,10 +67,13 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
         vscode.Uri.joinPath(this.context.extensionUri, "out"),
       ],
     };
-    webviewPanel.webview.html = getPreviewHtml(
-      webviewPanel.webview,
-      this.context.extensionUri,
-    );
+    // Same viewer as Quick look and the Page, opened with its chrome off.
+    // "Show controls" on the canvas reveals the full interface in place.
+    const getHtml = () =>
+      getPageHtml(webviewPanel.webview, this.context.extensionUri, {
+        surface: "canvas",
+      });
+    webviewPanel.webview.html = getHtml();
 
     const baseTitle = webviewPanel.title;
     const messageDisposable = onWebviewMessage(
@@ -93,6 +97,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
               webviewPanel.webview,
               this.fileLoader,
               this.logger,
+              message.mode,
             );
             break;
           case "dirtyStateChanged":
@@ -102,6 +107,15 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
             this.logger.error(`MolVis: ${message.message}`);
             break;
           default:
+            if (
+              await handleRangeMessage(
+                webviewPanel.webview,
+                message,
+                this.logger,
+              )
+            ) {
+              break;
+            }
             break;
         }
       }, this.logger),
@@ -120,8 +134,7 @@ export class MolvisEditorProvider implements vscode.CustomTextEditorProvider {
     );
 
     this.panelRegistry.register(webviewPanel, {
-      getHtml: () =>
-        getPreviewHtml(webviewPanel.webview, this.context.extensionUri),
+      getHtml,
       reload: async () => {
         await loadTextDocumentToWebview(webviewPanel.webview, document);
       },

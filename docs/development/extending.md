@@ -63,16 +63,21 @@ Register it at startup:
 ```typescript
 import { ModifierRegistry } from "@molcrafts/molvis-stage";
 
-ModifierRegistry.register("scale-x", () => new ScaleXModifier());
+// register(name, category, factory, options?) — category is required.
+ModifierRegistry.register("scale-x", "Modification", () => new ScaleXModifier());
 ```
 
-Now it shows up in the pipeline's *Add modifier* menu. The registry
-decides the **functional group** rendered in the Add menu from the
-`category` field — **same folders as OVITO** (Python folder omitted):
+Now it shows up in the pipeline's *Add modifier* menu. Pass
+`{ userAddable: false }` as the fourth argument to keep a modifier resolvable
+by load / RPC paths while omitting it from that menu.
 
-- `Selection` — Expression Select, Invert, Expand, Select type, …
-- `Modification` — Slice, Wrap PBC, Affine, Replicate, Compute property, …
-- `Coloring` — Color by Property, Color by Type, Assign Color
+The registry `category` field is the OVITO key; the menu displays one-word nouns
+(`Coloring` → Color, `Structure identification` → Structure). Wrap PBC
+is a pipeline flag under Modification, not a registerable modifier.
+
+- `Selection` — Expression select, Invert, Expand, Select type, …
+- `Modification` — Slice, Affine, Replicate, Compute property, …
+- `Coloring` — Color by property, Color by type, Assign color
 - `Structure identification` — Steinhardt, Solid–liquid (molrs); CNA/PTM later
 - `Visualization` — Bonds, Simulation cell, isosurface, surface mesh, polyhedra, …
 - `Analysis` — Displacement vectors (scene-feeding property compute)

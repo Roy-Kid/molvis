@@ -2,6 +2,7 @@ import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import { FileDataSource } from "../src/pipeline/data_source";
+import { MeshOverlayModifier } from "../src/pipeline/mesh_overlay";
 import { ModifierPipeline } from "../src/pipeline/pipeline";
 import { SceneSession, type SceneSessionHost } from "../src/scene_session";
 import { System } from "../src/system";
@@ -71,6 +72,49 @@ describe("SceneSession.replaceScene", () => {
     });
 
     expect(pipeline.getEntries().map((m) => m.name)).not.toContain("Particles");
+  });
+
+  it("keeps Mesh overlays when replacing molecular data", async () => {
+    const { host, pipeline } = hostStub();
+    const session = new SceneSession(host);
+    const mesh = new MeshOverlayModifier();
+    mesh.setMesh(
+      {
+        positions: new Float32Array(9),
+        indices: new Uint32Array([0, 1, 2]),
+        normals: new Float32Array(9),
+      },
+      "cavity.stl",
+    );
+    pipeline.addModifier(mesh);
+
+    await session.replaceScene(new Trajectory([oneOxygenFrame()]), {
+      filename: "sys.data",
+    });
+
+    expect(
+      pipeline.modifiers().some((m) => m instanceof MeshOverlayModifier),
+    ).toBe(true);
+    expect(pipeline.meshOverlayCount()).toBe(1);
+  });
+});
+
+describe("SceneSession.addDataSource", () => {
+  it("promotes System to the longer trajectory when stacking DCD onto a structure", async () => {
+    const { host, system } = hostStub();
+    const session = new SceneSession(host);
+    const structure = new Trajectory([oneOxygenFrame()]);
+    const frames = [oneOxygenFrame(), oneOxygenFrame(), oneOxygenFrame()];
+    const traj = new Trajectory(frames);
+
+    await session.replaceScene(structure, { filename: "sys.data" });
+    expect(system.trajectory.indexedLength).toBe(1);
+
+    await session.addDataSource(
+      new FileDataSource(traj, { filename: "sys.dcd" }),
+    );
+    expect(system.trajectory).toBe(traj);
+    expect(system.trajectory.indexedLength).toBe(3);
   });
 });
 

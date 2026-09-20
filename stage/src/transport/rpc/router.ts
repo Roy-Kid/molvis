@@ -22,6 +22,7 @@ import {
 } from "../../camera/control";
 import { DrawAtomCommand, DrawBondCommand } from "../../commands/draw";
 import { PlaceMoleculeCommand } from "../../commands/place_molecule";
+import { loadMeshOverlay } from "../../io";
 import { viewAtomCoords } from "../../io/atom_coords";
 import { CameraTrackModifier } from "../../modifiers/CameraTrackModifier";
 import type { MarkAtomOverlay } from "../../overlays/mark_atom";
@@ -290,7 +291,7 @@ function serializeEntry(entry: PipelineEntry): Record<string, unknown> {
       selection_scope_id: null,
       source_owner_id: null,
       category: DATA_SOURCE_CATEGORY,
-      kind: entry.kind,
+      type_name: entry.constructor.name,
       filename: entry.filename,
       source_type: entry.sourceType,
     };
@@ -413,6 +414,7 @@ export class RPCRouter {
       ["pipeline.set_source_owner", this.handlePipelineSetSourceOwner],
       ["pipeline.clear", this.handlePipelineClear],
       ["scene.add_data_source", this.handleAddDataSource],
+      ["scene.add_mesh_overlay", this.handleAddMeshOverlay],
       ["scene.remove_data_source", this.handleRemoveDataSource],
       ["scene.list_data_sources", this.handleListDataSources],
       ["snapshot.take", this.handleSnapshotTake],
@@ -934,7 +936,7 @@ export class RPCRouter {
   private handleSetFrameLabels: RPCHandler = (params, buffers) => {
     const rawLabels = params.labels;
     const trajectory = this.app.system.trajectory;
-    const nFrames = trajectory.length;
+    const nFrames = trajectory.indexedLength;
 
     // null → no-op. Python callers that want to clear should set empty
     // strings on the keys they wrote, or delete keys — but molrs currently
@@ -1536,6 +1538,21 @@ export class RPCRouter {
     return { success: true, id: ds.id };
   };
 
+  private handleAddMeshOverlay: RPCHandler = async (params, buffers) => {
+    const filename =
+      requireString(params.filename, "filename", { allowNull: true }) ??
+      "mesh.stl";
+    const view = buffers[0];
+    if (!view) {
+      throw invalidParams(
+        "scene.add_mesh_overlay requires STL bytes as buffer 0",
+      );
+    }
+    const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    await loadMeshOverlay(this.app, bytes, filename);
+    return { success: true };
+  };
+
   /**
    * Cascade-remove a DataSource and its children. The id must
    * refer to a DS in the pipeline (use `pipeline.remove_modifier` for
@@ -1564,7 +1581,7 @@ export class RPCRouter {
   private handleListDataSources: RPCHandler = async () => {
     const dsList = this.app.modifierPipeline.sources().map((ds) => ({
       id: ds.id,
-      kind: ds.kind,
+      type_name: ds.constructor.name,
       filename: ds.filename,
       source_type: ds.sourceType,
       frame_count: ds.frameCount,

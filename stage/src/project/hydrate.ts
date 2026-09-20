@@ -11,9 +11,11 @@ import {
   FileDataSource,
   MemoryDataSource,
 } from "../pipeline/data_source";
+import { DrawSurfaceModifier } from "../pipeline/draw_surface";
 import { bootstrapEmptyPipeline } from "../pipeline/empty_scene";
 import { ModifierRegistry } from "../pipeline/modifier_registry";
 import { Trajectory } from "../system/trajectory";
+import { carriesProjectParams } from "./params";
 import { portableToFrame } from "./portable_frame";
 import { isMolvisProject } from "./serialize";
 import type { MolvisProject, ProjectPipelineEntry } from "./types";
@@ -74,6 +76,15 @@ export async function hydrateProject(
     }
     const mod = factory();
     mod.enabled = entry.enabled;
+    if (
+      typeof entry.params?.highlightColor === "string" &&
+      /^#[0-9a-fA-F]{6}$/.test(entry.params.highlightColor)
+    ) {
+      mod.highlightColor = entry.params.highlightColor;
+    }
+    if (carriesProjectParams(mod) && entry.params) {
+      mod.fromProjectParams(entry.params);
+    }
     if (entry.selection_scope_id) {
       mod.selectionScopeId =
         idMap.get(entry.selection_scope_id) ?? entry.selection_scope_id;
@@ -82,7 +93,12 @@ export async function hydrateProject(
       mod.sourceOwnerId =
         idMap.get(entry.source_owner_id) ?? entry.source_owner_id;
     }
-    app.modifierPipeline.addModifier(mod);
+    // The saved pipeline already contains each producer's Draw surface, so
+    // pairing here would add a second one on every load.
+    if (mod instanceof DrawSurfaceModifier && mod.producerId) {
+      mod.producerId = idMap.get(mod.producerId) ?? mod.producerId;
+    }
+    app.modifierPipeline.addModifier(mod, { attachDraw: false });
     idMap.set(entry.id, mod.id);
   }
 
@@ -119,19 +135,18 @@ function materializeDataSource(entry: ProjectPipelineEntry): DataSource {
     portableToFrame(pf, `project.dataSource[${entry.id}].frames[${i}]`),
   );
 
-  if (frames.length === 1) {
-    return new MemoryDataSource(frames[0], {
-      filename: payload.filename || "Scene",
-      sourceType:
-        payload.sourceType === "empty" ? "backend" : payload.sourceType,
+  if (payload.typeName === "FileDataSource" || frames.length > 1) {
+    const traj = new Trajectory(frames);
+    return new FileDataSource(traj, {
+      filename: payload.filename || "trajectory",
+      sourceType: payload.sourceType === "file" ? "file" : "backend",
       contributedBlocks: payload.contributedBlocks,
     });
   }
 
-  const traj = new Trajectory(frames);
-  return new FileDataSource(traj, {
-    filename: payload.filename || "trajectory",
-    sourceType: payload.sourceType === "file" ? "file" : "backend",
+  return new MemoryDataSource(frames[0], {
+    filename: payload.filename || "Scene",
+    sourceType: payload.sourceType === "empty" ? "backend" : payload.sourceType,
     contributedBlocks: payload.contributedBlocks,
   });
 }

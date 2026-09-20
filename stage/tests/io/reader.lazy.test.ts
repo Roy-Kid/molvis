@@ -45,6 +45,22 @@ H 1.0 0.0 0.0
 H 0.0 1.0 0.0
 `;
 
+// LAMMPS `dump local` bond overlay as written by molrs
+// `write_lammps_dump_local`: `ITEM: ENTRIES batom1 batom2 [btype]` and no
+// atoms block. The endpoints are 1-based atom ids, not row indices.
+const DUMP_LOCAL_BONDS_FIXTURE = `ITEM: TIMESTEP
+0
+ITEM: NUMBER OF ENTRIES
+2
+ITEM: BOX BOUNDS pp pp pp
+0.0 10.0
+0.0 10.0
+0.0 10.0
+ITEM: ENTRIES batom1 batom2 btype
+1 2 1
+2 3 1
+`;
+
 describe("loadTextTrajectory", () => {
   it("opens xyz content lazily as a trajectory", () => {
     const bundle = loadTextTrajectory(XYZ_TRAJECTORY_FIXTURE, "traj.xyz");
@@ -108,8 +124,33 @@ describe("loadTextTrajectory", () => {
     try {
       const bonds = bundle.trajectory.get(0)?.getBlock("bonds");
       expect(bonds?.nrows()).toBe(2);
-      expect([...(bonds?.copyColU32("atomi") ?? [])]).toEqual([0, 0]);
-      expect([...(bonds?.copyColU32("atomj") ?? [])]).toEqual([1, 2]);
+      expect(Array.from(bonds?.copyColU32("atomi") ?? [], Number)).toEqual([
+        0, 0,
+      ]);
+      expect(Array.from(bonds?.copyColU32("atomj") ?? [], Number)).toEqual([
+        1, 2,
+      ]);
+    } finally {
+      bundle.dispose();
+    }
+  });
+
+  it("opens a bond-only .dump.local overlay and renames entries to bonds", () => {
+    const bundle = loadTextTrajectory(
+      DUMP_LOCAL_BONDS_FIXTURE,
+      "bonds.dump.local",
+    );
+
+    try {
+      const frame = bundle.trajectory.get(0);
+      expect(frame?.getBlock("entries")).toBeUndefined();
+      const bonds = frame?.getBlock("bonds");
+      expect(bonds?.nrows()).toBe(2);
+      expect(bonds?.dtype("batom1")).toBeDefined();
+      expect(bonds?.dtype("batom2")).toBeDefined();
+      expect(bonds?.dtype("btype")).toBeDefined();
+      // A bond-only overlay must not trip the "frame has 0 atoms" guard.
+      expect(frame?.getBlock("atoms")).toBeUndefined();
     } finally {
       bundle.dispose();
     }

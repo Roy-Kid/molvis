@@ -3,17 +3,17 @@ import type {
   KeyboardInfo,
   Observer,
   PointerInfo,
+  Vector3,
 } from "@babylonjs/core";
 import {
   KeyboardEventTypes,
   PointerEventTypes,
   Vector2,
-  Vector3,
 } from "@babylonjs/core";
 import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import type { MolvisApp as Molvis } from "../app";
 import type { ContextMenuController } from "../ui/menus/controller";
-import { formatBondLabel } from "../utils/bond_order";
+import { formatHitInfo } from "./hit_info";
 import type { ModeId } from "./mode_type";
 import { resolvePointerSpacePosition } from "./placement_position";
 import type { SceneHit } from "./types";
@@ -42,8 +42,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (tag === "input" || tag === "textarea" || tag === "select") return true;
   if (el.isContentEditable) return true;
   // Shadow hosts (element picker, menu bindings)
-  if (el.closest?.("molvis-element-picker, molvis-slider, molvis-context-menu"))
-    return true;
+  if (el.closest?.("molvis-element-picker, molvis-context-menu")) return true;
   return false;
 }
 
@@ -53,7 +52,13 @@ abstract class BaseMode {
 
   private _app: Molvis;
   private _pointer_observer: Observer<PointerInfo>;
-  private _kb_observer: Observer<KeyboardInfo>;
+  /**
+   * Keys are routed from `document`, not from Babylon's keyboard observable:
+   * that one only fires while the canvas holds focus, so "hover an atom and
+   * press Delete" did nothing until the user had clicked the canvas at least
+   * once. One path, gated on the pointer actually being over the canvas.
+   */
+  private _kb_handler: ((event: KeyboardEvent) => void) | null = null;
   private _infoLastText = "";
   private _hoverPickRaf: number | null = null;
   private _hoverPickScheduled = false;
@@ -81,7 +86,7 @@ abstract class BaseMode {
     this._app = app;
     this.name = name;
     this._pointer_observer = this.register_pointer_events();
-    this._kb_observer = this.register_keyboard_events();
+    this.register_keyboard_events();
     this.initContextMenu();
   }
 
@@ -157,7 +162,10 @@ abstract class BaseMode {
   };
 
   private unregister_keyboard_events = () => {
-    this.scene.onKeyboardObservable.remove(this._kb_observer);
+    if (this._kb_handler) {
+      document.removeEventListener("keydown", this._kb_handler);
+      this._kb_handler = null;
+    }
   };
 
   private register_pointer_events() {
@@ -193,7 +201,22 @@ abstract class BaseMode {
   }
 
   private register_keyboard_events = () => {
-    return this.scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
+    const canvas = this.scene.getEngine().getRenderingCanvas();
+
+    this._kb_handler = (event: KeyboardEvent) => {
+      // The canvas is the target surface whether or not it holds focus:
+      // pointer-over is what the user means by "the atom under my cursor".
+      // `:hover` is the browser's own hit state, so it is correct even when
+      // the pointer was already inside the canvas before this mode attached
+      // (an enter/leave flag of our own would miss that case, and does).
+      if (!canvas) return;
+      if (!canvas.matches(":hover") && document.activeElement !== canvas) {
+        return;
+      }
+      const kbInfo = {
+        type: KeyboardEventTypes.KEYDOWN,
+        event,
+      } as KeyboardInfo;
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
           if (isCtrlOrMeta(kbInfo.event)) {
@@ -259,7 +282,8 @@ abstract class BaseMode {
           }
           break;
       }
-    });
+    };
+    document.addEventListener("keydown", this._kb_handler);
   };
 
   /**
@@ -355,63 +379,7 @@ abstract class BaseMode {
   }
 
   protected formatHitInfo(hit: SceneHit | null): string {
-    if (!hit || hit.type === "empty") {
-      return "";
-    }
-    if (hit.type === "ribbon") {
-      return `Residue ${hit.resName} ${hit.resSeq} · chain ${hit.chainId}`;
-    }
-    if (hit.type === "atom") {
-      const { element, position, atomId } = hit.metadata;
-      const residue = this.residueLabelForAtom(atomId);
-      const el = element?.trim() || "Atom";
-      const xyz = `(${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) Å`;
-      const atomPart = `Atom ${el} · ID ${atomId} · ${xyz}`;
-      return residue ? `${residue} · ${atomPart}` : atomPart;
-    }
-    const { start, end, atomId1, atomId2, bondType, bondNumber } = hit.metadata;
-    const length = Vector3.Distance(
-      new Vector3(start.x, start.y, start.z),
-      new Vector3(end.x, end.y, end.z),
-    );
-    const kind = formatBondLabel(bondType, bondNumber);
-    return `Bond ${atomId1}–${atomId2} · ${length.toFixed(2)} Å · ${kind}`;
-  }
-
-  /**
-   * `THR 222 · chain A` when trajectory Frame carries residue columns.
-   * Atom must exist on SceneIndex (canvas); columns are reverse-lookup only.
-   */
-  private residueLabelForAtom(atomId: number): string | null {
-    if (this.app.world.sceneIndex.metaRegistry.atoms.getMeta(atomId) == null) {
-      return null;
-    }
-    const frame = this.app.system.frame;
-    const atoms = frame?.getBlock("atoms");
-    if (!atoms || atomId < 0 || atomId >= atoms.nrows()) return null;
-    try {
-      if (
-        atoms.dtype("res_name") !== "string" ||
-        atoms.dtype("chain_id") !== "string"
-      ) {
-        return null;
-      }
-      const resName = (atoms.copyColStr("res_name") as string[])[
-        atomId
-      ]?.trim();
-      const chainId =
-        (atoms.copyColStr("chain_id") as string[])[atomId]?.trim() || "A";
-      let resSeq: number | null = null;
-      if (atoms.dtype("res_seq") === "i32") {
-        resSeq = atoms.copyColI32("res_seq")[atomId];
-      } else if (atoms.dtype("res_seq") === "u32") {
-        resSeq = atoms.copyColU32("res_seq")[atomId];
-      }
-      if (!resName || resSeq === null || !Number.isFinite(resSeq)) return null;
-      return `${resName} ${resSeq} · chain ${chainId}`;
-    } catch {
-      return null;
-    }
+    return formatHitInfo(hit, this.app.system.frame?.getBlock("atoms") ?? null);
   }
 
   _on_pointer_wheel(_pointerInfo: PointerInfo): void {}

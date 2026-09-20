@@ -9,7 +9,7 @@ import {
   normalizeFrameBox,
   shouldDrawBox,
 } from "../../src/io/box_presence";
-import { WrapPBCModifier } from "../../src/modifiers/WrapPBCModifier";
+import { SliceModifier } from "../../src/modifiers/SliceModifier";
 import {
   DrawBoxModifier,
   defaultSimulationCellEnabled,
@@ -69,12 +69,11 @@ describe("shouldDrawBox / normalizeFrameBox", () => {
     );
   });
 
-  it("Wrap PBC never auto-attaches even with a usable box", () => {
+  it("Slice never auto-attaches even with a usable box", () => {
     const frame = new Frame();
     frame.box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
-    const wrap = new WrapPBCModifier("wrap-test");
-    expect(wrap.matches(frame)).toBe(false);
-    expect(wrap.isApplicable(frame)).toBe(true);
+    const slice = new SliceModifier();
+    expect(slice.matches(frame)).toBe(false);
     frame.free();
   });
 });

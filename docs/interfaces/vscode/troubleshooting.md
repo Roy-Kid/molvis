@@ -14,16 +14,15 @@ changing GPU flags.
 
 ## The file opens as text
 
-Use **Open With… → MolVis Quick View**. If the format should always use MolVis,
-choose **Configure default editor for…**. Text formats intentionally have
-`option` priority so installing MolVis does not unexpectedly replace the user's
-editor choice; binary DCD/TRR/XTC use MolVis by default.
+Use **Open With… → Quick look**. Text formats intentionally have `option`
+priority so installing MolVis does not unexpectedly replace the user's
+editor choice; binary DCD/TRR/XTC open in Quick look by default.
 
 ## Save is disabled or fails
 
 Confirm that:
 
-- the active tab is a MolVis custom editor or Quick View;
+- the active tab is a MolVis custom editor or Quick look;
 - the source format has a writer;
 - the workspace provider is writable;
 - the resource is a file rather than a Zarr directory;
@@ -31,10 +30,18 @@ Confirm that:
 
 ## A large file never appears
 
-Check transfer and memory messages in the Output channel. Large remote files
-must first cross the extension-host/webview boundary. Prefer a binary or
-chunked trajectory format for long simulations instead of a huge expanded text
-dump.
+Check transfer and memory messages in the Output channel.
+
+- **Structure files** (LAMMPS data, POSCAR, …) open as one frame. MolVis does
+  not refuse them for size. A VS Code `TextDocument` path is still capped at
+  ~50 MB — use Quick look / Stage, not the text editor.
+- **Streamable trajectories** open by range (`openUri` / `readRange`). A
+  512 MiB dump is no longer refused on a `file:` URI.
+- **Eager-only** trajectories at or above 512 MiB are still refused — there
+  is no range indexer for those formats.
+- The standalone web app streams a local `File` handle the same way.
+
+Press Esc on the web app while “Indexing …” is showing to cancel the scan.
 
 ## Notebook selection is different
 

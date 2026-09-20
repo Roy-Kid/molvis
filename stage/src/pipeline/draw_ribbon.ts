@@ -65,13 +65,13 @@ const CA_CA_BREAK_DIST_SQ = 4.5 * 4.5;
  * so `readBackboneBlock` groups them as a separate chain and the
  * RibbonRenderer draws independent splines.
  *
- * **Coordinate-policy contract:** this never wraps the whole frame into
- * the cell. Atom positions already went through
- * {@link import("../coords").applyCoordinatePolicy} (compose → policy →
- * modifiers). MI here is *draw-time chain continuity* only: under
- * `wrap-molecules` a continuous peptide should agree with MI and not
- * split; under `as-deposited` an ASU that crosses the cell still splits
- * so the ribbon does not bridge images.
+ * **Coordinate wrap contract:** this never wraps the whole frame into
+ * the cell. Atom positions already went through the system wrap gate
+ * ({@link import("../coords").applyWrapIfEnabled}, compose → wrap? →
+ * modifiers). MI here is *draw-time chain continuity* only: under wrap
+ * a continuous peptide that still spans the cell after fold is split so
+ * the ribbon does not bridge images; under as-deposited an ASU that
+ * crosses the cell likewise splits.
  */
 function splitChainsAtBreaks(rows: Residue[], box: Box | undefined): void {
   if (rows.length < 2) return;
@@ -293,10 +293,10 @@ export class DrawRibbonModifier extends BaseModifier {
     const atoms = frame.getBlock("atoms");
     if (!atoms) return false;
     const hasResColumns =
-      atoms.dtype("name") === "string" &&
-      atoms.dtype("res_name") === "string" &&
-      atoms.dtype("res_seq") === "i32" &&
-      atoms.dtype("chain_id") === "string";
+      atoms.hasStr("name") &&
+      atoms.hasStr("res_name") &&
+      atoms.hasI32("res_seq") &&
+      atoms.hasStr("chain_id");
     if (!hasResColumns) return false;
     const names = atoms.copyColStr("name") as string[];
     for (let i = 0; i < names.length; i++) {
@@ -312,13 +312,13 @@ export class DrawRibbonModifier extends BaseModifier {
     const n = atoms.nrows();
     if (n === 0) return input;
 
-    const x = atoms.copyColF("x");
-    const y = atoms.copyColF("y");
-    const z = atoms.copyColF("z");
-    const names = atoms.copyColStr("name") as string[];
-    const resNames = atoms.copyColStr("res_name") as string[];
-    const resSeqs = atoms.copyColI32("res_seq");
-    const chainIds = atoms.copyColStr("chain_id") as string[];
+    const x = atoms.getF64("x");
+    const y = atoms.getF64("y");
+    const z = atoms.getF64("z");
+    const names = atoms.getStr("name") as string[];
+    const resNames = atoms.getStr("res_name") as string[];
+    const resSeqs = atoms.getI32("res_seq");
+    const chainIds = atoms.getStr("chain_id") as string[];
 
     const byChainRes = new Map<string, Residue>();
     for (let i = 0; i < n; i++) {

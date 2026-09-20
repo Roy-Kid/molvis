@@ -1,6 +1,7 @@
 import type { DatasetExploration, Molvis } from "@molcrafts/molvis-stage";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useState } from "react";
+import { TrajectoryExtent } from "@/lib/trajectory-extent";
 
 /**
  * Tracks UI-facing runtime state mirrored from Molvis event streams.
@@ -9,11 +10,14 @@ export function useMolvisUiState(app: Molvis | null): {
   currentMode: string;
   setCurrentMode: Dispatch<SetStateAction<string>>;
   trajectoryLength: number;
+  trajectoryExtent: TrajectoryExtent;
   frameLabels: Map<string, Float64Array> | null;
   exploration: DatasetExploration | null;
 } {
   const [currentMode, setCurrentMode] = useState<string>("view");
-  const [trajectoryLength, setTrajectoryLength] = useState<number>(1);
+  const [trajectoryExtent, setTrajectoryExtent] = useState(
+    TrajectoryExtent.empty(),
+  );
   const [frameLabels, setFrameLabels] = useState<Map<
     string,
     Float64Array
@@ -30,7 +34,7 @@ export function useMolvisUiState(app: Molvis | null): {
     if (app.mode) {
       setCurrentMode(app.mode.name);
     }
-    setTrajectoryLength(app.system.trajectory.length);
+    setTrajectoryExtent(TrajectoryExtent.fromTrajectory(app.system.trajectory));
     setFrameLabels(app.system.frameLabels);
     setExploration(app.system.exploration);
 
@@ -41,7 +45,7 @@ export function useMolvisUiState(app: Molvis | null): {
     const handleTrajectoryChange = (
       trajectory: Molvis["system"]["trajectory"],
     ) => {
-      setTrajectoryLength(trajectory.length);
+      setTrajectoryExtent(TrajectoryExtent.fromTrajectory(trajectory));
     };
 
     const handleFrameLabelsChange = (
@@ -54,23 +58,39 @@ export function useMolvisUiState(app: Molvis | null): {
       setExploration(next);
     };
 
-    app.events.on("mode-change", handleModeChange);
-    app.events.on("trajectory-change", handleTrajectoryChange);
-    app.events.on("frame-labels-change", handleFrameLabelsChange);
-    app.events.on("exploration-change", handleExplorationChange);
+    const offMode = app.events.on("mode-change", handleModeChange);
+    const offTraj = app.events.on("trajectory-change", handleTrajectoryChange);
+    const syncExtent = () => {
+      setTrajectoryExtent(
+        TrajectoryExtent.fromTrajectory(app.system.trajectory),
+      );
+    };
+    const offLen = app.events.on("length-changed", syncExtent);
+    const offDone = app.events.on("index-complete", syncExtent);
+    const offLabels = app.events.on(
+      "frame-labels-change",
+      handleFrameLabelsChange,
+    );
+    const offExpl = app.events.on(
+      "exploration-change",
+      handleExplorationChange,
+    );
 
     return () => {
-      app.events.off("mode-change", handleModeChange);
-      app.events.off("trajectory-change", handleTrajectoryChange);
-      app.events.off("frame-labels-change", handleFrameLabelsChange);
-      app.events.off("exploration-change", handleExplorationChange);
+      offMode();
+      offTraj();
+      offLen();
+      offDone();
+      offLabels();
+      offExpl();
     };
   }, [app]);
 
   return {
     currentMode,
     setCurrentMode,
-    trajectoryLength,
+    trajectoryLength: trajectoryExtent.addressableLength,
+    trajectoryExtent,
     frameLabels,
     exploration,
   };

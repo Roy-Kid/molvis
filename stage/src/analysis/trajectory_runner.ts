@@ -23,7 +23,7 @@ export type AnalysisAtomSelection =
   | { kind: "mask"; mask: SelectionMask };
 
 export type AtomTrackingMode = "all" | "id-column" | "row-index";
-export type AtomTrackingKey = string | number;
+export type AtomTrackingKey = string | number | bigint;
 
 export interface TrackedAtomSelection {
   mode: AtomTrackingMode;
@@ -124,8 +124,14 @@ export interface AnalysisRunOptions {
  * dependencies are `../utils/dtype` and `../utils/yield_ui`.
  */
 export interface AnalysisTrajectorySource {
-  /** Number of frames, so index `0 … length - 1` is addressable. */
-  readonly length: number;
+  /**
+   * Known final N, or `null` while a file index is still growing.
+   * Omit `indexComplete` / `indexedLength` and a numeric `length` is
+   * treated as a complete snapshot (fakes, SnapshotTrajectory).
+   */
+  readonly length: number | null;
+  readonly indexedLength?: number;
+  readonly indexComplete?: boolean;
   /**
    * The frame at `index`. Async because a real trajectory may still have to
    * decode or fetch it.
@@ -265,6 +271,30 @@ function clampInt(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
+/**
+ * How many frames a whole-trajectory or ranged walk may visit.
+ * Unscoped walks require a complete index; explicit ranges use the
+ * playable window (`indexedLength ?? length`).
+ */
+export function resolveVisitLength(
+  source: AnalysisTrajectorySource,
+  frameRange?: FrameRange,
+): number {
+  const complete = source.indexComplete ?? source.length !== null;
+  const indexed = source.indexedLength ?? source.length ?? 0;
+  const explicit =
+    frameRange?.start !== undefined || frameRange?.endInclusive !== undefined;
+  if (!explicit) {
+    if (!complete || source.length === null) {
+      throw new Error(
+        "whole-trajectory analysis requires a complete index (or an explicit frame range)",
+      );
+    }
+    return source.length;
+  }
+  return indexed;
+}
+
 export function expandFrameRange(
   trajectoryLength: number,
   range: FrameRange = {},
@@ -308,9 +338,9 @@ function readAtomKeys(
   const dtype = atoms.dtype(column) as ColumnDType | undefined;
   if (!dtype) return null;
 
-  // Only ever called with STABLE_ATOM_ID_COLUMNS ("id"), which molrs pins to
-  // u32 — U32-or-absent is exhaustive.
-  if (dtype === DType.U32) {
+  // Only ever called with STABLE_ATOM_ID_COLUMNS ("id"), which molrs pins
+  // to domain uint / u64 — U64-or-absent is exhaustive.
+  if (dtype === DType.U64) {
     const values = atoms.copyColU32(column);
     return values ? { dtype, values: Array.from(values) } : null;
   }
@@ -519,7 +549,7 @@ export async function runTrajectoryFrames<T>(
   visit: (context: TrajectoryFrameContext) => T | Promise<T>,
 ): Promise<TrajectoryFrameRunResult<T>> {
   const frameIndices = expandFrameRange(
-    options.trajectory.length,
+    resolveVisitLength(options.trajectory, options.run?.frameRange),
     options.run?.frameRange,
   );
   const results: Array<{ frameIndex: number; value: T }> = [];

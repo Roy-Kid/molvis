@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
@@ -272,10 +273,10 @@ describe("extractBondColumns", () => {
     );
     frame.insertBlock("atoms", atoms);
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0, 1]));
-    bonds.setColU32("atomj", new Uint32Array([1, 2]));
-    bonds.setColU32("bond_type", new Uint32Array([2, 1]));
-    bonds.setColU32("bond_number", new Uint32Array([2, 1]));
+    bonds.setColU32("atomi", toDomainUint([0, 1]));
+    bonds.setColU32("atomj", toDomainUint([1, 2]));
+    bonds.setColU32("bond_type", toDomainUint([2, 1]));
+    bonds.setColU32("bond_number", toDomainUint([2, 1]));
     frame.insertBlock("bonds", bonds);
 
     const cols = extractBondColumns(frame);
@@ -303,10 +304,10 @@ describe("extractBondRows", () => {
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
-    bonds.setColU32("bond_type", new Uint32Array([2]));
-    bonds.setColU32("bond_number", new Uint32Array([2]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
+    bonds.setColU32("bond_type", toDomainUint([2]));
+    bonds.setColU32("bond_number", toDomainUint([2]));
     frame.insertBlock("bonds", bonds);
 
     const rows = extractBondRows(frame);
@@ -334,8 +335,8 @@ describe("extractBondRows", () => {
     frame.insertBlock("atoms", atoms);
 
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
     frame.insertBlock("bonds", bonds);
 
     const rows = extractBondRows(frame);

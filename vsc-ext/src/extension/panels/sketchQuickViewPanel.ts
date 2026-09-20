@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { StructureOutlinePayload } from "../../protocol";
 import { createInitMessage } from "../configuration";
 import { resolveActiveUri } from "../loading/activeUri";
 import type { MolecularFileLoader } from "../loading/molecularFileLoader";
@@ -15,7 +16,7 @@ import {
 } from "./messaging";
 
 /**
- * Sketch Quick View — 2D peek panel (peer to stage Quick View).
+ * Sketch Quick look — 2D peek panel (peer to stage Quick look).
  * Uses sketch bundle only; never the page React shell.
  */
 export async function openSketchQuickViewPanel(
@@ -24,12 +25,15 @@ export async function openSketchQuickViewPanel(
   logger: Logger,
   fileLoader: MolecularFileLoader,
   uri?: vscode.Uri,
+  options?: {
+    onStructureOutline?: (outline: StructureOutlinePayload | null) => void;
+  },
 ): Promise<void> {
   const targetUri = resolveActiveUri(uri);
 
   const title = targetUri
-    ? `Sketch Quick View: ${getDisplayName(targetUri)}`
-    : "Sketch Quick View";
+    ? `Quick look (Sketch): ${getDisplayName(targetUri)}`
+    : "Quick look (Sketch)";
 
   const panel = vscode.window.createWebviewPanel(
     "molvis.quickViewSketch",
@@ -70,7 +74,16 @@ export async function openSketchQuickViewPanel(
           await handleSaveFile(message.data, message.suggestedName, logger);
           break;
         case "dropUri":
-          await handleDropUri(message.uri, panel.webview, fileLoader, logger);
+          await handleDropUri(
+            message.uri,
+            panel.webview,
+            fileLoader,
+            logger,
+            message.mode,
+          );
+          break;
+        case "structureOutline":
+          options?.onStructureOutline?.(message.outline);
           break;
         case "dirtyStateChanged":
           panel.title = message.isDirty ? `● ${baseTitle}` : baseTitle;

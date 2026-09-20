@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { ScalarSliderRow } from "./ScalarSliderRow";
+import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
 interface Props {
   modifier: CoreExpandSelectionModifier;
@@ -83,6 +84,12 @@ export const ExpandSelectionModifier: React.FC<Props> = ({
           }}
         />
       )}
+
+      <SelectionHighlightColor
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
     </fieldset>
   );
 };

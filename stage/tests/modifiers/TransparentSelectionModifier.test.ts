@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { TransparentSelectionModifier } from "../../src/modifiers/TransparentSelectionModifier";
 import { createDefaultContext, SelectionMask } from "../../src/pipeline/types";
@@ -61,8 +62,8 @@ describe("TransparentSelectionModifier", () => {
   it("should preserve frame when bonds present", () => {
     const frame = makeFrame(["C", "O"]);
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
     frame.insertBlock("bonds", bonds);
 
     const mod = new TransparentSelectionModifier();

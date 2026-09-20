@@ -46,7 +46,7 @@ describe("StreamDataSource", () => {
 
     expect(pipeline.sources()).toHaveLength(1);
     expect(pipeline.modifiers()).toHaveLength(0);
-    expect(src.kind).toBe("stream");
+    expect(src).toBeInstanceOf(StreamDataSource);
   });
 });
 

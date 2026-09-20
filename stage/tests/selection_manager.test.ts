@@ -45,4 +45,15 @@ describe("SelectionManager logical id storage", () => {
 
     expect(revisions).toEqual([1, 2]);
   });
+
+  it("carries a highlight color override and resets it on clear", () => {
+    const manager = new SelectionManager(sceneIndex());
+    manager.setHighlightColor("#FF0000");
+    manager.apply({ type: "replace", atoms: [10] });
+
+    expect(manager.getState().highlightColor).toBe("#FF0000");
+
+    manager.apply({ type: "clear" });
+    expect(manager.getState().highlightColor).toBeNull();
+  });
 });

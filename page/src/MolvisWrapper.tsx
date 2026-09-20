@@ -5,7 +5,11 @@ import {
   type MolvisSetting,
   mountMolvis,
 } from "@molcrafts/molvis-stage";
-import type { LoadMode } from "@molcrafts/molvis-stage/io";
+import {
+  isStlPath,
+  type LoadMode,
+  sceneDropLoadMode,
+} from "@molcrafts/molvis-stage/io";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
@@ -24,6 +28,8 @@ import {
 } from "@/components/viewer/OpenStructureDialog";
 import { useReportOperationStatus } from "@/hooks/useReportOperationStatus";
 import { useViewerOperation } from "@/hooks/useViewerOperation";
+import { readDropUris } from "@/lib/drop-uris";
+import { type OpenTarget, resolveDropTarget } from "@/lib/mrec-open";
 import {
   bindLaunchQueue,
   fetchStructureFile,
@@ -32,6 +38,7 @@ import {
   takeSharedStructureFile,
 } from "@/lib/open-structure";
 import { reportStatus } from "@/lib/status-report";
+import { isViewportHidden } from "@/lib/viewport-visibility";
 
 interface MolvisWrapperProps {
   onMount?: (app: Molvis) => void;
@@ -40,6 +47,12 @@ interface MolvisWrapperProps {
    * session. Defaults to coarse-pointer hosts only.
    */
   showMobileOpenHint?: boolean;
+  /**
+   * Offered a drag's workspace URIs before this component reads
+   * `dataTransfer`. Return `true` to claim the drop. See
+   * {@link MountHostOpts.onDropUris}.
+   */
+  onDropUris?: (uris: string[]) => boolean;
 }
 
 type ResumeState = "idle" | "requested" | "failed";
@@ -88,20 +101,6 @@ function mergeUiConfig(
     ...overrideUi,
     contextMenu: overrideUi?.contextMenu ?? baseUi.contextMenu,
   };
-}
-
-function readCanvasColor(source: Element): [number, number, number] {
-  const raw = getComputedStyle(source)
-    .getPropertyValue("--molvis-canvas-rgb")
-    .trim();
-  const channels = raw.split(/\s+/).map(Number);
-  if (
-    channels.length !== 3 ||
-    channels.some((channel) => !Number.isFinite(channel))
-  ) {
-    return [0.031385, 0.040408, 0.052783];
-  }
-  return [channels[0], channels[1], channels[2]];
 }
 
 function applyMolvisSettings(
@@ -153,8 +152,13 @@ function applyMolvisSettings(
 const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   onMount,
   showMobileOpenHint,
+  onDropUris,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  // Read through a ref: the drop handler is registered once by the engine
+  // effect, which must not re-run when a host swaps the callback.
+  const onDropUrisRef = useRef(onDropUris);
+  onDropUrisRef.current = onDropUris;
   const molvisRef = useRef<Molvis | null>(null);
   const pickFormat = useFormatPicker();
   const pickFormatRef = useRef(pickFormat);
@@ -163,8 +167,10 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   const pickBondMappingRef = useRef(pickBondMapping);
   pickBondMappingRef.current = pickBondMapping;
   /** Dirty working tree must be resolved before a replace-style drop. */
-  const [pendingDirtyDrop, setPendingDirtyDrop] = useState<File | null>(null);
-  const [queuedDropFile, setQueuedDropFile] = useState<File | null>(null);
+  const [pendingDirtyDrop, setPendingDirtyDrop] = useState<OpenTarget | null>(
+    null,
+  );
+  const [queuedDropFile, setQueuedDropFile] = useState<OpenTarget | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(true);
   const [resumeState, setResumeState] = useState<ResumeState>("idle");
@@ -199,7 +205,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   }, []);
 
   const loadDroppedFile = async (
-    file: File,
+    file: OpenTarget,
     mode: LoadMode,
     copy: typeof DROP_COPY = DROP_COPY,
   ) => {
@@ -235,7 +241,7 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
   loadDroppedFileRef.current = loadDroppedFile;
 
   const enqueueOrLoadFile = useCallback(
-    (file: File, mode: LoadMode = "replace") => {
+    (file: OpenTarget, mode: LoadMode = "replace") => {
       const app = molvisRef.current;
       if (!app) {
         setQueuedDropFile(file);
@@ -254,7 +260,11 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
         );
         return;
       }
-      if (sceneHasUnsavedEdits(app)) {
+      // A mesh is added beside the scene, never in place of it, so there is
+      // nothing for the unsaved-edits prompt to protect — and answering it
+      // with "discard" would throw away edits the drop was never going to
+      // touch.
+      if (sceneHasUnsavedEdits(app) && !isStlPath(file.name)) {
         pendingDirtyModeRef.current = mode;
         setPendingDirtyDrop(file);
       } else {
@@ -307,12 +317,12 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     if (!queuedDropFile) return;
     const file = queuedDropFile;
     setQueuedDropFile(null);
-    // Queued drops also replace — no combine dialog.
-    if (sceneHasUnsavedEdits(app)) {
-      pendingDirtyModeRef.current = "replace";
+    const mode = sceneDropLoadMode(app.modifierPipeline);
+    if (sceneHasUnsavedEdits(app) && !isStlPath(file.name)) {
+      pendingDirtyModeRef.current = mode;
       setPendingDirtyDrop(file);
     } else {
-      void loadDroppedFileRef.current(file, "replace", DROP_COPY);
+      void loadDroppedFileRef.current(file, mode, DROP_COPY);
     }
   }, [
     queuedDropFile,
@@ -465,17 +475,12 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     let startupComplete = false;
     let viewportVisible = true;
 
-    const syncCanvasToTheme = () => {
-      if (!molvisRef.current || !containerRef.current) return;
-      const [r, g, b] = readCanvasColor(containerRef.current);
-      molvisRef.current.scene.clearColor.set(r, g, b, 1);
-    };
-    syncCanvasToTheme();
-
-    const handleThemeChange = () => {
-      syncCanvasToTheme();
-    };
-    window.addEventListener("molvis:theme-change", handleThemeChange);
+    // The canvas keeps Babylon's default clear colour, the same one the
+    // stage's own surfaces show (`stage/src/viewport_settings.ts` drops its
+    // clearColor for exactly this reason). Painting it from a CSS token here
+    // was the only thing making the Page and Quick look disagree about the
+    // background. A host that wants a specific colour still says so through
+    // the `background` mount option below.
 
     void runOperation(
       async () => {
@@ -502,19 +507,48 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
 
     // Resize is owned by MolvisApp (container ResizeObserver). Hosts only
     // opt into visibility pause for multi-cell notebook embeds.
+    //
+    // `isViewportHidden` ignores 0-area boxes — opening a side rail briefly
+    // collapses the canvas flex slot, and IntersectionObserver reports
+    // isIntersecting:false even though the viewer is still on screen.
+    // Treating that as a hide called stop() then resume→start(), which
+    // force-rebuilds the loaded scene. Real off-screen hides (notebook
+    // cells) still debounce 150ms before stop().
+    let hideStopTimer: ReturnType<typeof setTimeout> | undefined;
+    let intersecting = true;
+    let enginePausedForHide = false;
     const visibilityObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          const wasVisible = viewportVisible;
-          viewportVisible = entry.isIntersecting;
-          setViewerVisible(entry.isIntersecting);
+          intersecting = !isViewportHidden(entry);
           const m = molvisRef.current;
-          if (!m || !startupComplete) continue;
-          if (entry.isIntersecting) {
-            if (!wasVisible) setResumeState("requested");
+          if (!m || !startupComplete) {
+            viewportVisible = intersecting;
+            setViewerVisible(intersecting);
+            continue;
+          }
+          if (intersecting) {
+            if (hideStopTimer !== undefined) {
+              clearTimeout(hideStopTimer);
+              hideStopTimer = undefined;
+            }
+            viewportVisible = true;
+            setViewerVisible(true);
+            if (enginePausedForHide) {
+              enginePausedForHide = false;
+              setResumeState("requested");
+            }
           } else {
-            setResumeState("idle");
-            m.stop();
+            if (hideStopTimer !== undefined) clearTimeout(hideStopTimer);
+            hideStopTimer = setTimeout(() => {
+              hideStopTimer = undefined;
+              if (intersecting) return;
+              viewportVisible = false;
+              setViewerVisible(false);
+              setResumeState("idle");
+              enginePausedForHide = true;
+              molvisRef.current?.stop();
+            }, 150);
           }
         }
       },
@@ -529,6 +563,9 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
         settings?: unknown;
       }>,
     ) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
       const payload = event.data;
       if (!payload || typeof payload !== "object") {
         return;
@@ -562,20 +599,51 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const file = e.dataTransfer?.files?.[0];
-      if (!file) return;
-      // Drop = replace. Extend / add live only on Data Source overflow menu.
-      enqueueOrLoadFileRef.current(file, "replace");
+      // A drag from the host's file explorer carries `text/uri-list` and no
+      // `File` — a webview cannot read a workspace file, so only the host can
+      // load it. Offer it first, and stop if the host claims it, or the same
+      // drag would be loaded twice.
+      const hostUris = readDropUris(e.dataTransfer);
+      if (hostUris.length > 0 && onDropUrisRef.current?.(hostUris)) return;
+      // A dropped `*.mrec` folder resolves to its File handles (read lazily
+      // in the worker); anything else is the plain File. The item accessors
+      // run synchronously inside `resolveDropTarget` before it awaits.
+      const items = e.dataTransfer?.items;
+      const files = e.dataTransfer?.files;
+      const count = Math.max(items?.length ?? 0, files?.length ?? 0);
+      const jobs: Promise<OpenTarget | null>[] = [];
+      for (let i = 0; i < count; i++) {
+        jobs.push(resolveDropTarget(items?.[i], files?.[i]));
+      }
+      void (async () => {
+        try {
+          const targets = (await Promise.all(jobs)).filter(
+            (target): target is OpenTarget => target !== null,
+          );
+          for (const target of targets) {
+            const pipeline = molvisRef.current?.modifierPipeline;
+            enqueueOrLoadFileRef.current(
+              target,
+              pipeline ? sceneDropLoadMode(pipeline) : "replace",
+            );
+          }
+        } catch (error: unknown) {
+          reportStatus(
+            error instanceof Error ? error.message : String(error),
+            "error",
+          );
+        }
+      })();
     };
     container.addEventListener("dragover", handleDragOver);
     container.addEventListener("drop", handleDrop);
 
     return () => {
+      if (hideStopTimer !== undefined) clearTimeout(hideStopTimer);
       container.removeEventListener("dragover", handleDragOver);
       container.removeEventListener("drop", handleDrop);
       visibilityObserver.disconnect();
       window.removeEventListener("message", handleHostMessage);
-      window.removeEventListener("molvis:theme-change", handleThemeChange);
       if (molvisRef.current) {
         molvisRef.current.destroy();
         molvisRef.current = null;

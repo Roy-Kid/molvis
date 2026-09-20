@@ -9,8 +9,6 @@
 
 import type { RepresentationStyle } from "../artist/representation";
 import type { CameraPosePayload } from "../camera/control";
-import type { DataSourceKind } from "../pipeline/data_source";
-
 export const MOLVIS_PROJECT_FORMAT = "molvis.project/v1" as const;
 
 /** One portable binary buffer (base64) referenced by wire columns. */
@@ -31,7 +29,8 @@ export interface PortableFrame {
 }
 
 export interface ProjectDataSourcePayload {
-  kind: DataSourceKind;
+  /** Constructor name used on hydrate (`FileDataSource`, …). */
+  typeName?: string;
   filename: string;
   sourceType: "file" | "empty" | "backend";
   contributedBlocks: string[];

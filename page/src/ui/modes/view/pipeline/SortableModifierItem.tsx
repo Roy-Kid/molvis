@@ -15,6 +15,7 @@ import {
 import { ChevronDown, ChevronRight, GripVertical } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { modifierMenuLabel } from "./pipeline_menu";
 
 interface SortableModifierItemProps {
   modifier: PipelineEntry;
@@ -66,17 +67,19 @@ function getDisplayInfo(modifier: PipelineEntry): DisplayInfo {
   }
   if (modifier instanceof SelectModifier) {
     return {
-      title: modifier.name || modifier.id,
+      title: modifierMenuLabel(modifier.name || modifier.id),
       subtitle: modifier.selectionSummary || undefined,
     };
   }
   if (modifier instanceof ExpressionSelectionModifier) {
     return {
-      title: modifier.selectionName || modifier.name || modifier.id,
+      title:
+        modifier.selectionName ||
+        modifierMenuLabel(modifier.name || modifier.id),
       subtitle: modifier.expression || "empty expression",
     };
   }
-  return { title: modifier.name };
+  return { title: modifierMenuLabel(modifier.name) };
 }
 
 function hasSelectionScope(entry: PipelineEntry): boolean {

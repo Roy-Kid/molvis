@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { HideHydrogensModifier } from "../../src/modifiers/HideHydrogensModifier";
 import { createDefaultContext } from "../../src/pipeline/types";
@@ -28,8 +29,8 @@ function makeFrameWithBonds(
 ): Frame {
   const frame = makeFrame(elements);
   const bondsBlock = new Block();
-  bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b[0])));
-  bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b[1])));
+  bondsBlock.setColU32("atomi", toDomainUint(bonds.map((b) => b[0])));
+  bondsBlock.setColU32("atomj", toDomainUint(bonds.map((b) => b[1])));
   frame.insertBlock("bonds", bondsBlock);
   return frame;
 }
@@ -86,8 +87,8 @@ describe("HideHydrogensModifier", () => {
 
     const iCol = bonds?.viewColU32("atomi");
     const jCol = bonds?.viewColU32("atomj");
-    expect(iCol?.[0]).toBe(0); // C remapped to 0
-    expect(jCol?.[0]).toBe(1); // O remapped to 1
+    expect(Number(iCol?.[0])).toBe(0); // C remapped to 0
+    expect(Number(jCol?.[0])).toBe(1); // O remapped to 1
   });
 
   it("should pass through if no hydrogens exist", () => {
@@ -155,7 +156,7 @@ describe("HideHydrogensModifier", () => {
     expect(result).toBe(frame);
   });
 
-  it("should handle frame with no element column", () => {
+  it("throws when enabled without an element column", () => {
     const mod = new HideHydrogensModifier();
     mod.hideHydrogens = true;
     const frame = new Frame();
@@ -163,7 +164,6 @@ describe("HideHydrogensModifier", () => {
     atoms.setColF("x", new Float64Array([1, 2]));
     frame.insertBlock("atoms", atoms);
     const ctx = createDefaultContext(frame, mockApp);
-    const result = mod.apply(frame, ctx);
-    expect(result).toBe(frame);
+    expect(() => mod.apply(frame, ctx)).toThrow(/element/);
   });
 });

@@ -6,6 +6,7 @@
  */
 
 import { Color3, type Mesh } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import {
@@ -14,13 +15,13 @@ import {
   COLOR_OVERRIDE_R,
 } from "../color_override_keys";
 import { normalizeElement } from "../system/elements";
-import { DType } from "../utils/dtype";
 import {
   type AtomBufferOptions,
   buildAtomBuffers,
   buildAtomColorOnly,
 } from "./atom_buffer";
 import { buildBondBuffers } from "./bond_buffer";
+import { BondTopology } from "./bond_topology";
 import { type LabelRenderer, skeletalLabelFontSize } from "./label_renderer";
 import type { ImpostorTarget } from "./material_spec";
 
@@ -43,9 +44,27 @@ export interface RepresentationDrawHost {
 }
 
 function readElements(atomsBlock: Block): string[] | undefined {
-  return atomsBlock.dtype("element") === DType.String
-    ? (atomsBlock.copyColStr("element") as string[])
+  return atomsBlock.hasStr("element")
+    ? (atomsBlock.getStr("element") as string[])
     : undefined;
+}
+
+// Origin-sentinel dropping is a molpack convention (see system/occupancy.ts):
+// it hides rows from the canvas, so it must not be silent. Announce the first
+// time (per app) the heuristic starts hiding rows, naming the count. Dedupe on
+// the dropping/not-dropping transition so scrubbing a growth trajectory does
+// not spam the status bar every frame.
+const lastSentinelDrop = new WeakMap<MolvisApp, number>();
+
+function announceOriginSentinelDrop(app: MolvisApp, dropped: number): void {
+  const wasDropping = (lastSentinelDrop.get(app) ?? 0) > 0;
+  lastSentinelDrop.set(app, dropped);
+  if (dropped > 0 && !wasDropping) {
+    app.events.emit("status-message", {
+      text: `Hiding ${dropped} unplaced origin-sentinel atom(s) parked at (0,0,0) — molpack convention.`,
+      type: "info",
+    });
+  }
 }
 
 /** Atom indices hidden by conventional skeletal notation (C-bound H). */
@@ -55,14 +74,13 @@ export function carbonBoundHydrogens(
 ): Set<number> {
   const hidden = new Set<number>();
   const elements = readElements(atomsBlock);
-  if (!elements || !bondsBlock) return hidden;
+  if (!elements || !bondsBlock || bondsBlock.nrows() === 0) return hidden;
   const iAtoms = bondsBlock.viewColU32("atomi");
   const jAtoms = bondsBlock.viewColU32("atomj");
-  if (!iAtoms || !jAtoms) return hidden;
 
   for (let b = 0; b < bondsBlock.nrows(); b++) {
-    const i = iAtoms[b];
-    const j = jAtoms[b];
+    const i = toRowIndex(iAtoms[b]);
+    const j = toRowIndex(jAtoms[b]);
     const ei = normalizeElement(elements[i] ?? "");
     const ej = normalizeElement(elements[j] ?? "");
     if (ei === "C" && ej === "H") hidden.add(j);
@@ -86,27 +104,38 @@ export async function drawAtomsRepresentation(
     }),
   );
 
-  const atomBuffers = buildAtomBuffers(
+  const built = buildAtomBuffers(
     atomsBlock,
     host.app.styleManager,
     host.atomMesh.uniqueId,
     options,
+    frame,
+  );
+
+  announceOriginSentinelDrop(
+    host.app,
+    built.instanceMap ? atomsBlock.nrows() - built.instanceMap.length : 0,
   );
 
   host.app.world.sceneIndex.registerAtomFrame({
     frame,
     mesh: host.atomMesh,
     block: atomsBlock,
-    buffers: atomBuffers,
+    buffers: built.buffers,
+    instanceMap: built.instanceMap,
   });
   syncRepresentationLabels(host, frame, atomsBlock);
 }
 
+/**
+ * Full bond build. Resolves to the {@link BondTopology} the buffers were
+ * built from so the Artist can reuse it on position-only refreshes.
+ */
 export async function drawBondsRepresentation(
   host: RepresentationDrawHost,
   frame: Frame,
   options?: { radii?: number; impostor?: boolean; visible?: boolean[] },
-): Promise<void> {
+): Promise<BondTopology | undefined> {
   const atomsBlock = frame.getBlock("atoms");
   const bondsBlock = frame.getBlock("bonds");
   if (!atomsBlock || !bondsBlock || bondsBlock.nrows() === 0) return;
@@ -171,6 +200,7 @@ export async function drawBondsRepresentation(
     instanceCount: bondResult.instanceCount,
     instanceMap: bondResult.instanceMap,
   });
+  return BondTopology.of(bondsBlock);
 }
 
 function syncRepresentationLabels(

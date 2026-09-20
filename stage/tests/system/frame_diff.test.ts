@@ -1,6 +1,9 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { classifyFrameTransition } from "../../src/system/frame_diff";
+import {
+  classifyFrameTransition,
+  resolvePlaybackChangeKind,
+} from "../../src/system/frame_diff";
 
 interface AtomSpec {
   x: number;
@@ -20,11 +23,11 @@ interface BondSpec {
 interface MockBlock {
   nrows(): number;
   dtype(name: string): string | undefined;
-  viewColU32(name: string): Uint32Array;
-  viewColF?(name: string): Float64Array | undefined;
+  viewColU32(name: string): BigUint64Array;
+  viewColF(name: string): Float64Array | undefined;
   copyColStr(name: string): string[];
   copyColI32(name: string): Int32Array;
-  copyColU32(name: string): Uint32Array;
+  copyColU32(name: string): BigUint64Array;
   copyColF(name: string): Float64Array;
 }
 
@@ -44,6 +47,10 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
     );
   }
 
+  const x = new Float64Array(atoms.map((atom) => atom.x));
+  const y = new Float64Array(atoms.map((atom) => atom.y));
+  const z = new Float64Array(atoms.map((atom) => atom.z));
+
   return {
     nrows() {
       return atoms.length;
@@ -52,8 +59,14 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
       if (columnsStr.has(name)) return "string";
       return undefined;
     },
-    viewColU32(_name: string): Uint32Array {
-      throw new Error("No u32 columns in atom block");
+    viewColF(name: string): Float64Array | undefined {
+      if (name === "x") return x;
+      if (name === "y") return y;
+      if (name === "z") return z;
+      return undefined;
+    },
+    viewColU32(_name: string): BigUint64Array {
+      throw new Error("No u64 columns in atom block");
     },
     copyColStr(name: string): string[] {
       const col = columnsStr.get(name);
@@ -63,8 +76,8 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
     copyColI32(name: string): Int32Array {
       throw new Error(`Column '${name}' is not i32`);
     },
-    copyColU32(name: string): Uint32Array {
-      throw new Error(`Column '${name}' is not u32`);
+    copyColU32(name: string): BigUint64Array {
+      throw new Error(`Column '${name}' is not u64`);
     },
     copyColF(name: string): Float64Array {
       throw new Error(`Column '${name}' is not f64`);
@@ -90,8 +103,14 @@ function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
       if (name === "type") return "i32";
       return undefined;
     },
-    viewColU32(_name: string): Uint32Array {
-      throw new Error("No u32 columns in atom block");
+    viewColF(name: string): Float64Array | undefined {
+      if (name === "x") return new Float64Array(atoms.map((atom) => atom.x));
+      if (name === "y") return new Float64Array(atoms.map((atom) => atom.y));
+      if (name === "z") return new Float64Array(atoms.map((atom) => atom.z));
+      return undefined;
+    },
+    viewColU32(_name: string): BigUint64Array {
+      throw new Error("No u64 columns in atom block");
     },
     copyColStr(name: string): string[] {
       throw new Error(`Column '${name}' not found or not string`);
@@ -100,8 +119,8 @@ function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
       if (name !== "type") throw new Error(`Column '${name}' not found`);
       return typeCol;
     },
-    copyColU32(name: string): Uint32Array {
-      throw new Error(`Column '${name}' is not u32`);
+    copyColU32(name: string): BigUint64Array {
+      throw new Error(`Column '${name}' is not u64`);
     },
     copyColF(name: string): Float64Array {
       throw new Error(`Column '${name}' is not f64`);
@@ -111,19 +130,27 @@ function buildLammpsAtomBlock(atoms: LammpsAtomSpec[]): MockBlock {
 
 function buildBondBlock(bonds: BondSpec[]): MockBlock {
   // molrs: bond_type + bond_number (u32). BondSpec.order 1.5 → aromatic type 4.
-  const types = new Uint32Array(
+  const types = BigUint64Array.from(
     bonds.map((bond) =>
-      bond.order === 1.5 ? 4 : Math.max(1, Math.min(3, Math.round(bond.order))),
+      BigInt(
+        bond.order === 1.5
+          ? 4
+          : Math.max(1, Math.min(3, Math.round(bond.order))),
+      ),
     ),
   );
-  const numbers = new Uint32Array(
+  const numbers = BigUint64Array.from(
     bonds.map((bond) =>
-      bond.order === 1.5 ? 0 : Math.max(1, Math.min(3, Math.round(bond.order))),
+      BigInt(
+        bond.order === 1.5
+          ? 0
+          : Math.max(1, Math.min(3, Math.round(bond.order))),
+      ),
     ),
   );
-  const columnsU32 = new Map<string, Uint32Array>([
-    ["atomi", new Uint32Array(bonds.map((bond) => bond.i))],
-    ["atomj", new Uint32Array(bonds.map((bond) => bond.j))],
+  const columnsU32 = new Map<string, BigUint64Array>([
+    ["atomi", BigUint64Array.from(bonds.map((bond) => BigInt(bond.i)))],
+    ["atomj", BigUint64Array.from(bonds.map((bond) => BigInt(bond.j)))],
     ["bond_type", types],
     ["bond_number", numbers],
   ]);
@@ -133,10 +160,10 @@ function buildBondBlock(bonds: BondSpec[]): MockBlock {
       return bonds.length;
     },
     dtype(name: string) {
-      if (columnsU32.has(name)) return "u32";
+      if (columnsU32.has(name)) return "u64";
       return undefined;
     },
-    viewColU32(name: string): Uint32Array {
+    viewColU32(name: string): BigUint64Array {
       const col = columnsU32.get(name);
       if (!col) throw new Error(`Column '${name}' not found`);
       return col;
@@ -150,10 +177,10 @@ function buildBondBlock(bonds: BondSpec[]): MockBlock {
     copyColI32(name: string): Int32Array {
       throw new Error(`Column '${name}' is not i32`);
     },
-    copyColU32(name: string): Uint32Array {
+    copyColU32(name: string): BigUint64Array {
       const col = columnsU32.get(name);
       if (!col) throw new Error(`Column '${name}' not found`);
-      return new Uint32Array(col);
+      return new BigUint64Array(col);
     },
     copyColF(name: string): Float64Array {
       throw new Error(`Column '${name}' is not f64`);
@@ -322,5 +349,128 @@ describe("classifyFrameTransition", () => {
     );
     const decision = classifyFrameTransition(previous, next);
     expect(decision.kind).toBe("position");
+  });
+
+  it("full-rebuilds playback only when the user enabled Create bonds", () => {
+    const previous = buildFrame([
+      { x: 0.2, y: 0, z: 0, element: "C" },
+      { x: 1.5, y: 0, z: 0, element: "C" },
+    ]);
+    const next = buildFrame([
+      { x: 0.3, y: 0, z: 0, element: "C" },
+      { x: 1.6, y: 0, z: 0, element: "C" },
+    ]);
+    const decision = classifyFrameTransition(previous, next);
+    expect(decision.kind).toBe("position");
+    expect(resolvePlaybackChangeKind(decision, false)).toBe("position");
+    expect(resolvePlaybackChangeKind(decision, true)).toBe("full");
+  });
+
+  it("classifies origin-sentinel occupancy changes as full, including reverse", () => {
+    const f0 = buildFrame([
+      { x: 1.4, y: 0, z: 0, element: "C" },
+      { x: 2.8, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+    ]);
+    const f1 = buildFrame([
+      { x: 1.4, y: 0, z: 0, element: "C" },
+      { x: 2.8, y: 0, z: 0, element: "C" },
+      { x: 4.2, y: 0, z: 0, element: "C" },
+      { x: 5.6, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+      { x: 0, y: 0, z: 0, element: "C" },
+    ]);
+    const forward = classifyFrameTransition(f0, f1);
+    expect(forward.kind).toBe("full");
+    expect(forward.reasons.join(" ")).toMatch(/Occupancy changed: 2 -> 4/);
+    const reverse = classifyFrameTransition(f1, f0);
+    expect(reverse.kind).toBe("full");
+    expect(reverse.reasons.join(" ")).toMatch(/Occupancy changed: 4 -> 2/);
+  });
+});
+
+describe("classifyFrameTransition with store section updates", () => {
+  const water = (dx: number): AtomSpec[] => [
+    { x: 0 + dx, y: 0, z: 0, element: "O" },
+    { x: 1 + dx, y: 0, z: 0, element: "H" },
+    { x: 2 + dx, y: 0, z: 0, element: "H" },
+  ];
+  const bonds: BondSpec[] = [
+    { i: 0, j: 1, order: 1 },
+    { i: 0, j: 2, order: 1 },
+  ];
+  const updates = (atoms: number, extra: Record<string, number> = {}) =>
+    new Map<string, number>([["atoms", atoms], ...Object.entries(extra)]);
+
+  it("keeps a position pass when only the atoms section updated", () => {
+    // Elements differ on purpose: the index says topology is unchanged, so
+    // the O(N) element compare must not even run.
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(
+      water(1).map((a) => ({ ...a, element: "X" })),
+      bonds,
+    );
+    const decision = classifyFrameTransition(previous, next, {
+      previous: updates(4, { bonds: 1 }),
+      next: updates(5, { bonds: 1 }),
+    });
+    expect(decision.kind).toBe("position");
+    expect(decision.reasons[0]).toMatch(/Store index/);
+  });
+
+  it("rebuilds when a topology section's update id changed", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(water(1), bonds);
+    const decision = classifyFrameTransition(previous, next, {
+      previous: updates(4, { bonds: 1 }),
+      next: updates(5, { bonds: 2 }),
+    });
+    expect(decision.kind).toBe("full");
+    expect(decision.reasons[0]).toMatch(/bonds block updated \(1 -> 2\)/);
+  });
+
+  it("rebuilds when a section appears or disappears", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(water(1), bonds);
+    expect(
+      classifyFrameTransition(previous, next, {
+        previous: updates(0),
+        next: updates(1, { angles: 0 }),
+      }).kind,
+    ).toBe("full");
+    expect(
+      classifyFrameTransition(previous, next, {
+        previous: updates(0, { angles: 0 }),
+        next: updates(1),
+      }).kind,
+    ).toBe("full");
+  });
+
+  it("still rebuilds on an atom-count change even with a quiet index", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(water(1).slice(0, 2), bonds);
+    const decision = classifyFrameTransition(previous, next, {
+      previous: updates(4, { bonds: 1 }),
+      next: updates(5, { bonds: 1 }),
+    });
+    expect(decision.kind).toBe("full");
+    expect(decision.reasons[0]).toMatch(/Atom count changed/);
+  });
+
+  it("falls back to value compares when either side has no index", () => {
+    const previous = buildFrame(water(0), bonds);
+    const next = buildFrame(
+      water(1).map((a) => ({ ...a, element: "X" })),
+      bonds,
+    );
+    const decision = classifyFrameTransition(previous, next, {
+      previous: undefined,
+      next: updates(5, { bonds: 1 }),
+    });
+    expect(decision.kind).toBe("full");
+    expect(decision.reasons[0]).toMatch(/element column changed/);
   });
 });

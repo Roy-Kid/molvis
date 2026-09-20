@@ -31,7 +31,7 @@ export function writeResidueRows(frame: Frame, rows: Residue[]): void {
 
   const n = rows.length;
   const chainId: string[] = new Array(n);
-  const resSeq = new Uint32Array(n);
+  const resSeq = new Int32Array(n);
   const resName: string[] = new Array(n);
   const caX = new Float64Array(n);
   const caY = new Float64Array(n);
@@ -44,7 +44,7 @@ export function writeResidueRows(frame: Frame, rows: Residue[]): void {
   for (let i = 0; i < n; i++) {
     const r = rows[i];
     chainId[i] = r.chainId;
-    resSeq[i] = r.resSeq >>> 0;
+    resSeq[i] = r.resSeq;
     resName[i] = r.resName;
     // biome-ignore lint/style/noNonNullAssertion: caller guarantees ca exists
     const ca = r.ca!;
@@ -65,7 +65,7 @@ export function writeResidueRows(frame: Frame, rows: Residue[]): void {
 
   const block = frame.createBlock(RESIDUES_BLOCK);
   block.setColStr("chain_id", chainId);
-  block.setColU32("res_seq", resSeq);
+  block.setColI32("res_seq", resSeq);
   block.setColStr("res_name", resName);
   block.setColF("ca_x", caX);
   block.setColF("ca_y", caY);
@@ -103,31 +103,16 @@ export function readBackboneBlock(frame: Frame): ChainTrace[] {
   const n = block.nrows();
   if (n === 0) return [];
 
-  const chainIds = block.copyColStr("chain_id");
-  const resSeqs = block.copyColU32("res_seq");
-  const resNames = block.copyColStr("res_name");
-  const caX = block.copyColF("ca_x");
-  const caY = block.copyColF("ca_y");
-  const caZ = block.copyColF("ca_z");
-  const oX = block.copyColF("o_x");
-  const oY = block.copyColF("o_y");
-  const oZ = block.copyColF("o_z");
-  const ssCol = block.copyColStr("ss");
-
-  if (
-    !chainIds ||
-    !resSeqs ||
-    !resNames ||
-    !caX ||
-    !caY ||
-    !caZ ||
-    !oX ||
-    !oY ||
-    !oZ ||
-    !ssCol
-  ) {
-    return [];
-  }
+  const chainIds = block.getStr("chain_id") as string[];
+  const resSeqs = block.getI32("res_seq");
+  const resNames = block.getStr("res_name") as string[];
+  const caX = block.getF64("ca_x");
+  const caY = block.getF64("ca_y");
+  const caZ = block.getF64("ca_z");
+  const oX = block.getF64("o_x");
+  const oY = block.getF64("o_y");
+  const oZ = block.getF64("o_z");
+  const ssCol = block.getStr("ss") as string[];
 
   const byChain = new Map<string, Residue[]>();
   for (let i = 0; i < n; i++) {

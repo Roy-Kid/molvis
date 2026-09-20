@@ -2,6 +2,7 @@ import { Vector3 } from "@babylonjs/core";
 import { Block, Box, WasmArray } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import {
   type BondBufferResult,
   buildBondBuffers,
@@ -38,8 +39,8 @@ function makeBlocks(
   atoms.setColStr("element", Array(atomCount).fill("C"));
 
   const bondsBlock = new Block();
-  bondsBlock.setColU32("atomi", new Uint32Array(bonds.map((b) => b.i)));
-  bondsBlock.setColU32("atomj", new Uint32Array(bonds.map((b) => b.j)));
+  bondsBlock.setColU32("atomi", toDomainUint(bonds.map((b) => b.i)));
+  bondsBlock.setColU32("atomj", toDomainUint(bonds.map((b) => b.j)));
   // molrs bond_type / bond_number. order 1.5 in fixtures → aromatic (type 4).
   const types = new Uint32Array(
     bonds.map((b) =>
@@ -51,8 +52,8 @@ function makeBlocks(
       b.order === 1.5 ? 0 : Math.max(1, Math.min(3, Math.round(b.order))),
     ),
   );
-  bondsBlock.setColU32("bond_type", types);
-  bondsBlock.setColU32("bond_number", numbers);
+  bondsBlock.setColU32("bond_type", toDomainUint(types));
+  bondsBlock.setColU32("bond_number", toDomainUint(numbers));
 
   return { atoms, bonds: bondsBlock };
 }
@@ -166,10 +167,10 @@ describe("countBondInstances", () => {
     atoms.setColF("z", new Float64Array([0, 0]));
     atoms.setColStr("element", ["C", "C"]);
     const bonds = new Block();
-    bonds.setColU32("atomi", new Uint32Array([0]));
-    bonds.setColU32("atomj", new Uint32Array([1]));
-    bonds.setColU32("bond_type", new Uint32Array([4]));
-    bonds.setColU32("bond_number", new Uint32Array([2]));
+    bonds.setColU32("atomi", toDomainUint([0]));
+    bonds.setColU32("atomj", toDomainUint([1]));
+    bonds.setColU32("bond_type", toDomainUint([4]));
+    bonds.setColU32("bond_number", toDomainUint([2]));
     expect(countBondInstances(bonds)).toBe(2);
   });
 
@@ -373,8 +374,8 @@ describe("buildBondBuffers with bond order", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
     // No order column
     const atomColor = makeAtomColor(2);
     const result = buildBondBuffers(bondsBlock, atoms, atomColor, 42);
@@ -422,9 +423,41 @@ describe("refreshBondPositions", () => {
 
     expect(d0[0]).toBeCloseTo(2, 5); // midpoint x
     expect(d1[3]).toBeCloseTo(4, 5); // length
-    expect(uploads).toEqual(
-      expect.arrayContaining(["matrix", "instanceData0", "instanceData1"]),
+    expect(uploads).toEqual(["instanceData0", "instanceData1"]);
+  });
+
+  it("leaves the thin-instance matrix untouched on a position-only refresh", () => {
+    // The impostor shader never reads world0..3; re-uploading 16 floats per
+    // bond every frame was pure bandwidth. The matrix keeps the full build's
+    // layout (its length is Babylon's thin-instance count).
+    const { atoms, bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 1 }]);
+    const built = buildBondBuffers(bonds, atoms, makeAtomColor(2), 1);
+    const matrix = built!.buffers.get("matrix")!;
+    const before = matrix.slice();
+    const uploads: string[] = [];
+    const bondState = {
+      count: 0,
+      frameOffset: 1,
+      buffers: new Map([
+        ["matrix", { data: matrix }],
+        ["instanceData0", { data: built!.buffers.get("instanceData0")! }],
+        ["instanceData1", { data: built!.buffers.get("instanceData1")! }],
+      ]),
+      uploadBuffer(name: string) {
+        uploads.push(name);
+      },
+    };
+
+    refreshBondPositions(
+      bonds,
+      new Float64Array([1, 9]),
+      new Float64Array([2, 2]),
+      new Float64Array([3, 3]),
+      bondState,
     );
+
+    expect(Array.from(matrix)).toEqual(Array.from(before));
+    expect(uploads).not.toContain("matrix");
   });
 
   it("holds benzene double bonds in the ring plane across a frame advance", () => {
@@ -485,8 +518,8 @@ function miDisplacementsViaBox(
   const a = new Float64Array(n * 3);
   const b = new Float64Array(n * 3);
   for (let k = 0; k < n; k++) {
-    const i = iAtoms[k];
-    const j = jAtoms[k];
+    const i = Number(iAtoms[k]);
+    const j = Number(jAtoms[k]);
     a[3 * k] = x[i];
     a[3 * k + 1] = y[i];
     a[3 * k + 2] = z[i];
@@ -517,10 +550,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -545,10 +578,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
 
@@ -569,10 +602,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([0, 0]));
     atoms.setColF("z", new Float64Array([0, 9]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
     const box = Box.ortho(
       new Float64Array([10, 10, 10]),
@@ -629,10 +662,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     atoms.setColF("y", new Float64Array([2.165, 6.495]));
     atoms.setColF("z", new Float64Array([0, 0]));
     const bondsBlock = new Block();
-    bondsBlock.setColU32("atomi", new Uint32Array([0]));
-    bondsBlock.setColU32("atomj", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_type", new Uint32Array([1]));
-    bondsBlock.setColU32("bond_number", new Uint32Array([1]));
+    bondsBlock.setColU32("atomi", toDomainUint([0]));
+    bondsBlock.setColU32("atomj", toDomainUint([1]));
+    bondsBlock.setColU32("bond_type", toDomainUint([1]));
+    bondsBlock.setColU32("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
 
     const disp = miDisplacementsViaBox(box, atoms, bondsBlock);

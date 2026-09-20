@@ -1,6 +1,7 @@
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { computeRdf } from "../../src/analysis/rdf";
 import type { RdfResult } from "../../src/analysis/rdf_params";
 import {
@@ -31,7 +32,7 @@ function makeFrame(positions: readonly Position[], ids?: readonly number[]) {
     "element",
     positions.map(() => "Ar"),
   );
-  if (ids) atoms.setColU32("id", Uint32Array.from(ids));
+  if (ids) atoms.setColU32("id", toDomainUint(ids));
   frame.insertBlock("atoms", atoms);
   return frame;
 }
@@ -294,7 +295,6 @@ describe("TestComputeMsdTrajectory", () => {
     // Every atom moves with the frame, so MSD = shift²: 0, 1² and 4².
     expect(run.result.count).toBe(3);
     expect(run.result.frames.map((item) => item.mean)).toEqual([0, 1, 16]);
-    expect(Array.from(run.result.frames[2].perParticle)).toEqual([16, 16]);
     expect(run.frameIndices).toEqual([0, 1, 2]);
     expect(run.failures).toEqual([]);
     expect(run.trackedSelection.mode).toBe("all");

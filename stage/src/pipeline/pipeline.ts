@@ -1,10 +1,6 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
-import {
-  applyCoordinatePolicy,
-  type CoordinatePolicy,
-  type UnwrapState,
-} from "../coords";
+import { applyWrapIfEnabled } from "../coords";
 import { EventEmitter } from "../events";
 import {
   type CompositionSource,
@@ -14,7 +10,13 @@ import { logger } from "../utils/logger";
 import { DataSource } from "./data_source";
 import { DrawBoxModifier } from "./draw_box";
 import type { PipelineEntry } from "./entry";
-import { type Modifier, ModifierCapability } from "./modifier";
+import { MeshOverlayModifier } from "./mesh_overlay";
+import {
+  type GeometryProducer,
+  type Modifier,
+  ModifierCapability,
+  producesGeometry,
+} from "./modifier";
 import {
   generateNatoId,
   isSelectionProducer,
@@ -27,6 +29,14 @@ import {
   type PipelineContext,
   SelectionMask,
 } from "./types";
+
+export interface AddModifierOptions {
+  /**
+   * Give a `ProducesGeometry` modifier its draw companion. Default true.
+   * Set false when the caller supplies the draw itself.
+   */
+  attachDraw?: boolean;
+}
 
 export interface PipelineEventMap {
   // Membership events cover every row in the list, sources included, so they
@@ -69,9 +79,10 @@ export const PipelineEvents = {
  * phases.
  *
  * Phase A composes every enabled {@link DataSource} into a single frame
- * (`system/source_composition.ts`). Sources are unordered — composition merges
- * by block, not by list position — so where a source sits in the list is a
- * display concern only.
+ * (`system/source_composition.ts`). A length-1 source plus an N-frame
+ * trajectory compose as topology + coordinates regardless of list order.
+ * Same-kind overlapping columns still later-win. List position is otherwise
+ * a display concern.
  *
  * Phase B runs every enabled {@link Modifier} in {@link executionOrder}. Here
  * order *is* the semantics.
@@ -84,24 +95,19 @@ export const PipelineEvents = {
 export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   private entries: PipelineEntry[] = [];
   /**
-   * System-level coordinate policy applied after DataSource compose and
-   * before transform/draw modifiers. Default: leave deposited coordinates.
+   * System wrap gate after DataSource compose. When true, atom columns are
+   * folded with {@link applyWrapIfEnabled} once; edge bonds use draw-time MI.
    */
-  private _coordinatePolicy: CoordinatePolicy = "as-deposited";
-  private _unwrapState: UnwrapState | null = null;
+  private _wrapEnabled = false;
 
-  get coordinatePolicy(): CoordinatePolicy {
-    return this._coordinatePolicy;
+  get wrapEnabled(): boolean {
+    return this._wrapEnabled;
   }
 
-  /**
-   * Set the post-compose coordinate policy. Changing policy clears unwrap
-   * state so the next scrub re-seeds cleanly.
-   */
-  setCoordinatePolicy(policy: CoordinatePolicy): void {
-    if (this._coordinatePolicy === policy) return;
-    this._coordinatePolicy = policy;
-    this._unwrapState = null;
+  /** Enable or disable the post-compose atom wrap gate. */
+  setWrapEnabled(enabled: boolean): void {
+    if (this._wrapEnabled === enabled) return;
+    this._wrapEnabled = enabled;
   }
 
   /** Assign the pipeline-owned NATO id. Ids belong to the list, not the caller. */
@@ -166,6 +172,23 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     return this.entries.find((e): e is Session => e instanceof Session) ?? null;
   }
 
+  /**
+   * Give a geometry producer its draw companion, owned by it.
+   *
+   * Ownership does double duty: the pipeline tree already nests entries by
+   * `sourceOwnerId`, so the draw renders indented under its producer, and
+   * {@link removeEntry}'s descendant sweep takes it away when the producer
+   * goes — no bespoke cascade for either.
+   */
+  private attachDraw(producer: Modifier & GeometryProducer): void {
+    const draw = producer.createDraw();
+    this.assignId(draw);
+    draw.sourceOwnerId = producer.id;
+    const index = this.entries.indexOf(producer) + 1;
+    this.entries.splice(index, 0, draw);
+    this.emit(PipelineEvents.ENTRY_ADDED, { entry: draw, index });
+  }
+
   /** Index of the first `Draws`-capability modifier, or `null` if there is none. */
   private firstDrawIndex(): number | null {
     const i = this.entries.findIndex(
@@ -180,7 +203,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   /**
    * Add a modifier to the pipeline.
    *
-   * **Auto-positioning**: a `TransformsData`-only modifier (e.g. WrapPBC,
+   * **Auto-positioning**: a `TransformsData`-only modifier (e.g. Slice,
    * a future RecenterBox, a topology-rewriter) is inserted *before* the
    * first `Draws`-capability modifier already in the pipeline. Otherwise
    * it would land after DrawAtoms / DrawBonds / DrawBox and the
@@ -190,16 +213,19 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
    * append normally, preserving the user's left-to-right ordering of
    * draw layers.
    */
-  addModifier(modifier: Modifier): void {
+  addModifier(modifier: Modifier, options?: AddModifierOptions): void {
     this.assignId(modifier);
 
     const isTransform = modifier.capabilities.has(
       ModifierCapability.TransformsData,
     );
     const isDraw = modifier.capabilities.has(ModifierCapability.Draws);
+    const isProducer = modifier.capabilities.has(
+      ModifierCapability.ProducesGeometry,
+    );
 
     let insertIndex = this.entries.length;
-    if (isTransform && !isDraw) {
+    if ((isTransform || isProducer) && !isDraw) {
       const firstDraw = this.firstDrawIndex();
       if (firstDraw !== null) insertIndex = firstDraw;
     }
@@ -208,6 +234,10 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       entry: modifier,
       index: insertIndex,
     });
+
+    if (options?.attachDraw !== false && producesGeometry(modifier)) {
+      this.attachDraw(modifier);
+    }
   }
 
   /**
@@ -328,6 +358,15 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     return n;
   }
 
+  /** Live Mesh overlay rows — view geometry, not DataSources. */
+  meshOverlayCount(): number {
+    let n = 0;
+    for (const m of this.modifiers()) {
+      if (m instanceof MeshOverlayModifier) n++;
+    }
+    return n;
+  }
+
   /**
    * Get direct children of a given source owner.
    */
@@ -381,7 +420,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
     if (isTopologyChanging(target)) return false;
     if (sourceOwnerId !== null) {
       const owner = this.entries.find((e) => e.id === sourceOwnerId);
-      if (!(owner instanceof DataSource)) return false;
+      if (!owner || owner instanceof Session) return false;
     }
     const oldSourceOwnerId = target.sourceOwnerId;
     target.sourceOwnerId = sourceOwnerId;
@@ -417,39 +456,43 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
   }
 
   /**
-   * Compute the augment-composed frame at `frameIndex` and apply all enabled
-   * non-source modifiers in array order.
+   * Phase A: compose enabled sources at `frameIndex` and apply the wrap
+   * gate. Callers that need to classify the transition before draws run
+   * this once and pass the result into {@link compute} as `precomposed`.
    */
-  async compute(
-    frameIndex: number,
-    app: MolvisApp,
-    changeKind: FrameChangeKind = "full",
-  ): Promise<Frame> {
+  async composeHead(frameIndex: number): Promise<Frame> {
     const sources: CompositionSource[] = [];
     for (const s of this.sources()) {
       if (!s.enabled) continue;
       sources.push({
         id: s.id,
+        label: s.filename || s.name,
         trajectory: s.trajectory,
         contributedBlocks:
           s.contributedBlocks.length > 0 ? s.contributedBlocks : undefined,
       });
     }
-    let frame = await composeSources(sources, frameIndex);
+    const frame = await composeSources(sources, frameIndex);
+    return applyWrapIfEnabled(frame, this._wrapEnabled);
+  }
 
-    // --- Phase A2: system coordinate policy (compose → policy → modifiers) ---
-    // Draws and MI-aware visuals consume only post-policy coordinates.
-    // Volume grids (CHGCAR/CUBE) are untouched — they ride as separate blocks.
-    frame = applyCoordinatePolicy(frame, this._coordinatePolicy, {
-      frameIndex,
-      unwrapState: this._unwrapState,
-      onUnwrapState: (state) => {
-        this._unwrapState = state;
-      },
-    });
+  /**
+   * Compute the augment-composed frame at `frameIndex` and apply all enabled
+   * non-source modifiers in array order.
+   *
+   * Pass `precomposed` to skip a second compose when the caller already
+   * ran {@link composeHead} (playback classification).
+   */
+  async compute(
+    frameIndex: number,
+    app: MolvisApp,
+    changeKind: FrameChangeKind = "full",
+    precomposed?: Frame,
+  ): Promise<Frame> {
+    let frame = precomposed ?? (await this.composeHead(frameIndex));
 
     // --- Phase B: apply non-DS modifiers ---
-    // Pure TransformsData modifiers (WrapPBC, Slice, …) always run before
+    // Pure TransformsData modifiers (Slice, …) always run before
     // any Draws-capable modifier, even if the user reordered the list so a
     // transform sits after Particles. Otherwise the visual would render
     // un-transformed coordinates and the transform would appear broken.
@@ -503,11 +546,27 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
    * wrapped trajectory) are released deterministically rather than waiting
    * for GC.
    */
-  clear(): void {
+  clear(options?: { keepMeshOverlays?: boolean }): void {
+    const keepIds = new Set<string>();
+    if (options?.keepMeshOverlays) {
+      const session = this.session();
+      if (session) keepIds.add(session.id);
+      for (const m of this.modifiers()) {
+        if (!(m instanceof MeshOverlayModifier)) continue;
+        keepIds.add(m.id);
+        for (const child of this.getChildren(m.id)) keepIds.add(child.id);
+      }
+    }
+
     // Teardown, same as `removeEntry` — clearing *is* removal. Without this a
     // Session kept its socket and a CameraTrackModifier kept its observers,
     // because `clear` only ever disposed sources.
+    const kept: PipelineEntry[] = [];
     for (const entry of this.entries) {
+      if (keepIds.has(entry.id)) {
+        kept.push(entry);
+        continue;
+      }
       try {
         entry.onRemoved?.();
       } catch (err) {
@@ -518,6 +577,7 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
       }
     }
     for (const source of this.sources()) {
+      if (keepIds.has(source.id)) continue;
       try {
         source.dispose();
       } catch (err) {
@@ -527,45 +587,108 @@ export class ModifierPipeline extends EventEmitter<PipelineEventMap> {
         );
       }
     }
-    this.entries = [];
+    this.entries = kept;
     this.emit(PipelineEvents.PIPELINE_CLEARED, {} as Record<string, never>);
   }
 }
 
 /**
- * Stable partition for pipeline execution (three bands):
+ * Stable execution order for pipeline modifiers.
  *
- * 1. **Frame-box providers** — manual {@link DrawBoxModifier} that write
- *    `frame.box` (user-defined lattice). Must run first so pure geometry
- *    transforms can read the cell from the frame alone.
- * 2. **Pure `TransformsData`** (no `Draws`) — WrapPBC, Slice, Color, …
- * 3. **Everything else** — Draws, dual-capability (e.g. DrawRibbon), Select.
+ * Two forces drive ordering:
  *
- * Relative order within each band is preserved.
+ * 1. **Capability bands** (for unrelated modifiers, preserves the legacy
+ *    semantics): box providers → pure transforms → selection producers →
+ *    selection-consuming transforms → draws / dual-capability.
+ * 2. **Selection-scope dependencies**: a modifier whose
+ *    `selectionScopeId` references a producer must run after that producer.
+ *    This is the only execution dependency between modifiers (see
+ *    {@link ModifierPipeline.setSelectionScope}).
+ *
+ * The result is a stable topological sort over `selectionScopeId` edges.
+ * When several unrelated modifiers are runnable, the lowest band wins and
+ * within a band the original list order is preserved.
  */
 export function executionOrder(
   modifiers: readonly Modifier[],
 ): readonly Modifier[] {
-  const boxProviders: Modifier[] = [];
-  const transforms: Modifier[] = [];
-  const rest: Modifier[] = [];
+  const byId = new Map<string, Modifier>();
+  for (const m of modifiers) byId.set(m.id, m);
+
+  const indegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
   for (const m of modifiers) {
-    if (isFrameBoxProvider(m)) {
-      boxProviders.push(m);
-      continue;
-    }
-    const isTransform = m.capabilities.has(ModifierCapability.TransformsData);
-    const isDraw = m.capabilities.has(ModifierCapability.Draws);
-    if (isTransform && !isDraw) {
-      transforms.push(m);
-    } else {
-      rest.push(m);
+    indegree.set(m.id, 0);
+    dependents.set(m.id, []);
+  }
+  for (const m of modifiers) {
+    const scope = m.selectionScopeId;
+    if (scope !== null && byId.has(scope)) {
+      indegree.set(m.id, (indegree.get(m.id) ?? 0) + 1);
+      dependents.get(scope)?.push(m.id);
     }
   }
-  if (boxProviders.length === 0 && transforms.length === 0) {
-    return modifiers;
+
+  const remaining = new Set(modifiers.map((m) => m.id));
+  const ordered: Modifier[] = [];
+
+  while (remaining.size > 0) {
+    let next: Modifier | null = null;
+    let nextIndex = -1;
+    for (let i = 0; i < modifiers.length; i++) {
+      const m = modifiers[i];
+      if (!remaining.has(m.id) || (indegree.get(m.id) ?? 0) > 0) continue;
+      if (
+        next === null ||
+        bandPriority(m) < bandPriority(next) ||
+        (bandPriority(m) === bandPriority(next) && i < nextIndex)
+      ) {
+        next = m;
+        nextIndex = i;
+      }
+    }
+    if (next === null) {
+      // Invalid cyclic scope graph — fall back to list order for the rest so
+      // no modifier is silently dropped.
+      for (const m of modifiers) {
+        if (remaining.has(m.id)) ordered.push(m);
+      }
+      break;
+    }
+    ordered.push(next);
+    remaining.delete(next.id);
+    for (const dep of dependents.get(next.id) ?? []) {
+      indegree.set(dep, (indegree.get(dep) ?? 0) - 1);
+    }
   }
-  return [...boxProviders, ...transforms, ...rest];
+
+  return ordered;
+}
+
+function bandPriority(m: Modifier): number {
+  if (isFrameBoxProvider(m)) return 0;
+  const caps = m.capabilities;
+  const transforms = caps.has(ModifierCapability.TransformsData);
+  const draws = caps.has(ModifierCapability.Draws);
+  const consumes = caps.has(ModifierCapability.ConsumesSelection);
+  const produces = caps.has(ModifierCapability.ProducesSelection);
+
+  // Pure geometry/topology transforms run before any selection is computed so
+  // producers index the frame the user actually sees.
+  if (transforms && !draws && !consumes && !produces) return 1;
+  // Producers that only emit a mask (Expression, Type, Mask, Overlapping).
+  if (produces && !consumes && !draws) return 2;
+  // Derived producers (Select add/remove/toggle, Invert, Expand) consume an
+  // upstream mask before emitting their own; scope edges order them after it.
+  if (produces && consumes && !draws && !transforms) return 3;
+  // Consumers that rewrite the frame (Hide, Delete, Transparent, …) must see
+  // the producer's mask but still run before draws.
+  if (consumes && transforms && !draws) return 4;
+  // Geometry producers compute from the finished frame, so they run after
+  // every edit to it — and before the draws that paint what they produced.
+  if (caps.has(ModifierCapability.ProducesGeometry) && !draws) return 5;
+  // Draws and dual-capability modifiers render last.
+  return 6;
 }
 
 function isFrameBoxProvider(modifier: Modifier): boolean {

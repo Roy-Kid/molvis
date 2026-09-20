@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import {
   type Frame,
   Topology as WasmTopology,
@@ -18,9 +19,8 @@ export interface RingInfo {
 /**
  * Build a Topology graph from a frame.
  *
- * molrs `Topology.fromFrame` documents `i`/`j` bond columns; MolVis frames use
- * canonical `atomi`/`atomj`. Prefer fromFrame when it already has edges; else
- * construct explicitly from atomi/atomj (or i/j).
+ * molrs `Topology.fromFrame` may not see MolVis `atomi`/`atomj`. Prefer
+ * fromFrame when it already has edges; else rebuild from those columns.
  */
 function topologyFromFrame(frame: Frame): WasmTopology | null {
   const atoms = frame.getBlock("atoms");
@@ -31,17 +31,16 @@ function topologyFromFrame(frame: Frame): WasmTopology | null {
   let topo = WasmTopology.fromFrame(frame);
   if (topo.nBonds > 0) return topo;
 
-  // fromFrame saw no edges — rebuild from MolVis bond columns.
+  // fromFrame saw no edges — rebuild from canonical bond columns.
   topo.free();
   topo = new WasmTopology(nAtoms);
-  const atomi = bonds.viewColU32("atomi") ?? bonds.viewColU32("i") ?? undefined;
-  const atomj = bonds.viewColU32("atomj") ?? bonds.viewColU32("j") ?? undefined;
-  if (!atomi || !atomj) return topo;
+  const atomi = bonds.viewColU32("atomi");
+  const atomj = bonds.viewColU32("atomj");
 
   const nb = bonds.nrows();
   for (let b = 0; b < nb; b++) {
-    const i = atomi[b];
-    const j = atomj[b];
+    const i = toRowIndex(atomi[b]);
+    const j = toRowIndex(atomj[b]);
     if (i >= 0 && i < nAtoms && j >= 0 && j < nAtoms && i !== j) {
       topo.addBond(i, j);
     }

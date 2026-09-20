@@ -109,6 +109,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
   // Bump when pipeline mutates so left config re-resolves the modifier.
   const [pipelineTick, setPipelineTick] = useState(0);
   const trajectoryLength = useTrajectoryLength(app);
+  const indexComplete = app?.system.trajectory.indexComplete ?? true;
   const selectedAtoms = useSelectedAtoms(app);
   const catalog = useAnalysisCatalog(app, selectedAtoms.length > 0);
   const isPluginAnalysis = isPluginAnalysisId(analysisType);
@@ -176,7 +177,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
     if (fromPicker) return fromPicker;
     return getAnalysisDefinition(analysisType);
   }, [analysisType, isPluginAnalysis, catalog.groups]);
-  const frameRange = parseScopeRange(scope, trajectoryLength);
+  const parsedScope = parseScopeRange(scope, trajectoryLength, {
+    indexComplete,
+  });
+  const frameRange = parsedScope.ok
+    ? parsedScope.range
+    : { start: 0, endInclusive: 0, stride: 1 };
+  const scopeBlocked = !parsedScope.ok;
   const hideAtomScope = OWNS_ATOM_SCOPE.has(analysisType);
   const scopeSummary = formatScopeSummary(
     scope,
@@ -213,6 +220,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
         value={scope}
         onChange={setScope}
         trajectoryLength={trajectoryLength}
+        indexComplete={indexComplete}
         selectedAtomCount={selectedAtoms.length}
         hideAtomScope={hideAtomScope}
       />
@@ -290,6 +298,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
           app={app}
           frameRange={frameRange}
           trajectoryLength={trajectoryLength}
+          scopeBlocked={scopeBlocked}
         >
           {scopeNode}
         </RdfPanel>
@@ -299,6 +308,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ app }) => {
           app={app}
           frameRange={frameRange}
           trajectoryLength={trajectoryLength}
+          scopeBlocked={scopeBlocked}
         >
           {scopeNode}
         </MsdPanel>

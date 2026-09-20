@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { SpatialNeighborQuery } from "../algo/neighbor_list";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
@@ -103,8 +104,8 @@ function expandByBonds(
   if (!iCol || !jCol) return;
 
   for (let k = 0; k < iCol.length; k++) {
-    const i = iCol[k];
-    const j = jCol[k];
+    const i = toRowIndex(iCol[k]);
+    const j = toRowIndex(jCol[k]);
     if (i >= n || j >= n) continue;
     if (selected.has(i)) expanded.add(j);
     if (selected.has(j)) expanded.add(i);

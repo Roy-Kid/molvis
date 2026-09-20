@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { BOND_TYPE_SINGLE } from "../utils/bond_order";
 
@@ -17,9 +18,7 @@ export function copyAtomColumns(frame: Frame): {
   const x = atoms.copyColF("x");
   const y = atoms.copyColF("y");
   const z = atoms.copyColF("z");
-  const elements =
-    atoms.copyColStr("element") ??
-    Array.from({ length: atoms.nrows() }, () => "C");
+  const elements = atoms.getStr("element") as string[];
   if (!x || !y || !z) throw new Error("Atoms missing x/y/z");
   return {
     x: new Float64Array(x),
@@ -46,21 +45,19 @@ export function copyBondColumns(frame: Frame): {
       bondType: new Uint32Array(0),
     };
   }
-  const i =
-    bonds.viewColU32("atomi") ?? bonds.viewColU32("i") ?? new Uint32Array(0);
-  const j =
-    bonds.viewColU32("atomj") ?? bonds.viewColU32("j") ?? new Uint32Array(0);
-  const t = bonds.dtype("bond_type")
-    ? (bonds.viewColU32("bond_type") ?? undefined)
+  const i = bonds.viewColU32("atomi");
+  const j = bonds.viewColU32("atomj");
+  const t = bonds.hasU32("bond_type")
+    ? bonds.viewColU32("bond_type")
     : undefined;
   const n = bonds.nrows();
   const bondI = new Uint32Array(n);
   const bondJ = new Uint32Array(n);
   const bondType = new Uint32Array(n);
   for (let b = 0; b < n; b++) {
-    bondI[b] = i[b] ?? 0;
-    bondJ[b] = j[b] ?? 0;
-    bondType[b] = t?.[b] ?? BOND_TYPE_SINGLE;
+    bondI[b] = toRowIndex(i[b] ?? 0n);
+    bondJ[b] = toRowIndex(j[b] ?? 0n);
+    bondType[b] = t ? toRowIndex(t[b]) : BOND_TYPE_SINGLE;
   }
   return { bondI, bondJ, bondType };
 }

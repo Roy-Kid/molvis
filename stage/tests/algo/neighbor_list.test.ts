@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Frame, UFFTypifier } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
@@ -140,10 +141,10 @@ describe("LbfgsNeighborStrategy", () => {
     ab.setColStr("element", ["C", "C", "O"]);
     frame.insertBlock("atoms", ab);
     const bb = new Block();
-    bb.setColU32("atomi", new Uint32Array([0, 1]));
-    bb.setColU32("atomj", new Uint32Array([1, 2]));
-    bb.setColU32("bond_type", new Uint32Array([1, 1]));
-    bb.setColU32("bond_number", new Uint32Array([1, 1]));
+    bb.setColU32("atomi", toDomainUint([0, 1]));
+    bb.setColU32("atomj", toDomainUint([1, 2]));
+    bb.setColU32("bond_type", toDomainUint([1, 1]));
+    bb.setColU32("bond_number", toDomainUint([1, 1]));
     frame.insertBlock("bonds", bb);
 
     const typ = new UFFTypifier();

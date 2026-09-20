@@ -6,14 +6,14 @@
 import { type Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
 type Frozen =
   | { kind: "f64"; data: Float64Array }
   | { kind: "str"; data: string[] }
   | { kind: "i32"; data: Int32Array }
-  | { kind: "u32"; data: Uint32Array };
+  | { kind: "u64"; data: BigUint64Array };
 
 export class FreezePropertyModifier extends BaseModifier {
   static readonly NAME = "Freeze property";
@@ -111,10 +111,10 @@ function snapshotColumn(
     if (!src) return null;
     return { kind: "i32", data: new Int32Array(src.subarray(0, n)) };
   }
-  if (dtype === DType.U32) {
+  if (isDomainUintDtype(dtype)) {
     const src = atoms.viewColU32(column);
     if (!src) return null;
-    return { kind: "u32", data: new Uint32Array(src.subarray(0, n)) };
+    return { kind: "u64", data: new BigUint64Array(src.subarray(0, n)) };
   }
   return null;
 }

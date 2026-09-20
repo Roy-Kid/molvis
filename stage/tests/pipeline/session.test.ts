@@ -1,6 +1,6 @@
 import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { WrapPBCModifier } from "../../src/modifiers/WrapPBCModifier";
+import { SliceModifier } from "../../src/modifiers/SliceModifier";
 import { MemoryDataSource } from "../../src/pipeline/data_source";
 import { ModifierPipeline } from "../../src/pipeline/pipeline";
 import { Session } from "../../src/pipeline/session";
@@ -14,7 +14,7 @@ describe("Session", () => {
     const pipeline = new ModifierPipeline();
     pipeline.setSession(session());
     pipeline.addSource(new MemoryDataSource(new Frame()));
-    pipeline.addModifier(new WrapPBCModifier("wrap"));
+    pipeline.addModifier(new SliceModifier());
 
     // It occupies a row, and only a row: composition and the apply chain
     // must not see it.

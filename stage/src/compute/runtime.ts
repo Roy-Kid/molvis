@@ -1,11 +1,14 @@
 /**
  * Main-thread lifecycle for the shared compute worker.
  *
- * Spawning needs no host wiring: {@link spawnComputeWorker} uses the static
- * `new Worker(new URL("./worker.js", import.meta.url))` form, which every
- * rspack-based host folds into its own build (same pattern as the trajectory
- * worker) — the one exception is the VS Code webview, which builds the worker
- * separately and swaps the spawn module out at build time (see `./spawn`).
+ * Spawning needs no host wiring: {@link spawnComputeWorker} (from
+ * `@molcrafts/molvis-stage/worker-spawner`) keeps the static
+ * `new Worker(new URL(..., import.meta.url))` form, which every rspack-based
+ * host folds into its own build (same pattern as the trajectory worker) —
+ * the one exception is the VS Code webview, which builds the worker
+ * separately and aliases the whole worker-spawner subpath at build time.
+ * The async spawn bridges into core's synchronous `createWorker` factory
+ * through {@link DeferredWorker}.
  * Tests inject a fake host via {@link setComputeRuntimeForTests}.
  * Domain adapters (e.g. `optimize/worker_client`) build on this module —
  * never the other way around.
@@ -15,8 +18,13 @@ import {
   createWorkloadSingleton,
   WorkloadHost,
 } from "@molcrafts/molvis-core/workload";
+// Only the spawn function crosses the replaceable seam (hosts alias the
+// worker-spawner specifier to swap spawning). DeferredWorker is shared
+// bridging code every graph needs verbatim — imported relatively so an
+// aliasing host does not have to re-export it.
+import { spawnComputeWorker } from "@molcrafts/molvis-stage/worker-spawner";
+import { DeferredWorker } from "../worker_spawner";
 import type { ComputeJob, ComputeProgress, ComputeResult } from "./protocol";
-import { spawnComputeWorker } from "./spawn";
 
 /** The workload host specialized to this package's compute job envelope. */
 export type ComputeWorkloadHost = WorkloadHost<
@@ -27,20 +35,18 @@ export type ComputeWorkloadHost = WorkloadHost<
 
 /** Status-line beat while waiting for worker boot, so the UI looks alive. */
 const HEARTBEAT_MS = 2_000;
-/**
- * Fail fast on a broken worker URL / chunk. Boot includes the molrs WASM
- * fetch (cached after the main bundle loads it), so allow a slow first hit.
- */
-const READY_TIMEOUT_MS = 30_000;
 
 /**
  * Await the worker's boot handshake, beating a status line while it takes.
  *
  * Every domain adapter (optimize, analysis) needs the same wait: `whenReady()`
  * — resolved once the worker has loaded its modules and its WebAssembly and
- * posted `ready` — raced against a hard timeout, with a periodic beat so a slow
- * first boot never looks frozen. `onBeat` renders one status line; the caller
- * decides which of its own progress shapes carries it.
+ * posted `ready` — with a periodic beat so a slow first boot never looks
+ * frozen. `onBeat` renders one status line; the caller decides which of its
+ * own progress shapes carries it. The boot deadline is owned by the host
+ * (`readyTimeoutMs` in the singleton factory below), so any timeout rejection
+ * arrives through `whenReady()` with the host's `[molvis-compute]` prefix and
+ * propagates unchanged.
  *
  * The first beat is only due after 2 s, so an already-warm host resolves without
  * ever calling `onBeat`: a second job reports nothing but its own progress.
@@ -49,7 +55,8 @@ const READY_TIMEOUT_MS = 30_000;
  * @param host the compute host to wait on (see {@link getComputeRuntime})
  * @param onBeat renders the current boot status line; called repeatedly until
  *   the worker is ready
- * @throws Error when the worker does not post `ready` within 30 s
+ * @throws Error the host's own boot failure — worker error, dispose, or its
+ *   30 s `readyTimeoutMs` expiry
  */
 export async function awaitComputeHostReady(
   host: ComputeWorkloadHost,
@@ -59,23 +66,9 @@ export async function awaitComputeHostReady(
     () => onBeat("Starting compute worker…"),
     HEARTBEAT_MS,
   );
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await Promise.race([
-      host.whenReady(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(
-            new Error(
-              "Compute worker failed to start (check worker URL / chunk). " +
-                "See browser console for worker load errors.",
-            ),
-          );
-        }, READY_TIMEOUT_MS);
-      }),
-    ]);
+    await host.whenReady();
   } finally {
-    clearTimeout(timer);
     clearInterval(hb);
   }
 }
@@ -88,7 +81,16 @@ const singleton = createWorkloadSingleton<
   () =>
     new WorkloadHost({
       name: "molvis-compute",
-      createWorker: spawnComputeWorker,
+      // The double assertion is confined to this seam: WorkloadHost only
+      // touches onmessage/onerror/postMessage/terminate, exactly the
+      // surface DeferredWorker implements (same precedent as the
+      // WorkerLikeAdapter in the trajectory runtime).
+      createWorker: () =>
+        new DeferredWorker(spawnComputeWorker()) as unknown as Worker,
+      // Fail fast on a broken worker URL / chunk. Boot includes the molrs
+      // WASM fetch (cached after the main bundle loads it), so allow a slow
+      // first hit.
+      readyTimeoutMs: 30_000,
     }),
 );
 
@@ -125,4 +127,12 @@ export function setComputeRuntimeForTests(
  */
 export function warmComputeWorker(): Promise<void> {
   return getComputeRuntime().whenReady();
+}
+
+/**
+ * Terminate the process-wide compute worker, if one was spawned.
+ * Idempotent — safe to call from {@link MolvisApp.destroy} and tests.
+ */
+export function disposeComputeRuntime(): void {
+  singleton.setForTests(null);
 }

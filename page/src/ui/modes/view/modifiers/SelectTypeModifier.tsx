@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
+import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
 interface Props {
   modifier: CoreSelectTypeModifier;
@@ -57,7 +58,7 @@ export const SelectTypeModifier: React.FC<Props> = ({
         (a, b) => Number(a) - Number(b),
       );
     }
-    if (atoms.dtype("type") === "u32") {
+    if (atoms.dtype("type") === "u64" || atoms.dtype("type") === "u32") {
       const col = atoms.viewColU32("type");
       if (!col) return [];
       return [...new Set(Array.from(col, String))].sort(
@@ -173,6 +174,12 @@ export const SelectTypeModifier: React.FC<Props> = ({
           }}
         />
       </div>
+
+      <SelectionHighlightColor
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
     </fieldset>
   );
 };

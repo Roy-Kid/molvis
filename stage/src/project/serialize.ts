@@ -10,6 +10,7 @@ import type { MolvisApp } from "../app";
 import { readCameraPose } from "../camera/control";
 import { DataSource } from "../pipeline/data_source";
 import type { Modifier } from "../pipeline/modifier";
+import { carriesProjectParams } from "./params";
 import { frameToPortable } from "./portable_frame";
 import {
   MOLVIS_PROJECT_FORMAT,
@@ -29,7 +30,7 @@ async function captureDataSource(
     frames.push(frameToPortable(frame));
   }
   return {
-    kind: ds.kind,
+    typeName: ds.constructor.name,
     filename: ds.filename,
     sourceType: ds.sourceType,
     contributedBlocks: [...ds.contributedBlocks],
@@ -72,13 +73,20 @@ export async function serializeProject(
     }
 
     const mod = entry as Modifier;
-    pipeline.push({
+    const base = {
       id: mod.id,
       type: pipelineTypeName(mod),
       enabled: mod.enabled,
       selection_scope_id: mod.selectionScopeId,
       source_owner_id: mod.sourceOwnerId,
-    });
+    };
+    const colorParams =
+      mod.highlightColor !== null ? { highlightColor: mod.highlightColor } : {};
+    const params = {
+      ...(carriesProjectParams(mod) ? mod.toProjectParams() : {}),
+      ...colorParams,
+    };
+    pipeline.push(Object.keys(params).length > 0 ? { ...base, params } : base);
   }
 
   const hasDs = pipeline.some((e) => e.type === "DataSource");

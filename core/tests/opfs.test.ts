@@ -117,4 +117,22 @@ describe("cache sweep", () => {
     expect(await OpfsBlobCache.has("drop")).toBe(false);
     expect(await OpfsBlobCache.has("keep")).toBe(true);
   });
+
+  it("replaces an existing blob and openSync reads the new size", async () => {
+    await clearOpfsCache();
+    await OpfsBlobCache.set("fp-replace", new Blob(["abc"]));
+    await OpfsBlobCache.set("fp-replace", new Blob(["abcdef"]));
+    const handle = await OpfsBlobCache.openSync("fp-replace");
+    if (!handle) return;
+    try {
+      expect(handle.getSize()).toBe(6);
+    } finally {
+      handle.close();
+    }
+  });
+
+  it("openSync returns null for a missing key", async () => {
+    await clearOpfsCache();
+    expect(await OpfsBlobCache.openSync("never-written")).toBeNull();
+  });
 });

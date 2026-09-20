@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
+import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
 interface ModifierProps {
   modifier: CoreExpressionModifier;
@@ -86,6 +87,12 @@ export const ExpressionSelectionModifier: React.FC<ModifierProps> = ({
           onBlur={handleApply}
         />
       </div>
+
+      <SelectionHighlightColor
+        modifier={modifier}
+        app={app}
+        onUpdate={onUpdate}
+      />
     </fieldset>
   );
 };

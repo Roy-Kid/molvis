@@ -1,5 +1,6 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
-import { DType } from "../utils/dtype";
+import { DType, isDomainUintDtype } from "../utils/dtype";
 
 /**
  * Derive the scene-supplied inputs a `panelInput` requirement names.
@@ -16,8 +17,8 @@ export function bondPairs(frame: Frame): Uint32Array {
   const j = bonds.copyColU32("atomj");
   const out = new Uint32Array(i.length * 2);
   for (let k = 0; k < i.length; k++) {
-    out[2 * k] = i[k];
-    out[2 * k + 1] = j[k];
+    out[2 * k] = toRowIndex(i[k]);
+    out[2 * k + 1] = toRowIndex(j[k]);
   }
   return out;
 }
@@ -32,9 +33,11 @@ function adjacency(frame: Frame): number[][] {
   const i = bonds.copyColU32("atomi");
   const j = bonds.copyColU32("atomj");
   for (let k = 0; k < i.length; k++) {
-    if (i[k] < n && j[k] < n) {
-      adj[i[k]].push(j[k]);
-      adj[j[k]].push(i[k]);
+    const ii = toRowIndex(i[k]);
+    const jj = toRowIndex(j[k]);
+    if (ii < n && jj < n) {
+      adj[ii].push(jj);
+      adj[jj].push(ii);
     }
   }
   return adj;
@@ -111,7 +114,9 @@ export function atomLabels(frame: Frame, preferred?: string): Int32Array {
       }
       return out;
     }
-    if (dtype === DType.U32) return Int32Array.from(atoms.copyColU32(column));
+    if (isDomainUintDtype(dtype)) {
+      return Int32Array.from(atoms.copyColU32(column), (v) => toRowIndex(v));
+    }
     if (dtype === DType.I32) return atoms.copyColI32(column);
   }
   throw new Error(

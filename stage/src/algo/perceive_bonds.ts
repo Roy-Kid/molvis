@@ -1,6 +1,11 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { PeriodicTable } from "../system/elements";
+import {
+  isExactOrigin,
+  shouldSkipOriginSentinelsForFrame,
+} from "../system/occupancy";
 import { DType } from "../utils/dtype";
 import { SpatialNeighborQuery } from "./neighbor_list";
 
@@ -76,17 +81,63 @@ export class PerceiveBonds {
     const bondI: number[] = [];
     const bondJ: number[] = [];
 
-    // LinkedCell reads literal x/y/z. Unwrapped xu/yu/zu frames get a
-    // throwaway search frame so pair indices still match atom order.
-    // Unwrapped coords use free boundaries — wrapping invents bonds.
-    const searchFrame = coords.columns.x === "x" ? input : new Frame();
-    const tempFrame = searchFrame === input ? undefined : searchFrame;
-    if (tempFrame) {
+    const n = atoms.nrows();
+    const dropSentinels = shouldSkipOriginSentinelsForFrame(
+      input,
+      coords.x,
+      coords.y,
+      coords.z,
+      n,
+    );
+    // LinkedCell reads literal x/y/z. Only wrapped `x` frames carry the box
+    // into the search; unwrapped xu/yu/zu use free boundaries (wrapping
+    // invents bonds). When origin sentinels must be dropped, filter them out
+    // *before* the search: molpack parks every unplaced atom at exact (0,0,0),
+    // so k coincident sentinels land in one cell and generate O(k²) pairs
+    // before a per-pair check could discard them.
+    const literalXyz = coords.columns.x === "x";
+    let searchFrame: Frame;
+    let tempFrame: Frame | undefined;
+    // Maps a search-frame row back to its original atom index; undefined when
+    // the search runs over `input` unfiltered (identity mapping).
+    let indexMap: Int32Array | undefined;
+
+    if (!dropSentinels && literalXyz) {
+      searchFrame = input;
+    } else {
+      const included: number[] = [];
+      for (let i = 0; i < n; i++) {
+        if (
+          dropSentinels &&
+          isExactOrigin(coords.x[i], coords.y[i], coords.z[i])
+        ) {
+          continue;
+        }
+        included.push(i);
+      }
+      indexMap = Int32Array.from(included);
+      const m = included.length;
+      const sx = new Float64Array(m);
+      const sy = new Float64Array(m);
+      const sz = new Float64Array(m);
+      for (let k = 0; k < m; k++) {
+        const i = included[k];
+        sx[k] = coords.x[i];
+        sy[k] = coords.y[i];
+        sz[k] = coords.z[i];
+      }
+      tempFrame = new Frame();
       const tempAtoms = new Block();
-      tempAtoms.setColF("x", coords.x.slice());
-      tempAtoms.setColF("y", coords.y.slice());
-      tempAtoms.setColF("z", coords.z.slice());
+      tempAtoms.setColF("x", sx);
+      tempAtoms.setColF("y", sy);
+      tempAtoms.setColF("z", sz);
       tempFrame.insertBlock("atoms", tempAtoms);
+      // Wrapped coords keep PBC; unwrapped stay free-boundary.
+      if (literalXyz) {
+        const box = input.box;
+        if (box) tempFrame.box = box;
+      }
+      searchFrame = tempFrame;
     }
 
     const query = new SpatialNeighborQuery(searchCutoff, {
@@ -109,18 +160,20 @@ export class PerceiveBonds {
       for (let p = 0; p < pairs; p++) {
         const d2 = dSq[p];
         if (d2 < minSq) continue;
+        const oi = indexMap ? indexMap[iIdx[p]] : iIdx[p];
+        const oj = indexMap ? indexMap[jIdx[p]] : jIdx[p];
 
         let thresholdSq: number;
         if (covalent && radii) {
-          const sum = (radii[iIdx[p]] + radii[jIdx[p]]) * tol;
+          const sum = (radii[oi] + radii[oj]) * tol;
           thresholdSq = sum * sum;
         } else {
           thresholdSq = fixedSq;
         }
 
         if (d2 <= thresholdSq) {
-          bondI.push(iIdx[p]);
-          bondJ.push(jIdx[p]);
+          bondI.push(oi);
+          bondJ.push(oj);
         }
       }
     } finally {
@@ -156,8 +209,8 @@ export class PerceiveBonds {
 
     if (bondI.length > 0) {
       const bonds = new Block();
-      bonds.setColU32("atomi", Uint32Array.from(bondI));
-      bonds.setColU32("atomj", Uint32Array.from(bondJ));
+      bonds.setColU32("atomi", toDomainUint(bondI));
+      bonds.setColU32("atomj", toDomainUint(bondJ));
       result.insertBlock("bonds", bonds);
     }
 

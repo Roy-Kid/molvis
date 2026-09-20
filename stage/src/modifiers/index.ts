@@ -23,7 +23,6 @@ export {
   ComputeBondsModifier,
 } from "./ComputeBondsModifier";
 export { ComputePropertyModifier } from "./ComputePropertyModifier";
-export { ConstructSurfaceMeshModifier } from "./ConstructSurfaceMeshModifier";
 export { CoordinationPolyhedraModifier } from "./CoordinationPolyhedraModifier";
 export { DeleteSelectedModifier } from "./DeleteSelectedModifier";
 export {
@@ -42,8 +41,23 @@ export { FreezePropertyModifier } from "./FreezePropertyModifier";
 export { HideHydrogensModifier } from "./HideHydrogensModifier";
 export { HideSelectionModifier } from "./HideSelectionModifier";
 export { InvertSelectionModifier } from "./InvertSelectionModifier";
+export {
+  type AlphaShapeParams,
+  DEFAULT_ALPHA_PARAMS,
+  DEFAULT_GAUSSIAN_PARAMS,
+  DEFAULT_SOLVENT_PARAMS,
+  type GaussianSurfaceParams,
+  isMeshAlgorithm,
+  MAX_ALPHA_SHAPE_ATOMS,
+  type MeshAlgorithm,
+  MolecularSurfaceModifier,
+  type SolventSurfaceParams,
+  type SurfaceAlgorithm,
+  type SurfaceReport,
+} from "./MolecularSurfaceModifier";
 export { RadiusOfGyrationModifier } from "./RadiusOfGyrationModifier";
 export { ReplicateModifier } from "./ReplicateModifier";
+export { SelectMaskModifier } from "./SelectMaskModifier";
 export { ClearSelectionModifier, SelectModifier } from "./SelectModifier";
 export { SelectOverlappingModifier } from "./SelectOverlappingModifier";
 export { SelectTypeModifier } from "./SelectTypeModifier";
@@ -62,4 +76,3 @@ export {
 export { TrajectoryLinesModifier } from "./TrajectoryLinesModifier";
 export { TransparentSelectionModifier } from "./TransparentSelectionModifier";
 export { UnwrapTrajectoriesModifier } from "./UnwrapTrajectoriesModifier";
-export { WrapPBCModifier } from "./WrapPBCModifier";

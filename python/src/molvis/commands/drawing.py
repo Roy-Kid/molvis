@@ -91,29 +91,38 @@ class DrawingCommandsMixin:
         self: "Molvis",
         name: str | None = None,
         clear: bool = True,
+        *,
+        wait: bool = False,
     ) -> "Molvis":
         """Create a new frame and set it as current.
 
         When ``clear=True`` (default) this is an explicit wipe of scene
-        content (same family as :meth:`clear`).
+        content (same family as :meth:`clear`). Fire-and-forget by default;
+        pass ``wait=True`` to block on the frontend ACK and refresh the
+        modifier pipeline mirror.
         """
         self.send_cmd(
             FrontendCommands.NEW_FRAME.method,
             {"name": name, "clear": clear},
-            wait_for_response=True,
+            wait_for_response=wait,
         )
         if clear:
             self._clear_mirror()
             self._atom_ids = []
-        self.list_modifiers()
+        if wait:
+            self.list_modifiers()
         return self
 
     @frame_arg
-    def draw_frame(self: "Molvis", frame: Any) -> "Molvis":
+    def draw_frame(self: "Molvis", frame: Any, *, wait: bool = False) -> "Molvis":
         """Place a molecular frame into the edit working tree.
 
         Same path as Edit-mode molecule stamp (``PlaceMoleculeCommand``).
         Does **not** write molrs HEAD — call :meth:`commit` to save.
+
+        Fire-and-forget by default so an agent ``exec`` cannot stall the
+        MCP plane waiting for a canvas ACK. Pass ``wait=True`` to block,
+        collect session atom ids, and refresh the modifier pipeline mirror.
 
         Parameters
         ----------
@@ -121,18 +130,21 @@ class DrawingCommandsMixin:
             First argument: ``Frame``, Atomistic/molgraph (``to_frame``), or a
             frame mapping with ``blocks``. Its box, when it has one, travels
             with it — there is no separate box argument.
+        wait
+            Block on the frontend ACK (default ``False``).
         """
         payload, buffers = frame_payload(frame)
         result = self.send_cmd(
             FrontendCommands.DRAW_FRAME.method,
             {"frame": payload},
             buffers=buffers,
-            wait_for_response=True,
+            wait_for_response=wait,
         )
-        atom_ids = _as_int_list((result or {}).get("atomIds"))
-        if atom_ids:
-            self._atom_ids.extend(atom_ids)
-        self.list_modifiers()
+        if wait:
+            atom_ids = _as_int_list((result or {}).get("atomIds"))
+            if atom_ids:
+                self._atom_ids.extend(atom_ids)
+            self.list_modifiers()
         return self
 
     @frame_arg
@@ -141,13 +153,14 @@ class DrawingCommandsMixin:
         atomistic: Any,
         *,
         atom_fields: list[str] | None = None,
+        wait: bool = False,
     ) -> "Molvis":
         """Place an Atomistic / molgraph via :meth:`draw_frame`.
 
         Prefer the explicit :meth:`draw_frame` + :meth:`commit` pair for
         structures that should become pipeline HEAD.
         """
-        return self.draw_frame(atomistic)
+        return self.draw_frame(atomistic, wait=wait)
 
     def draw_box(self: "Molvis", box: mp.Box) -> "Molvis":
         """Draw a simulation box on its own.
@@ -164,14 +177,19 @@ class DrawingCommandsMixin:
         )
         return self
 
-    def draw_atoms(self: "Molvis", atoms: mp.Frame | Any) -> "Molvis":
+    def draw_atoms(
+        self: "Molvis",
+        atoms: mp.Frame | Any,
+        *,
+        wait: bool = False,
+    ) -> "Molvis":
         """Place *atoms* into the edit working tree (same as :meth:`draw_frame`).
 
         Takes a Frame (or anything :func:`coerce_to_frame` accepts). Does not
         clear prior content — use :meth:`clear` first when you want a wipe.
         Call :meth:`commit` to write HEAD.
         """
-        return self.draw_frame(atoms)
+        return self.draw_frame(atoms, wait=wait)
 
     def draw_atom(
         self: "Molvis",
@@ -276,10 +294,14 @@ class DrawingCommandsMixin:
         self.list_modifiers()
         return self
 
-    def clear(self: "Molvis") -> "Molvis":
-        """Clear all content from the canvas (the only full wipe)."""
+    def clear(self: "Molvis", *, wait: bool = False) -> "Molvis":
+        """Clear all content from the canvas (the only full wipe).
+
+        Fire-and-forget by default. Pass ``wait=True`` to block on the
+        frontend ACK.
+        """
         self._atom_ids = []
-        self.send_cmd(FrontendCommands.CLEAR.method, {}, wait_for_response=True)
+        self.send_cmd(FrontendCommands.CLEAR.method, {}, wait_for_response=wait)
         self._clear_mirror()
         return self
 

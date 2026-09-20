@@ -7,28 +7,31 @@
 import {
   AffineTransformationModifier as CoreAffineTransformationModifier,
   AssignColorModifier as CoreAssignColorModifier,
+  BondColumnRemapModifier as CoreBondColumnRemapModifier,
   CameraTrackModifier as CoreCameraTrackModifier,
   CenterOfMassModifier as CoreCenterOfMassModifier,
   ClusterModifier as CoreClusterModifier,
   ColorByPropertyModifier as CoreColorByPropertyModifier,
   ComputeBondsModifier as CoreComputeBondsModifier,
   ComputePropertyModifier as CoreComputePropertyModifier,
-  ConstructSurfaceMeshModifier as CoreConstructSurfaceMeshModifier,
   CoordinationPolyhedraModifier as CoreCoordinationPolyhedraModifier,
   DisplacementVectorsModifier as CoreDisplacementVectorsModifier,
   DrawAtomModifier as CoreDrawAtomModifier,
   DrawBondModifier as CoreDrawBondModifier,
   DrawBoxModifier as CoreDrawBoxModifier,
-  DrawIsosurfaceModifier as CoreDrawIsosurfaceModifier,
   DrawRibbonModifier as CoreDrawRibbonModifier,
+  DrawSurfaceModifier as CoreDrawSurfaceModifier,
   EditTypesModifier as CoreEditTypesModifier,
   ExpandSelectionModifier as CoreExpandSelectionModifier,
   ExpressionSelectionModifier as CoreExpressionSelectionModifier,
   FreezePropertyModifier as CoreFreezePropertyModifier,
-  GaussianDensitySurfaceModifier as CoreGaussianDensitySurfaceModifier,
   HideSelectionModifier as CoreHideModifier,
+  IsosurfaceModifier as CoreIsosurfaceModifier,
+  MeshOverlayModifier as CoreMeshOverlayModifier,
+  MolecularSurfaceModifier as CoreMolecularSurfaceModifier,
   RadiusOfGyrationModifier as CoreRadiusOfGyrationModifier,
   ReplicateModifier as CoreReplicateModifier,
+  SelectMaskModifier as CoreSelectMaskModifier,
   SelectModifier as CoreSelectModifier,
   SelectOverlappingModifier as CoreSelectOverlappingModifier,
   SelectTypeModifier as CoreSelectTypeModifier,
@@ -40,12 +43,14 @@ import {
   TransparentSelectionModifier as CoreTransparentSelectionModifier,
   UnwrapTrajectoriesModifier as CoreUnwrapTrajectoriesModifier,
   VectorFieldModifier as CoreVectorFieldModifier,
+  VolumeCloudModifier as CoreVolumeCloudModifier,
   DataSource,
   type PipelineEntry,
   Session,
 } from "@molcrafts/molvis-stage";
 import { AffineTransformationModifier } from "@/ui/modes/view/modifiers/AffineTransformationModifier";
 import { AssignColorModifier } from "@/ui/modes/view/modifiers/AssignColorModifier";
+import { BondColumnRemapModifier } from "@/ui/modes/view/modifiers/BondColumnRemapModifier";
 import { CameraTrackModifier } from "@/ui/modes/view/modifiers/CameraTrackModifier";
 import { CenterOfMassModifier } from "@/ui/modes/view/modifiers/CenterOfMassModifier";
 import { ClusterModifier } from "@/ui/modes/view/modifiers/ClusterModifier";
@@ -58,16 +63,19 @@ import { DisplacementVectorsModifier } from "@/ui/modes/view/modifiers/Displacem
 import { DrawAtomModifier } from "@/ui/modes/view/modifiers/DrawAtomModifier";
 import { DrawBondModifier } from "@/ui/modes/view/modifiers/DrawBondModifier";
 import { DrawBoxModifier } from "@/ui/modes/view/modifiers/DrawBoxModifier";
-import { DrawIsosurfaceModifier } from "@/ui/modes/view/modifiers/DrawIsosurfaceModifier";
 import { DrawRibbonModifier } from "@/ui/modes/view/modifiers/DrawRibbonModifier";
+import { DrawSurfaceModifier } from "@/ui/modes/view/modifiers/DrawSurfaceModifier";
 import { EditTypesModifier } from "@/ui/modes/view/modifiers/EditTypesModifier";
 import { ExpandSelectionModifier } from "@/ui/modes/view/modifiers/ExpandSelectionModifier";
 import { ExpressionSelectionModifier } from "@/ui/modes/view/modifiers/ExpressionSelectionModifier";
 import { FreezePropertyModifier } from "@/ui/modes/view/modifiers/FreezePropertyModifier";
-import { GaussianDensitySurfaceModifier } from "@/ui/modes/view/modifiers/GaussianDensitySurfaceModifier";
 import { HideSelectionModifier } from "@/ui/modes/view/modifiers/HideSelectionModifier";
+import { IsosurfaceModifier } from "@/ui/modes/view/modifiers/IsosurfaceModifier";
+import { MeshOverlayModifier } from "@/ui/modes/view/modifiers/MeshOverlayModifier";
+import { MolecularSurfaceModifier } from "@/ui/modes/view/modifiers/MolecularSurfaceModifier";
 import { RadiusOfGyrationModifier } from "@/ui/modes/view/modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "@/ui/modes/view/modifiers/ReplicateModifier";
+import { SelectMaskModifier } from "@/ui/modes/view/modifiers/SelectMaskModifier";
 import { SelectModifierProps } from "@/ui/modes/view/modifiers/SelectModifierProps";
 import { SelectOverlappingModifier } from "@/ui/modes/view/modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "@/ui/modes/view/modifiers/SelectTypeModifier";
@@ -80,6 +88,7 @@ import { TrajectoryLinesModifier } from "@/ui/modes/view/modifiers/TrajectoryLin
 import { TransparentSelectionModifier } from "@/ui/modes/view/modifiers/TransparentSelectionModifier";
 import { UnwrapTrajectoriesModifier } from "@/ui/modes/view/modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "@/ui/modes/view/modifiers/VectorFieldModifier";
+import { VolumeCloudModifier } from "@/ui/modes/view/modifiers/VolumeCloudModifier";
 import type { ModifierPanelComponent } from "../types";
 import { registerModifierPanelMatcher } from "./modifier_panels";
 
@@ -125,6 +134,11 @@ export function registerBuiltinModifierPanels(): void {
       id: "builtin:SelectType",
       match: (m) => m instanceof CoreSelectTypeModifier,
       component: asPanel(SelectTypeModifier),
+    },
+    {
+      id: "builtin:SelectMask",
+      match: (m) => m instanceof CoreSelectMaskModifier,
+      component: asPanel(SelectMaskModifier),
     },
     {
       id: "builtin:ExpandSelection",
@@ -192,6 +206,11 @@ export function registerBuiltinModifierPanels(): void {
       component: asPanel(ComputeBondsModifier),
     },
     {
+      id: "builtin:BondColumnRemap",
+      match: (m) => m instanceof CoreBondColumnRemapModifier,
+      component: asPanel(BondColumnRemapModifier),
+    },
+    {
       id: "builtin:AssignColor",
       match: (m) => m instanceof CoreAssignColorModifier,
       component: asPanel(AssignColorModifier),
@@ -227,10 +246,29 @@ export function registerBuiltinModifierPanels(): void {
       component: asPanel(DrawRibbonModifier),
     },
     {
-      id: "builtin:DrawIsosurface",
-      match: (m) => m instanceof CoreDrawIsosurfaceModifier,
-      component: asPanel(DrawIsosurfaceModifier),
+      id: "builtin:Isosurface",
+      match: (m) => m instanceof CoreIsosurfaceModifier,
+      component: asPanel(IsosurfaceModifier),
       usesLeftConfig: true,
+    },
+    {
+      id: "builtin:VolumeCloud",
+      match: (m) => m instanceof CoreVolumeCloudModifier,
+      component: asPanel(VolumeCloudModifier),
+      usesLeftConfig: true,
+    },
+    {
+      // Read-only: an imported mesh has no parameters, only an identity.
+      id: "builtin:MeshOverlay",
+      match: (m) => m instanceof CoreMeshOverlayModifier,
+      component: asPanel(MeshOverlayModifier),
+    },
+    {
+      // Appearance only — it belongs in the pipeline row beside its producer,
+      // not in the left compute rail.
+      id: "builtin:DrawSurface",
+      match: (m) => m instanceof CoreDrawSurfaceModifier,
+      component: asPanel(DrawSurfaceModifier),
     },
     {
       id: "builtin:VectorField",
@@ -239,17 +277,9 @@ export function registerBuiltinModifierPanels(): void {
       usesLeftConfig: true,
     },
     {
-      id: "builtin:GaussianDensitySurface",
-      match: (m) =>
-        m instanceof CoreGaussianDensitySurfaceModifier &&
-        !(m instanceof CoreConstructSurfaceMeshModifier),
-      component: asPanel(GaussianDensitySurfaceModifier),
-      usesLeftConfig: true,
-    },
-    {
-      id: "builtin:ConstructSurfaceMesh",
-      match: (m) => m instanceof CoreConstructSurfaceMeshModifier,
-      component: asPanel(GaussianDensitySurfaceModifier),
+      id: "builtin:MolecularSurface",
+      match: (m) => m instanceof CoreMolecularSurfaceModifier,
+      component: asPanel(MolecularSurfaceModifier),
       usesLeftConfig: true,
     },
     {

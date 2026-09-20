@@ -1,3 +1,4 @@
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
@@ -43,7 +44,7 @@ function makeFrame(box?: Box): Frame {
   atoms.setColF("y", Float64Array.from(Y));
   atoms.setColF("z", Float64Array.from(Z));
   atoms.setColStr("element", [...ELEMENTS]);
-  atoms.setColU32("id", Uint32Array.from(IDS));
+  atoms.setColU32("id", toDomainUint(IDS));
   frame.insertBlock("atoms", atoms);
   // `Frame.box` MOVES the handle it is given — the caller must not touch the
   // Box afterwards, and every attach constructs its own.
@@ -96,11 +97,11 @@ describe("snapshotFrameForAnalysis", () => {
 
     expect(snapshot.elements).toEqual([...ELEMENTS]);
 
-    // `id` is a u32 column, so the snapshot dtype is Uint32Array — a Float64
-    // or plain-array copy would lose the "same atoms across frames" guarantee
-    // MSD depends on.
-    expect(snapshot.ids).toBeInstanceOf(Uint32Array);
-    expect(Array.from(snapshot.ids ?? new Uint32Array(0))).toEqual([...IDS]);
+    // `id` is a domain-uint column, so the snapshot dtype is BigUint64Array.
+    expect(snapshot.ids).toBeInstanceOf(BigUint64Array);
+    expect(Array.from(snapshot.ids ?? new BigUint64Array(0), Number)).toEqual([
+      ...IDS,
+    ]);
 
     expect(snapshot.boxLengths).toBeInstanceOf(Float64Array);
     expect(snapshot.boxOrigin).toBeInstanceOf(Float64Array);
@@ -188,7 +189,7 @@ function makeSeriesFrame(x: readonly number[]): Frame {
   atoms.setColF("y", Float64Array.from(Y));
   atoms.setColF("z", Float64Array.from(Z));
   atoms.setColStr("element", [...ELEMENTS]);
-  atoms.setColU32("id", Uint32Array.from(IDS));
+  atoms.setColU32("id", toDomainUint(IDS));
   frame.insertBlock("atoms", atoms);
   return frame;
 }
@@ -372,7 +373,7 @@ describe("analysisJobTransferList", () => {
       y: Float64Array.from([0, 0]),
       z: Float64Array.from([0, 0]),
       elements: ["Ar", "Ar"],
-      ids: Uint32Array.from([1, 2]),
+      ids: BigUint64Array.from([1n, 2n]),
       boxLengths: Float64Array.from([20, 20, 20]),
       boxOrigin: Float64Array.from([0, 0, 0]),
       boxTilts: tilts,

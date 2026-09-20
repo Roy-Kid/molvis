@@ -10,7 +10,8 @@
  * Analysis / opt-in viz (Steinhardt, Solid-liquid, Gaussian density, …)
  * keep `matches() === false` and use `isApplicable` for the Add menu.
  * Only true default layers (Particles, Ribbon, Bonds, Simulation cell,
- * Create isosurface when a grid is present) return true from `matches`.
+ * Isosurface when a grid is present) return true from `matches`.
+ * Create bonds is opt-in — never auto-perceive topology.
  */
 
 import type { Frame } from "@molcrafts/molvis-core/molrs";
@@ -66,18 +67,25 @@ export function applyAutoAttach(
 
     pipeline.addModifier(probe);
     present.add(entry.name);
-    if (sourceOwner !== undefined) {
-      const ok = pipeline.setSourceOwner(probe.id, sourceOwner.id);
-      if (!ok) {
-        logger.warn(
-          `[auto-attach] failed to nest ${entry.name} under ${sourceOwner.filename || sourceOwner.id}`,
-        );
-      }
-    }
+    nestUnderSource(pipeline, probe.id, sourceOwner);
     attached.push(entry.name);
     logger.info(`[auto-attach] attached ${entry.name}`);
   }
   return attached;
+}
+
+function nestUnderSource(
+  pipeline: ModifierPipeline,
+  modifierId: string,
+  sourceOwner: DataSource | undefined,
+): void {
+  if (sourceOwner === undefined) return;
+  const ok = pipeline.setSourceOwner(modifierId, sourceOwner.id);
+  if (!ok) {
+    logger.warn(
+      `[auto-attach] failed to nest ${modifierId} under ${sourceOwner.filename || sourceOwner.id}`,
+    );
+  }
 }
 
 /** A misbehaving `matches()` that throws would otherwise abort the

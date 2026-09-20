@@ -16,7 +16,6 @@ import {
   DataSource,
   DrawBoxModifier,
   type DrawBoxSpec,
-  MODIFIER_CATEGORIES,
   type Modifier,
   ModifierRegistry,
   type Molvis,
@@ -29,27 +28,8 @@ import {
   getAllAcceptExtensions,
   type LoadMode,
 } from "@molcrafts/molvis-stage/io";
-import {
-  Atom,
-  ChartColumn,
-  Eye,
-  FilePlus2,
-  Filter,
-  Minus,
-  Palette,
-  Plus,
-  Radio,
-  Shapes,
-  Wand2,
-} from "lucide-react";
-import {
-  type ComponentType,
-  type CSSProperties,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { FilePlus2, Minus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useBondMappingPicker } from "@/components/bond-column-mapping-dialog";
 import {
   loadFileSmart,
@@ -63,47 +43,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
 import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { cn } from "@/lib/utils";
+import { PipelineAddMenu } from "./PipelineAddMenu";
 import { SortableModifierItem } from "./SortableModifierItem";
 import { buildTree, flattenTree } from "./tree_utils";
-
-type RegistryEntry = ReturnType<
-  typeof ModifierRegistry.getAvailableModifiers
->[number];
-type AvailableEntry = { entry: RegistryEntry; applicable: boolean };
-
-/** OVITO Add-menu groups (same order as OVITO; plus Other for plugins). */
-const MODIFIER_MENU_GROUPS = [...MODIFIER_CATEGORIES, "Other"] as const;
-
-type ModifierMenuGroup = (typeof MODIFIER_MENU_GROUPS)[number];
-
-const GROUP_ICONS: Record<
-  ModifierMenuGroup,
-  ComponentType<{ className?: string }>
-> = {
-  Selection: Filter,
-  Modification: Shapes,
-  Coloring: Palette,
-  "Structure identification": Atom,
-  Visualization: Eye,
-  Analysis: ChartColumn,
-  Other: Wand2,
-};
 
 type DrawBoxForm = {
   lx: string;
@@ -117,12 +65,6 @@ type DrawBoxForm = {
   py: boolean;
   pz: boolean;
 };
-
-const MENU_SCROLL_STYLE = {
-  maxHeight: "min(420px, calc(100vh - 6rem))",
-  overflowX: "hidden",
-  overflowY: "auto",
-} satisfies CSSProperties;
 
 const DEFAULT_DRAW_BOX_FORM: DrawBoxForm = {
   lx: "30",
@@ -142,18 +84,17 @@ const FILE_LOAD_COPY = {
   error: "Could not load the data source",
 };
 
+const WRAP_PBC_COPY = {
+  running: "Updating Wrap PBC…",
+  success: "Wrap PBC updated",
+  error: "Could not update Wrap PBC",
+};
+
 const STREAM_CONNECT_COPY = {
   running: "Connecting to stream",
   success: "Stream connected",
   error: "Could not connect to stream",
 };
-
-function modifierMenuGroup(entry: RegistryEntry): ModifierMenuGroup {
-  if (MODIFIER_MENU_GROUPS.includes(entry.category as ModifierMenuGroup)) {
-    return entry.category as ModifierMenuGroup;
-  }
-  return "Other";
-}
 
 function parsePositive(raw: string): number | null {
   const value = Number(raw);
@@ -372,15 +313,26 @@ export function PipelineList({
     });
   }, [app, frameVersion]);
 
-  const groupedEntries = useMemo(() => {
-    const groups = Object.fromEntries(
-      MODIFIER_MENU_GROUPS.map((g) => [g, [] as AvailableEntry[]]),
-    ) as Record<ModifierMenuGroup, AvailableEntry[]>;
-    for (const item of availableEntries) {
-      groups[modifierMenuGroup(item.entry)].push(item);
+  const pickModifier = (name: string) => {
+    const found = availableEntries.find((item) => item.entry.name === name);
+    if (!found) return;
+    if (found.entry.name === DrawBoxModifier.NAME) {
+      openDrawBoxDialog();
+      return;
     }
-    return groups;
-  }, [availableEntries]);
+    onAddModifier(found.entry.factory);
+  };
+
+  const toggleWrapPbc = (enabled: boolean) => {
+    if (!app) return;
+    app.setWrapEnabled(enabled);
+    const cell = entries.find((entry) => entry.name === DrawBoxModifier.NAME);
+    if (cell) onSelectModifier(cell.id);
+    void runPipelineOperation(
+      () => app.applyPipeline({ fullRebuild: true }),
+      WRAP_PBC_COPY,
+    );
+  };
 
   /**
    * Attach a live producer as a source. It dials on `connect()`; a frame that
@@ -398,28 +350,6 @@ export function PipelineList({
       });
     }, STREAM_CONNECT_COPY);
   };
-
-  const renderModifierItem = ({ entry, applicable }: AvailableEntry) => (
-    <DropdownMenuItem
-      key={entry.name}
-      className="text-xs"
-      disabled={!applicable}
-      onSelect={() => {
-        if (entry.name === DrawBoxModifier.NAME) {
-          openDrawBoxDialog();
-          return;
-        }
-        onAddModifier(entry.factory);
-      }}
-      title={
-        applicable
-          ? undefined
-          : `${entry.name} is not applicable to the current frame`
-      }
-    >
-      {entry.name}
-    </DropdownMenuItem>
-  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -519,73 +449,15 @@ export function PipelineList({
               onChange={handleDataSourceFile}
               accept={getAllAcceptExtensions()}
             />
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex h-control-compact w-control-compact shrink-0 items-center justify-center rounded-control border border-dashed border-border bg-panel text-muted-foreground transition-colors hover:bg-interactive hover:text-foreground"
-                  title="Add"
-                  aria-label="Add source or modifier"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="min-w-pipeline-menu-min max-w-pipeline-menu-max"
-              >
-                {/* Sources first — file / stream / compose; not “file loader”. */}
-                <DropdownMenuItem
-                  className="text-xs gap-2"
-                  onSelect={() => openFilePicker("replace")}
-                  title={
-                    hasSources
-                      ? "Replace the primary source trajectory"
-                      : "Open a structure as the primary source"
-                  }
-                >
-                  <FilePlus2 className="h-3.5 w-3.5 shrink-0" />
-                  {hasSources ? "Replace…" : "Open…"}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-xs gap-2"
-                  onSelect={() => openFilePicker("augment")}
-                  disabled={!hasSources}
-                  title="Stack another source onto the composition"
-                >
-                  <FilePlus2 className="h-3.5 w-3.5 shrink-0" />
-                  Add source…
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-xs gap-2"
-                  onSelect={() => setStreamDialogOpen(true)}
-                  title="Connect a live trajectory stream"
-                >
-                  <Radio className="h-3.5 w-3.5 shrink-0" />
-                  Stream…
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {MODIFIER_MENU_GROUPS.map((group) => {
-                  const entries = groupedEntries[group];
-                  if (entries.length === 0) return null;
-                  const GroupIcon = GROUP_ICONS[group];
-                  return (
-                    <DropdownMenuSub key={group}>
-                      <DropdownMenuSubTrigger className="text-xs gap-2">
-                        <GroupIcon className="h-3.5 w-3.5 shrink-0" />
-                        {group}
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent
-                        className="min-w-pipeline-menu-min max-w-pipeline-menu-max"
-                        style={MENU_SCROLL_STYLE}
-                      >
-                        {entries.map(renderModifierItem)}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <PipelineAddMenu
+              modifiers={availableEntries}
+              hasSources={hasSources}
+              wrapEnabled={app?.wrapEnabled ?? false}
+              onOpenFile={openFilePicker}
+              onStream={() => setStreamDialogOpen(true)}
+              onAddModifier={pickModifier}
+              onToggleWrap={toggleWrapPbc}
+            />
             <button
               type="button"
               className="flex h-control-compact w-control-compact shrink-0 items-center justify-center rounded-control border border-border bg-panel text-muted-foreground transition-colors hover:bg-interactive hover:text-foreground disabled:pointer-events-none disabled:opacity-40"

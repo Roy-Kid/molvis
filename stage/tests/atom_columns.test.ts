@@ -15,8 +15,8 @@ import {
 // declared as structural protocols precisely so this file never touches molrs.
 // No WASM Block, no Frame, no allocation to free.
 //
-// dtype vocabulary = molrs's dtype strings ("f32" / "f64" / "i32" / "u32" /
-// "string", molrs.d.ts:201), NOT a numeric enum.
+// dtype vocabulary = molrs's dtype strings ("f32" / "f64" / "i32" / "u64" /
+// "string", molrs.d.ts), NOT a numeric enum.
 //
 // Two places where the fakes are deliberately STRICTER than molrs's Block:
 //
@@ -36,7 +36,7 @@ import {
 type FakeColumn =
   | { readonly dtype: "f64"; readonly data: Float64Array }
   | { readonly dtype: "f32"; readonly data: Float32Array }
-  | { readonly dtype: "u32"; readonly data: Uint32Array }
+  | { readonly dtype: "u64"; readonly data: BigUint64Array }
   | { readonly dtype: "i32"; readonly data: Int32Array }
   | { readonly dtype: "string"; readonly data: string[] }
   // Not part of the dtype vocabulary — stands in for a column type the
@@ -45,7 +45,7 @@ type FakeColumn =
 
 /** Plain-JS snapshot of a source, used to prove the source was never written. */
 interface SourceSnapshot {
-  readonly [key: string]: readonly (number | string)[];
+  readonly [key: string]: readonly (number | string | bigint)[];
 }
 
 class FakeColumnSource implements ColumnSource {
@@ -86,11 +86,11 @@ class FakeColumnSource implements ColumnSource {
     return column.data;
   }
 
-  copyColU32(key: string): Uint32Array | undefined {
+  copyColU32(key: string): BigUint64Array | undefined {
     const column = this.column(key);
     if (!column) return undefined;
-    if (column.dtype !== "u32") {
-      throw new Error(`column "${key}" is ${column.dtype}, not a u32 column`);
+    if (column.dtype !== "u64") {
+      throw new Error(`column "${key}" is ${column.dtype}, not a u64 column`);
     }
     return column.data;
   }
@@ -106,10 +106,12 @@ class FakeColumnSource implements ColumnSource {
 
   /** Owned, comparable copy of every column's current contents. */
   snapshot(): SourceSnapshot {
-    const out: Record<string, readonly (number | string)[]> = {};
+    const out: Record<string, readonly (number | string | bigint)[]> = {};
     for (const [key, column] of this.columns) {
       out[key] =
-        column.dtype === "string" ? [...column.data] : Array.from(column.data);
+        column.dtype === "string"
+          ? [...column.data]
+          : Array.from(column.data as ArrayLike<number | bigint>);
     }
     return out;
   }
@@ -123,7 +125,7 @@ class FakeColumnSink implements ColumnSink {
   readonly written: string[] = [];
   private readonly floatCols = new Map<string, Float64Array>();
   private readonly stringCols = new Map<string, string[]>();
-  private readonly u32Cols = new Map<string, Uint32Array>();
+  private readonly u64Cols = new Map<string, BigUint64Array>();
   private readonly i32Cols = new Map<string, Int32Array>();
 
   setColF(key: string, value: Float64Array): void {
@@ -136,9 +138,9 @@ class FakeColumnSink implements ColumnSink {
     this.stringCols.set(key, value);
   }
 
-  setColU32(key: string, value: Uint32Array): void {
+  setColU32(key: string, value: BigUint64Array): void {
     this.written.push(key);
-    this.u32Cols.set(key, value);
+    this.u64Cols.set(key, value);
   }
 
   setColI32(key: string, value: Int32Array): void {
@@ -157,8 +159,8 @@ class FakeColumnSink implements ColumnSink {
   }
 
   u32s(key: string): number[] | undefined {
-    const column = this.u32Cols.get(key);
-    return column ? Array.from(column) : undefined;
+    const column = this.u64Cols.get(key);
+    return column ? Array.from(column, Number) : undefined;
   }
 
   i32s(key: string): number[] | undefined {
@@ -171,7 +173,7 @@ class FakeColumnSink implements ColumnSink {
 function waterSource(): FakeColumnSource {
   return new FakeColumnSource(3, [
     ["charge", { dtype: "f64", data: Float64Array.of(-0.834, 0.417, 0.417) }],
-    ["mol_id", { dtype: "u32", data: Uint32Array.of(1, 1, 1) }],
+    ["mol_id", { dtype: "u64", data: BigUint64Array.of(1n, 1n, 1n) }],
     ["res_name", { dtype: "string", data: ["HOH", "HOH", "HOH"] }],
     ["type_id", { dtype: "i32", data: Int32Array.of(7, 8, 8) }],
   ]);
@@ -184,7 +186,7 @@ function fourRowSource(): FakeColumnSource {
       "charge",
       { dtype: "f64", data: Float64Array.of(-0.834, 0.417, -0.7, 0.3) },
     ],
-    ["mol_id", { dtype: "u32", data: Uint32Array.of(10, 11, 12, 13) }],
+    ["mol_id", { dtype: "u64", data: BigUint64Array.of(10n, 11n, 12n, 13n) }],
     ["res_name", { dtype: "string", data: ["HOH", "HOH", "MET", "MET"] }],
     ["type_id", { dtype: "i32", data: Int32Array.of(1, 2, 3, 4) }],
   ]);
@@ -287,7 +289,7 @@ describe("TestAtomColumnCarrier", () => {
       expect(source.snapshot()).toEqual(before);
       expect(before).toEqual({
         charge: [-0.834, 0.417, 0.417],
-        mol_id: [1, 1, 1],
+        mol_id: [1n, 1n, 1n],
         res_name: ["HOH", "HOH", "HOH"],
         type_id: [7, 8, 8],
       });

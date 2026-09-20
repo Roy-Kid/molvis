@@ -20,7 +20,12 @@ import {
   safeKey,
 } from "@molcrafts/molvis-core/opfs";
 import { logger } from "../../utils/logger";
-import { type CachedIndex, decodeMolidx, encodeMolidx } from "./molidx_codec";
+import {
+  type CachedIndex,
+  type CachedIndexInput,
+  decodeMolidx,
+  encodeMolidx,
+} from "./molidx_codec";
 
 const FILE_SUFFIX = ".molidx";
 
@@ -39,7 +44,7 @@ export const OpfsIndexCache = {
     }
   },
 
-  async set(fingerprint: string, idx: CachedIndex): Promise<void> {
+  async set(fingerprint: string, idx: CachedIndexInput): Promise<void> {
     const dir = await getOpfsBucket("idx");
     if (!dir) return;
     try {

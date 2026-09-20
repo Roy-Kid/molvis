@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { usePipelineOperation } from "@/components/viewer/PipelineOperationProvider";
 import { ViewerAction } from "@/components/viewer/ViewerAction";
+import { type OpenTarget, pickMrecDirectory } from "@/lib/mrec-open";
 import { copyTextToClipboard } from "@/lib/open-structure";
 import { reportStatus } from "@/lib/status-report";
 import { cn } from "@/lib/utils";
@@ -155,12 +156,12 @@ export const DataSourcePanel: React.FC<DataSourcePanelProps> = ({
     void run(() => app.applyPipeline({ fullRebuild: true }), VISIBILITY_COPY);
   };
 
-  const loadFile = async (file: File, mode: LoadMode) => {
+  const loadFile = async (target: OpenTarget, mode: LoadMode) => {
     if (!app) return;
     await run(async () => {
       const result = await loadFileSmart(
         app,
-        file,
+        target,
         pickFormat,
         mode,
         pickBondMapping,
@@ -184,6 +185,25 @@ export const DataSourcePanel: React.FC<DataSourcePanelProps> = ({
       void loadFile(file, mode);
     };
     input.click();
+  };
+
+  /** `*.mrec` store folder via the File System Access picker (or its
+   *  `webkitdirectory` fallback); the worker reads only touched chunks. */
+  const pickStoreFolderAndLoad = (mode: LoadMode) => {
+    void (async () => {
+      let picked: Awaited<ReturnType<typeof pickMrecDirectory>>;
+      try {
+        picked = await pickMrecDirectory();
+      } catch (error) {
+        reportStatus(
+          error instanceof Error ? error.message : String(error),
+          "error",
+        );
+        return;
+      }
+      if (!picked) return;
+      await loadFile(picked, mode);
+    })();
   };
 
   const copyPath = async () => {
@@ -312,6 +332,19 @@ export const DataSourcePanel: React.FC<DataSourcePanelProps> = ({
               onSelect={() => pickAndLoad("replace")}
             >
               {isEmpty ? "Open…" : "Replace…"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs"
+              onSelect={() => pickStoreFolderAndLoad("replace")}
+            >
+              Open .mrec folder…
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs"
+              disabled={isEmpty}
+              onSelect={() => pickStoreFolderAndLoad("augment")}
+            >
+              Add .mrec folder…
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-xs"

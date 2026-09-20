@@ -1,7 +1,7 @@
 /**
  * Marching Cubes tests.
  *
- * Pipeline tested: Float64Array → marchingCubes() → MCMesh.
+ * Pipeline tested: Float64Array → marchingCubes() → SurfaceMesh.
  *
  * Volumetric data now flows through `frame.getBlock("grid")` (see
  * `core/src/transport/trajectory_worker/frame_codec.ts`). The marching

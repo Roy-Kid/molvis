@@ -18,19 +18,18 @@ export {
 } from "../modifiers/SelectModifier";
 export { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
 export { UnwrapTrajectoriesModifier } from "../modifiers/UnwrapTrajectoriesModifier";
-export { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 // Bond column remap (paired with the file-load column-mapping dialog)
 export {
   type BondColumnMapping,
   BondColumnRemapModifier,
   bondsIntegerColumns,
   bondsNeedColumnMapping,
+  inferBondColumnMapping,
 } from "./bond_column_remap";
 // The two things a pipeline holds, and the base they share.
 export {
   DATA_SOURCE_CATEGORY,
   DataSource,
-  type DataSourceKind,
   type DataSourceOptions,
   FileDataSource,
   MemoryDataSource,

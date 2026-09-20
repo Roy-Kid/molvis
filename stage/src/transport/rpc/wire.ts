@@ -17,10 +17,11 @@
  *
  *   | wire dtype | JS carrier      | molrs setter  | molrs getter  |
  *   | ---------- | --------------- | ------------- | ------------- |
- *   | `"f64"`    | `Float64Array`  | `setColF`     | `copyColF`    |
- *   | `"i32"`    | `Int32Array`    | `setColI32`   | `copyColI32`  |
- *   | `"u32"`    | `Uint32Array`   | `setColU32`   | `copyColU32`  |
- *   | `"string"` | `string[]`      | `setColStr`   | `copyColStr`  |
+ *   | `"f64"`    | `Float64Array`    | `setColF`     | `copyColF`    |
+ *   | `"i32"`    | `Int32Array`      | `setColI32`   | `copyColI32`  |
+ *   | `"u64"`    | `BigUint64Array`  | `setColU32`   | `copyColU32`  |
+ *   | `"u32"`    | `Uint32Array`     | promoted via `toDomainUint` (legacy) |
+ *   | `"string"` | `string[]`        | `setColStr`   | `copyColStr`  |
  *
  *   Those four are the complete set molrs-wasm can write. A producer holding a
  *   bool or u8 column converts it before sending and says so in the dtype tag;
@@ -39,6 +40,7 @@
  * @module
  */
 
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { type Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 
 // ---------------------------------------------------------------------------
@@ -46,7 +48,7 @@ import { type Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
 // ---------------------------------------------------------------------------
 
 /** The dtype tags molrs-wasm can round-trip. */
-export type WireDType = "f64" | "i32" | "u32" | "string";
+export type WireDType = "f64" | "i32" | "u64" | "u32" | "string";
 
 /** Marker key identifying a {@link BufferRef} inside a JSON payload. */
 export const BUFFER_REF_MARKER = "__molvis_buffer__";
@@ -73,6 +75,7 @@ export interface BufferRef {
 export type WireColumn =
   | { dtype: "f64"; data: Float64Array | BufferRef }
   | { dtype: "i32"; data: Int32Array | BufferRef }
+  | { dtype: "u64"; data: BigUint64Array | BufferRef }
   | { dtype: "u32"; data: Uint32Array | BufferRef }
   | { dtype: "string"; data: string[] };
 
@@ -173,7 +176,7 @@ function resolveCarrier(
   dtype: Exclude<WireDType, "string">,
   data: unknown,
   buffers: readonly DataView[],
-): Float64Array | Int32Array | Uint32Array {
+): Float64Array | Int32Array | Uint32Array | BigUint64Array {
   if (isBufferRef(data)) {
     const { index } = data;
     if (!Number.isInteger(index) || index < 0 || index >= buffers.length) {
@@ -193,6 +196,9 @@ function resolveCarrier(
     case "i32":
       if (data instanceof Int32Array) return data;
       break;
+    case "u64":
+      if (data instanceof BigUint64Array) return data;
+      break;
     case "u32":
       if (data instanceof Uint32Array) return data;
       break;
@@ -206,17 +212,18 @@ function resolveCarrier(
 const CARRIER_NAME = {
   f64: "a Float64Array",
   i32: "an Int32Array",
+  u64: "a BigUint64Array",
   u32: "a Uint32Array",
 } as const;
 
-const BYTES_PER_ELEMENT = { f64: 8, i32: 4, u32: 4 } as const;
+const BYTES_PER_ELEMENT = { f64: 8, i32: 4, u64: 8, u32: 4 } as const;
 
 /** Reinterpret transport bytes as the typed array the dtype tag names. */
 function viewAs(
   path: string,
   dtype: Exclude<WireDType, "string">,
   view: DataView,
-): Float64Array | Int32Array | Uint32Array {
+): Float64Array | Int32Array | Uint32Array | BigUint64Array {
   const itemSize = BYTES_PER_ELEMENT[dtype];
   if (view.byteLength % itemSize !== 0) {
     throw new WireError(
@@ -242,6 +249,8 @@ function viewAs(
       return new Float64Array(aligned.buffer, aligned.offset, count);
     case "i32":
       return new Int32Array(aligned.buffer, aligned.offset, count);
+    case "u64":
+      return new BigUint64Array(aligned.buffer, aligned.offset, count);
     case "u32":
       return new Uint32Array(aligned.buffer, aligned.offset, count);
   }
@@ -308,10 +317,20 @@ function decodeColumn(
         resolveCarrier(path, "i32", column.data, buffers) as Int32Array,
       );
       return;
-    case "u32":
+    case "u64":
       block.setColU32(
         name,
-        resolveCarrier(path, "u32", column.data, buffers) as Uint32Array,
+        resolveCarrier(path, "u64", column.data, buffers) as BigUint64Array,
+      );
+      return;
+    case "u32":
+      // Legacy wire: Python molpy 0.13 still tags identity columns `"u32"`.
+      // molrs 0.14 `setColU32` takes domain uint (`BigUint64Array`).
+      block.setColU32(
+        name,
+        toDomainUint(
+          resolveCarrier(path, "u32", column.data, buffers) as Uint32Array,
+        ),
       );
       return;
     case "string": {
@@ -539,8 +558,8 @@ export function encodeFrame(frame: Frame): EncodedFrame {
         case "i32":
           columns[name] = { dtype: "i32", data: push(block.copyColI32(name)) };
           break;
-        case "u32":
-          columns[name] = { dtype: "u32", data: push(block.copyColU32(name)) };
+        case "u64":
+          columns[name] = { dtype: "u64", data: push(block.copyColU32(name)) };
           break;
         case "string":
           columns[name] = {

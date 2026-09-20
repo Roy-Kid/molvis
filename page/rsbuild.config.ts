@@ -24,6 +24,8 @@ const pythonDev = process.env.MOLVIS_PYTHON_DEV === "1";
 const distRoot = pythonDev
   ? path.join("..", "python", "src", "molvis", "dist")
   : "dist";
+/** Host path prefix, e.g. `/molvis/` or `/nightly/molvis/`. Empty → auto. */
+const assetBase = (process.env.MOLVIS_ASSET_BASE ?? "").trim();
 
 export default defineConfig({
   server: {
@@ -38,16 +40,28 @@ export default defineConfig({
   plugins: [pluginReact()],
   html: {
     template: "./public/index.html",
+    tags: assetBase
+      ? [
+          {
+            tag: "script",
+            head: true,
+            append: false,
+            children: `window.__MOLVIS_ASSET_BASE__=${JSON.stringify(
+              assetBase.endsWith("/") ? assetBase : `${assetBase}/`,
+            )};`,
+          },
+        ]
+      : [],
   },
   output: {
-    // Document-relative. The production default `/` makes molrs fetch
-    // `/wasm/<hash>.module.wasm` from the origin root. On
-    // app.molcrafts.org/molvis/ the edge router treats `wasm` as a
-    // product slug and returns HTML, so WebAssembly.instantiate fails.
-    // `./` resolves against the page URL, so `/` and `/molvis/` both
-    // find `wasm/` next to `js/`. Jupyter / vscode-webview hosts still
-    // override via `page/src/public-path.ts` (`__MOLVIS_ASSET_BASE__`).
-    assetPrefix: "./",
+    // `auto` derives the runtime public path from each chunk's
+    // `import.meta.url`. It resolves `wasm/` relative to the entry (`js/` →
+    // `../wasm/`) and to module workers (`js/async/` → `../../wasm/`), so a
+    // document-relative prefix is not needed and sub-path hosting (e.g.
+    // app.molcrafts.org/molvis/) keeps working. Jupyter / vscode-webview
+    // hosts still override via `page/src/public-path.ts`
+    // (`__MOLVIS_ASSET_BASE__`).
+    assetPrefix: "auto",
     // Native ESM output (stable since Rsbuild 1.6 for web): entry + chunks
     // are real ES modules (`<script type="module">`), async chunks load via
     // dynamic `import()`, and module workers get `import`-based chunk

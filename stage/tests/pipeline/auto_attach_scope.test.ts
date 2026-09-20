@@ -29,6 +29,7 @@ describe("applyAutoAttach must not attach analysis/viz noise", () => {
     expect(attached).toContain("Simulation cell");
     // Analysis / optional surfaces must NOT auto-attach (they used to,
     // which overwrote CPK colors and spawned PBC-wrapped density blobs).
+    expect(attached).not.toContain("Molecular surface");
     expect(attached).not.toContain("Gaussian density surface");
     expect(attached).not.toContain("Construct surface mesh");
     expect(attached).not.toContain("Steinhardt order");

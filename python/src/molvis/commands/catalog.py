@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 # Keep in lockstep with core `RPC_PROTOCOL_VERSION` / `rpc.list_methods`.
-RPC_PROTOCOL_VERSION = "1.5.0"
+RPC_PROTOCOL_VERSION = "1.6.0"
 
 
 class FrontendCommandGroup(str, Enum):
@@ -83,6 +83,9 @@ class FrontendCommands:
     # Scene multi-source + state (core router)
     APPLY_STATE = FrontendCommand(FrontendCommandGroup.SCENE, "apply_state")
     ADD_DATA_SOURCE = FrontendCommand(FrontendCommandGroup.SCENE, "add_data_source")
+    ADD_MESH_OVERLAY = FrontendCommand(
+        FrontendCommandGroup.SCENE, "add_mesh_overlay"
+    )
     REMOVE_DATA_SOURCE = FrontendCommand(
         FrontendCommandGroup.SCENE, "remove_data_source"
     )

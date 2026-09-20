@@ -18,6 +18,7 @@ function testContext(): PipelineContext {
     suppressHighlight: false,
     postRenderEffects: [],
     selectionCache: new Map(),
+    surfaces: new Map(),
     app: stubApp,
     changeKind: "full",
   };
@@ -130,7 +131,7 @@ describe("DrawRibbonModifier.apply", () => {
     expect(residues.nrows()).toBe(3);
 
     const chains = residues.copyColStr("chain_id") as string[];
-    const seqs = residues.copyColU32("res_seq");
+    const seqs = residues.copyColI32("res_seq");
     const resNames = residues.copyColStr("res_name") as string[];
     const caX = residues.copyColF("ca_x");
     const oX = residues.copyColF("o_x");

@@ -6,25 +6,32 @@ if (!container) {
 }
 
 const loading = document.getElementById("molvis-loading");
+const label = loading?.querySelector<HTMLElement>(".molvis-loading__label");
+
+function showLoading(text: string): void {
+  if (!loading) return;
+  if (label) label.textContent = text;
+  // Busy over a live scene dims it; boot (opaque) still covers a blank canvas.
+  loading.classList.add("molvis-loading--busy");
+  loading.classList.remove("molvis-loading--hidden");
+}
 
 function hideLoading(): void {
   if (!loading) return;
   loading.classList.add("molvis-loading--hidden");
-  // Remove after the fade-out so it never intercepts pointer events.
-  window.setTimeout(() => loading.remove(), 400);
 }
 
 function showLoadingError(message: string): void {
   if (!loading) return;
   loading.classList.remove("molvis-loading--hidden");
   loading.replaceChildren();
-  const label = document.createElement("div");
-  label.className = "molvis-loading__label";
-  label.style.color = "#ff6b6b";
-  label.style.maxWidth = "80%";
-  label.style.textAlign = "center";
-  label.textContent = message;
-  loading.appendChild(label);
+  const text = document.createElement("div");
+  text.className = "molvis-loading__label";
+  text.style.color = "#ff6b6b";
+  text.style.maxWidth = "80%";
+  text.style.textAlign = "center";
+  text.textContent = message;
+  loading.appendChild(text);
 }
 
 // Defer the heavy `@molcrafts/molvis-stage` chunk (WebGL engine + WASM, tens of MB) so the
@@ -36,7 +43,13 @@ requestAnimationFrame(() => {
   requestAnimationFrame(() => {
     import("./controller")
       .then(({ bootstrapWebview }) => {
-        bootstrapWebview(container, { onReady: hideLoading });
+        bootstrapWebview(container, {
+          onReady: hideLoading,
+          // A large file parses and builds for seconds after the engine is
+          // up. Reuse the same overlay so the wait reads as progress instead
+          // of an empty scene.
+          onBusy: (text) => (text === null ? hideLoading() : showLoading(text)),
+        });
       })
       .catch((error: unknown) => {
         showLoadingError(

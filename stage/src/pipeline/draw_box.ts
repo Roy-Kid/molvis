@@ -53,6 +53,8 @@ export class DrawBoxModifier extends BaseModifier {
   static readonly NAME = "Simulation cell";
   private _thicknessScale = 1.0;
   private _manualBox: DrawBoxSpec | null = null;
+  /** Fingerprint of the last drawn cell; `"position"` skips a rebuild. */
+  private _lastBoxKey: string | null = null;
 
   constructor(id = "draw-box", manualBox?: DrawBoxSpec | null) {
     super(id, DrawBoxModifier.NAME, new Set([ModifierCapability.Draws]));
@@ -121,14 +123,22 @@ export class DrawBoxModifier extends BaseModifier {
     const owned = this.createManualBox();
     const frame = owned ? frameWithBox(input, owned) : input;
 
-    // Box geometry can change between frames (NPT trajectories), so
-    // we redraw on every change kind including "position".
     // Visibility of this step is solely `this.enabled` + applyVisibility
     // (pipeline skips apply when disabled). No parallel "shouldDraw" gate.
     if (!ctx.app.styleManager.getShowBox()) {
+      this._lastBoxKey = null;
       ctx.app.artist.drawBox(undefined);
       return frame;
     }
+    const key = boxFingerprint(frame.box, this._thicknessScale);
+    if (
+      ctx.changeKind === "position" &&
+      key !== null &&
+      key === this._lastBoxKey
+    ) {
+      return frame;
+    }
+    this._lastBoxKey = key;
     ctx.app.artist.drawBox(frame.box, {
       thicknessScale: this._thicknessScale,
     });
@@ -138,6 +148,7 @@ export class DrawBoxModifier extends BaseModifier {
   applyVisibility(app: import("../app").MolvisApp, visible: boolean): void {
     if (!visible) {
       // Same clear path as apply() when the step is off / showBox false.
+      this._lastBoxKey = null;
       app.artist.drawBox(undefined);
       return;
     }
@@ -198,4 +209,22 @@ function frameWithBox(input: Frame, box: Box): Frame {
   }
   result.box = box;
   return result;
+}
+
+function boxFingerprint(
+  box: Box | undefined,
+  thicknessScale: number,
+): string | null {
+  if (!box) return null;
+  const hArr = box.hMatrix();
+  const originArr = box.origin();
+  try {
+    const h = hArr.toCopy();
+    const origin = originArr.toCopy();
+    return `${thicknessScale}:${Array.from(h).join(",")}:${Array.from(origin).join(",")}`;
+  } finally {
+    hArr.free();
+    originArr.free();
+    box.free();
+  }
 }

@@ -13,6 +13,7 @@ function mod(id: string, sourceOwnerId: string | null = null): Modifier {
     capabilities: new Set(),
     selectionScopeId: null,
     sourceOwnerId,
+    highlightColor: null,
     matches: () => false,
     isApplicable: () => true,
     validate: () => ({ valid: true }),

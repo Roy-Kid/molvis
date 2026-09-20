@@ -24,7 +24,7 @@ import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
 import { cameraFacingBasis } from "./placement_orientation";
-import type { BindingEvent, MenuItem, SceneHit } from "./types";
+import type { MenuItem, SceneHit } from "./types";
 
 /**
  * =============================
@@ -170,7 +170,6 @@ class EditModeContextMenu extends ContextMenuController {
   protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
 
-    // ── Selection ──────────────────────────────────────────────
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
     if (header) items.push(header);
 
@@ -204,39 +203,25 @@ class EditModeContextMenu extends ContextMenuController {
       );
     }
 
-    // ── Draw tools ─────────────────────────────────────────────
     if (items.length > 0) items.push(CommonMenuItems.separator());
-    items.push({
-      type: "binding",
-      bindingConfig: {
-        view: "element-picker",
-        label: "Element",
-        value: this.mode.element,
-      },
-      action: (ev: BindingEvent) => {
-        this.mode.element = String(ev.value);
-      },
-    });
-    items.push({
-      type: "binding",
-      bindingConfig: {
-        view: "list",
-        label: "Bond order",
-        options: [
+    items.push(
+      CommonMenuItems.elementFolder(this.mode.element, (element) => {
+        this.mode.element = element;
+      }),
+      CommonMenuItems.radioFolder(
+        "Bond",
+        [
           { text: "Single", value: 1 },
           { text: "Double", value: 2 },
           { text: "Triple", value: 3 },
         ],
-        value: this.mode.bondOrder,
-      },
-      action: (ev: BindingEvent) => {
-        this.mode.bondOrder = Number(ev.value);
-      },
-    });
-
-    // ── View / export ──────────────────────────────────────────
-    items.push(CommonMenuItems.separator());
-    items.push(CommonMenuItems.fitCamera(this.app));
+        this.mode.bondOrder,
+        (value) => {
+          this.mode.bondOrder = Number(value);
+        },
+      ),
+      CommonMenuItems.fitCamera(this.app),
+    );
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }

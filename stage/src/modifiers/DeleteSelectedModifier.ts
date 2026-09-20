@@ -1,8 +1,9 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { remapBondSubset } from "../utils/bond_order";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 
 /**
  * Modifier that removes atoms based on the current pipeline selection.
@@ -79,10 +80,10 @@ export class DeleteSelectedModifier extends BaseModifier {
           }
           newAtoms.setColF(key, dst);
         }
-      } else if (dtype === DType.U32) {
+      } else if (isDomainUintDtype(dtype)) {
         const src = atoms.viewColU32(key);
         if (src) {
-          const dst = new Uint32Array(newCount);
+          const dst = new BigUint64Array(newCount);
           let ptr = 0;
           for (let i = 0; i < nrows; i++) {
             if (indexMap[i] !== -1) dst[ptr++] = src[i];
@@ -115,7 +116,10 @@ export class DeleteSelectedModifier extends BaseModifier {
         const validBonds: number[] = [];
 
         for (let b = 0; b < bondCount; b++) {
-          if (indexMap[iCol[b]] !== -1 && indexMap[jCol[b]] !== -1) {
+          if (
+            indexMap[toRowIndex(iCol[b])] !== -1 &&
+            indexMap[toRowIndex(jCol[b])] !== -1
+          ) {
             validBonds.push(b);
           }
         }

@@ -3,17 +3,26 @@ import { useEffect, useState } from "react";
 
 export function useTrajectoryLength(app: Molvis | null): number {
   const [length, setLength] = useState(
-    () => app?.system.trajectory.length ?? 0,
+    () => app?.system.trajectory.indexedLength ?? 0,
   );
   useEffect(() => {
     if (!app) {
       setLength(0);
       return;
     }
-    setLength(app.system.trajectory.length);
-    return app.events.on("trajectory-change", (trajectory) => {
-      setLength(trajectory.length);
-    });
+    const sync = () => {
+      const traj = app.system.trajectory;
+      setLength(traj.length ?? traj.indexedLength);
+    };
+    sync();
+    const offChange = app.events.on("trajectory-change", sync);
+    const offLen = app.events.on("length-changed", sync);
+    const offDone = app.events.on("index-complete", sync);
+    return () => {
+      offChange();
+      offLen();
+      offDone();
+    };
   }, [app]);
   return length;
 }

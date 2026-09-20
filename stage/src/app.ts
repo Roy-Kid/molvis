@@ -1,4 +1,5 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { App } from "@molcrafts/molvis-core/app";
 import {
   cropToContent,
@@ -20,8 +21,8 @@ import {
 } from "./commands";
 import { CommandManager } from "./commands/manager";
 import { SetRepresentationCommand } from "./commands/representation";
+import { disposeComputeRuntime } from "./compute/runtime";
 import { defaultMolvisConfig, type MolvisConfig } from "./config";
-import type { CoordinatePolicy } from "./coords";
 import { createMolvisDOM, registerWebComponents } from "./dom_helpers";
 import { EventEmitter, type MolvisEventMap } from "./events";
 import { FrameRenderScheduler } from "./frame_render_scheduler";
@@ -29,6 +30,7 @@ import { disposeLoadedFile } from "./io";
 import { ModeManager, ModeType } from "./mode";
 import { SelectMode } from "./mode/select";
 import type { MenuItem, SceneHit } from "./mode/types";
+import { ComputeBondsModifier } from "./modifiers/ComputeBondsModifier";
 import { SelectModifier } from "./modifiers/SelectModifier";
 import { OverlayManager } from "./overlays/overlay_manager";
 import type { AtomAnchored, Overlay } from "./overlays/types";
@@ -59,6 +61,7 @@ import {
   classifyFrameTransition,
   type FrameTransitionDecision,
   type FrameUpdateKind,
+  resolvePlaybackChangeKind,
 } from "./system/frame_diff";
 import type { Trajectory } from "./system/trajectory";
 import { GUIManager } from "./ui/manager";
@@ -103,6 +106,12 @@ export class MolvisApp implements App {
   private _modifierPipeline: ModifierPipeline;
   private _currentFrame = 0;
   private _lastRenderedFrame: Frame | null = null;
+  /**
+   * Trajectory index `_lastRenderedFrame` was rendered at, or `null` when the
+   * last render was not a trajectory frame (edit / RPC render) — the store
+   * index seam (`Trajectory.sectionUpdates`) is consulted only with an index.
+   */
+  private _lastRenderedIndex: number | null = null;
   private _lastSelectionSet: Map<string, SelectionMask> = new Map();
   /**
    * Active selection producer id (Select-mode list row). Highlight and
@@ -293,6 +302,7 @@ export class MolvisApp implements App {
       },
       clearLastRenderedFrame: () => {
         this._lastRenderedFrame = null;
+        this._lastRenderedIndex = null;
       },
       renderActiveTrajectoryFrame: (forceFull) =>
         this.renderActiveTrajectoryFrame(forceFull),
@@ -349,13 +359,13 @@ export class MolvisApp implements App {
     return this._modifierPipeline;
   }
 
-  /** Post-compose coordinate policy (as-deposited | wrap-* | unwrap-trajectory). */
-  get coordinatePolicy(): CoordinatePolicy {
-    return this._modifierPipeline.coordinatePolicy;
+  /** Post-compose wrap gate — fold atom columns into `frame.box` when on. */
+  get wrapEnabled(): boolean {
+    return this._modifierPipeline.wrapEnabled;
   }
 
-  setCoordinatePolicy(policy: CoordinatePolicy): void {
-    this._modifierPipeline.setCoordinatePolicy(policy);
+  setWrapEnabled(enabled: boolean): void {
+    this._modifierPipeline.setWrapEnabled(enabled);
   }
 
   /** Named selections from the last pipeline run. */
@@ -371,6 +381,18 @@ export class MolvisApp implements App {
     if (!this._guiManager) {
       throw new Error("GUI is not available on a headless (gui:false) app");
     }
+    return this._guiManager;
+  }
+
+  /**
+   * The stage's own chrome when this app has any, else `undefined`.
+   *
+   * The nullable twin of {@link gui}: for code where the GUI is an optional
+   * enhancement (the load flow's fallback bond-column picker) rather than a
+   * requirement, so a headless app takes the other branch instead of
+   * throwing.
+   */
+  get guiIfMounted(): GUIManager | undefined {
     return this._guiManager;
   }
 
@@ -573,7 +595,7 @@ export class MolvisApp implements App {
     if (
       primary &&
       primary.trajectory !== this._system.trajectory &&
-      primary.kind === "memory" &&
+      primary instanceof MemoryDataSource &&
       primary.frameCount === 1
     ) {
       primary.trajectory.replaceFrame(0, saved);
@@ -797,12 +819,15 @@ export class MolvisApp implements App {
     this._resizeObserver?.disconnect();
     this._resizeObserver = null;
     disposeLoadedFile(this);
-    for (const source of this._modifierPipeline.sources()) {
-      source.dispose();
-    }
+    // Full pipeline teardown — disposes every DataSource (streaming
+    // trajectories / workers), runs Session.onRemoved (WebSocket), and
+    // clears modifier observers. Source-only dispose left Sessions alive.
+    this._modifierPipeline.clear();
+    disposeComputeRuntime();
     this.overlayManager.dispose();
     this._guiManager?.unmount();
     this._lastRenderedFrame = null;
+    this._lastRenderedIndex = null;
     this._world.dispose();
     if (this._ownsEngine) this._engine.dispose();
 
@@ -944,26 +969,60 @@ export class MolvisApp implements App {
    * (pipeline recompute must not clobber an orphan live highlight).
    * Explicit {@link activateSelection}(null) clears highlight.
    */
-  syncHighlightFromActive(): void {
+  syncHighlightFromActive(frame?: Frame | null): void {
     const sm = this._world.selectionManager;
     const id = this._activeSelectionId;
     if (!id) return;
 
     const mask = this._lastSelectionSet.get(id);
-    let bonds: number[] = [];
     const mod = this._modifierPipeline.modifiers().find((m) => m.id === id);
-    if (mod instanceof SelectModifier) {
-      bonds = [...mod.selectedBondIds];
-      if (!mask && mod.isManual) {
-        const src = mod.selectionSource;
-        if (Array.isArray(src)) {
-          sm.apply({ type: "replace", atoms: src, bonds });
-          return;
-        }
+    sm.setHighlightColor(mod?.highlightColor ?? null);
+
+    const explicitBonds =
+      mod instanceof SelectModifier ? [...mod.selectedBondIds] : [];
+
+    if (mod instanceof SelectModifier && !mask && mod.isManual) {
+      const src = mod.selectionSource;
+      if (Array.isArray(src)) {
+        sm.apply({ type: "replace", atoms: src, bonds: explicitBonds });
+        return;
       }
     }
+
     const atoms = mask ? mask.getIndices() : [];
+    // Highlight bonds whose both endpoints are selected so an atom selection
+    // carries its backbone/connectivity, not only manual bond picks.
+    const bonds = mergeBonds(explicitBonds, this.bondsWithinMask(mask, frame));
     sm.apply({ type: "replace", atoms, bonds });
+  }
+
+  /**
+   * Bond rows whose both `atomi`/`atomj` endpoints fall inside the atom mask.
+   * Uses the given (computed) frame when available so multi-source / modified
+   * frames resolve against what is actually rendered; falls back to the live
+   * system frame.
+   */
+  private bondsWithinMask(
+    mask: SelectionMask | undefined,
+    frame?: Frame | null,
+  ): number[] {
+    if (!mask) return [];
+    const bondsFrame = frame ?? this._system.frame;
+    const bonds = bondsFrame?.getBlock("bonds");
+    if (!bonds) return [];
+    const iCol = bonds.viewColU32("atomi");
+    const jCol = bonds.viewColU32("atomj");
+    if (!iCol || !jCol) return [];
+    const result: number[] = [];
+    for (let b = 0; b < bonds.nrows(); b++) {
+      if (
+        mask.isSelected(toRowIndex(iCol[b])) &&
+        mask.isSelected(toRowIndex(jCol[b]))
+      ) {
+        result.push(b);
+      }
+    }
+    return result;
   }
 
   /**
@@ -1277,48 +1336,52 @@ export class MolvisApp implements App {
    * fast or slow path internally.
    */
   private async renderActiveTrajectoryFrame(forceFull = false): Promise<void> {
-    const frame = this._system.frame;
     this._currentFrame = this._system.trajectory.currentIndex;
-
-    const atomCount = frame.getBlock("atoms")?.nrows() ?? 0;
-    const bondCount = frame.getBlock("bonds")?.nrows() ?? 0;
 
     const hasGpuState =
       this._world.sceneIndex.meshRegistry.getAtomState() !== null;
 
-    // FrameDiff classifies against `system.frame`, which only carries
-    // the primary trajectory's blocks. With 2+ DSes, the bonds block
-    // contributed by a topology DS is invisible here and the classifier
-    // would always return "position" — DrawBondModifier's fast path
-    // would then reuse stale atomi/atomj pairings. Force full until the
-    // classifier can run on the synthesized merged frame.
-    const isMultiDs = this._modifierPipeline.enabledSourceCount() > 1;
+    // Classify against the composed (and wrapped) frame, not `system.frame`.
+    // Overlay topology lives on a second DataSource; the primary trajectory
+    // does not carry those bonds, so classifying the primary would either
+    // force a full rebuild every tick or miss a topology change.
+    const composed = await this._modifierPipeline.composeHead(
+      this._currentFrame,
+    );
+    const atomCount = composed.getBlock("atoms")?.nrows() ?? 0;
+    const bondCount = composed.getBlock("bonds")?.nrows() ?? 0;
 
     let decision: FrameTransitionDecision;
-    if (forceFull || !hasGpuState || isMultiDs) {
+    if (forceFull || !hasGpuState) {
       decision = {
         kind: "full",
-        reasons: [
-          forceFull
-            ? "Forced full rebuild"
-            : !hasGpuState
-              ? "No GPU state yet"
-              : "Multi-DS pipeline; classifier can't see the synthesized frame",
-        ],
+        reasons: [forceFull ? "Forced full rebuild" : "No GPU state yet"],
         stats: { atomCount, bondCount },
       };
     } else {
-      decision = classifyFrameTransition(this._lastRenderedFrame, frame);
+      const trajectory = this._system.trajectory;
+      const multiSource = this._modifierPipeline.enabledSourceCount() > 1;
+      decision = classifyFrameTransition(this._lastRenderedFrame, composed, {
+        previous:
+          multiSource || this._lastRenderedIndex === null
+            ? undefined
+            : trajectory.sectionUpdates(this._lastRenderedIndex),
+        next: multiSource
+          ? undefined
+          : trajectory.sectionUpdates(this._currentFrame),
+      });
     }
 
-    const isPositionOnly = decision.kind === "position";
+    const perceiveBonds = this._modifierPipeline
+      .modifiers()
+      .some((m) => m.enabled && m instanceof ComputeBondsModifier);
+    const changeKind = resolvePlaybackChangeKind(decision, perceiveBonds);
+    const isPositionOnly = changeKind === "position";
     const selectionSnapshot = isPositionOnly
       ? null
       : captureStructuralSelectionSnapshot(this._world.selectionManager);
 
-    await this.applyPipeline({
-      changeKind: isPositionOnly ? "position" : "full",
-    });
+    await this.applyPipeline({ changeKind, composed });
 
     if (!isPositionOnly && selectionSnapshot) {
       reconcileSelectionAfterStructuralUpdate(
@@ -1327,7 +1390,8 @@ export class MolvisApp implements App {
         selectionSnapshot,
       );
     }
-    this._lastRenderedFrame = frame;
+    this._lastRenderedFrame = composed;
+    this._lastRenderedIndex = this._currentFrame;
   }
 
   /**
@@ -1337,6 +1401,7 @@ export class MolvisApp implements App {
   private renderFrameInternal(frame: Frame): Promise<void> {
     return this.applyPipeline({ changeKind: "full" }).then(() => {
       this._lastRenderedFrame = frame;
+      this._lastRenderedIndex = null;
     });
   }
 
@@ -1355,6 +1420,7 @@ export class MolvisApp implements App {
    */
   public reset(): void {
     this._lastRenderedFrame = null;
+    this._lastRenderedIndex = null;
     this._lastSelectionSet = new Map();
 
     this._world.selectionManager.clearSelection();
@@ -1445,12 +1511,17 @@ export class MolvisApp implements App {
   public async applyPipeline(options?: {
     fullRebuild?: boolean;
     changeKind?: FrameChangeKind;
+    composed?: Frame;
   }): Promise<Frame | null> {
     const changeKind: FrameChangeKind =
       MolvisApp.resolvePipelineChangeKind(options);
 
     if (changeKind === "full") {
       this._world.highlighter.discardSavedOriginals();
+      // The pass owns the topology's lifetime, not the layers: Draw order is
+      // the pipeline's (Bonds auto-attaches ahead of Particles), so a layer
+      // that reset it would wipe whichever half registered first.
+      this._world.sceneIndex.topology.clear();
     }
 
     const captured: { context: PipelineContext | null } = { context: null };
@@ -1459,10 +1530,17 @@ export class MolvisApp implements App {
     };
     this._modifierPipeline.on(PipelineEvents.COMPUTED, captureContext);
 
+    // Compose at the System playhead. `_currentFrame` is a cache of that
+    // index for UI; if a seek updated the trajectory without going through
+    // `MolvisApp.seekFrame`, using the cache would keep drawing frame 0
+    // (topology + DCD augment looks loaded but next/play do nothing).
+    const frameIndex = this._system.trajectory.currentIndex;
+    this._currentFrame = frameIndex;
     const computed = await this._modifierPipeline.compute(
-      this._currentFrame,
+      frameIndex,
       this,
       changeKind,
+      options?.composed,
     );
 
     this._modifierPipeline.off(PipelineEvents.COMPUTED, captureContext);
@@ -1493,6 +1571,7 @@ export class MolvisApp implements App {
     this.events.emit("frame-rendered", {
       frame: renderTarget,
       box: renderTarget.box ?? undefined,
+      changeKind,
     });
 
     // Fresh impostor colors are on the GPU. Re-project the active region
@@ -1500,7 +1579,7 @@ export class MolvisApp implements App {
     // the highlight overlay from those clean buffers.
     if (changeKind === "full") {
       if (this._activeSelectionId) {
-        this.syncHighlightFromActive();
+        this.syncHighlightFromActive(computed);
       }
       this._world.highlighter.invalidateAndRebuild();
     }
@@ -1600,4 +1679,13 @@ export class MolvisApp implements App {
       this.queueTrajectoryFrameRender();
     }
   }
+}
+
+/** Merge explicit and mask-derived bond rows, deduplicated and ascending. */
+function mergeBonds(...groups: readonly (readonly number[])[]): number[] {
+  const seen = new Set<number>();
+  for (const group of groups) {
+    for (const bond of group) seen.add(bond);
+  }
+  return [...seen].sort((a, b) => a - b);
 }

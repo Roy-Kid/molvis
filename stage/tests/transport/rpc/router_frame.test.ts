@@ -116,7 +116,7 @@ function fakeApp() {
     },
     setTrajectory: async (trajectory: Trajectory) => {
       state.trajectory = trajectory;
-      state.nFrames = trajectory.length;
+      state.nFrames = trajectory.indexedLength;
     },
     appendFrame: async (frame: unknown) => {
       state.appended.push(frame);

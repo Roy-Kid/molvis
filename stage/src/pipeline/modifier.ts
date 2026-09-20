@@ -18,8 +18,40 @@ export enum ModifierCapability {
   ProducesSelection = "produces-selection",
   /** Returns a Frame distinct from input (filters atoms, adds blocks, etc). */
   TransformsData = "transforms-data",
+  /**
+   * Publishes surface geometry into `context.surfaces` for a paired draw
+   * step to paint. Runs after every frame edit and before any draw, so the
+   * geometry it computes is the geometry the user is looking at.
+   */
+  ProducesGeometry = "produces-geometry",
   /** Performs render side-effects via ctx.app.artist. */
   Draws = "draws",
+}
+
+/**
+ * A modifier that computes geometry but does not paint it.
+ *
+ * The pair is the point: an algorithm modifier publishes a {@link SurfacePart}
+ * list and the draw companion it creates here owns colour, opacity, and
+ * visibility. Adding a seventh surface algorithm is then one more producer and
+ * no renderer work — the same split that lets a DataSource bring Particles and
+ * Bonds along with it.
+ */
+export interface GeometryProducer {
+  /**
+   * Build the draw companion to attach beneath this modifier.
+   * {@link ModifierPipeline.addModifier} calls it; nothing else should.
+   */
+  createDraw(): Modifier;
+}
+
+export function producesGeometry(
+  modifier: Modifier,
+): modifier is Modifier & GeometryProducer {
+  return (
+    modifier.capabilities.has(ModifierCapability.ProducesGeometry) &&
+    typeof (modifier as Partial<GeometryProducer>).createDraw === "function"
+  );
 }
 
 /**
@@ -34,6 +66,12 @@ export interface Modifier {
 
   /** Whether this modifier is currently enabled. */
   enabled: boolean;
+
+  /**
+   * Optional `#RRGGBB` highlight color for selection-producing modifiers.
+   * Null = theme default. Non-producers ignore it.
+   */
+  highlightColor: string | null;
 
   /** Runtime capabilities. See {@link ModifierCapability}. */
   readonly capabilities: ReadonlySet<ModifierCapability>;
@@ -61,9 +99,9 @@ export interface Modifier {
    * spawn surfaces).
    *
    * - Auto-attaching modifiers (Particles, Ribbon, Simulation cell,
-   *   Create isosurface) override to return true based on frame contents
+   *   Isosurface) override to return true based on frame contents
    *   (e.g., `frame.box` defined).
-   * - User-opt-in modifiers (Slice, WrapPBC, ExpressionSelect, ...)
+   * - User-opt-in modifiers (Slice, ExpressionSelect, ...)
    *   inherit the BaseModifier default of `false`.
    *
    * MUST NOT mutate the frame. Throws are caught upstream and treated
@@ -138,6 +176,12 @@ export abstract class BaseModifier implements Modifier {
   public enabled = true;
   public selectionScopeId: string | null = null;
   public sourceOwnerId: string | null = null;
+  /**
+   * Optional hex color (`#RRGGBB`) that overrides the theme selection color
+   * for this selection producer's highlight. `null` falls back to the theme.
+   * Non-producer modifiers ignore it.
+   */
+  public highlightColor: string | null = null;
   protected _name: string;
 
   constructor(

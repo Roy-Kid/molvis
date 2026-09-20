@@ -52,12 +52,10 @@ class ManipulateModeContextMenu extends ContextMenuController {
   protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
     const items: MenuItem[] = [];
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
-    if (header) {
-      items.push(header);
-      items.push(CommonMenuItems.separator());
-    }
+    if (header) items.push(header);
 
     if (this.app.world.sceneIndex.hasUnsavedChanges) {
+      if (items.length > 0) items.push(CommonMenuItems.separator());
       items.push(
         CommonMenuItems.button("Save", () => {
           void this.app.commitScene();
@@ -65,22 +63,35 @@ class ManipulateModeContextMenu extends ContextMenuController {
         CommonMenuItems.button("Discard", () => {
           this.app.discardScene();
         }),
-        CommonMenuItems.separator(),
       );
     }
 
+    if (items.length > 0) items.push(CommonMenuItems.separator());
+    const tool = this.mode.getTool();
     items.push(
-      CommonMenuItems.button("Move (G)", () => {
-        this.mode.setTool("move");
-      }),
-      CommonMenuItems.button("Rotate (R)", () => {
-        this.mode.setTool("rotate");
-      }),
+      CommonMenuItems.toggle(
+        "Move",
+        tool === "move",
+        () => {
+          this.mode.setTool("move");
+        },
+        { shortcut: "G" },
+      ),
+      CommonMenuItems.toggle(
+        "Rotate",
+        tool === "rotate",
+        () => {
+          this.mode.setTool("rotate");
+        },
+        { shortcut: "R" },
+      ),
+    );
+
+    items.push(
       CommonMenuItems.separator(),
-      CommonMenuItems.button("Clear Select", () => {
+      CommonMenuItems.button("Clear", () => {
         this.mode.clearSelection();
       }),
-      CommonMenuItems.separator(),
     );
     return CommonMenuItems.appendCommonTail(items, this.app);
   }

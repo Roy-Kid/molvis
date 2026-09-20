@@ -6,12 +6,11 @@ export {
   generate3D,
   Perceive,
   parseSMILES,
-  RecordReader,
   SDFReader,
+  TrajectoryReader,
   WasmArray,
   WasmKMeans,
   WasmPca2,
-  WasmPcaResult,
 } from "@molcrafts/molvis-core/molrs";
 export {
   applyTransform,

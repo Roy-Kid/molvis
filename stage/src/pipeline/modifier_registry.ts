@@ -7,7 +7,6 @@ import { ColorByPropertyModifier } from "../modifiers/ColorByPropertyModifier";
 import { ColorByTypeModifier } from "../modifiers/ColorByTypeModifier";
 import { ComputeBondsModifier } from "../modifiers/ComputeBondsModifier";
 import { ComputePropertyModifier } from "../modifiers/ComputePropertyModifier";
-import { ConstructSurfaceMeshModifier } from "../modifiers/ConstructSurfaceMeshModifier";
 import { CoordinationPolyhedraModifier } from "../modifiers/CoordinationPolyhedraModifier";
 import { DeleteSelectedModifier } from "../modifiers/DeleteSelectedModifier";
 import { DisplacementVectorsModifier } from "../modifiers/DisplacementVectorsModifier";
@@ -18,8 +17,10 @@ import { FreezePropertyModifier } from "../modifiers/FreezePropertyModifier";
 import { HideHydrogensModifier } from "../modifiers/HideHydrogensModifier";
 import { HideSelectionModifier } from "../modifiers/HideSelectionModifier";
 import { InvertSelectionModifier } from "../modifiers/InvertSelectionModifier";
+import { MolecularSurfaceModifier } from "../modifiers/MolecularSurfaceModifier";
 import { RadiusOfGyrationModifier } from "../modifiers/RadiusOfGyrationModifier";
 import { ReplicateModifier } from "../modifiers/ReplicateModifier";
+import { SelectMaskModifier } from "../modifiers/SelectMaskModifier";
 import { ClearSelectionModifier } from "../modifiers/SelectModifier";
 import { SelectOverlappingModifier } from "../modifiers/SelectOverlappingModifier";
 import { SelectTypeModifier } from "../modifiers/SelectTypeModifier";
@@ -31,14 +32,15 @@ import { TrajectoryLinesModifier } from "../modifiers/TrajectoryLinesModifier";
 import { TransparentSelectionModifier } from "../modifiers/TransparentSelectionModifier";
 import { UnwrapTrajectoriesModifier } from "../modifiers/UnwrapTrajectoriesModifier";
 import { VectorFieldModifier } from "../modifiers/VectorFieldModifier";
-import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
 import { DrawAtomModifier } from "./draw_atom";
 import { DrawBondModifier } from "./draw_bond";
 import { DrawBoxModifier } from "./draw_box";
-import { DrawIsosurfaceModifier } from "./draw_isosurface";
 import { DrawRibbonModifier } from "./draw_ribbon";
-import { GaussianDensitySurfaceModifier } from "./gaussian_density_surface";
+import { DrawSurfaceModifier } from "./draw_surface";
+import { IsosurfaceModifier } from "./isosurface";
+import { MeshOverlayModifier } from "./mesh_overlay";
 import type { Modifier } from "./modifier";
+import { VolumeCloudModifier } from "./volume_cloud";
 
 // Type for a modifier factory function
 export type ModifierFactory = () => Modifier;
@@ -100,6 +102,25 @@ let _idCounter = 0;
 export function nextModifierId(prefix: string): string {
   return `${prefix}-${++_idCounter}`;
 }
+
+/**
+ * Surface modifiers that were absorbed into {@link MolecularSurfaceModifier}.
+ * `Gaussian density surface` and OVITO's `Construct surface mesh` were the
+ * same Gaussian-density code path with different default grids; they survive
+ * as named presets rather than as separate classes.
+ */
+const LEGACY_SURFACE_PRESETS = [
+  {
+    name: "Gaussian density surface",
+    idPrefix: "gaussian-density-surface",
+    gaussian: { resolution: 0.6, sigma: 1 },
+  },
+  {
+    name: "Construct surface mesh",
+    idPrefix: "construct-surface",
+    gaussian: { resolution: 0.4, sigma: 1.2 },
+  },
+] as const;
 
 // biome-ignore lint/complexity/noStaticOnlyClass: ModifierRegistry is a singleton registry pattern used across the app
 export class ModifierRegistry {
@@ -185,6 +206,11 @@ export class ModifierRegistry {
       () => new ExpandSelectionModifier(nextModifierId("expand-sel")),
     );
     ModifierRegistry.register(
+      SelectMaskModifier.NAME,
+      "Selection",
+      () => new SelectMaskModifier(nextModifierId("select-mask")),
+    );
+    ModifierRegistry.register(
       SelectOverlappingModifier.NAME,
       "Selection",
       () => new SelectOverlappingModifier(nextModifierId("select-overlap")),
@@ -200,11 +226,6 @@ export class ModifierRegistry {
       "Slice",
       "Modification",
       () => new SliceModifier(),
-    );
-    ModifierRegistry.register(
-      "Wrap PBC",
-      "Modification",
-      () => new WrapPBCModifier(nextModifierId("wrap-pbc")),
     );
     ModifierRegistry.register(
       AffineTransformationModifier.NAME,
@@ -330,19 +351,29 @@ export class ModifierRegistry {
       () => new VectorFieldModifier(nextModifierId("vector-field")),
     );
     ModifierRegistry.register(
-      GaussianDensitySurfaceModifier.NAME,
+      MolecularSurfaceModifier.NAME,
       "Visualization",
-      () =>
-        new GaussianDensitySurfaceModifier(
-          nextModifierId("gaussian-density-surface"),
-        ),
+      () => new MolecularSurfaceModifier(nextModifierId("molecular-surface")),
     );
-    ModifierRegistry.register(
-      ConstructSurfaceMeshModifier.DISPLAY_NAME,
-      "Visualization",
-      () =>
-        new ConstructSurfaceMeshModifier(nextModifierId("construct-surface")),
-    );
+    // Legacy names for what are now two presets of Molecular surface. Kept
+    // registered (and out of the Add menu) so saved projects, backend
+    // state-sync, and RPC calls that name them still resolve — all three
+    // rebuild modifiers by registry display name.
+    for (const preset of LEGACY_SURFACE_PRESETS) {
+      ModifierRegistry.register(
+        preset.name,
+        "Visualization",
+        () => {
+          const modifier = new MolecularSurfaceModifier(
+            nextModifierId(preset.idPrefix),
+          );
+          modifier.setAlgorithm("gaussian");
+          modifier.setGaussianParams(preset.gaussian);
+          return modifier;
+        },
+        { userAddable: false },
+      );
+    }
     ModifierRegistry.register(
       CoordinationPolyhedraModifier.NAME,
       "Visualization",
@@ -373,12 +404,48 @@ export class ModifierRegistry {
       () => new DrawRibbonModifier(),
       { userAddable: false },
     );
-    // Grid → marching-cubes surface. Auto-attaches when a grid block is
-    // present; also user-addable so empty pipelines can stage the step.
+    // Grid → marching-cubes level set. Auto-attaches when a grid block is
+    // present; also user-addable so empty pipelines can stage the step. It
+    // computes only — `addModifier` gives it a Draw surface companion.
     ModifierRegistry.register(
-      DrawIsosurfaceModifier.NAME, // "Create isosurface"
+      IsosurfaceModifier.NAME,
       "Visualization",
-      () => new DrawIsosurfaceModifier(),
+      () => new IsosurfaceModifier(nextModifierId("isosurface")),
+    );
+    // The name this step carried before it was split into producer + draw.
+    // Saved projects, backend state-sync, and RPC all resolve modifiers by
+    // registry display name, so dropping it would lose the isosurface from
+    // every project written before the split.
+    ModifierRegistry.register(
+      "Create isosurface",
+      "Visualization",
+      () => new IsosurfaceModifier(nextModifierId("isosurface")),
+      { userAddable: false },
+    );
+    // An imported triangle mesh. Not user-addable: an empty one has no
+    // geometry to paint, and geometry arrives only with a file
+    // (`io.loadMeshOverlay`). Registered so project load and state-sync can
+    // still resolve the row by name.
+    ModifierRegistry.register(
+      MeshOverlayModifier.NAME,
+      "Visualization",
+      () => new MeshOverlayModifier(nextModifierId("mesh")),
+      { userAddable: false },
+    );
+    // Every voxel as a point sprite. Not a surface, so not the shared draw:
+    // a level set and a full-field cloud are different pictures.
+    ModifierRegistry.register(
+      VolumeCloudModifier.NAME,
+      "Visualization",
+      () => new VolumeCloudModifier(nextModifierId("volume-cloud")),
+    );
+    // The shared painter. Producers attach one automatically, so it stays out
+    // of the Add menu — an orphan Draw surface would have nothing to paint.
+    ModifierRegistry.register(
+      DrawSurfaceModifier.NAME,
+      "Visualization",
+      () => new DrawSurfaceModifier(nextModifierId("draw-surface")),
+      { userAddable: false },
     );
     // Transparency is particle display property, not an Add-menu item.
     ModifierRegistry.register(

@@ -1,3 +1,4 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "./io/atom_coords";
 import { BOND_TYPE_SINGLE } from "./utils/bond_order";
@@ -78,8 +79,17 @@ export class AtomSource {
     return this.frame?.getBlock("atoms") ?? null;
   }
 
+  /**
+   * Rows deleted from the frame segment. A frame row cannot be removed from
+   * the Block, so "deleted" has to be recorded beside it: without this,
+   * dropping an edit entry would let `getAllIds` hand the row straight back
+   * from the frame and a deleted atom would return on the next commit.
+   */
+  public deleted = new Set<number>();
+
   setFrame(frame: Frame | null) {
     this.frame = frame;
+    this.deleted.clear();
     this._elementCache = null;
     this._elementCacheFrame = null;
   }
@@ -92,12 +102,12 @@ export class AtomSource {
     if (this._elementCacheFrame === this.frame && this._elementCache) {
       return this._elementCache;
     }
-    if (fb.dtype("element") !== DType.String) {
+    if (!fb.hasStr("element")) {
       this._elementCache = null;
       this._elementCacheFrame = this.frame;
       return null;
     }
-    const col = fb.copyColStr("element");
+    const col = fb.getStr("element") as string[];
     this._elementCache = col;
     this._elementCacheFrame = this.frame;
     return col;
@@ -105,10 +115,12 @@ export class AtomSource {
 
   setEdit(id: number, meta: AtomMeta) {
     this.edits.set(id, meta);
+    this.deleted.delete(id);
   }
 
   removeEdit(id: number) {
     this.edits.delete(id);
+    this.deleted.add(id);
   }
 
   /**
@@ -174,6 +186,7 @@ export class AtomSource {
   getMeta(id: number): AtomMeta | null {
     const edit = this.edits.get(id);
     if (edit) return edit;
+    if (this.deleted.has(id)) return null;
 
     const block = this.frameBlock;
     if (block && id < block.nrows()) {
@@ -221,7 +234,7 @@ export class AtomSource {
     const block = this.frameBlock;
     const frameCount = block?.nrows() ?? 0;
     for (let i = 0; i < frameCount; i++) {
-      yield i;
+      if (!this.deleted.has(i)) yield i;
     }
     // Yield edit-only IDs that are outside the frame range
     for (const id of this.edits.keys()) {
@@ -250,16 +263,22 @@ export class BondSource {
     return this.frame?.getBlock("atoms") ?? null;
   }
 
+  /** Frame-segment bonds deleted in the edit pool. See `AtomSource.deleted`. */
+  public deleted = new Set<number>();
+
   setFrame(frame: Frame | null) {
     this.frame = frame;
+    this.deleted.clear();
   }
 
   setEdit(id: number, meta: BondMeta) {
     this.edits.set(id, meta);
+    this.deleted.delete(id);
   }
 
   removeEdit(id: number) {
     this.edits.delete(id);
+    this.deleted.add(id);
   }
 
   setAttribute(id: number, key: string, value: unknown) {
@@ -295,6 +314,7 @@ export class BondSource {
   getMeta(id: number): BondMeta | null {
     const edit = this.edits.get(id);
     if (edit) return edit;
+    if (this.deleted.has(id)) return null;
 
     const bondBlock = this.frameBlock;
     const atomBlock = this.atomBlock;
@@ -315,8 +335,12 @@ export class BondSource {
 
     const iAtoms = bb.viewColU32("atomi");
     const jAtoms = bb.viewColU32("atomj");
-    const typeCol = bb.viewColU32("bond_type");
-    const numberCol = bb.viewColU32("bond_number");
+    const typeCol = bb.hasU32("bond_type")
+      ? bb.viewColU32("bond_type")
+      : undefined;
+    const numberCol = bb.hasU32("bond_number")
+      ? bb.viewColU32("bond_number")
+      : undefined;
 
     const coords = viewAtomCoords(ab);
     const ax = coords?.x;
@@ -325,15 +349,17 @@ export class BondSource {
 
     if (!iAtoms || !jAtoms || !ax || !ay || !az) return null;
 
-    const i = iAtoms[index];
-    const j = jAtoms[index];
+    const i = toRowIndex(iAtoms[index]);
+    const j = toRowIndex(jAtoms[index]);
 
-    const bondType = typeCol?.[index] ?? BOND_TYPE_SINGLE;
+    const bondType = typeCol ? toRowIndex(typeCol[index]) : BOND_TYPE_SINGLE;
     // Prefer bond_number; if missing, Lewis number matches type for 1–3,
     // and 0 for aromatic / unknown (same as molrs aromatic without Kekulé).
-    const bondNumber =
-      numberCol?.[index] ??
-      (bondType >= BOND_TYPE_SINGLE && bondType <= 3 ? bondType : 0);
+    const bondNumber = numberCol
+      ? toRowIndex(numberCol[index])
+      : bondType >= BOND_TYPE_SINGLE && bondType <= 3
+        ? bondType
+        : 0;
     return {
       type: "bond",
       bondId: index,
@@ -362,7 +388,7 @@ export class BondSource {
     const block = this.frameBlock;
     const frameCount = block?.nrows() ?? 0;
     for (let i = 0; i < frameCount; i++) {
-      yield i;
+      if (!this.deleted.has(i)) yield i;
     }
     for (const id of this.edits.keys()) {
       if (id >= frameCount) {

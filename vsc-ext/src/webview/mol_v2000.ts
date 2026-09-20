@@ -1,5 +1,5 @@
 /**
- * Minimal MOL V2000 connection-table parser for Sketch Quick View peek.
+ * Minimal MOL V2000 connection-table parser for Sketch Quick look peek.
  * Host-safe: no sketch/stage imports (unit-testable under tsconfig.test).
  */
 

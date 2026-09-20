@@ -1,7 +1,7 @@
 import { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { applyAutoAttach } from "../../src/pipeline/auto_attach";
-import { DrawIsosurfaceModifier } from "../../src/pipeline/draw_isosurface";
+import { IsosurfaceModifier } from "../../src/pipeline/isosurface";
 import { ModifierPipeline } from "../../src/pipeline/pipeline";
 
 /** Build a frame whose atoms block carries the four PDB residue-identity
@@ -79,6 +79,36 @@ describe("applyAutoAttach", () => {
     expect(ids).not.toContain("Cartoon");
   });
 
+  it("does not auto-attach Create bonds on a bondless XYZ-shape frame", () => {
+    const pipeline = new ModifierPipeline();
+    const frame = new Frame();
+    const atoms = frame.createBlock("atoms");
+    atoms.setColF("x", new Float64Array([0, 1.2]));
+    atoms.setColF("y", new Float64Array([0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0]));
+    atoms.setColStr("element", ["C", "O"]);
+    const ids = applyAutoAttach(pipeline, frame);
+    expect(ids).not.toContain("Create bonds");
+    expect(ids).not.toContain("Bonds");
+    expect(ids).toContain("Particles");
+  });
+
+  it("attaches Bonds when the frame already has drawable bonds", () => {
+    const pipeline = new ModifierPipeline();
+    const frame = new Frame();
+    const atoms = frame.createBlock("atoms");
+    atoms.setColF("x", new Float64Array([0, 1.2]));
+    atoms.setColF("y", new Float64Array([0, 0]));
+    atoms.setColF("z", new Float64Array([0, 0]));
+    atoms.setColStr("element", ["C", "O"]);
+    const bonds = frame.createBlock("bonds");
+    bonds.setColU32("atomi", new BigUint64Array([0n]));
+    bonds.setColU32("atomj", new BigUint64Array([1n]));
+    const ids = applyAutoAttach(pipeline, frame);
+    expect(ids).not.toContain("Create bonds");
+    expect(ids).toContain("Bonds");
+  });
+
   it("is idempotent: a second call does not stack another Particles layer", () => {
     const pipeline = new ModifierPipeline();
     const frame = xyzShapedFrame();
@@ -110,15 +140,15 @@ function syntheticGridFrame(): Frame {
 }
 
 describe("applyAutoAttach isosurface", () => {
-  it("attaches Create isosurface for grid-bearing frames", () => {
+  it("attaches Isosurface for grid-bearing frames", () => {
     const pipeline = new ModifierPipeline();
     const attached = applyAutoAttach(pipeline, syntheticGridFrame());
-    expect(attached).toContain(DrawIsosurfaceModifier.NAME);
+    expect(attached).toContain(IsosurfaceModifier.NAME);
   });
 
-  it("does not attach Create isosurface for atoms-only frames", () => {
+  it("does not attach Isosurface for atoms-only frames", () => {
     const pipeline = new ModifierPipeline();
     const attached = applyAutoAttach(pipeline, xyzShapedFrame());
-    expect(attached).not.toContain(DrawIsosurfaceModifier.NAME);
+    expect(attached).not.toContain(IsosurfaceModifier.NAME);
   });
 });

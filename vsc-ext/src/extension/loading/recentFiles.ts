@@ -4,7 +4,7 @@ const STORAGE_KEY = "molvis.recentFiles";
 const DEFAULT_MAX = 12;
 
 /**
- * Persists recently opened molecular URIs for the activity-bar launcher.
+ * Persists recently opened molecular URIs for the Activity Bar Files view.
  * Stored as URI strings in `globalState` so the list survives reloads and
  * works across multi-root workspaces (remote SSH paths included).
  */

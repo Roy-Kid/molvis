@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { ExportFrameCommand } from "../../src/commands/frame";
 import { AtomSource, BondSource } from "../../src/entity_source";
@@ -50,7 +51,7 @@ function chargedSourceFrame(): Frame {
   block.setColF("z", new Float64Array([0, 0, 0]));
   block.setColStr("element", ["O", "H", "H"]);
   block.setColF("charge", new Float64Array([0.5, -0.25, 0.125]));
-  block.setColU32("mol_id", new Uint32Array([1, 1, 1]));
+  block.setColU32("mol_id", toDomainUint([1, 1, 1]));
   frame.insertBlock("atoms", block);
   return frame;
 }
@@ -95,6 +96,8 @@ describe("ExportFrameCommand", () => {
     // cannot pass: the drop is whitelist-shaped, not float-shaped.
     const out = exportedAtoms();
     expect(out?.keys()).toContain("mol_id");
-    expect(Array.from(out?.copyColU32("mol_id") ?? [])).toEqual([1, 1, 1]);
+    expect(Array.from(out?.copyColU32("mol_id") ?? [], Number)).toEqual([
+      1, 1, 1,
+    ]);
   });
 });

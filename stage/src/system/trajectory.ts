@@ -2,11 +2,25 @@ import { type Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { logger } from "../utils/logger";
 
 /**
+ * Per-section update ids of one frame: block name → the store update index
+ * that frame resolves to (molrec `blockUpdateAt`). Two frames mapping a block
+ * to the same id carry identical rows for it, so a consumer can skip
+ * comparing that block's values. A block absent at the frame is not a key.
+ */
+export type SectionUpdates = ReadonlyMap<string, number>;
+
+/**
  * Interface for lazy frame providers that load frames on demand.
  */
 export interface FrameProvider {
   readonly length: number;
   get(index: number): Frame;
+  /**
+   * Optional index seam: the {@link SectionUpdates} of frame `index`, when
+   * the backing store keeps one (mrec). Providers without a store index leave
+   * this out and consumers fall back to value comparison.
+   */
+  sectionUpdates?(index: number): SectionUpdates | undefined;
 }
 
 /**
@@ -15,8 +29,19 @@ export interface FrameProvider {
  * result is cached LRU-style by the trajectory.
  */
 export interface AsyncFrameProvider {
-  readonly length: number;
+  /**
+   * Known complete length. Omit (or leave undefined) for a file scan
+   * that is still discovering frames — {@link Trajectory.length} is
+   * then `null` until {@link Trajectory.markIndexComplete}.
+   */
+  readonly length?: number;
   get(index: number): Promise<Frame>;
+  /**
+   * Optional index seam, same contract as {@link FrameProvider.sectionUpdates}.
+   * Answers synchronously for frames the provider has already resolved
+   * (the worker ships a frame's ids with the frame); `undefined` otherwise.
+   */
+  sectionUpdates?(index: number): SectionUpdates | undefined;
   /** Optional cleanup hook — called from `Trajectory.dispose()`. */
   dispose?(): void;
 }
@@ -34,13 +59,23 @@ export class Trajectory {
   private _asyncProvider?: AsyncFrameProvider;
   private _asyncCache = new Map<number, Frame>();
   private _asyncCacheLimit = 16;
-  private _length: number;
+  /** Playable window — frames that have a FramePos / eager slot. */
+  private _indexedLength: number;
+  /** Known final N, or null while a file scan has not finished. */
+  private _knownLength: number | null;
+  private _indexComplete: boolean;
   private _providerOverrides = new Map<number, Frame>();
 
   constructor(frames: Frame[] = [], boxes: (Box | undefined)[] = []) {
-    this._frames = frames;
-    this._boxes = boxes;
-    this._length = frames.length;
+    // Copy, never alias: `dropOldestFrame` and `addFrame` mutate these arrays,
+    // and callers hand us arrays they still own (`renderer.ts` takes a user's
+    // `Frame[]`, `state_sync.ts` passes a live state object's arrays). The
+    // Frames themselves are still shared — only the containers are ours.
+    this._frames = [...frames];
+    this._boxes = [...boxes];
+    this._indexedLength = frames.length;
+    this._knownLength = frames.length;
+    this._indexComplete = true;
     // Ensure boxes array matches frames length if not provided
     if (this._boxes.length < this._frames.length) {
       // Fill with undefined
@@ -49,8 +84,8 @@ export class Trajectory {
     }
 
     this._currentIndex = 0;
-    if (this._length > 0) {
-      logger.info(`[Trajectory] Initialized with ${this._length} frames`);
+    if (this._indexedLength > 0) {
+      logger.debug(`[Trajectory] built with ${this._indexedLength} frame(s)`);
     }
   }
 
@@ -64,15 +99,17 @@ export class Trajectory {
   ): Trajectory {
     const traj = new Trajectory([], boxes);
     traj._provider = provider;
-    traj._length = provider.length;
+    traj._indexedLength = provider.length;
+    traj._knownLength = provider.length;
+    traj._indexComplete = true;
     // Ensure boxes array matches provider length
-    if (traj._boxes.length < traj._length) {
-      const missing = traj._length - traj._boxes.length;
+    if (traj._boxes.length < traj._indexedLength) {
+      const missing = traj._indexedLength - traj._boxes.length;
       for (let i = 0; i < missing; i++) traj._boxes.push(undefined);
     }
-    if (traj._length > 0) {
-      logger.info(
-        `[Trajectory] Initialized lazy provider with ${traj._length} frames`,
+    if (traj._indexedLength > 0) {
+      logger.debug(
+        `[Trajectory] lazy provider with ${traj._indexedLength} frame(s)`,
       );
     }
     return traj;
@@ -95,14 +132,22 @@ export class Trajectory {
   ): Trajectory {
     const traj = new Trajectory([], boxes);
     traj._asyncProvider = provider;
-    traj._length = provider.length;
-    if (traj._boxes.length < traj._length) {
-      const missing = traj._length - traj._boxes.length;
+    if (provider.length === undefined) {
+      traj._indexedLength = 0;
+      traj._knownLength = null;
+      traj._indexComplete = false;
+    } else {
+      traj._indexedLength = provider.length;
+      traj._knownLength = provider.length;
+      traj._indexComplete = true;
+    }
+    if (traj._boxes.length < traj._indexedLength) {
+      const missing = traj._indexedLength - traj._boxes.length;
       for (let i = 0; i < missing; i++) traj._boxes.push(undefined);
     }
-    if (traj._length > 0) {
-      logger.info(
-        `[Trajectory] Initialized async provider with ${traj._length} frame(s)`,
+    if (traj._indexedLength > 0) {
+      logger.debug(
+        `[Trajectory] async provider with ${traj._indexedLength} frame(s)`,
       );
     }
     return traj;
@@ -118,8 +163,10 @@ export class Trajectory {
    * the underlying provider shape.
    */
   async frame(index: number): Promise<Frame> {
-    if (index < 0 || index >= this._length) {
-      throw new Error(`Frame index ${index} out of range [0, ${this._length})`);
+    if (index < 0 || index >= this._indexedLength) {
+      throw new Error(
+        `Frame index ${index} out of range [0, ${this._indexedLength})`,
+      );
     }
 
     if (this._asyncProvider) {
@@ -159,11 +206,24 @@ export class Trajectory {
   }
 
   /**
+   * Store-index seam: the {@link SectionUpdates} of frame `index`, or
+   * `undefined` when the backing provider keeps no index, `index` is out of
+   * range, or the frame at `index` was replaced in place
+   * ({@link replaceFrame}) and no longer is the store's row set.
+   */
+  sectionUpdates(index: number): SectionUpdates | undefined {
+    if (index < 0 || index >= this._indexedLength) return undefined;
+    if (this._providerOverrides.has(index)) return undefined;
+    const provider = this._asyncProvider ?? this._provider;
+    return provider?.sectionUpdates?.(index);
+  }
+
+  /**
    * Whether index is already materialized in the async LRU (or has a
    * sync frame available). Used by prefetch to skip redundant work.
    */
   hasCachedFrame(index: number): boolean {
-    if (index < 0 || index >= this._length) return false;
+    if (index < 0 || index >= this._indexedLength) return false;
     if (this._asyncProvider) return this._asyncCache.has(index);
     // Sync / lazy-sync paths resolve without a network hop; treat as warm.
     return true;
@@ -175,9 +235,9 @@ export class Trajectory {
    * Provider rejections (cancelled latest-wins loads) are swallowed.
    */
   prefetch(indices: readonly number[]): void {
-    if (!this._asyncProvider || this._length === 0) return;
+    if (!this._asyncProvider || this._indexedLength === 0) return;
     for (const index of indices) {
-      if (index < 0 || index >= this._length) continue;
+      if (index < 0 || index >= this._indexedLength) continue;
       if (this._asyncCache.has(index)) continue;
       void this.frame(index).catch(() => {
         // Prefetch is best-effort; supersede/cancel is normal.
@@ -205,7 +265,7 @@ export class Trajectory {
    * Returns a new empty Frame if the trajectory is empty.
    */
   get currentFrame(): Frame {
-    if (this._length === 0) {
+    if (this._indexedLength === 0) {
       return new Frame();
     }
     return this._getFrame(this._currentIndex);
@@ -215,7 +275,7 @@ export class Trajectory {
    * Get the current Box (if any).
    */
   get currentBox(): Box | undefined {
-    if (this._length === 0) {
+    if (this._indexedLength === 0) {
       return undefined;
     }
     return (
@@ -231,19 +291,77 @@ export class Trajectory {
   }
 
   /**
-   * Get the total number of frames.
+   * Known final frame count, or `null` while a file index is still
+   * being discovered. Never increments as frames are scanned — use
+   * {@link indexedLength} for the playable window.
    */
-  get length(): number {
-    return this._length;
+  get length(): number | null {
+    return this._knownLength;
+  }
+
+  /** Frames that already have a slot / FramePos and may be seeked. */
+  get indexedLength(): number {
+    return this._indexedLength;
+  }
+
+  /** True after {@link markIndexComplete} (eager trajectories start true). */
+  get indexComplete(): boolean {
+    return this._indexComplete;
   }
 
   /**
-   * True when frames are loaded on demand via a {@link FrameProvider}.
-   * Callers that would walk every frame eagerly (e.g. frame-label
-   * aggregation) skip lazy trajectories to preserve streaming behaviour.
+   * Advance the discovered-frame window. Does not change {@link length}
+   * unless `knownLength` is passed (header / complete sidecar).
+   */
+  recordIndexedLength(
+    indexedLength: number,
+    knownLength?: number | null,
+  ): void {
+    if (indexedLength < this._indexedLength) {
+      throw new Error(
+        `Trajectory.recordIndexedLength: cannot shrink ${this._indexedLength} → ${indexedLength}`,
+      );
+    }
+    this._indexedLength = indexedLength;
+    if (knownLength !== undefined) this._knownLength = knownLength;
+  }
+
+  /**
+   * Mark the file index finished. Sets `length` to `indexedLength` when
+   * it was still unknown. Throws if a previously advertised N disagrees.
+   */
+  markIndexComplete(): void {
+    if (
+      this._knownLength !== null &&
+      this._knownLength !== this._indexedLength
+    ) {
+      throw new Error(
+        `Trajectory.markIndexComplete: known length ${this._knownLength} !== indexed ${this._indexedLength}`,
+      );
+    }
+    this._indexComplete = true;
+    this._knownLength = this._indexedLength;
+  }
+
+  /**
+   * Final N for whole-trajectory consumers. Throws until the index is
+   * complete and `length` is known.
+   */
+  requireCompleteLength(purpose: string): number {
+    if (!this._indexComplete || this._knownLength === null) {
+      throw new Error(
+        `Trajectory length is not complete (${purpose}); indexed ${this._indexedLength}`,
+      );
+    }
+    return this._knownLength;
+  }
+
+  /**
+   * True when frames are loaded on demand via a {@link FrameProvider}
+   * or {@link AsyncFrameProvider}.
    */
   get isLazy(): boolean {
-    return this._provider !== undefined;
+    return this._provider !== undefined || this._asyncProvider !== undefined;
   }
 
   /**
@@ -252,7 +370,7 @@ export class Trajectory {
    * this accessor — there is no separate aggregation layer.
    */
   get(index: number): Frame | undefined {
-    if (index < 0 || index >= this._length) return undefined;
+    if (index < 0 || index >= this._indexedLength) return undefined;
     return this._getFrame(index);
   }
 
@@ -262,26 +380,39 @@ export class Trajectory {
   addFrame(frame: Frame, box?: Box): void {
     this._frames.push(frame);
     this._boxes.push(box);
-    this._length = this._provider ? this._length + 1 : this._frames.length;
+    this._indexedLength = this._provider
+      ? this._indexedLength + 1
+      : this._frames.length;
+    if (this._indexComplete) this._knownLength = this._indexedLength;
   }
 
   /**
-   * Drop the oldest frame, freeing it.
+   * Drop the oldest frame, releasing our reference to it.
    *
    * The counterpart to {@link addFrame} for a trajectory that is bounded at
    * the head — a live stream under a retention cap. Every remaining index
    * shifts down by one, so callers that hold an index must treat it as a
    * position in the retained window rather than a step number.
    *
+   * Deliberately does **not** call `frame.free()`, for the same reason the
+   * async LRU eviction path above does not: the canvas consumers
+   * (`AtomSource`, `SceneIndex`, `Artist`) can still be bound to the evicted
+   * frame — a user paused on the retained head while the producer keeps
+   * appending is the ordinary case, not a corner one. Freeing here hands
+   * them a dangling pointer ("null pointer passed to rust"). Dropping the
+   * reference lets the wasm-bindgen `FinalizationRegistry` reclaim the WASM
+   * memory once nothing holds the wrapper. Explicit frees belong in
+   * {@link dispose}, which runs when nothing can still be looking.
+   *
    * Returns `false` when there is nothing to drop, or when the trajectory is
    * provider-backed (a lazily-read file has no head to evict).
    */
   dropOldestFrame(): boolean {
     if (this._provider || this._frames.length === 0) return false;
-    const [oldest] = this._frames.splice(0, 1);
+    this._frames.splice(0, 1);
     this._boxes.splice(0, 1);
-    oldest?.free?.();
-    this._length = this._frames.length;
+    this._indexedLength = this._frames.length;
+    if (this._indexComplete) this._knownLength = this._indexedLength;
     if (this._currentIndex > 0) this._currentIndex--;
     return true;
   }
@@ -292,7 +423,10 @@ export class Trajectory {
    * Returns true if the index changed.
    */
   next(): boolean {
-    if (this._length === 0 || this._currentIndex >= this._length - 1) {
+    if (
+      this._indexedLength === 0 ||
+      this._currentIndex >= this._indexedLength - 1
+    ) {
       return false;
     }
     this._currentIndex++;
@@ -305,7 +439,7 @@ export class Trajectory {
    * Returns true if the index changed.
    */
   prev(): boolean {
-    if (this._length === 0 || this._currentIndex <= 0) {
+    if (this._indexedLength === 0 || this._currentIndex <= 0) {
       return false;
     }
     this._currentIndex--;
@@ -318,9 +452,9 @@ export class Trajectory {
    * Returns true if the index changed.
    */
   seek(index: number): boolean {
-    if (this._length === 0) return false;
+    if (this._indexedLength === 0) return false;
 
-    const newIndex = Math.max(0, Math.min(index, this._length - 1));
+    const newIndex = Math.max(0, Math.min(index, this._indexedLength - 1));
     if (newIndex !== this._currentIndex) {
       this._currentIndex = newIndex;
       return true;
@@ -368,7 +502,9 @@ export class Trajectory {
         }
       }
       this._asyncCache.clear();
-      this._length = 0;
+      this._indexedLength = 0;
+      this._knownLength = 0;
+      this._indexComplete = true;
       return;
     }
     // Sync provider-backed: the provider owns frame lifetime, nothing to free.
@@ -380,7 +516,9 @@ export class Trajectory {
     }
     this._frames = [];
     this._boxes = [];
-    this._length = 0;
+    this._indexedLength = 0;
+    this._knownLength = 0;
+    this._indexComplete = true;
   }
 
   /**
@@ -390,7 +528,7 @@ export class Trajectory {
    * relies on in-place mutation to avoid reconstructing the entire Trajectory.
    */
   replaceFrame(index: number, frame: Frame, box?: Box): boolean {
-    if (index < 0 || index >= this._length) {
+    if (index < 0 || index >= this._indexedLength) {
       return false;
     }
 
@@ -404,6 +542,11 @@ export class Trajectory {
       this._boxes[index] = box;
       return true;
     }
+
+    // Async provider: the replaced frame is no longer the store's row set, so
+    // mark the slot and `sectionUpdates` stops describing it. The sync
+    // accessors keep reading the replacement from `_frames`, as before.
+    if (this._asyncProvider) this._providerOverrides.set(index, frame);
 
     this._frames[index] = frame;
     this._boxes[index] = box;

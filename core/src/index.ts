@@ -4,5 +4,6 @@
  * Workload workers are a subpath export (`@molcrafts/molvis-core/workload`).
  */
 
+export * from "./domain_uint";
 export * from "./elements";
 export * from "./molrs";

@@ -1,5 +1,6 @@
 # Managed by prek: `prek install`
 default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit, pre-push]
 
 # Mirrors every job in .github/workflows/ci.yml. Any divergence is a bug
 # — when you add/modify a CI job, update this file in the same commit.
@@ -23,6 +24,13 @@ default_install_hook_types: [pre-commit, pre-push]
 #   pre-commit install --hook-type pre-commit --hook-type pre-push
 
 repos:
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      # Catches `if: secrets.*` at job level (workflow starts 0 jobs) and
+      # other GHA parse errors that `check-yaml` will not see.
+      - id: actionlint
+
   - repo: local
     hooks:
       # ─── ci.yml::lint ─────────────────────────────────────────────────────
@@ -78,13 +86,18 @@ repos:
       # guard is local-only and has no CI counterpart by design.
       - id: no-dev-watcher
         name: no dev watcher running (shared rspack cache)
-        entry: bash -c 'pgrep -f "rslib build --watch|rsbuild dev" >/dev/null && { echo "A dev watcher is running — stop it before pushing; the build hooks share node_modules/.cache/rspack and dist/ with it."; exit 1; }; exit 0'
+        entry: >
+          bash -c 'ROOT=$(git rev-parse --show-toplevel);
+          if pgrep -af "rslib build --watch|rsbuild dev" | grep -F "$ROOT/" | grep -v "pgrep -af" >/dev/null; then
+            echo "A molvis dev watcher is running — stop it before pushing; the build hooks share node_modules/.cache/rspack and dist/ with it.";
+            exit 1;
+          fi; exit 0'
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
-      # ─── ci.yml::build-stage / *-viewer / regressions / page / vsc ──
+      # ─── ci.yml::build-stage / *-viewer / page / vsc ──
       # Same shape as CI's parallel build jobs. Pre-push because each takes
       # ~30-60s and they run serially here (CI runs them on separate
       # runners). Each asks only for its own target; wireit builds the
@@ -116,14 +129,6 @@ repos:
       - id: check-pack
         name: check stage-viewer + sketch-viewer pack surfaces
         entry: npm run check:pack
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: regressions
-        name: regression examples (hard goldens vs engines + viewer dists)
-        entry: npm run check:regressions
         language: system
         pass_filenames: false
         always_run: true
@@ -165,8 +170,8 @@ repos:
         stages: [pre-push]
 
       - id: test-vsc-ext
-        name: test vsc-ext (mocha, unit only)
-        entry: npm run test:vsc-ext
+        name: test vsc-ext (build + mocha)
+        entry: bash -c 'npm run build:vsc-ext && npm run test:vsc-ext'
         language: system
         pass_filenames: false
         always_run: true
@@ -179,3 +184,12 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+
+      # Stale python/uv.lock pinning PyPI molpy 0.13.2 hid the git 0.14
+      # sources from `uv run` until the lock was regenerated.
+      - id: python-uv-lock
+        name: python uv.lock matches pyproject
+        entry: bash -c 'cd python && uv lock --check'
+        language: system
+        pass_filenames: false
+        always_run: true

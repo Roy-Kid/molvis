@@ -17,6 +17,7 @@ function makeTestModifier(
     enabled: true,
     selectionScopeId: null,
     sourceOwnerId: null,
+    highlightColor: null,
     capabilities,
     matches: () => false,
     isApplicable: () => true,
@@ -147,6 +148,49 @@ describe("Pipeline System", () => {
       );
       const ordered = executionOrder([ribbon, wrap]);
       expect(ordered.map((m) => m.name)).toEqual(["Wrap", "Cartoon"]);
+    });
+
+    it("runs selection producers before consuming transforms", () => {
+      const producer = makeTestModifier(
+        "producer",
+        "Select",
+        new Set([ModifierCapability.ProducesSelection]),
+      );
+      const hide = makeTestModifier(
+        "hide",
+        "Hide",
+        new Set([
+          ModifierCapability.ConsumesSelection,
+          ModifierCapability.TransformsData,
+        ]),
+      );
+      hide.selectionScopeId = "producer";
+      const draw = makeTestModifier(
+        "draw",
+        "Draw",
+        new Set([ModifierCapability.Draws]),
+      );
+      const ordered = executionOrder([draw, hide, producer]);
+      expect(ordered.map((m) => m.name)).toEqual(["Select", "Hide", "Draw"]);
+    });
+
+    it("runs scoped derived producers after their upstream producer", () => {
+      const base = makeTestModifier(
+        "base",
+        "Base",
+        new Set([ModifierCapability.ProducesSelection]),
+      );
+      const invert = makeTestModifier(
+        "invert",
+        "Invert",
+        new Set([
+          ModifierCapability.ConsumesSelection,
+          ModifierCapability.ProducesSelection,
+        ]),
+      );
+      invert.selectionScopeId = "base";
+      const ordered = executionOrder([invert, base]);
+      expect(ordered.map((m) => m.name)).toEqual(["Base", "Invert"]);
     });
 
     it("runs manual Simulation cell before pure transforms so frame.box is set first", async () => {

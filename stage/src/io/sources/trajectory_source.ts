@@ -23,7 +23,7 @@
 export interface TrajectorySource {
   /** Discriminant — keeps the worker switching cheap and lets future
    *  backends introduce themselves without touching unrelated code. */
-  readonly kind: "blob" | "opfs";
+  readonly kind: "blob" | "opfs" | "host";
 
   /** Total byte length of the underlying file. Used to drive the
    *  indexing-progress denominator and to bound `readRange` calls. */

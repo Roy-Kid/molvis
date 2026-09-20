@@ -38,12 +38,18 @@ describe("MoleculeGraph", () => {
       expect(atoms?.copyColStr("element")).toEqual(["O", "H", "H"]);
       const bonds = frame.getBlock("bonds");
       expect(bonds).toBeDefined();
-      expect(Array.from(bonds?.copyColU32("atomi") ?? [])).toEqual([0, 0]);
-      expect(Array.from(bonds?.copyColU32("atomj") ?? [])).toEqual([1, 2]);
-      expect(Array.from(bonds?.copyColU32("bond_type") ?? [])).toEqual([1, 1]);
-      expect(Array.from(bonds?.copyColU32("bond_number") ?? [])).toEqual([
+      expect(Array.from(bonds?.copyColU32("atomi") ?? [], Number)).toEqual([
+        0, 0,
+      ]);
+      expect(Array.from(bonds?.copyColU32("atomj") ?? [], Number)).toEqual([
+        1, 2,
+      ]);
+      expect(Array.from(bonds?.copyColU32("bond_type") ?? [], Number)).toEqual([
         1, 1,
       ]);
+      expect(
+        Array.from(bonds?.copyColU32("bond_number") ?? [], Number),
+      ).toEqual([1, 1]);
     } finally {
       frame.free();
     }
@@ -69,12 +75,12 @@ describe("MoleculeGraph", () => {
     const frame = g.toFrame();
     try {
       const bonds = frame.getBlock("bonds");
-      expect(Array.from(bonds?.copyColU32("bond_type") ?? [])).toEqual([
+      expect(Array.from(bonds?.copyColU32("bond_type") ?? [], Number)).toEqual([
         2, 1, 2, 1, 2, 1,
       ]);
-      expect(Array.from(bonds?.copyColU32("bond_number") ?? [])).toEqual([
-        2, 1, 2, 1, 2, 1,
-      ]);
+      expect(
+        Array.from(bonds?.copyColU32("bond_number") ?? [], Number),
+      ).toEqual([2, 1, 2, 1, 2, 1]);
     } finally {
       frame.free();
     }

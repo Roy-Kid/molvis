@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import type { MolvisApp } from "../../src/app";
 import { ExpandSelectionModifier } from "../../src/modifiers/ExpandSelectionModifier";
 import { ModifierCapability } from "../../src/pipeline/modifier";
@@ -17,8 +18,8 @@ function linearMolecule(): Frame {
   frame.insertBlock("atoms", atoms);
 
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([0, 1]));
-  bonds.setColU32("atomj", new Uint32Array([1, 2]));
+  bonds.setColU32("atomi", toDomainUint([0, 1]));
+  bonds.setColU32("atomj", toDomainUint([1, 2]));
   frame.insertBlock("bonds", bonds);
   return frame;
 }

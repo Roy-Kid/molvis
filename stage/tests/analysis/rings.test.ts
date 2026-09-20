@@ -1,6 +1,7 @@
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { detectRings } from "../../src/analysis/rings";
 
 /** Planar benzene-like C6 ring with single bonds (topology only). */
@@ -32,10 +33,10 @@ function benzeneLike(): Frame {
     atomi[i] = i;
     atomj[i] = (i + 1) % n;
   }
-  bonds.setColU32("atomi", atomi);
-  bonds.setColU32("atomj", atomj);
-  bonds.setColU32("bond_type", new Uint32Array(n).fill(1));
-  bonds.setColU32("bond_number", new Uint32Array(n).fill(1));
+  bonds.setColU32("atomi", toDomainUint(atomi));
+  bonds.setColU32("atomj", toDomainUint(atomj));
+  bonds.setColU32("bond_type", toDomainUint(new Uint32Array(n).fill(1)));
+  bonds.setColU32("bond_number", toDomainUint(new Uint32Array(n).fill(1)));
   frame.insertBlock("bonds", bonds);
   return frame;
 }

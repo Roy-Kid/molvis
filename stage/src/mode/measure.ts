@@ -12,7 +12,7 @@ import { makeSelectionKey } from "../selection_manager";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
-import type { BindingEvent, MenuItem, SceneHit } from "./types";
+import type { MenuItem, SceneHit } from "./types";
 
 interface MeasurementData {
   id: string;
@@ -55,67 +55,48 @@ class MeasureModeContextMenu extends ContextMenuController {
     return !isDragging;
   }
 
-  protected buildMenuItems(hit: SceneHit | null): MenuItem[] {
-    const items: MenuItem[] = [];
-    const header = hit ? CommonMenuItems.hitLabel(hit) : null;
-    if (header) {
-      items.push(header);
-      items.push(CommonMenuItems.separator());
-    }
-
+  protected buildMenuItems(_hit: SceneHit | null): MenuItem[] {
+    const items: MenuItem[] = [
+      CommonMenuItems.radioFolder(
+        "Distance",
+        [
+          { text: "Å", value: "angstrom" },
+          { text: "nm", value: "nanometer" },
+          { text: "pm", value: "picometer" },
+        ],
+        this.mode.distanceUnit,
+        (value) => {
+          this.mode.distanceUnit = String(value);
+          this.mode.updateAllLabels();
+        },
+      ),
+      CommonMenuItems.radioFolder(
+        "Angle",
+        [
+          { text: "°", value: "degrees" },
+          { text: "rad", value: "radians" },
+        ],
+        this.mode.angleUnit,
+        (value) => {
+          this.mode.angleUnit = String(value);
+          this.mode.updateAllLabels();
+        },
+      ),
+      CommonMenuItems.radioFolder(
+        "Digits",
+        [1, 2, 3, 4, 5, 6].map((n) => ({ text: String(n), value: n })),
+        this.mode.precision,
+        (value) => {
+          this.mode.precision = Number(value);
+          this.mode.updateAllLabels();
+        },
+      ),
+    ];
     items.push(
-      {
-        type: "binding",
-        bindingConfig: {
-          view: "list",
-          label: "Distance",
-          options: [
-            { text: "Å", value: "angstrom" },
-            { text: "nm", value: "nanometer" },
-            { text: "pm", value: "picometer" },
-          ],
-          value: this.mode.distanceUnit,
-        },
-        action: (ev: BindingEvent) => {
-          this.mode.distanceUnit = String(ev.value);
-          this.mode.updateAllLabels();
-        },
-      },
-      {
-        type: "binding",
-        bindingConfig: {
-          view: "list",
-          label: "Angle",
-          options: [
-            { text: "°", value: "degrees" },
-            { text: "rad", value: "radians" },
-          ],
-          value: this.mode.angleUnit,
-        },
-        action: (ev: BindingEvent) => {
-          this.mode.angleUnit = String(ev.value);
-          this.mode.updateAllLabels();
-        },
-      },
-      {
-        type: "binding",
-        bindingConfig: {
-          label: "Precision",
-          min: 1,
-          max: 6,
-          step: 1,
-          value: this.mode.precision,
-        },
-        action: (ev: BindingEvent) => {
-          this.mode.precision = Number(ev.value);
-          this.mode.updateAllLabels();
-        },
-      },
       CommonMenuItems.separator(),
-      CommonMenuItems.button("Clear All", () => {
+      CommonMenuItems.button("Clear", () => {
         this.mode.clearAllMeasurements();
       }),
-      CommonMenuItems.separator(),
     );
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
@@ -554,6 +535,10 @@ class MeasureMode extends BaseMode {
 
   public updateAllLabels(): void {
     this.updateInfoPanel();
+  }
+
+  public hasMeasurements(): boolean {
+    return this.measurements.size > 0;
   }
 
   public clearAllMeasurements(): void {

@@ -1,10 +1,13 @@
 import type { Molvis } from "@molcrafts/molvis-stage";
+import { Minimize, PanelsTopLeft } from "lucide-react";
 import type React from "react";
+import type { ReactNode } from "react";
 import {
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -12,12 +15,13 @@ import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dial
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
 import {
+  type PanelImperativeHandle,
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
   usePanelRef,
 } from "@/components/ui/resizable";
-import { ExitFullscreenAction } from "@/components/viewer/ExitFullscreenAction";
+import { CanvasOverlayAction } from "@/components/viewer/CanvasOverlayAction";
 import { ResetMolvisDialog } from "@/components/viewer/ResetMolvisDialog";
 import { StructureInspector } from "@/components/viewer/StructureInspector";
 import { TrajectoryTimeline } from "@/components/viewer/TrajectoryTimeline";
@@ -31,7 +35,11 @@ import { BackendConnectionProvider } from "@/hooks/useBackendConnection";
 import { useBackendStateSync } from "@/hooks/useBackendStateSync";
 import { useIsNarrow } from "@/hooks/useIsNarrow";
 import { useMolvisUiState } from "@/hooks/useMolvisUiState";
-import { resolveChrome, useMountOpts } from "@/lib/mount-opts";
+import {
+  type MolvisSurface,
+  resolveChrome,
+  useMountOpts,
+} from "@/lib/mount-opts";
 import { cn } from "@/lib/utils";
 import {
   CommandPalette,
@@ -43,6 +51,7 @@ import {
   isSidePanelOpen,
   resolveViewerPanelLayout,
   SIDE_PANEL,
+  sidePanelMaxPct,
   sidePanelMinPct,
 } from "./lib/viewer-layout";
 import MolvisWrapper from "./MolvisWrapper";
@@ -63,12 +72,82 @@ const INLINE_PANEL_BREAKPOINT = 1280;
 const COARSE_POINTER_INLINE_PANEL_BREAKPOINT = 1580;
 
 /**
+ * Collapsed state of a side-panel slot, or `null` while the panel has not
+ * registered its constraints with the group yet.
+ *
+ * react-resizable-panels throws "Panel constraints not found" when the
+ * imperative handle is asked before a conditionally-mounted panel finishes
+ * registering (observed on the VS Code webview's first commit, where a
+ * persisted layout restores before the tools panel mounts). Callers treat
+ * `null` as "state unknown — skip this pass"; the next effect run converges.
+ */
+function slotCollapsed(slot: PanelImperativeHandle | null): boolean | null {
+  if (!slot) return null;
+  try {
+    return slot.isCollapsed();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Run an imperative panel mutation only when constraints are registered.
+ * `expand` / `resize` / `collapse` throw the same "Panel constraints not
+ * found" error as `isCollapsed` when called across the registration race.
+ */
+function withPanelSlot(
+  slot: PanelImperativeHandle | null,
+  run: (slot: PanelImperativeHandle) => void,
+): void {
+  if (!slot || slotCollapsed(slot) === null) return;
+  try {
+    run(slot);
+  } catch {
+    /* registration raced between the probe and the mutation — next pass */
+  }
+}
+
+export interface AppProps {
+  /**
+   * Called with the engine each time the viewer mounts one, and with `null`
+   * when it is torn down (viewer reload). Hosts that speak to the engine
+   * directly — the VS Code webview attaches its file/settings/save bridge
+   * here — need the instance the page itself created.
+   */
+  onAppChange?: (app: Molvis | null) => void;
+  /**
+   * Called when the user asks for a different surface from inside the canvas.
+   * The host owns the surface bit, so it must complete the round trip by
+   * calling `MountedApp.setOpts({ surface })` — without that write-back the
+   * affordance is inert. When no host supplies this, `mountMolvisApp`
+   * composes a local fallback that patches the store directly.
+   */
+  onSurfaceChange?: (surface: MolvisSurface) => void;
+  /**
+   * Offered a drag's workspace URIs before the viewer reads `dataTransfer`.
+   * Return `true` to claim it. See {@link MountHostOpts.onDropUris}.
+   */
+  onDropUris?: (uris: string[]) => boolean;
+  /**
+   * Test seam: replaces the 3D canvas so a test can assert layout and surface
+   * continuity without booting Babylon and a WebGL context. No production
+   * caller passes it; an injected canvas makes `reloadViewer` a no-op.
+   */
+  canvas?: ReactNode;
+}
+
+/**
  * Main page application shell for the MolVis viewer.
  *
  * When mounted with `surface: "canvas"`, all chrome is hidden and only the
  * 3D canvas is rendered (useful for embeds that supply their own UI).
  */
-const App: React.FC = () => {
+const App: React.FC<AppProps> = ({
+  onAppChange,
+  onSurfaceChange,
+  onDropUris,
+  canvas,
+}) => {
   const opts = useMountOpts();
   const chrome = resolveChrome(opts);
   const canvasOnly =
@@ -78,7 +157,13 @@ const App: React.FC = () => {
     !chrome.statusBar &&
     !chrome.timeline;
 
-  const [app, setApp] = useState<Molvis | null>(null);
+  const [app, setAppState] = useState<Molvis | null>(null);
+  const onAppChangeRef = useRef(onAppChange);
+  onAppChangeRef.current = onAppChange;
+  const setApp = useCallback((next: Molvis | null) => {
+    setAppState(next);
+    onAppChangeRef.current?.(next);
+  }, []);
 
   // Host-supplied canvas colour (`mv.Stage(background="#FFFFFF")` or
   // `?background=`). Applied once, when the engine hands us the app; the
@@ -87,7 +172,7 @@ const App: React.FC = () => {
     if (!app || !opts.background) return;
     app.setBackgroundColor(opts.background);
   }, [app, opts.background]);
-  const { currentMode, setCurrentMode, trajectoryLength } =
+  const { currentMode, setCurrentMode, trajectoryLength, trajectoryExtent } =
     useMolvisUiState(app);
 
   // Bind plugin runtime once the engine is ready; restore Settings plugins
@@ -123,7 +208,7 @@ const App: React.FC = () => {
   const reloadViewer = useCallback(() => {
     setApp(null);
     setViewerGeneration((n) => n + 1);
-  }, []);
+  }, [setApp]);
   const openCommandPalette = useCallback(() => {
     setCommandPaletteOpen(true);
   }, []);
@@ -146,6 +231,9 @@ const App: React.FC = () => {
    * between "too narrow to use" and "closed".
    */
   const railMinPct = sidePanelMinPct(shellWidth);
+  // Never the raw 30% cap: on a narrow shell that equals `railMinPct` and the
+  // splitter cannot move at all.
+  const railMaxPct = sidePanelMaxPct(shellWidth);
   /** Rendered rail width: closed stays closed, open honours the floor. */
   const openRailWidth = (pct: number) =>
     pct <= 0 ? 0 : Math.max(pct, railMinPct);
@@ -204,10 +292,9 @@ const App: React.FC = () => {
   // a blank column beside an invisible overlay.
   useEffect(() => {
     if (toolsInlineOpen || isNarrow || uiHidden || !chrome.rightSidebar) return;
-    const slot = toolsSlotRef.current;
-    if (slot && !slot.isCollapsed()) {
-      slot.collapse();
-    }
+    withPanelSlot(toolsSlotRef.current, (slot) => {
+      if (!slot.isCollapsed()) slot.collapse();
+    });
     applyOverlayWidth("tools", 0);
   }, [
     toolsInlineOpen,
@@ -227,14 +314,16 @@ const App: React.FC = () => {
         const width = Math.max(lastComputeWidthRef.current, railMinPct);
         setComputeWidthPct(width);
         applyOverlayWidth("compute", width);
-        if (slot) {
-          if (slot.isCollapsed()) slot.expand();
-          slot.resize(`${width}%`);
-        }
+        withPanelSlot(slot, (handle) => {
+          if (handle.isCollapsed()) handle.expand();
+          handle.resize(`${width}%`);
+        });
       } else {
         setComputeWidthPct(0);
         applyOverlayWidth("compute", 0);
-        if (slot && !slot.isCollapsed()) slot.collapse();
+        withPanelSlot(slot, (handle) => {
+          if (!handle.isCollapsed()) handle.collapse();
+        });
       }
     },
     [computeSlotRef, applyOverlayWidth, railMinPct],
@@ -248,14 +337,16 @@ const App: React.FC = () => {
         const width = Math.max(lastToolsWidthRef.current, railMinPct);
         setToolsWidthPct(width);
         applyOverlayWidth("tools", width);
-        if (slot) {
-          if (slot.isCollapsed()) slot.expand();
-          slot.resize(`${width}%`);
-        }
+        withPanelSlot(slot, (handle) => {
+          if (handle.isCollapsed()) handle.expand();
+          handle.resize(`${width}%`);
+        });
       } else {
         setToolsWidthPct(0);
         applyOverlayWidth("tools", 0);
-        if (slot && !slot.isCollapsed()) slot.collapse();
+        withPanelSlot(slot, (handle) => {
+          if (!handle.isCollapsed()) handle.collapse();
+        });
       }
     },
     [toolsSlotRef, applyOverlayWidth, railMinPct],
@@ -274,10 +365,14 @@ const App: React.FC = () => {
     computeSize: defaultComputeSize,
     canvasSize: defaultCanvasSize,
     toolsSize: defaultToolsSize,
-  } = resolveViewerPanelLayout({
-    showCompute: showInlineCompute,
-    showTools: showInlineTools,
-  });
+  } = useMemo(
+    () =>
+      resolveViewerPanelLayout({
+        showCompute: showInlineCompute,
+        showTools: showInlineTools,
+      }),
+    [showInlineCompute, showInlineTools],
+  );
   /**
    * Canvas floor for this row. {@link CANVAS_MIN_PCT} assumes rails at
    * {@link SIDE_PANEL.minPct}; when the 240px form floor pushes `railMinPct`
@@ -290,9 +385,10 @@ const App: React.FC = () => {
     100 -
       railMinPct * ((showInlineCompute ? 1 : 0) + (showInlineTools ? 1 : 0)),
   );
-  // Trajectory is a canvas HUD (P0), not status-bar chrome. Single-frame
-  // trajectories never show the strip. Fullscreen (uiHidden) still keeps it.
-  const showTimeline = chrome.timeline && app !== null && trajectoryLength > 1;
+  // Trajectory is a canvas HUD (P0), not status-bar chrome. Hide only a
+  // finished 1-frame structure — scanning (unknown N) must stay visible.
+  const showTimeline =
+    chrome.timeline && app !== null && trajectoryExtent.filmstripVisible;
   // P1: status is a canvas overlay, not a layout strip.
   const showStatusOverlay = !uiHidden && chrome.statusBar;
 
@@ -396,40 +492,6 @@ const App: React.FC = () => {
     [applyOverlayWidth, railMinPct, setLeftOpen, setRightOpen],
   );
 
-  if (canvasOnly) {
-    return (
-      <ErrorBoundary>
-        <BackendConnectionProvider
-          app={app}
-          initial={{
-            wsUrl: opts.wsUrl,
-            token: opts.token,
-            session: opts.session,
-          }}
-        >
-          <FormatPickerProvider>
-            <BondMappingPickerProvider>
-              <section
-                aria-label="MolVis molecular viewer"
-                className="relative h-full w-full bg-background overflow-hidden"
-                onContextMenu={(e) => e.preventDefault()}
-              >
-                <MolvisWrapper key={viewerGeneration} onMount={setApp} />
-              </section>
-              <StateSyncDialog
-                open={stateSync.pending !== null}
-                summary={stateSync.pending?.summary ?? null}
-                feedback={stateSync.feedback}
-                onKeepLocal={stateSync.keepLocal}
-                onApplyBackend={() => void stateSync.applyBackend()}
-              />
-            </BondMappingPickerProvider>
-          </FormatPickerProvider>
-        </BackendConnectionProvider>
-      </ErrorBoundary>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <BackendConnectionProvider
@@ -449,7 +511,7 @@ const App: React.FC = () => {
                 className="relative h-full w-full flex flex-col bg-background text-foreground overflow-hidden safe-area-shell"
                 onContextMenu={(e) => e.preventDefault()}
               >
-                {!uiHidden && <WeChatOpenBrowserBanner />}
+                {!uiHidden && !canvasOnly && <WeChatOpenBrowserBanner />}
 
                 {!uiHidden && chrome.topBar && (
                   <ViewerToolbar
@@ -477,7 +539,7 @@ const App: React.FC = () => {
                         collapsible
                         collapsedSize="0%"
                         minSize={`${railMinPct}%`}
-                        maxSize={`${SIDE_PANEL.maxPct}%`}
+                        maxSize={`${railMaxPct}%`}
                         aria-hidden="true"
                       />
                     )}
@@ -498,14 +560,32 @@ const App: React.FC = () => {
                       className="flex min-w-0 flex-col"
                     >
                       <div className="relative flex-1 overflow-hidden bg-canvas">
-                        <MolvisWrapper
-                          key={viewerGeneration}
-                          onMount={setApp}
-                        />
+                        {canvas ?? (
+                          <MolvisWrapper
+                            key={viewerGeneration}
+                            onMount={setApp}
+                            onDropUris={onDropUris}
+                          />
+                        )}
                         {uiHidden && <CameraTrajectoryOverlay app={app} />}
                         {uiHidden && (
-                          <ExitFullscreenAction
-                            onExit={() => setUiHidden(false)}
+                          <CanvasOverlayAction
+                            icon={<Minimize />}
+                            label="Exit fullscreen"
+                            onClick={() => setUiHidden(false)}
+                          />
+                        )}
+                        {/*
+                          Canvas surface has no chrome to click, so this is the
+                          only way back. Reporting-only: the host owns the bit
+                          and writes it back through `setOpts`. Without a
+                          handler there is nothing to ask, so nothing renders.
+                        */}
+                        {canvasOnly && !uiHidden && onSurfaceChange && (
+                          <CanvasOverlayAction
+                            icon={<PanelsTopLeft />}
+                            label="Show controls"
+                            onClick={() => onSurfaceChange("full")}
                           />
                         )}
                         {/*
@@ -536,6 +616,9 @@ const App: React.FC = () => {
                                   <TrajectoryTimeline
                                     app={app}
                                     totalFrames={trajectoryLength}
+                                    indexComplete={
+                                      trajectoryExtent.indexComplete
+                                    }
                                     compact={isNarrow}
                                   />
                                 </div>
@@ -563,7 +646,7 @@ const App: React.FC = () => {
                         collapsible
                         collapsedSize="0%"
                         minSize={`${railMinPct}%`}
-                        maxSize={`${SIDE_PANEL.maxPct}%`}
+                        maxSize={`${railMaxPct}%`}
                         aria-hidden="true"
                       />
                     )}
@@ -625,7 +708,9 @@ const App: React.FC = () => {
                   )}
                 </div>
 
-                <WorkbenchBottomPanel app={app} hidden={uiHidden} />
+                {!canvasOnly && (
+                  <WorkbenchBottomPanel app={app} hidden={uiHidden} />
+                )}
 
                 <PluginDialogHost app={app} />
 
@@ -644,10 +729,12 @@ const App: React.FC = () => {
                   onCleared={reloadViewer}
                 />
 
-                <KeyboardShortcutsDialog
-                  open={shortcutsOpen}
-                  onOpenChange={setShortcutsOpen}
-                />
+                {!canvasOnly && (
+                  <KeyboardShortcutsDialog
+                    open={shortcutsOpen}
+                    onOpenChange={setShortcutsOpen}
+                  />
+                )}
 
                 <StateSyncDialog
                   open={stateSync.pending !== null}

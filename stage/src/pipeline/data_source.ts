@@ -3,32 +3,10 @@ import { frameToTrajectory, type Trajectory } from "../system/trajectory";
 import type { PipelineEntry } from "./entry";
 
 /**
- * Discriminator for a {@link DataSource}'s **acquisition** method — where its
- * data comes from, not what shape it has (every source exposes a unified
- * {@link Trajectory}; a single frame is a length-1 trajectory).
- *
- * - `file` — backed by a parsed / lazy / streaming {@link Trajectory}
- *   ({@link FileDataSource}).
- * - `memory` — an in-memory single {@link Frame} wrapped as a length-1
- *   trajectory ({@link MemoryDataSource}); broadcasts across the timeline.
- * - `stream` — a trajectory that grows from a live socket
- *   ({@link StreamDataSource}).
- *
- * This union previously also carried `ssh` and `http` as reserved kinds with
- * no subclass behind them. They were deleted rather than implemented: neither
- * described an acquisition this class hierarchy does not already cover.
- * Fetching a remote file yields a `Trajectory` like any other, and
- * {@link FileDataSource} accepts any trajectory whatever built it — so `http`
- * was a transport detail masquerading as a kind. Add a member here only
- * alongside the subclass that answers to it.
- */
-export type DataSourceKind = "file" | "memory" | "stream";
-
-/**
  * Category label shared by all {@link DataSource} subclasses. Used as a stable
- * discriminator in serialized pipeline snapshots (see
- * `BackendStateSyncPipelineEntry`) — never use this string to branch on
- * behaviour; check `instanceof DataSource` or the `kind` field instead.
+ * type name in serialized pipeline snapshots. Branch on
+ * `instanceof FileDataSource` / `MemoryDataSource` / `StreamDataSource`,
+ * never on a string discriminator.
  */
 export const DATA_SOURCE_CATEGORY = "Data Source";
 
@@ -50,9 +28,6 @@ export const DATA_SOURCE_CATEGORY = "Data Source";
  * trajectory), {@link MemoryDataSource} (a single in-memory frame).
  */
 export abstract class DataSource implements PipelineEntry {
-  /** Acquisition discriminator. See {@link DataSourceKind}. */
-  abstract readonly kind: DataSourceKind;
-
   /** Whether this source contributes to composition. */
   public enabled = true;
 
@@ -156,8 +131,6 @@ function applyOptions(ds: DataSource, options: DataSourceOptions): void {
  * trajectory is consulted lazily — constructing the source pulls no frames.
  */
 export class FileDataSource extends DataSource {
-  readonly kind = "file" as const;
-
   private readonly _trajectory: Trajectory;
   private _cached: Frame | null = null;
 
@@ -173,7 +146,11 @@ export class FileDataSource extends DataSource {
   }
 
   get frameCount(): number {
-    return this._trajectory.length;
+    return this._trajectory.length ?? this._trajectory.indexedLength;
+  }
+
+  get indexComplete(): boolean {
+    return this._trajectory.indexComplete;
   }
 
   async getFrame(index: number): Promise<Frame> {
@@ -181,9 +158,9 @@ export class FileDataSource extends DataSource {
   }
 
   async preload(index: number): Promise<void> {
-    if (index < 0 || index >= this._trajectory.length) {
+    if (index < 0 || index >= this._trajectory.indexedLength) {
       throw new Error(
-        `FileDataSource ${this.id}: frame index ${index} out of range [0, ${this._trajectory.length})`,
+        `FileDataSource ${this.id}: frame index ${index} out of range [0, ${this._trajectory.indexedLength})`,
       );
     }
     this._cached = await this._trajectory.frame(index);
@@ -241,8 +218,6 @@ export class FileDataSource extends DataSource {
  * it across the timeline when combined with longer sources.
  */
 export class MemoryDataSource extends DataSource {
-  readonly kind = "memory" as const;
-
   private readonly _frame: Frame;
   private readonly _trajectory: Trajectory;
   /** Set by {@link dispose}; accessors must not touch freed WASM. */

@@ -4,7 +4,7 @@ import {
   type BondCriterion,
   ComputeBondsModifier,
 } from "../modifiers/ComputeBondsModifier";
-import { WrapPBCModifier } from "../modifiers/WrapPBCModifier";
+import { DrawBondModifier } from "../pipeline/draw_bond";
 import { ContextMenuController } from "../ui/menus/controller";
 import { BaseMode, ModeType } from "./base";
 import { CommonMenuItems } from "./menu_items";
@@ -34,12 +34,8 @@ class ViewModeContextMenu extends ContextMenuController {
     const items: MenuItem[] = [];
 
     const header = hit ? CommonMenuItems.hitLabel(hit) : null;
-    if (header) {
-      items.push(header);
-      items.push(CommonMenuItems.separator());
-    }
+    if (header) items.push(header);
 
-    // Hit atom/bond → select that entity.
     if (hit?.type === "atom") {
       const atomId = hit.metadata.atomId;
       items.push(
@@ -62,10 +58,12 @@ class ViewModeContextMenu extends ContextMenuController {
       );
     }
 
+    if (items.length > 0) items.push(CommonMenuItems.separator());
     items.push(CommonMenuItems.fitCamera(this.app));
 
     const bondingOn = this.mode.isDynamicBondingEnabled();
-    const criterion = this.mode.getBondingCriterion();
+    // Criterion radios stay unchecked while Dynamic Bond is off (default).
+    const criterion = bondingOn ? this.mode.getBondingCriterion() : null;
     const canCovalent = this.mode.canUseCovalentBonding();
     items.push(
       CommonMenuItems.submenu("Dynamic Bond", [
@@ -77,30 +75,25 @@ class ViewModeContextMenu extends ContextMenuController {
           "Covalent",
           criterion === "covalent",
           () => {
-            if (canCovalent) this.mode.setBondingCriterion("covalent");
+            if (!canCovalent) return;
+            if (!bondingOn) this.mode.setDynamicBondingEnabled(true);
+            this.mode.setBondingCriterion("covalent");
           },
           { disabled: !canCovalent },
         ),
         CommonMenuItems.toggle("Distance", criterion === "distance", () => {
+          if (!bondingOn) this.mode.setDynamicBondingEnabled(true);
           this.mode.setBondingCriterion("distance");
         }),
       ]),
+      CommonMenuItems.toggle("Wrap PBC", this.app.wrapEnabled, () => {
+        this.app.setWrapEnabled(!this.app.wrapEnabled);
+        void this.app.applyPipeline({ fullRebuild: true });
+      }),
+      CommonMenuItems.toggle("Grid", this.mode.isGridEnabled(), () => {
+        this.mode.setGridEnabled(!this.mode.isGridEnabled());
+      }),
     );
-
-    const gridEnabled = this.mode.isGridEnabled();
-    const pbcEnabled = this.mode.isPbcEnabled();
-    items.push(
-      CommonMenuItems.submenu("Display", [
-        CommonMenuItems.toggle("Grid", gridEnabled, () => {
-          this.mode.setGridEnabled(!gridEnabled);
-        }),
-        CommonMenuItems.toggle("Wrap PBC", pbcEnabled, () => {
-          this.mode.setPbcEnabled(!pbcEnabled);
-        }),
-      ]),
-    );
-
-    items.push(CommonMenuItems.separator());
     return CommonMenuItems.appendCommonTail(items, this.app);
   }
 }
@@ -162,45 +155,6 @@ class ViewMode extends BaseMode {
     });
   }
 
-  public isPbcEnabled(): boolean {
-    for (const modifier of this.getWrapPbcModifiers()) {
-      if (modifier.enabled) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public setPbcEnabled(enabled: boolean): void {
-    const pipeline = this.app.modifierPipeline;
-    const modifiers = this.getWrapPbcModifiers();
-
-    if (enabled) {
-      if (modifiers.length === 0) {
-        pipeline.addModifier(new WrapPBCModifier(`wrap-pbc-${Date.now()}`));
-      } else {
-        for (const modifier of modifiers) {
-          modifier.enabled = true;
-        }
-      }
-    } else {
-      for (const modifier of modifiers) {
-        modifier.enabled = false;
-      }
-    }
-
-    void this.app.applyPipeline({ fullRebuild: true });
-  }
-
-  private getWrapPbcModifiers(): WrapPBCModifier[] {
-    return this.app.modifierPipeline
-      .modifiers()
-      .filter(
-        (modifier): modifier is WrapPBCModifier =>
-          modifier instanceof WrapPBCModifier,
-      );
-  }
-
   // ---- Dynamic bonding -----------------------------------------------------
 
   public isDynamicBondingEnabled(): boolean {
@@ -224,6 +178,9 @@ class ViewMode extends BaseMode {
         // addModifier auto-positions a TransformsData-only modifier before the
         // first Draw modifier, so the perceived bonds reach DrawBond.
         pipeline.addModifier(mod);
+        if (!pipeline.modifiers().some((m) => m instanceof DrawBondModifier)) {
+          pipeline.addModifier(new DrawBondModifier());
+        }
       } else {
         for (const modifier of modifiers) modifier.enabled = true;
       }

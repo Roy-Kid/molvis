@@ -10,8 +10,16 @@
  * and lifecycle so every heavy molrs job can stay off the UI thread.
  */
 
-export type { WorkloadHostOptions, WorkloadRunOptions } from "./host";
-export { createWorkloadSingleton, WorkloadHost } from "./host";
+export type {
+  WorkloadHostOptions,
+  WorkloadJobTicket,
+  WorkloadRunOptions,
+} from "./host";
+export {
+  createWorkloadSingleton,
+  WorkloadCancelledError,
+  WorkloadHost,
+} from "./host";
 export type {
   WorkloadRequest,
   WorkloadResponse,

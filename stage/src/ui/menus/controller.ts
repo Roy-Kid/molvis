@@ -73,16 +73,9 @@ export abstract class ContextMenuController {
     }
 
     ev.preventDefault();
-
-    const shown = this.host.show(
-      ev.clientX,
-      ev.clientY,
-      this.buildMenuItems(hit),
-      {
-        hit,
-      },
-    );
-    return shown;
+    return this.host.show(ev.clientX, ev.clientY, this.buildMenuItems(hit), {
+      hit,
+    });
   }
 
   public show(x: number, y: number, items: MenuItem[]): void {

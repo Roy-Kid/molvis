@@ -39,6 +39,17 @@ export {
   type SpatialNeighborQueryOptions,
 } from "./algo/neighbor_list";
 export {
+  type ChannelStats,
+  channelStats,
+  gridChannels,
+  hasMeshableGrid,
+} from "./algo/surface/grid_field";
+export type {
+  SurfaceMesh,
+  SurfacePart,
+  SurfaceRole,
+} from "./algo/surface_mesh";
+export {
   AnalysisAbortError,
   type AnalysisAtomSelection,
   type AnalysisAvailability,
@@ -168,12 +179,6 @@ export {
   Tab10Strategy,
 } from "./artist/categorical_theme";
 export {
-  DEFAULT_ISOSURFACE_STYLE,
-  type IsosurfaceRenderMode,
-  type IsosurfaceStyle,
-  type SurfaceStyle,
-} from "./artist/isosurface/isosurface_renderer";
-export {
   DEFAULT_LABEL_CONFIG,
   type LabelConfig,
   type LabelMode,
@@ -228,6 +233,16 @@ export type {
 } from "./artist/ribbon/ribbon_style";
 export type { CategoricalThemeId } from "./artist/style_manager";
 export {
+  DEFAULT_SURFACE_DRAW_STYLE,
+  type SurfaceDrawStyle,
+  type SurfaceFinish,
+} from "./artist/surface/surface_mesh_renderer";
+export {
+  DEFAULT_VOLUME_CLOUD_STYLE,
+  type VolumeCloudStyle,
+} from "./artist/surface/volume_cloud_renderer";
+export { type AtomTypeSource, readAtomTypeKeys } from "./atom_type";
+export {
   CameraAnimator,
   type TurntableOptions,
   type TurntableSpec,
@@ -272,7 +287,7 @@ export {
   RemoveOverlayCommand,
   UpdateOverlayCommand,
 } from "./commands/overlays";
-export { warmComputeWorker } from "./compute";
+export { disposeComputeRuntime, warmComputeWorker } from "./compute";
 export type { ContextMenuBuildContext, ContextMenuConfig } from "./config";
 export {
   DEFAULT_CONFIG,
@@ -281,16 +296,11 @@ export {
   type MolvisConfig,
 } from "./config";
 export {
-  applyCoordinatePolicy,
-  COORDINATE_POLICIES,
-  COORDINATE_POLICY_LABELS,
-  type CoordinatePolicy,
+  applyWrapIfEnabled,
   frameWithCoords,
-  isCoordinatePolicy,
   type UnwrapState,
   wrapAtoms,
-  wrapMoleculeAware,
-  wrapMolecules,
+  wrapEnabledFromLegacy,
 } from "./coords";
 export {
   type AtomRow,
@@ -356,7 +366,6 @@ export {
   ComputeBondsModifier,
 } from "./modifiers/ComputeBondsModifier";
 export { ComputePropertyModifier } from "./modifiers/ComputePropertyModifier";
-export { ConstructSurfaceMeshModifier } from "./modifiers/ConstructSurfaceMeshModifier";
 export { CoordinationPolyhedraModifier } from "./modifiers/CoordinationPolyhedraModifier";
 export { DeleteSelectedModifier } from "./modifiers/DeleteSelectedModifier";
 export {
@@ -375,8 +384,23 @@ export { FreezePropertyModifier } from "./modifiers/FreezePropertyModifier";
 export { HideHydrogensModifier } from "./modifiers/HideHydrogensModifier";
 export { HideSelectionModifier } from "./modifiers/HideSelectionModifier";
 export { InvertSelectionModifier } from "./modifiers/InvertSelectionModifier";
+export {
+  type AlphaShapeParams,
+  DEFAULT_ALPHA_PARAMS,
+  DEFAULT_GAUSSIAN_PARAMS,
+  DEFAULT_SOLVENT_PARAMS,
+  type GaussianSurfaceParams,
+  isMeshAlgorithm,
+  MAX_ALPHA_SHAPE_ATOMS,
+  type MeshAlgorithm,
+  MolecularSurfaceModifier,
+  type SolventSurfaceParams,
+  type SurfaceAlgorithm,
+  type SurfaceReport,
+} from "./modifiers/MolecularSurfaceModifier";
 export { RadiusOfGyrationModifier } from "./modifiers/RadiusOfGyrationModifier";
 export { ReplicateModifier } from "./modifiers/ReplicateModifier";
+export { SelectMaskModifier } from "./modifiers/SelectMaskModifier";
 export {
   ClearSelectionModifier,
   SelectModifier,
@@ -482,6 +506,13 @@ export type {
 export { VectorFieldOverlay } from "./overlays/vector_field";
 export { ModifierPipeline, PipelineEvents } from "./pipeline";
 export { applyAutoAttach } from "./pipeline/auto_attach";
+export {
+  type BondColumnMapping,
+  BondColumnRemapModifier,
+  bondsIntegerColumns,
+  bondsNeedColumnMapping,
+  inferBondColumnMapping,
+} from "./pipeline/bond_column_remap";
 // COM_ANALYSIS_ID / RG_ANALYSIS_ID are declared once in
 // `./analysis/analysis_ids` — the import-free id table — and reach the public
 // surface through `cluster_pipeline`, which also owns the two predicates over
@@ -506,7 +537,6 @@ export {
 export {
   DATA_SOURCE_CATEGORY,
   DataSource,
-  type DataSourceKind,
   type DataSourceOptions,
   FileDataSource,
   MemoryDataSource,
@@ -517,8 +547,8 @@ export {
   DrawBoxModifier,
   type DrawBoxSpec,
 } from "./pipeline/draw_box";
-export { DrawIsosurfaceModifier } from "./pipeline/draw_isosurface";
 export { DrawRibbonModifier } from "./pipeline/draw_ribbon";
+export { DrawSurfaceModifier } from "./pipeline/draw_surface";
 export {
   bootstrapEmptyPipeline,
   createEmptyPrimaryDataSource,
@@ -528,7 +558,8 @@ export {
   primaryDataSource,
 } from "./pipeline/empty_scene";
 export type { PipelineEntry } from "./pipeline/entry";
-export { GaussianDensitySurfaceModifier } from "./pipeline/gaussian_density_surface";
+export { IsosurfaceModifier } from "./pipeline/isosurface";
+export { MeshOverlayModifier } from "./pipeline/mesh_overlay";
 export type { Modifier } from "./pipeline/modifier";
 export {
   BaseModifier,
@@ -556,6 +587,7 @@ export {
 } from "./pipeline/stream_data_source";
 export type { PipelineContext } from "./pipeline/types";
 export { SelectionMask } from "./pipeline/types";
+export { VolumeCloudModifier } from "./pipeline/volume_cloud";
 export {
   isNamespacedPluginId,
   namespacePluginId,
@@ -587,6 +619,14 @@ export {
   simplifyPolyline,
 } from "./selection/fence";
 export {
+  MASK_FILE_ACCEPT,
+  MASK_FILE_EXTENSION,
+  type MaskFileParseResult,
+  MaskFileSyntaxError,
+  parseMaskFile,
+  serializeMaskFile,
+} from "./selection/mask_file";
+export {
   parseSelectionKey,
   SelectionManager,
   type SelectionState,
@@ -609,13 +649,12 @@ export {
   generate3D,
   Perceive,
   parseSMILES,
-  RecordReader,
   SDFReader,
   Trajectory,
+  TrajectoryReader,
   WasmArray,
   WasmKMeans,
   WasmPca2,
-  WasmPcaResult,
 } from "./system/index";
 export {
   type CompositionSource,

@@ -1,4 +1,5 @@
 import type { Vector3 } from "@babylonjs/core";
+import { toRowIndex } from "@molcrafts/molvis-core";
 
 /** Atom coordinate columns, as handed out by `Block.viewColF`. */
 export interface AtomCoords {
@@ -118,15 +119,15 @@ export class BondPlaneFrame {
 
   /** Build from a bonds block's endpoint columns. */
   public static build(
-    atomi: ArrayLike<number>,
-    atomj: ArrayLike<number>,
+    atomi: ArrayLike<number | bigint>,
+    atomj: ArrayLike<number | bigint>,
     atomCount: number,
   ): BondPlaneFrame {
     const bondCount = atomi.length;
     const rowStart = new Uint32Array(atomCount + 1);
     for (let b = 0; b < bondCount; b++) {
-      const i = atomi[b];
-      const j = atomj[b];
+      const i = toRowIndex(atomi[b]);
+      const j = toRowIndex(atomj[b]);
       if (i === j || i >= atomCount || j >= atomCount) continue;
       rowStart[i + 1]++;
       rowStart[j + 1]++;
@@ -136,8 +137,8 @@ export class BondPlaneFrame {
     const neighbors = new Uint32Array(rowStart[atomCount]);
     const cursor = rowStart.slice(0, atomCount);
     for (let b = 0; b < bondCount; b++) {
-      const i = atomi[b];
-      const j = atomj[b];
+      const i = toRowIndex(atomi[b]);
+      const j = toRowIndex(atomj[b]);
       if (i === j || i >= atomCount || j >= atomCount) continue;
       neighbors[cursor[i]++] = j;
       neighbors[cursor[j]++] = i;

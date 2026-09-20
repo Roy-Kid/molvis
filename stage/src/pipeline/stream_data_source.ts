@@ -49,7 +49,6 @@ export interface StreamDataSourceOptions extends DataSourceOptions {
  * tail, which is what a live view does, is unaffected either way.
  */
 export class StreamDataSource extends DataSource {
-  readonly kind = "stream" as const;
   readonly mode: StreamMode = "dial";
 
   private readonly _trajectory = new Trajectory();
@@ -82,7 +81,7 @@ export class StreamDataSource extends DataSource {
   }
 
   get frameCount(): number {
-    return this._trajectory.length;
+    return this._trajectory.indexedLength;
   }
 
   /** See the class doc: `index` addresses the retained window. */
@@ -91,9 +90,9 @@ export class StreamDataSource extends DataSource {
   }
 
   async preload(index: number): Promise<void> {
-    if (index < 0 || index >= this._trajectory.length) {
+    if (index < 0 || index >= this._trajectory.indexedLength) {
       throw new Error(
-        `StreamDataSource ${this.id}: frame index ${index} out of the retained window [0, ${this._trajectory.length})`,
+        `StreamDataSource ${this.id}: frame index ${index} out of the retained window [0, ${this._trajectory.indexedLength})`,
       );
     }
     this._cached = await this._trajectory.frame(index);
@@ -120,12 +119,12 @@ export class StreamDataSource extends DataSource {
   push(frame: Frame, box?: Box): number {
     this._trajectory.addFrame(frame, box);
     if (this._maxFrames > 0) {
-      while (this._trajectory.length > this._maxFrames) {
+      while (this._trajectory.indexedLength > this._maxFrames) {
         this._trajectory.dropOldestFrame();
         this.evicted++;
       }
     }
-    return this._trajectory.length - 1;
+    return this._trajectory.indexedLength - 1;
   }
 
   /**

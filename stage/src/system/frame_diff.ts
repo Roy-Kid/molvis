@@ -1,7 +1,20 @@
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { DType } from "../utils/dtype";
+import { occupiedAtomCountForFrame } from "./occupancy";
+import type { SectionUpdates } from "./trajectory";
 
 export type FrameUpdateKind = "position" | "bond" | "full";
+
+/**
+ * Store-index view of a transition: the {@link SectionUpdates} of the
+ * previous and next frames, when the trajectory's provider keeps one
+ * (`Trajectory.sectionUpdates`). Either side missing disables the index
+ * path and the classifier compares values.
+ */
+export interface SectionUpdateTransition {
+  previous: SectionUpdates | undefined;
+  next: SectionUpdates | undefined;
+}
 
 export interface FrameTransitionDecision {
   kind: FrameUpdateKind;
@@ -26,8 +39,8 @@ function decision(
 }
 
 function equalNumberArray(
-  left: Float32Array | Uint32Array,
-  right: Float32Array | Uint32Array,
+  left: Float32Array | Uint32Array | BigUint64Array,
+  right: Float32Array | Uint32Array | BigUint64Array,
 ): boolean {
   if (left.length !== right.length) return false;
   for (let i = 0; i < left.length; i++) {
@@ -78,6 +91,14 @@ function compareOptionalElement(
   return equalStringArray(left, right);
 }
 
+function occupiedCount(frame: Frame, atoms: Block, n: number): number | null {
+  const x = atoms.viewColF?.("x");
+  const y = atoms.viewColF?.("y");
+  const z = atoms.viewColF?.("z");
+  if (!x || !y || !z || x.length < n) return null;
+  return occupiedAtomCountForFrame(frame, x, y, z, n);
+}
+
 function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
   const leftI = leftBonds.viewColU32("atomi");
   const leftJ = leftBonds.viewColU32("atomj");
@@ -101,15 +122,58 @@ function hasSameBondTopology(leftBonds: Block, rightBonds: Block): boolean {
 
   const count = leftBonds.nrows();
   for (let i = 0; i < count; i++) {
-    if ((leftType?.[i] ?? 0) !== (rightType?.[i] ?? 0)) return false;
-    if ((leftNumber?.[i] ?? 0) !== (rightNumber?.[i] ?? 0)) return false;
+    if ((leftType?.[i] ?? 0n) !== (rightType?.[i] ?? 0n)) return false;
+    if ((leftNumber?.[i] ?? 0n) !== (rightNumber?.[i] ?? 0n)) return false;
   }
   return true;
+}
+
+/**
+ * Index-driven verdict for a transition whose provider exposes molrec section
+ * update ids. `null` when either side has no index.
+ *
+ * Every block section (atoms included) is a CSR update list in the store: a
+ * frame resolves to the latest update at or before it, and bit-identical
+ * content earns no new update. So an unchanged id proves identical rows
+ * without touching a value, while a changed id on any topology section
+ * (bonds, angles, …) or a section appearing / disappearing is a rebuild. The
+ * atoms section bumps whenever positions move, so its id says nothing by
+ * itself; the caller still runs the O(1) row-count and the occupancy guards
+ * before consulting this.
+ *
+ * Assumption pinned here: within a run, an atoms update changes coordinates
+ * and per-frame scalars, not identity columns (`element`). A store that
+ * rewrites identity per frame must be replayed with Create bonds on.
+ */
+function classifyBySectionUpdates(
+  previous: SectionUpdates,
+  next: SectionUpdates,
+): { kind: "position" | "full"; reason: string } | null {
+  if (previous.size !== next.size) {
+    return { kind: "full", reason: "Store index: block set changed" };
+  }
+  for (const [name, update] of next) {
+    const before = previous.get(name);
+    if (before === undefined) {
+      return { kind: "full", reason: `Store index: ${name} block appeared` };
+    }
+    if (name !== "atoms" && before !== update) {
+      return {
+        kind: "full",
+        reason: `Store index: ${name} block updated (${before} -> ${update})`,
+      };
+    }
+  }
+  return {
+    kind: "position",
+    reason: "Store index: topology blocks unchanged; only atoms updated",
+  };
 }
 
 export function classifyFrameTransition(
   previous: Frame | null,
   next: Frame,
+  updates?: SectionUpdateTransition,
 ): FrameTransitionDecision {
   const nextAtoms = next.getBlock("atoms");
   const nextAtomCount = nextAtoms?.nrows() ?? 0;
@@ -141,6 +205,44 @@ export function classifyFrameTransition(
       nextAtomCount,
       nextBondCount,
       `Atom count changed: ${prevAtomCount} -> ${nextAtomCount}`,
+    );
+  }
+
+  const occupancyChanged = (): boolean => {
+    const prevOcc = occupiedCount(previous, prevAtoms, prevAtomCount);
+    const nextOcc = occupiedCount(next, nextAtoms, nextAtomCount);
+    return prevOcc !== null && nextOcc !== null && prevOcc !== nextOcc;
+  };
+
+  // Index path first: skip the O(N) occupancy walk when the store already
+  // knows topology changed. Occupancy still runs when the index says
+  // "position" (molpack growth keeps nrows fixed).
+  if (updates?.previous && updates.next) {
+    const indexed = classifyBySectionUpdates(updates.previous, updates.next);
+    if (indexed) {
+      if (indexed.kind === "full") {
+        return decision("full", nextAtomCount, nextBondCount, indexed.reason);
+      }
+      if (occupancyChanged()) {
+        return decision(
+          "full",
+          nextAtomCount,
+          nextBondCount,
+          "Occupancy changed",
+        );
+      }
+      return decision("position", nextAtomCount, nextBondCount, indexed.reason);
+    }
+  }
+
+  if (occupancyChanged()) {
+    const prevOcc = occupiedCount(previous, prevAtoms, prevAtomCount);
+    const nextOcc = occupiedCount(next, nextAtoms, nextAtomCount);
+    return decision(
+      "full",
+      nextAtomCount,
+      nextBondCount,
+      `Occupancy changed: ${prevOcc} -> ${nextOcc}`,
     );
   }
 
@@ -210,4 +312,23 @@ export function classifyFrameTransition(
     nextBondCount,
     "Topology unchanged; position-only update",
   );
+}
+
+/**
+ * Playback `changeKind` after {@link classifyFrameTransition}.
+ *
+ * Create bonds rebuilds topology from the current coordinates. The
+ * classifier only sees `system.frame` (pre-perceive), so a growth
+ * trajectory with a stable atom count would otherwise stay on the
+ * position fast path and keep the last frame's GPU bonds — reverse
+ * play would not drop bonds or collapse the grown structure.
+ */
+export function resolvePlaybackChangeKind(
+  decision: FrameTransitionDecision,
+  perceiveBonds: boolean,
+): "position" | "full" {
+  // Opt-in Create bonds: the user asked for a fresh perceive every frame,
+  // so the GPU topology must rebuild with it. Default (off) stays cheap.
+  if (perceiveBonds) return "full";
+  return decision.kind === "position" ? "position" : "full";
 }

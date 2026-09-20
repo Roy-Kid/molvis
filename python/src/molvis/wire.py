@@ -16,14 +16,15 @@ dtype from what the JSON happened to look like, so whole-number coordinates
 became ``u32`` and the atoms disappeared. Here the dtype of a canonical field is
 decided once, by molrs, and stated explicitly on the wire.
 
-The four wire dtypes are the ones molrs-wasm can round-trip:
+The five wire dtypes are the ones molrs-wasm can round-trip:
 
 ===========  =====================  ==================
 wire dtype   numpy                  molrs-wasm setter
 ===========  =====================  ==================
 ``f64``      ``float64``            ``setColF``
 ``i32``      ``int32``              ``setColI32``
-``u32``      ``uint32``             ``setColU32``
+``u64``      ``uint64``             ``setColU32`` (Idx)
+``u32``      ``uint32``             promoted / legacy
 ``string``   ``str`` objects        ``setColStr``
 ===========  =====================  ==================
 
@@ -59,7 +60,7 @@ __all__ = [
     "resolve_buffers",
 ]
 
-WireDType = Literal["f64", "i32", "u32", "string"]
+WireDType = Literal["f64", "i32", "u64", "u32", "string"]
 
 #: Marker key identifying a binary-buffer reference inside a JSON payload.
 #: Matches ``BUFFER_REF_MARKER`` in ``stage/src/transport/rpc/wire.ts``.
@@ -87,7 +88,7 @@ def _wire_dtype_from_schema(kind: str) -> WireDType | None:
     if kind == "float":
         return "f64"
     if kind == "uint":
-        return "u32"
+        return "u64"
     if kind == "int":
         return "i32"
     if kind == "string":
@@ -171,6 +172,7 @@ def canonical_dtype(key: str) -> WireDType | None:
 
 _I32_MIN, _I32_MAX = -(2**31), 2**31 - 1
 _U32_MAX = 2**32 - 1
+_U64_MAX = 2**64 - 1
 
 
 def _observed_dtype(array: np.ndarray, key: str) -> WireDType:
@@ -182,7 +184,7 @@ def _observed_dtype(array: np.ndarray, key: str) -> WireDType:
         # molrs-wasm has no bool setter; widen here so the caller can see it.
         return "u32"
     if kind == "u":
-        return "u32"
+        return "u64" if array.dtype.itemsize >= 8 else "u32"
     if kind == "i":
         return "i32"
     if kind in ("U", "S"):
@@ -221,6 +223,11 @@ def _cast(array: np.ndarray, dtype: WireDType, key: str) -> np.ndarray | list[st
 
     if flat.size:
         low, high = int(flat.min()), int(flat.max())
+        if dtype == "u64" and (low < 0 or high > _U64_MAX):
+            raise WireError(
+                f"column {key!r} must be u64 (molrs stores identity unsigned) but "
+                f"holds values in [{low}, {high}]"
+            )
         if dtype == "u32" and (low < 0 or high > _U32_MAX):
             raise WireError(
                 f"column {key!r} must be u32 (molrs stores it unsigned) but "
@@ -231,7 +238,11 @@ def _cast(array: np.ndarray, dtype: WireDType, key: str) -> np.ndarray | list[st
                 f"column {key!r} must be i32 but holds values in [{low}, {high}]"
             )
 
-    return flat.astype(np.uint32 if dtype == "u32" else np.int32, copy=False)
+    if dtype == "u64":
+        return flat.astype(np.uint64, copy=False)
+    if dtype == "u32":
+        return flat.astype(np.uint32, copy=False)
+    return flat.astype(np.int32, copy=False)
 
 
 def _encode_column(key: str, values: Any) -> tuple[WireDType, np.ndarray | list[str]]:
@@ -424,7 +435,12 @@ def encode_box(box: Any, *, carrier: Any = None) -> dict[str, Any]:
 # Decoding — wire → molpy
 # ---------------------------------------------------------------------------
 
-_NUMPY_BY_DTYPE = {"f64": np.float64, "i32": np.int32, "u32": np.uint32}
+_NUMPY_BY_DTYPE = {
+    "f64": np.float64,
+    "i32": np.int32,
+    "u64": np.uint64,
+    "u32": np.uint32,
+}
 
 
 def _decode_column(path: str, column: Any, buffers: Sequence[Any]) -> np.ndarray:

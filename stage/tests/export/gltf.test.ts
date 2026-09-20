@@ -2,6 +2,7 @@ import { NullEngine } from "@babylonjs/core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
+import { toDomainUint } from "@molcrafts/molvis-core";
 import { exportFrameToGLB } from "../../src/export/gltf";
 
 /** A minimal C–O frame with one bond. */
@@ -14,8 +15,8 @@ function makeFrame(): Frame {
   atoms.setColStr("element", ["C", "O"]);
   frame.insertBlock("atoms", atoms);
   const bonds = new Block();
-  bonds.setColU32("atomi", new Uint32Array([0]));
-  bonds.setColU32("atomj", new Uint32Array([1]));
+  bonds.setColU32("atomi", toDomainUint([0]));
+  bonds.setColU32("atomj", toDomainUint([1]));
   frame.insertBlock("bonds", bonds);
   return frame;
 }

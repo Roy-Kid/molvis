@@ -23,6 +23,7 @@ interface TrajectoryPlaybackControlsProps {
   onTogglePlayback: () => void;
   onNextFrame: () => void;
   onLastFrame: () => void;
+  lastFrameLabel?: string;
 }
 
 function TransportButton({
@@ -90,6 +91,7 @@ export function TrajectoryPlaybackControls({
   onTogglePlayback,
   onNextFrame,
   onLastFrame,
+  lastFrameLabel = "Last frame",
 }: TrajectoryPlaybackControlsProps) {
   const speedLabel = formatSpeedLabel(speed);
   const icon = "size-3.5 shrink-0";
@@ -152,7 +154,7 @@ export function TrajectoryPlaybackControls({
       </TransportButton>
       {!compact && (
         <TransportButton
-          label="Last frame"
+          label={lastFrameLabel}
           disabled={disabled}
           onClick={onLastFrame}
         >

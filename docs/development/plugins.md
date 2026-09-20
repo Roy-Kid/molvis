@@ -119,7 +119,7 @@ CDN/release URLs. Users install the **repo**, not this file’s path.
   "id": "com.example.my-plugin",
   "name": "My Plugin",
   "version": "0.2.0",
-  "molvis": ">=0.2.0",
+  "molvis": ">=0.3.0",
   "entry": "dist/plugin.js"
 }
 ```

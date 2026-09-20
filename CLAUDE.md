@@ -93,19 +93,38 @@ sidebar design language) was intentionally not re-embedded here; repopulate
 `.claude/notes/architecture.md` via `/mol:map`, or recover specifics from git
 history (the commit immediately before the harness rebuild).
 
+- **PBC wrap single gate** — after compose, only `wrapEnabled` may fold atom
+  columns (`Box.wrap` via `applyWrapIfEnabled`). Bonds / ribbon are not wrap
+  objects; cross-boundary continuity is draw-time `Box.delta(MI)` only.
+  Do not reintroduce molecule-aware column rewrites or a second Wrap
+  modifier path. Details: `.claude/notes/open-questions.md` (coordinate wrap).
 - **Immutability** — every data transform returns a new object; never mutate in
   place.
 - **Command `do()`/`undo()` symmetry** — every reversible operation captures the
   state needed to fully reverse it.
 - **Pipeline is the single scene-data ingress** — never bypass the head
-  `DataSourceModifier` when loading; both GUI and RPC paths funnel through it, or
+  `DataSource` when loading; both GUI and RPC paths funnel through it, or
   downstream modifiers (selection, hide, color) never see the new frame.
+  A DataSource **subclass** converts a source into `Trajectory`/`Frame`.
+  There is no `DataSourceKind`. SSH/HTTP are host transports, not source
+  types, and they are not MolRS concepts. Details:
+  `.claude/notes/notes.md` (datasource-no-kind).
+- **MolRS owns trajectory streaming** — frame index + one-frame decode
+  live only in MolRS. Hosts supply byte ranges. Do not reimplement a
+  format scanner in page / vsc-ext / Python. `.molidx` is only a cache
+  of MolRS `FrameIndexEntry[]`. Details: `.claude/notes/notes.md`
+  (molrs-traj-streaming).
+- **VS Code trajectory worker WASM is posted, never fetched** — main thread
+  fetches worker.js + wasm; blob worker inlines the script and instantiates
+  from `postMessage` bytes. Never `new Worker(cdnUrl)`, never worker-side
+  `fetch`/`import()` of vscode-cdn or blob wasm. Details:
+  `.claude/notes/notes.md` (webview-worker-wasm).
 - **Pipeline path** — open/reset: empty pipeline + length-1 `System.trajectory`.
   User adds Source(s) via Open / Add source / Stream; compose with zero sources
   is empty Frame. Ingress is still `DataSource(s) → compose → transforms → draws`
   when sources exist. See `.claude/notes/notes.md` and `empty_scene.ts`.
 - **`changeKind` decides buffer-update vs rebuild** — `classifyFrameTransition`
-  (`stage/src/app.ts:999`) compares the incoming frame against
+  (`stage/src/system/frame_diff.ts`) compares the incoming frame against
   `_lastRenderedFrame` and threads `changeKind: "position" | "full"` into
   `PipelineContext`. A `"position"` pass is buffer-update-only: it must never
   call `sceneIndex.registerFrame()` or recreate `ImpostorState`. Only `"full"`
@@ -121,6 +140,22 @@ history (the commit immediately before the harness rebuild).
   do **not** clobber live canvas selection. Pushing live selection into the
   pipeline auto-commits a dirty scene first. Details:
   `.claude/notes/canvas-sceneindex.md`.
+- **Topology lifetime belongs to the pass** — `SceneIndex.topology` is reset
+  once per full rebuild in `MolvisApp.applyPipeline`, before any Draw runs.
+  A layer's `register*Frame` must never reset it: draw order follows the
+  pipeline (Bonds auto-attaches ahead of Particles), so a layer that clears
+  wipes whichever half registered first and every `getBondsForAtom` /
+  `incident` answer goes empty. Details: `.claude/notes/notes.md` (编辑/绘制
+  路径的四条规则).
+- **`changeKind` is carried, never re-derived** — `frame-rendered` ships the
+  pass's own verdict. A consumer that caches per-topology must read it; a
+  row-count comparison cannot see an equal-count topology swap and serves a
+  stale result. Same note.
+- **Edit-pool meta is copy-on-write** — entering Edit mode promotes render
+  indices only. Meta stays on the frame source with edits as an overlay and
+  deletions as tombstones (`AtomSource.deleted` / `BondSource.deleted`);
+  copying every entity up front cost 35.6 s on 500k atoms. Without the
+  tombstones a deleted frame atom returns on the next commit. Same note.
 - **`core` must never depend on a charting library or own charting** — charts
   live in the separate `@molcrafts/molplot` repo.
 - **Core subpath exports (`./io`, `./io/formats`) are public API** — treat

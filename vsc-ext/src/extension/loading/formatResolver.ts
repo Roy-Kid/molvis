@@ -1,9 +1,9 @@
 import {
-  FILE_FORMAT_REGISTRY,
   type FileFormat,
   inferFormatFromFilename,
 } from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
+import { FORMAT_MENU, formatMenuLabel } from "./formatMenu";
 
 /**
  * Resolve a molecular file format for `filename`. Returns the inferred
@@ -12,8 +12,9 @@ import * as vscode from "vscode";
  * user dismisses the picker, which callers should treat as "do not
  * load the file".
  *
- * Zarr payloads are detected by path / stat upstream and never reach
- * this helper, so we don't list a Zarr option here.
+ * mrec store payloads — the `.mrec` directory (`isMrecUriPath`) and the
+ * packed `.mrec.zip` (`isMrecZipPath`) — are detected by path / stat upstream
+ * and never reach this helper, so we don't list an mrec option here.
  */
 export async function resolveFileFormat(
   filename: string,
@@ -22,18 +23,14 @@ export async function resolveFileFormat(
   if (inferred) return inferred;
 
   const items: Array<vscode.QuickPickItem & { format: FileFormat }> =
-    FILE_FORMAT_REGISTRY.map((entry) => ({
-      label: entry.label,
-      description: entry.extensions.map((e) => `.${e}`).join(" "),
-      detail: entry.description,
+    FORMAT_MENU.map((entry) => ({
+      label: formatMenuLabel(entry),
       format: entry.format,
     }));
 
   const picked = await vscode.window.showQuickPick(items, {
-    title: `Pick a format for "${filename}"`,
-    placeHolder: "MolVis couldn't infer a format from the extension",
-    matchOnDescription: true,
-    matchOnDetail: true,
+    title: "Format",
+    placeHolder: filename,
     ignoreFocusOut: true,
   });
 

@@ -1,5 +1,6 @@
 import { Color3 } from "@babylonjs/core";
-import type { Block } from "@molcrafts/molvis-core/molrs";
+import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
+import { readAtomTypeKeys } from "../atom_type";
 import {
   COLOR_OVERRIDE_B,
   COLOR_OVERRIDE_G,
@@ -8,7 +9,10 @@ import {
 import { viewAtomCoords } from "../io/atom_coords";
 import { encodePickingColorInto } from "../picker";
 import { isMetalElement } from "../system/elements";
-import { DType } from "../utils/dtype";
+import {
+  shouldSkipOriginSentinels,
+  shouldSkipOriginSentinelsForFrame,
+} from "../system/occupancy";
 import { buildCategoricalColorLookup, type LinearRGB } from "./palette";
 import type { StyleManager } from "./style_manager";
 
@@ -40,28 +44,34 @@ interface CachedAtomStyle {
  * see `../color_override_keys`), uses them instead of element/type colors.
  * Radius is always resolved from the style system.
  */
+export interface AtomBufferBuild {
+  buffers: Map<string, Float32Array>;
+  /** Render instance → original atom row when origin sentinels were dropped. */
+  instanceMap?: Uint32Array;
+}
+
 export function buildAtomBuffers(
   atomsBlock: Block,
   styleManager: StyleManager,
   atomMeshUniqueId: number,
   options?: AtomBufferOptions,
-): Map<string, Float32Array> {
+  /** Owning frame, when known — lets the origin-sentinel scan reuse the
+   *  per-frame memo shared with frame_diff / perceive. */
+  frame?: Frame,
+): AtomBufferBuild {
   const atomCount = atomsBlock.nrows();
   const coords = viewAtomCoords(atomsBlock);
   const xCoords = coords?.x;
   const yCoords = coords?.y;
   const zCoords = coords?.z;
 
-  // Canonical: `element` is String. Secondary: `type` as stringified numeric
-  // category for LAMMPS dumps/data that carry no element symbol. These are
-  // the only two sources the renderer reads — no other column names.
-  const elementsColumn =
-    atomsBlock.dtype("element") === DType.String
-      ? (atomsBlock.copyColStr("element") as string[])
-      : undefined;
-  const typesColumn = elementsColumn
-    ? undefined
-    : readTypeAsStrings(atomsBlock);
+  // Canonical: `element` is String. Secondary: `type` / `type_id` via
+  // {@link readAtomTypeKeys} (LAMMPS data/dump write the ordinal as
+  // `type_id`). These are the only two sources the renderer reads.
+  const elementsColumn = atomsBlock.hasStr("element")
+    ? (atomsBlock.getStr("element") as string[])
+    : undefined;
+  const typesColumn = elementsColumn ? undefined : readAtomTypeKeys(atomsBlock);
 
   if (!xCoords || !yCoords || !zCoords)
     throw new Error("No coordinates column");
@@ -97,8 +107,27 @@ export function buildAtomBuffers(
   const radiusScale = options?.radiusScale ?? 1.0;
   const visibleArr = options?.visible;
   const representation = styleManager.getRepresentation();
+  const dropSentinels = frame
+    ? shouldSkipOriginSentinelsForFrame(
+        frame,
+        xCoords,
+        yCoords,
+        zCoords,
+        atomCount,
+      )
+    : shouldSkipOriginSentinels(xCoords, yCoords, zCoords, atomCount);
+  const instanceMap = dropSentinels ? new Uint32Array(atomCount) : undefined;
+  let written = 0;
 
   for (let i = 0; i < atomCount; i++) {
+    if (
+      dropSentinels &&
+      xCoords[i] === 0 &&
+      yCoords[i] === 0 &&
+      zCoords[i] === 0
+    ) {
+      continue;
+    }
     // Always resolve style for radius (and fallback color)
     const style = resolveAtomStyle(
       i,
@@ -111,8 +140,8 @@ export function buildAtomBuffers(
 
     const radius = (customRadii?.[i] ?? style.radius) * radiusScale;
     const scale = radius * 2;
-    const matOffset = i * 16;
-    const idx4 = i * 4;
+    const matOffset = written * 16;
+    const idx4 = written * 4;
 
     // Matrix (scale + translation)
     atomMatrix[matOffset + 0] = scale;
@@ -157,15 +186,20 @@ export function buildAtomBuffers(
         ? 1
         : 0;
     atomStyle[idx4 + 2] = representation.labels === "skeletal" ? 1 : 0;
+    if (instanceMap) instanceMap[written] = i;
+    written += 1;
   }
 
   const buffers = new Map<string, Float32Array>();
-  buffers.set("matrix", atomMatrix);
-  buffers.set("instanceData", atomData);
-  buffers.set("instanceColor", atomColor);
-  buffers.set("instanceStyle", atomStyle);
-  buffers.set("instancePickingColor", atomPick);
-  return buffers;
+  buffers.set("matrix", atomMatrix.subarray(0, written * 16));
+  buffers.set("instanceData", atomData.subarray(0, written * 4));
+  buffers.set("instanceColor", atomColor.subarray(0, written * 4));
+  buffers.set("instanceStyle", atomStyle.subarray(0, written * 4));
+  buffers.set("instancePickingColor", atomPick.subarray(0, written * 4));
+  return {
+    buffers,
+    instanceMap: instanceMap?.subarray(0, written),
+  };
 }
 
 /**
@@ -175,18 +209,47 @@ export function buildAtomBuffers(
  * so the bond bicolor pass still has a per-atom color source without
  * paying the matrix / instanceData / picking allocations.
  */
+/**
+ * In-place position refresh for the frame + edit atom segments.
+ *
+ * Only `instanceData` (xyz, radius) is rewritten and uploaded: the impostor
+ * vertex shader reads the sphere centre from `instanceData` and never touches
+ * the thin-instance `matrix` (`world0..3`), so the 16-float matrix stays as
+ * the full build left it. That keeps the per-frame upload at 4 floats per
+ * atom instead of 20 and drops the matrix re-upload entirely.
+ */
+export function refreshAtomPositions(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  z: ArrayLike<number>,
+  atomState: {
+    getTotalCount(): number;
+    uploadBuffer(name: string): void;
+    buffers: Map<string, { data: Float32Array }>;
+  },
+): void {
+  const dataDesc = atomState.buffers.get("instanceData");
+  if (!dataDesc) return;
+  const count = Math.min(x.length, atomState.getTotalCount());
+  const data = dataDesc.data;
+  for (let i = 0; i < count; i++) {
+    const o = i * 4;
+    data[o] = x[i];
+    data[o + 1] = y[i];
+    data[o + 2] = z[i];
+  }
+  atomState.uploadBuffer("instanceData");
+}
+
 export function buildAtomColorOnly(
   atomsBlock: Block,
   styleManager: StyleManager,
 ): Float32Array {
   const atomCount = atomsBlock.nrows();
-  const elementsColumn =
-    atomsBlock.dtype("element") === DType.String
-      ? (atomsBlock.copyColStr("element") as string[])
-      : undefined;
-  const typesColumn = elementsColumn
-    ? undefined
-    : readTypeAsStrings(atomsBlock);
+  const elementsColumn = atomsBlock.hasStr("element")
+    ? (atomsBlock.getStr("element") as string[])
+    : undefined;
+  const typesColumn = elementsColumn ? undefined : readAtomTypeKeys(atomsBlock);
 
   const overrideR = atomsBlock.dtype(COLOR_OVERRIDE_R)
     ? atomsBlock.viewColF(COLOR_OVERRIDE_R)
@@ -232,25 +295,6 @@ export function buildAtomColorOnly(
     out[idx4 + 3] = style.a;
   }
   return out;
-}
-
-/**
- * Read the `type` column as stringified category keys (e.g. "1", "2"). LAMMPS
- * dumps emit `type` as I32, LAMMPS data as I64; both are palette-keyed by
- * their string form. Returns undefined when `type` is absent.
- */
-function readTypeAsStrings(block: Block): string[] | undefined {
-  const dt = block.dtype("type");
-  if (dt === DType.I32) {
-    return Array.from(block.copyColI32("type"), (v) => String(v));
-  }
-  if (dt === DType.U32) {
-    return Array.from(block.copyColU32("type"), (v) => String(v));
-  }
-  if (dt === DType.String) {
-    return block.copyColStr("type") as string[];
-  }
-  return undefined;
 }
 
 function resolveAtomStyle(

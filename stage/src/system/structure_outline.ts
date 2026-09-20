@@ -1,12 +1,28 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
-import { DType } from "../utils/dtype";
 
-/** Serializable outline for hosts (VS Code tree, future web outline). */
+/**
+ * Serializable outline for hosts (VS Code tree, future web outline).
+ *
+ * A node names the atoms it **owns**, and nothing else: an atom owns itself,
+ * a residue owns its atoms (its children may be elided when there are many),
+ * and a chain or source owns none — a host reads those from the children or
+ * from {@link atomRange}. Listing a group's atoms again on the group was pure
+ * duplication, and on a 500 000-atom frame it was a 3.4 MB array crossing the
+ * host channel on every publish.
+ */
 export type StructureOutlineNode = {
   id: string;
   label: string;
   kind: "chain" | "residue" | "atom" | "source";
+  /** Atoms owned directly by this node. Absent on chain / source nodes. */
   atomIndices?: number[];
+  /** Atoms covered, listed or not — what a host shows as "N atoms". */
+  atomCount: number;
+  /**
+   * Contiguous `[start, end)` cover, when the node has one. Lets a host
+   * select the whole group with two numbers instead of an index per atom.
+   */
+  atomRange?: { start: number; end: number };
   children?: StructureOutlineNode[];
 };
 
@@ -16,7 +32,10 @@ export type StructureOutline = {
 
 /**
  * Build a chain → residue → atom tree from an atoms block.
- * Missing chain/residue columns fall back to a flat atom list (capped).
+ *
+ * Residue grouping uses canonical `res_id` (u32). `res_seq` is a ribbon
+ * field (i32) and is not read here. Missing hierarchy columns fall back
+ * to a flat atom list (capped).
  */
 export function buildStructureOutline(
   frame: Frame,
@@ -29,33 +48,30 @@ export function buildStructureOutline(
   }
 
   const n = atoms.nrows();
-  const hasChain = atoms.dtype("chain_id") === DType.String;
-  const resSeq = atoms.viewColF("res_seq");
-  const hasResName = atoms.dtype("res_name") === DType.String;
-  const hasName = atoms.dtype("name") === DType.String;
-  const hasElement = atoms.dtype("element") === DType.String;
+  const chainIds = atoms.hasStr("chain_id")
+    ? (atoms.getStr("chain_id") as string[])
+    : undefined;
+  const resIds = atoms.hasU32("res_id") ? atoms.getU32("res_id") : undefined;
+  const resNames = atoms.hasStr("res_name")
+    ? (atoms.getStr("res_name") as string[])
+    : undefined;
+  const names = atoms.hasStr("name")
+    ? (atoms.getStr("name") as string[])
+    : undefined;
+  const elements = atoms.hasStr("element")
+    ? (atoms.getStr("element") as string[])
+    : undefined;
 
-  const chainIds = hasChain ? (atoms.copyColStr("chain_id") as string[]) : null;
-  const resNames = hasResName
-    ? (atoms.copyColStr("res_name") as string[])
-    : null;
-  const names = hasName ? (atoms.copyColStr("name") as string[]) : null;
-  const elements = hasElement
-    ? (atoms.copyColStr("element") as string[])
-    : null;
-
-  // No hierarchy columns → flat atom list (capped).
-  if (!chainIds && !resSeq) {
+  if (!chainIds && !resIds) {
     const children: StructureOutlineNode[] = [];
     const limit = Math.min(n, maxAtoms);
     for (let i = 0; i < limit; i++) {
-      const el = elements?.[i]?.trim() || "?";
-      const nm = names?.[i]?.trim();
       children.push({
         id: `atom:${i}`,
-        label: nm ? `${nm} (${el}) #${i}` : `${el} #${i}`,
+        label: atomLabel(i, names, elements),
         kind: "atom",
         atomIndices: [i],
+        atomCount: 1,
       });
     }
     return {
@@ -65,14 +81,15 @@ export function buildStructureOutline(
           label:
             n > maxAtoms ? `Atoms (${n}, showing ${maxAtoms})` : `Atoms (${n})`,
           kind: "source",
-          atomIndices: Array.from({ length: n }, (_, i) => i),
+          // Row 0…n-1: a range says "every atom" in two numbers.
+          atomCount: n,
+          atomRange: { start: 0, end: n },
           children,
         },
       ],
     };
   }
 
-  // chain → residue → atom
   type ResBucket = {
     label: string;
     atoms: { index: number; label: string }[];
@@ -81,7 +98,7 @@ export function buildStructureOutline(
 
   for (let i = 0; i < n; i++) {
     const chain = (chainIds?.[i] ?? " ").trim() || "A";
-    const seq = resSeq ? Math.round(resSeq[i]) : 0;
+    const seq = resIds ? resIds[i] : 0;
     const rname = (resNames?.[i] ?? "UNK").trim() || "UNK";
     const resKey = `${chain}|${seq}|${rname}`;
     let resMap = chains.get(chain);
@@ -94,32 +111,33 @@ export function buildStructureOutline(
       bucket = { label: `${rname} ${seq}`, atoms: [] };
       resMap.set(resKey, bucket);
     }
-    const el = elements?.[i]?.trim() || "?";
-    const nm = names?.[i]?.trim();
     bucket.atoms.push({
       index: i,
-      label: nm ? `${nm} (${el})` : `${el} #${i}`,
+      label: atomLabel(i, names, elements),
     });
   }
 
   const roots: StructureOutlineNode[] = [];
   for (const [chain, resMap] of chains) {
     const residues: StructureOutlineNode[] = [];
-    const chainAtomIndices: number[] = [];
+    let chainAtoms = 0;
     for (const [resKey, bucket] of resMap) {
       const atomNodes: StructureOutlineNode[] = bucket.atoms.map((a) => ({
         id: `atom:${a.index}`,
         label: a.label,
         kind: "atom" as const,
         atomIndices: [a.index],
+        atomCount: 1,
       }));
       const indices = bucket.atoms.map((a) => a.index);
-      chainAtomIndices.push(...indices);
+      chainAtoms += indices.length;
       residues.push({
         id: `res:${resKey}`,
         label: bucket.label,
         kind: "residue",
+        // The residue owns these: its atom children are elided above 40.
         atomIndices: indices,
+        atomCount: indices.length,
         children: atomNodes.length <= 40 ? atomNodes : undefined,
       });
     }
@@ -127,10 +145,20 @@ export function buildStructureOutline(
       id: `chain:${chain}`,
       label: `Chain ${chain}`,
       kind: "chain",
-      atomIndices: chainAtomIndices,
+      atomCount: chainAtoms,
       children: residues,
     });
   }
 
   return { roots };
+}
+
+function atomLabel(
+  i: number,
+  names: string[] | undefined,
+  elements: string[] | undefined,
+): string {
+  const el = elements?.[i]?.trim() || "?";
+  const nm = names?.[i]?.trim();
+  return nm ? `${nm} (${el}) #${i}` : `${el} #${i}`;
 }

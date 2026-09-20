@@ -1,8 +1,9 @@
+import { toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { remapBondSubset } from "../utils/bond_order";
-import { DType, isFloatDtype } from "../utils/dtype";
+import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 
 /**
  * Modifier that hides hydrogen atoms from the scene.
@@ -33,8 +34,7 @@ export class HideHydrogensModifier extends BaseModifier {
     const atoms = input.getBlock("atoms");
     if (!atoms) return input;
 
-    if (!atoms.dtype("element")) return input;
-    const elements = atoms.copyColStr("element") as string[];
+    const elements = atoms.getStr("element") as string[];
 
     const nrows = atoms.nrows();
     const indexMap = new Int32Array(nrows);
@@ -60,7 +60,7 @@ export class HideHydrogensModifier extends BaseModifier {
         copyFilteredF32(atoms, newAtoms, col, indexMap, nrows, newCount);
       } else if (dtype === DType.String) {
         copyFilteredStr(atoms, newAtoms, col, indexMap, nrows);
-      } else if (dtype === DType.U32) {
+      } else if (isDomainUintDtype(dtype)) {
         copyFilteredU32(atoms, newAtoms, col, indexMap, nrows, newCount);
       } else if (dtype === DType.I32) {
         copyFilteredI32(atoms, newAtoms, col, indexMap, nrows, newCount);
@@ -71,7 +71,7 @@ export class HideHydrogensModifier extends BaseModifier {
     const bonds = input.getBlock("bonds");
     let newBonds: Block | undefined;
 
-    if (bonds) {
+    if (bonds && bonds.nrows() > 0) {
       const iCol = bonds.viewColU32("atomi");
       const jCol = bonds.viewColU32("atomj");
 
@@ -80,7 +80,10 @@ export class HideHydrogensModifier extends BaseModifier {
         const validBonds: number[] = [];
 
         for (let b = 0; b < bondCount; b++) {
-          if (indexMap[iCol[b]] !== -1 && indexMap[jCol[b]] !== -1) {
+          if (
+            indexMap[toRowIndex(iCol[b])] !== -1 &&
+            indexMap[toRowIndex(jCol[b])] !== -1
+          ) {
             validBonds.push(b);
           }
         }
@@ -144,9 +147,11 @@ function copyFilteredU32(
   nrows: number,
   newCount: number,
 ): void {
-  const col = src.dtype(name) === DType.U32 ? src.viewColU32(name) : undefined;
+  const col = isDomainUintDtype(src.dtype(name))
+    ? src.viewColU32(name)
+    : undefined;
   if (!col) return;
-  const out = new Uint32Array(newCount);
+  const out = new BigUint64Array(newCount);
   let ptr = 0;
   for (let i = 0; i < nrows; i++) {
     if (indexMap[i] !== -1) out[ptr++] = col[i];
