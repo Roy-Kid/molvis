@@ -86,7 +86,12 @@ repos:
       # guard is local-only and has no CI counterpart by design.
       - id: no-dev-watcher
         name: no dev watcher running (shared rspack cache)
-        entry: bash -c 'pgrep -f "rslib build --watch|rsbuild dev" >/dev/null && { echo "A dev watcher is running — stop it before pushing; the build hooks share node_modules/.cache/rspack and dist/ with it."; exit 1; }; exit 0'
+        entry: >
+          bash -c 'ROOT=$(git rev-parse --show-toplevel);
+          if pgrep -af "rslib build --watch|rsbuild dev" | grep -F "$ROOT/" | grep -v "pgrep -af" >/dev/null; then
+            echo "A molvis dev watcher is running — stop it before pushing; the build hooks share node_modules/.cache/rspack and dist/ with it.";
+            exit 1;
+          fi; exit 0'
         language: system
         pass_filenames: false
         always_run: true
