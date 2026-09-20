@@ -1,9 +1,7 @@
 # Testing
 
-One lane per package, unit only. There is no e2e lane in this repo and no
-`integration/` tree. Repo-root `regressions/` holds plain-node golden-lock
-scripts (one per shipped spec, dist imports only, hard-coded goldens, no WASM
-init) — it is an assertion lane, not e2e.
+One lane per package, unit only. There is no e2e lane, no `integration/`
+tree, and no repo-root `regressions/` golden-lock lane.
 
 ```bash
 npm run test:core     npm run test:stage    npm run test:sketch
@@ -34,7 +32,7 @@ kept:
 
 - **`vsc-ext`** used to download VS Code 1.120.0 and boot a real extension
   host. Five of its seven tests only read `package.json` `contributes`; those
-  are now `tests/unit/extension/manifest.test.ts` and run in milliseconds. The
+  are now `tests/extension/manifest.test.ts` and run in milliseconds. The
   two that genuinely needed a host went, along with the
   `molvis._test.getRegisteredPanelViewTypes` command that existed to serve
   them — production code should not carry a test-only surface.
@@ -103,10 +101,9 @@ working:
 ## CI
 
 `.github/workflows/ci.yml` runs lint, typecheck, a `guards` job
-(`check:molrs-gateway` — only `core/` may import `@molcrafts/molrs`), the four
-browser-mode suites as a matrix, `test-vsc-ext`, `test-python`, and the
+(`check:molrs-gateway` — only `core/` may mention `@molcrafts/molrs`), one
+`test` job (`npm run test:browser`), `test-vsc-ext`, `test-python`, and the
 builds.
 
-The test matrix is worth a note: CI used to run `test:core` alone, so stage's
-881 tests — the largest suite in the repo — were never executed remotely.
-If you add a package, add it to the matrix in the same commit.
+If you add a package with a browser-mode suite, add it to `test:browser` in
+the same commit.

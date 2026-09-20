@@ -281,7 +281,7 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
  * {@link FileFormat}. mrec is a Zarr-v3 *encoding*; molvis opens the whole
  * store through molrs's `TrajectoryReader`, never a per-extension parser.
  * Keeping it out of the parser-dispatch {@link FileFormat} union is a pinned
- * invariant (`regressions/mrec-format-06-molvis.ts`): hosts recognise the
+ * invariant (`stage/tests/io/formats.test.ts`): hosts recognise the
  * `.mrec` directory suffix and stream the store — they never route its bytes
  * to a format reader.
  */

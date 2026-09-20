@@ -12,7 +12,7 @@
   },
   "license": "BSD-3-Clause",
   "icon": "image/molvis-icon.png",
-  "version": "0.2.12",
+  "version": "0.3.0",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -635,8 +635,8 @@
     "package": "npm run package:prepare",
     "vscode:prepublish": "npm run package",
     "test:compile": "tsc --project tsconfig.test.json",
-    "test:unit:run": "mocha --ui tdd \"out-test/tests/unit/**/*.test.js\"",
-    "test:unit": "npm-run-all test:compile test:unit:run",
+    "test:unit:run": "mocha --ui tdd \"out-test/tests/**/*.test.js\"",
+    "test:unit": "npm-run-all clean:out-test test:compile test:unit:run",
     "test": "npm run test:unit",
     "deploy:vsce": "vsce publish",
     "deploy": "npm run deploy:vsce",
@@ -663,9 +663,9 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@molcrafts/molvis-core": "0.2.12",
-    "@molcrafts/molvis-sketch": "0.2.12",
-    "@molcrafts/molvis-stage": "0.2.12"
+    "@molcrafts/molvis-core": "0.3.0",
+    "@molcrafts/molvis-sketch": "0.3.0",
+    "@molcrafts/molvis-stage": "0.3.0"
   },
   "private": true
 }

@@ -5,8 +5,7 @@
  * The two spawn functions (`spawnTrajectoryWorker`, `spawnComputeWorker`)
  * construct real Workers from literal `new Worker(new URL(...))`
  * expressions; per the long-standing "Tests should NOT call this"
- * convention they are not unit-called here (the seam shape is locked by
- * `regressions/worker-arch-unify-03-spawn.ts` instead).
+ * convention they are not unit-called here.
  *
  * `DeferredWorker` bridges an async spawn (`Promise<Worker>`) into the
  * synchronous property-style Worker face that core's

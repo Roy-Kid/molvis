@@ -38,6 +38,7 @@ import {
   takeSharedStructureFile,
 } from "@/lib/open-structure";
 import { reportStatus } from "@/lib/status-report";
+import { isViewportHidden } from "@/lib/viewport-visibility";
 
 interface MolvisWrapperProps {
   onMount?: (app: Molvis) => void;
@@ -507,17 +508,19 @@ const MolvisWrapper: React.FC<MolvisWrapperProps> = ({
     // Resize is owned by MolvisApp (container ResizeObserver). Hosts only
     // opt into visibility pause for multi-cell notebook embeds.
     //
-    // Debounce hide→stop: opening a side rail briefly collapses the canvas
-    // flex slot to a non-intersecting box during layout. Immediate stop()
-    // then resume→start() re-runs renderActiveTrajectoryFrame(true) and
-    // looks like a full page refresh after a file is already loaded.
+    // `isViewportHidden` ignores 0-area boxes — opening a side rail briefly
+    // collapses the canvas flex slot, and IntersectionObserver reports
+    // isIntersecting:false even though the viewer is still on screen.
+    // Treating that as a hide called stop() then resume→start(), which
+    // force-rebuilds the loaded scene. Real off-screen hides (notebook
+    // cells) still debounce 150ms before stop().
     let hideStopTimer: ReturnType<typeof setTimeout> | undefined;
     let intersecting = true;
     let enginePausedForHide = false;
     const visibilityObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          intersecting = entry.isIntersecting;
+          intersecting = !isViewportHidden(entry);
           const m = molvisRef.current;
           if (!m || !startupComplete) {
             viewportVisible = intersecting;

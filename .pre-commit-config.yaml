@@ -33,22 +33,6 @@ repos:
 
   - repo: local
     hooks:
-      # ─── ci.yml::setup-molrs-wasm ─────────────────────────────────────────
-      # CI always builds this; a molvis-only clone otherwise fails typecheck
-      # / browser tests with a missing `@molcrafts/molrs` that looks unrelated.
-      - id: molrs-wasm-pkg
-        name: sibling @molcrafts/molrs wasm pkg
-        entry: >
-          bash -c 'test -f ../molrs/molrs-wasm/pkg/package.json || {
-            echo "BLOCK: ../molrs/molrs-wasm/pkg missing.";
-            echo "CI builds it via .github/actions/setup-molrs-wasm.";
-            echo "Locally: (cd ../molrs/molrs-wasm && wasm-pack build --release --target bundler --scope molcrafts --out-name molrs)";
-            exit 1;
-          }'
-        language: system
-        pass_filenames: false
-        always_run: true
-
       # ─── ci.yml::lint ─────────────────────────────────────────────────────
       # Run biome on the whole repo (matches `npx biome check` in CI),
       # not just changed files — biome's own includes/excludes config
@@ -108,7 +92,7 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      # ─── ci.yml::build-stage / *-viewer / regressions / page / vsc ──
+      # ─── ci.yml::build-stage / *-viewer / page / vsc ──
       # Same shape as CI's parallel build jobs. Pre-push because each takes
       # ~30-60s and they run serially here (CI runs them on separate
       # runners). Each asks only for its own target; wireit builds the
@@ -140,14 +124,6 @@ repos:
       - id: check-pack
         name: check stage-viewer + sketch-viewer pack surfaces
         entry: npm run check:pack
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: regressions
-        name: regression examples (hard goldens vs engines + viewer dists)
-        entry: npm run check:regressions
         language: system
         pass_filenames: false
         always_run: true

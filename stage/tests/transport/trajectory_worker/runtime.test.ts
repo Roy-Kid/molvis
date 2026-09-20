@@ -695,8 +695,9 @@ describe("TrajectoryRuntime.openStore (mrec)", () => {
     const runtime = new TrajectoryRuntime(fake, "mrec");
     expect(runtime.sectionUpdates(0)).toBeUndefined();
     for (let i = 0; i < SECTION_UPDATE_LOG_CAPACITY + 2; i++) {
-      const frame = await runtime.loadFrame(i);
-      frame.free();
+      // The runtime caches the last rehydrated Frame for section-update
+      // overlay; the caller must not free it while the runtime still holds it.
+      await runtime.loadFrame(i);
     }
     expect(runtime.sectionUpdates(0)).toBeUndefined();
     expect(runtime.sectionUpdates(1)).toBeUndefined();

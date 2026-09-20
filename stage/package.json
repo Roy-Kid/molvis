@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-stage",
-  "version": "0.2.12",
+  "version": "0.3.0",
   "type": "module",
   "exports": {
     ".": {
@@ -96,7 +96,7 @@
     "@babylonjs/gui": "^9.10.1",
     "@babylonjs/materials": "^9.10.1",
     "@babylonjs/serializers": "^9.10.1",
-    "@molcrafts/molvis-core": "0.2.12"
+    "@molcrafts/molvis-core": "0.3.0"
   },
   "directories": {
     "test": "tests"

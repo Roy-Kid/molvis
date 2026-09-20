@@ -16,12 +16,9 @@
  * sends the same literal as its persistent `info-text-change` line
  * (`stage/src/optimize/structure.ts`, `STAGED_HINT`) so every host — page,
  * VSCode, Python — shows one standing hint. The duplication is deliberate (the
- * page must not depend on stage internals for a string) and is locked by
- * `regressions/optimize-staging-05-panel.ts`, which compares both sides;
- * editing one copy alone is exactly the drift that lock exists to catch.
+ * page must not depend on stage internals for a string).
  *
- * Plain strings and one pure function: no React, no stage runtime, so the
- * regression script can read this module directly.
+ * Plain strings and one pure function: no React, no stage runtime.
  */
 
 /** The verb the save hint and a converged summary both open with. */

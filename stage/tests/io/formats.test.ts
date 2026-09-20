@@ -91,6 +91,13 @@ describe("format registry flags", () => {
     }
   });
 
+  it("does not treat mrec as a FileFormat", () => {
+    const formats = FILE_FORMAT_REGISTRY.map((d) => d.format);
+    expect(formats).not.toContain("mrec");
+    expect(inferFormatFromFilename("run.mrec")).toBeNull();
+    expect(directoryFormats.every((d) => d.product === "mrec")).toBe(true);
+  });
+
   it("classifies trr/xtc as binary and text formats as text", () => {
     expect(isBinaryFormat("trr")).toBe(true);
     expect(isBinaryFormat("xtc")).toBe(true);

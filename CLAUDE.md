@@ -124,7 +124,7 @@ history (the commit immediately before the harness rebuild).
   is empty Frame. Ingress is still `DataSource(s) → compose → transforms → draws`
   when sources exist. See `.claude/notes/notes.md` and `empty_scene.ts`.
 - **`changeKind` decides buffer-update vs rebuild** — `classifyFrameTransition`
-  (`stage/src/app.ts:999`) compares the incoming frame against
+  (`stage/src/system/frame_diff.ts`) compares the incoming frame against
   `_lastRenderedFrame` and threads `changeKind: "position" | "full"` into
   `PipelineContext`. A `"position"` pass is buffer-update-only: it must never
   call `sceneIndex.registerFrame()` or recreate `ImpostorState`. Only `"full"`
