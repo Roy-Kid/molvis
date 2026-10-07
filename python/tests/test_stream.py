@@ -247,7 +247,11 @@ class TestFailureVisibility:
     def test_a_reconnecting_stream_still_reports_why_it_is_empty(self) -> None:
         # Reconnect loops are how a dead endpoint stays silent forever.
         with FrameStream(RecordingViewer(), "ws://127.0.0.1:1") as stream:
-            time.sleep(0.3)
+            # Windows retries a refused SYN for about two seconds before the
+            # connect fails, so wait for the first failure, not a fixed time.
+            deadline = time.monotonic() + 10.0
+            while stream.last_error is None and time.monotonic() < deadline:
+                time.sleep(0.05)
             assert stream.last_error is not None
 
     def test_wait_for_frames_times_out_with_the_count_it_got(self) -> None:
