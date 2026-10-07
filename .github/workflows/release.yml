@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -39,7 +39,7 @@ jobs:
       NODE_AUTH_TOKEN: ""
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-node
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
@@ -74,8 +74,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-node
-      - uses: ./.github/actions/setup-python
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
       # The page bundle goes into python/src/molvis/dist/; the build backend
       # then finds it fresh and does not rebuild it.
       - run: npm run build:page
@@ -92,7 +92,7 @@ jobs:
     environment: ${{ github.event_name == 'push' && 'release-vsc-ext' || '' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-node
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
       - run: npm run build:vsc-ext
       - working-directory: vsc-ext
         run: npx vsce package --no-dependencies -o molvis.vsix
