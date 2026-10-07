@@ -100,16 +100,22 @@ working:
 
 ## CI
 
-| workflow | feature branch (fork or upstream) | dev / master, or a PR into one | upstream only |
+`test / tier` picks the tier. The fast tier runs on a feature-branch push to
+MolCrafts; the full tier on every push to a fork (so a branch is proven before
+its pull request), on dev, master and main on MolCrafts, and on pull requests,
+tags and dispatches.
+
+| workflow | fast tier | full tier | upstream only |
 |---|---|---|---|
 | `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck` | same | — |
-| `test.yml` | `test / browser` (`npm run test:browser`), `test / vsc-ext`, `test / python` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python` on macOS and Windows | — |
+| `test.yml` | `test / tier`, `test / browser` (`npm run test:browser`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
 | `docs.yml` | `docs / build` (strict Zensical) | same | — |
 | `nightly.yml` | — | — | daily when dev moved: `nightly / page` (app.molcrafts.org/nightly/molvis/), `nightly / python` (PyPI `molcrafts-molvis-nightly`) |
 | `release.yml` | — | — | `v*` tag: `release / npm`, `release / python`, `release / vsc-ext`; `workflow_dispatch` is a dry run anywhere |
 
-A pull request from a branch of the same repository skips the jobs its push
-already ran. `.pre-commit-config.yaml` mirrors these jobs; when you add or
+A pull request inside a fork skips: its push already ran the full tier. Shared
+setup is `MolCrafts/molcrafts-ci/actions/setup-{node,python}@master`.
+`.pre-commit-config.yaml` mirrors these jobs; when you add or
 change one, change the hook in the same commit.
 
 If you add a package with a browser-mode suite, add it to `test:browser` in
