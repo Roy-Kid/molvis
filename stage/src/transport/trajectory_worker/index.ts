@@ -10,7 +10,7 @@
  * worker-arch-unify-02-runtime); envelopes now live in `core/workload`.
  */
 
-export { rehydrateFrame } from "./frame_codec";
+export { encodeFrame, rehydrateFrame } from "./frame_codec";
 export type {
   BlockPayload,
   BoxPayload,
@@ -18,18 +18,28 @@ export type {
   Format,
   FrameMessage,
   GridPayload,
+  MrecFilesSourceHandle,
+  MrecFileTreeSourceHandle,
+  MrecSourceHandle,
+  MrecZipSourceHandle,
   RequestBytes,
   SourceHandle,
+  StreamFormat,
   TrajectoryIndexProgress,
   TrajectoryJob,
   TrajectoryJobResult,
 } from "./protocol";
-export { frameMessageTransferList } from "./protocol";
+export {
+  frameMessageTransferList,
+  isMrecSourceHandle,
+  mrecSourceTransferList,
+} from "./protocol";
 export {
   CancellationError,
   type IndexProgressCallback,
   type OpenOptions,
   type OpenResult,
+  SECTION_UPDATE_LOG_CAPACITY,
   TrajectoryRuntime,
   type WorkerLike,
 } from "./runtime";

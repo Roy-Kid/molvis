@@ -20,6 +20,7 @@ import {
   type Format,
   type FrameMessage,
   type OpenResult,
+  SECTION_UPDATE_LOG_CAPACITY,
   type SourceHandle,
   TrajectoryRuntime,
   type WorkerLike,
@@ -606,5 +607,104 @@ describe("TrajectoryRuntime (workload channel)", () => {
     );
     expect(lateErr).not.toBeNull();
     expect(String(lateErr?.message)).toMatch(/clos|dead|dispos/i);
+  });
+});
+
+describe("TrajectoryRuntime.openStore (mrec)", () => {
+  function frameResult(
+    frameId: number,
+    sectionUpdates: Record<string, number>,
+  ) {
+    return {
+      kind: "frame" as const,
+      frameId,
+      blocks: [],
+      box: null,
+      grids: [],
+      sectionUpdates,
+    };
+  }
+
+  it("posts one mrec open job with the store buffers in the transfer list", async () => {
+    const fake = new FakeWorkloadWorker((run, worker) => {
+      if (run.job.kind === "open") {
+        worker.emit({
+          type: "done",
+          id: run.id,
+          result: {
+            kind: "open-result",
+            frameCount: 4,
+            totalBytes: 12,
+            indexComplete: true,
+          },
+        });
+      }
+    });
+    const runtime = new TrajectoryRuntime(fake, "mrec");
+    const a = new ArrayBuffer(4);
+    const b = new ArrayBuffer(8);
+    const opened = await runtime.openStore({
+      kind: "mrec-files",
+      files: new Map([
+        ["zarr.json", a],
+        ["trajectory/step/c/0", b],
+      ]),
+    });
+    expect(opened).toEqual({
+      frameCount: 4,
+      indexedLength: 4,
+      length: 4,
+      indexComplete: true,
+      totalBytes: 12,
+    });
+    const run = fake.posts.find(
+      (p) => (p.msg as { type?: string }).type === "run",
+    );
+    expect(run).toBeDefined();
+    const job = (
+      run?.msg as {
+        job: { kind: string; format: string; source: { kind: string } };
+      }
+    ).job;
+    expect(job.kind).toBe("open");
+    expect(job.format).toBe("mrec");
+    expect(job.source.kind).toBe("mrec-files");
+    expect(run?.transfer).toEqual([a, b]);
+    expect(await runtime.whenIndexComplete).toEqual(opened);
+    await runtime.close();
+  });
+
+  it("refuses openStore on a byte-stream runtime", async () => {
+    const runtime = new TrajectoryRuntime(new FakeWorkloadWorker(), "xyz");
+    await expect(
+      runtime.openStore({ kind: "mrec-zip", bytes: new ArrayBuffer(1) }),
+    ).rejects.toThrow(/needs an mrec runtime/);
+    await runtime.close();
+  });
+
+  it("remembers each loaded frame's section updates, bounded", async () => {
+    const fake = new FakeWorkloadWorker((run, worker) => {
+      if (run.job.kind === "load-frame") {
+        worker.emit({
+          type: "done",
+          id: run.id,
+          result: frameResult(run.job.frameId, { atoms: run.job.frameId }),
+        });
+      }
+    });
+    const runtime = new TrajectoryRuntime(fake, "mrec");
+    expect(runtime.sectionUpdates(0)).toBeUndefined();
+    for (let i = 0; i < SECTION_UPDATE_LOG_CAPACITY + 2; i++) {
+      // The runtime caches the last rehydrated Frame for section-update
+      // overlay; the caller must not free it while the runtime still holds it.
+      await runtime.loadFrame(i);
+    }
+    expect(runtime.sectionUpdates(0)).toBeUndefined();
+    expect(runtime.sectionUpdates(1)).toBeUndefined();
+    expect(runtime.sectionUpdates(2)?.get("atoms")).toBe(2);
+    expect(
+      runtime.sectionUpdates(SECTION_UPDATE_LOG_CAPACITY + 1)?.get("atoms"),
+    ).toBe(SECTION_UPDATE_LOG_CAPACITY + 1);
+    await runtime.close();
   });
 });

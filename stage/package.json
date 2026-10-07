@@ -1,6 +1,6 @@
 {
   "name": "@molcrafts/molvis-stage",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "type": "module",
   "exports": {
     ".": {
@@ -28,6 +28,7 @@
       "default": "./dist/transport/trajectory_worker/worker.js"
     },
     "./trajectory-runtime": {
+      "source": "./src/transport/trajectory_worker/runtime.ts",
       "types": "./dist/transport/trajectory_worker/runtime.d.ts",
       "import": "./dist/transport/trajectory_worker/runtime.js",
       "default": "./dist/transport/trajectory_worker/runtime.js"
@@ -42,6 +43,7 @@
       "default": "./dist/compute/worker.js"
     },
     "./worker-spawner": {
+      "source": "./src/worker_spawner.ts",
       "types": "./dist/worker_spawner.d.ts",
       "import": "./dist/worker_spawner.js",
       "default": "./dist/worker_spawner.js"
@@ -94,7 +96,7 @@
     "@babylonjs/gui": "^9.10.1",
     "@babylonjs/materials": "^9.10.1",
     "@babylonjs/serializers": "^9.10.1",
-    "@molcrafts/molvis-core": "0.2.2"
+    "@molcrafts/molvis-core": "0.3.0"
   },
   "directories": {
     "test": "tests"

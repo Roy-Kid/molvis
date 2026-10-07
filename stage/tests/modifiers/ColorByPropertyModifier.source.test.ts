@@ -231,7 +231,7 @@ describe("ColorByPropertyModifier — categorical numeric (source_id)", () => {
     expect(atoms).toBeTruthy();
     if (!atoms) return;
 
-    const buffers = buildAtomBuffers(atoms, makeStyleManager(), 0);
+    const buffers = buildAtomBuffers(atoms, makeStyleManager(), 0).buffers;
     const instanceColor = buffers.get("instanceColor");
     expect(instanceColor).toBeTruthy();
     if (!instanceColor) return;

@@ -52,7 +52,13 @@ abstract class BaseMode {
 
   private _app: Molvis;
   private _pointer_observer: Observer<PointerInfo>;
-  private _kb_observer: Observer<KeyboardInfo>;
+  /**
+   * Keys are routed from `document`, not from Babylon's keyboard observable:
+   * that one only fires while the canvas holds focus, so "hover an atom and
+   * press Delete" did nothing until the user had clicked the canvas at least
+   * once. One path, gated on the pointer actually being over the canvas.
+   */
+  private _kb_handler: ((event: KeyboardEvent) => void) | null = null;
   private _infoLastText = "";
   private _hoverPickRaf: number | null = null;
   private _hoverPickScheduled = false;
@@ -80,7 +86,7 @@ abstract class BaseMode {
     this._app = app;
     this.name = name;
     this._pointer_observer = this.register_pointer_events();
-    this._kb_observer = this.register_keyboard_events();
+    this.register_keyboard_events();
     this.initContextMenu();
   }
 
@@ -156,7 +162,10 @@ abstract class BaseMode {
   };
 
   private unregister_keyboard_events = () => {
-    this.scene.onKeyboardObservable.remove(this._kb_observer);
+    if (this._kb_handler) {
+      document.removeEventListener("keydown", this._kb_handler);
+      this._kb_handler = null;
+    }
   };
 
   private register_pointer_events() {
@@ -192,7 +201,22 @@ abstract class BaseMode {
   }
 
   private register_keyboard_events = () => {
-    return this.scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
+    const canvas = this.scene.getEngine().getRenderingCanvas();
+
+    this._kb_handler = (event: KeyboardEvent) => {
+      // The canvas is the target surface whether or not it holds focus:
+      // pointer-over is what the user means by "the atom under my cursor".
+      // `:hover` is the browser's own hit state, so it is correct even when
+      // the pointer was already inside the canvas before this mode attached
+      // (an enter/leave flag of our own would miss that case, and does).
+      if (!canvas) return;
+      if (!canvas.matches(":hover") && document.activeElement !== canvas) {
+        return;
+      }
+      const kbInfo = {
+        type: KeyboardEventTypes.KEYDOWN,
+        event,
+      } as KeyboardInfo;
       switch (kbInfo.type) {
         case KeyboardEventTypes.KEYDOWN:
           if (isCtrlOrMeta(kbInfo.event)) {
@@ -258,7 +282,8 @@ abstract class BaseMode {
           }
           break;
       }
-    });
+    };
+    document.addEventListener("keydown", this._kb_handler);
   };
 
   /**

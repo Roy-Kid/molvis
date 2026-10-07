@@ -6,6 +6,11 @@ export type OutlineTreeItem = StructureOutlineNode & {
   atomIndices: number[];
 };
 
+/** What a tree click selects: explicit rows, or a contiguous run of them. */
+export type AtomSelection =
+  | { indices: number[]; range?: undefined }
+  | { range: { start: number; end: number }; indices?: undefined };
+
 /**
  * Native VS Code tree for one editor surface (Stage or Sketch).
  * Populated from that surface's `structureOutline` messages; click posts
@@ -20,10 +25,21 @@ export class StructureOutlineProvider
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private roots: OutlineTreeItem[] = [];
+  /**
+   * The webview whose scene this outline describes.
+   *
+   * Selection has to go back to it. Routing to whichever panel happens to be
+   * "active" instead meant a Quick look outline selected atoms in an unrelated
+   * Stage tab, or — with no Stage open — did nothing at all.
+   */
+  private source: vscode.Webview | undefined;
 
   constructor(
     private readonly selectCommand: string,
-    private readonly onSelectAtoms: (indices: number[]) => void,
+    private readonly onSelectAtoms: (
+      selection: AtomSelection,
+      source: vscode.Webview | undefined,
+    ) => void,
     private readonly contextKey: string,
   ) {}
 
@@ -31,8 +47,12 @@ export class StructureOutlineProvider
     this._onDidChangeTreeData.dispose();
   }
 
-  setOutline(payload: StructureOutlinePayload | null): void {
+  setOutline(
+    payload: StructureOutlinePayload | null,
+    source?: vscode.Webview,
+  ): void {
     this.roots = payload ? payload.roots.map((n) => hydrate(n)) : [];
+    this.source = payload ? source : undefined;
     void vscode.commands.executeCommand(
       "setContext",
       this.contextKey,
@@ -55,7 +75,7 @@ export class StructureOutlineProvider
     item.contextValue = `molvis.outline.${element.kind}`;
     item.description =
       element.kind === "residue" || element.kind === "chain"
-        ? `${element.atomIndices.length} atoms`
+        ? `${element.atomCount} atoms`
         : undefined;
     item.command = {
       command: this.selectCommand,
@@ -72,8 +92,14 @@ export class StructureOutlineProvider
   }
 
   select(element: OutlineTreeItem): void {
+    // A contiguous group travels as its range: the webview expands it there,
+    // so selecting a 500 000-atom frame is two numbers, not half a million.
+    if (element.atomRange) {
+      this.onSelectAtoms({ range: element.atomRange }, this.source);
+      return;
+    }
     if (element.atomIndices.length === 0) return;
-    this.onSelectAtoms(element.atomIndices);
+    this.onSelectAtoms({ indices: element.atomIndices }, this.source);
   }
 }
 

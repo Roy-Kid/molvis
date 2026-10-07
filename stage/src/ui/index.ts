@@ -1,3 +1,4 @@
+export { MolvisBondMappingDialog } from "./dialogs/bond_mapping_dialog";
 export { GUIManager } from "./manager";
 export { InfoPanel } from "./panels/info_panel";
 export { ModePanel } from "./panels/mode_panel";

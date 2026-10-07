@@ -22,6 +22,13 @@ import { logger } from "./utils/logger";
  */
 export class System {
   private _trajectory: Trajectory;
+  /**
+   * The one empty scene this System hands out. Boot and every reset point at
+   * this handle instead of allocating a fresh molrs `Frame` each time; it is
+   * rebuilt only if something grew or overwrote it (`appendFrame`,
+   * `updateCurrentFrame`). See `.claude/notes/molrs-handles.md`.
+   */
+  private _emptyTrajectory: Trajectory;
   private _currentFrame: Frame;
   private _frameLabels: Map<string, Float64Array> | null = null;
   private _exploration: DatasetExploration | null = null;
@@ -34,9 +41,29 @@ export class System {
 
   constructor(events?: EventEmitter<MolvisEventMap>) {
     this.events = events;
-    this._trajectory = new Trajectory([new Frame()]);
+    this._emptyTrajectory = new Trajectory([new Frame()]);
+    this._trajectory = this._emptyTrajectory;
     this._currentFrame = this._trajectory.currentFrame;
-    logger.info("[System] Initialized with empty frame");
+  }
+
+  /**
+   * Point System at its empty scene — a length-1 trajectory holding one empty
+   * Frame. Boot and hard reset share this single door (via
+   * `bootstrapEmptyPipeline`), and it reuses {@link _emptyTrajectory} unless
+   * that handle has since been grown or written over.
+   */
+  public resetToEmpty(): void {
+    if (!this.emptyTrajectoryIsPristine()) {
+      this._emptyTrajectory = new Trajectory([new Frame()]);
+    }
+    this.trajectory = this._emptyTrajectory;
+  }
+
+  /** True while {@link _emptyTrajectory} still holds exactly one empty Frame. */
+  private emptyTrajectoryIsPristine(): boolean {
+    const candidate = this._emptyTrajectory;
+    if (candidate.indexedLength !== 1 || candidate.isLazy) return false;
+    return (candidate.currentFrame.getBlock("atoms")?.nrows() ?? 0) === 0;
   }
 
   /**
@@ -62,7 +89,7 @@ export class System {
     this._activeLoad = null;
     this._currentFrame =
       value.indexedLength > 0 ? value.currentFrame : new Frame();
-    logger.info(`[System] Trajectory set with ${value.indexedLength} frame(s)`);
+    logger.debug(`[System] trajectory set: ${value.indexedLength} frame(s)`);
     this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
     this.setExploration(null);
     this.events?.emit("trajectory-change", value);
@@ -86,8 +113,8 @@ export class System {
     } else {
       this._currentFrame = new Frame();
     }
-    logger.info(
-      `[System] Trajectory set with ${value.indexedLength} frame(s) (async)`,
+    logger.debug(
+      `[System] trajectory set: ${value.indexedLength} frame(s) (async)`,
     );
     this.setFrameLabels(value.isLazy ? null : aggregateFrameLabels(value));
     this.setExploration(null);

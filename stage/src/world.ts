@@ -295,8 +295,9 @@ export class World {
   /**
    * Gather the point cloud used to frame the scene. A real simulation cell
    * contributes only its eight corners (radius 0) so the box fills the
-   * view. Otherwise the radius-aware atom data. Returns `null` when there
-   * is nothing to frame.
+   * view. Otherwise the radius-aware atom data, and failing that the corners
+   * of any imported surface geometry — a scene holding only a mesh is still
+   * something to look at. Returns `null` when there is nothing to frame.
    */
   private collectFramingPoints(
     frameBox: boolean,
@@ -311,7 +312,12 @@ export class World {
         };
       }
     }
-    return this.sceneIndex.getBoundsData();
+    const atoms = this.sceneIndex.getBoundsData();
+    if (atoms) return atoms;
+
+    const surfaces = this._app.artist.surfaceFramingPoints();
+    if (!surfaces) return null;
+    return { points: surfaces, radii: new Float64Array(surfaces.length / 3) };
   }
 
   public takeScreenShot() {

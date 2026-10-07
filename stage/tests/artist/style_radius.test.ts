@@ -40,11 +40,11 @@ describe("bubble vs spacefill radii", () => {
     const block = carbonBlock();
 
     sm.setRepresentation(BUBBLE);
-    const bubbleBuf = buildAtomBuffers(block, sm, 1);
+    const bubbleBuf = buildAtomBuffers(block, sm, 1).buffers;
     const bubbleR = bubbleBuf.get("instanceData")![3];
 
     sm.setRepresentation(SPACEFILL);
-    const sfBuf = buildAtomBuffers(block, sm, 1);
+    const sfBuf = buildAtomBuffers(block, sm, 1).buffers;
     const sfR = sfBuf.get("instanceData")![3];
 
     expect(sfR / bubbleR).toBeGreaterThan(1.5);

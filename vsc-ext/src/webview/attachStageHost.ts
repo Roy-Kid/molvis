@@ -10,7 +10,6 @@ import type { Molvis } from "@molcrafts/molvis-stage";
 import {
   decideIngest,
   decodeMolidx,
-  dropLoadMode,
   exportFrame,
   type FileFormat,
   HostRangeSource,
@@ -18,8 +17,12 @@ import {
   isBinaryFormat,
   loadFileContent,
   loadFileStream,
+  loadMeshOverlay,
+  loadMrecSource,
   OpfsIndexCache,
+  sceneDropLoadMode,
 } from "@molcrafts/molvis-stage/io";
+import { isMrecZipPath, isStlPath } from "@molcrafts/molvis-stage/io/formats";
 import {
   type HostToWebviewMessage,
   isQuickViewHostMessage,
@@ -27,6 +30,7 @@ import {
 } from "../protocol";
 import { applyConfigAndSettings } from "./applySettings";
 import { type HostApi, reportError, runAsync } from "./errorBoundary";
+import { hostPayload } from "./hostPayload";
 import { asHostBytes, WebviewHostRangeSource } from "./hostRangeSource";
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -56,6 +60,23 @@ export interface AttachStageHostOptions {
    * (selectAtoms, enableCapability, …). Return true if handled.
    */
   onExtraMessage?: (message: HostToWebviewMessage) => boolean;
+  /**
+   * Non-claiming pre-dispatch observer: sees every accepted host message
+   * before {@link handleCore}. Returns nothing, so it can never claim,
+   * reorder or suppress a message.
+   *
+   * It exists because `handleCore` claims `init` and returns `true`, which
+   * puts `init`'s payload structurally out of reach of `onExtraMessage`. The
+   * alternative — letting a surface run its own window listener — would fork
+   * message delivery into two owners that stay identical by convention alone.
+   */
+  onMessageSeen?: (message: HostToWebviewMessage) => void;
+  /**
+   * Called with a label while a host-driven load is in flight and with
+   * `null` once it settles. Quick look paints it over the canvas so a large
+   * file is not a silent wait on an empty scene.
+   */
+  onBusy?: (label: string | null) => void;
 }
 
 export interface StageHostHandle {
@@ -77,9 +98,41 @@ export function attachStageHost(
     listenWindow = true,
     isHostMessage = isQuickViewHostMessage,
     onExtraMessage,
+    onMessageSeen,
+    onBusy,
   } = options;
 
   let rangeSource: WebviewHostRangeSource | null = null;
+
+  /**
+   * Run one host-driven load: hold the busy label (refreshed from the
+   * engine's own `status-message` phases) until the load settles, and report
+   * the webview-side duration so the host can log how much of the wait was
+   * the wire and how much was here.
+   */
+  const runLoad = (
+    filename: string,
+    scope: string,
+    task: () => Promise<unknown>,
+  ): void => {
+    const startedAt = performance.now();
+    onBusy?.(`Loading ${filename}…`);
+    const onPhase = ({ text }: { text: string }) => onBusy?.(text);
+    app.events.on("status-message", onPhase);
+    const finish = () => {
+      app.events.off("status-message", onPhase);
+      onBusy?.(null);
+      host.postMessage({
+        type: "loadStats",
+        filename,
+        webviewMs: Math.round(performance.now() - startedAt),
+      });
+    };
+    task().then(finish, (error: unknown) => {
+      finish();
+      reportError(host, scope, error);
+    });
+  };
 
   app.saveFile = async (blob: Blob, suggestedName: string) => {
     const buffer = await blob.arrayBuffer();
@@ -89,6 +142,20 @@ export function attachStageHost(
 
   const handleCore = (message: HostToWebviewMessage): boolean => {
     switch (message.type) {
+      case "loadPhase": {
+        if (message.phase === "cancelled") {
+          onBusy?.(null);
+          return true;
+        }
+        const size =
+          message.bytes !== undefined
+            ? ` (${(message.bytes / (1024 * 1024)).toFixed(1)} MB)`
+            : "";
+        // Held until `runLoad` takes over when the payload lands — the host
+        // read plus the wire hop is dead air otherwise.
+        onBusy?.(`Opening ${message.filename}${size}…`);
+        return true;
+      }
       case "init":
       case "applySettings":
         try {
@@ -124,28 +191,32 @@ export function attachStageHost(
         );
         rangeSource = source;
         const fingerprint = `${message.uri}:${message.size}:${message.mtime}`;
-        runAsync(host, `Failed to load ${message.filename}`, async () => {
-          if (message.index) {
-            const copy = new Uint8Array(message.index.byteLength);
-            copy.set(message.index);
-            const decoded = decodeMolidx(copy.buffer);
-            if (decoded) await OpfsIndexCache.set(fingerprint, decoded);
-          }
-          return loadFileStream(
-            app,
-            new HostRangeSource(source),
-            message.filename,
-            message.format,
-            {
-              fingerprint,
-              // Host IPC is a postMessage round-trip per chunk. 1 MiB
-              // is enough for a first streamable frame without stuffing
-              // the webview channel.
-              chunkSize: 1024 * 1024,
-            },
-            message.mode,
-          );
-        });
+        runLoad(
+          message.filename,
+          `Failed to load ${message.filename}`,
+          async () => {
+            if (message.index) {
+              const copy = new Uint8Array(message.index.byteLength);
+              copy.set(message.index);
+              const decoded = decodeMolidx(copy.buffer);
+              if (decoded) await OpfsIndexCache.set(fingerprint, decoded);
+            }
+            return loadFileStream(
+              app,
+              new HostRangeSource(source),
+              message.filename,
+              message.format,
+              {
+                fingerprint,
+                // Host IPC is a postMessage round-trip per chunk. 1 MiB
+                // is enough for a first streamable frame without stuffing
+                // the webview channel.
+                chunkSize: 1024 * 1024,
+              },
+              message.mode,
+            );
+          },
+        );
         return true;
       }
       case "bytes": {
@@ -166,14 +237,48 @@ export function attachStageHost(
       }
       case "loadFile": {
         const { content, filename, format, mode, stream } = message;
+        if (isStlPath(filename)) {
+          // Scene geometry: the host posted the mesh bytes, and there is no
+          // `FileFormat` to route them by. Additive, so `mode` says nothing
+          // here either — a mesh never replaces the scene.
+          const bytes = asHostBytes(content);
+          runAsync(host, `Failed to load ${filename}`, async () => {
+            if (!bytes) {
+              throw new Error(`STL mesh ${filename} was not binary`);
+            }
+            await loadMeshOverlay(app, bytes, filename);
+          });
+          return true;
+        }
+        if (isMrecZipPath(filename)) {
+          // Packed mrec store: the host posted the archive bytes; the mrec
+          // reader opens it (in the trajectory worker when available).
+          const bytes = asHostBytes(content);
+          runAsync(host, `Failed to load ${filename}`, async () => {
+            if (!bytes) {
+              throw new Error(`packed mrec store ${filename} was not binary`);
+            }
+            await loadMrecSource(
+              app,
+              { kind: "zip", blob: new Blob([bytes as BlobPart]) },
+              filename,
+              mode,
+            );
+          });
+          return true;
+        }
         if (stream && content instanceof Uint8Array && format) {
           const blob = new Blob([content as BlobPart]);
-          runAsync(host, `Failed to load ${filename}`, () =>
+          runLoad(filename, `Failed to load ${filename}`, () =>
             loadFileStream(app, blob, filename, format as FileFormat, {}, mode),
           );
         } else {
-          runAsync(host, `Failed to load ${filename}`, () =>
-            loadFileContent(app, content, filename, format, mode),
+          const payload = hostPayload(
+            content,
+            format !== undefined && !isBinaryFormat(format),
+          );
+          runLoad(filename, `Failed to load ${filename}`, () =>
+            loadFileContent(app, payload, filename, format, mode),
           );
         }
         return true;
@@ -186,9 +291,21 @@ export function attachStageHost(
         }
         return true;
       case "selectAtoms": {
-        const { indices } = message;
-        if (!Array.isArray(indices) || indices.length === 0) return true;
-        app.world.selectionManager.replaceAtomsByIds(indices);
+        // A range is expanded here, where the atoms already live, so a
+        // whole-frame select costs two numbers on the wire instead of one
+        // per atom.
+        const rows =
+          message.indices ??
+          (message.range
+            ? Array.from(
+                {
+                  length: Math.max(0, message.range.end - message.range.start),
+                },
+                (_, i) => (message.range as { start: number }).start + i,
+              )
+            : undefined);
+        if (!rows || rows.length === 0) return true;
+        app.world.selectionManager.replaceAtomsByIds(rows);
         return true;
       }
       case "error":
@@ -199,6 +316,7 @@ export function attachStageHost(
   };
 
   const handleMessage = (message: HostToWebviewMessage): void => {
+    onMessageSeen?.(message);
     if (handleCore(message)) return;
     if (onExtraMessage?.(message)) return;
   };
@@ -244,7 +362,7 @@ export function attachStageHost(
       event.stopPropagation();
 
       const uriList = event.dataTransfer?.getData("text/uri-list");
-      const mode = dropLoadMode(app.modifierPipeline.sources().length);
+      const mode = sceneDropLoadMode(app.modifierPipeline);
       if (uriList) {
         const uri = uriList
           .split("\n")
@@ -261,6 +379,23 @@ export function attachStageHost(
 
       void (async () => {
         try {
+          if (isStlPath(file.name)) {
+            await loadMeshOverlay(
+              app,
+              new Uint8Array(await file.arrayBuffer()),
+              file.name,
+            );
+            return;
+          }
+          if (isMrecZipPath(file.name)) {
+            await loadMrecSource(
+              app,
+              { kind: "zip", blob: file },
+              file.name,
+              mode,
+            );
+            return;
+          }
           const inferred = inferFormatFromFilename(file.name);
           const decision = inferred ? decideIngest(inferred, file.size) : null;
           if (decision?.path === "refuse") {

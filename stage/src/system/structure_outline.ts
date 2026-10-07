@@ -1,11 +1,28 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 
-/** Serializable outline for hosts (VS Code tree, future web outline). */
+/**
+ * Serializable outline for hosts (VS Code tree, future web outline).
+ *
+ * A node names the atoms it **owns**, and nothing else: an atom owns itself,
+ * a residue owns its atoms (its children may be elided when there are many),
+ * and a chain or source owns none — a host reads those from the children or
+ * from {@link atomRange}. Listing a group's atoms again on the group was pure
+ * duplication, and on a 500 000-atom frame it was a 3.4 MB array crossing the
+ * host channel on every publish.
+ */
 export type StructureOutlineNode = {
   id: string;
   label: string;
   kind: "chain" | "residue" | "atom" | "source";
+  /** Atoms owned directly by this node. Absent on chain / source nodes. */
   atomIndices?: number[];
+  /** Atoms covered, listed or not — what a host shows as "N atoms". */
+  atomCount: number;
+  /**
+   * Contiguous `[start, end)` cover, when the node has one. Lets a host
+   * select the whole group with two numbers instead of an index per atom.
+   */
+  atomRange?: { start: number; end: number };
   children?: StructureOutlineNode[];
 };
 
@@ -54,6 +71,7 @@ export function buildStructureOutline(
         label: atomLabel(i, names, elements),
         kind: "atom",
         atomIndices: [i],
+        atomCount: 1,
       });
     }
     return {
@@ -63,7 +81,9 @@ export function buildStructureOutline(
           label:
             n > maxAtoms ? `Atoms (${n}, showing ${maxAtoms})` : `Atoms (${n})`,
           kind: "source",
-          atomIndices: Array.from({ length: n }, (_, i) => i),
+          // Row 0…n-1: a range says "every atom" in two numbers.
+          atomCount: n,
+          atomRange: { start: 0, end: n },
           children,
         },
       ],
@@ -100,21 +120,24 @@ export function buildStructureOutline(
   const roots: StructureOutlineNode[] = [];
   for (const [chain, resMap] of chains) {
     const residues: StructureOutlineNode[] = [];
-    const chainAtomIndices: number[] = [];
+    let chainAtoms = 0;
     for (const [resKey, bucket] of resMap) {
       const atomNodes: StructureOutlineNode[] = bucket.atoms.map((a) => ({
         id: `atom:${a.index}`,
         label: a.label,
         kind: "atom" as const,
         atomIndices: [a.index],
+        atomCount: 1,
       }));
       const indices = bucket.atoms.map((a) => a.index);
-      chainAtomIndices.push(...indices);
+      chainAtoms += indices.length;
       residues.push({
         id: `res:${resKey}`,
         label: bucket.label,
         kind: "residue",
+        // The residue owns these: its atom children are elided above 40.
         atomIndices: indices,
+        atomCount: indices.length,
         children: atomNodes.length <= 40 ? atomNodes : undefined,
       });
     }
@@ -122,7 +145,7 @@ export function buildStructureOutline(
       id: `chain:${chain}`,
       label: `Chain ${chain}`,
       kind: "chain",
-      atomIndices: chainAtomIndices,
+      atomCount: chainAtoms,
       children: residues,
     });
   }

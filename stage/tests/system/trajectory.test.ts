@@ -345,3 +345,54 @@ describe("Trajectory", () => {
     });
   });
 });
+
+describe("Trajectory.sectionUpdates (store index seam)", () => {
+  it("is undefined for eager trajectories and out-of-range indices", () => {
+    const traj = new Trajectory(makeFrames(2));
+    expect(traj.sectionUpdates(0)).toBeUndefined();
+    expect(traj.sectionUpdates(-1)).toBeUndefined();
+    expect(traj.sectionUpdates(5)).toBeUndefined();
+  });
+
+  it("delegates to a sync provider and goes dark for a replaced slot", () => {
+    const frames = makeFrames(3);
+    const asked: number[] = [];
+    const traj = Trajectory.fromProvider({
+      length: 3,
+      get: (i) => frames[i],
+      sectionUpdates: (i) => {
+        asked.push(i);
+        return new Map([
+          ["atoms", i],
+          ["bonds", 0],
+        ]);
+      },
+    });
+    expect(traj.sectionUpdates(2)?.get("atoms")).toBe(2);
+    expect(traj.sectionUpdates(2)?.get("bonds")).toBe(0);
+    expect(traj.sectionUpdates(3)).toBeUndefined();
+    traj.replaceFrame(2, new Frame());
+    expect(traj.sectionUpdates(2)).toBeUndefined();
+    expect(asked).toEqual([2, 2]);
+  });
+
+  it("is undefined when the provider has no index", () => {
+    const frames = makeFrames(1);
+    const traj = Trajectory.fromProvider({ length: 1, get: (i) => frames[i] });
+    expect(traj.sectionUpdates(0)).toBeUndefined();
+  });
+
+  it("delegates to an async provider synchronously", async () => {
+    const frame = new Frame();
+    const traj = Trajectory.fromAsyncProvider({
+      length: 2,
+      get: async () => frame,
+      sectionUpdates: (i) => (i === 1 ? new Map([["atoms", 9]]) : undefined),
+    });
+    expect(traj.sectionUpdates(1)?.get("atoms")).toBe(9);
+    expect(traj.sectionUpdates(0)).toBeUndefined();
+    traj.replaceFrame(1, new Frame());
+    expect(traj.sectionUpdates(1)).toBeUndefined();
+    expect(traj.get(1)).not.toBe(frame);
+  });
+});

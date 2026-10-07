@@ -78,7 +78,9 @@ export class SceneSession {
     this.host.setFrameIndex(this.host.system.trajectory.currentIndex);
     this.host.clearLastRenderedFrame();
 
-    this.host.pipeline.clear();
+    // Mesh overlays are view geometry, not data: replacing the molecular
+    // source must not delete an STL packing container already on the scene.
+    this.host.pipeline.clear({ keepMeshOverlays: true });
     // File load and memory/RPC replace use FileDataSource as the primary
     // Source when the payload is an owned Trajectory.
     const newDS = new FileDataSource(trajectory, meta);

@@ -88,3 +88,31 @@ describe("SceneIndex.bondPlaneAxis", () => {
     expect(out.length()).toBeCloseTo(1, 6);
   });
 });
+
+describe("SceneIndex topology lifetime", () => {
+  /**
+   * The draw order is the pipeline's, not the layers'. Bonds auto-attach
+   * ahead of Particles today, so the bond layer registers first — if the atom
+   * layer owns the topology reset, it wipes the edges that were just built and
+   * `getBondsForAtom` answers empty for every atom (deleting an atom then
+   * leaves its bonds on the canvas).
+   */
+  it("keeps bond edges when the bond layer registers before the atom layer", () => {
+    const index = new SceneIndex();
+
+    // Bond layer first — two bonds over three atoms.
+    index.topology.addBond(0, 0, 1);
+    index.topology.addBond(1, 1, 2);
+
+    // Atom layer second, as the live pipeline orders it.
+    index.registerAtomFrame({
+      frame: null as never,
+      mesh: { uniqueId: 1 } as never,
+      block: { nrows: () => 3 } as never,
+      buffers: new Map(),
+    });
+
+    expect([...index.topology.getBondsForAtom(1)].sort()).toEqual([0, 1]);
+    expect([...index.topology.getBondsForAtom(0)]).toEqual([0]);
+  });
+});

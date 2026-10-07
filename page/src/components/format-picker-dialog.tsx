@@ -8,11 +8,14 @@ import {
   type FileFormat,
   inferFormatFromFilename,
   isBinaryFormat,
+  isStlPath,
   type LoadFileStreamOptions,
   type LoadFileStreamResult,
   type LoadMode,
   loadFileContent,
   loadFileStream,
+  loadMeshOverlay,
+  loadMrecSource,
   type PickBondMapping,
   TRAJECTORY_WHOLE_FILE_CAP_BYTES,
   toIoError,
@@ -43,6 +46,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ViewerAction } from "@/components/viewer/ViewerAction";
+import {
+  isMrecDirectoryOpen,
+  isMrecZipFile,
+  type OpenTarget,
+} from "@/lib/mrec-open";
 
 type PickerReason = "unknown-extension" | "no-extension";
 
@@ -227,9 +235,11 @@ export async function loadFileStreamWithFormatPrompt(
 export type LoadFileResult = "started" | "cancelled";
 
 /**
- * Single ingress for any user-supplied `File`. Routes large files
- * through the streaming worker pipeline and small files through the
- * whole-content reader.
+ * Single ingress for any user-supplied open target: a `File`, a packed
+ * `*.mrec.zip`, or a `*.mrec` store directory ({@link OpenTarget}). Routes
+ * mrec stores to `loadMrecSource`, STL meshes to `loadMeshOverlay` (scene
+ * geometry, not a data source), large files through the streaming worker
+ * pipeline, and small files through the whole-content reader.
  *
  * On success returns `"started"`. On user cancel returns `"cancelled"`.
  * On parse/format failure **throws** with the molrs error message so the
@@ -242,12 +252,47 @@ export type LoadFileResult = "started" | "cancelled";
  */
 export async function loadFileSmart(
   app: Molvis,
-  file: File,
+  target: OpenTarget,
   pickFormat: PickFormat,
   mode: LoadMode = "replace",
   pickBondMapping?: PickBondMapping,
 ): Promise<LoadFileResult> {
   try {
+    // mrec stores have no FileFormat: both forms go straight to the store
+    // ingress (worker-backed when Workers exist), never to a format parser.
+    if (isMrecDirectoryOpen(target)) {
+      await loadMrecSource(
+        app,
+        { kind: "file-tree", files: target.files },
+        target.name,
+        mode,
+        pickBondMapping,
+      );
+      return "started";
+    }
+    const file = target;
+    // An STL is scene geometry, not scene data: no format parser, no data
+    // source, and no `mode` — the mesh is added to whatever is already
+    // there. Routed before format inference because it has no `FileFormat`
+    // to infer, and because its bytes must be read as bytes.
+    if (isStlPath(file.name)) {
+      await loadMeshOverlay(
+        app,
+        new Uint8Array(await file.arrayBuffer()),
+        file.name,
+      );
+      return "started";
+    }
+    if (isMrecZipFile(file)) {
+      await loadMrecSource(
+        app,
+        { kind: "zip", blob: file },
+        file.name,
+        mode,
+        pickBondMapping,
+      );
+      return "started";
+    }
     // Infer format up front so we can route between the streaming worker
     // (text-only for now) and the eager path (which knows how to read
     // binary formats as bytes). Unknown-extension files fall through with
@@ -353,14 +398,14 @@ export async function loadFileSmart(
       err instanceof CancellationError
     ) {
       app.events.emit("status-message", {
-        text: `Cancelled loading ${file.name}`,
+        text: `Cancelled loading ${target.name}`,
         type: "info",
       });
       return "cancelled";
     }
     // Re-throw so UI operation runners show molrs detail as the status
     // detail line (not a second generic "Failed to load <name>").
-    throw toIoError(err, `Failed to load ${file.name}`);
+    throw toIoError(err, `Failed to load ${target.name}`);
   }
 }
 

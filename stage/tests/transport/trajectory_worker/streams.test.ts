@@ -1,5 +1,6 @@
 import * as molrs from "@molcrafts/molvis-core/molrs";
 import {
+  TrajectoryReader,
   WasmLammpsDataStream,
   WasmLammpsDumpStream,
   WasmPdbStream,
@@ -7,7 +8,11 @@ import {
   WasmXyzStream,
 } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
-import { MOLRS_TRAJ_STREAMS } from "../../../src/transport/trajectory_worker/streams";
+import {
+  isStoreFormat,
+  MOLRS_STORE_READERS,
+  MOLRS_TRAJ_STREAMS,
+} from "../../../src/transport/trajectory_worker/streams";
 
 describe("MOLRS_TRAJ_STREAMS", () => {
   it("maps every worker Format to a molrs stream constructor", () => {
@@ -32,5 +37,15 @@ describe("MOLRS_TRAJ_STREAMS", () => {
         expect(MOLRS_TRAJ_STREAMS[format]).toBe(shipped);
       }
     }
+  });
+});
+
+describe("MOLRS_STORE_READERS", () => {
+  it("routes the mrec store format to molrs TrajectoryReader", () => {
+    expect(MOLRS_STORE_READERS.mrec).toBe(TrajectoryReader);
+    expect(isStoreFormat("mrec")).toBe(true);
+    expect(isStoreFormat("xyz")).toBe(false);
+    // No byte stream exists for a store format.
+    expect(Object.hasOwn(MOLRS_TRAJ_STREAMS, "mrec")).toBe(false);
   });
 });

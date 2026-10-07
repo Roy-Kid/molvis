@@ -24,6 +24,8 @@ const pythonDev = process.env.MOLVIS_PYTHON_DEV === "1";
 const distRoot = pythonDev
   ? path.join("..", "python", "src", "molvis", "dist")
   : "dist";
+/** Host path prefix, e.g. `/molvis/` or `/nightly/molvis/`. Empty → auto. */
+const assetBase = (process.env.MOLVIS_ASSET_BASE ?? "").trim();
 
 export default defineConfig({
   server: {
@@ -38,6 +40,18 @@ export default defineConfig({
   plugins: [pluginReact()],
   html: {
     template: "./public/index.html",
+    tags: assetBase
+      ? [
+          {
+            tag: "script",
+            head: true,
+            append: false,
+            children: `window.__MOLVIS_ASSET_BASE__=${JSON.stringify(
+              assetBase.endsWith("/") ? assetBase : `${assetBase}/`,
+            )};`,
+          },
+        ]
+      : [],
   },
   output: {
     // `auto` derives the runtime public path from each chunk's

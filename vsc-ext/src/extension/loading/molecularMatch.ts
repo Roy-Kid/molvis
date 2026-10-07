@@ -6,9 +6,61 @@
  * (`@molcrafts/molvis-stage/io/formats`) plus extension-less VASP names.
  */
 
-/** Exclude build/deps trees from the Activity Bar Files scan. */
+import { isMrecZipPath, isStlPath, mrecStoreRootPath } from "./pathUtils";
+
+/**
+ * Exclude build / dependency / cache trees from the Activity Bar Files scan.
+ *
+ * This list is a performance contract, not tidiness. `findFiles` walks every
+ * directory it is not told to skip, so one unexcluded artifact tree decides
+ * how long the scan takes: a Rust `target/` runs to ~35k files and a conda
+ * prefix to ~77k, and on a network filesystem that is the difference between
+ * a tree that renders and a spinner that never stops. Add a directory here
+ * the moment it is generated rather than authored.
+ */
+/**
+ * Directory names never worth walking into, as a set for the lazy tree.
+ *
+ * Same list as {@link WORKSPACE_FILE_EXCLUDE}, in the shape a per-directory
+ * read needs. Kept as one source so the two cannot disagree about what a
+ * generated directory is.
+ */
+export const IGNORED_DIRECTORY_NAMES: ReadonlySet<string> = new Set([
+  "node_modules",
+  ".git",
+  ".hg",
+  ".svn",
+  "out",
+  "out-test",
+  "dist",
+  "build",
+  "target",
+  ".venv",
+  "venv",
+  ".conda",
+  "conda-env",
+  "site-packages",
+  ".cache",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  ".tox",
+  ".nox",
+  ".direnv",
+  ".pixi",
+  ".gradle",
+  ".next",
+  ".turbo",
+  ".rustup",
+  ".cargo",
+]);
+
 export const WORKSPACE_FILE_EXCLUDE =
-  "**/{node_modules,.git,out,dist,out-test,.venv,venv}/**";
+  "**/{node_modules,.git,.hg,.svn,out,out-test,dist,build,target," +
+  ".venv,venv,.conda,conda-env,site-packages,.cache,__pycache__," +
+  ".mypy_cache,.pytest_cache,.ruff_cache,.tox,.nox,.direnv,.pixi," +
+  ".gradle,.next,.turbo,.rustup,.cargo}/**";
 
 const EXTENSIONS = [
   "pdb",
@@ -44,6 +96,15 @@ const EXTENSIONS = [
 
 const EXTENSION_SET = new Set<string>(EXTENSIONS);
 
+/** Compound two-part suffix of a LAMMPS `dump local` topology overlay.
+ *  Keep in lockstep with `DUMP_LOCAL_SUFFIX` in
+ *  `@molcrafts/molvis-stage/io/formats`. */
+const DUMP_LOCAL_SUFFIX = ".dump.local";
+
+function isDumpLocalPath(filePath: string): boolean {
+  return filePath.trim().toLowerCase().endsWith(DUMP_LOCAL_SUFFIX);
+}
+
 function basenameOf(filePath: string): string {
   const trimmed = filePath.trim();
   const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
@@ -56,9 +117,15 @@ function extensionOf(filePath: string): string {
   return dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
 }
 
-/** True when the path is a registered molecular file (or a `.zarr` directory). */
+/**
+ * True when the path is something the stage can open: a registered molecular
+ * file, a `.mrec` directory or packed `.mrec.zip`, or an `.stl` mesh.
+ */
 export function isMolecularPath(filePath: string): boolean {
-  if (filePath.endsWith(".zarr") || filePath.endsWith(".zarr/")) return true;
+  if (mrecStoreRootPath(filePath) || isMrecZipPath(filePath)) return true;
+  // Scene geometry rather than a parsed format — it has no `FileFormat`, the
+  // same reason mrec is matched by suffix above and not by the extension set.
+  if (isStlPath(filePath)) return true;
   const base = basenameOf(filePath);
   if (base === "CHGCAR" || base.startsWith("CHGCAR_")) return true;
   if (
@@ -69,6 +136,7 @@ export function isMolecularPath(filePath: string): boolean {
   ) {
     return true;
   }
+  if (isDumpLocalPath(filePath)) return true;
   const ext = extensionOf(filePath);
   return ext.length > 0 && EXTENSION_SET.has(ext);
 }
@@ -93,6 +161,10 @@ export function isSketchPath(filePath: string): boolean {
 export function workspaceMolecularIncludeGlobs(): string[] {
   return [
     `**/*.{${EXTENSIONS.join(",")}}`,
+    `**/*${DUMP_LOCAL_SUFFIX}`,
+    "**/*.mrec/zarr.json",
+    "**/*.mrec.zip",
+    "**/*.stl",
     "**/CHGCAR",
     "**/CHGCAR_*",
     "**/POSCAR",
@@ -100,4 +172,28 @@ export function workspaceMolecularIncludeGlobs(): string[] {
     "**/CONTCAR",
     "**/CONTCAR_*",
   ];
+}
+
+/**
+ * The same set as one pattern, for callers that walk the tree.
+ *
+ * `findFiles` costs a directory walk per pattern, not per match, so running
+ * the list above one glob at a time pays for the whole workspace eleven times
+ * over. Anything that scans uses this; the list stays for `createFileSystemWatcher`,
+ * which takes one pattern per watcher by construction.
+ */
+export function workspaceMolecularIncludeGlob(): string {
+  const alternatives = [
+    ...EXTENSIONS.map((ext) => `*.${ext}`),
+    `*${DUMP_LOCAL_SUFFIX}`,
+    "*.mrec.zip",
+    "*.stl",
+    "CHGCAR",
+    "CHGCAR_*",
+    "POSCAR",
+    "POSCAR_*",
+    "CONTCAR",
+    "CONTCAR_*",
+  ];
+  return `**/{${alternatives.join(",")}}`;
 }

@@ -137,6 +137,7 @@ describe("pipeline add-menu catalog", () => {
     expect(grouped[0]?.items.map((i) => i.kind)).toEqual([
       "open",
       "add-source",
+      "extend",
       "stream",
     ]);
     expect(grouped[0]?.items[0]?.label).toBe("Open…");

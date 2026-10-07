@@ -34,6 +34,11 @@ describe("dropLoadMode", () => {
     expect(dropLoadMode(1)).toBe("augment");
     expect(dropLoadMode(2)).toBe("augment");
   });
+
+  it("treats a mesh-only scene as occupied so the next structure augments", () => {
+    expect(dropLoadMode(0, 1)).toBe("augment");
+    expect(dropLoadMode(0, 0)).toBe("replace");
+  });
 });
 
 describe("decideIngest", () => {

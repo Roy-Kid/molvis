@@ -61,6 +61,32 @@ export function sidePanelMinPct(containerWidth: number): number {
   return Math.min(SIDE_PANEL.maxPct, Math.max(SIDE_PANEL.minPct, pxFloorPct));
 }
 
+/**
+ * Narrowest drag range a rail must keep, as a page percentage.
+ *
+ * Without a floor here the rail becomes unresizable on a small screen: the
+ * 240px form floor reaches {@link SIDE_PANEL.maxPct} at a 800px container, so
+ * `sidePanelMinPct` and the fixed 30% cap meet and the splitter has nowhere to
+ * travel (at 900px the whole range is ~30px). The cap is what gives — a rail
+ * the user is actively dragging is a rail they want wider.
+ */
+export const SIDE_PANEL_MIN_TRAVEL_PCT = 10;
+
+/**
+ * Widest a rail may grow for a container of `containerWidth` px.
+ *
+ * {@link SIDE_PANEL.maxPct} on screens wide enough for it, otherwise whatever
+ * keeps {@link SIDE_PANEL_MIN_TRAVEL_PCT} of travel above
+ * {@link sidePanelMinPct}. Pair it with that function — never with the raw
+ * constant — or narrow screens get min === max.
+ */
+export function sidePanelMaxPct(containerWidth: number): number {
+  return Math.max(
+    SIDE_PANEL.maxPct,
+    sidePanelMinPct(containerWidth) + SIDE_PANEL_MIN_TRAVEL_PCT,
+  );
+}
+
 /** @deprecated Prefer {@link SIDE_PANEL.minPct} — kept as stable export alias. */
 export const SIDE_PANEL_MIN_PCT = SIDE_PANEL.minPct;
 /** @deprecated Prefer {@link SIDE_PANEL.maxPct}. */

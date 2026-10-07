@@ -24,7 +24,7 @@
  * Unknown `version` / bad magic / truncate / unknown formatId → `null`.
  */
 
-import type { Format } from "../../transport/trajectory_worker/protocol";
+import type { StreamFormat } from "../../transport/trajectory_worker/protocol";
 
 /** Stage-side indexer generation. Bump when resume-incompatible. */
 export const STAGE_INDEXER_VERSION = 1;
@@ -47,7 +47,7 @@ export interface FrameIndexLike {
  * callers that only read `totalBytes` keep working.
  */
 export interface CachedIndex {
-  format: Format;
+  format: StreamFormat;
   fileSize: number;
   totalBytes: number;
   identity: MolidxIdentity;
@@ -61,7 +61,7 @@ export interface CachedIndex {
 
 /** Write input; omitted v2 fields get complete/legacy defaults. */
 export interface CachedIndexInput {
-  format: Format;
+  format: StreamFormat;
   fileSize?: number;
   totalBytes?: number;
   identity?: MolidxIdentity;
@@ -81,7 +81,7 @@ const HEADER_BYTES = 4 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + 4 + 8 + 8 + 8;
 const ENTRY_BYTES = 8 + 4;
 const FLAG_COMPLETE = 1;
 
-const FORMAT_TO_ID: Record<Format, number> = {
+const FORMAT_TO_ID: Record<StreamFormat, number> = {
   "lammps-dump": 1,
   xyz: 2,
   pdb: 3,
@@ -92,9 +92,9 @@ const FORMAT_TO_ID: Record<Format, number> = {
   trr: 8,
 };
 
-const ID_TO_FORMAT: Record<number, Format> = (() => {
-  const out: Record<number, Format> = {};
-  for (const [k, v] of Object.entries(FORMAT_TO_ID)) out[v] = k as Format;
+const ID_TO_FORMAT: Record<number, StreamFormat> = (() => {
+  const out: Record<number, StreamFormat> = {};
+  for (const [k, v] of Object.entries(FORMAT_TO_ID)) out[v] = k as StreamFormat;
   return out;
 })();
 
@@ -283,7 +283,7 @@ function decodeBody(dv: DataView, byteLength: number): CachedIndex | null {
 export function decideMolidxUse(
   cached: CachedIndex | null,
   fileSize: number,
-  format: Format,
+  format: StreamFormat,
 ): MolidxUse {
   if (!cached) return { action: "miss" };
   if (cached.format !== format) return { action: "miss" };

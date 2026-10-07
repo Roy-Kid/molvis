@@ -2,11 +2,25 @@ import { type Box, Frame } from "@molcrafts/molvis-core/molrs";
 import { logger } from "../utils/logger";
 
 /**
+ * Per-section update ids of one frame: block name → the store update index
+ * that frame resolves to (molrec `blockUpdateAt`). Two frames mapping a block
+ * to the same id carry identical rows for it, so a consumer can skip
+ * comparing that block's values. A block absent at the frame is not a key.
+ */
+export type SectionUpdates = ReadonlyMap<string, number>;
+
+/**
  * Interface for lazy frame providers that load frames on demand.
  */
 export interface FrameProvider {
   readonly length: number;
   get(index: number): Frame;
+  /**
+   * Optional index seam: the {@link SectionUpdates} of frame `index`, when
+   * the backing store keeps one (mrec). Providers without a store index leave
+   * this out and consumers fall back to value comparison.
+   */
+  sectionUpdates?(index: number): SectionUpdates | undefined;
 }
 
 /**
@@ -22,6 +36,12 @@ export interface AsyncFrameProvider {
    */
   readonly length?: number;
   get(index: number): Promise<Frame>;
+  /**
+   * Optional index seam, same contract as {@link FrameProvider.sectionUpdates}.
+   * Answers synchronously for frames the provider has already resolved
+   * (the worker ships a frame's ids with the frame); `undefined` otherwise.
+   */
+  sectionUpdates?(index: number): SectionUpdates | undefined;
   /** Optional cleanup hook — called from `Trajectory.dispose()`. */
   dispose?(): void;
 }
@@ -65,9 +85,7 @@ export class Trajectory {
 
     this._currentIndex = 0;
     if (this._indexedLength > 0) {
-      logger.info(
-        `[Trajectory] Initialized with ${this._indexedLength} frames`,
-      );
+      logger.debug(`[Trajectory] built with ${this._indexedLength} frame(s)`);
     }
   }
 
@@ -90,8 +108,8 @@ export class Trajectory {
       for (let i = 0; i < missing; i++) traj._boxes.push(undefined);
     }
     if (traj._indexedLength > 0) {
-      logger.info(
-        `[Trajectory] Initialized lazy provider with ${traj._indexedLength} frames`,
+      logger.debug(
+        `[Trajectory] lazy provider with ${traj._indexedLength} frame(s)`,
       );
     }
     return traj;
@@ -128,8 +146,8 @@ export class Trajectory {
       for (let i = 0; i < missing; i++) traj._boxes.push(undefined);
     }
     if (traj._indexedLength > 0) {
-      logger.info(
-        `[Trajectory] Initialized async provider with ${traj._indexedLength} frame(s)`,
+      logger.debug(
+        `[Trajectory] async provider with ${traj._indexedLength} frame(s)`,
       );
     }
     return traj;
@@ -185,6 +203,19 @@ export class Trajectory {
     }
 
     return this._getFrame(index);
+  }
+
+  /**
+   * Store-index seam: the {@link SectionUpdates} of frame `index`, or
+   * `undefined` when the backing provider keeps no index, `index` is out of
+   * range, or the frame at `index` was replaced in place
+   * ({@link replaceFrame}) and no longer is the store's row set.
+   */
+  sectionUpdates(index: number): SectionUpdates | undefined {
+    if (index < 0 || index >= this._indexedLength) return undefined;
+    if (this._providerOverrides.has(index)) return undefined;
+    const provider = this._asyncProvider ?? this._provider;
+    return provider?.sectionUpdates?.(index);
   }
 
   /**
@@ -511,6 +542,11 @@ export class Trajectory {
       this._boxes[index] = box;
       return true;
     }
+
+    // Async provider: the replaced frame is no longer the store's row set, so
+    // mark the slot and `sectionUpdates` stops describing it. The sync
+    // accessors keep reading the replacement from `_frames`, as before.
+    if (this._asyncProvider) this._providerOverrides.set(index, frame);
 
     this._frames[index] = frame;
     this._boxes[index] = box;

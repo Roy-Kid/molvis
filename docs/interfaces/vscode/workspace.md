@@ -4,7 +4,8 @@ Stage and Sketch are peer editor tabs. The Activity Bar never hosts a canvas.
 
 - **Stage** — 3D editor tab (`@molcrafts/molvis-stage`)
 - **Sketch** — 2D editor tab (`@molcrafts/molvis-sketch`)
-- **Page** — full product shell (`MolVis: Open Page`), same as the web app
+- **Page** — the same viewer as Quick look with its interface showing
+  (`MolVis: Open Page`), same shell as the web app
 - **Files** — workspace molecular files plus recent paths
 - **Stage** outline — chain / residue / atom tree of the open Stage
 - **Sketch** outline — atoms and bonds of the open Sketch

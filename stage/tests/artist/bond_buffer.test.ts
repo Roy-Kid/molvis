@@ -423,9 +423,41 @@ describe("refreshBondPositions", () => {
 
     expect(d0[0]).toBeCloseTo(2, 5); // midpoint x
     expect(d1[3]).toBeCloseTo(4, 5); // length
-    expect(uploads).toEqual(
-      expect.arrayContaining(["matrix", "instanceData0", "instanceData1"]),
+    expect(uploads).toEqual(["instanceData0", "instanceData1"]);
+  });
+
+  it("leaves the thin-instance matrix untouched on a position-only refresh", () => {
+    // The impostor shader never reads world0..3; re-uploading 16 floats per
+    // bond every frame was pure bandwidth. The matrix keeps the full build's
+    // layout (its length is Babylon's thin-instance count).
+    const { atoms, bonds } = makeBlocks(2, [{ i: 0, j: 1, order: 1 }]);
+    const built = buildBondBuffers(bonds, atoms, makeAtomColor(2), 1);
+    const matrix = built!.buffers.get("matrix")!;
+    const before = matrix.slice();
+    const uploads: string[] = [];
+    const bondState = {
+      count: 0,
+      frameOffset: 1,
+      buffers: new Map([
+        ["matrix", { data: matrix }],
+        ["instanceData0", { data: built!.buffers.get("instanceData0")! }],
+        ["instanceData1", { data: built!.buffers.get("instanceData1")! }],
+      ]),
+      uploadBuffer(name: string) {
+        uploads.push(name);
+      },
+    };
+
+    refreshBondPositions(
+      bonds,
+      new Float64Array([1, 9]),
+      new Float64Array([2, 2]),
+      new Float64Array([3, 3]),
+      bondState,
     );
+
+    expect(Array.from(matrix)).toEqual(Array.from(before));
+    expect(uploads).not.toContain("matrix");
   });
 
   it("holds benzene double bonds in the ring plane across a frame advance", () => {

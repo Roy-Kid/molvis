@@ -13,7 +13,7 @@ import {
 
 export type AttachQuickViewHostOptions = Omit<
   AttachStageHostOptions,
-  "isHostMessage" | "onExtraMessage"
+  "isHostMessage" | "onExtraMessage" | "onMessageSeen"
 >;
 
 export type QuickViewHostHandle = StageHostHandle;

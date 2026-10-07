@@ -76,7 +76,9 @@ export function attachSketchQuickViewHost(
         break;
       }
       case "selectAtoms":
-        composer.board.replaceSelectedAtoms(msg.indices);
+        // A sketch board is small enough that the tree always sends rows;
+        // the range form exists for whole-frame selects on the stage.
+        if (msg.indices) composer.board.replaceSelectedAtoms(msg.indices);
         break;
       case "triggerSave":
         break;

@@ -2,10 +2,17 @@ import { describe, expect, it } from "@rstest/core";
 import {
   canStream,
   describeFormat,
+  directoryFormats,
   FILE_FORMAT_REGISTRY,
   getAllAcceptExtensions,
   inferFormatFromFilename,
   isBinaryFormat,
+  isMrecZipPath,
+  isStlPath,
+  MREC_ZIP_SUFFIX,
+  matchBondEndpointColumns,
+  mrecStoreRootPath,
+  STL_SUFFIX,
 } from "../../src/io/formats";
 
 describe("inferFormatFromFilename", () => {
@@ -41,6 +48,12 @@ describe("inferFormatFromFilename", () => {
     expect(inferFormatFromFilename("traj.lammpstrj")).toBe("lammps-dump");
     expect(inferFormatFromFilename("traj.lmptrj")).toBe("lammps-dump");
     expect(inferFormatFromFilename("traj.lammpsdump")).toBe("lammps-dump");
+    expect(inferFormatFromFilename("bonds.dump.local")).toBe("lammps-dump");
+    expect(inferFormatFromFilename("BONDS.DUMP.LOCAL")).toBe("lammps-dump");
+  });
+
+  it("does not treat a bare .local extension as LAMMPS dump", () => {
+    expect(inferFormatFromFilename("notes.local")).toBeNull();
   });
 
   it("returns null for unknown extensions rather than guessing", () => {
@@ -76,6 +89,13 @@ describe("format registry flags", () => {
     for (const f of ["gro", "mol2", "poscar", "trr", "xtc"]) {
       expect(formats).toContain(f);
     }
+  });
+
+  it("does not treat mrec as a FileFormat", () => {
+    const formats = FILE_FORMAT_REGISTRY.map((d) => d.format);
+    expect(formats).not.toContain("mrec");
+    expect(inferFormatFromFilename("run.mrec")).toBeNull();
+    expect(directoryFormats.every((d) => d.product === "mrec")).toBe(true);
   });
 
   it("classifies trr/xtc as binary and text formats as text", () => {
@@ -114,6 +134,10 @@ describe("getAllAcceptExtensions", () => {
     const parts = getAllAcceptExtensions().split(",");
     expect(new Set(parts).size).toBe(parts.length);
   });
+
+  it("offers the .dump.local compound suffix", () => {
+    expect(getAllAcceptExtensions().split(",")).toContain(".dump.local");
+  });
 });
 
 describe("describeFormat", () => {
@@ -143,5 +167,100 @@ describe("cube / chgcar inference", () => {
     expect(inferFormatFromFilename("CHGCAR_sum")).toBe("chgcar");
     expect(inferFormatFromFilename("/path/to/CHGCAR")).toBe("chgcar");
     expect(inferFormatFromFilename("chgcar")).toBe(null);
+  });
+});
+
+describe("packed mrec (.mrec.zip)", () => {
+  it("isMrecZipPath matches only the packed suffix, case-insensitively", () => {
+    expect(isMrecZipPath("/runs/growth.mrec.zip")).toBe(true);
+    expect(isMrecZipPath("C:\\runs\\GROWTH.MREC.ZIP")).toBe(true);
+    expect(isMrecZipPath("growth.mrec")).toBe(false);
+    expect(isMrecZipPath("growth.mrec/zarr.json")).toBe(false);
+    expect(isMrecZipPath("archive.zip")).toBe(false);
+  });
+
+  it("a packed store is a file, not a directory store", () => {
+    expect(mrecStoreRootPath("/runs/growth.mrec.zip")).toBeUndefined();
+    expect(inferFormatFromFilename("growth.mrec.zip")).toBeNull();
+    expect(MREC_ZIP_SUFFIX).toBe(".mrec.zip");
+  });
+
+  it("the accept list offers both store forms", () => {
+    const accept = getAllAcceptExtensions().split(",");
+    expect(accept).toContain(".mrec");
+    expect(accept).toContain(".mrec.zip");
+    expect(directoryFormats[0].packedSuffix).toBe(MREC_ZIP_SUFFIX);
+  });
+});
+
+describe("STL meshes (.stl)", () => {
+  it("isStlPath matches only the suffix, case-insensitively", () => {
+    expect(isStlPath("/runs/cavity.stl")).toBe(true);
+    expect(isStlPath("C:\\meshes\\CAVITY.STL")).toBe(true);
+    expect(isStlPath("cavity.stl.gz")).toBe(false);
+    expect(isStlPath("still.lammpstrj")).toBe(false);
+  });
+
+  it("is not a parsed format: it carries no atoms", () => {
+    // Routing an STL to a Frame reader would be a category error, so
+    // inference must not claim one.
+    expect(inferFormatFromFilename("cavity.stl")).toBeNull();
+  });
+
+  it("the accept list still offers it", () => {
+    expect(getAllAcceptExtensions().split(",")).toContain(".stl");
+    expect(STL_SUFFIX).toBe(".stl");
+  });
+});
+
+describe("matchBondEndpointColumns", () => {
+  it("takes the compute property/local attribute names", () => {
+    expect(
+      matchBondEndpointColumns(["index", "batom1", "batom2", "btype"]),
+    ).toEqual(["batom1", "batom2"]);
+  });
+
+  it("takes OVITO's own standard-property spelling", () => {
+    expect(
+      matchBondEndpointColumns([
+        "ParticleIdentifiers.A",
+        "ParticleIdentifiers.B",
+      ]),
+    ).toEqual(["ParticleIdentifiers.A", "ParticleIdentifiers.B"]);
+  });
+
+  it("matches case-insensitively but reports the file's own spelling", () => {
+    expect(matchBondEndpointColumns(["BAtom1", "BATOM2"])).toEqual([
+      "BAtom1",
+      "BATOM2",
+    ]);
+  });
+
+  it("refuses the default dump local column names", () => {
+    // `dump local c_bond[1] c_bond[2] c_bond[3]` with no `dump_modify colname`
+    // — the names carry no meaning, so this must reach the user, not a guess.
+    expect(
+      matchBondEndpointColumns([
+        "index",
+        "c_bond[1]",
+        "c_bond[2]",
+        "c_bond[3]",
+      ]),
+    ).toBe(undefined);
+  });
+
+  it("refuses a half-present pair", () => {
+    expect(matchBondEndpointColumns(["batom1", "c_bond[2]"])).toBe(undefined);
+  });
+
+  it("prefers the attribute names when a file carries both spellings", () => {
+    expect(
+      matchBondEndpointColumns([
+        "batom1",
+        "batom2",
+        "ParticleIdentifiers.A",
+        "ParticleIdentifiers.B",
+      ]),
+    ).toEqual(["batom1", "batom2"]);
   });
 });

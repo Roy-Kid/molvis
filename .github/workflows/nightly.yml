@@ -1,0 +1,121 @@
+name: nightly
+
+# Upstream only, daily when dev moved in the last day: a snapshot of dev.
+#   nightly / page    the page bundle at app.molcrafts.org/nightly/molvis/
+#                     (Cloudflare Pages project `molvis`, branch `nightly`),
+#                     when the Cloudflare secrets are set.
+#   nightly / python  PyPI `molcrafts-molvis-nightly` <version>.dev<UTC
+#                     stamp>, pinned to `molcrafts-molpy-nightly`.
+on:
+  schedule:
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: nightly / prepare
+    if: github.repository_owner == 'MolCrafts'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      changed: ${{ steps.v.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 0
+      - id: v
+        run: |
+          set -euo pipefail
+          BASE=$(sed -n 's/^version = "\(.*\)"/\1/p' python/pyproject.toml | head -n1)
+          echo "version=${BASE}.dev$(date -u +%Y%m%d%H%M)" | tee -a "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || [ -n "$(git log -1 --since='25 hours ago' --format=%H)" ]; then
+            echo "changed=true" | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  page:
+    name: nightly / page
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      MOLVIS_ASSET_BASE: /nightly/molvis/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+      - uses: ./.github/actions/setup-node
+      - run: npm run build:page
+      - run: grep -F 'window.__MOLVIS_ASSET_BASE__="/nightly/molvis/"' page/dist/index.html
+      - uses: actions/upload-artifact@v7
+        with:
+          name: molvis-nightly-page
+          path: page/dist
+      - id: cloudflare
+        env:
+          API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$API_TOKEN" ] && [ -n "$ACCOUNT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Cloudflare deploy skipped: set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID."
+          fi
+      - if: steps.cloudflare.outputs.configured == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy page/dist --project-name=molvis --branch=nightly
+
+  python:
+    name: nightly / python
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/molcrafts-molvis-nightly
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MOLVIS_ASSET_BASE: /nightly/molvis/
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+      - uses: ./.github/actions/setup-node
+      - uses: ./.github/actions/setup-python
+      - run: npm run build:page
+      - name: Stamp the nightly distribution
+        env:
+          DEV: ${{ needs.prepare.outputs.version }}
+        run: |
+          python - "$DEV" <<'PY'
+          import pathlib, re, sys
+          dev = sys.argv[1]
+          p = pathlib.Path("python/pyproject.toml")
+          t = p.read_text(encoding="utf-8")
+          t = re.sub(r'^name\s*=\s*"molcrafts-molvis"', 'name = "molcrafts-molvis-nightly"', t, count=1, flags=re.M)
+          t = re.sub(r'^version\s*=\s*".*?"', f'version = "{dev}"', t, count=1, flags=re.M)
+          t = re.sub(r'"molcrafts-molpy>=[^"]+"', '"molcrafts-molpy-nightly>=0.14.0.dev0"', t, count=1)
+          p.write_text(t, encoding="utf-8")
+          PY
+      - run: uv build --project python --out-dir python/dist
+        env:
+          MOLVIS_SKIP_UI_BUILD: "1"
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
+          skip-existing: true

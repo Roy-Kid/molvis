@@ -1,0 +1,29 @@
+name: docs
+
+# Strict Zensical build of the product manual in every context. Nothing in
+# this repository deploys it.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [dev, master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && !contains(fromJSON('["refs/heads/dev","refs/heads/master","refs/heads/main"]'), github.ref) }}
+
+jobs:
+  build:
+    name: docs / build
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    env:
+      MOLVIS_SKIP_UI_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-python
+      - run: uv run --project python --extra docs zensical build --strict

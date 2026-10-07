@@ -219,23 +219,25 @@ export function EdgePanel({
 
   const isHorizontal = side === "bottom";
   const handle = (
-    <hr
+    <button
+      type="button"
+      role="slider"
       aria-orientation={isHorizontal ? "horizontal" : "vertical"}
       aria-valuenow={open ? size : 0}
       aria-valuemin={0}
       aria-valuemax={maxPx}
       aria-label={open ? resizeLabel : openLabel}
-      tabIndex={0}
       data-resizing={dragging ? "true" : undefined}
       data-slot="edge-panel-handle"
       data-side={side}
       className={cn(
-        "z-10 touch-none select-none border-0 bg-border outline-none",
+        "z-10 touch-none select-none border-0 bg-border",
+        "focus-visible:ring-2 focus-visible:ring-ring",
         "hover:bg-accent/80 data-[resizing=true]:bg-accent",
         isHorizontal && "h-px w-full cursor-row-resize",
         !isHorizontal && "h-full w-px cursor-col-resize",
-        !open && isHorizontal && "h-1",
-        !open && !isHorizontal && "w-1",
+        !open && isHorizontal && "h-3 min-h-touch-target",
+        !open && !isHorizontal && "w-3 min-w-touch-target",
         handleClassName,
       )}
       onPointerDown={beginResize}

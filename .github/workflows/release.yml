@@ -1,0 +1,112 @@
+name: release
+
+# A `v*` tag on MolCrafts publishes every surface of the shared version:
+#   release / npm      @molcrafts/molvis-* engines, viewers, plugin SDK and
+#                      the root umbrella (npm trusted publishing)
+#   release / python   molcrafts-molvis with the page bundle (PyPI trusted
+#                      publishing)
+#   release / vsc-ext  the VSIX on the VS Marketplace and Open VSX
+# workflow_dispatch is a dry run anywhere: everything builds and packs,
+# nothing is uploaded.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PUBLISH: ${{ github.event_name == 'push' && github.repository_owner == 'MolCrafts' }}
+
+jobs:
+  npm:
+    name: release / npm
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'push' && 'release-core' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    # setup-node's registry-url writes a placeholder NODE_AUTH_TOKEN into
+    # .npmrc, which overrides OIDC trusted publishing and 404s the PUT.
+    # Empty, npm >= 11.5 (Node 24) publishes through the id-token.
+    env:
+      NODE_AUTH_TOKEN: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - run: npm run check:versions
+      # The umbrella re-exports the plugin SDK, so every workspace is on the
+      # registry before it.
+      - run: |
+          npm run build:core
+          npm run build:stage
+          npm run build:stage-viewer
+          npm run build:sketch-viewer
+          npm run check:pack
+          npm run build:sketch
+          npm run build:plugin
+      - name: Publish core, engines, viewers, plugin SDK, then the umbrella
+        run: |
+          set -euo pipefail
+          if [ "$PUBLISH" = true ]; then publish="npm publish --provenance --access public"; else publish="npm pack --dry-run"; fi
+          for w in @molcrafts/molvis-core @molcrafts/molvis-stage @molcrafts/molvis-stage-viewer \
+                   @molcrafts/molvis-sketch @molcrafts/molvis-sketch-viewer @molcrafts/molvis-plugin; do
+            $publish -w "$w"
+          done
+          $publish
+
+  python:
+    name: release / python
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'push' && 'pypi' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+      - uses: ./.github/actions/setup-python
+      # The page bundle goes into python/src/molvis/dist/; the build backend
+      # then finds it fresh and does not rebuild it.
+      - run: npm run build:page
+      - run: uv build --project python --out-dir python/dist
+      - if: env.PUBLISH == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/
+
+  vsc-ext:
+    name: release / vsc-ext
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'push' && 'release-vsc-ext' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+      - run: npm run build:vsc-ext
+      - working-directory: vsc-ext
+        run: npx vsce package --no-dependencies -o molvis.vsix
+      - if: env.PUBLISH == 'true'
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.VSCE_PAT }}
+          registryUrl: https://marketplace.visualstudio.com
+          extensionFile: vsc-ext/molvis.vsix
+          skipDuplicate: true
+      - if: env.PUBLISH == 'true'
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.OVSX_PAT }}
+          registryUrl: https://open-vsx.org
+          extensionFile: vsc-ext/molvis.vsix
+          skipDuplicate: true

@@ -1,5 +1,6 @@
 import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
-import type { Frame } from "@molcrafts/molvis-core/molrs";
+import { Frame } from "@molcrafts/molvis-core/molrs";
+import { matchBondEndpointColumns } from "../io/formats";
 import { DType, isDomainUintDtype, isFloatDtype } from "../utils/dtype";
 import { BaseModifier, ModifierCapability } from "./modifier";
 import type { PipelineContext } from "./types";
@@ -26,9 +27,10 @@ export interface BondColumnMapping {
  * frame's `atoms.id` column to find its row position. The `offset`
  * field is only used when no `id` column exists.
  *
- * Idempotent: re-running on a block that already has `atomi`/`atomj`
- * is a no-op, so pipeline re-runs (selection toggles, etc.) don't
- * shift values twice.
+ * Copy-on-write: the rewritten columns land on a fresh Frame (every block
+ * deep-copied via `insertBlock`), never on the input — the input may be the
+ * DataSource's cached provider frame. A block that already carries
+ * `atomi`/`atomj` passes through untouched, so re-runs never shift twice.
  */
 export class BondColumnRemapModifier extends BaseModifier {
   static readonly NAME = "Bond Column Remap";
@@ -86,15 +88,24 @@ export class BondColumnRemapModifier extends BaseModifier {
         ? lookupViaIdMap(rawJ, idMap)
         : applyOffset(rawJ, m.offset);
 
+    const result = new Frame();
+    for (const name of input.blockNames()) {
+      const block = input.getBlock(name);
+      if (block) result.insertBlock(name, block);
+    }
+    if (input.box) result.box = input.box;
+
     // Re-fetch the block between writes — molrs Block handles can be
     // invalidated by mutations that touch the parent frame (see
-    // MEMORY note: project_molrs_block_handle_lifecycle).
+    // `.claude/notes/molrs-handles.md`).
+    bonds = result.getBlock("bonds");
+    if (bonds === undefined) return input;
     bonds.setColU32("atomi", ai);
-    bonds = input.getBlock("bonds");
+    bonds = result.getBlock("bonds");
     if (bonds === undefined) return input;
     bonds.setColU32("atomj", aj);
 
-    return input;
+    return result;
   }
 }
 
@@ -102,12 +113,23 @@ function lookupViaIdMap(
   raw: BigUint64Array,
   idMap: Map<number, number>,
 ): BigUint64Array {
-  // Unknown IDs map to row 0 — keeps the bond renderable instead of
-  // crashing, and shows up as a visibly wrong endpoint that's easy to
-  // spot rather than silently skipping the bond.
   const out = new BigUint64Array(raw.length);
+  let unknown = 0;
+  let sample: number | undefined;
   for (let k = 0; k < raw.length; k++) {
-    out[k] = BigInt(idMap.get(toRowIndex(raw[k])) ?? 0);
+    const id = toRowIndex(raw[k]);
+    const row = idMap.get(id);
+    if (row === undefined) {
+      unknown += 1;
+      if (sample === undefined) sample = id;
+      continue;
+    }
+    out[k] = BigInt(row);
+  }
+  if (unknown > 0) {
+    throw new Error(
+      `Bond Column Remap: ${unknown} bond endpoint(s) are not in this structure's atom id column (e.g. id ${sample}). Check the column mapping.`,
+    );
   }
   return out;
 }
@@ -191,4 +213,29 @@ export function bondsIntegerColumns(frame: Frame): string[] {
     }
   }
   return out;
+}
+
+/**
+ * The unambiguous column mapping for `frame`'s bonds block, or `null` when
+ * the endpoints have to be picked by hand.
+ *
+ * Inference is limited to the spellings OVITO's LAMMPS-dump-local reader
+ * recognises ({@link matchBondEndpointColumns}). A `dump local` file's column
+ * names are whatever the dump command was given — `c_bond[1] c_bond[2]` by
+ * default — so most files land here with nothing recognisable and must be
+ * mapped by the user; guessing would draw wrong topology in silence.
+ *
+ * Callers consult this before prompting, so a file whose columns were named
+ * with `dump_modify … colname` needs no dialog — which is also what makes it
+ * work on a host with no dialog to show.
+ */
+export function inferBondColumnMapping(frame: Frame): BondColumnMapping | null {
+  const bonds = frame.getBlock("bonds");
+  if (bonds === undefined || bonds.nrows() === 0) return null;
+  const matched = matchBondEndpointColumns(bonds.keys() as string[]);
+  if (matched === undefined) return null;
+  const [atomiSource, atomjSource] = matched;
+  // Values are persistent LAMMPS atom IDs; the modifier resolves them
+  // against `atoms.id`, so the direct-index offset is never used.
+  return { atomiSource, atomjSource, offset: 0 };
 }

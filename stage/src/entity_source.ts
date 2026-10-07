@@ -79,8 +79,17 @@ export class AtomSource {
     return this.frame?.getBlock("atoms") ?? null;
   }
 
+  /**
+   * Rows deleted from the frame segment. A frame row cannot be removed from
+   * the Block, so "deleted" has to be recorded beside it: without this,
+   * dropping an edit entry would let `getAllIds` hand the row straight back
+   * from the frame and a deleted atom would return on the next commit.
+   */
+  public deleted = new Set<number>();
+
   setFrame(frame: Frame | null) {
     this.frame = frame;
+    this.deleted.clear();
     this._elementCache = null;
     this._elementCacheFrame = null;
   }
@@ -106,10 +115,12 @@ export class AtomSource {
 
   setEdit(id: number, meta: AtomMeta) {
     this.edits.set(id, meta);
+    this.deleted.delete(id);
   }
 
   removeEdit(id: number) {
     this.edits.delete(id);
+    this.deleted.add(id);
   }
 
   /**
@@ -175,6 +186,7 @@ export class AtomSource {
   getMeta(id: number): AtomMeta | null {
     const edit = this.edits.get(id);
     if (edit) return edit;
+    if (this.deleted.has(id)) return null;
 
     const block = this.frameBlock;
     if (block && id < block.nrows()) {
@@ -222,7 +234,7 @@ export class AtomSource {
     const block = this.frameBlock;
     const frameCount = block?.nrows() ?? 0;
     for (let i = 0; i < frameCount; i++) {
-      yield i;
+      if (!this.deleted.has(i)) yield i;
     }
     // Yield edit-only IDs that are outside the frame range
     for (const id of this.edits.keys()) {
@@ -251,16 +263,22 @@ export class BondSource {
     return this.frame?.getBlock("atoms") ?? null;
   }
 
+  /** Frame-segment bonds deleted in the edit pool. See `AtomSource.deleted`. */
+  public deleted = new Set<number>();
+
   setFrame(frame: Frame | null) {
     this.frame = frame;
+    this.deleted.clear();
   }
 
   setEdit(id: number, meta: BondMeta) {
     this.edits.set(id, meta);
+    this.deleted.delete(id);
   }
 
   removeEdit(id: number) {
     this.edits.delete(id);
+    this.deleted.add(id);
   }
 
   setAttribute(id: number, key: string, value: unknown) {
@@ -296,6 +314,7 @@ export class BondSource {
   getMeta(id: number): BondMeta | null {
     const edit = this.edits.get(id);
     if (edit) return edit;
+    if (this.deleted.has(id)) return null;
 
     const bondBlock = this.frameBlock;
     const atomBlock = this.atomBlock;
@@ -369,7 +388,7 @@ export class BondSource {
     const block = this.frameBlock;
     const frameCount = block?.nrows() ?? 0;
     for (let i = 0; i < frameCount; i++) {
-      yield i;
+      if (!this.deleted.has(i)) yield i;
     }
     for (const id of this.edits.keys()) {
       if (id >= frameCount) {

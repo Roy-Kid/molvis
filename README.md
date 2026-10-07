@@ -8,7 +8,7 @@
 <p><strong>A visual workspace where people and agents inspect molecular data together</strong></p>
 
 <p>
-  <a href="https://github.com/molcrafts/molvis/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/MolCrafts/molvis/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
+  <a href="https://github.com/molcrafts/molvis/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/MolCrafts/molvis/test.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@molcrafts/molvis-stage"><img src="https://img.shields.io/npm/v/@molcrafts/molvis-stage?style=flat-square&logo=npm&logoColor=white" alt="npm stage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSD--3--Clause-18432B?style=flat-square" alt="License"></a>
 </p>

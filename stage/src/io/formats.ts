@@ -40,7 +40,7 @@ export type FormatPayload = "text" | "binary";
  *
  * - `"eager-only"` — no streaming reader exists; the whole file must be
  *   materialized before parsing. Used by formats whose payload is
- *   structurally indivisible (zarr directory, volumetric grids).
+ *   structurally indivisible (mrec store, volumetric grids).
  * - `"streaming-preferred"` — both an eager (`loadFileContent`) and a
  *   streaming (`loadFileStream`) reader exist. Hosts pick by file size /
  *   user intent. The default for everything multi-frame.
@@ -76,15 +76,33 @@ export type IngestDecision =
   | { path: "refuse"; reason: string };
 
 /**
- * Canvas / explorer drop onto a live viewer. An empty pipeline installs the
- * file as primary (`replace`); a scene that already has sources stacks the
- * file (`augment`) so topology (LAMMPS data) and trajectory (DCD) compose
- * in either drop order.
+ * Canvas / explorer drop onto a live viewer. An empty scene installs the
+ * file as primary (`replace`); a scene that already has data sources **or**
+ * mesh overlays stacks the file (`augment`) so topology (LAMMPS data),
+ * trajectory (DCD), and an STL packing container compose in either drop
+ * order.
+ *
+ * Mesh overlays are not DataSources — pass their count as
+ * `existingMeshCount` so an STL-only scene is not treated as empty.
+ * Hosts with a pipeline should prefer {@link sceneDropLoadMode} from
+ * `io/index.ts`, which counts both.
+ *
+ * STL itself never goes through this helper (`isStlPath` first): a mesh
+ * has no `LoadMode` and is always additive.
+ *
+ * @param existingSourceCount — enabled/installed DataSource rows
+ * @param existingMeshCount — live Mesh overlay rows (default 0)
+ * @returns `"replace"` on a truly empty scene, otherwise `"augment"`
+ * @example
+ * dropLoadMode(0) // "replace"
+ * dropLoadMode(0, 1) // "augment" — mesh-only scene
+ * dropLoadMode(1) // "augment"
  */
 export function dropLoadMode(
   existingSourceCount: number,
+  existingMeshCount = 0,
 ): "replace" | "augment" {
-  return existingSourceCount > 0 ? "augment" : "replace";
+  return existingSourceCount + existingMeshCount > 0 ? "augment" : "replace";
 }
 
 export interface FileFormatDescriptor {
@@ -258,6 +276,122 @@ export const FILE_FORMAT_REGISTRY: readonly FileFormatDescriptor[] = [
   },
 ];
 
+/**
+ * A directory-store product that is deliberately **not** a
+ * {@link FileFormat}. mrec is a Zarr-v3 *encoding*; molvis opens the whole
+ * store through molrs's `TrajectoryReader`, never a per-extension parser.
+ * Keeping it out of the parser-dispatch {@link FileFormat} union is a pinned
+ * invariant (`stage/tests/io/formats.test.ts`): hosts recognise the
+ * `.mrec` directory suffix and stream the store — they never route its bytes
+ * to a format reader.
+ */
+export interface DirectoryFormatDescriptor {
+  /** Product name molvis shows the user (never the `zarr` encoding). */
+  readonly product: "mrec";
+  readonly label: string;
+  readonly description: string;
+  /** Directory-name suffix that identifies the store, including the dot. */
+  readonly suffix: string;
+  /**
+   * File-name suffix of the store's packed single-file form, including the
+   * dot. A packed store is one file whose zip entries are the directory's
+   * files (stored, never deflated); it opens through the same reader.
+   */
+  readonly packedSuffix: string;
+  /** Directory stores are always streamed as trajectories. */
+  readonly ingest: IngestKind;
+}
+
+/** Directory-name suffix of an mrec store (a Zarr-v3 tree), including the dot. */
+export const MREC_DIR_SUFFIX = ".mrec";
+
+/** File-name suffix of a packed mrec store (`*.mrec.zip`), including the dot. */
+export const MREC_ZIP_SUFFIX = ".mrec.zip";
+
+/** Compound file-name suffix of a LAMMPS `dump local` topology overlay. */
+export const DUMP_LOCAL_SUFFIX = ".dump.local";
+
+/** File-name suffix of an STL triangle mesh, including the dot. */
+export const STL_SUFFIX = ".stl";
+
+/**
+ * Whether `filePath` names an STL triangle mesh.
+ *
+ * STL is deliberately absent from {@link FILE_FORMAT_REGISTRY}: it carries no
+ * atoms, so no reader turns it into a `Frame` and it never becomes a
+ * `DataSource`. It opens as scene geometry (`io/stl.ts` → `loadMeshOverlay`),
+ * the same way an mrec store opens as a store rather than through a format
+ * parser. Case-insensitive; either path separator.
+ */
+export function isStlPath(filePath: string): boolean {
+  return filePath.trim().toLowerCase().endsWith(STL_SUFFIX);
+}
+
+/**
+ * Directory-store products — the directory-shaped sibling of
+ * {@link FILE_FORMAT_REGISTRY}. Unioned into {@link getAllAcceptExtensions}
+ * so an open dialog / `accept` list offers `.mrec` alongside the file formats.
+ */
+export const directoryFormats: readonly DirectoryFormatDescriptor[] = [
+  {
+    product: "mrec",
+    label: "mrec store",
+    description:
+      "molpy record — a Zarr-v3 directory opened as a streaming trajectory (*.mrec/)",
+    suffix: MREC_DIR_SUFFIX,
+    packedSuffix: MREC_ZIP_SUFFIX,
+    ingest: "trajectory",
+  },
+];
+
+/**
+ * Whether `filePath` names a packed mrec store (`*.mrec.zip`). THE single
+ * source of truth for the packed form, the way {@link mrecStoreRootPath} is
+ * for the directory form. Case-insensitive; either path separator. A packed
+ * store is a file: it never has a store root and `mrecStoreRootPath` returns
+ * `undefined` for it.
+ */
+export function isMrecZipPath(filePath: string): boolean {
+  return filePath.trim().toLowerCase().endsWith(MREC_ZIP_SUFFIX);
+}
+
+/**
+ * Whether `filePath` names a LAMMPS `dump local` file (`*.dump.local`).
+ * This is a compound two-part suffix; the bare `local` extension is far too
+ * broad to register as a format extension, so it is matched here instead.
+ */
+export function isDumpLocalPath(filePath: string): boolean {
+  return filePath.trim().toLowerCase().endsWith(DUMP_LOCAL_SUFFIX);
+}
+
+/**
+ * Store root of a `*.mrec` directory record, or `undefined`. THE single
+ * source of truth for "is this an mrec store?" — every host (the VS Code path
+ * matcher, the store-URI collapser, the open dialog) funnels through here
+ * instead of re-deriving the `.mrec` rule.
+ *
+ * Accepts the store itself (`growth.mrec`) and any path inside it
+ * (`growth.mrec/zarr.json`, `growth.mrec/trajectory/atoms/x/c/0`), with or
+ * without a trailing slash and with either path separator. A packed
+ * `*.mrec.zip` archive is a file, not a directory store, and returns
+ * `undefined`.
+ */
+export function mrecStoreRootPath(filePath: string): string | undefined {
+  const posix = filePath.replaceAll("\\", "/");
+  const trimmed =
+    posix.length > 1 && posix.endsWith("/") ? posix.slice(0, -1) : posix;
+  const lower = trimmed.toLowerCase();
+  const insideMarker = `${MREC_DIR_SUFFIX}/`;
+  const inside = lower.lastIndexOf(insideMarker);
+  if (inside >= 0) {
+    return trimmed.slice(0, inside + MREC_DIR_SUFFIX.length);
+  }
+  if (lower.endsWith(MREC_DIR_SUFFIX)) {
+    return trimmed;
+  }
+  return undefined;
+}
+
 /** Returns the descriptor for a canonical FileFormat. */
 export function describeFormat(format: FileFormat): FileFormatDescriptor {
   const descriptor = FILE_FORMAT_REGISTRY.find((d) => d.format === format);
@@ -279,6 +413,18 @@ export function getAllAcceptExtensions(): string {
       exts.push(`.${ext}`);
     }
   }
+  // Directory stores contribute their dotted suffix (`.mrec`) so hosts that
+  // build an `accept` list from this offer the store folder too, plus the
+  // packed single-file form (`.mrec.zip`).
+  for (const dir of directoryFormats) {
+    exts.push(dir.suffix, dir.packedSuffix);
+  }
+  // Compound two-part suffix — not a registered extension, but an open
+  // dialog should still offer it alongside the `.mrec` store forms.
+  exts.push(DUMP_LOCAL_SUFFIX);
+  // Scene geometry rather than a parsed format, for the same reason mrec is
+  // listed here rather than in the registry.
+  exts.push(STL_SUFFIX);
   return exts.join(",");
 }
 
@@ -343,10 +489,12 @@ export function sniffFormatFromTextHead(head: string): FileFormat | null {
  * prompt.
  *
  * Resolution order:
- *  1. Extension-less basename match — currently only VASP CHGCAR files,
- *     whose canonical names are `CHGCAR`, `CHGCAR_sum`, `CHGCAR_diff`, …
+ *  1. Extension-less basename match — currently only VASP CHGCAR / POSCAR
+ *     files, whose canonical names are `CHGCAR`, `CHGCAR_sum`, `POSCAR`, …
  *     (case-sensitive — VASP filenames are uppercase by convention).
- *  2. Lowercased extension match against the registry.
+ *  2. Compound-suffix match — LAMMPS `dump local` (`*.dump.local`), whose
+ *     two-part suffix cannot be expressed as a single registry extension.
+ *  3. Lowercased extension match against the registry.
  */
 export function inferFormatFromFilename(filename: string): FileFormat | null {
   // 1. Extension-less canonical names.
@@ -365,7 +513,10 @@ export function inferFormatFromFilename(filename: string): FileFormat | null {
     return "poscar";
   }
 
-  // 2. Extension match.
+  // 2. Compound-suffix match.
+  if (isDumpLocalPath(filename)) return "lammps-dump";
+
+  // 3. Extension match.
   const ext = extensionOf(filename);
   if (!ext) return null;
   for (const entry of FILE_FORMAT_REGISTRY) {
@@ -472,3 +623,69 @@ export function decideIngest(
   }
   return { path: "whole-file" };
 }
+
+/**
+ * Column-name spellings a LAMMPS `dump local` file may use for a bond's two
+ * endpoints, most specific first, lower-cased for case-insensitive matching.
+ *
+ * These names are not ours to choose and not guessable. `dump local` writes
+ * whatever the dump command was given, so the default header for the usual
+ * `compute bond all property/local batom1 batom2 btype` is
+ * `c_bond[1] c_bond[2] c_bond[3]` — three columns carrying no meaning at all.
+ * Meaningful names exist only once the user has run `dump_modify … colname`.
+ *
+ * The list therefore mirrors OVITO's LAMMPS-dump-local reader rather than
+ * inventing a convention: OVITO recognises `batom1` / `batom2` for the
+ * endpoints, and separately maps any column whose name matches one of its own
+ * standard bond properties — case-insensitively, spaces removed, with `.A` /
+ * `.B` naming the two components of "Particle Identifiers". Anything else it
+ * sends to a manual column-mapping dialog, and so does molvis: a wrong guess
+ * draws wrong topology in silence, which is worse than asking.
+ *
+ * Reference: {@link https://www.ovito.org/manual/reference/file_formats/input/lammps_dump_local.html}
+ */
+export const BOND_ENDPOINT_ALIASES: readonly (readonly [string, string])[] = [
+  // `compute property/local` attribute names — what `dump_modify colname` is
+  // conventionally used to restore, and what molrs's own
+  // `write_lammps_dump_local` emits.
+  ["batom1", "batom2"],
+  // OVITO's standard-property spelling: the two components of its
+  // "Particle Identifiers" bond property, spaces removed.
+  ["particleidentifiers.a", "particleidentifiers.b"],
+];
+
+/**
+ * The two endpoint columns among `columns`, in `atomi`/`atomj` order and in
+ * the file's own spelling, or `undefined` when none of
+ * {@link BOND_ENDPOINT_ALIASES} is present — in which case the caller must
+ * ask the user rather than guess.
+ */
+export function matchBondEndpointColumns(
+  columns: readonly string[],
+): readonly [string, string] | undefined {
+  const bySpelling = new Map<string, string>();
+  for (const column of columns) {
+    // First spelling wins, so a file carrying both `batom1` and `BATOM1`
+    // resolves to whichever the reader saw first rather than flipping.
+    const key = column.toLowerCase();
+    if (!bySpelling.has(key)) bySpelling.set(key, column);
+  }
+  for (const [atomi, atomj] of BOND_ENDPOINT_ALIASES) {
+    const atomiSource = bySpelling.get(atomi);
+    const atomjSource = bySpelling.get(atomj);
+    if (atomiSource !== undefined && atomjSource !== undefined) {
+      return [atomiSource, atomjSource];
+    }
+  }
+  return undefined;
+}
+
+/**
+ * `dump local` section label LAMMPS records for rows that are bonds.
+ *
+ * `ENTRIES` is the default label and says nothing about content; `BONDS` is
+ * what OVITO's manual tells users to set (`dump_modify … label BONDS`), and
+ * is the only reliable signal that a local block holds bond topology, since
+ * the column names carry none.
+ */
+export const DUMP_LOCAL_BONDS_LABEL = "BONDS";

@@ -12,7 +12,7 @@
   },
   "license": "BSD-3-Clause",
   "icon": "image/molvis-icon.png",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -89,14 +89,19 @@
         "icon": "$(browser)"
       },
       {
+        "command": "molvis.openInPage",
+        "title": "Open in MolVis Page",
+        "icon": "$(browser)"
+      },
+      {
         "command": "molvis.openStructure",
-        "title": "MolVis: Open Structure\u2026",
+        "title": "MolVis: Open Structure…",
         "icon": "$(folder-opened)"
       },
       {
         "command": "molvis.quickView",
         "title": "Quick look",
-        "icon": "$(open-preview)"
+        "icon": "$(eye)"
       },
       {
         "command": "molvis.quickViewSketch",
@@ -268,7 +273,7 @@
         "displayName": "Quick look",
         "selector": [
           {
-            "filenamePattern": "*.{dcd,trr,xtc}"
+            "filenamePattern": "*.{dcd,trr,xtc,stl}"
           }
         ],
         "priority": "default"
@@ -278,7 +283,8 @@
       "workbench.editorAssociations": {
         "*.dcd": "molvis.binaryEditor",
         "*.trr": "molvis.binaryEditor",
-        "*.xtc": "molvis.binaryEditor"
+        "*.xtc": "molvis.binaryEditor",
+        "*.stl": "molvis.binaryEditor"
       }
     },
     "menus": {
@@ -299,6 +305,10 @@
           "command": "molvis.quickView"
         },
         {
+          "command": "molvis.openInPage",
+          "when": "(activeWebviewPanelId == molvis.quickView && molvis.activeSurfaceIsCanvas) || activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor"
+        },
+        {
           "command": "molvis.reload",
           "when": "activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor || activeWebviewPanelId == molvis.quickView || activeWebviewPanelId == molvis.stage || activeWebviewPanelId == molvis.sketch || activeWebviewPanelId == molvis.page"
         },
@@ -306,7 +316,6 @@
           "command": "molvis.quickViewSketch",
           "when": "false"
         },
-
         {
           "command": "molvis.stageOutline.select",
           "when": "false"
@@ -381,7 +390,12 @@
       "editor/title": [
         {
           "command": "molvis.quickView",
-          "when": "!activeCustomEditorId && activeWebviewPanelId != molvis.quickView && (resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR)",
+          "when": "!activeCustomEditorId && activeWebviewPanelId != molvis.quickView && (resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .stl || resourceExtname == .mrec || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR)",
+          "group": "navigation"
+        },
+        {
+          "command": "molvis.openInPage",
+          "when": "(activeWebviewPanelId == molvis.quickView && molvis.activeSurfaceIsCanvas) || activeCustomEditorId == molvis.editor || activeCustomEditorId == molvis.binaryEditor",
           "group": "navigation"
         },
         {
@@ -403,12 +417,12 @@
         },
         {
           "command": "molvis.openStage",
-          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
+          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .stl || resourceExtname == .mrec || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
           "group": "navigation@2"
         },
         {
           "command": "molvis.quickView",
-          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .zarr || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
+          "when": "resourceExtname == .pdb || resourceExtname == .ent || resourceExtname == .brk || resourceExtname == .xyz || resourceExtname == .extxyz || resourceExtname == .exyz || resourceExtname == .cif || resourceExtname == .mmcif || resourceExtname == .data || resourceExtname == .lmp || resourceExtname == .lammps || resourceExtname == .lammpsdata || resourceExtname == .dump || resourceExtname == .lammpstrj || resourceExtname == .lmptrj || resourceExtname == .lammpsdump || resourceExtname == .sdf || resourceExtname == .mol || resourceExtname == .cube || resourceExtname == .cub || resourceExtname == .chgcar || resourceExtname == .gro || resourceExtname == .mol2 || resourceExtname == .poscar || resourceExtname == .contcar || resourceExtname == .vasp || resourceExtname == .dcd || resourceExtname == .trr || resourceExtname == .xtc || resourceExtname == .stl || resourceExtname == .mrec || resourceFilename == CHGCAR || resourceFilename == POSCAR || resourceFilename == CONTCAR",
           "group": "navigation@3"
         },
         {
@@ -421,6 +435,19 @@
     "configuration": {
       "title": "MolVis",
       "properties": {
+        "molvis.defaultViewer": {
+          "type": "string",
+          "enum": [
+            "quickLook",
+            "page"
+          ],
+          "enumDescriptions": [
+            "Open with just the canvas; reveal the full interface in place when you want it.",
+            "Open with the full interface already showing (pipeline, compute, sidebars)."
+          ],
+          "default": "quickLook",
+          "markdownDescription": "Whether a molecular file opens with the full interface or with just the canvas. Both are the same viewer: `quickLook` starts with the interface hidden and **Show controls** reveals it in place, so switching costs nothing and never re-reads the file."
+        },
         "molvis.config": {
           "type": "object",
           "default": {},
@@ -608,8 +635,8 @@
     "package": "npm run package:prepare",
     "vscode:prepublish": "npm run package",
     "test:compile": "tsc --project tsconfig.test.json",
-    "test:unit:run": "mocha --ui tdd \"out-test/tests/unit/**/*.test.js\"",
-    "test:unit": "npm-run-all test:compile test:unit:run",
+    "test:unit:run": "mocha --ui tdd \"out-test/tests/**/*.test.js\"",
+    "test:unit": "npm-run-all clean:out-test test:compile test:unit:run",
     "test": "npm run test:unit",
     "deploy:vsce": "vsce publish",
     "deploy": "npm run deploy:vsce",
@@ -636,9 +663,9 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@molcrafts/molvis-core": "0.2.2",
-    "@molcrafts/molvis-sketch": "0.2.2",
-    "@molcrafts/molvis-stage": "0.2.2"
+    "@molcrafts/molvis-core": "0.3.0",
+    "@molcrafts/molvis-sketch": "0.3.0",
+    "@molcrafts/molvis-stage": "0.3.0"
   },
   "private": true
 }

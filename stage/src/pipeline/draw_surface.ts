@@ -13,6 +13,7 @@
  */
 
 import type { Frame } from "@molcrafts/molvis-core/molrs";
+import type { SurfacePart } from "../algo/surface_mesh";
 import type { MolvisApp } from "../app";
 import {
   DEFAULT_SURFACE_DRAW_STYLE,
@@ -29,6 +30,14 @@ export class DrawSurfaceModifier extends BaseModifier {
   producerId: string | null = null;
   private _style: SurfaceDrawStyle = { ...DEFAULT_SURFACE_DRAW_STYLE };
   private _app: MolvisApp | null = null;
+  /**
+   * The parts array painted onto the GPU, for the identity check in
+   * {@link apply}. A producer that recomputes every pass hands back a new
+   * array and repaints; one whose geometry is fixed (an imported mesh) hands
+   * back the same array and is left alone, instead of re-uploading its
+   * vertices on every trajectory step.
+   */
+  private _paintedParts: readonly SurfacePart[] | null = null;
 
   constructor(id = "draw-surface", producerId: string | null = null) {
     super(id, DrawSurfaceModifier.NAME, new Set([ModifierCapability.Draws]));
@@ -41,6 +50,7 @@ export class DrawSurfaceModifier extends BaseModifier {
 
   setStyle(patch: Partial<SurfaceDrawStyle>): void {
     this._style = { ...this._style, ...patch };
+    this._paintedParts = null;
   }
 
   /**
@@ -74,6 +84,7 @@ export class DrawSurfaceModifier extends BaseModifier {
         this._style.contourSpacing,
       ),
     };
+    this._paintedParts = null;
   }
 
   /** Never a default layer: it arrives with the producer that needs it. */
@@ -95,9 +106,20 @@ export class DrawSurfaceModifier extends BaseModifier {
     // nothing — clearing here is what makes the surface disappear with it.
     if (parts.length === 0) {
       ctx.app.artist.surfaceLayer(this.id).dispose();
+      this._paintedParts = null;
+      return input;
+    }
+    // `hasData` is the second half of the check: the artist drops its meshes
+    // on a scene replace without telling this modifier, and a repaint is due
+    // whenever the layer came back empty.
+    if (
+      parts === this._paintedParts &&
+      ctx.app.artist.surfaceLayer(this.id).hasData
+    ) {
       return input;
     }
     ctx.app.artist.drawSurfaceParts(this.id, parts, this._style);
+    this._paintedParts = parts;
     return input;
   }
 
@@ -108,6 +130,7 @@ export class DrawSurfaceModifier extends BaseModifier {
   onRemoved(): void {
     this._app?.artist.releaseSurfaceLayer(this.id);
     this._app = null;
+    this._paintedParts = null;
   }
 }
 

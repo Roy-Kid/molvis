@@ -14,6 +14,12 @@
  *   - The frame index, either built from a chunked feed pass or restored
  *     from a `.molidx` sidecar in OPFS when the caller passes a
  *     fingerprint and a matching cache entry exists.
+ *   - Or, for the `"mrec"` store format, one molrs `TrajectoryReader`
+ *     instead of all three: the store carries its own frame index, and the
+ *     reader pulls byte ranges through a synchronous key host (in-memory
+ *     map, `File` handles read with `FileReaderSync`, or an unpacked zip).
+ *     Frames come back as whole molrs Frames and are encoded with
+ *     `encodeFrame`, each carrying its section update ids.
  *
  * Scheduling is `"interleaved"`: a long open/index job yields at every
  * chunk read, so `load-frame` jobs are served while indexing streams —
@@ -27,7 +33,10 @@
  * scene/rendering code.
  */
 
-import { wasmMemory } from "@molcrafts/molvis-core/molrs";
+import {
+  type TrajectoryReader,
+  wasmMemory,
+} from "@molcrafts/molvis-core/molrs";
 import { OpfsBlobCache } from "@molcrafts/molvis-core/opfs";
 import {
   installWorkloadHandler,
@@ -35,25 +44,30 @@ import {
 } from "@molcrafts/molvis-core/workload";
 import { decideMolidxUse } from "../../io/cache/molidx_codec";
 import { OpfsIndexCache } from "../../io/cache/opfs_index_cache";
+import { sectionUpdatesAt } from "../../io/mrec_store";
 import { OPFSSyncRangeSource } from "../../io/sources/opfs_sync_range_source";
 import type { TrajectorySource } from "../../io/sources/trajectory_source";
+import { encodeFrame } from "./frame_codec";
+import { openMrecReader } from "./mrec_reader";
 import type {
   BlockPayload,
   BoxPayload,
   ColumnPayload,
-  Format,
   FrameMessage,
   GridPayload,
   RequestBytes,
   SourceHandle,
+  StreamFormat,
   TrajectoryIndexProgress,
   TrajectoryJob,
   TrajectoryJobResult,
 } from "./protocol";
-import { frameMessageTransferList } from "./protocol";
+import { frameMessageTransferList, isMrecSourceHandle } from "./protocol";
 import { type MolrsTrajStream, makeStream } from "./streams";
 
 type OpenJob = Extract<TrajectoryJob, { kind: "open" }>;
+/** An open job for a byte-stream format (everything but the mrec store). */
+type StreamOpenJob = Omit<OpenJob, "format"> & { format: StreamFormat };
 type LoadFrameJob = Extract<TrajectoryJob, { kind: "load-frame" }>;
 
 // ---------------------------------------------------------------------------
@@ -69,6 +83,12 @@ interface WorkerState {
    *  main thread) and OPFS (sync handle) backends. */
   source: TrajectorySource | null;
   index: FramePos[];
+  /** mrec store reader — set instead of the streams/source/index trio. */
+  reader: TrajectoryReader | null;
+  /** Block sections of the open store, read once at open. */
+  readerBlocks: string[];
+  /** Last posted mrec section ids — unchanged non-atoms blocks are omitted. */
+  lastSectionUpdates: Record<string, number> | undefined;
 }
 
 /** Plain-object frame position. We never store live `FrameIndexEntry`
@@ -113,6 +133,9 @@ const state: WorkerState = {
   parseStream: null,
   source: null,
   index: [],
+  reader: null,
+  readerBlocks: [],
+  lastSectionUpdates: undefined,
 };
 
 const DEFAULT_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
@@ -149,6 +172,16 @@ async function handleOpen(
   job: OpenJob,
   ctx: WorkloadWorkerContext,
 ): Promise<{ result: TrajectoryJobResult }> {
+  if (job.format === "mrec") return openStore(job);
+  return openStream({ ...job, format: job.format }, ctx);
+}
+
+/** Byte-stream open: attach the source, index it (or restore the sidecar). */
+async function openStream(
+  job: StreamOpenJob,
+  ctx: WorkloadWorkerContext,
+): Promise<{ result: TrajectoryJobResult }> {
+  handleClose();
   state.indexStream = makeStream(job.format);
   state.parseStream = makeStream(job.format);
   state.index = [];
@@ -181,6 +214,32 @@ async function handleOpen(
   return { result: openResult(totalBytes) };
 }
 
+/**
+ * mrec open: the store carries its frame index, so there is no scan — the
+ * reader opens index-only and `countFrames` is the answer. Any previous
+ * source (stream or store) is released first.
+ */
+function openStore(job: OpenJob): { result: TrajectoryJobResult } {
+  if (!isMrecSourceHandle(job.source)) {
+    throw new Error(
+      `worker: mrec open needs an mrec store handle, got '${job.source.kind}'`,
+    );
+  }
+  handleClose();
+  const { reader, totalBytes } = openMrecReader(job.source);
+  state.reader = reader;
+  state.readerBlocks = reader.blockNames();
+  state.lastSectionUpdates = undefined;
+  return {
+    result: {
+      kind: "open-result",
+      frameCount: reader.countFrames(),
+      totalBytes,
+      indexComplete: true,
+    },
+  };
+}
+
 /** Terminal payload for a finished index scan. */
 function openResult(totalBytes: number): TrajectoryJobResult {
   return {
@@ -198,6 +257,11 @@ async function resolveSource(
   if (source.kind === "blob") {
     return new MainThreadBlobSource(source.totalBytes, callHost);
   }
+  if (source.kind !== "opfs") {
+    throw new Error(
+      `worker: byte-stream open needs a blob or opfs source, got '${source.kind}'`,
+    );
+  }
   const handle = await OpfsBlobCache.openSync(source.filename);
   if (!handle) {
     throw new Error(`worker: opfs source '${source.filename}' not found`);
@@ -213,7 +277,7 @@ async function resolveSource(
  *  throwing (instead of returning a fabricated result) keeps the caller
  *  from persisting a torn-down index as complete. */
 async function runIndexingPass(
-  job: OpenJob,
+  job: StreamOpenJob,
   ctx: WorkloadWorkerContext,
   totalBytes: number,
   startAt: number,
@@ -294,7 +358,7 @@ function reportIndexProgress(
  *  write only costs the next open a rescan. No-op without a fingerprint. */
 function persistIndex(
   fingerprint: string | undefined,
-  format: Format,
+  format: StreamFormat,
   fileSize: number,
   complete: boolean,
 ): void {
@@ -331,6 +395,7 @@ async function handleLoadFrame(
   job: LoadFrameJob,
   ctx: WorkloadWorkerContext,
 ): Promise<{ result: TrajectoryJobResult; transfer: Transferable[] }> {
+  if (state.reader) return loadStoreFrame(job, ctx, state.reader);
   if (!state.parseStream || !state.source) {
     throw new Error("worker: load-frame before open");
   }
@@ -348,6 +413,9 @@ async function handleLoadFrame(
     pos.byteOffset + pos.byteLen,
   );
   if (ctx.isCancelled()) {
+    throw new Error("cancelled");
+  }
+  if (!state.parseStream || !state.source) {
     throw new Error("cancelled");
   }
 
@@ -377,6 +445,39 @@ async function handleLoadFrame(
   return { result: msg, transfer: frameMessageTransferList(msg) };
 }
 
+/**
+ * mrec frame: the reader decodes exactly frame `t` (only its chunks cross
+ * into wasm), the Frame is encoded to the wire and freed at once — a true
+ * worker-side ephemeral whose whole payload now lives in JS-owned arrays.
+ * The frame's section update ids ride along for the main-thread classifier.
+ */
+function loadStoreFrame(
+  job: LoadFrameJob,
+  ctx: WorkloadWorkerContext,
+  reader: TrajectoryReader,
+): { result: TrajectoryJobResult; transfer: Transferable[] } {
+  if (ctx.isCancelled()) {
+    throw new Error("cancelled");
+  }
+  const frame = reader.readFrame(job.frameId);
+  if (!frame) {
+    throw new Error(`worker: frame ${job.frameId} out of range`);
+  }
+  try {
+    const sectionUpdates = Object.fromEntries(
+      sectionUpdatesAt(reader, state.readerBlocks, job.frameId),
+    );
+    const msg = encodeFrame(frame, job.frameId, {
+      sectionUpdates,
+      previousSectionUpdates: state.lastSectionUpdates,
+    });
+    state.lastSectionUpdates = sectionUpdates;
+    return { result: msg, transfer: frameMessageTransferList(msg) };
+  } finally {
+    frame.free();
+  }
+}
+
 // ---------------------------------------------------------------------------
 //  Output extraction — the hot path. Every wasm call may grow memory, so
 //  we re-derive views per call and copy out before the next.
@@ -394,8 +495,10 @@ function readBlocks(s: MolrsTrajStream): BlockPayload[] {
       const dtype = s.columnDtype(bi, ci);
       const len = s.columnLen(bi, ci);
       switch (dtype) {
-        case "f64": {
+        case "f64":
+        case "f32": {
           const ptr = s.columnPtrF64(bi, ci);
+          if (ptr === 0) break;
           const view = new Float64Array(wasmMemory().buffer, ptr, len);
           columns.push({
             name: colName,
@@ -406,6 +509,7 @@ function readBlocks(s: MolrsTrajStream): BlockPayload[] {
         }
         case "u64": {
           const ptr = s.columnPtrU32(bi, ci);
+          if (ptr === 0) break;
           const view = new BigUint64Array(wasmMemory().buffer, ptr, len);
           columns.push({
             name: colName,
@@ -416,6 +520,7 @@ function readBlocks(s: MolrsTrajStream): BlockPayload[] {
         }
         case "i32": {
           const ptr = s.columnPtrI32(bi, ci);
+          if (ptr === 0) break;
           const view = new Int32Array(wasmMemory().buffer, ptr, len);
           columns.push({
             name: colName,
@@ -484,6 +589,10 @@ function handleClose(): { result: TrajectoryJobResult } {
   state.source?.close?.();
   state.source = null;
   state.index = [];
+  state.reader?.free();
+  state.reader = null;
+  state.readerBlocks = [];
+  state.lastSectionUpdates = undefined;
   return { result: { kind: "closed" } };
 }
 

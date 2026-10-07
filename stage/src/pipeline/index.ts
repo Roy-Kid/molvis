@@ -24,6 +24,7 @@ export {
   BondColumnRemapModifier,
   bondsIntegerColumns,
   bondsNeedColumnMapping,
+  inferBondColumnMapping,
 } from "./bond_column_remap";
 // The two things a pipeline holds, and the base they share.
 export {

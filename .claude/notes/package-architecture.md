@@ -49,7 +49,7 @@ Plugin authors import **`@molcrafts/molvis/plugin`** only — never `page/…`.
    never wiped mid-rebuild while dependents resolve exports.
 9. **No `scripts/` directory.** Repo constraints live where they run:
    `package.json` one-liners (`check:versions`, `check:molrs-gateway`,
-   `check:pack`), wired into `.github/workflows/ci.yml` **and**
+   `check:pack`), wired into `.github/workflows/lint.yml` / `test.yml` **and**
    `.pre-commit-config.yaml`. Build steps belong to the build config; release
    packaging belongs to the release workflow. A rule in a loose script is a
    rule with no owner, no test, and no gate.
@@ -72,15 +72,5 @@ Plugin authors import **`@molcrafts/molvis/plugin`** only — never `page/…`.
 ## Not in tree
 
 - No `umbrella/` workspace
-- No repo-root `e2e/` and no engine `examples/` demos
+- No repo-root `e2e/` or `regressions/` and no engine `examples/` demos
 - No host path aliases into engine `src/`
-
-## regressions/ (sanctioned 2026-08-14, supersedes the 2026-08-05 removal)
-
-Repo-root `regressions/` is the public-API golden-lock lane — one plain-node
-assertion script per shipped spec. Contract: import built `dist` output only
-(public barrel or deep path), hard-coded goldens with a provenance comment, no
-WASM instantiation, no third-party runtime, runs via `node regressions/<slug>.ts`
-and prints `<slug> ok` on exit 0. Precedent: the v0.2.0 theme chain
-(`theme-tab10-ovito-01..07`). This is **not** an e2e lane — no browser, no
-engine boot, no interaction — so the no-e2e iron law is untouched.

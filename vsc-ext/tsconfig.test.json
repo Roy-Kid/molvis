@@ -30,8 +30,8 @@
     "src/protocol/messages.ts"
   ],
   "exclude": [
-    "tests/unit/loading/molecularLoadIntent.test.ts",
-    "tests/unit/loading/remoteMolrsIndexer.test.ts",
-    "tests/unit/loading/remoteIndexStore.test.ts"
+    "tests/loading/molecularLoadIntent.test.ts",
+    "tests/loading/remoteMolrsIndexer.test.ts",
+    "tests/loading/remoteIndexStore.test.ts"
   ]
 }

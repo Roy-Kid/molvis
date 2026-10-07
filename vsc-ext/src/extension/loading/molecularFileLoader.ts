@@ -1,13 +1,21 @@
 import {
   type FileFormat,
   inferFormatFromFilename,
-  isBinaryFormat,
 } from "@molcrafts/molvis-stage/io/formats";
 import * as vscode from "vscode";
 import type { MolecularFilePayload } from "../../protocol";
 import { decideMolecularLoadIntent } from "./molecularLoadIntent";
-import { getDisplayName, isZarrUriPath } from "./pathUtils";
-import { readZarrDirectoryWithFs } from "./zarrDirectoryReaderCore";
+import {
+  collapseMrecStoreUri,
+  getDisplayName,
+  isMrecUriPath,
+  isMrecZipPath,
+  isStlPath,
+} from "./pathUtils";
+import {
+  DEFAULT_MAX_STORE_BYTES,
+  readZarrDirectoryWithFs,
+} from "./zarrDirectoryReaderCore";
 
 export interface LoadedMolecularFile {
   filename: string;
@@ -29,9 +37,15 @@ export class MolecularFileLoader {
     uri: vscode.Uri,
     knownFormat?: FileFormat,
   ): Promise<LoadedMolecularFile> {
+    uri = collapseMrecStoreUri(uri);
     const stat = await vscode.workspace.fs.stat(uri);
 
-    if (isZarrUriPath(uri, stat.type)) {
+    if (isMrecUriPath(uri, stat.type)) {
+      // Whole store read here, once: the webview↔host channel is async, and
+      // the reader's key host must answer synchronously inside the worker,
+      // so the lazy file-tree door is not available to this host. The
+      // webview transfers the map into its worker (`.claude/notes/notes.md`,
+      // mrec-ingest).
       return {
         filename: getDisplayName(uri),
         payload: await readZarrDirectoryWithFs(
@@ -39,6 +53,19 @@ export class MolecularFileLoader {
           vscode.workspace.fs,
           vscode.Uri,
         ),
+      };
+    }
+
+    if (isMrecZipPath(uri.path) || isStlPath(uri.path)) {
+      if (stat.size > DEFAULT_MAX_STORE_BYTES) {
+        throw new Error(
+          `${getDisplayName(uri)} is ${(stat.size / (1024 * 1024)).toFixed(0)} MB; refusing to read more than ${(DEFAULT_MAX_STORE_BYTES / (1024 * 1024)).toFixed(0)} MB into the extension host`,
+        );
+      }
+      return {
+        filename: getDisplayName(uri),
+        payload: await vscode.workspace.fs.readFile(uri),
+        stream: false,
       };
     }
 
@@ -66,12 +93,17 @@ export class MolecularFileLoader {
       // Non-file scheme: still copy once, then stream in the webview.
       return { filename, payload: bytes, stream: true };
     }
-    if (format && isBinaryFormat(format)) {
+    if (format) {
+      // Known format — binary or text — travels as raw bytes and is decoded
+      // on the webview side. Decoding here would put a whole-file JS string
+      // into the host↔webview message, which on Remote-SSH is the copy that
+      // crosses the network.
       return { filename, payload: bytes, stream: false };
     }
 
-    // Small text: safe to decode (well under the string cap). BOM is consumed
-    // by the decoder to match `doc.getText()` behavior.
+    // No format to decide by: hand over text and let the webview's extension
+    // dispatch resolve it. BOM is consumed by the decoder to match
+    // `doc.getText()` behavior.
     return {
       filename,
       payload: new TextDecoder("utf-8").decode(bytes),

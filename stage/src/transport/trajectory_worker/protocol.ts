@@ -25,7 +25,15 @@ export type Format =
   | "sdf"
   | "dcd"
   | "xtc"
-  | "trr";
+  | "trr"
+  | "mrec";
+
+/**
+ * Formats decoded by a byte-range `Wasm*Stream` (frame index + one-frame
+ * parse over a `SourceHandle`). `"mrec"` is the one store format: molrs's
+ * `TrajectoryReader` owns the frame index and the worker serves it keys.
+ */
+export type StreamFormat = Exclude<Format, "mrec">;
 
 // ---------------------------------------------------------------------------
 //  Source handles
@@ -59,7 +67,67 @@ export interface OpfsSourceHandle {
   filename: string;
 }
 
-export type SourceHandle = BlobSourceHandle | OpfsSourceHandle;
+/**
+ * mrec store handed to the worker. Three shapes, by what the host holds:
+ *
+ * - `mrec-files` — the whole store already in memory, posted **once** with
+ *   every buffer in the transfer list (zero copy; the sender's arrays are
+ *   detached). The worker opens it through a map-backed store host, so only
+ *   touched byte ranges cross into wasm.
+ * - `mrec-file-tree` — browser `File` handles of the store directory
+ *   (structured-clonable). The lazy path: the worker reads exactly the byte
+ *   ranges a frame touches with `FileReaderSync`; nothing else leaves disk.
+ * - `mrec-zip` — one packed `*.mrec.zip`, read whole by the host and
+ *   transferred; the worker unpacks it (`TrajectoryReader.fromZip`).
+ */
+export interface MrecFilesSourceHandle {
+  kind: "mrec-files";
+  files: Map<string, ArrayBuffer>;
+}
+
+export interface MrecFileTreeSourceHandle {
+  kind: "mrec-file-tree";
+  files: Map<string, File>;
+}
+
+export interface MrecZipSourceHandle {
+  kind: "mrec-zip";
+  bytes: ArrayBuffer;
+}
+
+export type MrecSourceHandle =
+  | MrecFilesSourceHandle
+  | MrecFileTreeSourceHandle
+  | MrecZipSourceHandle;
+
+export type SourceHandle =
+  | BlobSourceHandle
+  | OpfsSourceHandle
+  | MrecSourceHandle;
+
+/** Whether a source handle is one of the mrec store shapes. */
+export function isMrecSourceHandle(
+  source: SourceHandle,
+): source is MrecSourceHandle {
+  return source.kind.startsWith("mrec-");
+}
+
+/**
+ * Buffers to hand `postMessage` alongside an mrec `open` job so the store
+ * moves instead of being cloned. `File` handles are cloned by reference.
+ */
+export function mrecSourceTransferList(
+  source: MrecSourceHandle,
+): Transferable[] {
+  switch (source.kind) {
+    case "mrec-files":
+      return [...source.files.values()];
+    case "mrec-zip":
+      return [source.bytes];
+    case "mrec-file-tree":
+      return [];
+  }
+}
 
 // ---------------------------------------------------------------------------
 //  Frame payload — the transferable encoding of a single Frame
@@ -74,6 +142,12 @@ export type ColumnPayload =
 export interface BlockPayload {
   name: string;
   columns: ColumnPayload[];
+  /**
+   * Multi-dimensional block shape (volumetric grids: `[nx, ny, nz]`), set
+   * only when the block is not a plain row table. Rehydration re-applies it
+   * with `Block.setShape`.
+   */
+  shape?: Uint32Array;
 }
 
 export interface BoxPayload {
@@ -102,6 +176,27 @@ export interface FrameMessage {
   blocks: BlockPayload[];
   box: BoxPayload | null;
   grids: GridPayload[];
+  /**
+   * Numeric per-frame metadata (`Frame.getMetaScalar` names), when the
+   * source carries any (mrec `step` / `time` / thermo scalars).
+   */
+  meta?: Record<string, number>;
+  /**
+   * String per-frame metadata (`Frame.getMeta` names). Carried separately
+   * from {@link meta} because the two are distinct dtypes on the frame and
+   * the getters do not cross over — a label like a LAMMPS `dump local`
+   * `dump_local_label` reads back as `undefined` from `getMetaScalar`, so a
+   * numbers-only payload dropped it and the streamed copy of a frame silently
+   * lost what the whole-file copy kept.
+   */
+  metaText?: Record<string, string>;
+  /**
+   * mrec only: block name → the store update id this frame resolves to
+   * (`TrajectoryReader.blockUpdateAt`). Equal ids across two frames prove
+   * identical rows; the main-thread classifier keys its position-only fast
+   * path on them.
+   */
+  sectionUpdates?: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +284,7 @@ export function frameMessageTransferList(msg: FrameMessage): Transferable[] {
     for (const col of block.columns) {
       if (col.dtype !== "string") out.push(col.data.buffer);
     }
+    if (block.shape) out.push(block.shape.buffer);
   }
   if (msg.box) {
     out.push(msg.box.h.buffer);

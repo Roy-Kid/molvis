@@ -80,8 +80,8 @@ describe("writer registry", () => {
   });
 });
 
-// Text GRO/MOL2/POSCAR goldens live in regressions/ (hard-coded public API).
-// This file keeps binary writers + multi-format emit coverage only.
+// Binary writers + multi-format emit. Text round-trips live with the
+// format reader that owns the bytes.
 
 describe("text writer multi-format emit", () => {
   it("can emit XYZ, PDB and CIF for the same frame", () => {

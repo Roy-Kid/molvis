@@ -29,7 +29,11 @@ export class Highlighter {
     highlightColor: null,
   };
   private previewKeys: Set<string> = new Set();
+  // Meshes whose CPU-side buffers changed since the last flush. Every edit in
+  // a highlight pass lands in these sets and is uploaded once per mesh per
+  // buffer by `flushPendingBuffers` — never one GPU upload per atom.
   private pendingColorMeshes = new Set<Mesh>();
+  private pendingStyleMeshes = new Set<Mesh>();
 
   private app: MolvisApp;
 
@@ -64,7 +68,7 @@ export class Highlighter {
         this.highlightBond(bondId, selectionColor);
       }
     }
-    this.flushColorBuffers();
+    this.flushPendingBuffers();
     this.lastSelectionState = {
       atoms: new Set(state.atoms),
       bonds: new Set(state.bonds),
@@ -110,7 +114,7 @@ export class Highlighter {
     for (const bondId of this.lastSelectionState.bonds) {
       this.highlightBond(bondId, selectionColor);
     }
-    this.flushColorBuffers();
+    this.flushPendingBuffers();
   }
 
   private selectionColor(overrideHex?: string | null): number[] {
@@ -205,13 +209,18 @@ export class Highlighter {
     this.thinOriginalColors.delete(key);
   }
 
-  private flushColorBuffers(): void {
+  private flushPendingBuffers(): void {
     for (const mesh of this.pendingColorMeshes) {
       for (const { name, data } of this.getThinInstanceColorBuffers(mesh)) {
         mesh.thinInstanceSetBuffer(name, data, 4, false);
       }
     }
     this.pendingColorMeshes.clear();
+    for (const mesh of this.pendingStyleMeshes) {
+      const style = this.getThinInstanceStyleBuffer(mesh);
+      if (style) mesh.thinInstanceSetBuffer("instanceStyle", style, 4, false);
+    }
+    this.pendingStyleMeshes.clear();
   }
 
   /**
@@ -289,7 +298,7 @@ export class Highlighter {
       this.pendingColorMeshes.add(mesh);
       this.setHiddenAtomReveal(mesh, thinIndex, 0);
     }
-    this.flushColorBuffers();
+    this.flushPendingBuffers();
     this.thinOriginalColors.clear();
   }
 
@@ -337,48 +346,54 @@ export class Highlighter {
     this.clearAll();
   }
 
-  private getThinInstanceColorBuffers(
+  /** Babylon's CPU-side copy of the mesh's thin-instance buffers. */
+  private thinInstanceStorage(
     mesh: Mesh,
-  ): Array<{ name: string; data: Float32Array }> {
-    const storage = (
+  ): Record<string, Float32Array> | undefined {
+    return (
       mesh as unknown as {
         _userThinInstanceBuffersStorage?: {
           data?: Record<string, Float32Array>;
         };
       }
-    )._userThinInstanceBuffersStorage;
+    )._userThinInstanceBuffersStorage?.data;
+  }
+
+  private getThinInstanceColorBuffers(
+    mesh: Mesh,
+  ): Array<{ name: string; data: Float32Array }> {
+    const storage = this.thinInstanceStorage(mesh);
 
     const buffers: Array<{ name: string; data: Float32Array }> = [];
-    const single = storage?.data?.instanceColor;
+    const single = storage?.instanceColor;
     if (single instanceof Float32Array) {
       buffers.push({ name: "instanceColor", data: single });
     }
-    const start = storage?.data?.instanceColor0;
+    const start = storage?.instanceColor0;
     if (start instanceof Float32Array) {
       buffers.push({ name: "instanceColor0", data: start });
     }
-    const end = storage?.data?.instanceColor1;
+    const end = storage?.instanceColor1;
     if (end instanceof Float32Array) {
       buffers.push({ name: "instanceColor1", data: end });
     }
     return buffers;
   }
 
+  private getThinInstanceStyleBuffer(mesh: Mesh): Float32Array | undefined {
+    const style = this.thinInstanceStorage(mesh)?.instanceStyle;
+    return style instanceof Float32Array ? style : undefined;
+  }
+
+  /** Edit the reveal flag in place; the upload happens in the next flush. */
   private setHiddenAtomReveal(
     mesh: Mesh,
     thinIndex: number,
     reveal: 0 | 1,
   ): void {
-    const storage = (
-      mesh as unknown as {
-        _userThinInstanceBuffersStorage?: {
-          data?: Record<string, Float32Array>;
-        };
-      }
-    )._userThinInstanceBuffersStorage;
-    const style = storage?.data?.instanceStyle;
-    if (!(style instanceof Float32Array)) return;
+    const style = this.getThinInstanceStyleBuffer(mesh);
+    if (!style) return;
     style[thinIndex * 4 + 1] = reveal;
-    mesh.thinInstanceSetBuffer("instanceStyle", style, 4, false);
+    this.pendingStyleMeshes.add(mesh);
   }
 }

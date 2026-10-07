@@ -1,0 +1,92 @@
+name: test
+
+# Contexts (see "CI" in docs/development/testing.md):
+#   feature branch push (fork or upstream)  test / browser, test / vsc-ext,
+#                                            test / python
+#   dev / master / main, or a PR into one    + test / build (engines,
+#                                              viewers, pack surfaces, page,
+#                                              vsc-ext) and test / python on
+#                                              macOS and Windows
+# A PR from a branch of the same repository skips what its push already ran.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [dev, master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && !contains(fromJSON('["refs/heads/dev","refs/heads/master","refs/heads/main"]'), github.ref) }}
+
+jobs:
+  # Browser-mode unit tests (@rstest/browser), one Chromium for every package.
+  browser:
+    name: test / browser
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-pw-${{ hashFiles('node_modules/playwright/package.json') }}
+      - run: npx playwright install chromium
+      - run: npm run test:browser
+
+  # manifest.test asserts vsc-ext/out/extension.js exists, so build first.
+  vsc-ext:
+    name: test / vsc-ext
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+      - run: npm run build:vsc-ext
+      - run: npm run test:vsc-ext
+
+  # In-process tests (wire, RPC, transport): no page bundle, no Node.
+  python:
+    name: test / python
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    env:
+      MOLVIS_SKIP_UI_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-python
+      - run: uv run --project python --extra dev python -m pytest python/tests
+
+  python-os:
+    name: test / python (${{ matrix.os }})
+    if: github.event_name != 'push' || contains(fromJSON('["refs/heads/dev","refs/heads/master","refs/heads/main"]'), github.ref)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      MOLVIS_SKIP_UI_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-python
+      - run: uv run --project python --extra dev python -m pytest python/tests
+
+  # Every publishable output. wireit builds each dependency once.
+  build:
+    name: test / build
+    if: github.event_name != 'push' || contains(fromJSON('["refs/heads/dev","refs/heads/master","refs/heads/main"]'), github.ref)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node
+      - run: npm run build:stage
+      - run: npm run build:stage-viewer && npm run build:sketch-viewer
+      - run: npm run check:pack
+      - run: npm run build:page
+      - run: npm run check:page-public-path
+      - run: npm run build:vsc-ext

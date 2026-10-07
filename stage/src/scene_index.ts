@@ -27,6 +27,8 @@ export interface RegisterAtomFrameOptions {
   mesh: Mesh;
   block: Block;
   buffers: Map<string, Float32Array>;
+  /** Render instance → original atom row when occupancy dropped sentinels. */
+  instanceMap?: Uint32Array;
 }
 
 export interface RegisterBondFrameOptions {
@@ -768,25 +770,40 @@ export class SceneIndex {
 
   /**
    * Register the atom layer for a frame: mesh, GPU buffers, meta source,
-   * topology atoms. Clears topology because atoms are the structural
-   * anchor — bonds reference atom indices, so any prior bonds become
-   * stale when atoms re-register. Bond entries should be added via
-   * {@link registerBondFrame} after this.
+   * topology atoms.
+   *
+   * Does **not** reset the topology: a layer does not know whether it runs
+   * first or last in the pass. Draw order follows the pipeline (Bonds
+   * auto-attaches ahead of Particles), so resetting here wiped the edges the
+   * bond layer had just registered, leaving `getBondsForAtom` empty for every
+   * atom. The pass owns that lifetime — see `MolvisApp.applyPipeline`, which
+   * clears once per full rebuild before any Draw runs.
    *
    * Stores the owning Frame in MetaRegistry (not borrowed Block handles,
    * which go stale on frame.setMeta).
    */
   registerAtomFrame(options: RegisterAtomFrameOptions): void {
-    const { frame, mesh, block, buffers } = options;
+    const { frame, mesh, block, buffers, instanceMap } = options;
 
     this.meshRegistry.registerAtomLayer(mesh);
-    this.meshRegistry.getAtomState()?.setFrameData(buffers, block.nrows());
+    const matrixLen = buffers.get("matrix")?.length;
+    const instanceCount =
+      instanceMap?.length ??
+      (matrixLen !== undefined ? matrixLen / 16 : block.nrows());
+    this.meshRegistry
+      .getAtomState()
+      ?.setFrameData(buffers, instanceCount, instanceMap);
     this.metaRegistry.atoms.setFrame(frame);
 
-    this.topology.clear();
-    const atomCount = block.nrows();
-    for (let i = 0; i < atomCount; i++) {
-      this.topology.addAtom(i);
+    if (instanceMap) {
+      for (let i = 0; i < instanceMap.length; i++) {
+        this.topology.addAtom(instanceMap[i]);
+      }
+    } else {
+      const atomCount = block.nrows();
+      for (let i = 0; i < atomCount; i++) {
+        this.topology.addAtom(i);
+      }
     }
   }
 
@@ -929,32 +946,14 @@ export class SceneIndex {
    * This is used when entering Edit mode so frame atoms/bonds are editable in place.
    */
   promoteFrameToEditPool(): void {
-    const atomState = this.meshRegistry.getAtomState();
-    if (atomState && atomState.frameOffset > 0) {
-      const atomFrameCount = atomState.frameOffset;
-      for (let atomId = 0; atomId < atomFrameCount; atomId++) {
-        const meta = this.metaRegistry.atoms.getMeta(atomId);
-        if (meta) {
-          this.metaRegistry.atoms.setEdit(atomId, { ...meta });
-        }
-      }
-      atomState.promoteFrameSegmentToEdits();
-      this.metaRegistry.atoms.setFrame(null);
-    }
-
-    const bondState = this.meshRegistry.getBondState();
-    if (bondState && bondState.frameOffset > 0) {
-      // Iterate logical bond IDs (not render instance indices) to avoid
-      // promoting phantom entries for multi-order bond render instances.
-      for (const [bondId] of bondState.frameLogicalIds()) {
-        const meta = this.metaRegistry.bonds.getMeta(bondId);
-        if (meta) {
-          this.metaRegistry.bonds.setEdit(bondId, { ...meta });
-        }
-      }
-      bondState.promoteFrameSegmentToEdits();
-      this.metaRegistry.bonds.setFrame(null);
-    }
+    // Render-side only. Meta stays copy-on-write: `MetaSource.getMeta` already
+    // falls back to the frame block, `getAllIds` already enumerates it, and an
+    // edit (move, retype, delete) writes its own entry or tombstone. Copying
+    // every frame entity into the edit map up front — which is what nulling
+    // the frame source used to force — cost 35.6 s of the 33-36 s freeze on a
+    // 500 000-atom system, against 81 ms for the index maps below.
+    this.meshRegistry.getAtomState()?.promoteFrameSegmentToEdits();
+    this.meshRegistry.getBondState()?.promoteFrameSegmentToEdits();
   }
 
   clear(): void {

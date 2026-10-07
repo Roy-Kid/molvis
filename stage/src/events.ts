@@ -5,6 +5,7 @@ import type { DatasetExploration } from "./analysis/exploration";
 import type { RepresentationStyle } from "./artist/representation";
 import type { ModeId } from "./mode/mode_type";
 import type { Overlay } from "./overlays/types";
+import type { FrameChangeKind } from "./pipeline/types";
 import type { Trajectory } from "./system/trajectory";
 
 /**
@@ -15,7 +16,14 @@ export interface MolvisEventMap extends AppEventMap {
   "frame-change": number;
   "frame-load-start": { frameId: number; requestId: number };
   "frame-load-end": { frameId: number; requestId: number; success: boolean };
-  "frame-rendered": { frame: Frame; box?: Box };
+  /**
+   * One finished draw pass. `changeKind` is the pass's own verdict (see
+   * `MolvisApp.applyPipeline`): `"position"` moved atoms only, anything else
+   * rebuilt structure. Consumers that cache per-topology read it instead of
+   * re-deriving one — a row-count comparison cannot see an equal-count
+   * topology swap and would serve a stale result.
+   */
+  "frame-rendered": { frame: Frame; box?: Box; changeKind: FrameChangeKind };
   "trajectory-change": Trajectory;
   "length-changed": {
     indexedLength: number;

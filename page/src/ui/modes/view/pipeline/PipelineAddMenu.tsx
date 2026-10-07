@@ -68,6 +68,9 @@ export function PipelineAddMenu({
       case "add-source":
         onOpenFile("augment");
         break;
+      case "extend":
+        onOpenFile("extend");
+        break;
       case "stream":
         onStream();
         break;

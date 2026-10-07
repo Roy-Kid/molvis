@@ -21,6 +21,7 @@ import {
   buildAtomColorOnly,
 } from "./atom_buffer";
 import { buildBondBuffers } from "./bond_buffer";
+import { BondTopology } from "./bond_topology";
 import { type LabelRenderer, skeletalLabelFontSize } from "./label_renderer";
 import type { ImpostorTarget } from "./material_spec";
 
@@ -46,6 +47,24 @@ function readElements(atomsBlock: Block): string[] | undefined {
   return atomsBlock.hasStr("element")
     ? (atomsBlock.getStr("element") as string[])
     : undefined;
+}
+
+// Origin-sentinel dropping is a molpack convention (see system/occupancy.ts):
+// it hides rows from the canvas, so it must not be silent. Announce the first
+// time (per app) the heuristic starts hiding rows, naming the count. Dedupe on
+// the dropping/not-dropping transition so scrubbing a growth trajectory does
+// not spam the status bar every frame.
+const lastSentinelDrop = new WeakMap<MolvisApp, number>();
+
+function announceOriginSentinelDrop(app: MolvisApp, dropped: number): void {
+  const wasDropping = (lastSentinelDrop.get(app) ?? 0) > 0;
+  lastSentinelDrop.set(app, dropped);
+  if (dropped > 0 && !wasDropping) {
+    app.events.emit("status-message", {
+      text: `Hiding ${dropped} unplaced origin-sentinel atom(s) parked at (0,0,0) — molpack convention.`,
+      type: "info",
+    });
+  }
 }
 
 /** Atom indices hidden by conventional skeletal notation (C-bound H). */
@@ -85,27 +104,38 @@ export async function drawAtomsRepresentation(
     }),
   );
 
-  const atomBuffers = buildAtomBuffers(
+  const built = buildAtomBuffers(
     atomsBlock,
     host.app.styleManager,
     host.atomMesh.uniqueId,
     options,
+    frame,
+  );
+
+  announceOriginSentinelDrop(
+    host.app,
+    built.instanceMap ? atomsBlock.nrows() - built.instanceMap.length : 0,
   );
 
   host.app.world.sceneIndex.registerAtomFrame({
     frame,
     mesh: host.atomMesh,
     block: atomsBlock,
-    buffers: atomBuffers,
+    buffers: built.buffers,
+    instanceMap: built.instanceMap,
   });
   syncRepresentationLabels(host, frame, atomsBlock);
 }
 
+/**
+ * Full bond build. Resolves to the {@link BondTopology} the buffers were
+ * built from so the Artist can reuse it on position-only refreshes.
+ */
 export async function drawBondsRepresentation(
   host: RepresentationDrawHost,
   frame: Frame,
   options?: { radii?: number; impostor?: boolean; visible?: boolean[] },
-): Promise<void> {
+): Promise<BondTopology | undefined> {
   const atomsBlock = frame.getBlock("atoms");
   const bondsBlock = frame.getBlock("bonds");
   if (!atomsBlock || !bondsBlock || bondsBlock.nrows() === 0) return;
@@ -170,6 +200,7 @@ export async function drawBondsRepresentation(
     instanceCount: bondResult.instanceCount,
     instanceMap: bondResult.instanceMap,
   });
+  return BondTopology.of(bondsBlock);
 }
 
 function syncRepresentationLabels(
