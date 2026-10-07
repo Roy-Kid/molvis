@@ -2,7 +2,7 @@
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit, pre-push]
 
-# Mirrors every job in .github/workflows/ci.yml. Any divergence is a bug
+# Mirrors every job in .github/workflows/{lint,test,docs}.yml. Any divergence is a bug
 # — when you add/modify a CI job, update this file in the same commit.
 #
 # Build ordering is NOT written here: `wireit` resolves it from each
@@ -11,8 +11,6 @@ default_stages: [pre-commit, pre-push]
 # of the dependency graph, and it also meant two hooks could run overlapping
 # builds — the collision that produced "Transaction already in progress"
 # from rspack's cache and a truncated WASM read in test-core.
-# (We deliberately do NOT add docs / doc-build hooks here: there is no
-# corresponding CI job, and adding one would diverge from CI.)
 #
 # Stages:
 #   pre-commit (default): fast checks (biome, typecheck, test-core).
@@ -25,7 +23,7 @@ default_stages: [pre-commit, pre-push]
 
 repos:
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.7
+    rev: v1.7.12
     hooks:
       # Catches `if: secrets.*` at job level (workflow starts 0 jobs) and
       # other GHA parse errors that `check-yaml` will not see.
@@ -33,7 +31,7 @@ repos:
 
   - repo: local
     hooks:
-      # ─── ci.yml::lint ─────────────────────────────────────────────────────
+      # ─── lint.yml::biome ─────────────────────────────────────────────────────
       # Run biome on the whole repo (matches `npx biome check` in CI),
       # not just changed files — biome's own includes/excludes config
       # already scopes correctly, and a per-file glob would diverge.
@@ -44,7 +42,7 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # ─── ci.yml::guards ───────────────────────────────────────────────────
+      # ─── lint.yml::guards ───────────────────────────────────────────────────
       # Both are one-liners in package.json, not files in a scripts/ dir —
       # a rule with nowhere to live is a rule nobody runs.
       - id: check-molrs-gateway
@@ -61,7 +59,7 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # ─── ci.yml::typecheck ────────────────────────────────────────────────
+      # ─── lint.yml::typecheck ────────────────────────────────────────────────
       - id: typecheck
         name: typecheck (engines + viewers + hosts)
         entry: npm run typecheck
@@ -69,7 +67,7 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # ─── ci.yml::test-core ────────────────────────────────────────────────
+      # ─── test.yml::browser (fast lane) ────────────────────────────────────────────────
       - id: test-core
         name: test core (rstest, with Playwright browser)
         entry: npm run test:core
@@ -97,7 +95,7 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      # ─── ci.yml::build-stage / *-viewer / page / vsc ──
+      # ─── test.yml::build ──
       # Same shape as CI's parallel build jobs. Pre-push because each takes
       # ~30-60s and they run serially here (CI runs them on separate
       # runners). Each asks only for its own target; wireit builds the
@@ -158,8 +156,8 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      # ─── ci.yml::test / test-vsc-ext / test-python ─────────────────────
-      # Matches the single CI `test` job (`npm run test:browser`).
+      # ─── test.yml::browser / vsc-ext / python ─────────────────────
+      # Matches test.yml `test / browser` (`npm run test:browser`).
       # test-core stays on pre-commit as the fast lane.
       - id: test-browser
         name: test browser-mode units
@@ -193,3 +191,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      # ─── docs.yml::build ──────────────────────────────────────────────────
+      - id: docs-build
+        name: docs build (strict Zensical)
+        entry: bash -c 'MOLVIS_SKIP_UI_BUILD=1 uv run --project python --extra docs zensical build --strict'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

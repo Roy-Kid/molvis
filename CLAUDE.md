@@ -15,7 +15,7 @@ mol_project:
     required: false
   stage: experimental
   ci:
-    config: .github/workflows/ci.yml
+    config: .github/workflows/test.yml
   notes_path: .claude/notes/notes.md
   specs_path: .claude/specs/
 ---

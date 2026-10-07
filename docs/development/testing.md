@@ -100,10 +100,25 @@ working:
 
 ## CI
 
-`.github/workflows/ci.yml` runs lint, typecheck, a `guards` job
-(`check:molrs-gateway` — only `core/` may mention `@molcrafts/molrs`), one
-`test` job (`npm run test:browser`), `test-vsc-ext`, `test-python`, and the
-builds.
+| workflow | feature branch (fork or upstream) | dev / master, or a PR into one | upstream only |
+|---|---|---|---|
+| `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck` | same | — |
+| `test.yml` | `test / browser` (`npm run test:browser`), `test / vsc-ext`, `test / python` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python` on macOS and Windows | — |
+| `docs.yml` | `docs / build` (strict Zensical) | same | — |
+| `nightly.yml` | — | — | daily when dev moved: `nightly / page` (app.molcrafts.org/nightly/molvis/), `nightly / python` (PyPI `molcrafts-molvis-nightly`) |
+| `release.yml` | — | — | `v*` tag: `release / npm`, `release / python`, `release / vsc-ext`; `workflow_dispatch` is a dry run anywhere |
+
+A pull request from a branch of the same repository skips the jobs its push
+already ran. `.pre-commit-config.yaml` mirrors these jobs; when you add or
+change one, change the hook in the same commit.
 
 If you add a package with a browser-mode suite, add it to `test:browser` in
 the same commit.
+
+## Release
+
+Bump the shared version (`npm run check:versions` must pass), merge to
+master, and push a `v*` tag. `release.yml` publishes npm (trusted
+publishing, environment `release-core`), PyPI (environment `pypi`) and the
+VS Code extension (environment `release-vsc-ext`, secrets `VSCE_PAT` and
+`OVSX_PAT`). The npm and PyPI trusted publishers must name `release.yml`.
