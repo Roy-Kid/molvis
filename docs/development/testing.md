@@ -28,8 +28,10 @@ not:
 
 The browser-mode suite (core, stage, sketch, both viewers and page) was
 retired. The 248 test files that already passed under the Node config without
-touching a browser API were kept unchanged; the 57 that needed one were
-deleted, not shimmed. What that leaves uncovered is real: the custom elements
+touching a browser API were kept; the 57 that needed one were deleted, not
+shimmed. CI runs Node 22 (`.nvmrc`), which has no `ErrorEvent`: a fake
+worker hands its handler a plain `{ message }` object, and a code path that
+itself constructs an `ErrorEvent` is not unit-tested. What that leaves uncovered is real: the custom elements
 (`stage-viewer`, `sketch-viewer`), the stage GUI (panels, menus, dialogs, app
 boot and teardown), the sketch board and composer, OPFS caches, image crop,
 and the React components and hooks of `page`. The same cut removed the
