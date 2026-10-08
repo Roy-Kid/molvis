@@ -67,9 +67,9 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # ─── test.yml::browser (fast lane) ────────────────────────────────────────────────
+      # ─── test.yml::js (fast lane) ─────────────────────────────────────────
       - id: test-core
-        name: test core (rstest, with Playwright browser)
+        name: test core (rstest, Node)
         entry: npm run test:core
         language: system
         pass_filenames: false
@@ -156,20 +156,20 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      # ─── test.yml::browser / vsc-ext / python ─────────────────────
-      # Matches test.yml `test / browser` (`npm run test:browser`).
+      # ─── test.yml::js / vsc-ext / python ──────────────────────────
+      # Matches test.yml `test / js` (`npm run test:js`).
       # test-core stays on pre-commit as the fast lane.
-      - id: test-browser
-        name: test browser-mode units
-        entry: npm run test:browser
+      - id: test-js
+        name: test js units (rstest, Node)
+        entry: npm run test:js
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
       - id: test-vsc-ext
-        name: test vsc-ext (build + mocha)
-        entry: bash -c 'npm run build:vsc-ext && npm run test:vsc-ext'
+        name: test vsc-ext (mocha)
+        entry: npm run test:vsc-ext
         language: system
         pass_filenames: false
         always_run: true

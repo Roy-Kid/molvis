@@ -5,44 +5,40 @@ tree, and no repo-root `regressions/` golden-lock lane.
 
 ```bash
 npm run test:core     npm run test:stage    npm run test:sketch
-npm run test:page     npm run test:vsc-ext  npm run test:python
+npm run test:plugin   npm run test:page     npm run test:vsc-ext
+npm run test:python
+npm run test:js       # core, stage, sketch, plugin, page
 npm test              # all of the above
 ```
 
-## Browser mode is not e2e
+## Node only, no browser mode
 
-`core`, `stage`, `sketch` and `page` run under `@rstest/core` in **browser
-mode** — `@rstest/browser` plus a headless Playwright Chromium. That is there
-because WASM, OPFS, canvas and DOM APIs have no faithful Node stand-in, not
-because anything is being driven end to end.
+Every TypeScript suite runs under plain `@rstest/core` in Node: no
+`@rstest/browser`, no Playwright, no Chromium, and no jsdom or happy-dom. The
+Python suite is plain pytest, and `vsc-ext` is mocha over `tsc` output.
 
-The distinction matters when you are deciding what to delete:
+A unit test contains no speed, regression or e2e test. Concretely, a test does
+not:
 
-| | Browser-mode unit test | E2E |
-|---|---|---|
-| What runs | your test body, inside the page bundle | a built app, from outside |
-| Talks to | the module under test | a URL, a server, a real extension host |
-| Fails because | that module is wrong | anything in the stack is wrong |
+- need a browser API (DOM, custom elements, canvas, OPFS, WASM in a page);
+- open a socket, start a server, or talk to a network peer;
+- run an external binary (ffmpeg) or a subprocess;
+- read a built artifact (`dist/`, `out/`) or assert a bundle size;
+- measure time, or depend on an unseeded random source.
 
-Playwright appearing in `devDependencies` is therefore not evidence of an e2e
-lane. Removing it would delete roughly 1,100 unit tests.
+The browser-mode suite (core, stage, sketch, both viewers and page) was
+retired. The 248 test files that already passed under the Node config without
+touching a browser API were kept unchanged; the 57 that needed one were
+deleted, not shimmed. What that leaves uncovered is real: the custom elements
+(`stage-viewer`, `sketch-viewer`), the stage GUI (panels, menus, dialogs, app
+boot and teardown), the sketch board and composer, OPFS caches, image crop,
+and the React components and hooks of `page`. The same cut removed the
+Python tests that ran a live molrs `Publisher`, a loopback `websockets`
+server, or the ffmpeg binary, and the `vsc-ext` checks on the built `out/`
+tree.
 
-The two suites that historically wanted to be e2e were retired rather than
-kept:
-
-- **`vsc-ext`** used to download VS Code 1.120.0 and boot a real extension
-  host. Five of its seven tests only read `package.json` `contributes`; those
-  are now `tests/extension/manifest.test.ts` and run in milliseconds. The
-  two that genuinely needed a host went, along with the
-  `molvis._test.getRegisteredPanelViewTypes` command that existed to serve
-  them — production code should not carry a test-only surface.
-- **`python`** had a `tests/integration/` tree behind a pytest marker. Both
-  files are in-process (a loopback `websockets` client, and the ffmpeg binary
-  vendored by `imageio-ffmpeg`), so they are ordinary unit tests of
-  `transport/websocket.py` and `video.py` and now live beside the rest.
-
-If a new test needs a browser driver, a built artifact, or a network peer, the
-seam is wrong. Inject a fake; do not add a lane.
+If a new test needs a browser, a built artifact, a network peer or a
+subprocess, the seam is wrong. Inject a fake; do not add a lane.
 
 ## A test must be able to fail
 
@@ -94,9 +90,8 @@ working:
 - Plugin tests use `fakePluginAPI` from `@molcrafts/molvis-plugin/testing`.
   It is built from the real `PluginAPI` type, so a new domain becomes a
   compile error in one place instead of silently passing everywhere.
-- Duplicate coverage is a bug. `fingerprintFile` had two test files; the
-  weaker one was folded into `opfs.test.ts`, which mirrors the module that
-  actually owns the function.
+- Duplicate coverage is a bug. When two files test one function, fold the
+  weaker into the file that mirrors the module that owns the function.
 
 ## CI
 
@@ -108,7 +103,7 @@ tags and dispatches.
 | workflow | fast tier | full tier | upstream only |
 |---|---|---|---|
 | `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck` | same | — |
-| `test.yml` | `test / tier`, `test / browser` (`npm run test:browser`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
+| `test.yml` | `test / tier`, `test / js` (`npm run test:js`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
 | `docs.yml` | `docs / build` (strict Zensical) | same | — |
 | `nightly.yml` | — | — | daily when dev moved: `nightly / page` (app.molcrafts.org/nightly/molvis/), `nightly / python` (PyPI `molcrafts-molvis-nightly`) |
 | `release.yml` | — | — | `v*` tag: `release / npm`, `release / python`, `release / vsc-ext`; `workflow_dispatch` is a dry run anywhere |
@@ -118,8 +113,8 @@ setup is `MolCrafts/molcrafts-ci/actions/setup-{node,python}@master`.
 `.pre-commit-config.yaml` mirrors these jobs; when you add or
 change one, change the hook in the same commit.
 
-If you add a package with a browser-mode suite, add it to `test:browser` in
-the same commit.
+If you add a package with a test suite, add it to `test:js` in the same
+commit.
 
 ## Release
 

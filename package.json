@@ -96,14 +96,12 @@
     "test:core": "npm run test -w @molcrafts/molvis-core",
     "test:stage": "npm run build:stage && npm run test -w @molcrafts/molvis-stage",
     "test:sketch": "npm run build:sketch && npm run test -w @molcrafts/molvis-sketch",
-    "test:stage-viewer": "npm run build:stage && npm run test -w @molcrafts/molvis-stage-viewer",
-    "test:sketch-viewer": "npm run build:sketch && npm run test -w @molcrafts/molvis-sketch-viewer",
     "test:page": "npm run build:engines && npm run test -w page",
     "test:plugin": "npm run build:plugin && npm run test -w @molcrafts/molvis-plugin",
     "test:python": "cd python && MOLVIS_SKIP_UI_BUILD=1 uv run --extra dev python -m pytest tests",
-    "test:vsc-ext": "npm run test:unit -w vsc-ext",
-    "test:browser": "npm run test:core && npm run test:stage && npm run test:sketch && npm run test:stage-viewer && npm run test:sketch-viewer && npm run test:plugin && npm run test:page",
-    "test": "npm run test:browser && npm run test:python && npm run test:vsc-ext",
+    "test:vsc-ext": "npm run build:stage && npm run test:unit -w vsc-ext",
+    "test:js": "npm run test:core && npm run test:stage && npm run test:sketch && npm run test:plugin && npm run test:page",
+    "test": "npm run test:js && npm run test:python && npm run test:vsc-ext",
     "test:watch": "npm run test:watch -w @molcrafts/molvis-stage",
     "release:stage:check": "npm run release:check -w @molcrafts/molvis-stage",
     "check:pack": "npm run check:pack -w @molcrafts/molvis-stage-viewer && npm run check:pack -w @molcrafts/molvis-sketch-viewer",
@@ -122,9 +120,7 @@
     "@biomejs/biome": "2.4.16",
     "@rsbuild/core": "^2.1.10",
     "@rslib/core": "^0.23.2",
-    "@rstest/browser": "^0.11.6",
     "@rstest/core": "^0.11.6",
-    "playwright": "^1.60.0",
     "wireit": "^0.14.13"
   },
   "overrides": {
@@ -132,8 +128,7 @@
     "@rsbuild/core": "^2.1.10",
     "@rslib/core": "^0.23.2",
     "@rsbuild/plugin-react": "^2.1.0",
-    "@rstest/core": "^0.11.6",
-    "@rstest/browser": "^0.11.6"
+    "@rstest/core": "^0.11.6"
   },
   "packageManager": "npm@11.16.0"
 }
