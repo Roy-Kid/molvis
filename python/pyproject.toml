@@ -79,7 +79,9 @@ molvis = ["dist/*", "dist/**/*"]
 # checkouts ../molrs and ../molpy (next to this repository), which CI checks
 # out at the refs .github/partners.env names. The wheel still declares the
 # ranges in [project] dependencies, and pip ignores this table. molpy is
-# tracked too because its molrs pin moves in lockstep with molrs's dev.
+# tracked too because its molrs pin moves in lockstep with molrs's dev; its
+# own sources pull molcrafts-mollog / molcrafts-molcfg from ../mollog and
+# ../molcfg, which CI checks out as well.
 [tool.uv.sources]
 molcrafts-molrs = { path = "../../molrs/molrs-python" }
 molcrafts-molpy = { path = "../../molpy" }

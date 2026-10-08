@@ -122,9 +122,10 @@ the full tier. Shared setup is
 The Python package is built and tested against its partners' `dev`, not their
 releases. `.github/partners.env` names them (molrs and molpy), and
 `python/pyproject.toml` builds `molcrafts-molrs` and `molcrafts-molpy` from the
-sibling checkouts `../molrs` and `../molpy` (`[tool.uv.sources]`). CI checks
-them out there with `MolCrafts/molcrafts-ci/actions/setup-partners@master` in
-`lint / guards`, `test / python` and `docs / build`; locally, keep the two
+sibling checkouts `../molrs` and `../molpy` (`[tool.uv.sources]`); molpy's own
+sources add `../mollog` and `../molcfg` (their `master`). CI checks them out
+there with `MolCrafts/molcrafts-ci/actions/setup-partners@master` in
+`lint / guards`, `test / python` and `docs / build`; locally, keep the four
 repositories next to this one. When a partner's `dev` changes its package
 metadata, `uv lock --check` fails: relock `python/uv.lock` in a commit of its
 own.
