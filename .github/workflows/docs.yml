@@ -43,4 +43,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
+      # python/ builds molcrafts-molrs and molcrafts-molpy from ../molrs and
+      # ../molpy, at the refs .github/partners.env names.
+      - shell: bash
+        run: grep -E '^[A-Z_]+=' .github/partners.env >> "$GITHUB_ENV"
+      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
+        with:
+          repository: ${{ env.MOLRS_REPOSITORY }}
+          ref: ${{ env.MOLRS_REF }}
+          path: ../molrs
+      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
+        with:
+          repository: ${{ env.MOLPY_REPOSITORY }}
+          ref: ${{ env.MOLPY_REF }}
+          path: ../molpy
+      # molrs/rust-toolchain.toml pins the compiler that builds the molrs wheel.
+      - uses: MolCrafts/molcrafts-ci/actions/setup-rust@master
+        with:
+          toolchain-dir: ../molrs
+          cache: molrs-python
+          workspaces: ../molrs/molrs-python -> ../target
       - run: uv run --project python --extra docs zensical build --strict

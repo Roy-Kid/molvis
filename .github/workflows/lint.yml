@@ -56,6 +56,20 @@ jobs:
         with:
           install: "false"
       - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
+      # python/ builds molcrafts-molrs and molcrafts-molpy from ../molrs and
+      # ../molpy, at the refs .github/partners.env names.
+      - shell: bash
+        run: grep -E '^[A-Z_]+=' .github/partners.env >> "$GITHUB_ENV"
+      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
+        with:
+          repository: ${{ env.MOLRS_REPOSITORY }}
+          ref: ${{ env.MOLRS_REF }}
+          path: ../molrs
+      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
+        with:
+          repository: ${{ env.MOLPY_REPOSITORY }}
+          ref: ${{ env.MOLPY_REF }}
+          path: ../molpy
       - run: npm run check:molrs-gateway
       - run: npm run check:versions
       - run: uv lock --check --project python
