@@ -67,7 +67,7 @@ names an exception via `/mol:note`.
 - **No god context bags** — pass the fields a call needs.
 - **No all-in-one façades** — composition is the caller's job.
 - **Tests mirror source**, single-function, one module → its own tests only.
-- **No e2e lanes.** Browser-mode rstest is a unit environment, not a driver. Every gate must be proven to bite.
+- **Unit tests only.** No speed, regression or e2e tests, and no browser mode: every suite runs in plain Node. Every gate must be proven to bite.
 - **No `scripts/` directory.** Constraints live in `package.json` one-liners wired into CI *and* pre-commit; build steps belong to the build config, release packaging to the release workflow.
 
 ## Default workflow

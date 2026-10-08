@@ -37,8 +37,6 @@ dev = [
     "hatchling",
     "pytest>=7.0",
     "molcrafts-molrs>=0.14.0",
-    "imageio-ffmpeg>=0.6",
-    "pillow>=10",
     # test_ipython_extension.py and test_scene.py drive the inline
     # viewer through a live IPython shell; without this the declared dev
     # environment cannot run its own suite (7 collection errors).

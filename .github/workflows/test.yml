@@ -2,7 +2,7 @@ name: test
 
 # Two tiers (`test / tier` decides; see "CI" in docs/development/testing.md):
 #
-#   fast  a feature-branch push to MolCrafts: test / browser, test / vsc-ext,
+#   fast  a feature-branch push to MolCrafts: test / js, test / vsc-ext,
 #         test / python on Linux.
 #   full  every push to a fork (proven before its pull request), dev, master
 #         and main on MolCrafts, pull requests, tags and dispatches:
@@ -34,22 +34,17 @@ jobs:
       - id: tier
         run: echo "full=${{ github.repository_owner != 'MolCrafts' || contains(fromJSON('["dev","master","main"]'), github.ref_name) || github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') }}" | tee -a "$GITHUB_OUTPUT"
 
-  # Browser-mode unit tests (@rstest/browser), one Chromium for every package.
-  browser:
-    name: test / browser
+  # Node unit tests (@rstest/core) for core, stage, sketch, plugin and page.
+  js:
+    name: test / js
     needs: tier
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-pw-${{ hashFiles('node_modules/playwright/package.json') }}
-      - run: npx playwright install chromium
-      - run: npm run test:browser
+      - run: npm run test:js
 
-  # manifest.test asserts vsc-ext/out/extension.js exists, so build first.
+  # mocha over tsc-compiled tests; they import @molcrafts/molvis-stage types.
   vsc-ext:
     name: test / vsc-ext
     needs: tier
@@ -57,7 +52,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npm run build:vsc-ext
       - run: npm run test:vsc-ext
 
   # In-process tests (wire, RPC, transport): no page bundle, no Node.

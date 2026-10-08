@@ -11,8 +11,8 @@ instead.
 
 - [**Embedding**](setup.md) — add MolVis to your own web app, wire up
   the viewport, load a frame.
-- [**Testing**](testing.md) — one unit lane per package, why browser mode
-  is not e2e, and how to prove a test can actually fail.
+- [**Testing**](testing.md) — one Node unit lane per package, what a unit
+  test may not touch, and how to prove a test can actually fail.
 - [**Extending**](extending.md) — write a custom modifier, register a
   new command, add a mode, plug a renderer into the scene.
 - [**Page plugins**](plugins.md) — domain-oriented ESM plugins

@@ -157,7 +157,7 @@ class FakeWorkloadWorker implements WorkerLike {
 
   /** Fire the worker "error" event (boot failure path). */
   emitError(message: string): void {
-    const event = new ErrorEvent("error", { message });
+    const event = { type: "error", message } as ErrorEvent;
     for (const l of [...(this.listeners.get("error") ?? [])]) l(event);
   }
 
