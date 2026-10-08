@@ -6,8 +6,10 @@ name: release
 #   release / python   molcrafts-molvis with the page bundle (PyPI trusted
 #                      publishing)
 #   release / vsc-ext  the VSIX on the VS Marketplace and Open VSX
-# workflow_dispatch is a dry run anywhere: everything builds and packs,
-# nothing is uploaded.
+# Each job's environment is named after its registry: npm, pypi,
+# vscode-marketplace (VSCE_PAT, OVSX_PAT). workflow_dispatch is a dry run
+# anywhere: everything builds and packs, nothing is uploaded, and no job
+# enters an environment.
 on:
   push:
     tags: ["v*"]
@@ -28,7 +30,7 @@ jobs:
     name: release / npm
     if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'release-core' || '' }}
+    environment: ${{ github.event_name == 'push' && 'npm' || '' }}
     permissions:
       contents: read
       id-token: write
@@ -89,7 +91,7 @@ jobs:
     name: release / vsc-ext
     if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'release-vsc-ext' || '' }}
+    environment: ${{ github.event_name == 'push' && 'vscode-marketplace' || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@master

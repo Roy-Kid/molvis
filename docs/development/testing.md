@@ -125,6 +125,8 @@ the same commit.
 
 Bump the shared version (`npm run check:versions` must pass), merge to
 master, and push a `v*` tag. `release.yml` publishes npm (trusted
-publishing, environment `release-core`), PyPI (environment `pypi`) and the
-VS Code extension (environment `release-vsc-ext`, secrets `VSCE_PAT` and
+publishing, environment `npm`), PyPI (environment `pypi`) and the VS Code
+extension (environment `vscode-marketplace`, secrets `VSCE_PAT` and
 `OVSX_PAT`). The npm and PyPI trusted publishers must name `release.yml`.
+`nightly.yml` publishes `molcrafts-molvis-nightly` from the `pypi-nightly`
+environment.
