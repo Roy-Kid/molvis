@@ -5,7 +5,10 @@ name: nightly
 #                     (Cloudflare Pages project `molvis`, branch `nightly`),
 #                     when the Cloudflare secrets are set.
 #   nightly / python  PyPI `molcrafts-molvis-nightly` <version>.dev<UTC
-#                     stamp>, pinned to `molcrafts-molpy-nightly`.
+#                     stamp>, pinned to `molcrafts-molpy-nightly`. Its
+#                     trusted publisher names this file and the
+#                     `pypi-nightly` environment (as molrs and molpy do);
+#                     `pypi` is for v* tags only.
 on:
   schedule:
     - cron: "41 2 * * *"
@@ -84,7 +87,7 @@ jobs:
     if: needs.prepare.outputs.changed == 'true'
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: pypi-nightly
       url: https://pypi.org/p/molcrafts-molvis-nightly
     permissions:
       contents: read
