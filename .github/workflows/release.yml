@@ -25,13 +25,25 @@ concurrency:
   group: release-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  PUBLISH: ${{ github.event_name == 'push' && github.repository_owner == 'MolCrafts' }}
-
 jobs:
+  # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
+  context:
+    name: release / context
+    runs-on: ubuntu-latest
+    outputs:
+      tier: ${{ steps.context.outputs.tier }}
+      upstream: ${{ steps.context.outputs.upstream }}
+      integration: ${{ steps.context.outputs.integration }}
+      skip-pr: ${{ steps.context.outputs.skip-pr }}
+      cancel: ${{ steps.context.outputs.cancel }}
+    steps:
+      - id: context
+        uses: MolCrafts/molcrafts-ci/actions/ci-context@master
+
   npm:
     name: release / npm
-    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
+    needs: context
+    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'push' && 'npm' || '' }}
     permissions:
@@ -42,6 +54,8 @@ jobs:
     # Empty, npm >= 11.5 (Node 24) publishes through the id-token.
     env:
       NODE_AUTH_TOKEN: ""
+      # Upload only on a tag push to MolCrafts; anything else packs.
+      PUBLISH: ${{ github.event_name == 'push' && needs.context.outputs.upstream == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
@@ -71,9 +85,13 @@ jobs:
 
   python:
     name: release / python
-    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
+    needs: context
+    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'push' && 'pypi' || '' }}
+    env:
+      # Upload only on a tag push to MolCrafts; anything else packs.
+      PUBLISH: ${{ github.event_name == 'push' && needs.context.outputs.upstream == 'true' }}
     permissions:
       contents: read
       id-token: write
@@ -92,9 +110,13 @@ jobs:
 
   vsc-ext:
     name: release / vsc-ext
-    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'MolCrafts'
+    needs: context
+    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'push' && 'vscode-marketplace' || '' }}
+    env:
+      # Upload only on a tag push to MolCrafts; anything else packs.
+      PUBLISH: ${{ github.event_name == 'push' && needs.context.outputs.upstream == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
