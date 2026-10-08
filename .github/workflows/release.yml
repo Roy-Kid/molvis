@@ -6,10 +6,11 @@ name: release
 #   release / python   molcrafts-molvis with the page bundle (PyPI trusted
 #                      publishing)
 #   release / vsc-ext  the VSIX on the VS Marketplace and Open VSX
-# Each job's environment is named after its registry: npm, pypi,
-# vscode-marketplace (VSCE_PAT, OVSX_PAT). workflow_dispatch is a dry run
-# anywhere: everything builds and packs, nothing is uploaded, and no job
-# enters an environment.
+# Each surface first builds and dry-runs in its `*-build` job, which runs
+# anywhere on workflow_dispatch (the dry run) and enters no environment. The
+# upload jobs gate on ci-context's `publish` (a `v*` tag pushed to MolCrafts),
+# wait for every build, and enter the environment named after their registry:
+# npm, pypi, vscode-marketplace (VSCE_PAT, OVSX_PAT).
 on:
   push:
     tags: ["v*"]
@@ -18,9 +19,8 @@ on:
 permissions:
   contents: read
 
-# One group per file, workflow, event and ref. Under workflow_call (release.yml
-# running lint/test) github.workflow and github.event_name are the caller's, so
-# a called run never shares, and so never cancels, a direct run's group.
+# One group per file, workflow, event and ref; a release is never cancelled.
+# The canonical block: actions/check-workflows.
 concurrency:
   group: release-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
@@ -35,17 +35,83 @@ jobs:
       upstream: ${{ steps.context.outputs.upstream }}
       integration: ${{ steps.context.outputs.integration }}
       skip-pr: ${{ steps.context.outputs.skip-pr }}
-      cancel: ${{ steps.context.outputs.cancel }}
+      publish: ${{ steps.context.outputs.publish }}
     steps:
       - id: context
         uses: MolCrafts/molcrafts-ci/actions/ci-context@master
 
-  npm:
-    name: release / npm
+  npm-build:
+    name: release / npm-build
     needs: context
     if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'npm' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+        with:
+          node-version: "24"
+      - run: npm run check:versions
+      - run: |
+          npm run build:core
+          npm run build:stage
+          npm run build:stage-viewer
+          npm run build:sketch-viewer
+          npm run check:pack
+          npm run build:sketch
+          npm run build:plugin
+      - name: Pack core, engines, viewers, plugin SDK and the umbrella
+        run: |
+          set -euo pipefail
+          for w in @molcrafts/molvis-core @molcrafts/molvis-stage @molcrafts/molvis-stage-viewer \
+                   @molcrafts/molvis-sketch @molcrafts/molvis-sketch-viewer @molcrafts/molvis-plugin; do
+            npm pack --dry-run -w "$w"
+          done
+          npm pack --dry-run
+
+  python-build:
+    name: release / python-build
+    needs: context
+    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
+      # The page bundle goes into python/src/molvis/dist/; the build backend
+      # then finds it fresh and does not rebuild it.
+      - run: npm run build:page
+      - run: uv build --project python --out-dir python/dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-dist
+          path: python/dist/
+          if-no-files-found: error
+
+  vsc-ext-build:
+    name: release / vsc-ext-build
+    needs: context
+    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - run: npm run build:vsc-ext
+      - working-directory: vsc-ext
+        run: npx vsce package --no-dependencies -o molvis.vsix
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vsix
+          path: vsc-ext/molvis.vsix
+          if-no-files-found: error
+
+  # npm publishes from the workspaces, so this job builds them again (the
+  # same steps as npm-build) rather than publishing tarballs.
+  npm:
+    name: release / npm
+    needs: [context, npm-build, python-build, vsc-ext-build]
+    if: needs.context.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: npm
     permissions:
       contents: read
       id-token: write
@@ -54,15 +120,12 @@ jobs:
     # Empty, npm >= 11.5 (Node 24) publishes through the id-token.
     env:
       NODE_AUTH_TOKEN: ""
-      # Upload only on a tag push to MolCrafts; anything else packs.
-      PUBLISH: ${{ github.event_name == 'push' && needs.context.outputs.upstream == 'true' }}
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
-      - run: npm run check:versions
       # The umbrella re-exports the plugin SDK, so every workspace is on the
       # registry before it.
       - run: |
@@ -76,62 +139,48 @@ jobs:
       - name: Publish core, engines, viewers, plugin SDK, then the umbrella
         run: |
           set -euo pipefail
-          if [ "$PUBLISH" = true ]; then publish="npm publish --provenance --access public"; else publish="npm pack --dry-run"; fi
           for w in @molcrafts/molvis-core @molcrafts/molvis-stage @molcrafts/molvis-stage-viewer \
                    @molcrafts/molvis-sketch @molcrafts/molvis-sketch-viewer @molcrafts/molvis-plugin; do
-            $publish -w "$w"
+            npm publish --provenance --access public -w "$w"
           done
-          $publish
+          npm publish --provenance --access public
 
   python:
     name: release / python
-    needs: context
-    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    needs: [context, npm-build, python-build, vsc-ext-build]
+    if: needs.context.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'pypi' || '' }}
-    env:
-      # Upload only on a tag push to MolCrafts; anything else packs.
-      PUBLISH: ${{ github.event_name == 'push' && needs.context.outputs.upstream == 'true' }}
+    environment: pypi
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
-      # The page bundle goes into python/src/molvis/dist/; the build backend
-      # then finds it fresh and does not rebuild it.
-      - run: npm run build:page
-      - run: uv build --project python --out-dir python/dist
-      - if: env.PUBLISH == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/download-artifact@v8
+        with:
+          name: python-dist
+          path: python/dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python/dist/
 
   vsc-ext:
     name: release / vsc-ext
-    needs: context
-    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    needs: [context, npm-build, python-build, vsc-ext-build]
+    if: needs.context.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'vscode-marketplace' || '' }}
-    env:
-      # Upload only on a tag push to MolCrafts; anything else packs.
-      PUBLISH: ${{ github.event_name == 'push' && needs.context.outputs.upstream == 'true' }}
+    environment: vscode-marketplace
     steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npm run build:vsc-ext
-      - working-directory: vsc-ext
-        run: npx vsce package --no-dependencies -o molvis.vsix
-      - if: env.PUBLISH == 'true'
-        uses: HaaLeo/publish-vscode-extension@v2
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: vsc-ext/
+      - uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.VSCE_PAT }}
           registryUrl: https://marketplace.visualstudio.com
           extensionFile: vsc-ext/molvis.vsix
           skipDuplicate: true
-      - if: env.PUBLISH == 'true'
-        uses: HaaLeo/publish-vscode-extension@v2
+      - uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OVSX_PAT }}
           registryUrl: https://open-vsx.org

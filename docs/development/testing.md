@@ -107,11 +107,11 @@ tags and dispatches.
 
 | workflow | fast tier | full tier | upstream only |
 |---|---|---|---|
-| `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck` | same | — |
+| `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck`, `lint / workflows` (`actions/check-workflows`) | same | — |
 | `test.yml` | `test / context`, `test / js` (`npm run test:js`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
 | `docs.yml` | `docs / build` (strict Zensical) | same | — |
 | `nightly.yml` | — | — | daily when dev moved: `nightly / page` (app.molcrafts.org/nightly/molvis/), `nightly / python` (PyPI `molcrafts-molvis-nightly`) |
-| `release.yml` | — | — | `v*` tag: `release / npm`, `release / python`, `release / vsc-ext`; `workflow_dispatch` is a dry run anywhere |
+| `release.yml` | — | — | `release / {npm,python,vsc-ext}-build` build and dry-run; on a `v*` tag pushed to MolCrafts (`publish`), `release / npm`, `release / python`, `release / vsc-ext` upload; `workflow_dispatch` is a dry run anywhere |
 
 A pull request inside a fork runs only the context jobs: its push already ran
 the full tier. Shared setup is
