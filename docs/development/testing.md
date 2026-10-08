@@ -97,7 +97,10 @@ working:
 
 ## CI
 
-`test / tier` picks the tier. The fast tier runs on a feature-branch push to
+Every workflow starts with a `<file> / context` job running
+`MolCrafts/molcrafts-ci/actions/ci-context@master`, which decides the tier,
+upstream-only gating and pull-request dedup for all MolCrafts repositories;
+the other jobs read its outputs. The fast tier runs on a feature-branch push to
 MolCrafts; the full tier on every push to a fork (so a branch is proven before
 its pull request), on dev, master and main on MolCrafts, and on pull requests,
 tags and dispatches.
@@ -105,13 +108,14 @@ tags and dispatches.
 | workflow | fast tier | full tier | upstream only |
 |---|---|---|---|
 | `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck` | same | — |
-| `test.yml` | `test / tier`, `test / js` (`npm run test:js`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
+| `test.yml` | `test / context`, `test / js` (`npm run test:js`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
 | `docs.yml` | `docs / build` (strict Zensical) | same | — |
 | `nightly.yml` | — | — | daily when dev moved: `nightly / page` (app.molcrafts.org/nightly/molvis/), `nightly / python` (PyPI `molcrafts-molvis-nightly`) |
 | `release.yml` | — | — | `v*` tag: `release / npm`, `release / python`, `release / vsc-ext`; `workflow_dispatch` is a dry run anywhere |
 
-A pull request inside a fork skips: its push already ran the full tier. Shared
-setup is `MolCrafts/molcrafts-ci/actions/setup-{node,python}@master`.
+A pull request inside a fork runs only the context jobs: its push already ran
+the full tier. Shared setup is
+`MolCrafts/molcrafts-ci/actions/setup-{node,python}@master`.
 `.pre-commit-config.yaml` mirrors these jobs; when you add or
 change one, change the hook in the same commit.
 
