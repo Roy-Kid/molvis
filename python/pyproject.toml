@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "molcrafts-molpy>=0.16.0",
+    "molcrafts-molpy>=0.17.0",
     "numpy",
     "websockets>=13.0",
 ]
@@ -35,7 +35,7 @@ dev = [
     "hatchling",
     "pytest>=7.0",
     # FrameStream decodes molrs.stream payloads with molrs.io.
-    "molcrafts-molrs>=0.16.0",
+    "molcrafts-molrs>=0.17.0",
     # test_ipython_extension.py and test_scene.py drive the inline
     # viewer through a live IPython shell; without this the declared dev
     # environment cannot run its own suite (7 collection errors).

@@ -5,10 +5,15 @@ name: nightly
 #                     (Cloudflare Pages project `molvis`, branch `nightly`),
 #                     when the Cloudflare secrets are set.
 #   nightly / python  PyPI `molcrafts-molvis-nightly` <version>.dev<UTC
-#                     stamp>, pinned to `molcrafts-molpy-nightly`. Its
+#                     stamp>, depending on the released `molcrafts-molpy`
+#                     (the molpy/molrs nightly wheels stopped at 0.14). Its
 #                     trusted publisher names this file and the
 #                     `pypi-nightly` environment (as molrs and molpy do);
 #                     `pypi` is for v* tags only.
+#
+# GitHub only schedules the copy of this file on the default branch
+# (master). That copy checks out `dev`, which is what gets built. Keep the
+# two copies the same.
 on:
   schedule:
     - cron: "41 2 * * *"
@@ -129,7 +134,6 @@ jobs:
           t = p.read_text(encoding="utf-8")
           t = re.sub(r'^name\s*=\s*"molcrafts-molvis"', 'name = "molcrafts-molvis-nightly"', t, count=1, flags=re.M)
           t = re.sub(r'^version\s*=\s*".*?"', f'version = "{dev}"', t, count=1, flags=re.M)
-          t = re.sub(r'"molcrafts-molpy>=[^"]+"', '"molcrafts-molpy-nightly>=0.14.0.dev0"', t, count=1)
           p.write_text(t, encoding="utf-8")
           PY
       - run: uv build --project python --out-dir python/dist
