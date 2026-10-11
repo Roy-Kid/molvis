@@ -1,105 +1,15 @@
 name: lint
-
-# Same jobs in every context (feature branch or dev/master, fork or
-# upstream); see "CI" in docs/development/testing.md.
 on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [dev, master, main]
+    branches: [dev, master]
   workflow_dispatch:
-
 permissions:
   contents: read
-
-# One group per file, workflow, event and ref; only a feature ref cancels its
-# superseded runs. The canonical block: actions/check-workflows.
-concurrency:
-  group: lint-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/master"]'), github.ref) && !startsWith(github.ref, 'refs/tags/') }}
-
 jobs:
-  # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
-  context:
-    name: lint / context
-    runs-on: ubuntu-latest
-    outputs:
-      tier: ${{ steps.context.outputs.tier }}
-      upstream: ${{ steps.context.outputs.upstream }}
-      integration: ${{ steps.context.outputs.integration }}
-      skip-pr: ${{ steps.context.outputs.skip-pr }}
-      publish: ${{ steps.context.outputs.publish }}
-    steps:
-      - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@master
-
-  biome:
-    name: lint / biome
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npx biome check
-
-  # Only core/ imports @molcrafts/molrs; every workspace and the Python
-  # package share one version and pin it; python/uv.lock matches pyproject.
-  guards:
-    name: lint / guards
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-        with:
-          install: "false"
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
-      # python/ builds molrs, molpy, mollog and molcfg from the sibling
-      # checkouts, at the refs .github/partners.env names.
-      - shell: bash
-        run: grep -E '^[A-Z_]+=' .github/partners.env >> "$GITHUB_ENV"
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLRS_REPOSITORY }}
-          ref: ${{ env.MOLRS_REF }}
-          path: ../molrs
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLPY_REPOSITORY }}
-          ref: ${{ env.MOLPY_REF }}
-          path: ../molpy
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLLOG_REPOSITORY }}
-          ref: ${{ env.MOLLOG_REF }}
-          path: ../mollog
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLCFG_REPOSITORY }}
-          ref: ${{ env.MOLCFG_REF }}
-          path: ../molcfg
-      - run: npm run check:molrs-gateway
-      - run: npm run check:versions
-      - run: uv lock --check --project python
-
-  # Package types come from dist via exports; the script builds the engines.
-  typecheck:
-    name: lint / typecheck
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npm run typecheck
-
-  workflows:
-    name: lint / workflows
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/check-workflows@master
+  ci:
+    uses: MolCrafts/molcrafts-ci/.github/workflows/ci.yml@master
+    with:
+      profile: node-python
+      area: lint

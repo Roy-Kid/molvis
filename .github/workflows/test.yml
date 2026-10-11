@@ -1,125 +1,15 @@
 name: test
-
-# Two tiers (`test / context` decides; see "CI" in docs/development/testing.md):
-#
-#   fast  a feature-branch push to MolCrafts: test / js, test / vsc-ext,
-#         test / python on Linux.
-#   full  every push to a fork (proven before its pull request), dev, master
-#         and main on MolCrafts, pull requests, tags and dispatches:
-#         + test / build (engines, viewers, pack surfaces, page, vsc-ext) and
-#         test / python on macOS and Windows.
 on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [dev, master, main]
+    branches: [dev, master]
   workflow_dispatch:
-
 permissions:
   contents: read
-
-# One group per file, workflow, event and ref; only a feature ref cancels its
-# superseded runs. The canonical block: actions/check-workflows.
-concurrency:
-  group: test-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/master"]'), github.ref) && !startsWith(github.ref, 'refs/tags/') }}
-
 jobs:
-  # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
-  context:
-    name: test / context
-    runs-on: ubuntu-latest
-    outputs:
-      tier: ${{ steps.context.outputs.tier }}
-      upstream: ${{ steps.context.outputs.upstream }}
-      integration: ${{ steps.context.outputs.integration }}
-      skip-pr: ${{ steps.context.outputs.skip-pr }}
-      publish: ${{ steps.context.outputs.publish }}
-    steps:
-      - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@master
-
-  # Node unit tests (@rstest/core) for core, stage, sketch, plugin and page.
-  js:
-    name: test / js
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npm run test:js
-
-  # mocha over tsc-compiled tests; they import @molcrafts/molvis-stage types.
-  vsc-ext:
-    name: test / vsc-ext
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npm run test:vsc-ext
-
-  # In-process tests (wire, RPC, transport): no page bundle, no Node.
-  python:
-    name: test / python (${{ matrix.os }})
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(needs.context.outputs.tier == 'full' && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
-    env:
-      MOLVIS_SKIP_UI_BUILD: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
-      # python/ builds molrs, molpy, mollog and molcfg from the sibling
-      # checkouts, at the refs .github/partners.env names.
-      - shell: bash
-        run: grep -E '^[A-Z_]+=' .github/partners.env >> "$GITHUB_ENV"
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLRS_REPOSITORY }}
-          ref: ${{ env.MOLRS_REF }}
-          path: ../molrs
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLPY_REPOSITORY }}
-          ref: ${{ env.MOLPY_REF }}
-          path: ../molpy
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLLOG_REPOSITORY }}
-          ref: ${{ env.MOLLOG_REF }}
-          path: ../mollog
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLCFG_REPOSITORY }}
-          ref: ${{ env.MOLCFG_REF }}
-          path: ../molcfg
-      # molrs/rust-toolchain.toml pins the compiler that builds the molrs wheel.
-      - uses: MolCrafts/molcrafts-ci/actions/setup-rust@master
-        with:
-          toolchain-dir: ../molrs
-          cache: molrs-python
-          workspaces: ../molrs/molrs-python -> ../target
-      - run: uv run --project python --extra dev python -m pytest python/tests
-
-  # Every publishable output. wireit builds each dependency once.
-  build:
-    name: test / build
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true' && needs.context.outputs.tier == 'full'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - run: npm run build:stage
-      - run: npm run build:stage-viewer && npm run build:sketch-viewer
-      - run: npm run check:pack
-      - run: npm run build:page
-      - run: npm run check:page-public-path
-      - run: npm run build:vsc-ext
+  ci:
+    uses: MolCrafts/molcrafts-ci/.github/workflows/ci.yml@master
+    with:
+      profile: node-python
+      area: test

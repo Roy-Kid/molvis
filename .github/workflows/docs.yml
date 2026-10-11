@@ -1,76 +1,15 @@
 name: docs
-
-# Strict Zensical build of the product manual in every context. Nothing in
-# this repository deploys it.
 on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [dev, master, main]
+    branches: [dev, master]
   workflow_dispatch:
-
 permissions:
   contents: read
-
-# One group per file, workflow, event and ref; only a feature ref cancels its
-# superseded runs. The canonical block: actions/check-workflows.
-concurrency:
-  group: docs-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/master"]'), github.ref) && !startsWith(github.ref, 'refs/tags/') }}
-
 jobs:
-  # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
-  context:
-    name: docs / context
-    runs-on: ubuntu-latest
-    outputs:
-      tier: ${{ steps.context.outputs.tier }}
-      upstream: ${{ steps.context.outputs.upstream }}
-      integration: ${{ steps.context.outputs.integration }}
-      skip-pr: ${{ steps.context.outputs.skip-pr }}
-      publish: ${{ steps.context.outputs.publish }}
-    steps:
-      - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@master
-
-  build:
-    name: docs / build
-    needs: context
-    if: needs.context.outputs.skip-pr != 'true'
-    runs-on: ubuntu-latest
-    env:
-      MOLVIS_SKIP_UI_BUILD: "1"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
-      # python/ builds molrs, molpy, mollog and molcfg from the sibling
-      # checkouts, at the refs .github/partners.env names.
-      - shell: bash
-        run: grep -E '^[A-Z_]+=' .github/partners.env >> "$GITHUB_ENV"
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLRS_REPOSITORY }}
-          ref: ${{ env.MOLRS_REF }}
-          path: ../molrs
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLPY_REPOSITORY }}
-          ref: ${{ env.MOLPY_REF }}
-          path: ../molpy
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLLOG_REPOSITORY }}
-          ref: ${{ env.MOLLOG_REF }}
-          path: ../mollog
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@master
-        with:
-          repository: ${{ env.MOLCFG_REPOSITORY }}
-          ref: ${{ env.MOLCFG_REF }}
-          path: ../molcfg
-      # molrs/rust-toolchain.toml pins the compiler that builds the molrs wheel.
-      - uses: MolCrafts/molcrafts-ci/actions/setup-rust@master
-        with:
-          toolchain-dir: ../molrs
-          cache: molrs-python
-          workspaces: ../molrs/molrs-python -> ../target
-      - run: uv run --project python --extra docs zensical build --strict
+  ci:
+    uses: MolCrafts/molcrafts-ci/.github/workflows/ci.yml@master
+    with:
+      profile: node-python
+      area: docs

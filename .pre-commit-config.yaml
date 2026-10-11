@@ -1,211 +1,23 @@
-# Managed by prek: `prek install`
+# Same file in every repository. The profile name lives in
+# .github/partners.env as CI_PROFILE. This file does not contain a SHA.
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit, pre-push]
 
-# Mirrors every job in .github/workflows/{lint,test,docs}.yml. Any divergence is a bug
-# — when you add/modify a CI job, update this file in the same commit.
-#
-# Build ordering is NOT written here: `wireit` resolves it from each
-# package's own `dependencies`. Asking for `build:page` builds whatever it
-# needs, once. Re-listing `build:core && build:stage && …` was a third copy
-# of the dependency graph, and it also meant two hooks could run overlapping
-# builds — the collision that produced "Transaction already in progress"
-# from rspack's cache and a truncated WASM read in test-core.
-#
-# Stages:
-#   pre-commit (default): fast checks (biome, typecheck, test-core).
-#                         Runs on every commit.
-#   pre-push:            slow checks (build-core / page / vsc-ext).
-#                        Runs before push only.
-#
-# Install both stages:
-#   pre-commit install --hook-type pre-commit --hook-type pre-push
-
 repos:
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
-      # Catches `if: secrets.*` at job level (workflow starts 0 jobs) and
-      # other GHA parse errors that `check-yaml` will not see.
-      - id: actionlint
-
   - repo: local
     hooks:
-      # lint.yml::workflows. actionlint does not enforce the MolCrafts scheme,
-      # so a green actionlint still lets `lint / workflows` fail.
-      - id: workflows
-        name: check-workflows (lint.yml)
-        entry: scripts/check-workflows.sh
+      - id: ci
+        name: molcrafts-ci
+        entry: uv run --no-project --script https://raw.githubusercontent.com/MolCrafts/molcrafts-ci/master/hooks/ci.py
         language: system
         pass_filenames: false
         always_run: true
-
-      # ─── lint.yml::biome ─────────────────────────────────────────────────────
-      # Run biome on the whole repo (matches `npx biome check` in CI),
-      # not just changed files — biome's own includes/excludes config
-      # already scopes correctly, and a per-file glob would diverge.
-      - id: biome-check
-        name: biome check (whole repo)
-        entry: npx biome check
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # ─── lint.yml::guards ───────────────────────────────────────────────────
-      # Both are one-liners in package.json, not files in a scripts/ dir —
-      # a rule with nowhere to live is a rule nobody runs.
-      - id: check-molrs-gateway
-        name: only core/ imports @molcrafts/molrs
-        entry: npm run check:molrs-gateway
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      - id: check-versions
-        name: workspace versions and pins in sync
-        entry: npm run check:versions
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # ─── lint.yml::typecheck ────────────────────────────────────────────────
-      - id: typecheck
-        name: typecheck (engines + viewers + hosts)
-        entry: npm run typecheck
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # ─── test.yml::js (fast lane) ─────────────────────────────────────────
-      - id: test-core
-        name: test core (rstest, Node)
-        entry: npm run test:core
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # ─── local-only guard ────────────────────────────────────────────────
-      # The build hooks below and a running `npm run dev:page` share
-      # `node_modules/.cache/rspack` and the same `dist/` trees. Overlapping
-      # them made rspack panic ("Transaction already in progress"), truncated
-      # a WASM read in test-core, and hung rstest's snapshot RPC — three
-      # different-looking failures, one cause. CI has no watchers, so this
-      # guard is local-only and has no CI counterpart by design.
-      - id: no-dev-watcher
-        name: no dev watcher running (shared rspack cache)
-        entry: >
-          bash -c 'ROOT=$(git rev-parse --show-toplevel);
-          if pgrep -af "rslib build --watch|rsbuild dev" | grep -F "$ROOT/" | grep -v "pgrep -af" >/dev/null; then
-            echo "A molvis dev watcher is running — stop it before pushing; the build hooks share node_modules/.cache/rspack and dist/ with it.";
-            exit 1;
-          fi; exit 0'
+        args: ["--stage", "pre-commit"]
+      - id: ci-push
+        name: molcrafts-ci pre-push
+        entry: uv run --no-project --script https://raw.githubusercontent.com/MolCrafts/molcrafts-ci/master/hooks/ci.py
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
-
-      # ─── test.yml::build ──
-      # Same shape as CI's parallel build jobs. Pre-push because each takes
-      # ~30-60s and they run serially here (CI runs them on separate
-      # runners). Each asks only for its own target; wireit builds the
-      # dependencies once.
-      - id: build-stage
-        name: build stage library (rslib)
-        entry: npm run build:stage
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: build-stage-viewer
-        name: build @molcrafts/molvis-stage-viewer
-        entry: npm run build:stage-viewer
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: build-sketch-viewer
-        name: build @molcrafts/molvis-sketch-viewer
-        entry: npm run build:sketch-viewer
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: check-pack
-        name: check stage-viewer + sketch-viewer pack surfaces
-        entry: npm run check:pack
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: build-page
-        name: build page (rsbuild)
-        entry: npm run build:page
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: check-page-public-path
-        name: page publicPath is document-relative
-        entry: npm run check:page-public-path
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: build-vsc-ext
-        name: build vsc-ext (rslib)
-        entry: npm run build:vsc-ext
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      # ─── test.yml::js / vsc-ext / python ──────────────────────────
-      # Matches test.yml `test / js` (`npm run test:js`).
-      # test-core stays on pre-commit as the fast lane.
-      - id: test-js
-        name: test js units (rstest, Node)
-        entry: npm run test:js
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: test-vsc-ext
-        name: test vsc-ext (mocha)
-        entry: npm run test:vsc-ext
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: test-python
-        name: test python (uv, dev extra)
-        entry: npm run test:python
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      # Stale python/uv.lock pinning PyPI molpy 0.13.2 hid the git 0.14
-      # sources from `uv run` until the lock was regenerated.
-      - id: python-uv-lock
-        name: python uv.lock matches pyproject
-        entry: bash -c 'cd python && uv lock --check'
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # ─── docs.yml::build ──────────────────────────────────────────────────
-      - id: docs-build
-        name: docs build (strict Zensical)
-        entry: bash -c 'MOLVIS_SKIP_UI_BUILD=1 uv run --project python --extra docs zensical build --strict'
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
+        args: ["--stage", "pre-push"]
