@@ -31,6 +31,15 @@ repos:
 
   - repo: local
     hooks:
+      # lint.yml::workflows. actionlint does not enforce the MolCrafts scheme,
+      # so a green actionlint still lets `lint / workflows` fail.
+      - id: workflows
+        name: check-workflows (lint.yml)
+        entry: scripts/check-workflows.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # ─── lint.yml::biome ─────────────────────────────────────────────────────
       # Run biome on the whole repo (matches `npx biome check` in CI),
       # not just changed files — biome's own includes/excludes config
