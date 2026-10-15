@@ -55,7 +55,7 @@
     "test": "rstest run"
   },
   "dependencies": {
-    "@molcrafts/ui": "0.1.0-alpha.0"
+    "@molcrafts/ui": "0.1.0-alpha.1"
   },
   "peerDependencies": {
     "@molcrafts/molvis-core": "^0.3.0",
