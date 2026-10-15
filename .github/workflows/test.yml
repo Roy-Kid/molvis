@@ -1,15 +1,87 @@
 name: test
+
+# The tests a laptop cannot run: every OS. The local hooks run every
+# molcrafts-ci `node-python` gate once (pre-commit: workflows, biome, guards,
+# typecheck, test-core; pre-push: js, vsc-ext, python, build, docs), so this
+# workflow repeats none of the static checks, the Node suites or the bundle
+# builds; none of them depends on the OS. The Python suite runs once per OS
+# against the partners .github/partners.env names, in two tiers (`test /
+# context` decides):
+#
+#   fast  a feature-branch push to MolCrafts: Linux.
+#   full  every push to a fork (proven before its pull request), dev, master
+#         and master on MolCrafts, pull requests and dispatches: Linux, macOS
+#         and Windows.
+#
+# The strict docs build runs in the Linux leg, after its tests, in the same
+# environment: the molrs it imports is the one that leg built and tested, not
+# a second compile.
 on:
   push:
     branches: ["**"]
   pull_request:
     branches: [dev, master]
   workflow_dispatch:
+
 permissions:
   contents: read
+
+# One group per file, workflow, event and ref; only a feature ref cancels its superseded runs.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !contains(fromJSON('["refs/heads/dev","refs/heads/master"]'), github.ref) && !startsWith(github.ref, 'refs/tags/') }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # uv builds molrs through maturin's PEP 517 hook; this makes that cargo
+  # build --locked as well.
+  MATURIN_PEP517_ARGS: --locked
+  # The tests import the package, not the page bundle; setup.py would
+  # otherwise run `npm run build:page`, which is the pre-push build gate.
+  MOLVIS_SKIP_UI_BUILD: "1"
+
 jobs:
-  ci:
-    uses: MolCrafts/molcrafts-ci/.github/workflows/ci.yml@master
-    with:
-      profile: node-python
-      area: test
+  # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
+  context:
+    name: test / context
+    runs-on: ubuntu-latest
+    outputs:
+      tier: ${{ steps.context.outputs.tier }}
+      upstream: ${{ steps.context.outputs.upstream }}
+      integration: ${{ steps.context.outputs.integration }}
+      skip-pr: ${{ steps.context.outputs.skip-pr }}
+      publish: ${{ steps.context.outputs.publish }}
+    steps:
+      - id: context
+        uses: MolCrafts/molcrafts-ci/actions/ci-context@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+
+  python:
+    name: test / python (${{ matrix.os }})
+    needs: context
+    if: needs.context.outputs.skip-pr != 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.context.outputs.tier == 'full' && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      # molrs/rust-toolchain.toml pins the compiler that builds the molrs wheel.
+      - uses: MolCrafts/molcrafts-ci/actions/setup-rust@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+        with:
+          toolchain-dir: ../molrs
+          cache: molrs-python
+          workspaces: ../molrs/molrs-python -> ../target
+      # The pre-push `python` gate.
+      - name: Unit tests
+        run: uv run --project python --extra dev python -m pytest python/tests
+      # The site as Cloudflare Pages builds it, zensical --strict: any warning
+      # fails. Cloudflare Pages deploys it, so no job here deploys.
+      - name: Docs
+        if: matrix.os == 'ubuntu-latest'
+        run: uv run --project python --extra docs zensical build --strict

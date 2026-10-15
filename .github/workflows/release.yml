@@ -38,7 +38,7 @@ jobs:
       publish: ${{ steps.context.outputs.publish }}
     steps:
       - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@master
+        uses: MolCrafts/molcrafts-ci/actions/ci-context@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
 
   npm-build:
     name: release / npm-build
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
         with:
           node-version: "24"
       - run: npm run check:versions
@@ -75,8 +75,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
       # The page bundle goes into python/src/molvis/dist/; the build backend
       # then finds it fresh and does not rebuild it.
       - run: npm run build:page
@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
       - run: npm run build:vsc-ext
       - working-directory: vsc-ext
         run: npx vsce package --no-dependencies -o molvis.vsix
@@ -122,7 +122,7 @@ jobs:
       NODE_AUTH_TOKEN: ""
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org

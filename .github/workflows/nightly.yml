@@ -41,7 +41,7 @@ jobs:
       publish: ${{ steps.context.outputs.publish }}
     steps:
       - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@master
+        uses: MolCrafts/molcrafts-ci/actions/ci-context@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
 
   prepare:
     name: nightly / prepare
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: dev
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
       - run: npm run build:page
       - run: grep -F 'window.__MOLVIS_ASSET_BASE__="/nightly/molvis/"' page/dist/index.html
       - uses: actions/upload-artifact@v7
@@ -120,8 +120,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: dev
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@master
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@master
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
       - run: npm run build:page
       - name: Stamp the nightly distribution
         env:
