@@ -25,6 +25,9 @@ classifiers = [
 ]
 dependencies = [
     "molcrafts-molpy>=0.17.0",
+    # `molvis serve` runs cells through the same InteractiveShell.run_cell
+    # a notebook kernel uses. The shell is the session; there is no second one.
+    "ipython>=8",
     "numpy",
     "websockets>=13.0",
 ]
@@ -36,10 +39,6 @@ dev = [
     "pytest>=7.0",
     # FrameStream decodes molrs.stream payloads with molrs.io.
     "molcrafts-molrs>=0.17.0",
-    # test_ipython_extension.py and test_scene.py drive the inline
-    # viewer through a live IPython shell; without this the declared dev
-    # environment cannot run its own suite (7 collection errors).
-    "ipython>=8",
     # test_mdx.py drives the molvis fence through Python-Markdown directly
     # (at docs-build time zensical brings these along).
     "markdown>=3.5",

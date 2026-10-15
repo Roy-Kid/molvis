@@ -447,6 +447,10 @@ class ControlMixin:
             self._camera_proxy = proxy  # type: ignore[attr-defined]
         return proxy
 
+    def fit(self) -> Camera:
+        """Fit the main camera to the scene. Same as ``self.camera.fit()``."""
+        return self.camera.fit()
+
     def seek_frame(self, index: int) -> Any:
         """Move the trajectory to *index* (0-based) and redraw. Returns ``self``."""
         # String method name (not FrontendCommands) so this module stays free

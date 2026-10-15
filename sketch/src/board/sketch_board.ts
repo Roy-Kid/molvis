@@ -57,7 +57,7 @@ import {
   DEFAULT_CUSTOM_COLOR,
   normalizeSketchColor,
 } from "../style/custom_color";
-import type { MoleculeData } from "../types";
+import type { Atom2D, Bond2D, MoleculeData } from "../types";
 import { DEFAULT_BOND_SCREEN_PX, ViewportCoords } from "./coords";
 import { type BoardHit, HitTester } from "./hit_test";
 import { resolveKeymap } from "./keymap";
@@ -359,6 +359,70 @@ export class SketchBoard {
       return;
     }
     this.executeCommand(new ClearDocumentCommand(this.graph));
+    this.clearSelection();
+    this.emitState();
+  }
+
+  /** Draw one atom. One undo step. Returns the new atom index, or -1 if disabled. */
+  drawAtom(atom: Atom2D): number {
+    const command = new AddAtomCommand(this.graph, atom);
+    this.executeCommand(command);
+    return command.getAtomIndex();
+  }
+
+  /** Draw one bond. One undo step. Returns the new bond index, or -1 if disabled. */
+  drawBond(bond: Bond2D): number {
+    const command = new AddBondCommand(this.graph, bond);
+    this.executeCommand(command);
+    return command.getBondIndex();
+  }
+
+  /**
+   * Draw a carbon chain at `bondChainStep`, bond order 1, color unset.
+   * `x0` and `y0` are ignored when `start` is an atom index.
+   */
+  drawChain(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    start?: number,
+  ): void {
+    const step = this.bondChainStep;
+    const order = 1;
+    const color = undefined;
+    if (start === undefined) {
+      this.executeCommand(
+        new PlaceChainFromPointCommand(
+          this.graph,
+          x0,
+          y0,
+          x1,
+          y1,
+          step,
+          order,
+          color,
+        ),
+      );
+      return;
+    }
+    this.executeCommand(
+      new PlaceChainCommand(this.graph, start, x1, y1, step, order, color),
+    );
+  }
+
+  /** Delete the current atom and bond selection as one undo step. */
+  deleteSelection(): void {
+    if (this.selectedAtoms.size === 0 && this.selectedBonds.size === 0) {
+      return;
+    }
+    this.executeCommand(
+      new DeleteSelectionCommand(
+        this.graph,
+        [...this.selectedAtoms],
+        [...this.selectedBonds],
+      ),
+    );
     this.clearSelection();
     this.emitState();
   }
