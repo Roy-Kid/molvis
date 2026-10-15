@@ -67,7 +67,7 @@ class RecordingViewer:
         record = {
             "x": np.array(atoms["x"], copy=True),
             "element": list(atoms["element"]),
-            "box": None if frame.box is None else np.array(frame.box.matrix, copy=True),
+            "box": None if frame.box is None else np.array(frame.box.h, copy=True),
         }
         with self._lock:
             self.records.append(record)
@@ -137,7 +137,7 @@ class TestRelay:
             # Wait for the server to register the client, else the first sends
             # broadcast into an empty fan-out.
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             for i in range(3):
@@ -151,7 +151,7 @@ class TestRelay:
         with FrameStream(viewer, _url(producer)) as stream:
             stream.wait_for_connection(timeout=5.0)
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             producer.send(_frame(offset=7.0))
@@ -169,7 +169,7 @@ class TestRelay:
         with FrameStream(viewer, _url(producer)) as stream:
             stream.wait_for_connection(timeout=5.0)
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             producer.send(frame)
@@ -183,7 +183,7 @@ class TestRelay:
         with FrameStream(viewer, _url(producer), follow=False) as stream:
             stream.wait_for_connection(timeout=5.0)
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             producer.send(_frame())
@@ -196,7 +196,7 @@ class TestRelay:
         with FrameStream(viewer, _url(producer)) as stream:
             stream.wait_for_connection(timeout=5.0)
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             producer.send(_frame())
@@ -224,7 +224,7 @@ class TestBackPressure:
         with FrameStream(viewer, _url(producer), max_rate_hz=1.0) as stream:
             stream.wait_for_connection(timeout=5.0)
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             for i in range(40):
@@ -272,7 +272,7 @@ class TestUpstreamControl:
         with FrameStream(RecordingViewer(), _url(producer)) as stream:
             stream.wait_for_connection(timeout=5.0)
             deadline = time.monotonic() + 5.0
-            while producer.client_count == 0 and time.monotonic() < deadline:
+            while producer.n_clients == 0 and time.monotonic() < deadline:
                 time.sleep(0.01)
 
             stream.send_command(molrs_stream.ControlCommand.set_frame_rate(12.5))
@@ -294,7 +294,7 @@ class TestUpstreamControl:
             ) as stream:
                 stream.wait_for_connection(timeout=5.0)
                 deadline = time.monotonic() + 5.0
-                while server.client_count == 0 and time.monotonic() < deadline:
+                while server.n_clients == 0 and time.monotonic() < deadline:
                     time.sleep(0.01)
 
                 stream.send_command(molrs_stream.ControlCommand.pause())

@@ -1,7 +1,7 @@
+import { Tabs } from "@molcrafts/ui";
 import { describe, expect, it } from "@rstest/core";
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { Tabs } from "../../../src/components/ui/tabs";
 import { PanelTabStrip } from "../../../src/components/viewer/PanelTabStrip";
 import { enableReactActEnvironment } from "../../react_harness";
 
@@ -91,10 +91,16 @@ describe("PanelTabStrip", () => {
     await renderStrip(false);
     await pressOptimize();
 
+    // Radix selects on mousedown and again when that mousedown moves focus.
+    // Both reports are the clicked tab. A disabled strip must not add another.
+    expect(changes.length).toBeGreaterThan(0);
+    expect(changes.every((value) => value === "optimize")).toBe(true);
+    const reported = changes.length;
+
     await renderStrip(true);
     await pressOptimize();
 
-    expect(changes).toEqual(["optimize"]);
+    expect(changes).toHaveLength(reported);
 
     await React.act(async () => root.unmount());
     host.remove();

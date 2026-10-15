@@ -75,8 +75,10 @@ export const ATOMJ = "atomj";
 export const ATOMK = "atomk";
 /** Fourth endpoint of a relation block (dihedral/improper), 0-indexed. */
 export const ATOML = "atoml";
+/** Fifth endpoint of a relation block, 0-indexed. */
+export const ATOMM = "atomm";
 /** Relation endpoint keys in position order. */
-export const ENDPOINTS = [ATOMI, ATOMJ, ATOMK, ATOML] as const;
+export const ENDPOINTS = [ATOMI, ATOMJ, ATOMK, ATOML, ATOMM] as const;
 
 /** Conventional block names. Not from `keys.rs` — molrs names blocks at the
  * `Frame` level, and these are the two every reader and the renderer agree on. */

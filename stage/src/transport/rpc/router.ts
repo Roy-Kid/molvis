@@ -35,6 +35,7 @@ import {
 import type { PipelineEntry } from "../../pipeline/entry";
 import type { Modifier } from "../../pipeline/modifier";
 import { ModifierRegistry } from "../../pipeline/modifier_registry";
+import { SESSION_CATEGORY, Session } from "../../pipeline/session";
 import { Trajectory } from "../../system/trajectory";
 import { listRpcMethods, RPC_METHODS, RPC_PROTOCOL_VERSION } from "./catalog";
 import {
@@ -276,12 +277,26 @@ async function applyGlobalStyle(
  * Sources and modifiers share the identity fields and diverge after that. A
  * source reports `capabilities: []` and null scope/ownership because it has
  * none — it contributes a trajectory rather than transforming a frame, so it
- * consumes no selection and is owned by nothing. (Before sources left the
- * modifier hierarchy this field read `["transforms-data"]`, inherited from a
- * base class whose `apply()` returned its input unchanged.) The keys stay
- * present so consumers can iterate them uniformly.
+ * consumes no selection and is owned by nothing. A session does the same:
+ * it is a connection, not a modifier, and has no capability set. (Before
+ * sources left the modifier hierarchy this field read `["transforms-data"]`,
+ * inherited from a base class whose `apply()` returned its input unchanged.)
+ * The keys stay present so consumers can iterate them uniformly.
  */
 function serializeEntry(entry: PipelineEntry): Record<string, unknown> {
+  if (entry instanceof Session) {
+    return {
+      id: entry.id,
+      name: entry.name,
+      capabilities: [],
+      enabled: entry.enabled,
+      selection_scope_id: null,
+      source_owner_id: null,
+      category: SESSION_CATEGORY,
+      address: entry.address,
+    };
+  }
+
   if (entry instanceof DataSource) {
     const source: Record<string, unknown> = {
       id: entry.id,
@@ -1031,11 +1046,18 @@ export class RPCRouter {
     }
   };
 
-  private handleSelectionSelectAtoms: RPCHandler = (params) => {
+  private handleSelectionSelectAtoms: RPCHandler = async (params) => {
     const ids = toIntegerIdList(params.ids ?? [], "ids");
     this.app.execute("select_atoms", { ids });
-    void this.app.writeLiveSelectionToActive();
-    return { success: true };
+    // The reply is what Python unblocks on. Finish the manual region first,
+    // then report the live set so `stage.selection` is not still empty.
+    await this.app.writeLiveSelectionToActive();
+    const meta = this.app.world.selectionManager.getSelectedMeta();
+    return {
+      success: true,
+      atom_ids: meta.atoms.atomId,
+      bond_ids: meta.bonds.bondId,
+    };
   };
 
   private handleSelectionClear: RPCHandler = () => {

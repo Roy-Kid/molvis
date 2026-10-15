@@ -1,5 +1,16 @@
+import {
+  FullScreenMinimizeRegular as Minimize,
+  PanelLeftRegular as PanelsTopLeft,
+} from "@fluentui/react-icons";
 import type { Molvis } from "@molcrafts/molvis-stage";
-import { Minimize, PanelsTopLeft } from "lucide-react";
+import {
+  Button,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+  type ResizablePanelHandle,
+  usePanelRef,
+} from "@molcrafts/ui";
 import type React from "react";
 import type { ReactNode } from "react";
 import {
@@ -14,13 +25,6 @@ import {
 import { BondMappingPickerProvider } from "@/components/bond-column-mapping-dialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FormatPickerProvider } from "@/components/format-picker-dialog";
-import {
-  type PanelImperativeHandle,
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-  usePanelRef,
-} from "@/components/ui/resizable";
 import { CanvasOverlayAction } from "@/components/viewer/CanvasOverlayAction";
 import { ResetMolvisDialog } from "@/components/viewer/ResetMolvisDialog";
 import { StructureInspector } from "@/components/viewer/StructureInspector";
@@ -81,7 +85,7 @@ const COARSE_POINTER_INLINE_PANEL_BREAKPOINT = 1580;
  * persisted layout restores before the tools panel mounts). Callers treat
  * `null` as "state unknown — skip this pass"; the next effect run converges.
  */
-function slotCollapsed(slot: PanelImperativeHandle | null): boolean | null {
+function slotCollapsed(slot: ResizablePanelHandle | null): boolean | null {
   if (!slot) return null;
   try {
     return slot.isCollapsed();
@@ -96,8 +100,8 @@ function slotCollapsed(slot: PanelImperativeHandle | null): boolean | null {
  * found" error as `isCollapsed` when called across the registration race.
  */
 function withPanelSlot(
-  slot: PanelImperativeHandle | null,
-  run: (slot: PanelImperativeHandle) => void,
+  slot: ResizablePanelHandle | null,
+  run: (slot: ResizablePanelHandle) => void,
 ): void {
   if (!slot || slotCollapsed(slot) === null) return;
   try {
@@ -225,7 +229,7 @@ const App: React.FC<AppProps> = ({
     COARSE_POINTER_INLINE_PANEL_BREAKPOINT,
   );
   /**
-   * Rail floor for this shell width: the percentage floor, or the 240px compute
+   * Rail floor for this shell width: the percentage floor, or the 168px compute
    * form floor when a percentage would render the rail narrower than the forms
    * are designed for. The same value gates snap-close, so a rail can never rest
    * between "too narrow to use" and "closed".
@@ -375,7 +379,7 @@ const App: React.FC<AppProps> = ({
   );
   /**
    * Canvas floor for this row. {@link CANVAS_MIN_PCT} assumes rails at
-   * {@link SIDE_PANEL.minPct}; when the 240px form floor pushes `railMinPct`
+   * {@link SIDE_PANEL.minPct}; when the 168px form floor pushes `railMinPct`
    * above it, every minimum in the row must still sum to ≤ 100 or the group has
    * no layout that satisfies them. Lowering the canvas is the right give: the
    * rails have a designed width, the canvas only needs to stay dominant.
@@ -523,7 +527,7 @@ const App: React.FC<AppProps> = ({
 
                 <div className="relative min-h-0 flex-1">
                   <ResizablePanelGroup
-                    orientation="horizontal"
+                    direction="horizontal"
                     className="h-full"
                     defaultLayout={defaultPanelLayout}
                     onLayoutChange={handlePanelLayout}
@@ -548,7 +552,7 @@ const App: React.FC<AppProps> = ({
                       <ResizableHandle
                         key="handle-compute"
                         aria-label="Resize compute panel"
-                        className="z-20"
+                        className="workbench-split workbench-split-v workbench-split-interactive workbench-split-grip z-20 outline-hidden"
                       />
                     )}
 
@@ -607,9 +611,8 @@ const App: React.FC<AppProps> = ({
                               <div
                                 className={cn(
                                   "pointer-events-auto w-[min(72vw,56rem)]",
-                                  "rounded-xl border border-border/70",
-                                  "bg-background/90 text-foreground shadow-sm backdrop-blur-xl",
-                                  "dark:bg-background/85 dark:shadow-sm",
+                                  "rounded-panel border border-border",
+                                  "bg-background text-foreground",
                                 )}
                               >
                                 <div className="h-10">
@@ -633,7 +636,7 @@ const App: React.FC<AppProps> = ({
                       <ResizableHandle
                         key="handle-tools"
                         aria-label="Resize tool panel"
-                        className="z-20"
+                        className="workbench-split workbench-split-v workbench-split-interactive workbench-split-grip z-20 outline-hidden"
                       />
                     )}
 
@@ -653,14 +656,14 @@ const App: React.FC<AppProps> = ({
                   </ResizablePanelGroup>
 
                   {isNarrow && (computeInlineOpen || toolsInlineOpen) && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
                       aria-label="Close side panel"
                       onClick={() => {
                         setLeftOpen(false);
                         setRightOpen(false);
                       }}
-                      className="motion-fade-in absolute inset-0 z-20 cursor-default bg-scrim"
+                      className="motion-fade-in absolute inset-0 z-20 h-full w-full cursor-default rounded-none bg-scrim hover:bg-scrim"
                     />
                   )}
 

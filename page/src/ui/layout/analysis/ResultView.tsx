@@ -1,5 +1,6 @@
 import { LineChart, type SeriesPoint } from "@molcrafts/molplot";
 import type { AnalysisResultKind } from "@molcrafts/molvis-stage";
+import { Button } from "@molcrafts/ui";
 import type React from "react";
 import { useMemo } from "react";
 import { AnalysisChart, type AnalysisChartController } from "./AnalysisChart";
@@ -139,7 +140,7 @@ function ScalarResult({ payload }: { payload: Payload }) {
       {entries.map(([key, value]) => (
         <div key={key} className="rounded-control border bg-muted/15 px-2 py-2">
           <div className="truncate text-micro text-muted-foreground">{key}</div>
-          <div className="font-mono text-xs tabular-nums">
+          <div className="font-mono text-label tabular-nums">
             {Number.isInteger(value) ? value : value.toPrecision(6)}
           </div>
         </div>
@@ -252,13 +253,14 @@ function DownloadJson({ payload }: { payload: Payload }) {
     URL.revokeObjectURL(url);
   };
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={download}
-      className="self-start rounded-control border px-2 py-1 text-micro text-muted-foreground hover:bg-muted/40"
+      className="self-start font-normal text-micro text-muted-foreground"
     >
       Download JSON
-    </button>
+    </Button>
   );
 }
 

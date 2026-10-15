@@ -1,6 +1,3 @@
-import { describe, expect, it } from "@rstest/core";
-import React from "react";
-import { createRoot } from "react-dom/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +6,10 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "../../../src/components/ui/dropdown-menu";
+} from "@molcrafts/ui";
+import { describe, expect, it } from "@rstest/core";
+import React from "react";
+import { createRoot } from "react-dom/client";
 import { enableReactActEnvironment } from "../../react_harness";
 
 enableReactActEnvironment();

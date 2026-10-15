@@ -5,7 +5,7 @@ from __future__ import annotations
 import molpy as mp
 import numpy as np
 import pytest
-from molrs import keys
+from molrs.core import keys
 
 from molvis.wire import (
     BUFFER_REF_MARKER,
@@ -48,7 +48,7 @@ class TestCanonicalDtype:
         assert canonical_dtype("my_custom_descriptor") is None
 
     def test_key_objects_look_up_the_same_as_strings(self):
-        # molrs.keys.Key == str, but hashes differently; lookup must use the name.
+        # molrs.core.keys.Key == str, but hashes differently; lookup must use the name.
         assert canonical_dtype(keys.X) == canonical_dtype("x") == "f64"
         assert canonical_dtype(keys.ATOMI) == canonical_dtype("atomi") == "u64"
 
@@ -161,16 +161,17 @@ class TestRoundTrip:
                 }
             )
         )
-        blocks = frame.to_dict()["blocks"]
-        assert blocks["atoms"]["x"].dtype == np.float64
-        assert blocks["atoms"]["x"].tolist() == [0.0, 1.5]
-        assert blocks["atoms"]["element"].tolist() == ["C", "O"]
-        assert blocks["bonds"]["atomi"].dtype == np.uint64
-        assert blocks["bonds"]["order"].tolist() == [2.0]
+        atoms = frame["atoms"]
+        bonds = frame["bonds"]
+        assert atoms["x"].dtype == np.float64
+        assert atoms["x"].tolist() == [0.0, 1.5]
+        assert atoms["element"].tolist() == ["C", "O"]
+        assert bonds["atomi"].dtype == np.uint64
+        assert bonds["order"].tolist() == [2.0]
 
     def test_preserves_a_custom_block_and_column(self):
         frame = roundtrip({"blocks": {"forces": {"fx": [1.0], "fy": [2.0]}}})
-        assert set(frame.to_dict()["blocks"]["forces"]) == {"fx", "fy"}
+        assert set(frame["forces"].keys()) == {"fx", "fy"}
 
     def test_preserves_numeric_frame_metadata_without_stringifying(self):
         payload, buffers = encode_frame(
@@ -204,7 +205,7 @@ class TestMolrsSchemaValidation:
     @staticmethod
     def _schema_ready() -> bool:
         try:
-            from molrs import schema  # type: ignore
+            from molrs.core import schema
 
             return schema.column("atomi") is not None
         except Exception:
@@ -231,23 +232,36 @@ class TestMolrsSchemaValidation:
             encode_frame(mp.Frame(blocks={"bonds": {"order": [1.0]}}))
 
 
+def _triclinic(lengths: list[float], tilts: list[float]) -> mp.Box:
+    """Box whose columns are the lattice vectors for these lengths and tilts."""
+    cell = mp.Box.matrix_from_lengths_tilts(
+        np.asarray(lengths, dtype=np.float64),
+        np.asarray(tilts, dtype=np.float64),
+    )
+    return mp.Box(cell)
+
+
 class TestBox:
     def test_round_trips_a_triclinic_cell(self):
-        box = mp.Box.tric([10.0, 20.0, 30.0], [1.0, 2.0, 3.0])
+        box = _triclinic([10.0, 20.0, 30.0], [1.0, 2.0, 3.0])
         restored = decode_box(encode_box(box))
         assert np.allclose(np.asarray(restored.lengths), np.asarray(box.lengths))
         assert np.allclose(np.asarray(restored.tilts), np.asarray(box.tilts))
 
     def test_h_is_the_row_major_flattening_of_the_lattice_matrix(self):
-        # molpy documents Box.matrix as "lattice vectors as columns"; the wire
-        # carries that matrix row-major, which is what molrs new Box() expects.
-        box = mp.Box.tric([10.0, 20.0, 30.0], [1.0, 2.0, 3.0])
+        # Box.h has lattice vectors as columns; the wire carries that matrix
+        # row-major, which is what Box(h, …) expects.
+        box = _triclinic([10.0, 20.0, 30.0], [1.0, 2.0, 3.0])
         assert np.allclose(
-            encode_box(box)["h"], np.asarray(box.matrix).reshape(-1, order="C")
+            encode_box(box)["h"], np.asarray(box.h).reshape(-1, order="C")
         )
 
     def test_pbc_survives(self):
-        box = mp.Box(np.eye(3) * 10, np.asarray([True, False, True]))
+        box = mp.Box(
+            np.eye(3, dtype=np.float64) * 10,
+            np.zeros(3, dtype=np.float64),
+            np.asarray([True, False, True]),
+        )
         restored = decode_box(encode_box(box))
         assert np.asarray(restored.pbc).tolist() == [True, False, True]
 

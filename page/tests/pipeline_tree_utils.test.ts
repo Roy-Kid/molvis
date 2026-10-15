@@ -1,7 +1,12 @@
-import type { Modifier } from "@molcrafts/molvis-stage";
+import {
+  type Modifier,
+  ModifierCapability,
+  Session,
+} from "@molcrafts/molvis-stage";
 import { describe, expect, it } from "@rstest/core";
 import {
   buildTree,
+  getAvailableParents,
   getDescendants,
 } from "../src/ui/modes/view/pipeline/tree_utils";
 
@@ -34,6 +39,22 @@ describe("pipeline tree utils", () => {
 
     expect(tree.map((node) => node.entry.id)).toEqual(["source", "hide"]);
     expect(tree[0].children.map((node) => node.entry.id)).toEqual(["draw"]);
+  });
+
+  it("does not ask a session for selection capabilities", () => {
+    const session = new Session("Alpha", "ws://127.0.0.1/ws", () => {});
+    const producer = mod("Bravo");
+    (producer.capabilities as Set<ModifierCapability>).add(
+      ModifierCapability.ProducesSelection,
+    );
+
+    const parents = getAvailableParents("hide", [
+      session,
+      producer,
+      mod("hide"),
+    ]);
+
+    expect(parents.map((parent) => parent.id)).toEqual(["Bravo"]);
   });
 
   it("collects source-owned descendants", () => {

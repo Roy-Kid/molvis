@@ -41,7 +41,14 @@ Session management
     mv.Stage.session_summary()          # [{name, gui, connected, port, ...}]
     mv.Stage.close_all()                # tear down every scene
 
-Both hosts drive the same page bundle over a local WebSocket. See
+A 2D formula is :class:`molvis.Sketch`, a separate registry. The same
+name may exist on both. ``Sketch`` is not a :class:`Stage`::
+
+    board = mv.Sketch(name="board")
+    mv.Sketch.get("board")
+
+Script and notebook hosts drive the stage page over a local WebSocket.
+The sketch board uses its own page bundle. See
 :mod:`molvis.events` for the bidirectional event API and
 :mod:`molvis.transport` for configuring the transport explicitly.
 """
@@ -63,6 +70,7 @@ from .palettes import (
 )
 from .runtime import Appearance, DisplaySurface, RuntimeEnv, detect_runtime, display_surface
 from .scene import Molvis
+from .sketch import Sketch, SketchUnavailable
 from .stream import FrameStream, StreamError
 from .structure import coerce_to_frame, frame_arg, frame_payload, frames_arg
 from .transport import InProcessTransport, Transport, WebSocketTransport
@@ -88,6 +96,8 @@ __all__ = [
     "PaletteInfo",
     "RuntimeEnv",
     "Selection",
+    "Sketch",
+    "SketchUnavailable",
     "Stage",
     "StreamError",
     "Transport",

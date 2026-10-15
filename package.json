@@ -135,15 +135,16 @@
     "@rstest/core": "^0.11.6",
     "@rstest/browser": "^0.11.6",
     "@radix-ui/react-arrow": "1.1.15",
-    "@radix-ui/react-popper": "1.3.7",
-    "@radix-ui/react-primitive": "2.1.10",
+    "@radix-ui/react-popper": "1.3.8",
+    "@radix-ui/react-primitive": "2.1.11",
     "@radix-ui/react-context": "1.2.2",
-    "@radix-ui/react-focus-scope": "1.1.16",
-    "@radix-ui/react-dismissable-layer": "1.1.19",
+    "@radix-ui/react-focus-scope": "1.2.0",
+    "@radix-ui/react-dismissable-layer": "1.1.20",
     "@radix-ui/primitive": "1.1.7",
-    "@radix-ui/react-presence": "1.1.10",
-    "@radix-ui/react-visually-hidden": "1.2.11",
-    "@radix-ui/react-portal": "1.1.17"
+    "@radix-ui/react-presence": "1.1.11",
+    "@radix-ui/react-visually-hidden": "1.2.12",
+    "@radix-ui/react-portal": "1.1.18",
+    "@molcrafts/ui-tokens": "0.1.0-alpha.0"
   },
   "packageManager": "npm@11.16.0"
 }

@@ -64,19 +64,28 @@ def coerce_to_frame(
     *,
     atom_fields: list[str] | None = None,
 ) -> Any:
-    """Normalize Frame | Atomistic | molgraph | mapping → Frame-like with ``to_dict``.
+    """Normalize Frame | Atomistic | molgraph | mapping → a Frame the wire can read.
 
     Order of checks
     ---------------
-    1. Mapping with ``blocks`` → passed through.
-    2. Graph / Atomistic with ``to_frame`` only → Kekulé fill (when possible)
+    1. A :class:`molpy.Frame` → passed through. Its columns are read by name.
+    2. Mapping with ``blocks`` → passed through.
+    3. Graph / Atomistic with ``to_frame`` only → Kekulé fill (when possible)
        then ``to_frame(atom_fields=…)``.
-    3. Object with both ``to_dict`` and ``to_frame`` → Frame if ``to_dict`` has
+    4. Object with both ``to_dict`` and ``to_frame`` → Frame if ``to_dict`` has
        ``blocks``, else Kekulé fill then ``to_frame``.
-    4. Object with ``to_dict`` only → returned as-is.
+    5. Object with ``to_dict`` only → returned as-is.
     """
     if obj is None:
         raise TypeError("structure argument is required (got None)")
+
+    try:
+        import molpy as mp
+    except ImportError:
+        mp = None  # type: ignore[assignment]
+    frame_type = getattr(mp, "Frame", None) if mp is not None else None
+    if frame_type is not None and isinstance(obj, frame_type):
+        return obj
 
     if isinstance(obj, dict) and "blocks" in obj:
         return obj
@@ -118,7 +127,7 @@ def coerce_to_frame(
         return obj
 
     raise TypeError(
-        "expected a Frame (to_dict), Atomistic/molgraph (to_frame), or "
+        "expected a Frame, Atomistic/molgraph (to_frame), or "
         f"frame mapping with 'blocks'; got {type(obj)!r}"
     )
 

@@ -24,9 +24,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    # FrameStream needs molrs.stream (read_frame_bytes + Publisher).
-    # Identity columns are u64 / Idx from molrs 0.14.
-    "molcrafts-molpy>=0.14.0",
+    # FrameStream needs molrs.stream.Publisher and molrs.io.read_msgpack_frame_bytes.
+    # molpy 0.17 refuses to import unless molrs is the same 0.17 minor.
+    "molcrafts-molpy>=0.17.0,<0.18",
+    # `molvis serve` runs cells through the same InteractiveShell.run_cell
+    # a notebook kernel uses. The shell is the session; there is no second one.
+    "ipython>=8",
     "numpy",
     "websockets>=13.0",
 ]
@@ -36,13 +39,9 @@ dev = [
     "build>=1.0",
     "hatchling",
     "pytest>=7.0",
-    "molcrafts-molrs>=0.14.0",
+    "molcrafts-molrs>=0.17.0,<0.18",
     "imageio-ffmpeg>=0.6",
     "pillow>=10",
-    # test_ipython_extension.py and test_scene.py drive the inline
-    # viewer through a live IPython shell; without this the declared dev
-    # environment cannot run its own suite (7 collection errors).
-    "ipython>=8",
     # test_mdx.py drives the molvis fence through Python-Markdown directly
     # (at docs-build time zensical brings these along).
     "markdown>=3.5",

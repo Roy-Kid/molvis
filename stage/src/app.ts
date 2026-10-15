@@ -46,6 +46,7 @@ import type { PipelineEntry } from "./pipeline/entry";
 import { type Modifier, ModifierCapability } from "./pipeline/modifier";
 import { registerDefaultModifiers } from "./pipeline/modifier_registry";
 import { generateNatoId, isSelectionProducer } from "./pipeline/nato_ids";
+import { Session } from "./pipeline/session";
 import type { FrameChangeKind, PipelineContext } from "./pipeline/types";
 import { SelectionMask } from "./pipeline/types";
 import { defaultSaveFile } from "./save_file";
@@ -957,10 +958,12 @@ export class MolvisApp implements App {
     );
     const id = generateNatoId(existing);
     const mod = new SelectModifier(id, [...atoms], "replace", [...bonds]);
+    // The pipeline replaces the constructor id. A session already holds the
+    // first NATO name, so the stored id is not `id`.
     this._modifierPipeline.addModifier(mod);
-    this._activeSelectionId = id;
-    this.events.emit("active-selection-change", { id });
-    return id;
+    this._activeSelectionId = mod.id;
+    this.events.emit("active-selection-change", { id: mod.id });
+    return mod.id;
   }
 
   /**
@@ -1494,6 +1497,11 @@ export class MolvisApp implements App {
       return this.system.frame ?? null;
     }
     entry.enabled = enabled;
+
+    // A session gate is the flag itself. It has no capabilities and no mesh.
+    if (entry instanceof Session) {
+      return this.system.frame ?? null;
+    }
 
     // Disabling a source withholds its trajectory from composition, which
     // always needs a recompose — only a drawing modifier can be toggled by

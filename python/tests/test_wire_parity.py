@@ -5,7 +5,7 @@ Each of these was a live divergence before the wire refactor:
 * Python called 16 RPC methods the frontend had no handler for; 15 public
   ``Stage`` methods were dead, most of them **silently** because they did not
   wait for a response.
-* ``core/src/keys.ts`` transcribes ``molrs.keys``, which nothing checked.
+* ``core/src/keys.ts`` transcribes ``molrs.core.keys``, which nothing checked.
 * The wire dtype tags are written out in both languages.
 
 These tests read the TypeScript sources directly, so they run offline with no
@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 
 import pytest
-from molrs import keys as molrs_keys
+from molrs.core import keys as molrs_keys
 
 from molvis.commands.catalog import RPC_PROTOCOL_VERSION, rpc_method_names
 

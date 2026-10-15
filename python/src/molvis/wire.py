@@ -2,13 +2,10 @@
 
 Nothing in this module invents a name or a layout.
 
-**Names** come from :mod:`molrs.keys` (mirrored into :mod:`molrs.fields`, which
-molpy re-exports). ``x``/``y``/``z``, ``element``, ``symbol``, ``type``,
-``charge``, ``atomi``/``atomj``/``atomk``/``atoml``, ``bond_type``/
-``bond_number`` — this module reads that registry, it does not define one,
-and it never renames a column.
-Translating a format-native spelling (``species``, ``q``, ``mol``) to a
-canonical one is :class:`molrs.fields.FieldFormatter`'s job at the I/O boundary.
+**Names** come from :mod:`molrs.core.keys`. ``x``/``y``/``z``, ``element``,
+``symbol``, ``type``, ``charge``, ``atomi``/``atomj``/``atomk``/``atoml``,
+``bond_type``/``bond_number`` — this module reads that registry, it does not
+define one, and it never renames a column.
 
 **Storage dtypes** likewise come from the registry rather than from a value's
 runtime type. That is the whole point: the browser used to guess a column's
@@ -39,13 +36,7 @@ from typing import Any, Literal
 
 import molpy as mp
 import numpy as np
-from molrs import fields as _fields
-from molrs import keys as _keys
-
-try:
-    from molrs import schema as _schema
-except ImportError:  # molrs < frame-schema
-    _schema = None  # type: ignore[assignment]
+from molrs.core import schema as _schema
 
 __all__ = [
     "ATOMS_BLOCK",
@@ -67,7 +58,7 @@ WireDType = Literal["f64", "i32", "u64", "u32", "string"]
 BUFFER_REF_MARKER = "__molvis_buffer__"
 
 #: Conventional block names. Unlike column names these are *not* in
-#: ``molrs.keys`` — molrs names blocks at the ``Frame`` level and takes whatever
+#: ``molrs.core.keys`` — molrs names blocks at the ``Frame`` level and takes whatever
 #: it is given. These two are the names every molpy reader emits and the
 #: renderer looks for, so they live here rather than as scattered literals.
 ATOMS_BLOCK = "atoms"
@@ -102,7 +93,7 @@ def _wire_dtype_from_schema(kind: str) -> WireDType | None:
 def _field_name(key: object) -> str:
     """Canonical column name as a plain ``str``.
 
-    ``molrs.keys`` constants are ``Key`` objects: they compare equal to their
+    ``molrs.core.keys`` constants are ``Key`` objects: they compare equal to their
     string form (``Key("x") == "x"``) but do not hash as ``str``, so dict
     lookup and ``in`` must go through the name.
     """
@@ -113,41 +104,16 @@ def _field_name(key: object) -> str:
 
 
 def _canonical_registry() -> dict[str, WireDType]:
-    """Map canonical field name → wire dtype from molrs — never hand-copied.
-
-    Prefer :mod:`molrs.schema` (the Frame vocabulary the Validator uses). Fall
-    back to :mod:`molrs.fields` only when schema is not yet installed.
-    """
+    """Map canonical field name → wire dtype from :mod:`molrs.core.schema`."""
     registry: dict[str, WireDType] = {}
-
-    if _schema is not None:
-        for spec in getattr(_schema, "columns", ()) or ():
-            key = getattr(spec, "key", None)
-            kind = getattr(spec, "dtype", None)
-            if key is None or not isinstance(kind, str):
-                continue
-            wire = _wire_dtype_from_schema(kind)
-            if wire is not None:
-                registry[_field_name(key)] = wire
-        return registry
-
-    for name in _fields.__all__:
-        spec = getattr(_fields, name, None)
-        if not isinstance(spec, _fields.FieldSpec):
+    for spec in _schema.columns:
+        key = getattr(spec, "key", None)
+        kind = getattr(spec, "dtype", None)
+        if key is None or not isinstance(kind, str):
             continue
-        kind = spec.dtype.kind
-        if kind == "f":
-            registry[_field_name(spec.key)] = "f64"
-        elif kind in ("i", "u"):
-            registry[_field_name(spec.key)] = "i32"
-        elif kind in ("U", "S"):
-            registry[_field_name(spec.key)] = "string"
-
-    # fields still mis-labels endpoints as signed int on older molrs; the
-    # schema path above does not need this override.
-    for endpoint in _keys.ENDPOINTS:
-        registry[_field_name(endpoint)] = "u32"
-
+        wire = _wire_dtype_from_schema(kind)
+        if wire is not None:
+            registry[_field_name(key)] = wire
     return registry
 
 
@@ -161,7 +127,7 @@ def canonical_dtype(key: str) -> WireDType | None:
     its array already has, exactly like molrs, which lets an unregistered field
     take the dtype of its first write.
 
-    *key* may be a ``str`` or a ``molrs.keys.Key``; lookup is by name.
+    *key* may be a ``str`` or a ``molrs.core.keys.Key``; lookup is by name.
     """
     return _CANONICAL.get(_field_name(key))
 
@@ -264,13 +230,30 @@ def _encode_column(key: str, values: Any) -> tuple[WireDType, np.ndarray | list[
 
 
 def _frame_mapping(frame: Any) -> dict[str, Any]:
+    """Read a frame as ``{"blocks", "meta", "box"}``.
+
+    A mapping is already that shape. A native :class:`molpy.Frame` exposes
+    block names from ``keys()`` and columns from ``frame[name]``.
+    """
     if isinstance(frame, Mapping):
         return dict(frame)
     to_dict = getattr(frame, "to_dict", None)
     if callable(to_dict):
         return to_dict()
+    keys = getattr(frame, "keys", None)
+    if callable(keys):
+        mapped: dict[str, Any] = {
+            "blocks": {str(name): frame[name] for name in keys()}
+        }
+        meta = getattr(frame, "meta", None)
+        if meta is not None:
+            mapped["meta"] = meta
+        box = getattr(frame, "box", None)
+        if box is not None:
+            mapped["box"] = box
+        return mapped
     raise WireError(
-        f"expected a Frame with to_dict() or a mapping with 'blocks'; got {type(frame)!r}"
+        f"expected a Frame or a mapping with 'blocks'; got {type(frame)!r}"
     )
 
 
@@ -298,8 +281,8 @@ def encode_frame(
     """Serialize a Frame for the wire.
 
     Args:
-        frame: A :class:`molpy.Frame`, anything with ``to_dict()``, or a mapping
-            shaped like one (``{"blocks": {...}, "metadata": {...}}``).
+        frame: A :class:`molpy.Frame`, or a mapping shaped like one
+            (``{"blocks": {...}, "metadata": {...}}``).
         inline: When ``True``, numeric columns are left as ndarrays in the
             payload for a transport that can carry them directly (the in-process
             Pyodide bridge). When ``False`` (the WebSocket default) they become
@@ -365,7 +348,7 @@ def encode_frame(
 
 
 def _block_columns(block_name: str, raw_columns: Any) -> Mapping[str, Any]:
-    """Accept a mapping of columns, or a Block that behaves like one."""
+    """Accept a mapping of columns, or a Block addressed by ``keys()``."""
     if isinstance(raw_columns, Mapping):
         return raw_columns
     to_dict = getattr(raw_columns, "to_dict", None)
@@ -373,14 +356,17 @@ def _block_columns(block_name: str, raw_columns: Any) -> Mapping[str, Any]:
         result = to_dict()
         if isinstance(result, Mapping):
             return result
+    keys = getattr(raw_columns, "keys", None)
+    if callable(keys):
+        return {str(key): raw_columns[key] for key in keys()}
     raise WireError(f"block {block_name!r} must be a mapping of column → array")
 
 
 def _scalar_meta(metadata: Any) -> dict[str, float]:
     """Keep the numeric metadata molrs can store per frame (``setMetaScalar``).
 
-    Accepts both the wire/dict key ``metadata`` and molrs ``Frame.to_dict()``'s
-    ``meta`` map (values may be bare numbers or ``molrs.MetaValue``).
+    Accepts both the wire/dict key ``metadata`` and a Frame ``meta`` map
+    (values may be bare numbers or ``molrs.core.MetaValue``).
 
     Non-numeric metadata is dropped rather than stringified — the browser has no
     reader for it, and ``str(3.14)`` round-tripping through frame meta is how
@@ -390,7 +376,7 @@ def _scalar_meta(metadata: Any) -> dict[str, float]:
         return {}
     out: dict[str, float] = {}
     for key, value in metadata.items():
-        # molrs.MetaValue carries .value / .dtype
+        # molrs.core.MetaValue carries .value / .dtype
         if hasattr(value, "value") and hasattr(value, "dtype"):
             value = getattr(value, "value", value)
             # Nested F64(...) wrappers expose .value again in some builds.
@@ -408,11 +394,11 @@ def _scalar_meta(metadata: Any) -> dict[str, float]:
 def encode_box(box: Any, *, carrier: Any = None) -> dict[str, Any]:
     """Serialize a :class:`molpy.Box`.
 
-    ``h`` is ``Box.matrix`` flattened row-major — the matrix whose *columns* are
-    the lattice vectors, which is what molrs ``new Box(h, …)`` consumes. The
+    ``h`` is ``Box.h`` flattened row-major — the matrix whose *columns* are
+    the lattice vectors, which is what molrs ``Box(h, …)`` consumes. The
     array is already C-contiguous, so this is a reshape, not a transpose.
     """
-    matrix = np.ascontiguousarray(np.asarray(box.matrix, dtype=np.float64)).reshape(-1)
+    matrix = np.ascontiguousarray(np.asarray(box.h, dtype=np.float64)).reshape(-1)
     if matrix.size != 9:
         raise WireError(f"box matrix must hold 9 values, got {matrix.size}")
     origin = np.ascontiguousarray(np.asarray(box.origin, dtype=np.float64)).reshape(-1)
@@ -528,11 +514,9 @@ def decode_frame(payload: Any, buffers: Sequence[Any] = ()) -> mp.Frame:
 
     meta = payload.get("meta")
     if isinstance(meta, Mapping) and meta:
-        try:
-            from molrs import MetaValue
-        except ImportError:
-            MetaValue = None  # type: ignore[misc, assignment]
-        if MetaValue is not None and hasattr(frame, "meta"):
+        from molrs.core import MetaValue
+
+        if hasattr(frame, "meta"):
             frame.meta = {
                 str(k): MetaValue("f64", float(v)) for k, v in meta.items()
             }
@@ -562,10 +546,10 @@ def decode_box(payload: Any, buffers: Sequence[Any] = ()) -> mp.Box:
     pbc = payload.get("pbc")
     if not isinstance(pbc, Sequence) or len(pbc) != 3:
         raise WireError("box.pbc must be three booleans")
-    # molpy.Box(matrix, pbc, origin) — matrix has lattice vectors as columns,
-    # so the row-major wire array reshapes straight into it.
+    # Box(h, origin, pbc). ``h`` has lattice vectors as columns, so the
+    # row-major wire array reshapes straight into it.
     return mp.Box(
         h.reshape(3, 3),
-        np.asarray([bool(flag) for flag in pbc]),
         origin,
+        np.asarray([bool(flag) for flag in pbc]),
     )

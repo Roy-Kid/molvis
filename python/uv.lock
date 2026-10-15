@@ -356,31 +356,31 @@ wheels = [
 
 [[package]]
 name = "molcrafts-molcfg"
-version = "1.4.2"
+version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/27/26d42088d70c0da60277ad720e65c9bd5f786a75a5f670aad595ac8fa450/molcrafts_molcfg-1.4.2.tar.gz", hash = "sha256:75c351ca03c78552487d4866394d1ef63c07e2f853ba02f91ec2991e8c19e3dd", size = 39963, upload-time = "2026-07-01T08:02:14.746Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/63/60ac6dc310cec92ddafddcd5c759b3fd307bb4a9547a3f496f1fb8c8e3e5/molcrafts_molcfg-1.5.1.tar.gz", hash = "sha256:440a3592d5b59def720567061f1c75cd2ac0234b2180fbba05fb5b9cb753d18a", size = 44748, upload-time = "2026-10-08T19:17:42.084Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/ae/195b755fa697ee1fdb3bcdf7d525dc1e1a07f19bab9c6b02c70801d93d46/molcrafts_molcfg-1.4.2-py3-none-any.whl", hash = "sha256:30170debb26ca77afc24ca543aaf259e801be0ad729df1a44f4af53bd60c20f6", size = 21217, upload-time = "2026-07-01T08:02:13.327Z" },
+    { url = "https://files.pythonhosted.org/packages/93/b5/2cf85c485d53097cf2a3a765ab844e1812623b8c2649fe0ea58346f9b89c/molcrafts_molcfg-1.5.1-py3-none-any.whl", hash = "sha256:405d2a991352666afc16dec99fde37c3b81e265a17d6be0896d02141200b284b", size = 23624, upload-time = "2026-10-08T19:17:40.952Z" },
 ]
 
 [[package]]
 name = "molcrafts-mollog"
-version = "1.2.2"
+version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/54/2f9345c025460c056d84c61d86f852305fd9863ed95dbcca038e1d61d4cc/molcrafts_mollog-1.2.2.tar.gz", hash = "sha256:02fa31d11c3ac560440aac68b1709bd41a88318abc712f2c3c6307e2db26880a", size = 43861, upload-time = "2026-05-11T10:13:11.251Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1f/9b/59d604eec7d9e106fcd2f8db65787b5a3cddda73ee3cbb40217dae197c29/molcrafts_mollog-1.3.1.tar.gz", hash = "sha256:d15f700968ecdb1dccd68d9c7edca5eb2595c5360183b1d8467e84ec77fdbda1", size = 48487, upload-time = "2026-10-08T19:24:36.157Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/db/92/7b39c0715515965fa0463670c647735aacdfc255cb7fb33d5a4fc15cbf57/molcrafts_mollog-1.2.2-py3-none-any.whl", hash = "sha256:1dc4cacf715aae173f022698a99db8a725ecaf4d504c19336c987ddca6cee426", size = 24849, upload-time = "2026-05-11T10:13:10.094Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/6d/d3d9d1d6932ce5101dd86cf18d4cfc29e8616e57bd8989aab710b5217550/molcrafts_mollog-1.3.1-py3-none-any.whl", hash = "sha256:113da22d79bdb9529c6647ee2db8a6a4656bdd5e69aa2214d2ddb29b0a74a6b3", size = 27505, upload-time = "2026-10-08T19:24:34.509Z" },
 ]
 
 [[package]]
 name = "molcrafts-molpy"
-version = "0.14.0"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "molcrafts-molcfg" },
@@ -388,25 +388,25 @@ dependencies = [
     { name = "molcrafts-molrs" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/62/a5e9458dd95e18f9c1da99d0763a455ca2727d7fce32609c1b762bf40df7/molcrafts_molpy-0.14.0.tar.gz", hash = "sha256:b8c7011fb45a914d309ed9fc344adf78d75359ef5749b7a4f23682a27545f0f9", size = 296194, upload-time = "2026-09-20T18:39:55.827Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/92/cb456461c25d5f424f197d50c7e88202e5c253fc11d870acdeba406ed5fc/molcrafts_molpy-0.17.0.tar.gz", hash = "sha256:b0c50829aa76ec84de0c01503f43449355ff49e4cac58f11175fccf335efa2de", size = 109657, upload-time = "2026-10-09T13:58:50.787Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/cc/c5d8c272cb6af19d5833dfbceb7f5f43f2574e8193d96f9375b6c0351d3c/molcrafts_molpy-0.14.0-py3-none-any.whl", hash = "sha256:5a860f660d8b0fa07c85118c47ba2893e0383f261a1b01a539534d55f7a86e4a", size = 363365, upload-time = "2026-09-20T18:39:54.029Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/5c/5893c3b1241dd52e4019871b95f90c0d15d01f5f78975f616a6c0badc157/molcrafts_molpy-0.17.0-py3-none-any.whl", hash = "sha256:4efe7bfeff0e3d2678ea498dc9ffd4ac0d15c5fea32b1b3be26869d6aef58d15", size = 129947, upload-time = "2026-10-09T13:58:49.406Z" },
 ]
 
 [[package]]
 name = "molcrafts-molrs"
-version = "0.14.0"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/2a/5dfedf876da5ce39ac956aefd82fc02970183d79ec869837cbd7c8028bfe/molcrafts_molrs-0.14.0-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:4e8eb733d3bbad88542136d43b0dc3781835dcf20aa60d5330065a57012c4d09", size = 7841880, upload-time = "2026-09-20T18:31:43.456Z" },
-    { url = "https://files.pythonhosted.org/packages/88/1b/b5ac03a699ec2e5cc1267514094e6ac530aa589e7d072cff66f00f825c85/molcrafts_molrs-0.14.0-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:c45b2351a2c237dbe4d6f3048abd775bdddb2de0eb5b4f44e320b45a840ebe9e", size = 7031009, upload-time = "2026-09-20T18:31:45.411Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/07/7ebff13151acc3edef41758e179370abadbaeb13c220a5787a3e5ef68e95/molcrafts_molrs-0.14.0-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cb92dc0cc9b69ea534eacac692aef78cc5fe0794afb828c8d6f72617c4d5d277", size = 8212474, upload-time = "2026-09-20T18:31:46.878Z" },
-    { url = "https://files.pythonhosted.org/packages/79/99/f1dbf097013dc8e75732594ae0220a29b4a0ce53a3ab8cdb70e7fc53ff5b/molcrafts_molrs-0.14.0-cp312-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:770be3f39d5a33c48a0d454270d89a641199db10008d286ced47b4254cebf956", size = 7365474, upload-time = "2026-09-20T18:31:49.098Z" },
-    { url = "https://files.pythonhosted.org/packages/86/aa/5cd4f3cdc92c8c97293a262a5c52cbd025039d8766486f85b2a0da69e930/molcrafts_molrs-0.14.0-cp312-abi3-pyemscripten_2026_0_wasm32.whl", hash = "sha256:e32f29a7b312524bc45afccddef3136c1c40eaa6a7235998d1186f0d809456f5", size = 2550164, upload-time = "2026-09-20T18:31:50.654Z" },
-    { url = "https://files.pythonhosted.org/packages/92/d6/85a526682fbfa834ed6d0ae1d710e795232c6b02439c7eb887a48b80ccbc/molcrafts_molrs-0.14.0-cp312-abi3-win_amd64.whl", hash = "sha256:dd285ae844d74ad151b037f07fcdb75c313adfb163f43aed77968ae351d07469", size = 8370299, upload-time = "2026-09-20T18:31:52.128Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/25/f6cac0fa0476c5433b215f9c55d99fe8a9b7c434832e53ce213887817c8f/molcrafts_molrs-0.17.0-cp312-abi3-macosx_10_12_x86_64.whl", hash = "sha256:657995d0023a5c9a87ddc19c708350bd63ab9ecf7e62b28a0a930196d4e2bf0f", size = 10312592, upload-time = "2026-10-09T12:57:25.89Z" },
+    { url = "https://files.pythonhosted.org/packages/75/b8/f673d1c3b638cb1969076eee4e962953a2ffb942896c0f2565b9d2e93fe7/molcrafts_molrs-0.17.0-cp312-abi3-macosx_11_0_arm64.whl", hash = "sha256:992df549b6960f1243c21a3b4fbd91aa151bb45ca5a8943ac7608b998bd99fcc", size = 9350683, upload-time = "2026-10-09T12:57:28.526Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/e5/76a24e3a3b5f399642da65e04e28768e0c027cd355709a4dfd3ed290deb8/molcrafts_molrs-0.17.0-cp312-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4d8934b2c8b546327a18fddc231ced7e4f055e195aa7851fe49cf8f9942b27a7", size = 10732606, upload-time = "2026-10-09T12:57:31.307Z" },
+    { url = "https://files.pythonhosted.org/packages/83/7a/fac7053b4cedddf99ea8f36140d06daa8f85fbca99612fe0e45d774d124b/molcrafts_molrs-0.17.0-cp312-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:03c1adba43f4ceab375e4101025f859e64636e55fef8132b5644ef8b5b69872f", size = 9709117, upload-time = "2026-10-09T12:57:34.31Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/42/1cc6ee3129b5e4a4693b5a11a78f9100ff910f5dc3389fb30c2af0627e45/molcrafts_molrs-0.17.0-cp312-abi3-pyemscripten_2026_0_wasm32.whl", hash = "sha256:192ebff2723f81f06dff7c6f57dff7f4371e4caca9a167b74cc74d5f8f2df298", size = 4102718, upload-time = "2026-10-09T12:57:37.313Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/2b/f8092ca9c9ec992379d59f0922d787fa86c22bd2784e89f3a6301bbc9b88/molcrafts_molrs-0.17.0-cp312-abi3-win_amd64.whl", hash = "sha256:1b2f95aa3ce6b6f84aeb5b7125930ad516724eb2c1ef6f19d10b27e1284f46d4", size = 11101630, upload-time = "2026-10-09T12:57:39.659Z" },
 ]
 
 [[package]]
@@ -414,6 +414,7 @@ name = "molcrafts-molvis"
 version = "0.3.0"
 source = { editable = "." }
 dependencies = [
+    { name = "ipython" },
     { name = "molcrafts-molpy" },
     { name = "numpy" },
     { name = "websockets" },
@@ -424,7 +425,6 @@ dev = [
     { name = "build" },
     { name = "hatchling" },
     { name = "imageio-ffmpeg" },
-    { name = "ipython" },
     { name = "markdown" },
     { name = "molcrafts-molrs" },
     { name = "pillow" },
@@ -445,10 +445,10 @@ requires-dist = [
     { name = "hatchling", marker = "extra == 'dev'" },
     { name = "imageio-ffmpeg", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "imageio-ffmpeg", marker = "extra == 'video'", specifier = ">=0.6" },
-    { name = "ipython", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "ipython", specifier = ">=8" },
     { name = "markdown", marker = "extra == 'dev'", specifier = ">=3.5" },
-    { name = "molcrafts-molpy", specifier = ">=0.14.0" },
-    { name = "molcrafts-molrs", marker = "extra == 'dev'", specifier = ">=0.14.0" },
+    { name = "molcrafts-molpy", specifier = ">=0.17.0,<0.18" },
+    { name = "molcrafts-molrs", marker = "extra == 'dev'", specifier = ">=0.17.0,<0.18" },
     { name = "molcrafts-zensical-theme", marker = "extra == 'docs'", specifier = ">=0.2.5" },
     { name = "numpy" },
     { name = "pillow", marker = "extra == 'dev'", specifier = ">=10" },

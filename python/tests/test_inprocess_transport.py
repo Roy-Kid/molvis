@@ -194,8 +194,8 @@ def test_draw_atom_accepts_mapping_row() -> None:
 
 
 def test_draw_atom_accepts_molrs_key_mapping_row() -> None:
-    """Block rows may key fields with molrs.keys.Key, not plain str."""
-    from molrs import keys
+    """Block rows may key fields with molrs.core.keys.Key, not plain str."""
+    from molrs.core import keys
 
     inv = CatalogInvoker()
     scene = Molvis(

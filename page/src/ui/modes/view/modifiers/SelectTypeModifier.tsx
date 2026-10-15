@@ -2,10 +2,9 @@ import type {
   SelectTypeModifier as CoreSelectTypeModifier,
   Molvis,
 } from "@molcrafts/molvis-stage";
+import { Input, Label, ToggleAction } from "@molcrafts/ui";
 import type React from "react";
 import { useMemo } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import { SelectionHighlightColor } from "./SelectionHighlightColor";
 
@@ -81,15 +80,10 @@ export const SelectTypeModifier: React.FC<Props> = ({
             {frameElements.map((el) => {
               const on = modifier.elements.includes(el);
               return (
-                <button
+                <ToggleAction
                   key={el}
-                  type="button"
-                  className={
-                    on
-                      ? "rounded-control bg-primary px-2 py-0.5 text-micro text-primary-foreground"
-                      : "rounded-control bg-muted px-2 py-0.5 text-micro text-muted-foreground hover:bg-muted/80"
-                  }
-                  aria-pressed={on}
+                  selected={on}
+                  className="h-auto px-2 py-0.5 text-micro"
                   onClick={() => {
                     modifier.elements = toggleInList(modifier.elements, el);
                     onUpdate();
@@ -97,7 +91,7 @@ export const SelectTypeModifier: React.FC<Props> = ({
                   }}
                 >
                   {el}
-                </button>
+                </ToggleAction>
               );
             })}
           </div>
@@ -111,15 +105,10 @@ export const SelectTypeModifier: React.FC<Props> = ({
             {frameTypes.map((t) => {
               const on = modifier.types.includes(t);
               return (
-                <button
+                <ToggleAction
                   key={t}
-                  type="button"
-                  className={
-                    on
-                      ? "rounded-control bg-primary px-2 py-0.5 text-micro text-primary-foreground"
-                      : "rounded-control bg-muted px-2 py-0.5 text-micro text-muted-foreground hover:bg-muted/80"
-                  }
-                  aria-pressed={on}
+                  selected={on}
+                  className="h-auto px-2 py-0.5 text-micro"
                   onClick={() => {
                     modifier.types = toggleInList(modifier.types, t);
                     onUpdate();
@@ -127,7 +116,7 @@ export const SelectTypeModifier: React.FC<Props> = ({
                   }}
                 >
                   {t}
-                </button>
+                </ToggleAction>
               );
             })}
           </div>
@@ -140,7 +129,7 @@ export const SelectTypeModifier: React.FC<Props> = ({
         </Label>
         <Input
           id="select-type-elements"
-          className="h-8 text-xs"
+          className="h-control-compact text-label"
           key={`el-${modifier.elements.join(",")}`}
           defaultValue={modifier.elements.join(",")}
           placeholder="C, H, O"
@@ -160,7 +149,7 @@ export const SelectTypeModifier: React.FC<Props> = ({
         </Label>
         <Input
           id="select-type-types"
-          className="h-8 text-xs"
+          className="h-control-compact text-label"
           key={`ty-${modifier.types.join(",")}`}
           defaultValue={modifier.types.join(",")}
           placeholder="1, 2"

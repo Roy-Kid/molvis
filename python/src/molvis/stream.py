@@ -19,8 +19,9 @@ producer keeps a socket it can bind anywhere — including a machine the browser
 cannot reach, as long as this process can.
 
 Nothing here parses the wire itself. Payloads are decoded by
-:func:`molrs.io.read_frame_bytes`, whose format molrs owns; re-deriving the
-layout in Python is how the two ends drift apart.
+:func:`molrs.io.read_msgpack_frame_bytes` or
+:func:`molrs.io.read_json_frame_str`, whose format molrs owns; re-deriving
+the layout in Python is how the two ends drift apart.
 
 Threading
 ---------
@@ -107,25 +108,27 @@ class StreamError(RuntimeError):
     """The stream could not be established, or died in a way worth reporting."""
 
 
-def _frame_codec() -> Any:
-    """The decode function molrs owns for its stream wire format.
+def _decode_frame(payload: bytes, fmt: str) -> Any:
+    """Bytes → Frame, using the molrs reader for *fmt*.
 
-    Reading bytes into a ``Frame`` is a reader\'s job, so it lives in
-    ``molrs.io`` rather than on ``Frame`` itself. An older molrs installed
-    under a new molvis would otherwise surface as an ``AttributeError`` once
-    the first payload landed — long after the mistake, on a background thread,
-    where it reads as a corrupt stream rather than a stale dependency.
+    Reading bytes into a ``Frame`` is a reader's job, so it lives in
+    ``molrs.io`` rather than on ``Frame`` itself. A molrs install without
+    those readers would otherwise surface as an ``ImportError`` once the
+    first payload landed — on a background thread, where it reads as a
+    corrupt stream rather than a stale dependency.
     """
     try:
-        from molrs.io import read_frame_bytes
+        from molrs.io import read_json_frame_str, read_msgpack_frame_bytes
     except ImportError as exc:
         raise StreamError(
-            "This molpy/molrs build has no molrs.io.read_frame_bytes, so a "
+            "This molrs build has no molrs.io.read_msgpack_frame_bytes, so a "
             "molrs stream cannot be decoded. Upgrade molcrafts-molrs to a "
             "release that ships molrs.stream (the same one that provides "
             "molrs.stream.Publisher)."
         ) from exc
-    return read_frame_bytes
+    if fmt == "json":
+        return read_json_frame_str(payload.decode("utf-8"))
+    return read_msgpack_frame_bytes(payload)
 
 
 class FrameStream:
@@ -560,7 +563,7 @@ class FrameStream:
 
     def _decode(self, payload: bytes) -> Any:
         """Bytes → Frame, using molrs's own codec."""
-        return _frame_codec()(payload, self._format)
+        return _decode_frame(payload, self._format)
 
     def _append(self, frame: Any) -> None:
         self._viewer.append_frame(frame, follow=self._follow)

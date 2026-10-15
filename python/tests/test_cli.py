@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -46,11 +44,9 @@ class _FakeTraj:
 
 
 def _install_mrec(monkeypatch, *, secs, traj=None, frame=None) -> None:
-    mod = types.ModuleType("molpy.io.mrec")
-    mod.sections = lambda _path: secs
-    mod.read_trajectory = lambda _path: traj
-    mod.read_frame = lambda _path: frame
-    monkeypatch.setitem(sys.modules, "molpy.io.mrec", mod)
+    monkeypatch.setattr(cli.mp.io.mrec, "section_names", lambda _path: secs)
+    monkeypatch.setattr(cli.mp.io, "read_mrec_trajectory", lambda _path: traj)
+    monkeypatch.setattr(cli.mp.io, "read_mrec_frame", lambda _path: frame)
 
 
 def test_load_trajectory_section_strides(monkeypatch) -> None:
@@ -59,7 +55,7 @@ def test_load_trajectory_section_strides(monkeypatch) -> None:
     frames, steps, overlay = _load_mrec_trajectory(Path("growth.mrec"), every=2)
     assert overlay is None
     assert steps == [0, 2, 4]
-    assert [f["atoms"].nrows for f in frames] == [3, 4, 2]
+    assert [f["atoms"].n_rows for f in frames] == [3, 4, 2]
 
 
 def test_load_frame_section_is_one_frame(monkeypatch) -> None:
@@ -70,7 +66,7 @@ def test_load_frame_section_is_one_frame(monkeypatch) -> None:
     )
     frames, steps, overlay = _load_mrec_trajectory(Path("final.mrec"))
     assert len(frames) == 1
-    assert frames[0]["atoms"].nrows == 2
+    assert frames[0]["atoms"].n_rows == 2
     assert steps is None
     assert overlay is None
 
