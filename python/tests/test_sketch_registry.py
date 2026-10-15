@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -140,7 +141,9 @@ def test_connection_url_names_the_missing_bundle(
 
     monkeypatch.setattr("molvis.transport.websocket.resolve_dist", boom)
     board = Sketch(name="url")
-    with pytest.raises(SketchUnavailable, match=str(missing.resolve())):
+    # A Windows path (C:\Users\...) is not a valid regex as it stands.
+    pattern = re.escape(str(missing.resolve()))
+    with pytest.raises(SketchUnavailable, match=pattern):
         _ = board.connection_url
     assert Sketch.has("url")
     with pytest.raises(SketchUnavailable, match="index.html"):
