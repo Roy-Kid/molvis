@@ -157,7 +157,7 @@ describe("AxisHelper", () => {
       const camPos = (gizmoScene!.activeCamera as ArcRotateCamera).position;
       for (const name of ["axisLabelX", "axisLabelY", "axisLabelZ"]) {
         const label = gizmoScene!.getMeshByName(name)!;
-        // FromLookDirectionRH aims local +Z along the away-from-camera dir.
+        // faceCameraToRef aims local +Z along the away-from-camera dir.
         const expected = label.position.subtract(camPos).normalize();
         const actual = new Vector3(0, 0, 1).applyRotationQuaternion(
           label.rotationQuaternion!,
