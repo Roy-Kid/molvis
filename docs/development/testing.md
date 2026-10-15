@@ -97,25 +97,33 @@ working:
 
 ## CI
 
+Every check runs once. The local hooks (`.pre-commit-config.yaml`) run the
+molcrafts-ci `node-python` profile: at pre-commit `workflows`, `biome`,
+`guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`),
+`typecheck` and `test-core`; at pre-push `js` (`npm run test:js`), `vsc-ext`,
+`python`, `build` (stage, viewers + `check:pack`, page +
+`check:page-public-path`, vsc-ext) and `docs` (strict Zensical). GitHub CI
+keeps only what a laptop cannot do: the Python suite on the other operating
+systems, and the release artifacts.
+
 Every workflow starts with a `<file> / context` job running
-`MolCrafts/molcrafts-ci/actions/ci-context@master`, which decides the tier,
+`MolCrafts/molcrafts-ci/actions/ci-context`, which decides the tier,
 upstream-only gating and pull-request dedup for all MolCrafts repositories;
 the other jobs read its outputs. The fast tier runs on a feature-branch push to
 MolCrafts; the full tier on every push to a fork (so a branch is proven before
-its pull request), on dev, master and main on MolCrafts, and on pull requests,
-tags and dispatches.
+its pull request), on dev and master on MolCrafts, and on pull requests, tags
+and dispatches.
 
 | workflow | fast tier | full tier | upstream only |
 |---|---|---|---|
-| `lint.yml` | `lint / biome`, `lint / guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`), `lint / typecheck`, `lint / workflows` (`actions/check-workflows`) | same | — |
-| `test.yml` | `test / context`, `test / js` (`npm run test:js`), `test / vsc-ext`, `test / python (ubuntu-latest)` | + `test / build` (stage, viewers + `check:pack`, page + `check:page-public-path`, vsc-ext), `test / python (macos-latest)`, `test / python (windows-latest)` | — |
-| `docs.yml` | `docs / build` (strict Zensical) | same | — |
+| `test.yml` | `test / context`, `test / python (ubuntu-latest)` (pytest, then the strict docs build on the same environment) | + `test / python (macos-latest)`, `test / python (windows-latest)` | — |
 | `nightly.yml` | — | — | daily when dev moved: `nightly / page` (app.molcrafts.org/nightly/molvis/), `nightly / python` (PyPI `molcrafts-molvis-nightly`) |
 | `release.yml` | — | — | `release / {npm,python,vsc-ext}-build` build and dry-run; on a `v*` tag pushed to MolCrafts (`publish`), `release / npm`, `release / python`, `release / vsc-ext` upload; `workflow_dispatch` is a dry run anywhere |
 
 A pull request inside a fork runs only the context jobs: its push already ran
-the full tier. Shared setup is
-`MolCrafts/molcrafts-ci/actions/setup-{node,python}@master`.
+the full tier. Shared setup is `MolCrafts/molcrafts-ci/actions/setup-*`,
+pinned to one full molcrafts-ci commit SHA in every workflow, so a change on
+molcrafts-ci `master` reaches molvis only when the pin moves.
 
 ## Partners
 
@@ -124,16 +132,14 @@ releases. `.github/partners.env` names them (molrs and molpy), and
 `python/pyproject.toml` builds `molcrafts-molrs` and `molcrafts-molpy` from the
 sibling checkouts `../molrs` and `../molpy` (`[tool.uv.sources]`); molpy's own
 sources add `../mollog` and `../molcfg` (their `master`). CI checks them out
-there with `MolCrafts/molcrafts-ci/actions/setup-partners@master` in
-`lint / guards`, `test / python` and `docs / build`; locally, keep the four
+there with `MolCrafts/molcrafts-ci/actions/setup-partners` in
+`test / python`; locally, keep the four
 repositories next to this one. When a partner's `dev` changes its package
 metadata, `uv lock --check` fails: relock `python/uv.lock` in a commit of its
 own.
 
 The TypeScript packages build against the published `@molcrafts/molrs`
 (`core/package.json`).
-`.pre-commit-config.yaml` mirrors these jobs; when you add or
-change one, change the hook in the same commit.
 
 If you add a package with a test suite, add it to `test:js` in the same
 commit.

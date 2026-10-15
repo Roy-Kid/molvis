@@ -3,14 +3,12 @@ import {
   type Molvis,
   type RingInfo,
 } from "@molcrafts/molvis-stage";
+import { Callout, EmptyState, InspectorSection } from "@molcrafts/ui";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { DocsLink } from "@/components/viewer/DocsLink";
 import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { molpyDocsForAnalysis } from "@/lib/molpy-docs";
-import { SidebarSection } from "@/ui/layout/SidebarSection";
-import { AnalysisAlert } from "./AnalysisAlert";
 import { AnalysisPanelShell } from "./AnalysisPanelShell";
 import { AnalysisRunBar } from "./AnalysisRunBar";
 import { ResultSection } from "./ResultSection";
@@ -104,13 +102,13 @@ export const RingsPanel: React.FC<RingsPanelProps> = ({ app }) => {
         />
       }
     >
-      <SidebarSection title="Rings" subtitle="SSSR" defaultOpen>
+      <InspectorSection title="Rings" subtitle="SSSR" defaultOpen>
         <DocsLink href={molpyDocsForAnalysis(RINGS_ANALYSIS_ID)}>
           Topology · molpy handbook
         </DocsLink>
-      </SidebarSection>
+      </InspectorSection>
 
-      {error ? <AnalysisAlert tone="error">{error}</AnalysisAlert> : null}
+      {error ? <Callout tone="error">{error}</Callout> : null}
 
       {emptyTitle && !hasPositiveRings ? (
         <EmptyState density="compact" title={emptyTitle} />

@@ -18,16 +18,9 @@ export type RequirementSource = "frameColumn" | "panelInput" | "upstreamResult";
 
 const PANEL_INPUTS: ReadonlySet<AnalysisRequirement> = new Set([
   "atomPairs",
-  "atomTriples",
-  "atomQuads",
-  "atomGroups",
-  "donors",
-  "acceptors",
   "labels",
   "voidMask",
-  "referenceAtoms",
-  "targetAtoms",
-  "template",
+  "descriptorMatrix",
 ]);
 
 /**
@@ -37,8 +30,6 @@ const PANEL_INPUTS: ReadonlySet<AnalysisRequirement> = new Set([
  */
 const PANEL_SUPPLIED: ReadonlySet<AnalysisRequirement> = new Set([
   "atomPairs",
-  "atomTriples",
-  "atomQuads",
   "labels",
   "voidMask",
 ]);
@@ -53,9 +44,7 @@ const PANEL_SUPPLIED: ReadonlySet<AnalysisRequirement> = new Set([
 const PANEL_INPUT_SOURCES: Readonly<
   Partial<Record<AnalysisRequirement, string>>
 > = {
-  atomPairs: "a `bonds` block",
-  atomTriples: "a `bonds` block (angles are derived from it)",
-  atomQuads: "a `bonds` block (dihedrals are derived from it)",
+  atomPairs: "a `bonds` block (angles and dihedrals are derived from it)",
   labels: "an `element`, `mol_id` or `type` column",
   voidMask: "an atom selection marking the probe atoms",
 };
@@ -103,6 +92,14 @@ export function resolveRequirementColumns(
   const required = requirementColumns(requirement);
   if (required.length === 0) return undefined;
   return required.every((column) => columns.has(column)) ? required : undefined;
+}
+
+/** Whether `frame` carries a cell. `frame.box` hands back a copy, freed here. */
+function frameHasCell(frame: Frame | null): boolean {
+  const box = frame?.box;
+  if (!box) return false;
+  box.free();
+  return true;
 }
 
 export interface RequirementStatus {
@@ -165,7 +162,7 @@ function probePanelInput(
       ? { requirement, source, satisfied: true, columns: [found] }
       : unmet();
   }
-  // atomPairs / atomTriples / atomQuads all come from the bonds block.
+  // atomPairs (and the angles / dihedrals derived from it): the bonds block.
   const bonds = frame.has("bonds") ? frame.get("bonds") : undefined;
   return bonds && bonds.nRows > 0
     ? { requirement, source, satisfied: true }
@@ -204,6 +201,16 @@ export function probeRequirements(
         satisfied: false,
         detail: `needs a \`${requirement}\` produced by another analysis`,
       };
+    }
+    if (requirement === "box") {
+      return frameHasCell(frame)
+        ? { requirement, source, satisfied: true }
+        : {
+            requirement,
+            source,
+            satisfied: false,
+            detail: "needs a simulation cell on the frame",
+          };
     }
     const resolved = resolveRequirementColumns(columns, requirement);
     return resolved

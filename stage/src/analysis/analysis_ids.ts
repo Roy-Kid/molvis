@@ -4,13 +4,13 @@
  *
  * molrs is the Rust molecular core this package computes with, compiled to
  * WASM (WebAssembly, the binary format browsers execute at near-native speed).
- * It ships a *compute catalog*: a machine-readable list of every analysis that
- * build can actually run. Each catalog entry is an `AnalysisDefinition` (see
- * `./registry.ts`), and its `id` field is one of the strings below — goldens
- * copied from the `@molcrafts/molrs@^0.16.0` catalog, read 2026-10-08.
- * `stage/tests/analysis/analysis_ids.test.ts` fails if any of them stops
- * resolving to a catalog entry, which is how a stale constant — and the dead
- * dispatch branch behind it — gets caught.
+ * It describes every compute it can run (`ComputeSpec.all()`); molvis joins
+ * those descriptors with its own presentation rows (`./ui_rows`) into the
+ * analysis catalog (`./registry`). Each catalog entry is an
+ * `AnalysisDefinition`, and its `id` — molvis's, stable across molrs releases —
+ * is one of the strings below. `stage/tests/analysis/analysis_ids.test.ts`
+ * fails if any of them stops resolving to a catalog entry, which is how a
+ * stale constant — and the dead dispatch branch behind it — gets caught.
  *
  * That id is the identity every consumer routes on: main-thread orchestration
  * (`./dispatch.ts`), the worker kernel (`./job_runner.ts`) and the pipeline
@@ -55,16 +55,15 @@ export const CLUSTER_ANALYSIS_ID = "cluster.connected_components";
 
 /**
  * Center of mass (COM) of each cluster — the average atom position weighted by
- * mass. Drives the `Center of mass` pipeline modifier via
+ * mass (molrs `CenterOfMass`). Drives the `Center of mass` pipeline modifier via
  * `../pipeline/cluster_pipeline.ts`'s `isComAnalysisId`.
  */
 export const COM_ANALYSIS_ID = "shape.center_of_mass";
 
 /**
- * Per-cluster shape properties in one call: geometric centers, centers of
- * mass, cluster masses, gyration and inertia tensors, and radii of gyration
- * (see `./cluster_properties.ts` for the result fields). The radius of
- * gyration — the mass-weighted root-mean-square distance of a cluster's atoms
+ * Per-cluster gyration (molrs `GyrationTensor`, whose result also answers
+ * the radius of gyration; `./cluster_properties.ts` composes it with
+ * `CenterOfMass`). The radius of gyration — the mass-weighted root-mean-square distance of a cluster's atoms
  * from its center of mass, i.e. how spread out the cluster is — is the one
  * molvis surfaces, hence the `RG_` name on an id the catalog spells more
  * broadly. Drives the `Radius of gyration` pipeline modifier via
@@ -73,7 +72,7 @@ export const COM_ANALYSIS_ID = "shape.center_of_mass";
 export const RG_ANALYSIS_ID = "shape.cluster_properties";
 
 /**
- * Power spectrum of the velocity autocorrelation function (VACF — how much an
+ * Power spectrum (molrs `Spectrum`) of the velocity autocorrelation function (VACF — how much an
  * atom's velocity at one instant still resembles its velocity a time t later).
  * The frequency spectrum of that decay is the vibrational density of states:
  * how much of the atoms' motion sits at each vibration frequency.

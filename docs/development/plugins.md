@@ -180,7 +180,7 @@ plugin, and 160 kB vs 40 kB for the LAMMPS generator. Two such plugins loaded
 together also give the page two Radix trees, which `resolve.dedupe` cannot
 prevent because it only dedupes within one bundle.
 
-Radix, `clsx`, `class-variance-authority` and `tailwind-merge` still belong in
+`@molcrafts/ui`, `clsx` and `tailwind-merge` still belong in
 your **devDependencies** — the SDK's `.d.ts` files reference their types — but
 never in `dependencies`.
 

@@ -5,16 +5,16 @@ import {
   type SurfaceAlgorithm,
   type SurfaceReport,
 } from "@molcrafts/molvis-stage";
-import type React from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@molcrafts/ui";
+import type React from "react";
 import { useApplyPipelineOperation } from "@/hooks/useApplyPipelineOperation";
 import type { ModifierPanelSurface } from "@/plugins/types";
 import { ScalarSliderRow } from "./ScalarSliderRow";
@@ -113,7 +113,7 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
       {showCompute && (
         <>
           <div className="space-y-1">
-            <Label className="text-xs font-semibold">Algorithm</Label>
+            <Label className="text-label font-semibold">Algorithm</Label>
             <Select
               value={algorithm}
               onValueChange={(v) => {
@@ -123,7 +123,7 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
             >
               <SelectTrigger
                 aria-label="Surface algorithm"
-                className="h-control-compact text-xs"
+                className="h-control-compact text-label"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -239,7 +239,7 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
                 onCommit={commit}
               />
               <div className="space-y-1">
-                <Label className="text-xs font-semibold" htmlFor="ms-cutoff">
+                <Label className="text-label font-semibold" htmlFor="ms-cutoff">
                   Cutoff (Å)
                 </Label>
                 <Input
@@ -249,7 +249,7 @@ export const MolecularSurfaceModifier: React.FC<Props> = ({
                   step={0.1}
                   placeholder="Auto"
                   value={gaussian.cutoff ?? ""}
-                  className="h-control-compact px-2 text-xs"
+                  className="h-control-compact px-2 text-label"
                   onChange={(e) => {
                     const raw = e.target.value.trim();
                     const n = Number(raw);

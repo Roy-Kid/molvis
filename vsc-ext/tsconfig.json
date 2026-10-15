@@ -5,7 +5,8 @@
     "jsx": "react-jsx",
     "types": ["node", "mocha", "vscode"],
     "paths": {
-      "@/*": ["../page/src/*"]
+      "@/*": ["../page/src/*"],
+      "@molcrafts/ui": ["../../molcrafts-ui/packages/ui/src/index.ts"]
     }
   },
   "include": ["src/**/*", "../page/src/**/*.d.ts"],

@@ -1,5 +1,4 @@
-import { Loader2 } from "lucide-react";
-import type React from "react";
+import { SpinnerIosRegular as Loader2 } from "@fluentui/react-icons";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +6,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@molcrafts/ui";
+import type React from "react";
 import { ViewerAction } from "@/components/viewer/ViewerAction";
 import { ViewerOperationState } from "@/components/viewer/ViewerOperationState";
 import type { BackendStateSyncFeedback } from "@/hooks/useBackendStateSync";
@@ -56,7 +56,7 @@ export const StateSyncDialog: React.FC<StateSyncDialogProps> = ({
         </DialogHeader>
 
         {summary && (
-          <div className="rounded-control border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <div className="rounded-control border bg-muted/30 px-3 py-2 text-label text-muted-foreground">
             backend snapshot · {summary.nModifiers} modifier
             {summary.nModifiers === 1 ? "" : "s"} · {summary.nFrames} frame
             {summary.nFrames === 1 ? "" : "s"}
