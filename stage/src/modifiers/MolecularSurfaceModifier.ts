@@ -38,7 +38,7 @@ import {
   Box,
   type Frame,
   GaussianDensity,
-  Frame as MolrsFrame,
+  type GaussianDensityResult,
 } from "@molcrafts/molvis-core/molrs";
 import { marchingCubes } from "../algo/marching_cubes";
 import { AlphaShape } from "../algo/surface/alpha_shape";
@@ -465,32 +465,28 @@ export class MolecularSurfaceModifier
     });
 
     let density: GaussianDensity | null = null;
-    let computeFrame: Frame | null = null;
+    let handle: GaussianDensityResult | null = null;
+    let simbox: Box | null = null;
     try {
       // Same atom positions as Particles, on a non-periodic domain so the
       // kernel never folds contributions into the crystal cell.
-      computeFrame = new MolrsFrame();
-      computeFrame.box = new Box(
+      simbox = new Box(
         new Float64Array(domain.cell),
         new Float64Array(domain.origin),
         false,
         false,
         false,
       );
-      const block = computeFrame.createBlock("atoms");
-      block.set("x", atoms.x);
-      block.set("y", atoms.y);
-      block.set("z", atoms.z);
-
       density = new GaussianDensity(
-        domain.nx,
-        domain.ny,
-        domain.nz,
+        new Uint32Array([domain.nx, domain.ny, domain.nz]),
         sigma,
-        cutoff,
+        cutoff ?? undefined,
       );
-      const raw = density.compute(computeFrame);
-      const values = readGrid3(raw);
+      handle = density.compute({
+        positions: interleavePositions(atoms),
+        simbox,
+      });
+      const values = readGrid3(handle.toJSON());
       if (!values) {
         logger.warn(
           "[Molecular surface] unexpected density payload; skip draw",
@@ -516,8 +512,9 @@ export class MolecularSurfaceModifier
         isovalue,
       };
     } finally {
+      handle?.free();
       density?.free();
-      computeFrame?.free();
+      simbox?.free();
     }
   }
 }
@@ -543,17 +540,38 @@ interface Grid3 {
   shape: [number, number, number];
 }
 
-/** Validate the untyped `grid3` payload molrs returns from `compute()`. */
+/**
+ * Validate `GaussianDensityResult.toJSON()`: its `density` field is the
+ * `nx × ny × nz` grid as `{ dim, data }`.
+ */
 function readGrid3(raw: unknown): Grid3 | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as { data?: unknown; shape?: unknown };
-  if (!Array.isArray(o.shape) || o.shape.length !== 3) return null;
-  if (!Array.isArray(o.data) && !ArrayBuffer.isView(o.data)) return null;
-  const data =
-    o.data instanceof Float64Array
-      ? o.data
-      : Float64Array.from(o.data as ArrayLike<number>);
-  return { data, shape: o.shape as [number, number, number] };
+  const density = (raw as { density?: { dim?: unknown; data?: unknown } })
+    .density;
+  if (!density || typeof density !== "object") return null;
+  const { dim, data } = density;
+  if (!Array.isArray(dim) || dim.length !== 3) return null;
+  if (!Array.isArray(data) && !ArrayBuffer.isView(data)) return null;
+  return {
+    data: Float64Array.from(data as ArrayLike<number>),
+    shape: dim as [number, number, number],
+  };
+}
+
+/** Atom positions as the flat `N × 3` array molrs `compute` takes. */
+function interleavePositions(atoms: {
+  x: ArrayLike<number>;
+  y: ArrayLike<number>;
+  z: ArrayLike<number>;
+  count: number;
+}): Float64Array {
+  const positions = new Float64Array(atoms.count * 3);
+  for (let i = 0; i < atoms.count; i++) {
+    positions[3 * i] = atoms.x[i];
+    positions[3 * i + 1] = atoms.y[i];
+    positions[3 * i + 2] = atoms.z[i];
+  }
+  return positions;
 }
 
 /** A tenth of the peak: dense enough to read as a molecule, not a blob. */

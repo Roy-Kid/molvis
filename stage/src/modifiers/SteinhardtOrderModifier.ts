@@ -8,7 +8,11 @@
  * `colorScene` is off.
  */
 
-import { type Frame, Steinhardt } from "@molcrafts/molvis-core/molrs";
+import {
+  type Frame,
+  Steinhardt,
+  type SteinhardtResult,
+} from "@molcrafts/molvis-core/molrs";
 import { SpatialNeighborQuery } from "../algo/neighbor_list";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
@@ -21,16 +25,33 @@ import {
   writeAtomF64Column,
 } from "./structure_order_shared";
 
+/**
+ * `SteinhardtResult.toJSON()`: `features` is `n_particles × (n_l [+ n_l])` —
+ * `q_ℓ` per requested ℓ, then `w_ℓ` when `wl` is on.
+ */
 interface SteinhardtOut {
   l: number[];
-  ql: number[][];
-  wl?: number[][] | null;
+  features: { dim: number[]; data: number[] };
 }
 
 function isSteinhardtOut(v: unknown): v is SteinhardtOut {
   if (!v || typeof v !== "object") return false;
   const o = v as SteinhardtOut;
-  return Array.isArray(o.l) && Array.isArray(o.ql);
+  return (
+    Array.isArray(o.l) &&
+    !!o.features &&
+    Array.isArray(o.features.dim) &&
+    o.features.dim.length === 2 &&
+    Array.isArray(o.features.data)
+  );
+}
+
+/** Column `k` of the row-major `features` matrix. */
+function featureColumn(out: SteinhardtOut, k: number): Float64Array {
+  const [rows, cols] = out.features.dim;
+  const column = new Float64Array(rows);
+  for (let i = 0; i < rows; i++) column[i] = out.features.data[i * cols + k];
+  return column;
 }
 
 export class SteinhardtOrderModifier extends BaseModifier {
@@ -144,6 +165,7 @@ export class SteinhardtOrderModifier extends BaseModifier {
     if (n === 0) return input;
 
     let steinhardt: Steinhardt | null = null;
+    let handle: SteinhardtResult | null = null;
     // Steinhardt needs bond displacement vectors (θ, φ from r̂_ij).
     // SpatialNeighborQuery defaults disp=false for lean RDF/cluster tables.
     const query = new SpatialNeighborQuery(this._cutoff, {
@@ -161,7 +183,8 @@ export class SteinhardtOrderModifier extends BaseModifier {
         this._wl,
         this._wlNormalize,
       );
-      const raw = steinhardt.compute(input, neighbors);
+      handle = steinhardt.compute({ neighbors });
+      const raw: unknown = handle.toJSON();
       if (!isSteinhardtOut(raw)) {
         logger.warn("[Steinhardt order] unexpected compute payload");
         return input;
@@ -172,18 +195,21 @@ export class SteinhardtOrderModifier extends BaseModifier {
       if (!result.has("atoms")) return input;
       const atoms = result.get("atoms");
 
+      const [rows, cols] = raw.features.dim;
+      if (rows < n) {
+        logger.warn(`[Steinhardt order] result rows ${rows} < n=${n}`);
+        return input;
+      }
+      const hasWl = cols >= 2 * raw.l.length;
       for (let li = 0; li < raw.l.length; li++) {
         const l = raw.l[li];
-        const ql = raw.ql[li];
-        if (!ql || ql.length < n) {
-          logger.warn(
-            `[Steinhardt order] ql for l=${l} length ${ql?.length ?? 0} < n=${n}`,
+        writeAtomF64Column(atoms, steinhardtQColumn(l), featureColumn(raw, li));
+        if (this._wl && hasWl) {
+          writeAtomF64Column(
+            atoms,
+            steinhardtWColumn(l),
+            featureColumn(raw, raw.l.length + li),
           );
-          continue;
-        }
-        writeAtomF64Column(atoms, steinhardtQColumn(l), ql);
-        if (this._wl && raw.wl?.[li] && raw.wl[li].length >= n) {
-          writeAtomF64Column(atoms, steinhardtWColumn(l), raw.wl[li]);
         }
       }
 
@@ -199,6 +225,7 @@ export class SteinhardtOrderModifier extends BaseModifier {
       logger.warn("[Steinhardt order] compute failed", err as Error);
       return input;
     } finally {
+      handle?.free();
       steinhardt?.free();
       neighbors?.free();
       query.free();

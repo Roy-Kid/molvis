@@ -316,15 +316,6 @@ function asString(label: string, value: unknown): string {
   return value;
 }
 
-function asU32(label: string, value: unknown): Uint32Array {
-  if (!(value instanceof Uint32Array)) {
-    throw new Error(
-      `${label} is not a Uint32Array (got ${describeValue(value)})`,
-    );
-  }
-  return value;
-}
-
 /** One frame's failure as it crosses the wire: plain data, never an `Error`. */
 interface ShapeFailure {
   frameIndex: number;
@@ -374,7 +365,7 @@ function asShapeResult(value: unknown): ShapeResult {
 /** One `molrs.ClusterResult`, as `result_marshal` copies it out. */
 interface ClusterPayload {
   frameIndex: number;
-  clusterSizes: Uint32Array;
+  clusterSizes: number[];
   numClusters: number;
 }
 
@@ -386,8 +377,11 @@ function asClusterFrames(value: unknown): ClusterPayload[] {
     const result = asRecord(`${label}.value`, item.value);
     return {
       frameIndex: asNumber(`${label}.frameIndex`, item.frameIndex),
-      clusterSizes: asU32(`${label}.value.clusterSizes`, result.clusterSizes),
-      numClusters: asNumber(`${label}.value.numClusters`, result.numClusters),
+      clusterSizes: asArray(
+        `${label}.value.cluster_sizes`,
+        result.cluster_sizes,
+      ) as number[],
+      numClusters: asNumber(`${label}.value.n_clusters`, result.n_clusters),
     };
   });
 }
@@ -634,11 +628,11 @@ describe("runAnalysisJob", () => {
 
   it("runs a catalog per-frame analysis through shape dispatch", async () => {
     // No trajectory-level entry exists for this id, so the only way it can run
-    // is by its catalog `inputKind` — which is the point: the worker stops
-    // enumerating ids and starts dispatching on shape.
+    // is through the catalog entry — which is the point: the worker does not
+    // enumerate ids, it builds the compute from the catalog.
     const result = await runAnalysisJob({
       analysisId: CLUSTER_ID,
-      params: { cutoff: LATTICE_CUTOFF, minClusterSize: 1 },
+      params: { cutoff: LATTICE_CUTOFF, min_cluster_size: 1 },
       frames: [latticeSnapshot(0), latticeSnapshot(1)],
     });
 
@@ -664,7 +658,7 @@ describe("runAnalysisJob", () => {
   }, 60_000);
 
   it("refuses a series analysis the snapshot cannot express", async () => {
-    // A `series` analysis bins a velocity matrix stacked across frames, and an
+    // The power spectrum reads a velocity series stacked across frames, and an
     // `AnalysisFrameSnapshot` carries no velocity columns. The refusal has to
     // name what blocked it — "unsupported" alone sends the caller reading
     // kernel code.
@@ -708,7 +702,7 @@ describe("runAnalysisJob", () => {
     const result = await runAnalysisJob(
       {
         analysisId: CLUSTER_ID,
-        params: { cutoff: LATTICE_CUTOFF, minClusterSize: 1 },
+        params: { cutoff: LATTICE_CUTOFF, min_cluster_size: 1 },
         frames: [latticeSnapshot(2), latticeSnapshot(5)],
       },
       (progress) => {

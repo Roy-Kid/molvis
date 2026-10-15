@@ -100,11 +100,17 @@ function computeClustersByCutoff(
     query = new SpatialNeighborQuery(rMax);
     nlist = query.build(frame);
     cluster = new Cluster(minClusterSize);
-    wasmResult = cluster.compute(frame, nlist);
+    wasmResult = cluster.compute({ pairs: nlist });
+    // `cluster_idx` is -1 for atoms in a cluster below `min_cluster_size`.
+    const data = wasmResult.toJSON() as {
+      cluster_idx: { data: number[] };
+      cluster_sizes: number[];
+      n_clusters: number;
+    };
 
-    let clusterIdx = wasmResult.clusterIdx();
-    let clusterSizes = wasmResult.clusterSizes();
-    let numClusters = wasmResult.nClusters;
+    let clusterIdx: Int32Array = Int32Array.from(data.cluster_idx.data);
+    let clusterSizes: Uint32Array = Uint32Array.from(data.cluster_sizes);
+    let numClusters = data.n_clusters;
 
     if (params.selectedIndices) {
       ({ clusterIdx, clusterSizes, numClusters } = filterBySelection(

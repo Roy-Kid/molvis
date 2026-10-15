@@ -415,36 +415,24 @@ export async function snapshotFramesForAnalysis(
 // ---------------------------------------------------------------------------
 
 /**
- * Input kinds an {@link AnalysisFrameSnapshot} can drive.
- *
- * The per-frame shapes `runSingleFrame` implements (`./shape_dispatch`'s
- * `PER_FRAME_KINDS`) plus `accumulate`, which is fed one frame at a time and is
- * therefore just as expressible. Spelled out here rather than imported: this is
- * the wire tier, and reaching into a molrs-loading kernel module would put molrs
- * behind every importer of this file. A new per-frame shape lands in both.
- *
- * The two absentees are absent on purpose. `series` consumes a per-atom
- * velocity matrix stacked across frames, and the snapshot carries no velocity
- * columns to stack — that is the machine-readable form of "`runSeries` stays on
- * the main thread". `frameGroupSets` needs a per-observable atom-group editor,
- * i.e. UI state rather than frame data.
+ * Input kinds an {@link AnalysisFrameSnapshot} can drive: both of them. A
+ * `frame` analysis reads one snapshot at a time and a `trajectory` one is fed
+ * one at a time, so the kind never decides coverage — the requirements do
+ * (a velocity series needs `vx/vy/vz`, which no snapshot carries). Spelled out
+ * here rather than imported: this is the wire tier, and reaching into a
+ * molrs-loading kernel module would put molrs behind every importer of this
+ * file.
  */
 const SNAPSHOT_INPUT_KINDS: ReadonlySet<AnalysisInputKind> =
-  new Set<AnalysisInputKind>([
-    "frame",
-    "frameNeighbors",
-    "frameClusters",
-    "frameGroups",
-    "frameRadii",
-    "accumulate",
-  ]);
+  new Set<AnalysisInputKind>(["frame", "trajectory"]);
 
 /**
- * Requirements a job satisfies, today exactly one.
+ * Requirements a job satisfies.
  *
  * `voidMask` is built from the job's own atom selection — a `params` entry that
  * does cross the wire (`AnalysisWireParams.selection` in `./job_runner`) — not
- * from a frame column, so a snapshot expresses it.
+ * from a frame column, so a snapshot expresses it. `box` is the cell, which a
+ * snapshot copies whenever the frame has one.
  *
  * Every other requirement fails, and the reason is the same one line:
  * {@link snapshotFrameForAnalysis} copies x / y / z, `element`, `id` and the
@@ -452,22 +440,17 @@ const SNAPSHOT_INPUT_KINDS: ReadonlySet<AnalysisInputKind> =
  * - `velocity`, `charge`, `dipole`, `orientation` — the atom columns
  *   `isFrameColumnRequirement` (`./registry`) names (`vx/vy/vz`, `charge`,
  *   `mux/muy/muz`, `quatw/quati/quatj/quatk`). None is snapshotted.
- * - `atomPairs`, `atomTriples`, `atomQuads`, `atomGroups` — all four are read
- *   off the frame's *bonds* block (`./panel_inputs`), and the snapshot carries
- *   the atoms block alone.
- * - `labels` — an arbitrary per-atom column chosen at run time (`labelBy`),
+ * - `atomPairs` — read off the frame's *bonds* block (`./panel_inputs`), and
+ *   the snapshot carries the atoms block alone.
+ * - `labels` — an arbitrary per-atom column chosen at run time (`label_by`),
  *   which is exactly the kind of column the snapshot does not carry.
- * - everything else (`magneticDipole`, `polarizability`, `gTensor`,
- *   `scalarField`, `series`, `xySeries`, `descriptorMatrix`, `donors`,
- *   `acceptors`, `hbondPresence`, `hbondEdges`, `referenceAtoms`,
- *   `targetAtoms`, `template`) is an upstream analysis result or a second
- *   structure, neither of which is frame data at all.
+ * - `descriptorMatrix` — a panel-assembled feature matrix, not frame data.
  *
  * Growing this set means growing {@link AnalysisFrameSnapshot} first — a wire
  * change — which is the whole point of writing the two down side by side.
  */
 const SNAPSHOT_SATISFIED_REQUIREMENTS: ReadonlySet<AnalysisRequirement> =
-  new Set<AnalysisRequirement>(["voidMask"]);
+  new Set<AnalysisRequirement>(["voidMask", "box"]);
 
 /**
  * Can an {@link AnalysisFrameSnapshot} express what this analysis needs?

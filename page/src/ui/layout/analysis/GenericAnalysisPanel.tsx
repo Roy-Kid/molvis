@@ -321,8 +321,7 @@ export const GenericAnalysisPanel: React.FC<GenericAnalysisPanelProps> = ({
 
   /** Multi-frame / series-shaped runs get Cancel + series empty copy. */
   const isSeriesLike =
-    definition.inputKind === "series" ||
-    definition.inputKind === "accumulate" ||
+    definition.inputKind === "trajectory" ||
     definition.resultKind === "trajectorySeries";
 
   const handleCancel = useCallback(() => {

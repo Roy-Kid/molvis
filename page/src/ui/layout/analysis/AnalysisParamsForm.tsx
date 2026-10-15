@@ -37,12 +37,14 @@ const LIST_PLACEHOLDER: Record<string, string> = {
   intList: "1, 2, 3",
   floatList: "1.0, 2.5",
   textList: "C, H, O",
+  axis: "0, 10, 100",
 };
 
 const LIST_CAPTION: Record<string, string> = {
   intList: "Comma-separated integers",
   floatList: "Comma-separated numbers",
   textList: "Comma-separated names",
+  axis: "Min, max, number of bins",
 };
 
 export const AnalysisParamsForm: React.FC<AnalysisParamsFormProps> = ({

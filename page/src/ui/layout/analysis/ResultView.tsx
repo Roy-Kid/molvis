@@ -30,7 +30,9 @@ function pick(payload: Payload, keys: string[]): number[] {
 }
 
 const X_KEYS = [
+  "bin_centers",
   "binCenters",
+  "k_values",
   "lagTimes",
   "lag_times",
   "times",
@@ -43,6 +45,8 @@ const X_KEYS = [
 ];
 const Y_KEYS = [
   "rdf",
+  "sk",
+  "real",
   "msd",
   "vacf",
   "values",
@@ -96,7 +100,12 @@ function LineResult({ payload, label }: { payload: Payload; label: string }) {
 }
 
 function BarResult({ payload }: { payload: Payload }) {
-  const sizes = pick(payload, ["clusterSizes", "sizes", "counts"]);
+  const sizes = pick(payload, [
+    "cluster_sizes",
+    "clusterSizes",
+    "sizes",
+    "counts",
+  ]);
   if (sizes.length === 0)
     return <EmptyResult reason="no bar data in the payload" />;
   const max = Math.max(...sizes);
@@ -170,6 +179,11 @@ function MatrixResult({ payload }: { payload: Payload }) {
   const data = pick(payload, [
     "pmf",
     "density",
+    "voxels",
+    "diffraction",
+    "bond_order",
+    "features",
+    "tensors",
     "data",
     "counts",
     "intensities",
@@ -194,10 +208,18 @@ function MatrixResult({ payload }: { payload: Payload }) {
   );
 }
 
+/** A non-array field as one table cell; nested records are left to the JSON. */
+function cellText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") return null;
+  return String(value);
+}
+
 function TableResult({ payload }: { payload: Payload }) {
-  const rows = Object.entries(payload).filter(
-    ([, value]) => !isNumericArray(value),
-  );
+  const rows = Object.entries(payload)
+    .filter(([, value]) => !isNumericArray(value))
+    .map(([key, value]) => [key, cellText(value)] as const)
+    .filter((entry): entry is readonly [string, string] => entry[1] !== null);
   const columns = Object.entries(payload).filter(([, value]) =>
     isNumericArray(value),
   );
@@ -206,7 +228,7 @@ function TableResult({ payload }: { payload: Payload }) {
       {rows.length > 0 && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-micro">
           {rows.map(([key, value]) => (
-            <Stat key={key} label={key} value={String(value)} />
+            <Stat key={key} label={key} value={value} />
           ))}
         </dl>
       )}

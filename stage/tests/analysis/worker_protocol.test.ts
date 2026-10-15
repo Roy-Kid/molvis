@@ -414,47 +414,43 @@ function definition(
     id: `test.${inputKind}`,
     category: "test",
     label: "Coverage fixture",
-    wasmExport: "TestBinding",
+    specName: "TestBinding",
+    ctor: "new",
+    ctorArgs: [],
+    neighborCutoff: "cutoff",
+    form: "Single",
+    inputs: [],
     inputKind,
     resultKind: "lineSeries",
     requires,
     params: [],
+    supplied: [],
   };
 }
 
 describe("snapshotCoversAnalysis", () => {
   it("covers a per-frame analysis that needs nothing beyond positions", () => {
     // x / y / z + element + id + cell is exactly what `snapshotFrameForAnalysis`
-    // packs, so a `frame`-shaped analysis with no extra requirement is the
-    // clearest yes there is.
+    // packs, so a `frame` analysis with no extra requirement is the clearest
+    // yes there is.
     expect(snapshotCoversAnalysis(definition("frame", []))).toBe(true);
   });
 
-  it("covers an accumulating analysis that needs nothing beyond positions", () => {
-    // `accumulate` is fed one snapshot at a time, so it is as expressible as a
-    // per-frame shape — MSD is the standing example.
-    expect(snapshotCoversAnalysis(definition("accumulate", []))).toBe(true);
+  it("covers a trajectory analysis that needs nothing beyond positions", () => {
+    // A `trajectory` analysis is fed one snapshot at a time, so it is as
+    // expressible as a per-frame one — MSD is the standing example.
+    expect(snapshotCoversAnalysis(definition("trajectory", []))).toBe(true);
   });
 
-  it("does not cover the `series` shape", () => {
-    // A `series` analysis consumes a velocity matrix stacked across frames, and
-    // the snapshot carries no velocity columns to stack. This verdict is the
-    // machine-readable form of "runSeries stays on the main thread".
-    expect(snapshotCoversAnalysis(definition("series", []))).toBe(false);
-  });
-
-  it("does not cover the `frameGroupSets` shape", () => {
-    // Joint distributions need a per-observable atom-group editor — UI state,
-    // not frame data — so no snapshot can carry it.
-    expect(snapshotCoversAnalysis(definition("frameGroupSets", []))).toBe(
-      false,
-    );
+  it("covers an analysis that needs the cell", () => {
+    // The snapshot copies the cell whenever the frame has one.
+    expect(snapshotCoversAnalysis(definition("frame", ["box"]))).toBe(true);
   });
 
   it("does not cover an analysis that needs a velocity column", () => {
     // `velocity` is a frame column (vx / vy / vz) the snapshot does not copy;
-    // the shape being per-frame does not help.
-    expect(snapshotCoversAnalysis(definition("frame", ["velocity"]))).toBe(
+    // the kind does not help.
+    expect(snapshotCoversAnalysis(definition("trajectory", ["velocity"]))).toBe(
       false,
     );
   });
@@ -462,15 +458,15 @@ describe("snapshotCoversAnalysis", () => {
   it("does not cover an analysis that needs bonded atom pairs", () => {
     // `atomPairs` is read off the frame's bonds block, and the snapshot carries
     // only the atoms block.
-    expect(
-      snapshotCoversAnalysis(definition("frameGroups", ["atomPairs"])),
-    ).toBe(false);
+    expect(snapshotCoversAnalysis(definition("frame", ["atomPairs"]))).toBe(
+      false,
+    );
   });
 
   it("covers an analysis whose only requirement is the void mask", () => {
-    // `voidMask` is the one requirement a job satisfies without a frame column:
-    // it is built from the job's own atom selection, which does cross the wire.
-    expect(snapshotCoversAnalysis(definition("frameRadii", ["voidMask"]))).toBe(
+    // `voidMask` is built from the job's own atom selection, which does cross
+    // the wire.
+    expect(snapshotCoversAnalysis(definition("frame", ["voidMask"]))).toBe(
       true,
     );
   });

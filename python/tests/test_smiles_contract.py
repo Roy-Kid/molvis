@@ -1,4 +1,4 @@
-"""SMILES atom classes survive the 0.17 conformer the viewer draws.
+"""SMILES atom classes survive the 0.18 conformer the viewer draws.
 
 The dopamine sequence is the acceptance picture an agent builds in a cell.
 These checks pin the row numbers that cell selects. They do not open a viewer.
@@ -33,8 +33,8 @@ _CASES = [
 ]
 
 
-def test_molpy_minor_is_0_17() -> None:
-    assert str(mp.version).startswith("0.17.")
+def test_molpy_minor_is_0_18() -> None:
+    assert str(mp.version).startswith("0.18.")
 
 
 @pytest.mark.parametrize(

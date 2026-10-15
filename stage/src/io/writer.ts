@@ -8,8 +8,8 @@ import {
   writeLammpsDumpStr,
   writeMol2Str,
   writePdbStr,
+  writePoscarStr,
   writeTrrBytes,
-  writeVaspPoscarStr,
   writeXtcBytes,
   writeXyzStr,
 } from "@molcrafts/molvis-core/molrs";
@@ -65,7 +65,7 @@ export const MOLRS_WRITERS: Partial<
   cube: writeCubeStr,
   gro: writeGroStr,
   mol2: writeMol2Str,
-  poscar: writeVaspPoscarStr,
+  poscar: writePoscarStr,
   trr: writeTrrBytes,
   xtc: writeXtcBytes,
 };
