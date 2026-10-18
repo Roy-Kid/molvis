@@ -16,16 +16,14 @@ molrs field registry instead of leaving the browser to guess.
 
 from __future__ import annotations
 
+import copy
 import functools
 import inspect
-import logging
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from molrs.core import Frame
+from molrs.core import Atomistic, Frame
 from molrs.perceive import assign_kekule_bond_orders
-
-logger = logging.getLogger("molvis")
 
 __all__ = [
     "coerce_to_frame",
@@ -40,18 +38,14 @@ R = TypeVar("R")
 def _with_kekule_orders(obj: Any) -> Any:
     """Fill localized ``bond_number`` on aromatic bonds via molrs perception.
 
-    Graph-in / graph-out; never mutates *obj*. This is
-    ``molrs.perceive.assign_kekule_bond_orders`` — the same chemistry as the
-    WASM face used by the page. A graph it cannot read is logged and returned
-    unchanged, so perception cannot break a draw.
+    Graph-in / graph-out; native perception mutates, so apply it to a deep
+    copy. Other structures (such as coarse grains) do not need Kekulé orders.
     """
-    try:
-        return assign_kekule_bond_orders(obj)
-    except (TypeError, ValueError) as exc:
-        logger.debug(
-            "assign_kekule_bond_orders skipped for %r: %s", type(obj).__name__, exc
-        )
+    if not isinstance(obj, Atomistic):
         return obj
+    result = copy.deepcopy(obj)
+    assign_kekule_bond_orders(result)
+    return result
 
 
 def coerce_to_frame(
@@ -66,7 +60,7 @@ def coerce_to_frame(
     1. :class:`molrs.core.Frame` → passed through.
     2. Mapping with ``blocks`` → passed through.
     3. Graph / Atomistic with ``to_frame`` → Kekulé fill (when possible) then
-       ``to_frame(atom_fields=…)``.
+       ``to_frame()``; optionally retain the requested atom columns.
     """
     if obj is None:
         raise TypeError("structure argument is required (got None)")
@@ -79,9 +73,14 @@ def coerce_to_frame(
 
     if callable(getattr(obj, "to_frame", None)):
         obj = _with_kekule_orders(obj)
-        if atom_fields is not None:
-            return obj.to_frame(atom_fields=atom_fields)
-        return obj.to_frame()
+        frame = obj.to_frame()
+        if atom_fields is not None and "atoms" in frame:
+            frame = frame.copy()
+            atoms = frame["atoms"]
+            for key in list(atoms.keys()):
+                if str(key) not in atom_fields:
+                    del atoms[key]
+        return frame
 
     raise TypeError(
         "expected a Frame, Atomistic/molgraph (to_frame), or frame mapping "

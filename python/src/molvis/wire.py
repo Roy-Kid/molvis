@@ -237,7 +237,8 @@ def _frame_mapping(frame: Any) -> dict[str, Any]:
         return dict(frame)
     if isinstance(frame, mp.Frame):
         return {
-            "blocks": {name: frame[name] for name in frame.keys()},
+            "blocks": {name: frame[name] for name in frame.keys()},  # noqa: SIM118
+            # Native Frame has keys() but no iteration protocol.
             "meta": frame.meta,
             "box": frame.box,
         }
@@ -344,7 +345,7 @@ def _block_columns(block_name: str, raw_columns: Any) -> Mapping[str, Any]:
     if isinstance(raw_columns, Mapping):
         return raw_columns
     if isinstance(raw_columns, Block):
-        return {key: raw_columns[key] for key in raw_columns.keys()}
+        return {key: raw_columns[key] for key in raw_columns}
     raise WireError(f"block {block_name!r} must be a mapping of column → array")
 
 
@@ -384,7 +385,7 @@ def encode_box(box: Any, *, carrier: Any = None) -> dict[str, Any]:
     the lattice vectors, which is what molrs ``new Box(h, …)`` consumes. The
     array is already C-contiguous, so this is a reshape, not a transpose.
     """
-    matrix = np.ascontiguousarray(np.asarray(box.h, dtype=np.float64)).reshape(-1)
+    matrix = np.ascontiguousarray(np.asarray(box.matrix, dtype=np.float64)).reshape(-1)
     if matrix.size != 9:
         raise WireError(f"box matrix must hold 9 values, got {matrix.size}")
     origin = np.ascontiguousarray(np.asarray(box.origin, dtype=np.float64)).reshape(-1)
@@ -452,13 +453,17 @@ def resolve_buffers(payload: Any, buffers: Sequence[Any]) -> Any:
     if isinstance(payload, Mapping):
         dtype = payload.get("dtype")
         data = payload.get("data")
-        if isinstance(dtype, str) and dtype in _NUMPY_BY_DTYPE:
-            if isinstance(data, Mapping) and data.get(BUFFER_REF_MARKER) is True:
-                index = data.get("index")
-                if not isinstance(index, int) or not 0 <= index < len(buffers):
-                    raise WireError(f"buffer index {index!r} is out of range")
-                resolved = np.frombuffer(buffers[index], dtype=_NUMPY_BY_DTYPE[dtype])
-                return {**payload, "data": resolved}
+        if (
+            isinstance(dtype, str)
+            and dtype in _NUMPY_BY_DTYPE
+            and isinstance(data, Mapping)
+            and data.get(BUFFER_REF_MARKER) is True
+        ):
+            index = data.get("index")
+            if not isinstance(index, int) or not 0 <= index < len(buffers):
+                raise WireError(f"buffer index {index!r} is out of range")
+            resolved = np.frombuffer(buffers[index], dtype=_NUMPY_BY_DTYPE[dtype])
+            return {**payload, "data": resolved}
         return {key: resolve_buffers(value, buffers) for key, value in payload.items()}
     if isinstance(payload, list):
         return [resolve_buffers(item, buffers) for item in payload]
@@ -528,7 +533,7 @@ def decode_box(payload: Any, buffers: Sequence[Any] = ()) -> mp.Box:
     # molpy.Box(h, origin, pbc) — h has lattice vectors as columns, so the
     # row-major wire array reshapes straight into it.
     return mp.Box(
-        h.reshape(3, 3),
+        mp.core.Cell.matrix(h.reshape(3, 3)),
         origin,
         np.asarray([bool(flag) for flag in pbc]),
     )

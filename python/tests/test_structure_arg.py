@@ -5,7 +5,6 @@ from __future__ import annotations
 import molpy as mp
 import numpy as np
 import pytest
-
 from molvis.structure import (
     coerce_to_frame,
     frame_arg,
@@ -102,3 +101,21 @@ def test_frame_payload_states_dtypes_from_the_molrs_registry() -> None:
     assert columns["x"]["dtype"] == "f64"
     # One buffer per numeric column; the string column rides inline.
     assert len(buffers) == sum(1 for c in columns.values() if c["dtype"] != "string")
+
+
+def test_native_perception_coercion_keeps_input_and_filters_columns(monkeypatch) -> None:
+    from molvis import structure
+
+    graph = mp.Atomistic()
+    atom = graph.add_atom(atomic_number=6, x=1.0, y=2.0, z=3.0, charge=2.5)
+
+    def perceive(native_graph):
+        next(iter(native_graph.atoms))["x"] = 9.5
+        return True  # Native perception mutates and returns a status, not a graph.
+
+    monkeypatch.setattr(structure, "assign_kekule_bond_orders", perceive)
+    frame = coerce_to_frame(graph, atom_fields=["x", "y", "z", "atomic_number"])
+    assert atom["x"] == 1.0
+    assert atom["charge"] == 2.5
+    assert float(frame["atoms"]["x"][0]) == 9.5
+    assert set(frame["atoms"].keys()) == {"x", "y", "z", "atomic_number"}

@@ -6,7 +6,6 @@ import molpy as mp
 import numpy as np
 import pytest
 from molrs.core import keys
-
 from molvis.wire import (
     BUFFER_REF_MARKER,
     WireError,
@@ -219,7 +218,7 @@ class TestMolrsSchemaValidation:
 
 def triclinic_box() -> mp.Box:
     return mp.Box(
-        mp.Box.matrix_from_lengths_tilts(
+        mp.core.Cell.lengths_tilts(
             np.array([10.0, 20.0, 30.0]), np.array([1.0, 2.0, 3.0])
         )
     )
@@ -229,23 +228,25 @@ class TestBox:
     def test_round_trips_a_triclinic_cell(self):
         box = triclinic_box()
         restored = decode_box(encode_box(box))
-        assert np.allclose(restored.h, box.h)
+        assert np.allclose(restored.matrix, box.matrix)
         assert np.allclose(restored.origin, box.origin)
 
     def test_h_is_the_row_major_flattening_of_the_lattice_matrix(self):
         # molrs documents Box.h as "lattice vectors as columns"; the wire
         # carries that matrix row-major, which is what molrs new Box() expects.
         box = triclinic_box()
-        assert np.allclose(encode_box(box)["h"], box.h.reshape(-1, order="C"))
+        assert np.allclose(encode_box(box)["h"], box.matrix.reshape(-1, order="C"))
 
     def test_pbc_survives(self):
-        box = mp.Box(np.eye(3) * 10, pbc=np.asarray([True, False, True]))
+        box = mp.Box(
+            mp.core.Cell.matrix(np.eye(3) * 10), pbc=np.asarray([True, False, True])
+        )
         restored = decode_box(encode_box(box))
         assert np.asarray(restored.pbc).tolist() == [True, False, True]
 
     def test_frame_carries_its_own_box(self):
         frame = mp.Frame(blocks={"atoms": {"x": [0.0]}})
-        frame.box = mp.Box.cube(10.0)
+        frame.box = mp.Box(mp.core.Cell.lengths([10.0, 10.0, 10.0]))
         assert roundtrip(frame).box is not None
 
 
