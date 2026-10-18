@@ -11,10 +11,11 @@ name: release
 # upload jobs gate on ci-context's `publish` (a `v*` tag pushed to MolCrafts),
 # wait for every build, and enter the environment named after their registry:
 # npm, pypi, vscode-marketplace (VSCE_PAT, OVSX_PAT).
-on:
+'on':
   push:
-    tags: ["v*"]
-  workflow_dispatch:
+    tags:
+    - v*
+  workflow_dispatch: null
 
 permissions:
   contents: read
@@ -28,26 +29,19 @@ concurrency:
 jobs:
   # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
   context:
+    permissions:
+      contents: read
     name: release / context
-    runs-on: ubuntu-latest
-    outputs:
-      tier: ${{ steps.context.outputs.tier }}
-      upstream: ${{ steps.context.outputs.upstream }}
-      integration: ${{ steps.context.outputs.integration }}
-      skip-pr: ${{ steps.context.outputs.skip-pr }}
-      publish: ${{ steps.context.outputs.publish }}
-    steps:
-      - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+    uses: MolCrafts/molcrafts-ci/.github/workflows/context.yml@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
 
   npm-build:
     name: release / npm-build
     needs: context
-    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    if: needs.context.outputs.skip-pr != 'true' && (github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
         with:
           node-version: "24"
       - run: npm run check:versions
@@ -56,27 +50,37 @@ jobs:
           npm run build:stage
           npm run build:stage-viewer
           npm run build:sketch-viewer
-          npm run check:pack
           npm run build:sketch
           npm run build:plugin
+          npm run check:pack
       - name: Pack core, engines, viewers, plugin SDK and the umbrella
         run: |
           set -euo pipefail
+          mkdir -p npm-dist
+          i=0
           for w in @molcrafts/molvis-core @molcrafts/molvis-stage @molcrafts/molvis-stage-viewer \
                    @molcrafts/molvis-sketch @molcrafts/molvis-sketch-viewer @molcrafts/molvis-plugin; do
-            npm pack --dry-run -w "$w"
+            i=$((i + 1))
+            mkdir -p "npm-dist/$i"
+            npm pack -w "$w" --pack-destination "npm-dist/$i"
           done
-          npm pack --dry-run
+          mkdir -p npm-dist/7
+          npm pack --pack-destination npm-dist/7
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-dist
+          path: npm-dist/
+          if-no-files-found: error
 
   python-build:
     name: release / python-build
     needs: context
-    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    if: needs.context.outputs.skip-pr != 'true' && (github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
       # The page bundle goes into python/src/molvis/dist/; the build backend
       # then finds it fresh and does not rebuild it.
       - run: npm run build:page
@@ -90,11 +94,11 @@ jobs:
   vsc-ext-build:
     name: release / vsc-ext-build
     needs: context
-    if: github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true'
+    if: needs.context.outputs.skip-pr != 'true' && (github.event_name == 'workflow_dispatch' || needs.context.outputs.upstream == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
       - run: npm run build:vsc-ext
       - working-directory: vsc-ext
         run: npx vsce package --no-dependencies -o molvis.vsix
@@ -104,8 +108,7 @@ jobs:
           path: vsc-ext/molvis.vsix
           if-no-files-found: error
 
-  # npm publishes from the workspaces, so this job builds them again (the
-  # same steps as npm-build) rather than publishing tarballs.
+  # Publish the exact tarballs produced above, in dependency order.
   npm:
     name: release / npm
     needs: [context, npm-build, python-build, vsc-ext-build]
@@ -122,28 +125,23 @@ jobs:
       NODE_AUTH_TOKEN: ""
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
         with:
           node-version: "24"
+          install: "false"
           registry-url: https://registry.npmjs.org
-      # The umbrella re-exports the plugin SDK, so every workspace is on the
-      # registry before it.
-      - run: |
-          npm run build:core
-          npm run build:stage
-          npm run build:stage-viewer
-          npm run build:sketch-viewer
-          npm run check:pack
-          npm run build:sketch
-          npm run build:plugin
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm-dist
+          path: npm-dist/
       - name: Publish core, engines, viewers, plugin SDK, then the umbrella
         run: |
           set -euo pipefail
-          for w in @molcrafts/molvis-core @molcrafts/molvis-stage @molcrafts/molvis-stage-viewer \
-                   @molcrafts/molvis-sketch @molcrafts/molvis-sketch-viewer @molcrafts/molvis-plugin; do
-            npm publish --provenance --access public -w "$w"
+          for i in 1 2 3 4 5 6 7; do
+            packages=(npm-dist/"$i"/*.tgz)
+            [ "${#packages[@]}" -eq 1 ] && [ -f "${packages[0]}" ]
+            npm publish "${packages[0]}" --provenance --access public
           done
-          npm publish --provenance --access public
 
   python:
     name: release / python

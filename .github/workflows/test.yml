@@ -1,8 +1,8 @@
 name: test
 
 # The tests a laptop cannot run: every OS. The local hooks run every
-# molcrafts-ci `node-python` gate once (pre-commit: workflows, biome, guards,
-# typecheck, test-core; pre-push: js, vsc-ext, python, build, docs), so this
+# molcrafts-ci `node-python` gate once (pre-commit: workflows, biome, guards;
+# pre-push: build, typecheck, js, vsc-ext, python, docs), so this
 # workflow repeats none of the static checks, the Node suites or the bundle
 # builds; none of them depends on the OS. The Python suite runs once per OS
 # against the partners .github/partners.env names, in two tiers (`test /
@@ -10,18 +10,21 @@ name: test
 #
 #   fast  a feature-branch push to MolCrafts: Linux.
 #   full  every push to a fork (proven before its pull request), dev, master
-#         and master on MolCrafts, pull requests and dispatches: Linux, macOS
+#         on MolCrafts, pull requests and dispatches: Linux, macOS
 #         and Windows.
 #
 # The strict docs build runs in the Linux leg, after its tests, in the same
 # environment: the molrs it imports is the one that leg built and tested, not
 # a second compile.
-on:
+'on':
   push:
-    branches: ["**"]
+    branches:
+    - '**'
   pull_request:
-    branches: [dev, master]
-  workflow_dispatch:
+    branches:
+    - dev
+    - master
+  workflow_dispatch: null
 
 permissions:
   contents: read
@@ -46,17 +49,10 @@ env:
 jobs:
   # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
   context:
+    permissions:
+      contents: read
     name: test / context
-    runs-on: ubuntu-latest
-    outputs:
-      tier: ${{ steps.context.outputs.tier }}
-      upstream: ${{ steps.context.outputs.upstream }}
-      integration: ${{ steps.context.outputs.integration }}
-      skip-pr: ${{ steps.context.outputs.skip-pr }}
-      publish: ${{ steps.context.outputs.publish }}
-    steps:
-      - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+    uses: MolCrafts/molcrafts-ci/.github/workflows/context.yml@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
 
   python:
     name: test / python (${{ matrix.os }})
@@ -69,10 +65,10 @@ jobs:
         os: ${{ fromJSON(needs.context.outputs.tier == 'full' && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
-      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+      - uses: MolCrafts/molcrafts-ci/actions/setup-partners@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
       # molrs/rust-toolchain.toml pins the compiler that builds the molrs wheel.
-      - uses: MolCrafts/molcrafts-ci/actions/setup-rust@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+      - uses: MolCrafts/molcrafts-ci/actions/setup-rust@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
         with:
           toolchain-dir: ../molrs
           cache: molrs-python

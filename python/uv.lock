@@ -435,6 +435,7 @@ requires-dist = [
     { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.0,<2.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'doc'" },
     { name = "molcrafts-zensical-theme", marker = "extra == 'doc'", specifier = ">=0.2.3" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13" },
     { name = "numpy", specifier = ">=2.0" },
     { name = "numpy", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'" },
