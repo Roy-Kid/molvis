@@ -50,14 +50,8 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "::error::tag $GITHUB_REF_NAME is not v$version"; exit 1; }
-      - run: |
-          npm run build:core
-          npm run build:stage
-          npm run build:stage-viewer
-          npm run build:sketch-viewer
-          npm run build:sketch
-          npm run build:plugin
-          npm run check:pack
+      - run: npm run build:packages
+      - run: npm run check:pack
       - name: Pack core, engines, viewers, plugin SDK and the umbrella
         run: |
           set -euo pipefail
@@ -104,7 +98,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
-      - run: npm run build:vsc-ext
+      # vsce invokes vscode:prepublish, which builds the extension once.
+      - run: npm run build:engines
       - working-directory: vsc-ext
         run: npx vsce package --no-dependencies -o molvis.vsix
       - uses: actions/upload-artifact@v7
