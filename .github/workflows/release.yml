@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: read
     name: release / context
-    uses: MolCrafts/molcrafts-ci/.github/workflows/context.yml@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+    uses: MolCrafts/molcrafts-ci/.github/workflows/context.yml@b2c4441faa0743987a82bbc53d7ff9d7c2f974aa
 
   npm-build:
     name: release / npm-build
@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@b2c4441faa0743987a82bbc53d7ff9d7c2f974aa
         with:
           node-version: "24"
       - run: npm run check:versions
@@ -78,8 +78,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@b2c4441faa0743987a82bbc53d7ff9d7c2f974aa
+      - uses: MolCrafts/molcrafts-ci/actions/setup-python@b2c4441faa0743987a82bbc53d7ff9d7c2f974aa
       # The page bundle goes into python/src/molvis/dist/; the build backend
       # then finds it fresh and does not rebuild it.
       - run: npm run build:page
@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@b2c4441faa0743987a82bbc53d7ff9d7c2f974aa
       # vsce invokes vscode:prepublish, which builds the extension once.
       - run: npm run build:engines
       - working-directory: vsc-ext
@@ -125,7 +125,7 @@ jobs:
       NODE_AUTH_TOKEN: ""
     steps:
       - uses: actions/checkout@v7
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@2c51eb289dccaeb9a0cb9e32d7ac1412b5d0a229
+      - uses: MolCrafts/molcrafts-ci/actions/setup-node@b2c4441faa0743987a82bbc53d7ff9d7c2f974aa
         with:
           node-version: "24"
           install: "false"
