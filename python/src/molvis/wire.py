@@ -381,7 +381,7 @@ def _scalar_meta(metadata: Any) -> dict[str, float]:
 def encode_box(box: Any, *, carrier: Any = None) -> dict[str, Any]:
     """Serialize a :class:`molpy.Box`.
 
-    ``h`` is ``Box.h`` flattened row-major — the matrix whose *columns* are
+    ``h`` is ``Box.matrix`` flattened row-major — the matrix whose *columns* are
     the lattice vectors, which is what molrs ``new Box(h, …)`` consumes. The
     array is already C-contiguous, so this is a reshape, not a transpose.
     """
@@ -530,7 +530,7 @@ def decode_box(payload: Any, buffers: Sequence[Any] = ()) -> mp.Box:
     pbc = payload.get("pbc")
     if not isinstance(pbc, Sequence) or len(pbc) != 3:
         raise WireError("box.pbc must be three booleans")
-    # molpy.Box(h, origin, pbc) — h has lattice vectors as columns, so the
+    # The native Cell matrix has lattice vectors as columns, so the
     # row-major wire array reshapes straight into it.
     return mp.Box(
         mp.core.Cell.matrix(h.reshape(3, 3)),
