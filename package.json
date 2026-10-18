@@ -73,7 +73,7 @@
     "check:dev-ready": "L=$(mktemp); FORCE_COLOR=1 npm run dev:page > \"$L\" 2>&1 & P=$!; for i in $(seq 1 72); do sleep 5; grep -q \"Local:\" \"$L\" && break; done; if grep -q \"Local:\" \"$L\"; then R=0; else echo \"dev never reported ready — a service readyWhen pattern likely does not match its colored output:\"; tail -20 \"$L\"; R=1; fi; kill -INT $P 2>/dev/null; sleep 3; kill -9 $P 2>/dev/null; exit $R",
     "dev:python": "npm run dev:python -w page",
     "build:core": "npm run build -w @molcrafts/molvis-core",
-    "build": "npm run build:engines && npm run build:stage && npm run build:stage-viewer && npm run build:sketch-viewer && npm run build -w page && rm -rf python/src/molvis/dist && mkdir -p python/src/molvis/dist && cp -r page/dist/. python/src/molvis/dist/ && npm run build -w vsc-ext",
+    "build": "wireit",
     "build:stage": "npm run build -w @molcrafts/molvis-stage",
     "build:stage-viewer": "npm run build -w @molcrafts/molvis-stage-viewer",
     "build:sketch": "npm run build -w @molcrafts/molvis-sketch",
@@ -132,5 +132,18 @@
     "@rstest/core": "^0.11.6",
     "@molcrafts/ui-tokens": "0.1.0-alpha.1"
   },
-  "packageManager": "npm@11.16.0"
+  "packageManager": "npm@11.16.0",
+  "wireit": {
+    "build": {
+      "command": "npm run build -w page && rm -rf python/src/molvis/dist && mkdir -p python/src/molvis/dist && cp -r page/dist/. python/src/molvis/dist/ && npm run build -w vsc-ext",
+      "dependencies": [
+        "./core:build",
+        "./stage:build",
+        "./sketch:build",
+        "./plugin:build",
+        "./stage-viewer:build",
+        "./sketch-viewer:build"
+      ]
+    }
+  }
 }
