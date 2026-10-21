@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 /**
  * Representation-level frame draw paths extracted from {@link Artist}.
  * Keeps atom/bond GPU upload logic out of the Artist façade so new
@@ -44,8 +45,8 @@ export interface RepresentationDrawHost {
 }
 
 function readElements(atomsBlock: Block): string[] | undefined {
-  return atomsBlock.has("element") && atomsBlock.dtype("element") === "string"
-    ? (atomsBlock.copy("element") as string[])
+  return new AtomSpecies(atomsBlock).has()
+    ? new AtomSpecies(atomsBlock).symbols()
     : undefined;
 }
 

@@ -1,3 +1,4 @@
+import { AtomSpecies, PeriodicTableElements } from "@molcrafts/molvis-core";
 /**
  * Read a molrs `compute` call's data off frames.
  *
@@ -239,15 +240,18 @@ export class FrameInputs {
     const n = atomCount(this.frame);
     if (this.params.use_atom_radii !== true) return new Float64Array(n).fill(1);
     const atoms = this.frame.get("atoms");
-    if (!atoms.has("element")) {
+    if (!new AtomSpecies(atoms).has()) {
       throw new AnalysisUnsupportedError(
         this.definition.id,
         "covalent radii need an `element` column",
       );
     }
-    const elements = atoms.copy("element") as string[];
+    const elements = new AtomSpecies(atoms).symbols();
     return Float64Array.from(elements, (element) => {
-      const radius = covalentRadius(element);
+      const radius = covalentRadius(
+        PeriodicTableElements.find((entry) => entry.symbol === element)
+          ?.atomicNumber ?? 0,
+      );
       if (radius === undefined) {
         throw new AnalysisUnsupportedError(
           this.definition.id,
@@ -367,7 +371,32 @@ export class TrajectoryInputs {
    * @throws AnalysisUnsupportedError for a per-frame source in a trajectory
    *   compute
    */
-  data(params: ResolvedParams): Record<string, unknown> {
+  data(
+    params: ResolvedParams,
+  ): Record<string, unknown> | Record<string, unknown>[] {
+    if (this.definition.form === "Frames") {
+      return Array.from({ length: this.count }, (_, index) => {
+        const data: Record<string, unknown> = {};
+        for (const input of this.definition.inputs) {
+          if (input.source === "positionTrajectory") {
+            data[input.name] = {
+              dim: [this.width, 3],
+              data: this.positions[index],
+            };
+          } else if (input.source === "velocitySeries") {
+            data[input.name] = this.velocities[index];
+          } else if (input.source === "timestep") {
+            data[input.name] = numberParam(params, "dt");
+          } else if (!input.optional) {
+            throw new AnalysisUnsupportedError(
+              this.definition.id,
+              `unsupported frame input ${input.name}`,
+            );
+          }
+        }
+        return data;
+      });
+    }
     const out: Record<string, unknown> = {};
     for (const input of this.definition.inputs) {
       switch (input.source) {
@@ -400,10 +429,12 @@ export class TrajectoryInputs {
   private velocityAcf(params: ResolvedParams): Float64Array {
     const vacf = new Vacf(numberParam(params, "max_lag"));
     try {
-      const result = vacf.compute({
-        velocities: stack(this.velocities, [this.width * 3]),
-        dt: numberParam(params, "dt"),
-      });
+      const result = vacf.compute(
+        this.velocities.map((a) => ({
+          a,
+          dt: numberParam(params, "dt"),
+        })),
+      );
       try {
         const values = result.toJSON().values as { data: number[] };
         return Float64Array.from(values.data);

@@ -12,12 +12,12 @@ name: nightly
 #                     `pypi` is for v* tags only.
 #
 # GitHub only schedules the copy of this file on the default branch
-# (master). That copy checks out `dev`, which is what gets built. Keep the
-# two copies the same.
-on:
+# (master). Shared context resolves `dev` once; every job checks out that
+# same immutable commit.
+'on':
   schedule:
-    - cron: "41 2 * * *"
-  workflow_dispatch:
+  - cron: 41 2 * * *
+  workflow_dispatch: null
 
 permissions:
   contents: read
@@ -31,44 +31,40 @@ concurrency:
 jobs:
   # Where this run happens, decided once: MolCrafts/molcrafts-ci/actions/ci-context.
   context:
-    name: nightly / context
-    runs-on: ubuntu-latest
-    outputs:
-      tier: ${{ steps.context.outputs.tier }}
-      upstream: ${{ steps.context.outputs.upstream }}
-      integration: ${{ steps.context.outputs.integration }}
-      skip-pr: ${{ steps.context.outputs.skip-pr }}
-      publish: ${{ steps.context.outputs.publish }}
-    steps:
-      - id: context
-        uses: MolCrafts/molcrafts-ci/actions/ci-context@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
+    permissions:
+      contents: read
+    name: nightly
+    uses: MolCrafts/molcrafts-ci/.github/workflows/context.yml@3b8332e6c8f2402618d21126f7fa4d50f4acb6dc
 
   prepare:
     name: nightly / prepare
     needs: context
-    if: needs.context.outputs.upstream == 'true'
+    if: needs.context.outputs.nightly == 'true'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
       changed: ${{ steps.v.outputs.changed }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: dev
-          fetch-depth: 0
-      - id: v
-        run: |
-          set -euo pipefail
-          BASE=$(sed -n 's/^version = "\(.*\)"/\1/p' python/pyproject.toml | head -n1)
-          echo "version=${BASE}.dev$(date -u +%Y%m%d%H%M)" | tee -a "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = workflow_dispatch ] || [ -n "$(git log -1 --since='25 hours ago' --format=%H)" ]; then
-            echo "changed=true" | tee -a "$GITHUB_OUTPUT"
-          fi
-
+    - uses: actions/checkout@v7
+      with:
+        ref: ${{ needs.context.outputs.source-ref }}
+    - id: v
+      run: |
+        set -euo pipefail
+        BASE=$(sed -n 's/^version = "\(.*\)"/\1/p' python/pyproject.toml | head -n1)
+        echo "version=${BASE}.dev$(date -u +%Y%m%d%H%M)" | tee -a "$GITHUB_OUTPUT"
+        if [ "${{ github.event_name }}" = workflow_dispatch ] || [ -n "$(git log -1 --since='25 hours ago' --format=%H)" ]; then
+          echo "changed=true" | tee -a "$GITHUB_OUTPUT"
+        fi
   page:
+    concurrency:
+      group: nightly-page-publication
+      cancel-in-progress: false
     name: nightly / page
-    needs: prepare
-    if: needs.prepare.outputs.changed == 'true'
+    needs:
+    - context
+    - prepare
+    if: needs.context.outputs.nightly == 'true' && (needs.prepare.outputs.changed == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,37 +72,37 @@ jobs:
     env:
       MOLVIS_ASSET_BASE: /nightly/molvis/
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: dev
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
-      - run: npm run build:page
-      - run: grep -F 'window.__MOLVIS_ASSET_BASE__="/nightly/molvis/"' page/dist/index.html
-      - uses: actions/upload-artifact@v7
-        with:
-          name: molvis-nightly-page
-          path: page/dist
-      - id: cloudflare
-        env:
-          API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -n "$API_TOKEN" ] && [ -n "$ACCOUNT_ID" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::Cloudflare deploy skipped: set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID."
-          fi
-      - if: steps.cloudflare.outputs.configured == 'true'
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy page/dist --project-name=molvis --branch=nightly
+    - uses: actions/checkout@v7
+      with:
+        ref: ${{ needs.context.outputs.source-ref }}
+    - uses: MolCrafts/molcrafts-ci/actions/setup-node@3b8332e6c8f2402618d21126f7fa4d50f4acb6dc
+    - run: npm run build:page
+    - run: grep -F 'window.__MOLVIS_ASSET_BASE__="/nightly/molvis/"' page/dist/index.html
+    - uses: actions/upload-artifact@v7
+      with:
+        name: molvis-nightly-page
+        path: page/dist
+    - id: cloudflare
+      env:
+        API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      run: |
+        if [ -n "$API_TOKEN" ] && [ -n "$ACCOUNT_ID" ]; then
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::Cloudflare deploy skipped: set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID."
+        fi
+    - if: steps.cloudflare.outputs.configured == 'true'
+      uses: cloudflare/wrangler-action@v4
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        command: pages deploy page/dist --project-name=molvis --branch=nightly
 
   python:
     name: nightly / python
     needs: [context, prepare]
-    if: needs.context.outputs.upstream == 'true' && needs.prepare.outputs.changed == 'true'
+    if: needs.context.outputs.nightly == 'true' && (needs.prepare.outputs.changed == 'true')
     runs-on: ubuntu-latest
     environment:
       name: pypi-nightly
@@ -117,29 +113,29 @@ jobs:
     env:
       MOLVIS_ASSET_BASE: /nightly/molvis/
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: dev
-      - uses: MolCrafts/molcrafts-ci/actions/setup-node@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
-      - uses: MolCrafts/molcrafts-ci/actions/setup-python@4e5a51d0c60518e028ed118abbd1adb4a04d28ae
-      - run: npm run build:page
-      - name: Stamp the nightly distribution
-        env:
-          DEV: ${{ needs.prepare.outputs.version }}
-        run: |
-          python - "$DEV" <<'PY'
-          import pathlib, re, sys
-          dev = sys.argv[1]
-          p = pathlib.Path("python/pyproject.toml")
-          t = p.read_text(encoding="utf-8")
-          t = re.sub(r'^name\s*=\s*"molcrafts-molvis"', 'name = "molcrafts-molvis-nightly"', t, count=1, flags=re.M)
-          t = re.sub(r'^version\s*=\s*".*?"', f'version = "{dev}"', t, count=1, flags=re.M)
-          p.write_text(t, encoding="utf-8")
-          PY
-      - run: uv build --project python --out-dir python/dist
-        env:
-          MOLVIS_SKIP_UI_BUILD: "1"
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/dist/
-          skip-existing: true
+    - uses: actions/checkout@v7
+      with:
+        ref: ${{ needs.context.outputs.source-ref }}
+    - uses: MolCrafts/molcrafts-ci/actions/setup-node@3b8332e6c8f2402618d21126f7fa4d50f4acb6dc
+    - uses: MolCrafts/molcrafts-ci/actions/setup-python@3b8332e6c8f2402618d21126f7fa4d50f4acb6dc
+    - run: npm run build:page
+    - name: Stamp the nightly distribution
+      env:
+        DEV: ${{ needs.prepare.outputs.version }}
+      run: |
+        python - "$DEV" <<'PY'
+        import pathlib, re, sys
+        dev = sys.argv[1]
+        p = pathlib.Path("python/pyproject.toml")
+        t = p.read_text(encoding="utf-8")
+        t = re.sub(r'^name\s*=\s*"molcrafts-molvis"', 'name = "molcrafts-molvis-nightly"', t, count=1, flags=re.M)
+        t = re.sub(r'^version\s*=\s*".*?"', f'version = "{dev}"', t, count=1, flags=re.M)
+        p.write_text(t, encoding="utf-8")
+        PY
+    - run: uv build --project python --out-dir python/dist
+      env:
+        MOLVIS_SKIP_UI_BUILD: '1'
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: python/dist/
+        skip-existing: true

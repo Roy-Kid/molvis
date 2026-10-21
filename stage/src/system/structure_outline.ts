@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 
 /**
@@ -63,10 +64,9 @@ export function buildStructureOutline(
     atoms.has("name") && atoms.dtype("name") === "string"
       ? (atoms.copy("name") as string[])
       : undefined;
-  const elements =
-    atoms.has("element") && atoms.dtype("element") === "string"
-      ? (atoms.copy("element") as string[])
-      : undefined;
+  const elements = new AtomSpecies(atoms).has()
+    ? new AtomSpecies(atoms).symbols()
+    : undefined;
 
   if (!chainIds && !resIds) {
     const children: StructureOutlineNode[] = [];

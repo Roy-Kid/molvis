@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
@@ -541,12 +541,10 @@ function makeInputFrame(
 }
 
 function orthoCell(): Box {
-  return Box.ortho(
-    Float64Array.from(BOX_LENGTHS),
+  return new Box(
+    Cell.lengths(Float64Array.from(BOX_LENGTHS)),
     Float64Array.from(BOX_ORIGIN),
-    true,
-    true,
-    true,
+    [true, true, true],
   );
 }
 
@@ -554,7 +552,11 @@ function orthoCell(): Box {
 function triclinicCell(): Box {
   // a = (8,0,0), b = (2.5,5,0), c = (0,0,6) — xy tilt 2.5 Å.
   const h = Float64Array.from([8, 2.5, 0, 0, 5, 0, 0, 0, 6]);
-  return new Box(h, Float64Array.from(BOX_ORIGIN), true, true, true);
+  return new Box(Cell.matrix(h), Float64Array.from(BOX_ORIGIN), [
+    true,
+    true,
+    true,
+  ]);
 }
 
 /** Primary memory source whose trajectory IS the system trajectory. */

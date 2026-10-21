@@ -97,13 +97,47 @@ describe("writer registry", () => {
 // format reader that owns the bytes.
 
 describe("text writer multi-format emit", () => {
+  it("does not invent species from GRO atom names", () => {
+    const source = loadTextTrajectory(WATER_GRO, "in.gro");
+    try {
+      const frame = source.trajectory.get(0);
+      if (!frame) throw new Error("missing GRO frame");
+      expect(() => writeFrame(frame, { format: "xyz" })).toThrow(/element/);
+    } finally {
+      source.dispose();
+    }
+  });
+
+  it("exports canonical species without changing the source symbols", () => {
+    const frame = new Frame();
+    try {
+      const atoms = frame.createBlock("atoms");
+      atoms.set("atomic_number", new BigUint64Array([8n]));
+      atoms.set("element", ["C"]);
+      atoms.set("x", new Float64Array([0]));
+      atoms.set("y", new Float64Array([0]));
+      atoms.set("z", new Float64Array([0]));
+      const payload = writeFrame(frame, { format: "xyz" });
+      expect(payload.content).toMatch(/O\s+0/);
+      expect((frame.get("atoms").copy("element") as string[])[0]).toBe("C");
+    } finally {
+      frame.free();
+    }
+  });
+
   it("can emit XYZ, PDB and CIF for the same frame", () => {
     for (const [format, ext] of [
       ["xyz", "xyz"],
       ["pdb", "pdb"],
       ["cif", "cif"],
     ] as const) {
-      const { nAtoms } = roundTripX(WATER_GRO, "in.gro", format, ext, false);
+      const { nAtoms } = roundTripX(
+        "3\nwater\nO 0 0 0\nH 1 0 0\nH 0 1 0\n",
+        "in.xyz",
+        format,
+        ext,
+        false,
+      );
       expect(nAtoms).toBe(3);
     }
   });
@@ -150,6 +184,8 @@ function chargedSourceFrame(): Frame {
   block.set("y", new Float64Array([0, 0, 1]));
   block.set("z", new Float64Array([0, 0, 0]));
   block.set("element", ["O", "H", "H"]);
+  block.set("name", ["O1", "H1", "H2"]);
+  block.set("type", ["O.3", "H", "H"]);
   block.set("charge", new Float64Array([0.5, -0.25, 0.125]));
   frame.set("atoms", block);
   return frame;

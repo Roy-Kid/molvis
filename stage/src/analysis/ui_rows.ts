@@ -232,6 +232,7 @@ export const ANALYSIS_ROWS: readonly AnalysisRow[] = [
   {
     id: "msd.mean_squared_displacement",
     spec: "Msd",
+    sources: { a: "positionTrajectory" },
     category: "msd",
     label: "Mean squared displacement",
     resultKind: "trajectorySeries",
@@ -391,6 +392,7 @@ export const ANALYSIS_ROWS: readonly AnalysisRow[] = [
   {
     id: "transport.vacf",
     spec: "Vacf",
+    sources: { a: "velocitySeries" },
     category: "transport",
     label: "Vacf",
     resultKind: "lineSeries",

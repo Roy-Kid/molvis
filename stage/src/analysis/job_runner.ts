@@ -14,7 +14,7 @@
  * frame) — take the entry-level route in {@link TRAJECTORY_ENTRY_RUNNERS}.
  */
 
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { safeFree } from "../utils/yield_ui";
 import { MSD_ANALYSIS_ID, RDF_ANALYSIS_ID } from "./analysis_ids";
 import type { PairRepresentation } from "./rdf_params";
@@ -168,13 +168,15 @@ class SnapshotTrajectory implements AnalysisTrajectorySource {
         : undefined;
       frame.box = tilts
         ? new Box(
-            SnapshotTrajectory.hMatrix(snapshot.boxLengths, tilts),
+            Cell.matrix(SnapshotTrajectory.hMatrix(snapshot.boxLengths, tilts)),
             origin,
-            true,
-            true,
-            true,
+            [true, true, true],
           )
-        : Box.ortho(snapshot.boxLengths, origin, true, true, true);
+        : new Box(Cell.lengths(snapshot.boxLengths), origin, [
+            true,
+            true,
+            true,
+          ]);
     }
     return frame;
   }

@@ -31,8 +31,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Sequence
+from typing import TYPE_CHECKING
 
 import molpy as mp
 
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 __all__ = ["main"]
 
 # Single-frame readers keyed by lowercased file extension.
-_READERS: dict[str, Callable[[Path], "Frame"]] = {
+_READERS: dict[str, Callable[[Path], Frame]] = {
     ".pdb": mp.io.read_pdb,
     ".ent": mp.io.read_pdb,
     ".xyz": mp.io.read_xyz,
@@ -59,12 +60,12 @@ _READERS: dict[str, Callable[[Path], "Frame"]] = {
 # with the caller-supplied ``--atom-style``.
 _LAMMPS_DATA_EXT = frozenset({".data", ".lmp", ".lammps", ".lammpsdata"})
 
-# Trajectory formats → a molrs lazy reader exposing ``read_all()``.
+# Trajectory formats → an iterable molrs lazy reader.
 _TRAJECTORY_READERS: dict[str, Callable[[Path], object]] = {
-    ".lammpstrj": mp.io.read_lammps_dump_trajectory,
-    ".dump": mp.io.read_lammps_dump_trajectory,
-    ".xyz": mp.io.read_xyz_trajectory,
-    ".extxyz": mp.io.read_xyz_trajectory,
+    ".lammpstrj": mp.io.lammps.LammpsDumpReader,
+    ".dump": mp.io.lammps.LammpsDumpReader,
+    ".xyz": mp.io.xyz.XyzReader,
+    ".extxyz": mp.io.xyz.XyzReader,
 }
 
 # mrec trajectory stores are directories (``growth.mrec/``). Dispatched
@@ -93,7 +94,7 @@ def _is_mrec_store(path: Path) -> bool:
     return path.name.lower().endswith(_MREC_DIR_SUFFIX)
 
 
-def _load_single_frame(path: Path, atom_style: str) -> "Frame":
+def _load_single_frame(path: Path, atom_style: str) -> Frame:
     """Read ``path`` as a single static frame."""
     ext = path.suffix.lower()
     if ext in _LAMMPS_DATA_EXT:
@@ -107,7 +108,7 @@ def _load_single_frame(path: Path, atom_style: str) -> "Frame":
     return reader(path)
 
 
-def _load_trajectory(path: Path) -> list["Frame"]:
+def _load_trajectory(path: Path) -> list[Frame]:
     """Read ``path`` as a multi-frame trajectory."""
     ext = path.suffix.lower()
     reader_factory = _TRAJECTORY_READERS.get(ext)
@@ -118,7 +119,7 @@ def _load_trajectory(path: Path) -> list["Frame"]:
             f"trajectory formats: {supported}"
         )
     reader = reader_factory(path)
-    return list(reader.read_all())
+    return list(reader)
 
 
 def _mrec_stride_indices(n: int, every: int) -> list[int]:
@@ -134,7 +135,7 @@ def _mrec_stride_indices(n: int, every: int) -> list[int]:
 
 def _load_mrec_trajectory(
     path: Path, every: int = 0
-) -> tuple[list["Frame"], list[int] | None, "Frame | None"]:
+) -> tuple[list[Frame], list[int] | None, Frame | None]:
     """Read a molpy ``*.mrec`` trajectory store → ``(frames, steps)``.
 
     Frames may be ragged (per-frame atom counts differ — e.g. a chain-growth
@@ -142,19 +143,14 @@ def _load_mrec_trajectory(
     a large store down to ≤ ``_MREC_TARGET_FRAMES`` frames; any positive value
     keeps every ``every``-th frame (the last frame is always kept).
 
-    Dispatches on :func:`molpy.io.mrec.section_names`: a ``trajectory``
-    group goes through :func:`molpy.io.read_mrec_trajectory` (so ``step``
-    rides along); a snapshot ``frame`` group goes through
-    :func:`molpy.io.read_mrec_frame`. :class:`~molpy.io.mrec.MrecReader` is
-    the lazy one-frame cursor — this door needs ``step``, so the trajectory
-    path stays eager.
+    MrecFile reads the record sections; MrecReader decodes only the selected
+    trajectory frames and exposes their step labels.
     """
-    from molpy.io.mrec import section_names
-
-    secs = section_names(path)
+    record = mp.io.mrec.MrecFile(path)
+    secs = record.sections()
     overlay: mp.Frame | None = None
     if "trajectory" in secs:
-        traj = mp.io.read_mrec_trajectory(path)
+        traj = mp.io.mrec.MrecReader(path)
         n = len(traj)
         if n == 0:
             raise ValueError(f"{path.name} holds no frames")
@@ -163,10 +159,10 @@ def _load_mrec_trajectory(
         raw_step = getattr(traj, "step", None)
         steps = None if raw_step is None else [int(raw_step[i]) for i in indices]
         if "frame" in secs:
-            overlay = mp.io.read_mrec_frame(path)
+            overlay = record.frame()
         return frames, steps, overlay
     if "frame" in secs:
-        return [mp.io.read_mrec_frame(path)], None, None
+        return [record.frame()], None, None
     raise ValueError(
         f"{path.name} has no frame or trajectory section (sections: {sorted(secs)})"
     )
@@ -229,7 +225,9 @@ def _cmd_open(args: argparse.Namespace) -> int:
         print(f"molvis: failed to read {path.name}: {exc}", file=log)
         return 1
 
-    transport = mv.WebSocketTransport(open_browser=output is None and not args.no_browser)
+    transport = mv.WebSocketTransport(
+        open_browser=output is None and not args.no_browser
+    )
     scene = mv.Molvis(name=args.name, transport=transport)
 
     # ``draw_frame`` / ``set_trajectory`` block until a page connects and
@@ -340,7 +338,9 @@ def _cmd_serve(_args: argparse.Namespace) -> int:
     pipe = KernelPipe()
     path = kernel_file()
     print(f"molvis: kernel {path}", flush=True)
-    print("molvis: send a cell with `molvis exec`. Ctrl+C stops the kernel.", flush=True)
+    print(
+        "molvis: send a cell with `molvis exec`. Ctrl+C stops the kernel.", flush=True
+    )
     try:
         pipe.serve(path)
     except KeyboardInterrupt:
@@ -361,9 +361,7 @@ def _cmd_sessions(_args: argparse.Namespace) -> int:
 
 def _cmd_close(args: argparse.Namespace) -> int:
     """Close one viewer. ``surface`` is null when the flag is omitted."""
-    return _kernel_call(
-        {"op": "close", "name": args.name, "surface": args.surface}
-    )
+    return _kernel_call({"op": "close", "name": args.name, "surface": args.surface})
 
 
 def _add_stage_arguments(parser: argparse.ArgumentParser) -> None:

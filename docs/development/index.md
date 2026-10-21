@@ -66,3 +66,25 @@ layer cheatsheet.
   surface.
 - [MolVis on GitHub](https://github.com/molcrafts/molvis) — source,
   issues, and release history.
+
+## Working against molrs and molpy
+
+Python uses the sibling checkouts configured in `python/pyproject.toml`
+(`../molrs/molrs-python`, `../molpy`), pinned in CI by `.github/partners.env`.
+TypeScript builds against the published `@molcrafts/molrs` declared in
+`core/package.json`; only `core/` may import it (`npm run check:molrs-gateway`).
+
+```bash
+npm ci
+npm run typecheck
+npm test
+```
+
+Species is `atoms.atomic_number` (uint; 0 is wildcard). MolVis derives display
+symbols from it and accepts raw `element` symbols at file boundaries. Chemistry
+converts symbols with molrs `fillAtomicNumbers`; symbol-based exports convert
+an owned copy with `fillSymbols`. `Box` takes a `Cell`, an origin and a
+three-boolean PBC tuple. Perception modifies an owned copy. Mrec uses
+`new MrecReader(source)` / `new MrecFile(source)`, and streamed frames use
+`readWireFrame(payload, encoding)`. MSD and VACF receive arrays of per-frame
+records rather than a stacked trajectory object.

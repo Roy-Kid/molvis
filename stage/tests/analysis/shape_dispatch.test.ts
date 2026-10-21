@@ -1,5 +1,5 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import type { AnalysisDefinition } from "../../src/analysis/registry";
@@ -22,7 +22,6 @@ import { AnalysisUnsupportedError } from "../../src/analysis/trajectory_runner";
 // ---------------------------------------------------------------------------
 
 const NO_SUBSET: readonly number[] = [];
-const ORIGIN = Float64Array.from([0, 0, 0]);
 
 function definition(id: string): AnalysisDefinition {
   const found = getAnalysisDefinition(id);
@@ -39,7 +38,11 @@ function pairFrame(separation: number): Frame {
   atoms.set("z", Float64Array.from([0, 0]));
   atoms.set("element", ["Ar", "Ar"]);
   frame.set("atoms", atoms);
-  frame.box = Box.cube(20, ORIGIN, true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([20, 20, 20])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 
@@ -76,7 +79,11 @@ function latticeFrame(): Frame {
   bonds.set("atomi", toDomainUint([0, 9, 1, 10, 0]));
   bonds.set("atomj", toDomainUint([9, 18, 10, 19, 1]));
   frame.set("bonds", bonds);
-  frame.box = Box.cube(6, ORIGIN, true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([6, 6, 6])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 

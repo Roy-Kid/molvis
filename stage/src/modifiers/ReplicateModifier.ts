@@ -4,7 +4,7 @@
  */
 
 import { toRowIndex } from "@molcrafts/molvis-core";
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
@@ -240,5 +240,9 @@ function scaleBox(box: Box, nx: number, ny: number, nz: number): Box {
     b[2],
     c[2],
   ]);
-  return new Box(hRow, origin, pbc[0] === 1, pbc[1] === 1, pbc[2] === 1);
+  return new Box(Cell.matrix(hRow), origin, [
+    pbc[0] === 1,
+    pbc[1] === 1,
+    pbc[2] === 1,
+  ]);
 }

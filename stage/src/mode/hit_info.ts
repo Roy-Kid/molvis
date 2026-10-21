@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 /**
  * Hover overlay text for a pick hit.
  *
@@ -98,8 +99,8 @@ function atomSpecies(
   const fromMeta = meta.element.trim();
   if (fromMeta) return fromMeta;
   if (!atoms) return undefined;
-  if (atoms.has("element") && atoms.dtype("element") === "string") {
-    const el = String((atoms.copy("element") as string[])[row] ?? "").trim();
+  if (new AtomSpecies(atoms).has()) {
+    const el = String(new AtomSpecies(atoms).symbols()[row] ?? "").trim();
     if (el) return el;
   }
   if (atoms.has("type") && atoms.dtype("type") === "string") {

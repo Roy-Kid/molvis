@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, test } from "@rstest/core";
 import "../setup_wasm";
 import type { MolvisApp } from "../../src/app";
@@ -51,7 +51,11 @@ describe("AffineTransformationModifier", () => {
     atoms.set("z", new Float64Array([0]));
     atoms.set("element", ["C"]);
     frame.set("atoms", atoms);
-    frame.box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+    frame.box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
+    );
 
     const mod = new AffineTransformationModifier();
     mod.setUniformScale(2);

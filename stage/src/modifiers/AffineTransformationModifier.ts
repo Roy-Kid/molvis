@@ -5,7 +5,7 @@
  * x' = M · x + t  (Å). Matrix is row-major 3×3; translation is (tx, ty, tz).
  */
 
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
@@ -189,5 +189,9 @@ function transformBox(
     m10 * origin[0] + m11 * origin[1] + m12 * origin[2] + t[1],
     m20 * origin[0] + m21 * origin[1] + m22 * origin[2] + t[2],
   ]);
-  return new Box(hRow, oNew, pbc[0] === 1, pbc[1] === 1, pbc[2] === 1);
+  return new Box(Cell.matrix(hRow), oNew, [
+    pbc[0] === 1,
+    pbc[1] === 1,
+    pbc[2] === 1,
+  ]);
 }

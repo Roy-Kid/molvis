@@ -82,6 +82,21 @@ describe("ComputeBondsModifier", () => {
     expect(bondSet(result).size).toBe(0);
   });
 
+  it("covalent criterion uses atomic numbers over stale symbol data", () => {
+    const frame = makeFrame(["H", "H"], [0, 0, 0, 1.5, 0, 0]);
+    frame.get("atoms").set("atomic_number", new BigUint64Array([6n, 6n]));
+    const mod = new ComputeBondsModifier();
+    mod.criterion = "covalent";
+    const result = mod.apply(frame, createDefaultContext(frame, mockApp));
+    try {
+      expect(bondSet(result)).toEqual(new Set(["0-1"]));
+      expect(frame.has("bonds")).toBe(false);
+    } finally {
+      if (result !== frame) result.free();
+      frame.free();
+    }
+  });
+
   it("covalent criterion: bonds a C-C pair at typical bond length", () => {
     // C covalent radius 0.77; (0.77+0.77)*1.2 = 1.848 A threshold.
     const frame = makeFrame(["C", "C"], [0, 0, 0, 1.5, 0, 0]);

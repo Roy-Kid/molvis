@@ -22,7 +22,9 @@ export const Z = "z";
 /** The three Cartesian coordinate keys, in axis order. */
 export const COORDS = [X, Y, Z] as const;
 
-/** Element symbol of an atom (e.g. `"C"`). */
+/** Canonical atomic species (u64, 0 wildcard, 1–118 elements). */
+export const ATOMIC_NUMBER = "atomic_number";
+/** Raw element symbol of an atom (e.g. `"C"`). */
 export const ELEMENT = "element";
 /** Coarse-grained bead type (e.g. `"W"`). */
 export const BEAD_TYPE = "bead_type";

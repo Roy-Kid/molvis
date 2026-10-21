@@ -90,18 +90,15 @@ export class MsdAnalyzer {
       };
     }
 
-    const data = new Float64Array(nFrames * nAtoms * 3);
-    this.rows.forEach((row, t) => {
-      data.set(row, t * nAtoms * 3);
-    });
-
     const msd = new WasmMSD(nFrames - 1, "first", "per_item");
     let series: TimeCorrelation | null = null;
     try {
-      series = msd.compute({
-        positions: { dim: [nFrames, nAtoms, 3], data },
-        dt: 1,
-      });
+      series = msd.compute(
+        this.rows.map((data) => ({
+          a: { dim: [nAtoms, 3], data },
+          dt: 1,
+        })),
+      );
       const { values } = series.toJSON() as {
         values: { dim: number[]; data: number[] };
       };

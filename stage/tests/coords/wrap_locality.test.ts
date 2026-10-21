@@ -3,7 +3,7 @@
  * Draw code (ribbon / bonds) uses MI *delta* on post-gate coordinates —
  * it must not re-apply wrapAtoms itself.
  */
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
@@ -39,12 +39,10 @@ describe("post-gate wrap vs draw MI contract", () => {
   });
 
   it("wrap off leaves coords for draw-time MI to resolve", () => {
-    const box = Box.ortho(
-      new Float64Array([10, 10, 10]),
+    const box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
       new Float64Array([0, 0, 0]),
-      true,
-      true,
-      true,
+      [true, true, true],
     );
     const frame = frameWith(
       [
@@ -62,12 +60,10 @@ describe("post-gate wrap vs draw MI contract", () => {
   });
 
   it("wrap on folds both dimer ends into the cell", () => {
-    const box = Box.ortho(
-      new Float64Array([10, 10, 10]),
+    const box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
       new Float64Array([0, 0, 0]),
-      true,
-      true,
-      true,
+      [true, true, true],
     );
     const frame = frameWith(
       [

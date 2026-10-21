@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
@@ -300,7 +300,11 @@ describe("loader-time extend", () => {
 
   it("copies source WASM handles instead of consuming them", async () => {
     const a = atoms(["C"], 0);
-    a.box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+    a.box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
+    );
     const b = atoms(["O"], 5);
 
     const projected = await composeSources(

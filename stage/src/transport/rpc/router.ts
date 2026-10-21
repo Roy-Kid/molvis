@@ -980,11 +980,11 @@ export class RPCRouter {
           `labels['${name}'] has length ${column.length}, expected ${nFrames}`,
         );
       }
-      // Frame meta is the single source of truth. `setMetaScalar` keeps the
+      // Frame meta is the single source of truth. `setMeta` keeps the
       // value a float64; the old `setMeta(name, String(v))` round-tripped every
       // per-frame descriptor through decimal text and lost precision.
       for (let i = 0; i < column.length; i++) {
-        trajectory.get(i)?.setMetaScalar(name, column[i]);
+        trajectory.get(i)?.setMeta(name, column[i]);
       }
       nLabels++;
     }

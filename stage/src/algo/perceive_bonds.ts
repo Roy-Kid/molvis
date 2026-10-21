@@ -1,4 +1,4 @@
-import { toDomainUint } from "@molcrafts/molvis-core";
+import { AtomSpecies, toDomainUint } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "../io/atom_coords";
 import { PeriodicTable } from "../system/elements";
@@ -6,7 +6,6 @@ import {
   isExactOrigin,
   shouldSkipOriginSentinelsForFrame,
 } from "../system/occupancy";
-import { DType } from "../utils/dtype";
 import { SpatialNeighborQuery } from "./neighbor_list";
 
 /** How a pair of atoms is judged to be bonded. */
@@ -35,7 +34,7 @@ export class PerceiveBonds {
   static hasElementData(frame: Frame): boolean {
     if (!frame.has("atoms")) return false;
     const atoms = frame.get("atoms");
-    return atoms.has("element") && atoms.dtype("element") === DType.String;
+    return new AtomSpecies(atoms).has();
   }
 
   /**
@@ -61,10 +60,9 @@ export class PerceiveBonds {
     const coords = viewAtomCoords(atoms);
     if (!coords) return input;
 
-    const elements =
-      atoms.has("element") && atoms.dtype("element") === DType.String
-        ? (atoms.copy("element") as string[])
-        : undefined;
+    const elements = new AtomSpecies(atoms).has()
+      ? new AtomSpecies(atoms).symbols()
+      : undefined;
     if (this.criterion === "covalent" && !elements) return input;
 
     const radii = elements

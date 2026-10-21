@@ -6,7 +6,10 @@
     "types": ["node", "mocha", "vscode"],
     "paths": {
       "@/*": ["../page/src/*"],
-      "@molcrafts/ui": ["../../molcrafts-ui/packages/ui/src/index.ts"]
+      "@molcrafts/ui": ["../../molcrafts-ui/packages/ui/src/index.ts"],
+      "@molcrafts/ui-tokens": [
+        "../node_modules/@molcrafts/ui-tokens/dist/index.d.ts"
+      ]
     }
   },
   "include": ["src/**/*", "../page/src/**/*.d.ts"],

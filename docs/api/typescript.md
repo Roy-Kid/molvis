@@ -314,15 +314,12 @@ across frames.
 ### `Box`
 
 ```typescript
-import { Box } from "@molcrafts/molvis-stage";
+import { Box, Cell } from "@molcrafts/molvis-stage";
 
-const cubic     = Box.cube(10.0, [0, 0, 0], true, true, true);
-const ortho     = Box.ortho(
-  new Float64Array([10, 20, 30]),
-  new Float64Array([0, 0, 0]),
-  true, true, true,
-);
-const triclinic = new Box(hMatrix, origin, true, true, true);
+const origin = new Float64Array([0, 0, 0]);
+const cubic = new Box(Cell.lengths(new Float64Array([10, 10, 10])), origin, [true, true, true]);
+const ortho = new Box(Cell.lengths(new Float64Array([10, 20, 30])), origin, [true, true, true]);
+const triclinic = new Box(Cell.matrix(hMatrix), origin, [true, true, true]);
 
 cubic.free();
 ```

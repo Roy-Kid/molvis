@@ -1,5 +1,5 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import type {
@@ -53,12 +53,10 @@ function makeFrame(box?: Box): Frame {
 }
 
 function orthoCell(): Box {
-  return Box.ortho(
-    Float64Array.from(BOX_LENGTHS),
+  return new Box(
+    Cell.lengths(Float64Array.from(BOX_LENGTHS)),
     Float64Array.from(BOX_ORIGIN),
-    true,
-    true,
-    true,
+    [true, true, true],
   );
 }
 
@@ -72,7 +70,11 @@ function orthoCell(): Box {
 function triclinicCell(): Box {
   // a = (10,0,0), b = (2.5,12,0), c = (0,0,14) — xy tilt 2.5 Å.
   const h = Float64Array.from([10, 2.5, 0, 0, 12, 0, 0, 0, 14]);
-  return new Box(h, Float64Array.from(BOX_ORIGIN), true, true, true);
+  return new Box(Cell.matrix(h), Float64Array.from(BOX_ORIGIN), [
+    true,
+    true,
+    true,
+  ]);
 }
 
 describe("snapshotFrameForAnalysis", () => {

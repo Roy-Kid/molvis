@@ -40,6 +40,7 @@ export default defineConfig({
       output: {
         target: "web",
         cleanDistPath: false,
+        minify: true,
       },
       tools: {
         rspack(config) {

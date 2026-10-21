@@ -4,6 +4,8 @@ One lane per package, unit only. There is no e2e lane, no `integration/`
 tree, and no repo-root `regressions/` golden-lock lane.
 
 ```bash
+npm run build         # build shared artifacts once before checks/tests
+npm run typecheck
 npm run test:core     npm run test:stage    npm run test:sketch
 npm run test:plugin   npm run test:page     npm run test:vsc-ext
 npm run test:python
@@ -97,17 +99,23 @@ working:
 
 ## CI
 
-Every check runs once. The local hooks (`.pre-commit-config.yaml`) run the
-molcrafts-ci `node-python` profile: at pre-commit `workflows`, `biome`,
-`guards` (`check:molrs-gateway`, `check:versions`, `uv lock --check`),
-`typecheck` and `test-core`; at pre-push `js` (`npm run test:js`), `vsc-ext`,
-`python`, `build` (stage, viewers + `check:pack`, page +
-`check:page-public-path`, vsc-ext) and `docs` (strict Zensical). GitHub CI
-keeps only what a laptop cannot do: the Python suite on the other operating
-systems, and the release artifacts.
+The local hooks (`.pre-commit-config.yaml`) use the pinned molcrafts-ci
+`node-python` profile. Pre-commit runs `workflows`, `biome` and `guards`
+(`check:molrs-gateway`, `check:versions`, `uv lock --check`). Pre-push builds
+once, then runs `typecheck`, `js`, `vsc-ext`, `python` and strict `docs`.
+`test:js` already includes the core suite. Type checks and tests read the
+artifacts from the build phase.
 
-Every workflow starts with a `<file> / context` job running
-`MolCrafts/molcrafts-ci/actions/ci-context`, which decides the tier,
+`npm run build:packages` owns one Wireit graph for core, stage, sketch,
+plugin and both viewers. The complete `npm run build` reuses that graph,
+then builds the page, its Python copy and the VS Code extension. npm release
+uploads the exact tarballs from `npm-build`; VSIX packaging uses its existing
+`vscode:prepublish` lifecycle to build the extension once.
+
+GitHub CI adds the Python operating-system matrix and release artifacts.
+
+Every workflow starts with a `<file> / context` job calling
+`MolCrafts/molcrafts-ci/.github/workflows/context.yml` at `CI_REF`, which decides the tier,
 upstream-only gating and pull-request dedup for all MolCrafts repositories;
 the other jobs read its outputs. The fast tier runs on a feature-branch push to
 MolCrafts; the full tier on every push to a fork (so a branch is proven before

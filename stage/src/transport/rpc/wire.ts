@@ -41,7 +41,7 @@
  */
 
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { type Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { type Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { DType } from "../../utils/dtype";
 
 // ---------------------------------------------------------------------------
@@ -124,8 +124,8 @@ export interface WireBox {
 export interface WireFrame {
   blocks: Record<string, WireBlock>;
   box?: WireBox | null;
-  /** Per-frame scalars — molrs `Frame.setMetaScalar` / `getMetaScalar`. */
-  meta?: Record<string, number>;
+  /** Finite f64 scalars or exact 64-bit integers encoded as decimal text. */
+  meta?: Record<string, number | { dtype: "i64" | "u64"; data: string }>;
 }
 
 /** A frame plus the binary buffers its {@link BufferRef}s point into. */
@@ -429,13 +429,38 @@ export function decodeFrame(
     if (wire.meta !== undefined) {
       const meta = asRecord(wire.meta, "", "frame 'meta'");
       for (const [name, value] of Object.entries(meta)) {
+        if (typeof value === "object" && value !== null) {
+          const integer = asRecord(value, `meta.${name}`, "integer metadata");
+          if (
+            (integer.dtype !== "i64" && integer.dtype !== "u64") ||
+            typeof integer.data !== "string" ||
+            !/^-?(0|[1-9][0-9]*)$/.test(integer.data)
+          ) {
+            throw new WireError(
+              `meta.${name}`,
+              "expected i64/u64 decimal data",
+            );
+          }
+          const number = BigInt(integer.data);
+          const min = integer.dtype === "i64" ? -(1n << 63n) : 0n;
+          const max =
+            integer.dtype === "i64" ? (1n << 63n) - 1n : (1n << 64n) - 1n;
+          if (number < min || number > max) {
+            throw new WireError(
+              `meta.${name}`,
+              `${integer.dtype} value is out of range`,
+            );
+          }
+          frame.setMeta(name, number);
+          continue;
+        }
         if (typeof value !== "number" || !Number.isFinite(value)) {
           throw new WireError(
             `meta.${name}`,
             `must be a finite number, received ${describe(value)}`,
           );
         }
-        frame.setMetaScalar(name, value);
+        frame.setMeta(name, value);
       }
     }
 
@@ -513,7 +538,7 @@ export function decodeBox(
     );
   }
 
-  return new Box(h, origin, pbc[0], pbc[1], pbc[2]);
+  return new Box(Cell.matrix(h), origin, [pbc[0], pbc[1], pbc[2]]);
 }
 
 // ---------------------------------------------------------------------------
@@ -610,13 +635,18 @@ export function encodeFrame(frame: Frame): EncodedFrame {
 
   const metaNames = frame.metaKeys();
   if (metaNames.length > 0) {
-    const meta: Record<string, number> = {};
+    const meta: NonNullable<WireFrame["meta"]> = {};
     for (const name of metaNames) {
-      // getMetaScalar is the only reader molrs-wasm exposes; string-valued meta
-      // is not representable and is left out rather than stringified.
-      const value = frame.getMetaScalar(name);
-      if (typeof value === "number" && Number.isFinite(value))
+      // JSON numbers cannot carry native i64/u64 exactly.
+      const value = frame.getMeta(name);
+      if (typeof value === "bigint") {
+        meta[name] = {
+          dtype: value > (1n << 63n) - 1n ? "u64" : "i64",
+          data: value.toString(),
+        };
+      } else if (typeof value === "number" && Number.isFinite(value)) {
         meta[name] = value;
+      }
     }
     if (Object.keys(meta).length > 0) wire.meta = meta;
   }

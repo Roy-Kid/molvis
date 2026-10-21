@@ -6,8 +6,7 @@ from pathlib import Path
 
 import molpy as mp
 import pytest
-
-import molvis.cli as cli
+from molvis import cli
 from molvis.cli import _load_mrec_trajectory, _mrec_stride_indices
 
 
@@ -45,11 +44,19 @@ class _FakeTraj:
 
 
 def _install_mrec(monkeypatch, *, secs, traj=None, frame=None) -> None:
-    import molpy.io.mrec
 
-    monkeypatch.setattr(molpy.io.mrec, "section_names", lambda _path: secs)
-    monkeypatch.setattr(mp.io, "read_mrec_trajectory", lambda _path: traj)
-    monkeypatch.setattr(mp.io, "read_mrec_frame", lambda _path: frame)
+    class Record:
+        def __init__(self, _path):
+            pass
+
+        def sections(self):
+            return secs
+
+        def frame(self):
+            return frame
+
+    monkeypatch.setattr(mp.io.mrec, "MrecFile", Record)
+    monkeypatch.setattr(mp.io.mrec, "MrecReader", lambda _path: traj)
 
 
 def test_load_trajectory_section_strides(monkeypatch) -> None:

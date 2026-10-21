@@ -1,4 +1,4 @@
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
   encodeFrame,
@@ -138,7 +138,7 @@ describe("encodeFrame string meta", () => {
     const entries = source.createBlock("entries");
     entries.set("c_bond[1]", new BigUint64Array([1n, 2n]));
     source.setMeta("dump_local_label", "BONDS");
-    source.setMetaScalar("timestep", 500);
+    source.setMeta("timestep", 500);
 
     const msg = encodeFrame(source, 0, {});
     expect(msg.metaText).toEqual({ dump_local_label: "BONDS" });
@@ -146,18 +146,42 @@ describe("encodeFrame string meta", () => {
 
     const restored = rehydrateFrame(msg);
     expect(restored.getMeta("dump_local_label")).toBe("BONDS");
-    expect(restored.getMetaScalar("timestep")).toBe(500);
+    expect(restored.getMeta("timestep")).toBe(500);
   });
 
   it("omits the string map when the frame has no word-valued meta", () => {
     const source = new Frame();
     source.createBlock("atoms").set("x", new Float64Array([0]));
-    source.setMetaScalar("step", 1);
+    source.setMeta("step", 1);
     expect(encodeFrame(source, 0, {}).metaText).toBeUndefined();
   });
 });
 
 describe("encodeFrame", () => {
+  it("preserves exact integer metadata across structured clone", () => {
+    const source = new Frame();
+    source.setMeta("timestep", 500n);
+    source.setMeta("count", 18446744073709551615n);
+    source.setMeta("offset", -9223372036854775808n);
+    source.setMeta("enabled", true);
+    source.setMeta("vector", Float64Array.of(1, 2, 3));
+    source.setMeta("run", { name: "sample", sequence: [1, 2] });
+    const restored = rehydrateFrame(structuredClone(encodeFrame(source, 0)));
+    try {
+      expect(restored.getMeta("timestep")).toBe(500n);
+      expect(restored.getMeta("count")).toBe(18446744073709551615n);
+      expect(restored.getMeta("offset")).toBe(-9223372036854775808n);
+      expect(restored.getMeta("enabled")).toBe(true);
+      expect(restored.getMeta("vector")).toEqual(Float64Array.of(1, 2, 3));
+      expect(restored.getMeta("run")).toEqual({
+        name: "sample",
+        sequence: [1, 2],
+      });
+    } finally {
+      source.free();
+      restored.free();
+    }
+  });
   it("round-trips blocks, box, meta, and a grid shape through the wire", () => {
     const source = new Frame();
     const atoms = source.createBlock("atoms");
@@ -169,13 +193,11 @@ describe("encodeFrame", () => {
     grid.set("rho", new Float64Array(8).fill(0.5));
     grid.setShape([2, 2, 2]);
     source.box = new Box(
-      new Float64Array([10, 0, 0, 0, 12, 0, 0, 0, 14]),
+      Cell.matrix(new Float64Array([10, 0, 0, 0, 12, 0, 0, 0, 14])),
       new Float64Array([1, 2, 3]),
-      true,
-      false,
-      true,
+      [true, false, true],
     );
-    source.setMetaScalar("step", 42);
+    source.setMeta("step", 42);
 
     const msg = encodeFrame(source, 7, { sectionUpdates: { atoms: 3 } });
     expect(msg.frameId).toBe(7);
@@ -209,7 +231,7 @@ describe("encodeFrame", () => {
     ).toEqual([-1, 4]);
     expect([...(backAtoms?.copy("element") as string[])]).toEqual(["C", "O"]);
     expect(back.get("grid").structuralShape).toEqual([2, 2, 2]);
-    expect(back.getMetaScalar("step")).toBe(42);
+    expect(back.getMeta("step")).toBe(42);
     const h = back.box?.h().toCopy();
     expect(h?.[0]).toBe(10);
     expect(h?.[4]).toBe(12);

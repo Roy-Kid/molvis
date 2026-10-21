@@ -1,4 +1,4 @@
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { hexToLinearRgb } from "../../src/artist/palette";
 import {
@@ -38,7 +38,11 @@ function scLattice(n = 3, spacing = 1.0): Frame {
   atoms.set("y", Float64Array.from(ys));
   atoms.set("z", Float64Array.from(zs));
   const L = (n - 1) * spacing + 2;
-  frame.box = Box.cube(L, new Float64Array([0, 0, 0]), true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([L, L, L])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 

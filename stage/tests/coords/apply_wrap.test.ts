@@ -1,7 +1,7 @@
 /**
  * System wrap gate — atom columns only. Edge-bond continuity is draw-time MI.
  */
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
@@ -37,12 +37,10 @@ function makeFrame(
 }
 
 function orthoBox(L = 10): Box {
-  return Box.ortho(
-    new Float64Array([L, L, L]),
+  return new Box(
+    Cell.lengths(new Float64Array([L, L, L])),
     new Float64Array([0, 0, 0]),
-    true,
-    true,
-    true,
+    [true, true, true],
   );
 }
 

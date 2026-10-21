@@ -10,6 +10,7 @@ interface AtomSpec {
   y: number;
   z: number;
   element: string;
+  atomicNumber?: number;
   type?: string;
 }
 
@@ -87,6 +88,12 @@ function buildAtomBlock(atoms: AtomSpec[]): MockBlock {
     ["z", new Float64Array(atoms.map((atom) => atom.z))],
     ["element", atoms.map((atom) => atom.element)],
   ]);
+  if (atoms.some((atom) => atom.atomicNumber !== undefined)) {
+    columns.set(
+      "atomic_number",
+      BigUint64Array.from(atoms, (atom) => BigInt(atom.atomicNumber ?? 0)),
+    );
+  }
   if (atoms.some((atom) => atom.type !== undefined)) {
     columns.set(
       "type",
@@ -160,6 +167,16 @@ function buildLammpsFrame(atoms: LammpsAtomSpec[]): Frame {
 }
 
 describe("classifyFrameTransition", () => {
+  it("rebuilds when canonical species changes beside stale raw symbols", () => {
+    const previous = buildFrame([
+      { x: 0, y: 0, z: 0, element: "C", atomicNumber: 6 },
+    ]);
+    const next = buildFrame([
+      { x: 1, y: 0, z: 0, element: "C", atomicNumber: 8 },
+    ]);
+    expect(classifyFrameTransition(previous, next).kind).toBe("full");
+  });
+
   it("returns full when previous frame is missing", () => {
     const next = buildFrame([{ x: 0, y: 0, z: 0, element: "C" }]);
     const decision = classifyFrameTransition(null, next);

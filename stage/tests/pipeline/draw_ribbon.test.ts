@@ -1,5 +1,5 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { DrawRibbonModifier } from "../../src/pipeline/draw_ribbon";
 import { type PipelineContext, SelectionMask } from "../../src/pipeline/types";
@@ -218,7 +218,11 @@ describe("DrawRibbonModifier.apply", () => {
         chain: ["A", "A", "A"],
       },
     );
-    frame.box = Box.cube(50, new Float64Array([0, 0, 0]), true, true, true);
+    frame.box = new Box(
+      Cell.lengths(new Float64Array([50, 50, 50])),
+      new Float64Array(3),
+      [true, true, true],
+    );
     const ctx = testContext();
     const out = new DrawRibbonModifier().apply(frame, ctx);
     const residues = out.has("residues") ? out.get("residues") : undefined;
@@ -241,7 +245,11 @@ describe("DrawRibbonModifier.apply", () => {
         chain: ["A", "A", "A", "A"],
       },
     );
-    frame.box = Box.cube(50, new Float64Array([0, 0, 0]), true, true, true);
+    frame.box = new Box(
+      Cell.lengths(new Float64Array([50, 50, 50])),
+      new Float64Array(3),
+      [true, true, true],
+    );
     const ctx = testContext();
     const out = new DrawRibbonModifier().apply(frame, ctx);
     const residues = out.has("residues") ? out.get("residues") : undefined;

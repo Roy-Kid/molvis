@@ -9,7 +9,7 @@
  * `gaussian_density_surface.test.ts`.
  */
 
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
   isMeshAlgorithm,
@@ -25,7 +25,11 @@ function atomsInBox(): Frame {
   atoms.set("y", new Float64Array([1, 2, 3]));
   atoms.set("z", new Float64Array([1, 2, 3]));
   atoms.set("element", ["C", "C", "O"]);
-  frame.box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([10, 10, 10])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 

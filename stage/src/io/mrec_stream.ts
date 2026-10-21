@@ -16,11 +16,7 @@
 // `spawnTrajectoryWorker` hands back is typed from the dist-backed
 // `./trajectory-runtime` subpath, and `TrajectoryRuntime` is nominal (private
 // members), so this module must name the same declaration.
-import {
-  type Frame,
-  readMrecFrameBytes,
-  readMrecFrameFiles,
-} from "@molcrafts/molvis-core/molrs";
+import { type Frame, MrecFile } from "@molcrafts/molvis-core/molrs";
 import type { TrajectoryRuntime } from "@molcrafts/molvis-stage/trajectory-runtime";
 import { type AsyncFrameProvider, Trajectory } from "../system/trajectory";
 import type { MrecSourceHandle } from "../transport/trajectory_worker";
@@ -105,9 +101,16 @@ export async function openMrecTrajectory(
 export async function readMrecFrameSection(
   input: MrecStoreInput,
 ): Promise<Frame | undefined> {
-  return input.kind === "zip"
-    ? readMrecFrameBytes(new Uint8Array(await input.blob.arrayBuffer()))
-    : readMrecFrameFiles(await storeBytes(input, isFrameSectionKey));
+  const record = new MrecFile(
+    input.kind === "zip"
+      ? new Uint8Array(await input.blob.arrayBuffer())
+      : await storeBytes(input, isFrameSectionKey),
+  );
+  try {
+    return record.frame();
+  } finally {
+    record.free();
+  }
 }
 
 /**

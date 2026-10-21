@@ -1,8 +1,9 @@
 import { Vector3 } from "@babylonjs/core";
-import { toRowIndex } from "@molcrafts/molvis-core";
+import { AtomSpecies, toRowIndex } from "@molcrafts/molvis-core";
 import {
   assignKekuleBondOrders,
-  type Frame,
+  Frame,
+  fillAtomicNumbers,
 } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import { viewAtomCoords } from "../io/atom_coords";
@@ -23,7 +24,7 @@ import { DrawAtomCommand, DrawBondCommand } from "./draw";
  * Undo removes all placed atoms/bonds as a single atomic action.
  *
  * Read-only on the caller's Frame: stamps go through molrs
- * `assignKekuleBondOrders` (new handle, freed after column snapshot) so
+ * `assignKekuleBondOrders` on an owned copy (freed after column snapshot) so
  * aromatic bonds carry localized `bond_number` without mutating the template.
  * Ownership of the constructor Frame stays with the caller.
  */
@@ -60,8 +61,14 @@ export class PlaceMoleculeCommand extends Command<void> {
     }
 
     // A new Frame; free it when we are done reading.
-    const prepared = assignKekuleBondOrders(this.frame);
+    const prepared = new Frame();
     try {
+      for (const key of this.frame.keys())
+        prepared.set(key, this.frame.get(key));
+      if (!prepared.has("atoms")) return;
+      if (!prepared.get("atoms").has("atomic_number"))
+        fillAtomicNumbers(prepared);
+      assignKekuleBondOrders(prepared);
       await this.buildAndRunFrom(prepared);
     } finally {
       prepared.free();
@@ -85,7 +92,7 @@ export class PlaceMoleculeCommand extends Command<void> {
     const ys = Float64Array.from(coords.y);
     const zs = Float64Array.from(coords.z);
 
-    const elements = atomBlock.copy("element") as string[];
+    const elements = new AtomSpecies(atomBlock).symbols();
     if (elements.length < nAtoms) {
       throw new Error(
         "Frame atoms are missing element column (required to place)",

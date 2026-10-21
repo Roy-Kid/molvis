@@ -1,17 +1,18 @@
 import {
-  type Frame,
-  writeCifStr,
-  writeCubeStr,
-  writeDcdBytes,
-  writeGroStr,
-  writeLammpsDataStr,
-  writeLammpsDumpStr,
-  writeMol2Str,
-  writePdbStr,
-  writePoscarStr,
-  writeTrrBytes,
-  writeXtcBytes,
-  writeXyzStr,
+  Frame,
+  fillSymbols,
+  writeCif,
+  writeCube,
+  writeDcd,
+  writeGro,
+  writeLammpsData,
+  writeLammpsDump,
+  writeMol2,
+  writePdb,
+  writePoscar,
+  writeTrr,
+  writeXtc,
+  writeXyz,
 } from "@molcrafts/molvis-core/molrs";
 import type { SceneIndex } from "../scene_index";
 import { buildFrameFromScene } from "../scene_sync";
@@ -56,18 +57,18 @@ export interface ExportPayload {
 export const MOLRS_WRITERS: Partial<
   Record<FileFormat, (frame: Frame) => string | Uint8Array>
 > = {
-  pdb: writePdbStr,
-  xyz: writeXyzStr,
-  cif: writeCifStr,
-  lammps: writeLammpsDataStr,
-  "lammps-dump": (frame) => writeLammpsDumpStr(frame),
-  dcd: writeDcdBytes,
-  cube: writeCubeStr,
-  gro: writeGroStr,
-  mol2: writeMol2Str,
-  poscar: writePoscarStr,
-  trr: writeTrrBytes,
-  xtc: writeXtcBytes,
+  pdb: writePdb,
+  xyz: writeXyz,
+  cif: writeCif,
+  lammps: writeLammpsData,
+  "lammps-dump": (frame) => writeLammpsDump(frame),
+  dcd: writeDcd,
+  cube: writeCube,
+  gro: writeGro,
+  mol2: writeMol2,
+  poscar: writePoscar,
+  trr: writeTrr,
+  xtc: writeXtc,
 };
 
 /** The formats with a molrs writer, in registry order. */
@@ -151,12 +152,31 @@ export function writeFrame(
       `Format "${format}" is writable but has no molrs writer wired up.`,
     );
   }
+  // Writers that spell species require symbols, even when chemistry produced Z.
+  // Convert an owned copy: fillSymbols invalidates its block borrows.
+  let prepared: Frame | undefined;
   let content: string | Uint8Array;
   try {
-    content = write(frame);
+    if (
+      frame.has("atoms") &&
+      frame.get("atoms").has("atomic_number") &&
+      ["pdb", "xyz", "cif", "gro", "poscar"].includes(format)
+    ) {
+      prepared = new Frame();
+      for (const key of frame.keys()) prepared.set(key, frame.get(key));
+      for (const key of frame.metaKeys()) {
+        const value = frame.getMeta(key);
+        if (value !== undefined) prepared.setMeta(key, value);
+      }
+      prepared.box = frame.box;
+      fillSymbols(prepared);
+    }
+    content = write(prepared ?? frame);
   } catch (e) {
     logger.error(`[writer] Error writing ${format} frame via WASM:`, e);
     throw e;
+  } finally {
+    prepared?.free();
   }
 
   const ext = defaultExtensionForFormat(format);

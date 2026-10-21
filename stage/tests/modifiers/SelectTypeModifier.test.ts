@@ -20,6 +20,22 @@ function hchFrame(): Frame {
 describe("SelectTypeModifier", () => {
   const mockApp = {} as MolvisApp;
 
+  test("rejects an element query without species before replacing selection", () => {
+    const frame = new Frame();
+    try {
+      frame.createBlock("atoms").set("type", ["water"]);
+      const context = createDefaultContext(frame, mockApp);
+      const before = context.currentSelection;
+      const mod = new SelectTypeModifier("missing-species");
+      mod.elements = ["O"];
+      expect(() => mod.apply(frame, context)).toThrow(/species/);
+      expect(context.currentSelection).toBe(before);
+      expect(context.selectionSet.has(mod.id)).toBe(false);
+    } finally {
+      frame.free();
+    }
+  });
+
   test("elements ['C'] on H-C-H selects only index 1", () => {
     const frame = hchFrame();
     const context = createDefaultContext(frame, mockApp);

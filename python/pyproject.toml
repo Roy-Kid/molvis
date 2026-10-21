@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "molcrafts-molvis"
-version = "0.3.0"
+version = "0.4.0"
 description = "Molecular visualization driven by a local WebSocket-hosted page"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "molcrafts-molpy>=0.18.0",
+    "molcrafts-molpy>=0.19.0",
     # `molvis serve` runs cells through the same InteractiveShell.run_cell
     # a notebook kernel uses. The shell is the session; there is no second one.
     "ipython>=8",
@@ -38,7 +38,7 @@ dev = [
     "hatchling",
     "pytest>=7.0",
     # FrameStream decodes molrs.stream payloads with molrs.io.
-    "molcrafts-molrs>=0.18.0",
+    "molcrafts-molrs>=0.19.0",
     # test_mdx.py drives the molvis fence through Python-Markdown directly
     # (at docs-build time zensical brings these along).
     "markdown>=3.5",

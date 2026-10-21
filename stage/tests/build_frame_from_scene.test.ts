@@ -1,5 +1,5 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "./setup_wasm";
 import { AtomSource, BondSource } from "../src/entity_source";
@@ -124,12 +124,10 @@ describe("buildFrameFromScene", () => {
 
   it("preserves the simulation box from the source frame", () => {
     const sourceFrame = new Frame();
-    sourceFrame.box = Box.cube(
-      10,
-      new Float64Array([0, 0, 0]),
-      true,
-      true,
-      true,
+    sourceFrame.box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
     );
     const frame = buildFrameFromScene(sceneWith3Atoms(), { sourceFrame });
     expect(frame.box).toBeTruthy();
@@ -139,12 +137,10 @@ describe("buildFrameFromScene", () => {
 
   it("does NOT mutate/clear the source frame (immutability)", () => {
     const sourceFrame = new Frame();
-    sourceFrame.box = Box.cube(
-      5,
-      new Float64Array([0, 0, 0]),
-      true,
-      true,
-      true,
+    sourceFrame.box = new Box(
+      Cell.lengths(new Float64Array([5, 5, 5])),
+      new Float64Array(3),
+      [true, true, true],
     );
     buildFrameFromScene(sceneWith3Atoms(), { sourceFrame });
     // Source frame must remain usable and box intact after the build.

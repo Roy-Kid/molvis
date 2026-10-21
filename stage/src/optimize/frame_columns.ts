@@ -1,4 +1,4 @@
-import { toRowIndex } from "@molcrafts/molvis-core";
+import { AtomSpecies, toRowIndex } from "@molcrafts/molvis-core";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { BOND_TYPE_SINGLE } from "../utils/bond_order";
 
@@ -18,7 +18,7 @@ export function copyAtomColumns(frame: Frame): {
   const x = atoms.copy("x") as Float64Array;
   const y = atoms.copy("y") as Float64Array;
   const z = atoms.copy("z") as Float64Array;
-  const elements = atoms.copy("element") as string[];
+  const elements = new AtomSpecies(atoms).symbols();
   if (!x || !y || !z) throw new Error("Atoms missing x/y/z");
   return {
     x: new Float64Array(x),
