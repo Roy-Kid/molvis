@@ -1,3 +1,4 @@
+import { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { MoleculeGraph } from "../src/molecule_graph";
 import type { MoleculeData } from "../src/types";
@@ -15,6 +16,18 @@ const H2O: MoleculeData = {
 };
 
 describe("MoleculeGraph", () => {
+  it("rejects missing species without clearing the existing graph", () => {
+    const graph = new MoleculeGraph();
+    graph.loadMoleculeData(H2O);
+    const frame = new Frame();
+    try {
+      frame.createBlock("atoms").set("type", ["water"]);
+      expect(() => graph.fromFrame(frame)).toThrow(/species/);
+      expect(graph.getMoleculeData()).toEqual(H2O);
+    } finally {
+      frame.free();
+    }
+  });
   it("loadMoleculeData then getMoleculeData returns deep equal copy", () => {
     const g = new MoleculeGraph();
     g.loadMoleculeData(H2O);

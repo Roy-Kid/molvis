@@ -1,9 +1,16 @@
+import { fillAtomicNumbers } from "@molcrafts/molvis-core/molrs";
 /**
  * Worker-side optimize pipeline — pure molrs + stage geometry helpers.
  * No Babylon, no DOM, no MolvisApp.
  */
 
-import { addHydrogens, Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import {
+  addHydrogens,
+  Block,
+  Box,
+  Cell,
+  Frame,
+} from "@molcrafts/molvis-core/molrs";
 import { PerceiveBonds } from "../algo/perceive_bonds";
 import { BOND_TYPE_SINGLE, setBondTopology } from "../utils/bond_order";
 import { safeFree } from "../utils/yield_ui";
@@ -76,9 +83,10 @@ function buildFrame(job: OptimizeJobPayload): Frame {
       job.boxLengths[1],
       job.boxLengths[2],
     ]);
-    frame.box = Box.ortho(lengths, origin, true, true, true);
+    frame.box = new Box(Cell.lengths(lengths), origin, [true, true, true]);
   }
 
+  fillAtomicNumbers(frame);
   return frame;
 }
 
@@ -102,6 +110,7 @@ function materializeOwned(source: Frame): Frame {
   if (box) {
     frame.box = box;
   }
+  fillAtomicNumbers(frame);
   return frame;
 }
 

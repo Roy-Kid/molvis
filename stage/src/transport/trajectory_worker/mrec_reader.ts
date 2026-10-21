@@ -8,7 +8,7 @@
  * import-time side effects.
  */
 
-import { MrecReader, openMrecStore } from "@molcrafts/molvis-core/molrs";
+import { MrecReader } from "@molcrafts/molvis-core/molrs";
 import {
   type FileRangeReadSync,
   FileTreeMrecStoreHost,
@@ -40,13 +40,16 @@ export function openMrecReader(
         files.set(key, new Uint8Array(buffer));
         totalBytes += buffer.byteLength;
       }
-      return { reader: openMrecStore(new MapMrecStoreHost(files)), totalBytes };
+      return {
+        reader: new MrecReader(new MapMrecStoreHost(files)),
+        totalBytes,
+      };
     }
     case "mrec-file-tree": {
       let totalBytes = 0;
       for (const file of source.files.values()) totalBytes += file.size;
       return {
-        reader: openMrecStore(
+        reader: new MrecReader(
           new FileTreeMrecStoreHost(source.files, fileRange()),
         ),
         totalBytes,
@@ -54,7 +57,7 @@ export function openMrecReader(
     }
     case "mrec-zip":
       return {
-        reader: MrecReader.fromZip(new Uint8Array(source.bytes)),
+        reader: new MrecReader(new Uint8Array(source.bytes)),
         totalBytes: source.bytes.byteLength,
       };
   }

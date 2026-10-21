@@ -1,6 +1,7 @@
 import {
   assignRings,
-  type Frame,
+  Frame,
+  fillAtomicNumbers,
   Topology,
 } from "@molcrafts/molvis-core/molrs";
 
@@ -24,16 +25,20 @@ export function detectRings(frame: Frame): RingInfo | null {
   if (!frame.has("atoms") || !frame.has("bonds")) return null;
   if (frame.get("bonds").nRows === 0) return null;
 
-  const ringed = assignRings(frame);
-  const topo = Topology.fromFrame(frame);
+  const ringed = new Frame();
+  let topo: Topology | undefined;
   try {
+    for (const key of frame.keys()) ringed.set(key, frame.get(key));
+    if (!ringed.get("atoms").has("atomic_number")) fillAtomicNumbers(ringed);
+    assignRings(ringed);
+    topo = Topology.fromFrame(frame);
     const inRing = ringed.get("atoms").copy("is_in_ring") as Int32Array;
     return {
       numRings: topo.nBonds - topo.nAtoms + topo.nComponents,
       atomRingMask: Uint8Array.from(inRing, (flag) => (flag ? 1 : 0)),
     };
   } finally {
-    topo.free();
+    topo?.free();
     ringed.free();
   }
 }

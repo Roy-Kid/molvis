@@ -5,6 +5,8 @@ import {
   addHydrogens,
   Block,
   Frame,
+  fillAtomicNumbers,
+  fillSymbols,
   removeHydrogens,
 } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
@@ -19,6 +21,7 @@ function bareCarbon(): Frame {
   atoms.set("z", new Float64Array([0]));
   atoms.set("element", ["C"]);
   frame.set("atoms", atoms);
+  fillAtomicNumbers(frame);
   return frame;
 }
 
@@ -36,6 +39,7 @@ function ethaneSkeleton(): Frame {
   bonds.set("bond_type", toDomainUint([1]));
   bonds.set("bond_number", toDomainUint([1]));
   frame.set("bonds", bonds);
+  fillAtomicNumbers(frame);
   return frame;
 }
 
@@ -44,6 +48,7 @@ describe("addHydrogens", () => {
     const input = bareCarbon();
     const out = addHydrogens(input);
     expect(out.get("atoms").nRows).toBe(5);
+    fillSymbols(out);
     const els = out.get("atoms").copy("element") as string[];
     expect(els.filter((e: string) => e === "H" || e === "h")).toHaveLength(4);
     input.free();

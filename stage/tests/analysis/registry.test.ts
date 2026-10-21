@@ -1,5 +1,11 @@
 import * as molrs from "@molcrafts/molvis-core/molrs";
-import { Block, Box, ComputeSpec, Frame } from "@molcrafts/molvis-core/molrs";
+import {
+  Block,
+  Box,
+  Cell,
+  ComputeSpec,
+  Frame,
+} from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
   type AnalysisRequirement,
@@ -38,7 +44,11 @@ function positionsOnlyFrame(withBox = true): Frame {
   const frame = new Frame();
   frame.set("atoms", block);
   if (withBox) {
-    frame.box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+    frame.box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
+    );
   }
   return frame;
 }

@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { computeRdf } from "../../src/analysis/rdf";
@@ -28,7 +28,11 @@ function makePeriodicFrame(
   boxSize: number,
 ): Frame {
   const frame = makeFrame(positions);
-  const box = Box.cube(boxSize, new Float64Array([0, 0, 0]), true, true, true);
+  const box = new Box(
+    Cell.lengths(new Float64Array([boxSize, boxSize, boxSize])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   frame.box = box;
   return frame;
 }
@@ -306,7 +310,11 @@ describe("computeRdf", () => {
     atoms.set("y", new Float64Array([0, 0, 1, 1]));
     atoms.set("z", new Float64Array([0, 0, 0, 0]));
     frame.set("atoms", atoms);
-    const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+    const box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
+    );
     frame.box = box;
     const result = computeRdf(frame, {
       nBins: 50,

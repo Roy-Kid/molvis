@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 import {
   Block,
   type Frame,
@@ -7,7 +8,7 @@ import { viewAtomCoords } from "../io/atom_coords";
 
 /**
  * Build a frame containing only the requested atom rows.
- * The output keeps xyz, element when present, and the source simulation box.
+ * The output keeps xyz, species when present, and the source simulation box.
  */
 export function buildAtomSubFrame(
   frame: Frame,
@@ -40,14 +41,22 @@ export function buildAtomSubFrame(
 
   // copy throws a raw string when the column is absent (LAMMPS dumps
   // often only have type/id, no element). Probe dtype first.
-  if (atoms.has("element")) {
-    const elems = atoms.copy("element") as string[];
+  if (new AtomSpecies(atoms).has()) {
+    const elems = new AtomSpecies(atoms).symbols();
     if (elems) {
       subBlock.set(
         "element",
         indices.map((idx) => elems[idx]),
       );
     }
+  }
+
+  if (atoms.has("atomic_number")) {
+    const numbers = atoms.copy("atomic_number") as BigUint64Array;
+    subBlock.set(
+      "atomic_number",
+      BigUint64Array.from(indices, (index) => numbers[index]),
+    );
   }
 
   const subFrame = new FrameClass();

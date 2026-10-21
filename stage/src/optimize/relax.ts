@@ -1,3 +1,4 @@
+import { fillAtomicNumbers } from "@molcrafts/molvis-core/molrs";
 /**
  * Optimize runners: L-BFGS (molrs force fields) and damped soft springs.
  * Preflight / pairing / error text live in {@link ./assess}.
@@ -691,6 +692,7 @@ export async function runLbfgsOptimize(
     await yieldForPaint();
     // Preflight: empty/"-"/"X" elements and MMFF-out-of-domain metals.
     assertElementsForTypify(working, input.potential);
+    if (!working.get("atoms").has("atomic_number")) fillAtomicNumbers(working);
     setupTypifier = newTypifier(input.potential);
     setupTyped = setupTypifier.typify(working);
     await yieldUi();

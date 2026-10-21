@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 /**
  * Analysis workload job / result / progress shapes.
  *
@@ -84,7 +85,7 @@ export interface AnalysisFrameSnapshot {
    *
    * Absent for an orthorhombic cell — one whose three edges meet at right
    * angles, so all tilts are within {@link CELL_TILT_EPS} — and the worker then
-   * rebuilds `Box.ortho` rather than reading a zero triple. A *triclinic* cell
+   * rebuilds `Box(Cell.lengths(...), ...)` rather than reading a zero triple. A *triclinic* cell
    * (edges not at right angles) is carried, not converted: the molrs kernels
    * handle tilt directly, so the tilted cell travels as-is instead of being
    * approximated by a right-angled box or rejected.
@@ -312,18 +313,12 @@ export function snapshotFrameForAnalysis(
   const atoms = frame.get("atoms");
   // `get` / `box` hand back borrows of the frame's own data — reading them
   // is safe, freeing them would corrupt the frame.
-  const elementDtype = atoms.has("element")
-    ? atoms.dtype("element")
-    : undefined;
-  if (elementDtype !== DType.String) {
+  if (!new AtomSpecies(atoms).has()) {
     throw new Error(
-      `Analysis snapshot: frame ${frameIndex} needs a string "element" column ` +
-        `(got ${elementDtype ?? "no column"})`,
+      `Analysis snapshot: frame ${frameIndex} needs atomic_number or a string element column`,
     );
   }
-  // Checked above: `copy` is typed loosely by wasm-bindgen, and the dtype
-  // is what makes this a `string[]`.
-  const elements: string[] = atoms.copy("element") as string[];
+  const elements: string[] = new AtomSpecies(atoms).symbols();
   const box = frame.box;
   const cell = box ? describeSnapshotCell(box) : undefined;
 

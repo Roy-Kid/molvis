@@ -1,4 +1,5 @@
-import { Block, Frame } from "@molcrafts/molvis-core/molrs";
+import { PeriodicTable } from "@molcrafts/molvis-core/elements";
+import { Block, Frame, fillAtomicNumbers } from "@molcrafts/molvis-core/molrs";
 import { AtomColumnCarrier } from "./atom_columns";
 import type { SceneIndex } from "./scene_index";
 import { setBondTopology } from "./utils/bond_order";
@@ -203,6 +204,15 @@ export function materializeFrameFromScene(
     logger.warn(
       `[buildFrameFromScene] Dropped ${droppedBonds} bond(s) referencing deleted atoms.`,
     );
+  }
+  if (atomCount > 0 && frame.has("atoms")) {
+    const symbols = frame.get("atoms").copy("element") as string[];
+    if (
+      frame.get("atoms").has("atomic_number") ||
+      symbols.every((symbol) => symbol === "*" || PeriodicTable[symbol])
+    ) {
+      fillAtomicNumbers(frame);
+    }
   }
   if (options.markSaved !== false) {
     sceneIndex.markAllSaved();

@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
@@ -45,7 +45,11 @@ function makePeriodicFrame(
 ): Frame {
   const frame = makeFrame(positions, ids);
   // `Frame.box` MOVES the handle — build a fresh Box per attach.
-  frame.box = Box.cube(boxSize, new Float64Array([0, 0, 0]), true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([boxSize, boxSize, boxSize])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 

@@ -1,5 +1,5 @@
 import { Vector3 } from "@babylonjs/core";
-import { Block, Box, NDArray } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, NDArray } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { toDomainUint } from "@molcrafts/molvis-core";
@@ -564,7 +564,11 @@ describe("buildBondBuffers with PBC minimum image", () => {
     bondsBlock.set("bond_type", toDomainUint([1]));
     bondsBlock.set("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
-    const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+    const box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
+    );
 
     const noPbc = buildBondBuffers(bondsBlock, atoms, atomColor, 42);
     expect(getBuffer(noPbc, "instanceData1")[3]).toBeCloseTo(9, 3);
@@ -592,7 +596,11 @@ describe("buildBondBuffers with PBC minimum image", () => {
     bondsBlock.set("bond_type", toDomainUint([1]));
     bondsBlock.set("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
-    const box = Box.cube(10, new Float64Array([0, 0, 0]), true, true, true);
+    const box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
+      new Float64Array(3),
+      [true, true, true],
+    );
 
     const result = buildBondBuffers(bondsBlock, atoms, atomColor, 42, {
       miDisplacements: miDisplacementsViaBox(box, atoms, bondsBlock),
@@ -616,12 +624,10 @@ describe("buildBondBuffers with PBC minimum image", () => {
     bondsBlock.set("bond_type", toDomainUint([1]));
     bondsBlock.set("bond_number", toDomainUint([1]));
     const atomColor = makeAtomColor(2);
-    const box = Box.ortho(
-      new Float64Array([10, 10, 10]),
+    const box = new Box(
+      Cell.lengths(new Float64Array([10, 10, 10])),
       new Float64Array([0, 0, 0]),
-      true,
-      true,
-      false,
+      [true, true, false],
     );
 
     const disp = miDisplacementsViaBox(box, atoms, bondsBlock);
@@ -665,7 +671,11 @@ describe("buildBondBuffers with PBC minimum image", () => {
       0,
       10, // h row 2
     ]);
-    const box = new Box(h, new Float64Array([0, 0, 0]), true, true, true);
+    const box = new Box(Cell.matrix(h), new Float64Array([0, 0, 0]), [
+      true,
+      true,
+      true,
+    ]);
     const atoms = new Block();
     atoms.set("x", new Float64Array([3.75, 11.25]));
     atoms.set("y", new Float64Array([2.165, 6.495]));

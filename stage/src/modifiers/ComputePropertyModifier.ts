@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 /**
  * OVITO-style **Compute property**: evaluate a per-atom expression and
  * write a float column.
@@ -77,8 +78,8 @@ export class ComputePropertyModifier extends BaseModifier {
     const xCol = coords?.x;
     const yCol = coords?.y;
     const zCol = coords?.z;
-    const elCol = atoms.has("element")
-      ? (atoms.copy("element") as string[])
+    const elCol = new AtomSpecies(atoms).has()
+      ? new AtomSpecies(atoms).symbols()
       : undefined;
     if (!xCol || !yCol || !zCol || !elCol) {
       logger.warn("Compute property: missing coords/element, skipping");

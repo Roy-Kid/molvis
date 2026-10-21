@@ -1,5 +1,10 @@
-import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
-import { Block, type Column, Frame } from "@molcrafts/molvis-core/molrs";
+import { AtomSpecies, toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
+import {
+  Block,
+  type Column,
+  Frame,
+  fillAtomicNumbers,
+} from "@molcrafts/molvis-core/molrs";
 import { normalizeSketchColor } from "./style/custom_color";
 import type { Atom2D, Bond2D, MoleculeData } from "./types";
 
@@ -130,6 +135,7 @@ export class MoleculeGraph {
       bondBlock.set("bond_number", orderU32);
       frame.set("bonds", bondBlock);
     }
+    fillAtomicNumbers(frame);
     return frame;
   }
 
@@ -144,7 +150,13 @@ export class MoleculeGraph {
       this.bonds = [];
       return;
     }
-    const elements = atomBlock.copy("element") as string[];
+    const species = new AtomSpecies(atomBlock);
+    if (!species.has()) {
+      throw new Error(
+        "fromFrame: atoms need species (atomic_number or element)",
+      );
+    }
+    const elements = species.symbols();
     const n = elements.length;
     const atoms = elements.map((element, idx) => ({
       element: element || "C",

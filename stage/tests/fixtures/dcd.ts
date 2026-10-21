@@ -10,7 +10,7 @@
  * half of the contract.
  *
  * The one exception is {@link buildMultiDcd}. MolRS publishes
- * `writeDcdBytes(frame)`, which writes a **single-frame** file, and
+ * `writeDcd(frame)`, which writes a **single-frame** file, and
  * `DcdStream`, which only reads — there is no multi-frame DCD writer on the
  * WASM surface. So a multi-frame fixture has to be assembled here, and that
  * assembly needs one piece of DCD knowledge: NSET, the frame count, lives at
@@ -27,7 +27,7 @@ import {
   Block,
   DcdStream,
   Frame,
-  writeDcdBytes,
+  writeDcd,
 } from "@molcrafts/molvis-core/molrs";
 import {
   takeFrameOffsets,
@@ -94,7 +94,7 @@ function singleDcd(
   header: Uint8Array;
   frameBlock: Uint8Array;
 } {
-  const bytes = writeDcdBytes(makeFrame(atomCount, seed, withId));
+  const bytes = writeDcd(makeFrame(atomCount, seed, withId));
   const pos = indexFrames(bytes)[0];
   return {
     bytes,

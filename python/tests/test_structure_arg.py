@@ -103,19 +103,38 @@ def test_frame_payload_states_dtypes_from_the_molrs_registry() -> None:
     assert len(buffers) == sum(1 for c in columns.values() if c["dtype"] != "string")
 
 
-def test_native_perception_coercion_keeps_input_and_filters_columns(monkeypatch) -> None:
-    from molvis import structure
+def test_native_perception_keeps_the_input_graph_and_atom_properties() -> None:
+    graph = mp.io.smiles.read_smiles("[c:7]1ccccc1").to_atomistic()
+    before = graph.to_frame()
+    frame = coerce_to_frame(graph)
+    after = graph.to_frame()
+    assert np.array_equal(
+        before["atoms"]["atomic_number"], after["atoms"]["atomic_number"]
+    )
+    assert np.array_equal(before["bonds"]["bond_number"], after["bonds"]["bond_number"])
+    assert frame["atoms"]["atom_map"][0] == 7
+    assert frame["atoms"]["atomic_number"].tolist() == [6] * 6
+    assert all(frame["bonds"]["bond_number"] > 0)
 
-    graph = mp.Atomistic()
-    atom = graph.add_atom(atomic_number=6, x=1.0, y=2.0, z=3.0, charge=2.5)
 
-    def perceive(native_graph):
-        next(iter(native_graph.atoms))["x"] = 9.5
-        return True  # Native perception mutates and returns a status, not a graph.
+def test_atom_fields_filters_after_native_to_frame() -> None:
+    graph = mp.io.smiles.read_smiles("CO").to_atomistic()
+    frame = coerce_to_frame(graph, atom_fields=["atomic_number"])
+    assert frame["atoms"].keys() == ["atomic_number"]
+    assert frame["atoms"]["atomic_number"].tolist() == [6, 8]
 
-    monkeypatch.setattr(structure, "assign_kekule_bond_orders", perceive)
-    frame = coerce_to_frame(graph, atom_fields=["x", "y", "z", "atomic_number"])
-    assert atom["x"] == 1.0
-    assert atom["charge"] == 2.5
-    assert float(frame["atoms"]["x"][0]) == 9.5
-    assert set(frame["atoms"].keys()) == {"x", "y", "z", "atomic_number"}
+
+def test_atom_fields_does_not_modify_an_adapters_cached_frame() -> None:
+    class CachedGraph:
+        def __init__(self):
+            self.frame = make_frame()
+
+        def to_frame(self):
+            return self.frame
+
+    graph = CachedGraph()
+    before = set(graph.frame["atoms"].keys())
+    filtered = coerce_to_frame(graph, atom_fields=["element"])
+    assert filtered["atoms"].keys() == ["element"]
+    assert set(graph.frame["atoms"].keys()) == before
+    assert graph.frame["atoms"]["x"].tolist() == [0, 0]

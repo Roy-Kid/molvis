@@ -18,9 +18,11 @@ describe("benzene toFrame → Conformer", () => {
       const frame3d = conformer.generate(frame2d);
       conformer.free();
       try {
-        const els = frame3d.get("atoms").copy("element") as string[];
-        const nC = els.filter((e) => e === "C").length;
-        const nH = els.filter((e) => e === "H").length;
+        const numbers = frame3d
+          .get("atoms")
+          .copy("atomic_number") as BigUint64Array;
+        const nC = numbers.filter((z) => z === 6n).length;
+        const nH = numbers.filter((z) => z === 1n).length;
         expect(nC).toBe(6);
         expect(nH).toBe(6);
       } finally {

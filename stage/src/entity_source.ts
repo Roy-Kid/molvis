@@ -1,4 +1,4 @@
-import { toRowIndex } from "@molcrafts/molvis-core";
+import { AtomSpecies, toRowIndex } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { viewAtomCoords } from "./io/atom_coords";
 import { BOND_TYPE_SINGLE } from "./utils/bond_order";
@@ -102,12 +102,12 @@ export class AtomSource {
     if (this._elementCacheFrame === this.frame && this._elementCache) {
       return this._elementCache;
     }
-    if (!(fb.has("element") && fb.dtype("element") === "string")) {
+    if (!new AtomSpecies(fb).has()) {
       this._elementCache = null;
       this._elementCacheFrame = this.frame;
       return null;
     }
-    const col = fb.copy("element") as string[];
+    const col = new AtomSpecies(fb).symbols();
     this._elementCache = col;
     this._elementCacheFrame = this.frame;
     return col;

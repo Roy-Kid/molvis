@@ -1,5 +1,5 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
   BUFFER_REF_MARKER,
@@ -291,6 +291,43 @@ describe("decodeBox", () => {
 });
 
 describe("encodeFrame", () => {
+  it("round-trips integer metadata through JSON without precision loss", () => {
+    const source = new Frame();
+    source.setMeta("timestep", 500n);
+    source.setMeta("count", 18446744073709551615n);
+    source.setMeta("offset", -9223372036854775808n);
+    const encoded = encodeFrame(source);
+    const wire = JSON.parse(JSON.stringify(encoded.frame));
+    expect(wire.meta.count).toEqual({
+      dtype: "u64",
+      data: "18446744073709551615",
+    });
+    const restored = decodeFrame(wire);
+    try {
+      expect(restored.getMeta("timestep")).toBe(500n);
+      expect(restored.getMeta("count")).toBe(18446744073709551615n);
+      expect(restored.getMeta("offset")).toBe(-9223372036854775808n);
+    } finally {
+      source.free();
+      restored.free();
+    }
+  });
+
+  it("rejects malformed or out-of-range tagged integer metadata", () => {
+    for (const value of [
+      { dtype: "i64", data: "9223372036854775808" },
+      { dtype: "u64", data: "18446744073709551616" },
+      { dtype: "u64", data: "-1" },
+      { dtype: "i64", data: "1.5" },
+      { dtype: "i64", data: "0x10" },
+      { dtype: "i64", data: 42 },
+      { dtype: "other", data: "42" },
+    ]) {
+      expect(() => decodeFrame({ blocks: {}, meta: { step: value } })).toThrow(
+        /meta.step/,
+      );
+    }
+  });
   it("emits every block and column, not a fixed whitelist", () => {
     const frame = new Frame();
     const atoms = frame.createBlock("atoms");
@@ -326,13 +363,11 @@ describe("encodeFrame", () => {
     atoms.set("delta", new Int32Array([-3, 4]));
     atoms.set("element", ["N", "H"]);
     original.box = new Box(
-      new Float64Array([10, 1, 2, 0, 20, 3, 0, 0, 30]),
+      Cell.matrix(new Float64Array([10, 1, 2, 0, 20, 3, 0, 0, 30])),
       new Float64Array([0, 0, 0]),
-      true,
-      true,
-      false,
+      [true, true, false],
     );
-    original.setMetaScalar("energy", -12.5);
+    original.setMeta("energy", -12.5);
 
     const { frame: wire, buffers } = encodeFrame(original);
     const views = buffers.map((b) => new DataView(b));
@@ -363,7 +398,7 @@ describe("encodeFrame", () => {
       true,
       false,
     ]);
-    expect(restored.getMetaScalar("energy")).toBeCloseTo(-12.5, 10);
+    expect(restored.getMeta("energy")).toBeCloseTo(-12.5, 10);
 
     original.free();
     restored.free();

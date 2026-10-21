@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 /**
  * Molecular surface — the envelope of a molecule, computed from its atoms.
  *
@@ -36,6 +37,7 @@
 
 import {
   Box,
+  Cell,
   type Frame,
   GaussianDensity,
   type GaussianDensityResult,
@@ -58,7 +60,6 @@ import {
 } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
 import { type ProjectParams, readEnum, readNumber } from "../project/params";
-import { DType } from "../utils/dtype";
 import { logger } from "../utils/logger";
 
 export const SURFACE_ALGORITHMS = [
@@ -300,10 +301,9 @@ export class MolecularSurfaceModifier
       y: Float64Array.from(coords.y),
       z: Float64Array.from(coords.z),
       count: atoms.nRows,
-      elements:
-        atoms.has("element") && atoms.dtype("element") === DType.String
-          ? (atoms.copy("element") as string[])
-          : undefined,
+      elements: new AtomSpecies(atoms).has()
+        ? new AtomSpecies(atoms).symbols()
+        : undefined,
     };
 
     const algorithm = this._algorithm;
@@ -471,11 +471,9 @@ export class MolecularSurfaceModifier
       // Same atom positions as Particles, on a non-periodic domain so the
       // kernel never folds contributions into the crystal cell.
       simbox = new Box(
-        new Float64Array(domain.cell),
+        Cell.matrix(new Float64Array(domain.cell)),
         new Float64Array(domain.origin),
-        false,
-        false,
-        false,
+        [false, false, false],
       );
       density = new GaussianDensity(
         new Uint32Array([domain.nx, domain.ny, domain.nz]),

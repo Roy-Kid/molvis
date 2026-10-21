@@ -1,4 +1,4 @@
-import { toRowIndex } from "@molcrafts/molvis-core";
+import { AtomSpecies, toRowIndex } from "@molcrafts/molvis-core";
 import { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
@@ -34,7 +34,11 @@ export class HideHydrogensModifier extends BaseModifier {
     if (!input.has("atoms")) return input;
     const atoms = input.get("atoms");
 
-    const elements = atoms.copy("element") as string[];
+    if (!new AtomSpecies(atoms).has())
+      throw new Error(
+        "Hide hydrogens needs atomic_number or an element column",
+      );
+    const elements = new AtomSpecies(atoms).symbols();
 
     const nrows = atoms.nRows;
     const indexMap = new Int32Array(nrows);

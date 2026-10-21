@@ -34,6 +34,7 @@ Python, where the caller can see it happen — never silently in the browser.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
@@ -140,6 +141,7 @@ def canonical_dtype(key: str) -> WireDType | None:
 # ---------------------------------------------------------------------------
 
 _I32_MIN, _I32_MAX = -(2**31), 2**31 - 1
+_I64_MIN, _I64_MAX = -(2**63), 2**63 - 1
 _U32_MAX = 2**32 - 1
 _U64_MAX = 2**64 - 1
 
@@ -237,15 +239,12 @@ def _frame_mapping(frame: Any) -> dict[str, Any]:
         return dict(frame)
     if isinstance(frame, mp.Frame):
         return {
+            # Native Frame exposes keys(), but has no iterator protocol.
             "blocks": {name: frame[name] for name in frame.keys()},  # noqa: SIM118
-            # Native Frame has keys() but no iteration protocol.
             "meta": frame.meta,
             "box": frame.box,
         }
-    raise WireError(
-        f"expected a Frame or a mapping with 'blocks'; got {type(frame)!r}"
-    )
-
+    raise WireError(f"expected a Frame or a mapping with 'blocks'; got {type(frame)!r}")
 
 
 def _validate_frame(frame: Any) -> None:
@@ -333,7 +332,9 @@ def encode_frame(
     if box is not None:
         payload["box"] = encode_box(box, carrier=carrier)
 
-    meta = _scalar_meta(raw.get("meta") if raw.get("meta") is not None else raw.get("metadata"))
+    meta = _scalar_meta(
+        raw.get("meta") if raw.get("meta") is not None else raw.get("metadata")
+    )
     if meta:
         payload["meta"] = meta
 
@@ -349,19 +350,18 @@ def _block_columns(block_name: str, raw_columns: Any) -> Mapping[str, Any]:
     raise WireError(f"block {block_name!r} must be a mapping of column → array")
 
 
-def _scalar_meta(metadata: Any) -> dict[str, float]:
-    """Keep the numeric metadata molrs can store per frame (``setMetaScalar``).
+def _scalar_meta(metadata: Any) -> dict[str, Any]:
+    """Keep the numeric metadata molrs can store per frame (``setMeta``).
 
     Accepts both the wire/dict key ``metadata`` and a molrs ``Frame.meta`` map
     (values may be bare numbers or ``molrs.core.MetaValue``).
 
-    Non-numeric metadata is dropped rather than stringified — the browser has no
-    reader for it, and ``str(3.14)`` round-tripping through frame meta is how
-    per-frame descriptors used to lose precision.
+    Integers use a dtype tag and decimal text so JSON never rounds i64/u64.
+    Non-numeric metadata is outside this scalar RPC contract.
     """
     if not isinstance(metadata, Mapping):
         return {}
-    out: dict[str, float] = {}
+    out: dict[str, Any] = {}
     for key, value in metadata.items():
         # molrs.core.MetaValue carries .value / .dtype
         if hasattr(value, "value") and hasattr(value, "dtype"):
@@ -371,7 +371,15 @@ def _scalar_meta(metadata: Any) -> dict[str, float]:
                 value = value.value
         if isinstance(value, bool):
             continue
-        if isinstance(value, (int, float, np.integer, np.floating)):
+        if isinstance(value, (int, np.integer)):
+            number = int(value)
+            if not _I64_MIN <= number <= _U64_MAX:
+                raise WireError(f"meta.{key}: integer is outside the i64/u64 range")
+            out[str(key)] = {
+                "dtype": "u64" if number > _I64_MAX else "i64",
+                "data": str(number),
+            }
+        elif isinstance(value, (float, np.floating)):
             number = float(value)
             if np.isfinite(number):
                 out[str(key)] = number
@@ -504,8 +512,35 @@ def decode_frame(payload: Any, buffers: Sequence[Any] = ()) -> mp.Frame:
     frame = mp.Frame(blocks=blocks)
 
     meta = payload.get("meta")
+    if meta is not None and not isinstance(meta, Mapping):
+        raise WireError("frame 'meta' must be an object")
     if isinstance(meta, Mapping) and meta:
-        frame.meta = {str(k): MetaValue("f64", float(v)) for k, v in meta.items()}
+        decoded_meta = {}
+        for key, value in meta.items():
+            if isinstance(value, Mapping):
+                dtype, data = value.get("dtype"), value.get("data")
+                if (
+                    dtype not in ("i64", "u64")
+                    or not isinstance(data, str)
+                    or re.fullmatch(r"-?(0|[1-9][0-9]*)", data) is None
+                ):
+                    raise WireError(f"meta.{key}: expected i64/u64 decimal data")
+                number = int(data)
+                low, high = (_I64_MIN, _I64_MAX) if dtype == "i64" else (0, _U64_MAX)
+                if not low <= number <= high:
+                    raise WireError(f"meta.{key}: {dtype} value is out of range")
+                decoded_meta[str(key)] = MetaValue(dtype, number)
+            elif (
+                not isinstance(value, bool)
+                and isinstance(value, (int, float))
+                and np.isfinite(value)
+            ):
+                decoded_meta[str(key)] = MetaValue("f64", float(value))
+            else:
+                raise WireError(
+                    f"meta.{key}: expected a finite number or tagged integer"
+                )
+        frame.meta = decoded_meta
 
     box = payload.get("box")
     if box is not None:

@@ -1,3 +1,5 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
+import { fillAtomicNumbers } from "@molcrafts/molvis-core/molrs";
 /**
  * OVITO-style **Edit types**: set element and/or type for the current
  * selection.
@@ -58,9 +60,9 @@ export class EditTypesModifier extends BaseModifier {
     const out = result.get("atoms");
 
     if (this._element) {
-      const els = out.has("element")
-        ? [...(out.copy("element") as string[])]
-        : Array.from({ length: n }, () => "X");
+      const els = new AtomSpecies(out).has()
+        ? [...new AtomSpecies(out).symbols()]
+        : Array.from({ length: n }, () => "*");
       for (const i of indices) {
         if (i >= 0 && i < n) els[i] = this._element;
       }
@@ -99,6 +101,7 @@ export class EditTypesModifier extends BaseModifier {
       if (block) result.set(name, block);
     }
     if (input.box) result.box = input.box;
+    if (this._element) fillAtomicNumbers(result);
     return result;
   }
 }

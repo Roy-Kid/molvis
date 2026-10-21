@@ -1,5 +1,5 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
-import { DType } from "../utils/dtype";
 import { occupiedAtomCountForFrame } from "./occupancy";
 import type { SectionUpdates } from "./trajectory";
 
@@ -68,10 +68,9 @@ const elementColumnCache = new WeakMap<Frame, string[] | null>();
 function getElementColumn(frame: Frame, atoms: Block): string[] | null {
   const cached = elementColumnCache.get(frame);
   if (cached !== undefined) return cached;
-  const column =
-    atoms.has("element") && atoms.dtype("element") === DType.String
-      ? (atoms.copy("element") as string[])
-      : null;
+  const column = new AtomSpecies(atoms).has()
+    ? new AtomSpecies(atoms).symbols()
+    : null;
   elementColumnCache.set(frame, column);
   return column;
 }
@@ -82,8 +81,8 @@ function compareOptionalElement(
   rightFrame: Frame,
   rightAtoms: Block,
 ): boolean {
-  // Canonical identity column is `element: String`. LAMMPS data/dump without
-  // element simply have no identity column — both sides missing is "equal".
+  // Canonical atomic numbers decide species; raw symbols are a file-boundary
+  // fallback. Type-only frames have no species column.
   const left = getElementColumn(leftFrame, leftAtoms);
   const right = getElementColumn(rightFrame, rightAtoms);
   if (left === null && right === null) return true;

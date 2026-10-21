@@ -63,9 +63,8 @@ function generateAndPlace(app: Molvis, frame2d: Frame) {
   // Fill localized bond_number on aromatic bonds before stamp.
   // PlaceMoleculeCommand also runs this; doing it here keeps the pending
   // template inspectable / re-stampable with correct columns.
-  const withKekule = assignKekuleBondOrders(frame3d);
-  frame3d.free();
-  placeFrame(app, withKekule);
+  assignKekuleBondOrders(frame3d);
+  placeFrame(app, frame3d);
 }
 
 const GENERATE_COPY = {

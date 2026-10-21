@@ -83,11 +83,19 @@
   "scripts": {
     "dev": "wireit",
     "build": "wireit",
+    "pretypecheck": "npm run build",
+    "prepublishOnly": "npm run check:molrs-release --prefix ..",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "rstest run"
   },
   "dependencies": {
     "@molcrafts/molrs": "^0.18.0"
+  },
+  "molrsDevelopment": {
+    "repository": "https://github.com/MolCrafts/molrs.git",
+    "revision": "f9722bbea655500d43d3d9e8e3e5bc2caab45b87",
+    "toolchain": "1.99.1",
+    "wasmPackVersion": "0.15.0"
   },
   "devDependencies": {
     "@rslib/core": "^0.23.2",

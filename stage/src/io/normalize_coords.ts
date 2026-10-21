@@ -1,4 +1,5 @@
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
+import { fillAtomicNumbers } from "@molcrafts/molvis-core/molrs";
 import { DType } from "../utils/dtype";
 import { lammpsCellFromBox } from "./box_lammps";
 
@@ -145,28 +146,24 @@ export function normalizeAtomCoords(frame: Frame): void {
 const ELEMENT_ALIASES = ["species", "symbol"] as const;
 
 /**
- * Ensure the frame's `atoms` block exposes a canonical `element` String column.
- *
- * The renderer's per-element coloring, bond perception, RDF analysis, and
- * selection expressions all key off `element` (see
- * `artist/atom_buffer.ts:resolveAtomStyle`). When a reader names that column
- * something else — extended-XYZ emits `species` from `Properties=species:S:1` —
- * those atoms silently fall through to the categorical *type* path and render
- * with a single uniform color instead of per-element CPK colors.
- *
- * Aliases the first present `species`/`symbol` String column to `element`,
- * mirroring the alias handling on the RPC ingress (`transport/rpc/
- * serialization.ts`). No-op when an `element` column already exists or no
- * alias is present. The aliased source column is left in place (harmless;
- * `element` takes priority everywhere downstream).
+ * Convert a reader's explicit symbols into canonical atomic numbers.
+ * Existing atomic numbers are authoritative. `species` / `symbol` aliases
+ * remain raw columns; no species is inferred from names or force-field types.
+ * Molrs performs the conversion and reports unknown symbols with their row.
+ * Its conversion invalidates borrowed blocks: callers must reacquire them.
  */
 export function normalizeAtomElements(frame: Frame): void {
   if (!frame.has("atoms")) return;
   const atoms = frame.get("atoms");
-  if (atoms.has("element")) return;
+  if (atoms.has("atomic_number")) return;
+  if (atoms.has("element")) {
+    fillAtomicNumbers(frame);
+    return;
+  }
   for (const alias of ELEMENT_ALIASES) {
     if (atoms.has(alias) && atoms.dtype(alias) === DType.String) {
       atoms.set("element", atoms.copy(alias) as string[]);
+      fillAtomicNumbers(frame);
       return;
     }
   }

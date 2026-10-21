@@ -19,7 +19,13 @@
  * safe, because it runs when nothing can still be looking.
  */
 
-import { type Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import {
+  type Block,
+  Box,
+  Cell,
+  Frame,
+  type MetaValue,
+} from "@molcrafts/molvis-core/molrs";
 import { DType } from "../../utils/dtype";
 import type { BlockPayload, ColumnPayload, FrameMessage } from "./protocol";
 
@@ -74,18 +80,16 @@ export function rehydrateFrame(msg: FrameMessage, previous?: Frame): Frame {
   }
 
   if (msg.box) {
-    frame.box = new Box(
-      msg.box.h,
-      msg.box.origin,
+    frame.box = new Box(Cell.matrix(msg.box.h), msg.box.origin, [
       msg.box.pbc[0],
       msg.box.pbc[1],
       msg.box.pbc[2],
-    );
+    ]);
   }
 
   if (msg.meta) {
     for (const [name, value] of Object.entries(msg.meta)) {
-      frame.setMetaScalar(name, value);
+      frame.setMeta(name, value);
     }
   }
 
@@ -178,23 +182,21 @@ export function encodeFrame(
     );
   }
 
-  // Numeric and string meta are separate dtypes with separate getters; a
-  // key is one or the other, never both, so each name lands in exactly one
-  // of these maps.
-  const meta: Record<string, number> = {};
+  // Structured clone preserves bigint, typed arrays, and JSON metadata.
+  // Keep text in its existing field; carry every other stored value as-is.
+  const meta: Record<string, MetaValue> = {};
   const metaText: Record<string, string> = {};
   let hasMeta = false;
   let hasMetaText = false;
   for (const name of frame.metaKeys()) {
-    const value = frame.getMetaScalar(name);
-    if (value !== undefined) {
+    const value = frame.getMeta(name);
+    if (value === undefined) continue;
+    if (typeof value !== "string") {
       meta[name] = value;
       hasMeta = true;
       continue;
     }
-    const text = frame.getMeta(name);
-    if (text === undefined) continue;
-    metaText[name] = text;
+    metaText[name] = value;
     hasMetaText = true;
   }
 

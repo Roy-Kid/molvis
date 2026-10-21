@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { runAnalysisJob } from "../../src/analysis/job_runner";
@@ -62,12 +62,10 @@ function pairFrame(separation: number): Frame {
   atoms.set("element", ["Ar", "Ar"]);
   frame.set("atoms", atoms);
   // `Frame.box` MOVES the handle — build a fresh Box per attach.
-  frame.box = Box.ortho(
-    Float64Array.from(BOX_LENGTHS),
+  frame.box = new Box(
+    Cell.lengths(Float64Array.from(BOX_LENGTHS)),
     Float64Array.from(BOX_ORIGIN),
-    true,
-    true,
-    true,
+    [true, true, true],
   );
   return frame;
 }
@@ -122,11 +120,9 @@ function triclinicFrame(): Frame {
   const [lx, ly, lz] = TRI_LENGTHS;
   const [xy, xz, yz] = TRI_TILTS;
   frame.box = new Box(
-    Float64Array.from([lx, xy, xz, 0, ly, yz, 0, 0, lz]),
+    Cell.matrix(Float64Array.from([lx, xy, xz, 0, ly, yz, 0, 0, lz])),
     Float64Array.from(TRI_ORIGIN),
-    true,
-    true,
-    true,
+    [true, true, true],
   );
   return frame;
 }
@@ -559,6 +555,16 @@ describe("runAnalysisJob", () => {
     expect(series.means[1]).toBeCloseTo(1, 12);
     expect(series.means[2]).toBeCloseTo(4, 12);
   }, 30_000);
+
+  it("runs coordinate-only MSD for nonchemical species labels", async () => {
+    const result = await runAnalysisJob({
+      analysisId: MSD_ID,
+      params: {},
+      frames: [0, 1, 2].map((i) => ({ ...msdSnapshot(i), elements: ["X"] })),
+    });
+    expect(result.cancelled).toBe(false);
+    expect(asMsdSeries(result.payload).means).toEqual([0, 1, 4]);
+  });
 
   it("cancel mid-run resolves cancelled without a payload", async () => {
     // ac-003: cooperative cancel between frames. The job still answers, so the

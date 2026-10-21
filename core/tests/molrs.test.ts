@@ -7,7 +7,7 @@ import {
   DcdStream,
   Frame,
   SmilesIr,
-  writeDcdBytes,
+  writeDcd,
 } from "../src/molrs";
 
 /** Embed `smiles` in 3D with a fixed seed; the caller frees the frame. */
@@ -76,26 +76,23 @@ describe("molrs gateway", () => {
 
 describe("mrec gateway", () => {
   it("re-exports every MrecReader door", async () => {
-    const { MrecReader, openMrecStore } = await import("../src/molrs");
+    const { MrecReader } = await import("../src/molrs");
     expect(typeof MrecReader).toBe("function");
-    expect(typeof MrecReader.fromZip).toBe("function");
-    expect(typeof MrecReader.fromStorage).toBe("function");
     expect(typeof MrecReader.prototype.readColumns).toBe("function");
     expect(typeof MrecReader.prototype.blockUpdateAt).toBe("function");
-    expect(typeof openMrecStore).toBe("function");
   });
 
-  it("openMrecStore names a host missing a required method", async () => {
-    const { openMrecStore } = await import("../src/molrs");
+  it("MrecReader names a host missing a required method", async () => {
+    const { MrecReader } = await import("../src/molrs");
     const partial = {
       get: () => null,
       size: () => null,
     } as unknown as import("../src/molrs").MrecStoreHost;
-    expect(() => openMrecStore(partial)).toThrow(/lacks list/);
+    expect(() => new MrecReader(partial)).toThrow(/lacks list/);
   });
 
-  it("openMrecStore reads keys through the host, not a copy", async () => {
-    const { openMrecStore } = await import("../src/molrs");
+  it("MrecReader reads keys through the host, not a copy", async () => {
+    const { MrecReader } = await import("../src/molrs");
     const seen: string[] = [];
     const host = {
       get: (key: string) => {
@@ -110,7 +107,7 @@ describe("mrec gateway", () => {
     };
     // An empty store is not a sequence; the open must fail through the
     // host's own answers rather than by never consulting it.
-    expect(() => openMrecStore(host)).toThrow();
+    expect(() => new MrecReader(host)).toThrow();
     expect(seen.length).toBeGreaterThan(0);
   });
 });
@@ -164,7 +161,7 @@ function indexFrames(bytes: Uint8Array): {
 
 function buildMultiDcd(seeds: number[], patchNset = true): Uint8Array {
   const parts = seeds.map((seed) => {
-    const bytes = writeDcdBytes(makeCoordFrame(4, seed));
+    const bytes = writeDcd(makeCoordFrame(4, seed));
     const { stream, entries } = indexFrames(bytes);
     stream.free();
     const pos = entries[0];

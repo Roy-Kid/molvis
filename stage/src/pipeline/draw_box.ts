@@ -1,4 +1,4 @@
-import { Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { hMatrixFromLammps } from "../io/box_lammps";
 import { hasPresentBox, shouldDrawBox } from "../io/box_presence";
 import { BaseModifier, ModifierCapability } from "./modifier";
@@ -191,7 +191,11 @@ export class DrawBoxModifier extends BaseModifier {
     if (!this._manualBox) return undefined;
     const { lengths, tilts, origin, pbc } = this._manualBox;
     const h = hMatrixFromLammps(lengths, tilts);
-    return new Box(h, Float64Array.from(origin), pbc[0], pbc[1], pbc[2]);
+    return new Box(Cell.matrix(h), Float64Array.from(origin), [
+      pbc[0],
+      pbc[1],
+      pbc[2],
+    ]);
   }
 }
 

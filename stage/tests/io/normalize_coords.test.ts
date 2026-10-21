@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import { hMatrixFromLammps } from "../../src/io/box_lammps";
@@ -16,11 +16,9 @@ describe("normalizeAtomCoords", () => {
     atoms.set("zs", new Float64Array([0]));
     frame.set("atoms", atoms);
     frame.box = new Box(
-      hMatrixFromLammps([8, 8, 8], [2, 0, 0]),
+      Cell.matrix(hMatrixFromLammps([8, 8, 8], [2, 0, 0])),
       new Float64Array([0, 0, 0]),
-      true,
-      true,
-      true,
+      [true, true, true],
     );
 
     normalizeAtomCoords(frame);

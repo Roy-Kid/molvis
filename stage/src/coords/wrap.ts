@@ -31,7 +31,7 @@ export function wrapAtoms(
   try {
     const wrapped = box.wrap(coordsArr);
     try {
-      const w = wrapped.toCopy();
+      const w = wrapped.xyz.toCopy();
       for (let i = 0; i < atomCount; i++) {
         const i3 = i * 3;
         outX[i] = w[i3];
@@ -39,7 +39,7 @@ export function wrapAtoms(
         outZ[i] = w[i3 + 2];
       }
     } finally {
-      wrapped.free();
+      wrapped.xyz.free();
     }
   } finally {
     coordsArr.free();

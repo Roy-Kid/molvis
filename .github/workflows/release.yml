@@ -53,8 +53,10 @@ jobs:
       - run: npm run build:packages
       - run: npm run check:pack
       - name: Pack core, engines, viewers, plugin SDK and the umbrella
+        # Source-built MolRS is a development dependency, not a registry release.
         run: |
           set -euo pipefail
+          npm run check:molrs-release
           mkdir -p npm-dist
           i=0
           for w in @molcrafts/molvis-core @molcrafts/molvis-stage @molcrafts/molvis-stage-viewer \

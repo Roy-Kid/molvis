@@ -1,8 +1,4 @@
-import {
-  type Frame,
-  MrecReader,
-  openMrecStore,
-} from "@molcrafts/molvis-core/molrs";
+import { type Frame, MrecReader } from "@molcrafts/molvis-core/molrs";
 import { type FrameProvider, Trajectory } from "../system/trajectory";
 import { logger } from "../utils/logger";
 import { MapMrecStoreHost, sectionUpdatesAt } from "./mrec_store";
@@ -226,13 +222,13 @@ export function loadMrecStore(
     throw new Error("mrec store is empty");
   }
   return trajectoryFromReader(
-    openMrecStore(new MapMrecStoreHost(files)),
+    new MrecReader(new MapMrecStoreHost(files)),
     options,
   );
 }
 
 /**
- * Load a packed `*.mrec.zip` from its bytes (`MrecReader.fromZip`).
+ * Load a packed `*.mrec.zip` from its bytes (`MrecReader constructor`).
  * Entries must be stored, not deflated — the reader refuses compressed
  * archives by name.
  */
@@ -243,7 +239,7 @@ export function loadMrecZip(
   if (bytes.byteLength === 0) {
     throw new Error("mrec archive is empty");
   }
-  return trajectoryFromReader(MrecReader.fromZip(bytes), options);
+  return trajectoryFromReader(new MrecReader(bytes), options);
 }
 
 /**

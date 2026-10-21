@@ -1,5 +1,5 @@
 import { toDomainUint, toRowIndex } from "@molcrafts/molvis-core";
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { BOND_TYPE_SINGLE, setBondTopology } from "../utils/bond_order";
 import { type ColumnDType, DType } from "../utils/dtype";
 import type { Trajectory } from "./trajectory";
@@ -305,7 +305,11 @@ function cloneBox(source: Box): Box {
     hColMajor[5],
     hColMajor[8],
   ]);
-  return new Box(hRowMajor, origin, pbc[0] !== 0, pbc[1] !== 0, pbc[2] !== 0);
+  return new Box(Cell.matrix(hRowMajor), origin, [
+    pbc[0] !== 0,
+    pbc[1] !== 0,
+    pbc[2] !== 0,
+  ]);
 }
 
 function copyAndFreeWasmArray(array: {

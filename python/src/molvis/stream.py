@@ -149,21 +149,15 @@ class FrameStream:
         queue_size: int = DEFAULT_QUEUE_SIZE,
     ) -> None:
         if not url.startswith(("ws://", "wss://")):
-            raise ValueError(
-                f"url must be a ws:// or wss:// endpoint, got {url!r}"
-            )
+            raise ValueError(f"url must be a ws:// or wss:// endpoint, got {url!r}")
         if format not in ("msgpack", "json"):
-            raise ValueError(
-                f"format must be 'msgpack' or 'json', got {format!r}"
-            )
+            raise ValueError(f"format must be 'msgpack' or 'json', got {format!r}")
         if max_rate_hz is not None and not max_rate_hz > 0:
             raise ValueError(
                 f"max_rate_hz must be positive or None, got {max_rate_hz!r}"
             )
         if queue_size < 1:
-            raise ValueError(
-                f"queue_size must be at least 1, got {queue_size!r}"
-            )
+            raise ValueError(f"queue_size must be at least 1, got {queue_size!r}")
 
         self._viewer = viewer
         self._url = url
@@ -265,9 +259,7 @@ class FrameStream:
         )
         self._thread.start()
         if not self._ready.wait(timeout=timeout):
-            raise StreamError(
-                f"stream reader failed to start within {timeout}s"
-            )
+            raise StreamError(f"stream reader failed to start within {timeout}s")
         return self
 
     def stop(self, timeout: float = 5.0) -> None:

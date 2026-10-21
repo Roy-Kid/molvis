@@ -1,4 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rslib/core";
+import { MolrsBuild } from "./molrs.build";
+
+new MolrsBuild(fileURLToPath(new URL("..", import.meta.url))).ensure();
 
 /**
  * Unbundled library build for `@molcrafts/molvis-core`.

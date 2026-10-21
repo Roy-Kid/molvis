@@ -4,8 +4,8 @@ import {
   type Frame,
   GroReader,
   Mol2Reader,
-  readChgcarStr,
-  readCubeStr,
+  readChgcar,
+  readCube,
   VaspPoscarReader,
 } from "@molcrafts/molvis-core/molrs";
 import { type FrameProvider, Trajectory } from "../system/trajectory";
@@ -183,9 +183,9 @@ function openTextReader(content: string, format: FileFormat): MultiFrameReader {
       case "poscar":
         return new VaspPoscarReader(content);
       case "cube":
-        return new SingleFrameReader(readCubeStr(content));
+        return new SingleFrameReader(readCube(content));
       case "chgcar":
-        return new SingleFrameReader(readChgcarStr(content));
+        return new SingleFrameReader(readChgcar(content));
       default:
         // Unreachable in practice: loadTextTrajectory rejects
         // payload="binary" formats before reaching this dispatch. Kept

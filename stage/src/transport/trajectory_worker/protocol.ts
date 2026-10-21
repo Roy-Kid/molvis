@@ -12,10 +12,12 @@
  * streaming pipeline caps trajectory size at 1 TB, well within safe-int —
  * byte offsets stay exact without BigInt on either side of the channel.
  *
- * Every typed-array field in a `FrameMessage` is added to the
- * `postMessage` transfer list — ownership moves to the receiver, the
- * sender must not retain references after sending.
+ * Column, shape and box arrays in a `FrameMessage` are added to the
+ * `postMessage` transfer list — ownership moves to the receiver. Metadata
+ * values are structured-cloned. The sender must not retain transferred arrays.
  */
+
+import type { MetaValue } from "@molcrafts/molvis-core/molrs";
 
 export type Format =
   | "lammps-dump"
@@ -78,7 +80,7 @@ export interface OpfsSourceHandle {
  *   (structured-clonable). The lazy path: the worker reads exactly the byte
  *   ranges a frame touches with `FileReaderSync`; nothing else leaves disk.
  * - `mrec-zip` — one packed `*.mrec.zip`, read whole by the host and
- *   transferred; the worker unpacks it (`MrecReader.fromZip`).
+ *   transferred; the worker unpacks it (`MrecReader constructor`).
  */
 export interface MrecFilesSourceHandle {
   kind: "mrec-files";
@@ -164,17 +166,13 @@ export interface FrameMessage {
   blocks: BlockPayload[];
   box: BoxPayload | null;
   /**
-   * Numeric per-frame metadata (`Frame.getMetaScalar` names), when the
-   * source carries any (mrec `step` / `time` / thermo scalars).
+   * Non-text per-frame metadata, including exact i64/u64 bigint values,
+   * booleans, shaped values and JSON. Structured clone preserves the carriers.
    */
-  meta?: Record<string, number>;
+  meta?: Record<string, MetaValue>;
   /**
-   * String per-frame metadata (`Frame.getMeta` names). Carried separately
-   * from {@link meta} because the two are distinct dtypes on the frame and
-   * the getters do not cross over — a label like a LAMMPS `dump local`
-   * `dump_local_label` reads back as `undefined` from `getMetaScalar`, so a
-   * numbers-only payload dropped it and the streamed copy of a frame silently
-   * lost what the whole-file copy kept.
+   * String per-frame metadata (`Frame.getMeta` names), including LAMMPS
+   * `dump_local_label`. Kept separately from the non-text metadata field.
    */
   metaText?: Record<string, string>;
   /**

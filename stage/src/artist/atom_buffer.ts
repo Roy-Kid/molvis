@@ -1,4 +1,5 @@
 import { Color3 } from "@babylonjs/core";
+import { AtomSpecies } from "@molcrafts/molvis-core";
 import type { Block, Frame } from "@molcrafts/molvis-core/molrs";
 import { readAtomTypeKeys } from "../atom_type";
 import {
@@ -68,10 +69,9 @@ export function buildAtomBuffers(
   // Canonical: `element` is String. Secondary: `type` / `type_id` via
   // {@link readAtomTypeKeys} (LAMMPS data/dump write the ordinal as
   // `type_id`). These are the only two sources the renderer reads.
-  const elementsColumn =
-    atomsBlock.has("element") && atomsBlock.dtype("element") === "string"
-      ? (atomsBlock.copy("element") as string[])
-      : undefined;
+  const elementsColumn = new AtomSpecies(atomsBlock).has()
+    ? new AtomSpecies(atomsBlock).symbols()
+    : undefined;
   const typesColumn = elementsColumn ? undefined : readAtomTypeKeys(atomsBlock);
 
   if (!xCoords || !yCoords || !zCoords)
@@ -247,10 +247,9 @@ export function buildAtomColorOnly(
   styleManager: StyleManager,
 ): Float32Array {
   const atomCount = atomsBlock.nRows;
-  const elementsColumn =
-    atomsBlock.has("element") && atomsBlock.dtype("element") === "string"
-      ? (atomsBlock.copy("element") as string[])
-      : undefined;
+  const elementsColumn = new AtomSpecies(atomsBlock).has()
+    ? new AtomSpecies(atomsBlock).symbols()
+    : undefined;
   const typesColumn = elementsColumn ? undefined : readAtomTypeKeys(atomsBlock);
 
   const overrideR = atomsBlock.has(COLOR_OVERRIDE_R)

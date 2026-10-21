@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 import type {
   SelectTypeModifier as CoreSelectTypeModifier,
   Molvis,
@@ -41,8 +42,8 @@ export const SelectTypeModifier: React.FC<Props> = ({
     const atoms = app?.system?.frame?.has("atoms")
       ? app?.system?.frame.get("atoms")
       : undefined;
-    if (!atoms?.has("element")) return [] as string[];
-    const els = atoms.copy("element") as string[];
+    if (!atoms || !new AtomSpecies(atoms).has()) return [] as string[];
+    const els = new AtomSpecies(atoms).symbols();
     return [...new Set(els)].sort();
   }, [app, app?.system?.frame]);
 

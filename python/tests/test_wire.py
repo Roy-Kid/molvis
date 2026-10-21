@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import molpy as mp
 import numpy as np
 import pytest
@@ -53,6 +55,37 @@ class TestCanonicalDtype:
 
 
 class TestEncodeFrame:
+    def test_integer_metadata_roundtrips_through_json_exactly(self):
+        payload, buffers = encode_frame(
+            {
+                "blocks": {},
+                "meta": {"step": 500, "count": 2**64 - 1, "offset": -(2**63)},
+            }
+        )
+        assert payload["meta"]["count"] == {"dtype": "u64", "data": str(2**64 - 1)}
+        restored = decode_frame(json.loads(json.dumps(payload)), buffers)
+        assert restored.meta["step"] == 500
+        assert restored.meta["count"] == 2**64 - 1
+        assert restored.meta["offset"] == -(2**63)
+
+    def test_refuses_integer_metadata_outside_native_range(self):
+        for value in [-(2**63) - 1, 2**64]:
+            with pytest.raises(WireError, match="meta.step"):
+                encode_frame({"blocks": {}, "meta": {"step": value}})
+
+    def test_rejects_malformed_or_out_of_range_integer_metadata(self):
+        for value in [
+            {"dtype": "i64", "data": str(2**63)},
+            {"dtype": "u64", "data": str(2**64)},
+            {"dtype": "u64", "data": "-1"},
+            {"dtype": "i64", "data": "1.5"},
+            {"dtype": "i64", "data": "0x10"},
+            {"dtype": "i64", "data": 42},
+            {"dtype": "other", "data": "42"},
+        ]:
+            with pytest.raises(WireError, match="meta.step"):
+                decode_frame({"blocks": {}, "meta": {"step": value}})
+
     def test_whole_number_coordinates_stay_float(self):
         # The regression the wire format exists to kill: these used to be
         # sniffed as u32 in the browser and the atoms vanished.
@@ -192,8 +225,6 @@ class TestRoundTrip:
             {"blocks": {"atoms": {"x": [0.0]}}, "metadata": {"note": "run-42"}}
         )
         assert "meta" not in payload
-
-
 
 
 class TestMolrsSchemaValidation:

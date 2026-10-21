@@ -225,7 +225,9 @@ def _cmd_open(args: argparse.Namespace) -> int:
         print(f"molvis: failed to read {path.name}: {exc}", file=log)
         return 1
 
-    transport = mv.WebSocketTransport(open_browser=output is None and not args.no_browser)
+    transport = mv.WebSocketTransport(
+        open_browser=output is None and not args.no_browser
+    )
     scene = mv.Molvis(name=args.name, transport=transport)
 
     # ``draw_frame`` / ``set_trajectory`` block until a page connects and
@@ -336,7 +338,9 @@ def _cmd_serve(_args: argparse.Namespace) -> int:
     pipe = KernelPipe()
     path = kernel_file()
     print(f"molvis: kernel {path}", flush=True)
-    print("molvis: send a cell with `molvis exec`. Ctrl+C stops the kernel.", flush=True)
+    print(
+        "molvis: send a cell with `molvis exec`. Ctrl+C stops the kernel.", flush=True
+    )
     try:
         pipe.serve(path)
     except KeyboardInterrupt:
@@ -357,9 +361,7 @@ def _cmd_sessions(_args: argparse.Namespace) -> int:
 
 def _cmd_close(args: argparse.Namespace) -> int:
     """Close one viewer. ``surface`` is null when the flag is omitted."""
-    return _kernel_call(
-        {"op": "close", "name": args.name, "surface": args.surface}
-    )
+    return _kernel_call({"op": "close", "name": args.name, "surface": args.surface})
 
 
 def _add_stage_arguments(parser: argparse.ArgumentParser) -> None:

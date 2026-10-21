@@ -2,7 +2,7 @@ import {
   ArrowDownloadRegular as Download,
   SpinnerIosRegular as Loader2,
 } from "@fluentui/react-icons";
-import { type Frame, readSdfStr } from "@molcrafts/molvis-stage";
+import { type Frame, readSdf } from "@molcrafts/molvis-stage";
 import {
   Input,
   InspectorSection,
@@ -117,7 +117,7 @@ async function fetchPubChem3DFrame(query: string): Promise<Frame> {
   const sdf = await res.text();
   if (!sdf.trim()) throw new Error("PubChem returned empty SDF");
 
-  return readSdfStr(sdf);
+  return readSdf(sdf);
 }
 
 interface DownloadStructureSectionProps {

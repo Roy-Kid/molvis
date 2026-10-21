@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import { SpatialNeighborQuery } from "../../src/algo/neighbor_list";
 import { shouldDrawBox } from "../../src/io/box_presence";
@@ -37,7 +37,11 @@ function compactCarbon(n: number, nonPbcCell: boolean): Frame {
   atoms.set("element", el);
   frame.set("atoms", atoms);
   if (nonPbcCell) {
-    frame.box = Box.cube(1, new Float64Array([0, 0, 0]), true, true, true);
+    frame.box = new Box(
+      Cell.lengths(new Float64Array([1, 1, 1])),
+      new Float64Array(3),
+      [true, true, true],
+    );
   }
   return frame;
 }
@@ -58,7 +62,11 @@ function farEthanol(nonPbcCell: boolean): Frame {
   bonds.set("atomj", toDomainUint([1, 2]));
   frame.set("bonds", bonds);
   if (nonPbcCell) {
-    frame.box = Box.cube(1, new Float64Array([0, 0, 0]), true, true, true);
+    frame.box = new Box(
+      Cell.lengths(new Float64Array([1, 1, 1])),
+      new Float64Array(3),
+      [true, true, true],
+    );
   }
   return frame;
 }

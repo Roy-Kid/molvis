@@ -6,7 +6,7 @@
  * never runs on the main thread, and the relaxed geometry lands in the working
  * tree as one undoable edit instead of overwriting the DataSource HEAD.
  */
-import { toRowIndex } from "@molcrafts/molvis-core";
+import { AtomSpecies, toRowIndex } from "@molcrafts/molvis-core";
 import type { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp } from "../app";
 import {
@@ -249,7 +249,7 @@ function materializeWorkingFromSource(source: Frame): WorkingSnapshot {
   if (!xSrc || !ySrc || !zSrc) {
     throw new Error("Atoms are missing x/y/z coordinates");
   }
-  const elements = atoms.copy("element") as string[];
+  const elements = new AtomSpecies(atoms).symbols();
   const x = new Float64Array(xSrc);
   const y = new Float64Array(ySrc);
   const z = new Float64Array(zSrc);

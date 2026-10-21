@@ -162,7 +162,7 @@ class FrameCommandsMixin:
         """Attach per-frame numeric descriptors, one value per frame.
 
         Values stay float64 end to end — the frontend stores them with molrs
-        ``setMetaScalar`` rather than round-tripping them through decimal text.
+        ``setMeta`` rather than round-tripping them through decimal text.
         """
         if labels is None:
             self.send_cmd(FrontendCommands.SET_FRAME_LABELS.method, {"labels": None})

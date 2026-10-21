@@ -1,3 +1,4 @@
+import { AtomSpecies } from "@molcrafts/molvis-core";
 /**
  * Optimize preflight: pairing, size/type gates, error classification.
  * No L-BFGS / damped loops and no neighbor-list construction — those stay
@@ -633,7 +634,7 @@ export function assessFrameForOptimize(
   let col: string[] | null = null;
   try {
     // molrs throws when the column is absent or not string dtype.
-    col = atoms.copy("element") as string[];
+    col = new AtomSpecies(atoms).symbols();
   } catch {
     col = null;
   }

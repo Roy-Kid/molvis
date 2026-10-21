@@ -1,5 +1,5 @@
 import { toDomainUint } from "@molcrafts/molvis-core";
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import "../setup_wasm";
 import {
@@ -21,7 +21,11 @@ function frameWithIdBonds(): Frame {
   bonds.set("id_i", toDomainUint([10, 20]));
   bonds.set("id_j", toDomainUint([20, 30]));
   frame.set("bonds", bonds);
-  frame.box = Box.cube(5, new Float64Array([0, 0, 0]), true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([5, 5, 5])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 

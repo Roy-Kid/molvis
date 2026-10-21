@@ -1,4 +1,4 @@
-import { Block, Box, Frame } from "@molcrafts/molvis-core/molrs";
+import { Block, Box, Cell, Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it } from "@rstest/core";
 import {
   clusterColumnName,
@@ -20,7 +20,11 @@ function twoClusterFrame(): Frame {
   atoms.set("element", ["C", "C", "O", "O"]);
   const frame = new Frame();
   frame.set("atoms", atoms);
-  frame.box = Box.cube(40, new Float64Array([0, 0, 0]), true, true, true);
+  frame.box = new Box(
+    Cell.lengths(new Float64Array([40, 40, 40])),
+    new Float64Array(3),
+    [true, true, true],
+  );
   return frame;
 }
 

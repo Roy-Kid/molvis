@@ -2,6 +2,7 @@ import { toDomainUint } from "@molcrafts/molvis-core";
 import {
   Block,
   Frame,
+  fillAtomicNumbers,
   PotentialCompiler,
   UffTypifier,
 } from "@molcrafts/molvis-core/molrs";
@@ -154,6 +155,7 @@ describe("LbfgsNeighborStrategy", () => {
 
     const typ = new UffTypifier();
     try {
+      fillAtomicNumbers(frame);
       const typed = typ.typify(frame);
       const forcefield = typ.forcefield();
       const compiler = new PotentialCompiler(forcefield);
