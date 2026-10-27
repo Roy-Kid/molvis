@@ -106,14 +106,7 @@ export interface WireBlock {
  *
  * That is exactly `molpy.Box.matrix.ravel(order="C")` — the array is already
  * C-contiguous, so producers send it as-is — and exactly what molrs
- * `new Box(h, …)` consumes.
- *
- * Note that molrs `Box.h()` returns the **transpose** of this (the same
- * matrix flattened column-major); {@link encodeFrame} transposes on the way out
- * so both directions of the wire agree on one convention. There is no
- * orientation sniffing anywhere — a producer that sends the transpose gets a
- * silently transposed cell, which is why the convention is spelled out here
- * rather than left to a 3×3-shaped guess.
+ * `Cell.matrix` / `Box.h()` use. Encode and decode pass `h` through unchanged.
  */
 export interface WireBox {
   h: Float64Array | BufferRef;
@@ -239,17 +232,6 @@ function viewAs(
         };
   const count = view.byteLength / itemSize;
   return new carrierType(aligned.buffer, aligned.offset, count);
-}
-
-/** Swap between the row-major wire cell and molrs's column-major `hMatrix()`. */
-function transpose3x3(flat: Float64Array): Float64Array {
-  const out = new Float64Array(9);
-  for (let row = 0; row < 3; row++) {
-    for (let col = 0; col < 3; col++) {
-      out[3 * row + col] = flat[3 * col + row];
-    }
-  }
-  return out;
 }
 
 /** molrs throws bare JS strings from wasm-bindgen as often as `Error`s. */
@@ -598,8 +580,8 @@ export function encodeFrame(frame: Frame): EncodedFrame {
   const box = frame.box;
   if (box) {
     wire.box = {
-      // h() is column-major; the wire is row-major (see WireBox).
-      h: push(transpose3x3(box.h().toCopy())),
+      // Box.h() is already the row-major wire layout (see WireBox).
+      h: push(box.h().toCopy()),
       origin: push(box.origin().toCopy()),
       pbc: [...box.pbc()] as [boolean, boolean, boolean],
     };

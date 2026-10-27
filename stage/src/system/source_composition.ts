@@ -307,21 +307,11 @@ function copyBox(target: Frame, source: Frame): void {
 }
 
 function cloneBox(source: Box): Box {
-  const hColMajor = copyAndFreeWasmArray(source.h());
+  const h = copyAndFreeWasmArray(source.h());
   const origin = copyAndFreeWasmArray(source.origin());
   const pbc = source.pbc();
-  const hRowMajor = new Float64Array([
-    hColMajor[0],
-    hColMajor[3],
-    hColMajor[6],
-    hColMajor[1],
-    hColMajor[4],
-    hColMajor[7],
-    hColMajor[2],
-    hColMajor[5],
-    hColMajor[8],
-  ]);
-  return new Box(Cell.matrix(hRowMajor), origin, [pbc[0], pbc[1], pbc[2]]);
+  // Box.h() is already the row-major layout Cell.matrix takes.
+  return new Box(Cell.matrix(h), origin, [pbc[0], pbc[1], pbc[2]]);
 }
 
 function copyAndFreeWasmArray(array: {

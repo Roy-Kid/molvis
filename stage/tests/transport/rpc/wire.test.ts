@@ -393,8 +393,7 @@ describe("encodeFrame", () => {
       "N",
       "H",
     ]);
-    // Same cell in, same cell out — the encode-side transpose to row-major and
-    // the decode-side read cancel exactly.
+    // Same cell in, same cell out — wire and Box.h() share row-major layout.
     expect(Array.from(restored.box?.lengths().toCopy() ?? [])[1]).toBeCloseTo(
       20.024984394500787,
       9,

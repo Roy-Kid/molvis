@@ -98,7 +98,7 @@ describe("rehydrateFrame", () => {
     expect(frame.get("bonds").nRows).toBe(2);
   });
 
-  it("reattaches a triclinic box from column-major worker data", () => {
+  it("reattaches a triclinic box from row-major worker data", () => {
     const msg = emptyMessage();
     msg.box = {
       h: new Float64Array([10, 0, 0, 2, 12, 0, -3, 4, 14]),
@@ -110,7 +110,7 @@ describe("rehydrateFrame", () => {
     expect(box?.h().toCopy()).toEqual(msg.box.h);
     expect(box?.origin().toCopy()).toEqual(msg.box.origin);
     expect(Array.from(box?.pbc() ?? [], Boolean)).toEqual(msg.box.pbc);
-    // Conversion must not mutate the received payload.
+    // Rehydrate must not mutate the received payload.
     expect(Array.from(msg.box.h)).toEqual([10, 0, 0, 2, 12, 0, -3, 4, 14]);
   });
 
@@ -275,7 +275,7 @@ describe("encodeFrame", () => {
     expect(Array.from(encodedGrid?.shape ?? [])).toEqual([2, 2, 2]);
     expect(msg.box?.pbc).toEqual([true, false, true]);
     expect(Array.from(msg.box?.h ?? [])).toEqual([
-      10, 0, 0, 2, 12, 0, -3, 4, 14,
+      10, 2, -3, 0, 12, 4, 0, 0, 14,
     ]);
     expect(Array.from(msg.box?.origin ?? [])).toEqual([1, 2, 3]);
     // Every typed array is JS-owned: transferring it must not touch wasm.
@@ -296,7 +296,7 @@ describe("encodeFrame", () => {
     expect(back.get("grid").structuralShape).toEqual([2, 2, 2]);
     expect(back.getMeta("step")).toBe(42);
     const h = back.box?.h().toCopy();
-    expect(Array.from(h ?? [])).toEqual([10, 0, 0, 2, 12, 0, -3, 4, 14]);
+    expect(Array.from(h ?? [])).toEqual([10, 2, -3, 0, 12, 4, 0, 0, 14]);
     source.free();
     back.free();
   });

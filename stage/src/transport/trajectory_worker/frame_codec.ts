@@ -78,11 +78,8 @@ export function rehydrateFrame(msg: FrameMessage, previous?: Frame): Frame {
   }
 
   if (msg.box) {
-    // The worker carries Box.h() column-major; Cell.matrix takes row-major.
-    const h = msg.box.h;
-    // Keep the length so Cell.matrix still rejects malformed payloads.
-    const rowMajor = h.map((_, i) => h[(i % 3) * 3 + Math.floor(i / 3)]);
-    frame.box = new Box(Cell.matrix(rowMajor), msg.box.origin, [
+    // Worker wire and Box.h() / Cell.matrix share the same row-major layout.
+    frame.box = new Box(Cell.matrix(msg.box.h), msg.box.origin, [
       msg.box.pbc[0],
       msg.box.pbc[1],
       msg.box.pbc[2],
