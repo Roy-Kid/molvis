@@ -16,7 +16,7 @@ import { mountMolvis, Molvis } from "@molcrafts/molvis-stage";
 
 MolVis targets modern browsers (ES2022, WebGL2). The Babylon.js engine
 is imported as a peer dependency in source; the published bundle
-vendors its own copy of `@babylonjs/*` and reaches `@molcrafts/molrs`
+vendors its own copy of `@babylonjs/*` and reaches `@molcrafts/molwasm`
 (WebAssembly kernels) only through workspace-private
 `@molcrafts/molvis-core/molrs`.
 
@@ -261,7 +261,7 @@ interface MolvisSetting {
 
 ## Data layer
 
-The data layer is re-exported from the `@molcrafts/molrs` WASM package.
+The data layer is re-exported from the `@molcrafts/molwasm` WASM package.
 These classes own WASM memory; call `.free()` on any instance you
 create yourself.
 
@@ -296,9 +296,9 @@ array type is the column's dtype (`block.dtype(name)`):
 
 | Array | dtype | Columns |
 |---|---|---|
-| `Float64Array` | `float` | all floating columns |
-| `Int32Array` | `int` | signed ints |
-| `BigUint64Array` | `uint` | identifiers and endpoints (`id`, `type_id`, `atomi`) |
+| `Float64Array` | `f64` | all floating columns |
+| `Int32Array` | `i32` | signed ints |
+| `BigUint64Array` | `u64` | identifiers and endpoints (`id`, `type_id`, `atomi`) |
 | `string[]` | `string` | string columns (`element`, `res_name`) |
 
 Getters come in two flavors:

@@ -77,7 +77,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         ref: ${{ needs.context.outputs.source-ref }}
-    - uses: MolCrafts/molcrafts-ci/actions/setup-node@01317cbc43f961ab14c35d51d48c081a1acfe815
+    - uses: ./.github/actions/setup-source
     - run: npm run build:page
     - run: grep -F 'window.__MOLVIS_ASSET_BASE__="/nightly/molvis/"' page/dist/index.html
     - uses: actions/upload-artifact@v7
@@ -107,7 +107,7 @@ jobs:
     - uses: actions/checkout@v7
       with:
         ref: ${{ needs.context.outputs.source-ref }}
-    - uses: MolCrafts/molcrafts-ci/actions/setup-node@01317cbc43f961ab14c35d51d48c081a1acfe815
+    - uses: ./.github/actions/setup-source
     - uses: MolCrafts/molcrafts-ci/actions/setup-python@01317cbc43f961ab14c35d51d48c081a1acfe815
     - run: npm run build:page
     - name: Stamp the nightly distribution
