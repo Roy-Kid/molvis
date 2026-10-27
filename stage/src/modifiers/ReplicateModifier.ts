@@ -240,9 +240,5 @@ function scaleBox(box: Box, nx: number, ny: number, nz: number): Box {
     b[2],
     c[2],
   ]);
-  return new Box(Cell.matrix(hRow), origin, [
-    pbc[0] === 1,
-    pbc[1] === 1,
-    pbc[2] === 1,
-  ]);
+  return new Box(Cell.matrix(hRow), origin, [pbc[0], pbc[1], pbc[2]]);
 }

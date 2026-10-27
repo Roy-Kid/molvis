@@ -321,11 +321,7 @@ function cloneBox(source: Box): Box {
     hColMajor[5],
     hColMajor[8],
   ]);
-  return new Box(Cell.matrix(hRowMajor), origin, [
-    pbc[0] !== 0,
-    pbc[1] !== 0,
-    pbc[2] !== 0,
-  ]);
+  return new Box(Cell.matrix(hRowMajor), origin, [pbc[0], pbc[1], pbc[2]]);
 }
 
 function copyAndFreeWasmArray(array: {

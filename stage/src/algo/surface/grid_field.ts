@@ -89,7 +89,7 @@ export function readGridField(frame: Frame, channel: string): GridField | null {
   // CHGCAR-style periodic cells wrap; cube files declare non-periodic boxes
   // and take the sealed-at-boundary path. Mixed PBC (a slab) falls back to
   // general, since marching cubes' periodic mode is all-or-nothing.
-  const allPeriodic = pbc[0] === 1 && pbc[1] === 1 && pbc[2] === 1;
+  const allPeriodic = pbc[0] && pbc[1] && pbc[2];
 
   return {
     data,

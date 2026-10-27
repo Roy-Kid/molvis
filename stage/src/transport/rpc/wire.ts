@@ -601,11 +601,7 @@ export function encodeFrame(frame: Frame): EncodedFrame {
       // h() is column-major; the wire is row-major (see WireBox).
       h: push(transpose3x3(box.h().toCopy())),
       origin: push(box.origin().toCopy()),
-      pbc: Array.from(box.pbc(), (flag) => flag !== 0) as [
-        boolean,
-        boolean,
-        boolean,
-      ],
+      pbc: [...box.pbc()] as [boolean, boolean, boolean],
     };
   }
 
