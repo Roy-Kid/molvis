@@ -109,7 +109,7 @@ describe("rehydrateFrame", () => {
     const box = frame.box;
     expect(box?.h().toCopy()).toEqual(msg.box.h);
     expect(box?.origin().toCopy()).toEqual(msg.box.origin);
-    expect(Array.from(box?.pbc() ?? [], Boolean)).toEqual(msg.box.pbc);
+    expect(box?.pbc()).toEqual(msg.box.pbc);
     // Rehydrate must not mutate the received payload.
     expect(Array.from(msg.box.h)).toEqual([10, 0, 0, 2, 12, 0, -3, 4, 14]);
   });

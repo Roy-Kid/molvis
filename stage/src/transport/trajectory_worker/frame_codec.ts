@@ -79,11 +79,7 @@ export function rehydrateFrame(msg: FrameMessage, previous?: Frame): Frame {
 
   if (msg.box) {
     // Worker wire and Box.h() / Cell.matrix share the same row-major layout.
-    frame.box = new Box(Cell.matrix(msg.box.h), msg.box.origin, [
-      msg.box.pbc[0],
-      msg.box.pbc[1],
-      msg.box.pbc[2],
-    ]);
+    frame.box = new Box(Cell.matrix(msg.box.h), msg.box.origin, msg.box.pbc);
   }
 
   if (msg.meta) {
@@ -216,11 +212,10 @@ function encodeBox(box: Box | undefined): FrameMessage["box"] {
   const hArr = box.h();
   const originArr = box.origin();
   try {
-    const pbc = box.pbc();
     return {
       h: hArr.toCopy(),
       origin: originArr.toCopy(),
-      pbc: [Boolean(pbc[0]), Boolean(pbc[1]), Boolean(pbc[2])],
+      pbc: box.pbc(),
     };
   } finally {
     hArr.free();

@@ -225,12 +225,12 @@ describe("decodeFrame — binary buffers", () => {
           atoms: {
             columns: {
               x: { dtype: "f64", data: ref(0) },
-              id: { dtype: "u32", data: ref(1) },
+              id: { dtype: "u64", data: ref(1) },
             },
           },
         },
       },
-      asBuffers(new Float64Array([1.5, 2.5]), new Uint32Array([7, 8])),
+      asBuffers(new Float64Array([1.5, 2.5]), new BigUint64Array([7n, 8n])),
     );
     const atoms = frame.has("atoms") ? frame.get("atoms") : undefined;
     expect(Array.from((atoms?.copy("x") as Float64Array) ?? [])).toEqual([
@@ -399,11 +399,7 @@ describe("encodeFrame", () => {
       9,
     );
     expect(Array.from(restored.box?.tilts().toCopy() ?? [])).toEqual([1, 2, 3]);
-    expect(Array.from(restored.box?.pbc() ?? []).map(Boolean)).toEqual([
-      true,
-      true,
-      false,
-    ]);
+    expect(restored.box?.pbc()).toEqual([true, true, false]);
     expect(restored.getMeta("energy")).toBeCloseTo(-12.5, 10);
 
     original.free();
@@ -494,31 +490,18 @@ describe("wire column fidelity", () => {
   });
 });
 
-it("promotes only legacy schema identities and keeps custom u32", () => {
-  const frame = decodeFrame({
-    blocks: {
-      atoms: {
-        columns: {
-          id: { dtype: "u32", data: new Uint32Array([3, 7]) },
-          flags: { dtype: "u32", data: new Uint32Array([1, 2]) },
-        },
-      },
-    },
-  });
-  expect(frame.get("atoms").dtype("id")).toBe("u64");
-  expect(frame.get("atoms").dtype("flags")).toBe("u32");
+it("rejects a u32 identity column instead of silently promoting it", () => {
   expect(() =>
     decodeFrame({
       blocks: {
         atoms: {
           columns: {
-            id: { dtype: "u32", data: new Uint32Array([3, 7]), shape: [2] },
+            id: { dtype: "u32", data: new Uint32Array([3, 7]) },
           },
         },
       },
     }),
-  ).toThrow(/native setter changed dtype/);
-  frame.free();
+  ).toThrow(/native setter changed dtype|atoms\.id/);
 });
 
 it("rejects column declarations the native setter cannot reconstruct", () => {

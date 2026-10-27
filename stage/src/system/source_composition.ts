@@ -311,7 +311,7 @@ function cloneBox(source: Box): Box {
   const origin = copyAndFreeWasmArray(source.origin());
   const pbc = source.pbc();
   // Box.h() is already the row-major layout Cell.matrix takes.
-  return new Box(Cell.matrix(h), origin, [pbc[0], pbc[1], pbc[2]]);
+  return new Box(Cell.matrix(h), origin, pbc);
 }
 
 function copyAndFreeWasmArray(array: {

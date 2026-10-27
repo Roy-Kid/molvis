@@ -17,13 +17,11 @@
  *
  * Columns with complex values, null rows, empty bool arrays, precision or target declarations
  * cannot be reconstructed by Block.set and are explicitly rejected.
- * Legacy scalar u32 identity columns are promoted according to molrs's schema.
- * All other schema validation is owned by molrs.
+ * All schema validation is owned by molrs.
  *
  * @module
  */
 
-import { toDomainUint } from "@molcrafts/molvis-core";
 import {
   type Block,
   Box,
@@ -31,7 +29,6 @@ import {
   type Column,
   Frame,
   type NumericColumn,
-  schemaColumnDtype,
 } from "@molcrafts/molvis-core/molrs";
 
 // ---------------------------------------------------------------------------
@@ -271,7 +268,6 @@ function decodeColumn(
   const shape =
     column.shape === undefined ? undefined : toShape(path, column.shape);
   let data: Column;
-  let expectedDtype: WireDType = column.dtype;
   if (column.dtype === "string" || column.dtype === "bool") {
     if (
       !Array.isArray(column.data) ||
@@ -288,24 +284,14 @@ function decodeColumn(
     data = column.data as boolean[] | string[];
   } else if (Object.hasOwn(CARRIERS, column.dtype)) {
     data = resolveCarrier(path, column.dtype, column.data, buffers);
-    // Older Python senders used u32 for identities. New payloads state the
-    // column shape and must preserve their declared dtype without promotion.
-    if (
-      column.dtype === "u32" &&
-      column.shape === undefined &&
-      schemaColumnDtype(name) === "u64"
-    ) {
-      data = toDomainUint(data as Uint32Array);
-      expectedDtype = "u64";
-    }
   } else {
     throw new WireError(path, `unknown dtype ${JSON.stringify(column.dtype)}`);
   }
   block.set(name, data, shape);
-  if (block.dtype(name) !== expectedDtype) {
+  if (block.dtype(name) !== column.dtype) {
     throw new WireError(
       path,
-      `native setter changed dtype ${expectedDtype} to ${block.dtype(name)}; cannot preserve this column`,
+      `native setter changed dtype ${column.dtype} to ${block.dtype(name)}; cannot preserve this column`,
     );
   }
 }
@@ -495,7 +481,7 @@ export function decodeBox(
     );
   }
 
-  return new Box(Cell.matrix(h), origin, [pbc[0], pbc[1], pbc[2]]);
+  return new Box(Cell.matrix(h), origin, pbc as [boolean, boolean, boolean]);
 }
 
 // ---------------------------------------------------------------------------
@@ -583,7 +569,7 @@ export function encodeFrame(frame: Frame): EncodedFrame {
       // Box.h() is already the row-major wire layout (see WireBox).
       h: push(box.h().toCopy()),
       origin: push(box.origin().toCopy()),
-      pbc: [...box.pbc()] as [boolean, boolean, boolean],
+      pbc: box.pbc(),
     };
   }
 

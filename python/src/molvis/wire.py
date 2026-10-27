@@ -526,8 +526,6 @@ def decode_frame(payload: Any, buffers: Sequence[Any] = ()) -> mp.Frame:
                     array = array.reshape(shape)
                 except ValueError as exc:
                     raise WireError(f"{path}: invalid column shape: {exc}") from exc
-            elif raw_column.get("dtype") == "u32" and canonical_dtype(key) == "u64":
-                array = array.astype(np.uint64)
             columns[key] = array
         block = Block()
         for key, array in columns.items():

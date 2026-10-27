@@ -431,21 +431,19 @@ class TestColumnFidelity:
                 }
             )
 
-    def test_promotes_only_legacy_canonical_u32(self):
-        restored = decode_frame(
-            {
-                "blocks": {
-                    "atoms": {
-                        "columns": {
-                            "id": {"dtype": "u32", "data": [1, 2]},
-                            "flags": {"dtype": "u32", "data": [3, 4]},
+    def test_rejects_u32_identity_instead_of_promoting(self):
+        with pytest.raises(WireError, match="atoms.id"):
+            decode_frame(
+                {
+                    "blocks": {
+                        "atoms": {
+                            "columns": {
+                                "id": {"dtype": "u32", "data": [1, 2]},
+                            }
                         }
                     }
                 }
-            }
-        )
-        assert restored["atoms"]["id"].dtype == np.uint64
-        assert restored["atoms"]["flags"].dtype == np.uint32
+            )
 
     @pytest.mark.parametrize(
         "dtype,data",
