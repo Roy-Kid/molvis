@@ -1,7 +1,7 @@
 /**
  * MolVis aliases over the shared workbench geometry.
  *
- * Tokens and helpers live in `layout.ts` (synced from molcrafts-ui).
+ * `layout.ts` binds the shared MolCrafts UI sizing helpers to MolVis defaults.
  * This file keeps compute/tools names so existing tests and App.tsx
  * imports stay stable until App mounts WorkbenchShell.
  */

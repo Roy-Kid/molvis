@@ -584,13 +584,24 @@ class Sketch:
         return [int(i) for i in self._call("sketch.selected_atoms")]
 
     def delete_selection(self) -> Sketch:
-        """Delete the current atom and bond selection as one undo step."""
+        """Delete the current selection as one undo step."""
         self._call("sketch.delete_selection")
         return self
 
     def molecule(self) -> dict[str, Any]:
         """Deep copy of the document as MoleculeData. Mutating it does not change the board."""
         return dict(self._call("sketch.molecule"))
+
+    def document(self) -> dict[str, Any]:
+        """Copy the editable drawing, including atoms, bonds, and figure annotations."""
+        return dict(self._call("sketch.document"))
+
+    def load_document(self, data: dict[str, Any]) -> Sketch:
+        """Load an editable Sketch drawing with explicit 2D coordinates and fit the view."""
+        if not isinstance(data, dict) or not {"atoms", "bonds", "annotations"} <= data.keys():
+            raise TypeError("load_document expects atoms, bonds, and annotations")
+        self._call("sketch.load_document", {"data": data})
+        return self
 
     def load(self, data: dict[str, Any]) -> Sketch:
         """Replace the 2D document with MoleculeData.
@@ -655,10 +666,11 @@ class Sketch:
         padding: float | None = None,
         background: str | None = None,
     ) -> str:
-        """Fitted, selection-free SVG of the formula. Written to ``path`` when given.
+        """Fitted, selection-free SVG of the drawing. Written to ``path`` when given.
 
         ``width``/``height`` are the image size in pixels (default
-        1200x800), ``padding`` the margin, ``background`` the paper color.
+        1200x800 for molecules, fitted height for annotated figures). ``padding``
+        sets the margin and ``background`` sets the paper color.
         """
         svg = str(
             self._call(
@@ -680,7 +692,7 @@ class Sketch:
         background: str | None = None,
         pixel_ratio: float | None = None,
     ) -> bytes:
-        """Fitted, selection-free PNG of the formula. Written to ``path`` when given.
+        """Fitted, selection-free PNG of the drawing. Written to ``path`` when given.
 
         Same sizing as :meth:`export_svg`; ``pixel_ratio`` (default 2)
         multiplies the pixel size for a sharper raster.
@@ -698,7 +710,7 @@ class Sketch:
         return png
 
     def fit(self) -> Sketch:
-        """Fit the 2D viewport to the atoms. Not a camera, and not an undo step."""
+        """Fit the 2D viewport to the entire drawing."""
         self._call("sketch.fit")
         return self
 
@@ -732,7 +744,8 @@ class Sketch:
         ``ringKind``, ``fragmentId``, ``stereoMode``, ``chargeDelta``,
         ``customColor``, ``colorOverrideEnabled``, ``disabled``,
         ``canUndo``, ``canRedo``, ``atomCount``, ``bondCount``,
-        ``selectedAtomCount``, ``selectedBondCount``. Not a subset.
+        ``selectedAtomCount``, ``selectedBondCount``, ``annotationCount``,
+        ``selectedAnnotationCount``, ``figureToolLocked``.
         """
         return dict(self._call("sketch.state"))
 

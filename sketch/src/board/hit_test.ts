@@ -1,4 +1,6 @@
 import type { MoleculeGraph } from "../molecule_graph";
+import { atomLabelWidth } from "../style/atom_label";
+import type { Atom2D } from "../types";
 
 /**
  * What the pointer is over on the 2D board, right now.
@@ -15,6 +17,7 @@ import type { MoleculeGraph } from "../molecule_graph";
 export type BoardHit =
   | { kind: "atom"; index: number }
   | { kind: "bond"; index: number }
+  | { kind: "annotation"; index: number }
   | { kind: "none" };
 
 /**
@@ -24,10 +27,15 @@ export class HitTester {
   constructor(
     private readonly atomRadiusDoc: number,
     private readonly bondHalfWidthDoc: number,
+    private readonly labelSizeDoc = 0,
+    private readonly multipleBondReachDoc = 0,
   ) {}
 
   hit(graph: MoleculeGraph, x: number, y: number): BoardHit {
     const data = graph.getMoleculeData();
+    const label = findAtomLabel(data.atoms, { x, y }, this.labelSizeDoc);
+    if (label !== undefined) return { kind: "atom", index: label };
+
     let bestAtom = -1;
     let bestAtomDist = Infinity;
     for (let i = 0; i < data.atoms.length; i++) {
@@ -50,7 +58,11 @@ export class HitTester {
       const a2 = data.atoms[bond.j];
       if (!a1 || !a2) continue;
       const d = pointSegmentDistance(x, y, a1.x, a1.y, a2.x, a2.y);
-      if (d <= this.bondHalfWidthDoc && d < bestBondDist) {
+      const reach =
+        bond.order > 1
+          ? Math.max(this.bondHalfWidthDoc, this.multipleBondReachDoc)
+          : this.bondHalfWidthDoc;
+      if (d <= reach && d < bestBondDist) {
         bestBondDist = d;
         bestBond = b;
       }
@@ -58,6 +70,37 @@ export class HitTester {
     if (bestBond >= 0) return { kind: "bond", index: bestBond };
     return { kind: "none" };
   }
+}
+
+/** Find the nearest visible symbol whose label area contains this point. */
+export function findAtomLabel(
+  atoms: readonly Atom2D[],
+  point: { x: number; y: number },
+  fontSize: number,
+  padding = 0,
+  exclude?: readonly number[],
+): number | undefined {
+  if (fontSize <= 0) return undefined;
+  let best: number | undefined;
+  let bestDistance = Infinity;
+  for (const [index, atom] of atoms.entries()) {
+    if (exclude?.includes(index)) continue;
+    const text = atom.label ?? (atom.element === "C" ? "" : atom.element);
+    if (!text) continue;
+    const dx = Math.abs(atom.x - point.x);
+    const dy = Math.abs(atom.y - point.y);
+    if (
+      dy <= fontSize / 2 + padding &&
+      dx <= atomLabelWidth(text, fontSize) / 2 + padding
+    ) {
+      const distance = Math.hypot(dx, dy);
+      if (distance < bestDistance) {
+        best = index;
+        bestDistance = distance;
+      }
+    }
+  }
+  return best;
 }
 
 function pointSegmentDistance(

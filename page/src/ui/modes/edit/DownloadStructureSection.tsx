@@ -2,7 +2,8 @@ import {
   ArrowDownloadRegular as Download,
   SpinnerIosRegular as Loader2,
 } from "@fluentui/react-icons";
-import { type Frame, readSdf } from "@molcrafts/molvis-stage";
+import type { Frame } from "@molcrafts/molvis-stage";
+import { fetchPubChem3DFrame } from "@molcrafts/molvis-stage/io";
 import {
   Input,
   InspectorSection,
@@ -88,37 +89,6 @@ const SOURCES: SourceOption[] = [
     enabled: false,
   },
 ];
-
-/**
- * Fetch the experimentally/PubChem-computed 3D SDF for a compound and
- * parse it into a {@link Frame}. Coordinates come from PubChem — no
- * additional 3D generation or optimization is performed.
- *
- * Accepts a CID (all-digits) or a compound name/synonym. Throws with a
- * distinct message when PubChem has no 3D record for the compound, so
- * callers can choose to fall back to SMILES + `Conformer`.
- */
-async function fetchPubChem3DFrame(query: string): Promise<Frame> {
-  const trimmed = query.trim();
-  if (!trimmed) throw new Error("Enter a PubChem name or CID");
-
-  const ns = /^\d+$/.test(trimmed) ? "cid" : "name";
-  const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/${ns}/${encodeURIComponent(
-    trimmed,
-  )}/record/SDF?record_type=3d`;
-
-  const res = await fetch(url, {
-    headers: { Accept: "chemical/x-mdl-sdfile" },
-  });
-  if (!res.ok) {
-    if (res.status === 404) throw new Error(`PubChem: "${trimmed}" not found`);
-    throw new Error(`PubChem error ${res.status}`);
-  }
-  const sdf = await res.text();
-  if (!sdf.trim()) throw new Error("PubChem returned empty SDF");
-
-  return readSdf(sdf);
-}
 
 interface DownloadStructureSectionProps {
   /** Called with a 3D {@link Frame} when the source already provides

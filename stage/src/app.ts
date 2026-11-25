@@ -1,11 +1,11 @@
 import { Color4, Engine, Tools } from "@babylonjs/core";
 import { toRowIndex } from "@molcrafts/molvis-core";
 import type { App } from "@molcrafts/molvis-core/app";
+import type { Box, Frame } from "@molcrafts/molvis-core/molrs";
 import {
   cropToContent,
   reencodeImage,
-} from "@molcrafts/molvis-core/image-crop";
-import type { Box, Frame } from "@molcrafts/molvis-core/molrs";
+} from "@molcrafts/ui-web-components/image-crop";
 import { frameHasStructure } from "./analysis/requirements";
 import { Artist } from "./artist";
 import type {
@@ -825,6 +825,7 @@ export class MolvisApp implements App {
 
   public destroy(): void {
     this.stop();
+    this.mode?.finish();
     this._resizeCoalesce?.cancel();
     this._resizeCoalesce = null;
     this._resizeObserver?.disconnect();

@@ -1,4 +1,8 @@
-import type { MoleculeData, SketchTopology } from "@molcrafts/molvis-sketch";
+import type {
+  MoleculeData,
+  SketchDocument,
+  SketchTopology,
+} from "@molcrafts/molvis-sketch";
 import { describe, expect, it } from "@rstest/core";
 import {
   type RpcBoard,
@@ -9,7 +13,7 @@ import {
 /** Records every board call; returns canned values where the board would. */
 function fakeBoard(document: MoleculeData = { atoms: [], bonds: [] }) {
   const calls: Array<[string, unknown[]]> = [];
-  let data = document;
+  let data: SketchDocument = { ...document, annotations: [] };
   const record =
     (name: string, result?: unknown) =>
     (...args: unknown[]) => {
@@ -30,9 +34,14 @@ function fakeBoard(document: MoleculeData = { atoms: [], bonds: [] }) {
     replaceSelectedAtoms: record("replaceSelectedAtoms"),
     selectedAtomIndices: record("selectedAtomIndices", [0, 2]),
     deleteSelection: record("deleteSelection"),
-    getMoleculeData: () => data,
+    getMoleculeData: () => ({ atoms: data.atoms, bonds: data.bonds }),
     loadMoleculeData: (next: MoleculeData) => {
       calls.push(["loadMoleculeData", [next]]);
+      data = { ...next, annotations: [] };
+    },
+    getSketchDocument: () => data,
+    loadSketchDocument: (next: SketchDocument) => {
+      calls.push(["loadSketchDocument", [next]]);
       data = next;
     },
     toSvg: record("toSvg", "<svg/>"),
@@ -89,6 +98,24 @@ describe("SketchBoardRpc", () => {
     expect(calls.map(([name]) => name)).toEqual([
       "loadMoleculeData",
       "fitToView",
+    ]);
+  });
+
+  it("loads figure annotations without laying out the saved coordinates", async () => {
+    const { board, calls } = fakeBoard();
+    const rpc = new SketchBoardRpc(board, placer, templates);
+    const data = {
+      atoms: [{ element: "O", x: 13, y: 6 }],
+      bonds: [],
+      annotations: [
+        { kind: "text", label: { text: "PEG", size: 0.6 }, x: 13, y: 4 },
+      ],
+    };
+    await rpc.execute("sketch.load_document", { data });
+    await expect(rpc.execute("sketch.document", {})).resolves.toEqual(data);
+    expect(calls).toEqual([
+      ["loadSketchDocument", [data]],
+      ["fitToView", []],
     ]);
   });
 

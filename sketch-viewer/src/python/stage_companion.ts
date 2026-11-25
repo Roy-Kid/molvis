@@ -112,6 +112,7 @@ export class StageCompanion implements MoleculeEndpoint {
         return {
           ...atom,
           color: original.color,
+          label: original.label,
           port: original.port,
           hydrogens:
             original.element === atom.element &&

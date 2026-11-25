@@ -8,6 +8,7 @@ import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { describe, expect, it, rstest } from "@rstest/core";
 import type { MolvisApp } from "../../src/app";
 import type { Command } from "../../src/commands/base";
+import { EventEmitter, type MolvisEventMap } from "../../src/events";
 import { EditMode } from "../../src/mode/edit";
 import type { SceneHit } from "../../src/mode/types";
 
@@ -79,6 +80,7 @@ rstest.mock("../../src/mode/preview_impostor", () => ({
 
 /** Only EditMode runs; camera, picker, preview renderer and artist are fakes. */
 class EditFixture {
+  readonly events = new EventEmitter<MolvisEventMap>();
   readonly canvas = {};
   readonly commands: Command<unknown>[] = [];
   readonly previews: string[] = [];

@@ -127,7 +127,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
-    "@molcrafts/ui": "file:vendor/ui/molcrafts-ui-0.1.0-alpha.1.tgz",
+    "@molcrafts/ui": "file:vendor/ui/molcrafts-ui-0.1.0-alpha.1-workbench-125bf2d1.tgz",
     "@rsbuild/core": "^2.1.10",
     "@rslib/core": "^0.23.2",
     "@rstest/core": "^0.11.6",

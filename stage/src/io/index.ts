@@ -81,6 +81,7 @@ export {
   sectionUpdatesAt,
 } from "./mrec_store";
 export { mrecSourceHandleFor, openMrecTrajectory } from "./mrec_stream";
+export { fetchPubChem3DFrame } from "./pubchem";
 export {
   canStream,
   decideIngest,

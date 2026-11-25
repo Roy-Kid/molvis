@@ -3,6 +3,8 @@
  */
 export interface Atom2D {
   element: string;
+  /** Optional single-line display text in place of the element symbol. */
+  label?: string;
   /** Document-space x (Å-like). */
   x: number;
   /** Document-space y (Å-like). */

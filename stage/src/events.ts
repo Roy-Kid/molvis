@@ -41,6 +41,7 @@ export interface MolvisEventMap extends AppEventMap {
     length: number | null;
   };
   "mode-change": ModeId;
+  "edit-tool-change": undefined;
   "info-text-change": string;
   "fps-change": number;
   "show-fps-change": boolean;

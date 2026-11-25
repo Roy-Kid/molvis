@@ -1,4 +1,4 @@
-import { ModeType, type Molvis } from "@molcrafts/molvis-stage";
+import { EditMode, type Molvis } from "@molcrafts/molvis-stage";
 import { ToggleAction } from "@molcrafts/ui";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -8,22 +8,6 @@ registerEditElementPicker();
 
 interface ToolsTabProps {
   app: Molvis | null;
-}
-
-interface EditModeState {
-  type: ModeType.Edit;
-  element: string;
-  bondOrder: number;
-}
-
-function isEditModeState(mode: unknown): mode is EditModeState {
-  if (!mode || typeof mode !== "object") return false;
-  const candidate = mode as Partial<EditModeState>;
-  return (
-    candidate.type === ModeType.Edit &&
-    typeof candidate.element === "string" &&
-    typeof candidate.bondOrder === "number"
-  );
 }
 
 const BOND_ORDERS: Array<{ value: 1 | 2 | 3; label: string }> = [
@@ -64,7 +48,7 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
 
     const updateState = () => {
       const mode = app.mode;
-      if (isEditModeState(mode)) {
+      if (mode instanceof EditMode) {
         setIsEditMode(true);
         setActiveElement(mode.element);
         setActiveBondOrder(mode.bondOrder);
@@ -79,11 +63,13 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
 
     if (app.events && typeof app.events.on === "function") {
       app.events.on("mode-change", onModeChange);
+      app.events.on("edit-tool-change", onModeChange);
     }
 
     return () => {
       if (app.events && typeof app.events.off === "function") {
         app.events.off("mode-change", onModeChange);
+        app.events.off("edit-tool-change", onModeChange);
       }
     };
   }, [app]);
@@ -95,14 +81,12 @@ export const ToolsTab: React.FC<ToolsTabProps> = ({ app }) => {
     if (!app) return;
 
     const mode = app.mode;
-    if (isEditModeState(mode)) {
+    if (mode instanceof EditMode) {
       if (updates.element) {
         mode.element = updates.element;
-        setActiveElement(updates.element);
       }
       if (updates.bondOrder) {
         mode.bondOrder = updates.bondOrder;
-        setActiveBondOrder(updates.bondOrder);
       }
     }
   };

@@ -1,4 +1,8 @@
-import { DEFAULT_BOND_LENGTH, resolveBondTarget } from "../geometry/snap";
+import {
+  type BondTarget,
+  DEFAULT_BOND_LENGTH,
+  resolveBondTarget,
+} from "../geometry/snap";
 import type { MoleculeGraph } from "../molecule_graph";
 import { SketchCommand } from "../sketch_command";
 import type { MoleculeData } from "../types";
@@ -18,6 +22,7 @@ export class PlaceTerminalBondCommand extends SketchCommand {
     private readonly order: number,
     private readonly bondLength: number = DEFAULT_BOND_LENGTH,
     private readonly color?: string,
+    private readonly target?: BondTarget,
   ) {
     super();
   }
@@ -31,13 +36,15 @@ export class PlaceTerminalBondCommand extends SketchCommand {
     }
     this.before = this.graph.getMoleculeData();
     const start = this.startIndex;
-    const target = resolveBondTarget(
-      this.graph,
-      start,
-      this.pointerX,
-      this.pointerY,
-      this.bondLength,
-    );
+    const target =
+      this.target ??
+      resolveBondTarget(
+        this.graph,
+        start,
+        this.pointerX,
+        this.pointerY,
+        this.bondLength,
+      );
 
     let end = target.existingIndex;
     if (end === null) {

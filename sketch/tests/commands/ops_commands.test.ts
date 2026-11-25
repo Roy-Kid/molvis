@@ -39,6 +39,15 @@ describe("ops commands", () => {
     await h.execute(new CycleBondOrderCommand(g, 0));
     expect(g.getBond(0).order).toBe(2);
     expect(g.getBond(0).stereo).toBe("none");
+    await h.execute(new CycleBondOrderCommand(g, 0));
+    expect(g.getBond(0).order).toBe(3);
+    await h.execute(new CycleBondOrderCommand(g, 0));
+    expect(g.getBond(0).order).toBe(1);
+    await h.undo();
+    expect(g.getBond(0).order).toBe(3);
+    await h.undo();
+    await h.undo();
+    expect(g.getBond(0)).toMatchObject({ order: 1, stereo: "up" });
   });
 
   it("SetBondStereoCommand only on single bonds", async () => {

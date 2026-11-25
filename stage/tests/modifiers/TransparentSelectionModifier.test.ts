@@ -22,6 +22,17 @@ describe("TransparentSelectionModifier", () => {
   // tests queue but never run — the seam just has to exist.
   const mockApp = {} as MolvisApp;
 
+  it("restores selection opacity and keeps it when an old record omits it", () => {
+    const source = new TransparentSelectionModifier();
+    source.opacity = 0.085;
+    const restored = new TransparentSelectionModifier();
+    restored.fromProjectParams(source.toProjectParams());
+    restored.fromProjectParams({});
+    expect(restored.opacity).toBe(0.085);
+    restored.fromProjectParams({ opacity: 2 });
+    expect(restored.opacity).toBe(1);
+  });
+
   it("should pass through when selection is empty", () => {
     const mod = new TransparentSelectionModifier();
     const frame = makeFrame(["C", "O"]);

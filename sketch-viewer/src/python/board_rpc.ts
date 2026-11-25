@@ -1,6 +1,7 @@
 import type {
   MoleculeData,
   SketchBoard,
+  SketchDocument,
   SketchExportOptions,
   SketchTopology,
 } from "@molcrafts/molvis-sketch";
@@ -26,6 +27,8 @@ export type RpcBoard = Pick<
   | "deleteSelection"
   | "getMoleculeData"
   | "loadMoleculeData"
+  | "getSketchDocument"
+  | "loadSketchDocument"
   | "toSvg"
   | "toPng"
   | "fitToView"
@@ -87,6 +90,8 @@ export class SketchBoardRpc {
       ["sketch.delete_selection", () => this.board.deleteSelection()],
       ["sketch.molecule", () => this.board.getMoleculeData()],
       ["sketch.load", (p) => this.load(p)],
+      ["sketch.document", () => this.board.getSketchDocument()],
+      ["sketch.load_document", (p) => this.loadDocument(p)],
       ["sketch.fragment_templates", () => this.listTemplates()],
       ["sketch.export_svg", (p) => this.board.toSvg(exportOptions(p))],
       ["sketch.export_png", (p) => this.exportPng(p)],
@@ -213,6 +218,23 @@ export class SketchBoardRpc {
     this.board.loadMoleculeData(placed);
     this.board.fitToView();
     return this.board.getMoleculeData();
+  }
+
+  private loadDocument(p: Params): void {
+    const data = p.data as SketchDocument | undefined;
+    if (
+      !data ||
+      !Array.isArray(data.atoms) ||
+      !Array.isArray(data.bonds) ||
+      !Array.isArray(data.annotations)
+    ) {
+      throw new SketchRpcError(
+        INVALID_PARAMS,
+        "sketch.load_document needs atoms, bonds, and annotations arrays",
+      );
+    }
+    this.board.loadSketchDocument(data);
+    this.board.fitToView();
   }
 
   private listTemplates(): TemplateEntry[] {

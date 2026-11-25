@@ -1,3 +1,11 @@
+import {
+  annotationBounds,
+  annotationRadius,
+  annotationTexts,
+  bracketCommands,
+  DEFAULT_ANNOTATION_STROKE,
+  type SketchAnnotation,
+} from "../annotations";
 import { ViewportCoords } from "../board/coords";
 import {
   SketchRenderer,
@@ -5,9 +13,10 @@ import {
 } from "../board/sketch_renderer";
 import { bondRingCentroid } from "../geometry/bond_ring";
 import type { MoleculeGraph } from "../molecule_graph";
-import { AtomLabel } from "../style/atom_label";
+import { AtomLabel, atomLabelWidth } from "../style/atom_label";
 import {
   type BondMark,
+  DEPICTION_TOKENS,
   type DepictionInk,
   depictionInk,
   labelInset,
@@ -26,10 +35,17 @@ const MAX_EXPORT_DIMENSION = 8192;
 const MAX_PIXEL_RATIO = 4;
 const MAX_EXPORT_SCALE = 72;
 
+export interface SketchExportView {
+  centerX: number;
+  centerY: number;
+  /** Output CSS pixels per document unit. */
+  scale: number;
+}
+
 export interface SketchExportOptions {
   /** Export surface width in CSS pixels. Default 1200. */
   width?: number;
-  /** Export surface height in CSS pixels. Default 800. */
+  /** Export height in CSS pixels. Defaults to 800 for molecules or the fitted figure height. */
   height?: number;
   /** Minimum whitespace around the fitted molecule in CSS pixels. Default 48. */
   padding?: number;
@@ -37,6 +53,8 @@ export interface SketchExportOptions {
   pixelRatio?: number;
   /** Paper color. Defaults to the board render theme background. */
   background?: string;
+  /** Reuse an existing camera instead of fitting the drawing. */
+  view?: SketchExportView;
 }
 
 interface ExportLayout {
@@ -44,8 +62,6 @@ interface ExportLayout {
   height: number;
   pixelRatio: number;
   background: string;
-  /** Opaque fill behind element labels (may differ from paper when transparent). */
-  labelBackdrop: string;
   centerX: number;
   centerY: number;
   scale: number;
@@ -69,11 +85,22 @@ export class SketchImageExporter {
     private readonly graph: MoleculeGraph,
     private readonly theme: SketchRenderTheme,
     private readonly omitCarbonLabel: boolean,
+    private readonly annotations: readonly SketchAnnotation[] = [],
   ) {}
+
+  getView(options: SketchExportOptions): SketchExportView {
+    const { centerX, centerY, scale } = resolveLayout(
+      this.graph.getMoleculeData(),
+      this.annotations,
+      this.theme,
+      options,
+    );
+    return { centerX, centerY, scale };
+  }
 
   toSvg(options: SketchExportOptions = {}): string {
     const data = this.graph.getMoleculeData();
-    const layout = resolveLayout(data, this.theme, options);
+    const layout = resolveLayout(data, this.annotations, this.theme, options);
     const atomPoints = data.atoms.map((atom) =>
       toScreen(atom.x, atom.y, layout),
     );
@@ -81,7 +108,7 @@ export class SketchImageExporter {
       isLabeledElement(atom.element, {
         omitCarbonLabel: this.omitCarbonLabel,
         charge: atom.charge,
-        forceLabel: false,
+        forceLabel: Boolean(atom.label),
       }),
     );
     const degrees = atomDegrees(data);
@@ -110,6 +137,12 @@ export class SketchImageExporter {
     const body: string[] = [
       `<rect width="${layout.width}" height="${layout.height}" fill="${escapeXml(layout.background)}"/>`,
     ];
+
+    for (const item of this.annotations) {
+      if (item.kind === "rectangle" || item.kind === "ellipse") {
+        body.push(svgAnnotationShape(item, layout, this.theme.bondStroke));
+      }
+    }
 
     data.bonds.forEach((bond, bondIndex) => {
       const first = atomPoints[bond.i];
@@ -146,7 +179,6 @@ export class SketchImageExporter {
       const atom = data.atoms[index];
       const point = atomPoints[index];
       const label = labels[index];
-      const mask = masks[index];
       if (!atom || !point || !label) continue;
       if (!labeled[index]) {
         if (degrees[index] === 0) {
@@ -157,16 +189,7 @@ export class SketchImageExporter {
             `<circle cx="${num(point.x)}" cy="${num(point.y)}" r="${num(r)}" fill="${escapeXml(atom.color ?? this.theme.bondStroke)}"/>`,
           );
         }
-      } else if (mask) {
-        if (mask.rect) {
-          body.push(
-            `<rect x="${num(point.x + mask.rect.x)}" y="${num(point.y + mask.rect.y)}" width="${num(mask.rect.width)}" height="${num(mask.rect.height)}" fill="${escapeXml(layout.labelBackdrop)}"/>`,
-          );
-        } else {
-          body.push(
-            `<circle cx="${num(point.x)}" cy="${num(point.y)}" r="${num(mask.radius)}" fill="${escapeXml(layout.labelBackdrop)}"/>`,
-          );
-        }
+      } else {
         for (const run of label.runs(ink.fontPx)) {
           const fill =
             run.role === "charge"
@@ -192,8 +215,14 @@ export class SketchImageExporter {
       }
     }
 
+    for (const item of this.annotations) {
+      if (item.kind === "bracket" && item.variant !== "none")
+        body.push(svgAnnotationShape(item, layout, this.theme.bondStroke));
+      body.push(...svgAnnotationText(item, layout, this.theme.labelFill));
+    }
+
     return [
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" role="img" aria-label="Molecule structure">`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" role="img" aria-label="${this.annotations.length ? "Sketch figure" : "Molecule structure"}">`,
       ...body,
       "</svg>",
     ].join("\n");
@@ -201,7 +230,7 @@ export class SketchImageExporter {
 
   async toPng(options: SketchExportOptions = {}): Promise<Blob> {
     const data = this.graph.getMoleculeData();
-    const layout = resolveLayout(data, this.theme, options);
+    const layout = resolveLayout(data, this.annotations, this.theme, options);
     const canvas = document.createElement("canvas");
     const viewport = new ViewportCoords();
     viewport.resize(layout.width, layout.height, layout.pixelRatio);
@@ -221,6 +250,7 @@ export class SketchImageExporter {
       background: layout.background,
     });
     renderer.paint(context, this.graph, viewport, {
+      annotations: this.annotations,
       selectedAtoms: new Set(),
       selectedBonds: new Set(),
       omitCarbonLabel: this.omitCarbonLabel,
@@ -241,9 +271,14 @@ export class SketchImageExporter {
 
 function resolveLayout(
   data: MoleculeData,
+  annotations: readonly SketchAnnotation[],
   theme: SketchRenderTheme,
   options: SketchExportOptions,
 ): ExportLayout {
+  const bounds = moleculeBounds(data, annotations);
+  // Leave room for atom labels and stroke ends.
+  const spanX = Math.max(bounds.maxX - bounds.minX + 1, 1);
+  const spanY = Math.max(bounds.maxY - bounds.minY + 1, 1);
   const width = integerOption(
     "width",
     options.width,
@@ -253,7 +288,13 @@ function resolveLayout(
   const height = integerOption(
     "height",
     options.height,
-    DEFAULT_EXPORT_HEIGHT,
+    annotations.length > 0 && options.width === undefined
+      ? Math.min(
+          MAX_EXPORT_DIMENSION,
+          Math.round(((width - DEFAULT_EXPORT_PADDING * 2) * spanY) / spanX) +
+            DEFAULT_EXPORT_PADDING * 2,
+        )
+      : DEFAULT_EXPORT_HEIGHT,
     MAX_EXPORT_DIMENSION,
   );
   const padding = finiteOption(
@@ -270,60 +311,62 @@ function resolveLayout(
     Number.EPSILON,
     MAX_PIXEL_RATIO,
   );
-  const bounds = moleculeBounds(data);
-  // Pad span so single-atom / short fragments still leave ink room for labels.
-  const spanX = Math.max(bounds.maxX - bounds.minX + 1, 1);
-  const spanY = Math.max(bounds.maxY - bounds.minY + 1, 1);
   const usableWidth = Math.max(1, width - padding * 2);
   const usableHeight = Math.max(1, height - padding * 2);
-  const scale = Math.min(
+  const fittedScale = Math.min(
     usableWidth / spanX,
     usableHeight / spanY,
     MAX_EXPORT_SCALE,
   );
+  const scale = options.view
+    ? finiteOption(
+        "view.scale",
+        options.view.scale,
+        fittedScale,
+        Number.EPSILON,
+        Infinity,
+      )
+    : fittedScale;
 
   // Same ratios as the canvas. A pixel ceiling here is what made labels and
   // double-bond gaps stay small while the fitted bond grew.
   const ink = depictionInk(scale);
 
-  const paper = options.background ?? theme.background;
-  // Transparent paper (menu previews) still needs an opaque knockout behind
-  // element letters so bonds don't bleed through N/O/S.
-  const labelBackdrop = isTransparentPaint(paper)
-    ? "var(--msk-stage-bg, #ffffff)"
-    : paper;
-
   return {
     width,
     height,
     pixelRatio,
-    background: paper,
-    labelBackdrop,
-    centerX: (bounds.minX + bounds.maxX) / 2,
-    centerY: (bounds.minY + bounds.maxY) / 2,
+    background: options.background ?? theme.background,
+    centerX: finiteOption(
+      "view.centerX",
+      options.view?.centerX,
+      (bounds.minX + bounds.maxX) / 2,
+      -Infinity,
+      Infinity,
+    ),
+    centerY: finiteOption(
+      "view.centerY",
+      options.view?.centerY,
+      (bounds.minY + bounds.maxY) / 2,
+      -Infinity,
+      Infinity,
+    ),
     scale,
     fontPx: ink.fontPx,
     ink,
   };
 }
 
-function isTransparentPaint(paint: string): boolean {
-  const value = paint.trim().toLowerCase();
-  return (
-    value === "transparent" ||
-    value === "none" ||
-    value === "rgba(0,0,0,0)" ||
-    value === "rgba(0, 0, 0, 0)"
-  );
-}
-
-function moleculeBounds(data: MoleculeData): {
+function moleculeBounds(
+  data: MoleculeData,
+  annotations: readonly SketchAnnotation[],
+): {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
 } {
-  if (data.atoms.length === 0) {
+  if (data.atoms.length === 0 && annotations.length === 0) {
     return { minX: -0.5, minY: -0.5, maxX: 0.5, maxY: 0.5 };
   }
   let minX = Infinity;
@@ -333,10 +376,20 @@ function moleculeBounds(data: MoleculeData): {
   for (const atom of data.atoms) {
     // A port marker reaches about one bond past its atom; keep it on paper.
     const reach = atom.port !== undefined ? portReachDoc() : 0;
-    minX = Math.min(minX, atom.x - reach);
+    const labelReach = atom.label
+      ? atomLabelWidth(atom.label, DEPICTION_TOKENS.fontSizeRatio) / 2
+      : 0;
+    minX = Math.min(minX, atom.x - Math.max(reach, labelReach));
     minY = Math.min(minY, atom.y - reach);
-    maxX = Math.max(maxX, atom.x + reach);
+    maxX = Math.max(maxX, atom.x + Math.max(reach, labelReach));
     maxY = Math.max(maxY, atom.y + reach);
+  }
+  for (const item of annotations) {
+    const bounds = annotationBounds(item);
+    minX = Math.min(minX, bounds.minX);
+    minY = Math.min(minY, bounds.minY);
+    maxX = Math.max(maxX, bounds.maxX);
+    maxY = Math.max(maxY, bounds.maxY);
   }
   return { minX, minY, maxX, maxY };
 }
@@ -389,6 +442,56 @@ function trimSegment(
       y: end.y - unitY * endInset,
     },
   };
+}
+
+function svgAnnotationShape(
+  item: Exclude<SketchAnnotation, { kind: "text" }>,
+  layout: ExportLayout,
+  ink: string,
+): string {
+  const { x, y } = toScreen(item.x, item.y, layout);
+  const halfWidth = (item.width * layout.scale) / 2;
+  const halfHeight = (item.height * layout.scale) / 2;
+  const left = x - halfWidth;
+  const top = y - halfHeight;
+  const fill = item.kind === "bracket" ? "none" : (item.fill ?? "none");
+  const strokeWidth =
+    (item.strokeWidth ?? DEFAULT_ANNOTATION_STROKE) * layout.scale;
+  const transform = item.rotation
+    ? ` transform="rotate(${num(item.rotation)} ${num(x)} ${num(y)})"`
+    : "";
+  const style = `fill="${escapeXml(fill)}" stroke="${escapeXml(item.stroke ?? ink)}" stroke-width="${num(strokeWidth)}" stroke-linejoin="round" stroke-linecap="round"${transform}`;
+  if (item.kind === "rectangle") {
+    return `<rect x="${num(left)}" y="${num(top)}" width="${num(halfWidth * 2)}" height="${num(halfHeight * 2)}" rx="${num(annotationRadius(item) * layout.scale)}" ${style}/>`;
+  }
+  if (item.kind === "ellipse") {
+    return `<ellipse cx="${num(x)}" cy="${num(y)}" rx="${num(halfWidth)}" ry="${num(halfHeight)}" ${style}/>`;
+  }
+  const path = bracketCommands(item, x, y, layout.scale)
+    .map(
+      ([command, ...coordinates]) =>
+        `${command} ${coordinates.map(num).join(" ")}`,
+    )
+    .join(" ");
+  return `<path d="${path}" ${style}/>`;
+}
+
+function svgAnnotationText(
+  item: SketchAnnotation,
+  layout: ExportLayout,
+  ink: string,
+): string[] {
+  return annotationTexts(item).flatMap((text) => {
+    const { label, align, lines, step } = text;
+    const { x, y } = toScreen(text.x, text.y, layout);
+    const anchor =
+      align === "center" ? "middle" : align === "right" ? "end" : "start";
+    return lines.map((line, index) => {
+      const baseline =
+        y + (index - (lines.length - 1) / 2) * step * layout.scale;
+      return `<text x="${num(x)}" y="${num(baseline)}" fill="${escapeXml(label.color ?? ink)}" font-family="${label.family ?? "sans-serif"}" font-size="${num(label.size * layout.scale)}" font-weight="${label.bold ? "bold" : "normal"}" font-style="${label.italic ? "italic" : "normal"}" text-anchor="${anchor}" dominant-baseline="central" xml:space="preserve">${escapeXml(line)}</text>`;
+    });
+  });
 }
 
 function svgMarks(marks: readonly BondMark[], color: string): string[] {

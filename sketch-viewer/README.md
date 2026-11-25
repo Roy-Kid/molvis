@@ -25,10 +25,14 @@ instead of loading the CDN bundle.
 
 ## Standalone Sketch editor
 
+The editor saves completed edits in the current browser tab. Reloading the
+tab restores the drawing, including shapes and text. Use **Sketch files →
+Save Sketch document** to keep a copy for another tab or browser session.
+
 The editor shipped with Python (`molvis sketch MOLECULE`) has an optional
-linked 3D pane. It starts closed. Click **3D** in the top toolbar, or
-right-click the drawing and choose **Show 3D structure**, to open Stage on
-the right. The same controls or the pane's close button hide it again.
+linked 3D pane. It starts closed. Click **Show 3D structure** in the top
+toolbar to open Stage on the right. The toolbar toggle and the pane's close
+button both hide it.
 Drag the divider, or focus it and use the arrow keys, to resize the views.
 Narrow windows stack them vertically.
 

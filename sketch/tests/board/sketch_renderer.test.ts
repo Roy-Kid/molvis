@@ -65,9 +65,8 @@ describe("SketchRenderer", () => {
     expect(calls.filter((c) => c.startsWith("fillText:O")).length).toBe(1);
     expect(calls.filter((c) => c.startsWith("fillText:H")).length).toBe(2);
     expect(calls.filter((c) => c.startsWith("fillText:C")).length).toBe(0);
-    // No filled atom balls for bonded carbons — arcs only for label halos on O/H
-    // (3 labeled atoms → 3 halo arcs). Carbon has no arc.
-    expect(calls.filter((c) => c === "arc").length).toBe(3);
+    expect(calls).not.toContain("arc");
+    expect(calls).not.toContain("fill");
   });
 
   it("double bond emits parallel strokes", () => {
@@ -200,7 +199,6 @@ describe("SketchRenderer", () => {
     expect(calls).toContain("fillText:>");
     expect(calls).toContain("fillText:O");
     expect(calls).toContain("fillText:H");
-    // The OH label is wider than one letter: a rectangular knockout.
-    expect(calls).toContain("rect");
+    expect(calls).not.toContain("rect");
   });
 });

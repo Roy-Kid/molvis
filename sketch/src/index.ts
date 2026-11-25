@@ -1,3 +1,10 @@
+export type {
+  AnnotationCorner,
+  AnnotationLabel,
+  BracketVariant,
+  SketchAnnotation,
+  SketchDocument,
+} from "./annotations";
 export { SketchApp } from "./app";
 export {
   DEFAULT_BOND_SCREEN_PX,
@@ -50,7 +57,10 @@ export {
 export type { PlaceFragmentOptions } from "./commands/place_fragment_command";
 export { PlaceFragmentCommand } from "./commands/place_fragment_command";
 export { PlaceTerminalBondCommand } from "./commands/place_terminal_bond_command";
-export type { SketchExportOptions } from "./export/sketch_image_exporter";
+export type {
+  SketchExportOptions,
+  SketchExportView,
+} from "./export/sketch_image_exporter";
 export { buildChainPoints } from "./geometry/chain_builder";
 export { fragmentPreviewSvg } from "./geometry/fragment_preview";
 export {

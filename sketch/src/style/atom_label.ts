@@ -29,7 +29,7 @@ export interface LabelRun {
 const ADVANCE = { upper: 0.74, lower: 0.42, digit: 0.56 } as const;
 
 /** Approximate rendered width of `text` at `size` px. */
-function textWidth(text: string, size: number): number {
+export function atomLabelWidth(text: string, size: number): number {
   let em = 0;
   for (const ch of text) {
     if (ch >= "0" && ch <= "9") em += ADVANCE.digit;
@@ -81,10 +81,11 @@ export class AtomLabel {
 
   /** Text runs for a label at `fontPx`. */
   runs(fontPx: number): LabelRun[] {
-    const elementHalf = textWidth(this.atom.element, fontPx) / 2;
+    const text = this.atom.label ?? this.atom.element;
+    const elementHalf = atomLabelWidth(text, fontPx) / 2;
     const out: LabelRun[] = [
       {
-        text: this.atom.element,
+        text,
         dx: 0,
         dy: 0,
         size: fontPx,
@@ -96,9 +97,9 @@ export class AtomLabel {
     let right = elementHalf;
     const count = this.atom.hydrogens ?? 0;
     if (count > 0) {
-      const hWidth = textWidth("H", fontPx);
+      const hWidth = atomLabelWidth("H", fontPx);
       const subSize = fontPx * 0.68;
-      const subWidth = count > 1 ? textWidth(String(count), subSize) : 0;
+      const subWidth = count > 1 ? atomLabelWidth(String(count), subSize) : 0;
       if (this.hydrogensLeft) {
         const hCenter = -elementHalf - subWidth - hWidth / 2;
         out.push({
@@ -168,7 +169,7 @@ export class AtomLabel {
     let right = -Infinity;
     for (const run of this.runs(fontPx)) {
       if (run.role === "charge") continue;
-      const width = textWidth(run.text, run.size);
+      const width = atomLabelWidth(run.text, run.size);
       const start = run.anchor === "middle" ? run.dx - width / 2 : run.dx;
       left = Math.min(left, start);
       right = Math.max(right, start + width);

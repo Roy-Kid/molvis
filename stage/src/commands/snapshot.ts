@@ -3,7 +3,7 @@ import {
   type CropBounds,
   contentBounds,
   cropToRect,
-} from "@molcrafts/molvis-core/image-crop";
+} from "@molcrafts/ui-web-components/image-crop";
 import type { MolvisApp } from "../app";
 import { Command, command } from "./base";
 

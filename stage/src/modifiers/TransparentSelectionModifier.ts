@@ -1,6 +1,7 @@
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { BaseModifier, ModifierCapability } from "../pipeline/modifier";
 import type { PipelineContext } from "../pipeline/types";
+import { type ProjectParams, readNumber } from "../project/params";
 
 /**
  * Modifier that applies a persistent alpha override to selected atoms.
@@ -24,6 +25,17 @@ export class TransparentSelectionModifier extends BaseModifier {
 
   get selectedCount(): number {
     return this._lastCount;
+  }
+
+  toProjectParams(): ProjectParams {
+    return { opacity: this.opacity };
+  }
+
+  fromProjectParams(params: ProjectParams): void {
+    this.opacity = Math.max(
+      0,
+      Math.min(1, readNumber(params.opacity, this.opacity)),
+    );
   }
 
   getCacheKey(): string {

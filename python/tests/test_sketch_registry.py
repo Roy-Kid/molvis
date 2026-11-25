@@ -119,7 +119,6 @@ def test_sketch_has_board_verbs_and_not_stage_verbs() -> None:
         assert not hasattr(Sketch, name)
         assert not hasattr(board, name)
     assert "document units" in (Sketch.draw_atom.__doc__ or "")
-    assert "Not a camera" in (Sketch.fit.__doc__ or "")
 
 
 def test_construct_does_not_detect_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,6 +183,7 @@ def test_document_methods_are_sketch_rpc_requests() -> None:
     assert board.draw_fragment("phenyl", 0.0, 0.0) is board
     assert board.select_atom_by_id(0) is board
     assert board.clear() is board
+    assert board.fit() is board
     sent = [(method, params) for method, params, _ in transport.requests]
     assert sent == [
         ("sketch.draw_atom", {"element": "N", "x": 1.0, "y": 2.0, "charge": 1}),
@@ -193,6 +193,7 @@ def test_document_methods_are_sketch_rpc_requests() -> None:
         ("sketch.draw_fragment", {"template_id": "phenyl", "x": 0.0, "y": 0.0}),
         ("sketch.select_atoms", {"atom_ids": [0]}),
         ("sketch.clear", {}),
+        ("sketch.fit", {}),
     ]
     assert all(kwargs["wait_for_response"] is True for _, _, kwargs in transport.requests)
     assert transport.started == len(transport.requests)
@@ -231,6 +232,19 @@ def test_export_png_without_data_is_an_error() -> None:
     board = Sketch(name="nopng", transport=_RpcTransport({"sketch.export_png": None}))
     with pytest.raises(SketchUnavailable, match="no PNG"):
         board.export_png()
+
+
+def test_load_and_read_a_figure_document() -> None:
+    data = {
+        "atoms": [],
+        "bonds": [],
+        "annotations": [{"kind": "text", "x": 0, "y": 0, "label": {"text": "PEG", "size": 0.6}}],
+    }
+    transport = _RpcTransport({"sketch.document": data})
+    board = Sketch(name="figure", transport=transport)
+    assert board.load_document(data) is board
+    assert board.document() == data
+    assert transport.requests[0][:2] == ("sketch.load_document", {"data": data})
 
 
 def test_load_smiles_sends_a_laid_out_topology() -> None:

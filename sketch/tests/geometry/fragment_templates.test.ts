@@ -69,8 +69,8 @@ describe("fragment_templates", () => {
     );
     expect(fonts.length).toBeGreaterThan(0);
     expect(Math.max(...fonts)).toBeLessThan(12);
-    // Label knockout must not be transparent (bonds would show through N).
-    expect(svg).toContain("var(--msk-stage-bg");
+    expect(svg).toContain('fill="transparent"');
+    expect(svg).not.toContain("<circle ");
   });
 
   it("naphthalene is C10H8 topology: 10 carbons, fused (connected), not two benzenes", () => {

@@ -1,4 +1,5 @@
 import {
+  type BondTarget,
   DEFAULT_BOND_LENGTH,
   findAtom,
   resolveBondTarget,
@@ -26,6 +27,7 @@ export class PlaceBondFromPointCommand extends SketchCommand {
     private readonly element = "C",
     private readonly bondLength = DEFAULT_BOND_LENGTH,
     private readonly color?: string,
+    private readonly target?: BondTarget,
   ) {
     super();
   }
@@ -52,13 +54,15 @@ export class PlaceBondFromPointCommand extends SketchCommand {
         y: this.startY,
         ...(this.color ? { color: this.color } : {}),
       });
-    const target = resolveBondTarget(
-      this.graph,
-      start,
-      this.pointerX,
-      this.pointerY,
-      this.bondLength,
-    );
+    const target =
+      this.target ??
+      resolveBondTarget(
+        this.graph,
+        start,
+        this.pointerX,
+        this.pointerY,
+        this.bondLength,
+      );
     const end =
       target.existingIndex ??
       this.graph.addAtomInternal({

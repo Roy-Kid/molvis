@@ -4,7 +4,12 @@ import {
   type PointerInfo,
   Vector3,
 } from "@babylonjs/core";
-import type { Frame } from "@molcrafts/molvis-core/molrs";
+import {
+  assignKekuleBondOrders,
+  Conformer,
+  type Frame,
+  SmilesIr,
+} from "@molcrafts/molvis-core/molrs";
 import type { MolvisApp as Molvis } from "../app";
 import type { Artist } from "../artist";
 import { CompositeCommand } from "../commands/composite";
@@ -144,14 +149,18 @@ class EditMode extends BaseMode {
     return this.element_;
   }
   set element(v: string) {
+    if (v === this.element_) return;
     this.element_ = v;
+    this.app.events.emit("edit-tool-change", undefined);
   }
 
   get bondOrder(): number {
     return this.bondOrder_;
   }
   set bondOrder(v: number) {
+    if (v === this.bondOrder_) return;
     this.bondOrder_ = v;
+    this.app.events.emit("edit-tool-change", undefined);
   }
 
   /**
@@ -162,11 +171,39 @@ class EditMode extends BaseMode {
     return this.pendingMolecule_;
   }
   set pendingMolecule(frame: Frame | null) {
-    // Free the old WASM Frame if overwriting with a different one
-    if (this.pendingMolecule_ && this.pendingMolecule_ !== frame) {
-      this.pendingMolecule_.free();
-    }
+    if (this.pendingMolecule_ === frame) return;
+    this.pendingMolecule_?.free();
     this.pendingMolecule_ = frame;
+    this.app.events.emit("edit-tool-change", undefined);
+  }
+
+  /** Generate a stamp from a sketch frame, taking ownership of the input. */
+  public placeConformer(frame2d: Frame): void {
+    let conformer: Conformer | undefined;
+    try {
+      conformer = new Conformer();
+      const frame = conformer.generate(frame2d);
+      try {
+        assignKekuleBondOrders(frame);
+        this.pendingMolecule = frame;
+      } catch (error) {
+        frame.free();
+        throw error;
+      }
+    } finally {
+      conformer?.free();
+      frame2d.free();
+    }
+  }
+
+  /** Generate a stamp from the SMILES string and arm it for placement. */
+  public placeSmiles(smiles: string): void {
+    const ir = SmilesIr.parse(smiles);
+    try {
+      this.placeConformer(ir.toFrame());
+    } finally {
+      ir.free();
+    }
   }
 
   constructor(app: Molvis) {
@@ -615,10 +652,7 @@ class EditMode extends BaseMode {
     this.clickedBond = null;
     this.clickedBondIndex = -1;
     this.pendingAtom = false;
-    if (this.pendingMolecule_) {
-      this.pendingMolecule_.free();
-      this.pendingMolecule_ = null;
-    }
+    this.pendingMolecule = null;
     this.previews.clear();
     this.world.camera.attachControl(
       this.world.scene.getEngine().getRenderingCanvas(),

@@ -1,4 +1,5 @@
 import type { MoleculeGraph } from "../molecule_graph";
+import type { Point } from "./plane";
 
 /** Default bond length in document units. */
 export const DEFAULT_BOND_LENGTH = 1.0;
@@ -60,22 +61,22 @@ export function snapDirection(
  */
 export function resolveBondTarget(
   graph: MoleculeGraph,
-  fromIndex: number,
+  source: number | Point,
   pointerX: number,
   pointerY: number,
   bondLength: number = DEFAULT_BOND_LENGTH,
-): { x: number; y: number; existingIndex: number | null } {
-  const from = graph.getAtom(fromIndex);
+): BondTarget {
+  const from = typeof source === "number" ? graph.getAtom(source) : source;
   const { ux, uy } = snapDirection(pointerX - from.x, pointerY - from.y);
   const x = from.x + ux * bondLength;
   const y = from.y + uy * bondLength;
   const existing = findAtom(graph, x, y, CONNECT_SNAP_RADIUS);
-  if (existing !== null && existing !== fromIndex) {
+  if (existing !== null && existing !== source) {
     return { x, y, existingIndex: existing };
   }
   // Also: if pointer itself is near an atom, connect there
   const atPointer = findAtom(graph, pointerX, pointerY, CONNECT_SNAP_RADIUS);
-  if (atPointer !== null && atPointer !== fromIndex) {
+  if (atPointer !== null && atPointer !== source) {
     return {
       x: graph.getAtom(atPointer).x,
       y: graph.getAtom(atPointer).y,
@@ -83,4 +84,8 @@ export function resolveBondTarget(
     };
   }
   return { x, y, existingIndex: null };
+}
+
+export interface BondTarget extends Point {
+  existingIndex: number | null;
 }

@@ -88,7 +88,8 @@
     "test": "rstest run"
   },
   "dependencies": {
-    "@molcrafts/molwasm": "file:../../molpy/molwasm/pkg"
+    "@molcrafts/molwasm": "file:../../molpy/molwasm/pkg",
+    "@molcrafts/ui-web-components": "file:../vendor/ui/molcrafts-ui-web-components-0.1.0-alpha.1-workbench.tgz"
   },
   "devDependencies": {
     "@rslib/core": "^0.23.2",

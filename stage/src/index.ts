@@ -17,18 +17,18 @@ export function mountMolvis(
 }
 
 export {
+  clearOpfsCache,
+  type OpfsCacheUsage,
+  readOpfsCacheUsage,
+} from "@molcrafts/molvis-core/opfs";
+export {
   type CropBounds,
   type CropOptions,
   cropToContent,
   cropToRect,
   findAlphaBounds,
   reencodeImage,
-} from "@molcrafts/molvis-core/image-crop";
-export {
-  clearOpfsCache,
-  type OpfsCacheUsage,
-  readOpfsCacheUsage,
-} from "@molcrafts/molvis-core/opfs";
+} from "@molcrafts/ui-web-components/image-crop";
 export {
   FF_NONBONDED_CUTOFF_A,
   type ForceFieldNeighborMethod,
@@ -359,6 +359,7 @@ export {
   screenAlignedPlaneOrigin,
   selectionCentroid,
 } from "./mode";
+export { EditMode } from "./mode/edit";
 export { CommonMenuItems } from "./mode/menu_items";
 export type { MenuItem, SceneHit } from "./mode/types";
 export {

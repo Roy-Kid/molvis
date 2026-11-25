@@ -3,6 +3,20 @@ import { HitTester } from "../../src/board/hit_test";
 import { MoleculeGraph } from "../../src/molecule_graph";
 
 describe("HitTester", () => {
+  it("picks a visible CN label over a closer implicit carbon", () => {
+    const graph = new MoleculeGraph();
+    graph.loadMoleculeData({
+      atoms: [
+        { element: "C", x: -0.12, y: 0 },
+        { element: "N", label: "CN", x: 0, y: 0 },
+      ],
+      bonds: [],
+    });
+    expect(new HitTester(0.42, 0.2, 0.7).hit(graph, -0.23, 0)).toEqual({
+      kind: "atom",
+      index: 1,
+    });
+  });
   it("hits atom inside radius and prefers atom over bond", () => {
     const g = new MoleculeGraph();
     g.loadMoleculeData({

@@ -12,6 +12,7 @@ import type { Atom2D, Bond2D, MoleculeData, TopologyAtom } from "./types";
 function cloneAtom(a: Atom2D): Atom2D {
   return {
     element: a.element,
+    ...(a.label !== undefined ? { label: a.label } : {}),
     x: a.x,
     y: a.y,
     ...(a.charge !== undefined ? { charge: a.charge } : {}),
@@ -383,6 +384,16 @@ export class MoleculeGraph {
   private validateAtom(atom: Atom2D, index: number): void {
     if (typeof atom.element !== "string" || atom.element.trim().length === 0) {
       throw new Error(`atom ${index}: element must be a non-empty string`);
+    }
+    if (
+      atom.label !== undefined &&
+      (typeof atom.label !== "string" ||
+        !atom.label.trim() ||
+        /[\r\n]/.test(atom.label))
+    ) {
+      throw new Error(
+        `atom ${index}: label must be non-empty single-line text`,
+      );
     }
     if (!Number.isFinite(atom.x) || !Number.isFinite(atom.y)) {
       throw new Error(`atom ${index}: coordinates must be finite`);

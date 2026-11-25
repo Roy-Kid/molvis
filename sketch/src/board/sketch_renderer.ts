@@ -1,3 +1,16 @@
+import {
+  ANNOTATION_ROTATION_HANDLE_PX,
+  annotationBounds,
+  annotationCorners,
+  annotationFont,
+  annotationRadius,
+  annotationRotationHandle,
+  annotationRotationRadians,
+  annotationTexts,
+  bracketCommands,
+  DEFAULT_ANNOTATION_STROKE,
+  type SketchAnnotation,
+} from "../annotations";
 import { bondRingCentroid } from "../geometry/bond_ring";
 import type { MoleculeGraph } from "../molecule_graph";
 import { AtomLabel } from "../style/atom_label";
@@ -10,6 +23,7 @@ import {
 } from "../style/depiction-tokens";
 import { colorForElement, isLabeledElement } from "../style/element_colors";
 import { defaultCanvasTheme } from "../style/tokens";
+import type { MoleculeData } from "../types";
 import type { ViewportCoords } from "./coords";
 
 export interface SketchRenderTheme {
@@ -35,6 +49,13 @@ export interface SketchRenderState {
   selectedBonds: ReadonlySet<number>;
   hoveredAtom?: number;
   hoveredBond?: number;
+  annotations?: readonly SketchAnnotation[];
+  selectedAnnotations?: ReadonlySet<number>;
+  hoveredAnnotation?: number;
+  annotationPreview?: SketchAnnotation;
+  atomLabelDraft?: { index: number; text: string };
+  moleculePreview?: MoleculeData;
+  resizeAnnotation?: number;
   omitCarbonLabel: boolean;
   /** Hit-test / label clearance radius in document units. */
   atomRadiusDoc: number;
@@ -54,6 +75,8 @@ export interface SketchRenderState {
   /** Prospective bond/chain polyline in document coordinates. */
   gesturePreview?: {
     points: ReadonlyArray<{ x: number; y: number }>;
+    startAtom?: number;
+    endAtom?: number;
   };
 }
 
@@ -89,7 +112,18 @@ export class SketchRenderer {
     ctx.fillStyle = this.theme.background;
     ctx.fillRect(0, 0, width, height);
 
-    const data = graph.getMoleculeData();
+    const annotations = state.annotations ?? [];
+    for (const item of annotations) {
+      if (item.kind === "rectangle" || item.kind === "ellipse") {
+        this.paintAnnotationShape(ctx, viewport, item);
+      }
+    }
+
+    const data = state.moleculePreview ?? graph.getMoleculeData();
+    const editing = state.atomLabelDraft;
+    if (editing && data.atoms[editing.index]) {
+      data.atoms[editing.index].label = editing.text || " ";
+    }
     const scale = viewport.getScale();
     const ink = depictionInk(scale);
     const fontPx = ink.fontPx;
@@ -98,7 +132,7 @@ export class SketchRenderer {
       isLabeledElement(atom.element, {
         omitCarbonLabel: state.omitCarbonLabel,
         charge: atom.charge,
-        forceLabel: false,
+        forceLabel: Boolean(atom.label),
       }),
     );
     const degrees = new Uint32Array(data.atoms.length);
@@ -183,10 +217,32 @@ export class SketchRenderer {
       );
     }
 
-    if (state.gesturePreview && state.gesturePreview.points.length >= 2) {
-      const preview = state.gesturePreview.points.map((point) =>
-        viewport.docToScreen(point.x, point.y),
+    const gesture = state.gesturePreview;
+    const preview = gesture?.points.map((point) =>
+      viewport.docToScreen(point.x, point.y),
+    );
+    if (gesture && preview?.length === 2) {
+      const [start, end] = preview;
+      const startMask =
+        gesture.startAtom === undefined ? null : masks[gesture.startAtom];
+      const endMask =
+        gesture.endAtom === undefined ? null : masks[gesture.endAtom];
+      const trimmed = trimBondSegment(
+        start.x,
+        start.y,
+        end.x,
+        end.y,
+        startMask ? labelInset(startMask, start, end) : 0,
+        endMask ? labelInset(endMask, end, start) : 0,
       );
+      if (trimmed) {
+        preview[0] = { x: trimmed.x1, y: trimmed.y1 };
+        preview[1] = { x: trimmed.x2, y: trimmed.y2 };
+      } else {
+        preview.length = 0;
+      }
+    }
+    if (preview && preview.length >= 2) {
       ctx.beginPath();
       ctx.moveTo(preview[0].x, preview[0].y);
       for (let index = 1; index < preview.length; index++) {
@@ -205,11 +261,10 @@ export class SketchRenderer {
     for (let i = 0; i < data.atoms.length; i++) {
       const atom = data.atoms[i];
       const p = atomPoints[i];
-      const selected = state.selectedAtoms.has(i);
-      const hovered = state.hoveredAtom === i;
+      const selected = i !== editing?.index && state.selectedAtoms.has(i);
+      const hovered = i !== editing?.index && state.hoveredAtom === i;
       const showLabel = labeled[i];
       const label = labels[i];
-      const mask = masks[i];
 
       if (selected || hovered) {
         // Open selection ring — structure-formula style, not a ball
@@ -240,22 +295,7 @@ export class SketchRenderer {
           ctx.fillStyle = atom.color ?? this.theme.bondStroke;
           ctx.fill();
         }
-      } else if (mask) {
-        // Paper-colored knockout behind the letters so bonds look "cut".
-        ctx.fillStyle = this.theme.background;
-        ctx.beginPath();
-        if (mask.rect) {
-          ctx.rect(
-            p.x + mask.rect.x,
-            p.y + mask.rect.y,
-            mask.rect.width,
-            mask.rect.height,
-          );
-        } else {
-          ctx.arc(p.x, p.y, mask.radius, 0, Math.PI * 2);
-        }
-        ctx.fill();
-
+      } else {
         ctx.textBaseline = "middle";
         for (const run of label.runs(fontPx)) {
           ctx.font = `${run.weight} ${run.size}px ${ink.fontFamily}`;
@@ -284,6 +324,83 @@ export class SketchRenderer {
       }
     }
 
+    for (const [index, item] of annotations.entries()) {
+      if (item.kind === "bracket")
+        this.paintAnnotationShape(ctx, viewport, item);
+      this.paintAnnotationText(ctx, viewport, item);
+      if (
+        state.selectedAnnotations?.has(index) ||
+        state.hoveredAnnotation === index
+      ) {
+        ctx.strokeStyle = this.theme.selectionStroke;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        if (item.kind !== "text" && item.rotation) {
+          const corners = annotationCorners({
+            ...item,
+            width: item.width + 6 / scale,
+            height: item.height + 6 / scale,
+          });
+          ctx.beginPath();
+          for (const [index, corner] of corners.entries()) {
+            const { x, y } = viewport.docToScreen(corner.x, corner.y);
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        } else {
+          const bounds = annotationBounds(item);
+          const start = viewport.docToScreen(bounds.minX, bounds.maxY);
+          const end = viewport.docToScreen(bounds.maxX, bounds.minY);
+          ctx.strokeRect(
+            start.x - 3,
+            start.y - 3,
+            end.x - start.x + 6,
+            end.y - start.y + 6,
+          );
+        }
+        ctx.setLineDash([]);
+      }
+    }
+    const resizable =
+      state.resizeAnnotation === undefined
+        ? undefined
+        : annotations[state.resizeAnnotation];
+    if (resizable && resizable.kind !== "text") {
+      ctx.fillStyle = this.theme.background;
+      ctx.strokeStyle = this.theme.selectionStroke;
+      ctx.lineWidth = 1;
+      for (const corner of annotationCorners(resizable)) {
+        const { x, y } = viewport.docToScreen(corner.x, corner.y);
+        ctx.fillRect(x - 3, y - 3, 6, 6);
+        ctx.strokeRect(x - 3, y - 3, 6, 6);
+      }
+      const base = annotationRotationHandle(resizable, 0);
+      const handle = annotationRotationHandle(
+        resizable,
+        ANNOTATION_ROTATION_HANDLE_PX / scale,
+      );
+      const start = viewport.docToScreen(base.x, base.y);
+      const end = viewport.docToScreen(handle.x, handle.y);
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (state.annotationPreview) {
+      const item = state.annotationPreview;
+      ctx.save();
+      ctx.globalAlpha = 0.65;
+      if (item.kind !== "text") this.paintAnnotationShape(ctx, viewport, item);
+      this.paintAnnotationText(ctx, viewport, item);
+      ctx.restore();
+    }
+
     if (state.marquee) {
       const start = viewport.docToScreen(state.marquee.x0, state.marquee.y0);
       const end = viewport.docToScreen(state.marquee.x1, state.marquee.y1);
@@ -302,6 +419,98 @@ export class SketchRenderer {
       ctx.setLineDash(ink.marqueeDashPx);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+  }
+
+  private paintAnnotationShape(
+    ctx: CanvasRenderingContext2D,
+    viewport: ViewportCoords,
+    item: Exclude<SketchAnnotation, { kind: "text" }>,
+  ): void {
+    if (item.kind === "bracket" && item.variant === "none") return;
+    const { x, y } = viewport.docToScreen(item.x, item.y);
+    const scale = viewport.getScale();
+    const halfWidth = (item.width * scale) / 2;
+    const halfHeight = (item.height * scale) / 2;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(annotationRotationRadians(item));
+    ctx.beginPath();
+    if (item.kind === "rectangle") {
+      ctx.roundRect(
+        -halfWidth,
+        -halfHeight,
+        halfWidth * 2,
+        halfHeight * 2,
+        annotationRadius(item) * scale,
+      );
+    } else if (item.kind === "ellipse") {
+      ctx.ellipse(0, 0, halfWidth, halfHeight, 0, 0, Math.PI * 2);
+    } else {
+      for (const command of bracketCommands(item, 0, 0, scale)) {
+        switch (command[0]) {
+          case "M":
+            ctx.moveTo(command[1], command[2]);
+            break;
+          case "L":
+            ctx.lineTo(command[1], command[2]);
+            break;
+          case "Q":
+            ctx.quadraticCurveTo(
+              command[1],
+              command[2],
+              command[3],
+              command[4],
+            );
+            break;
+          case "C":
+            ctx.bezierCurveTo(
+              command[1],
+              command[2],
+              command[3],
+              command[4],
+              command[5],
+              command[6],
+            );
+            break;
+        }
+      }
+    }
+    if (item.kind !== "bracket" && item.fill) {
+      ctx.fillStyle = item.fill;
+      ctx.fill();
+    }
+    const lineWidth = (item.strokeWidth ?? DEFAULT_ANNOTATION_STROKE) * scale;
+    if (lineWidth > 0) {
+      ctx.lineWidth = lineWidth;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = item.stroke ?? this.theme.bondStroke;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private paintAnnotationText(
+    ctx: CanvasRenderingContext2D,
+    viewport: ViewportCoords,
+    item: SketchAnnotation,
+  ): void {
+    const scale = viewport.getScale();
+    ctx.textBaseline = "middle";
+    for (const text of annotationTexts(item)) {
+      const { label, align, lines, step } = text;
+      const { x, y } = viewport.docToScreen(text.x, text.y);
+      ctx.font = annotationFont(label, scale);
+      ctx.fillStyle = label.color ?? this.theme.labelFill;
+      ctx.textAlign = align;
+      for (const [index, line] of lines.entries()) {
+        ctx.fillText(
+          line,
+          x,
+          y + (index - (lines.length - 1) / 2) * step * scale,
+        );
+      }
     }
   }
 

@@ -94,7 +94,8 @@
     "@babylonjs/gui": "^9.10.1",
     "@babylonjs/materials": "^9.10.1",
     "@babylonjs/serializers": "^9.10.1",
-    "@molcrafts/molvis-core": "0.4.0"
+    "@molcrafts/molvis-core": "0.4.0",
+    "@molcrafts/ui-web-components": "file:../vendor/ui/molcrafts-ui-web-components-0.1.0-alpha.1-workbench.tgz"
   },
   "directories": {
     "test": "tests"

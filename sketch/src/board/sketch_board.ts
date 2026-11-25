@@ -4,7 +4,24 @@ import { EventEmitter } from "@molcrafts/molvis-core/events";
 import type { Frame } from "@molcrafts/molvis-core/molrs";
 import { isCtrlOrMeta } from "@molcrafts/molvis-core/platform";
 import {
+  ANNOTATION_ROTATION_HANDLE_PX,
+  annotationBounds,
+  annotationCorners,
+  annotationPoint,
+  annotationRotationHandle,
+  DEFAULT_TEXT_ANNOTATION,
+  hitAnnotation,
+  measureAnnotationText,
+  normalizeAnnotation,
+  type ResizableAnnotation,
+  type SketchAnnotation,
+  type SketchDocument,
+  snapToAnnotationText,
+} from "../annotations";
+import { ReplaceAnnotationsCommand } from "../commands/annotation_commands";
+import {
   SetAtomColorCommand,
+  SetAtomLabelCommand,
   SetBondColorCommand,
 } from "../commands/appearance_commands";
 import { CompositeCommand } from "../commands/composite_command";
@@ -45,24 +62,31 @@ import {
 } from "../geometry/fragment_templates";
 import { buildRingTemplate, type RingKind } from "../geometry/ring_template";
 import {
+  type BondTarget,
   CONNECT_SNAP_RADIUS,
   DEFAULT_BOND_LENGTH,
   findAtom,
   resolveBondTarget,
   SNAP_RADIUS,
-  snapDirection,
 } from "../geometry/snap";
 import { MoleculeGraph } from "../molecule_graph";
 import type { SketchCommand } from "../sketch_command";
+import { atomLabelWidth } from "../style/atom_label";
 import {
   DEFAULT_CUSTOM_COLOR,
   normalizeSketchColor,
 } from "../style/custom_color";
+import { DEPICTION_TOKENS, depictionInk } from "../style/depiction-tokens";
 import type { Atom2D, Bond2D, MoleculeData } from "../types";
+import { type BondSnapSelection, snapMovedBond } from "./bond_snap";
 import { DEFAULT_BOND_SCREEN_PX, ViewportCoords } from "./coords";
 import { type BoardHit, HitTester } from "./hit_test";
 import { resolveKeymap } from "./keymap";
-import { SketchRenderer, type SketchRenderTheme } from "./sketch_renderer";
+import {
+  SketchRenderer,
+  type SketchRenderState,
+  type SketchRenderTheme,
+} from "./sketch_renderer";
 import { ViewportController } from "./viewport";
 
 /** Active drawing tool. */
@@ -70,12 +94,14 @@ export type SketchTool =
   | "atom"
   | "bond"
   | "select"
+  | "pan"
   | "erase"
   | "ring"
   | "chain"
   | "charge"
   | "stereo"
-  | "fragment";
+  | "fragment"
+  | "annotation";
 
 export interface SketchBoardOptions {
   /** Atom hit radius at the default zoom. Default SNAP_RADIUS (0.42). */
@@ -84,6 +110,12 @@ export interface SketchBoardOptions {
   omitCarbonLabel?: boolean;
   /** Chain bond length in document units. Default 1.0. */
   bondChainStep?: number;
+  /** CSS pixels per drawing unit allowed for zoom gestures in a host view. */
+  zoomRange?: readonly [min: number, max: number];
+  /** Let an editor collect the text before a placement enters history. */
+  onPlaceText?: (item: Extract<SketchAnnotation, { kind: "text" }>) => void;
+  /** Refresh host overlays after the canvas and viewport have been painted. */
+  onPaint?: () => void;
 }
 
 /** Observable editor state for host toolbars and status surfaces. */
@@ -106,6 +138,9 @@ export interface SketchBoardState {
   bondCount: number;
   selectedAtomCount: number;
   selectedBondCount: number;
+  annotationCount: number;
+  figureToolLocked: boolean;
+  selectedAnnotationCount: number;
 }
 
 type Point = { x: number; y: number };
@@ -125,7 +160,18 @@ interface MoveGesture {
   start: Point;
   current: Point;
   atoms: number[];
+  annotations: ReadonlySet<number>;
+  selectedBondIndex?: number;
+  snapSelection?: BondSnapSelection;
 }
+
+type FigureHandle = {
+  index: number;
+  item: ResizableAnnotation;
+} & ({ kind: "resize"; corner: number } | { kind: "rotate" });
+
+type FigureTransformGesture = FigureHandle &
+  MarqueeGesture & { constrain: boolean };
 
 /**
  * Canvas-backed 2D molecule sketch board.
@@ -141,7 +187,7 @@ export class SketchBoard {
   readonly history = new CommandManager(this);
   readonly viewport = new ViewportCoords();
   readonly renderer = new SketchRenderer();
-  readonly viewportCtrl = new ViewportController(this.viewport);
+  readonly viewportCtrl: ViewportController;
 
   private readonly atomRadiusDoc: number;
   private readonly omitCarbonLabel: boolean;
@@ -163,6 +209,18 @@ export class SketchBoard {
   private readonlyMode = false;
   private selectedAtoms = new Set<number>();
   private selectedBonds = new Set<number>();
+  private annotations: readonly SketchAnnotation[] = [];
+  private readonly selectedAnnotations = new Set<number>();
+  private annotationTemplate: SketchAnnotation = DEFAULT_TEXT_ANNOTATION;
+  private constrainAnnotation = false;
+  private annotationDraft: { index?: number; item: SketchAnnotation } | null =
+    null;
+  private atomLabelDraft: { index: number; text: string } | null = null;
+  private figureToolLocked = false;
+  private readonly onPlaceText: SketchBoardOptions["onPlaceText"];
+  private readonly onPaint: SketchBoardOptions["onPaint"];
+  private annotationGesture: (MarqueeGesture & { constrain: boolean }) | null =
+    null;
   private dirty = false;
   private raf = 0;
   private readonly stateListeners = new Set<
@@ -178,6 +236,7 @@ export class SketchBoard {
   private lastPan: { x: number; y: number } | null = null;
   private marqueeGesture: MarqueeGesture | null = null;
   private moveGesture: MoveGesture | null = null;
+  private figureTransform: FigureTransformGesture | null = null;
   private elementPrefix: { key: "b" | "c" | "s"; at: number } | null = null;
   private readonly onPointerDown = (e: PointerEvent) =>
     this.handlePointerDown(e);
@@ -220,11 +279,16 @@ export class SketchBoard {
       e.clientX - rect.left,
       e.clientY - rect.top,
       factor,
+      this.annotations.length > 0 ? 0.1 : undefined,
     );
     this.markDirty();
   };
 
   constructor(options: SketchBoardOptions = {}) {
+    this.viewportCtrl = new ViewportController(
+      this.viewport,
+      options.zoomRange,
+    );
     if (
       options.atomRadiusDoc !== undefined &&
       (!Number.isFinite(options.atomRadiusDoc) || options.atomRadiusDoc <= 0)
@@ -241,6 +305,8 @@ export class SketchBoard {
     this.atomRadiusDoc = options.atomRadiusDoc ?? SNAP_RADIUS;
     this.omitCarbonLabel = options.omitCarbonLabel ?? true;
     this.bondChainStep = options.bondChainStep ?? DEFAULT_BOND_LENGTH;
+    this.onPlaceText = options.onPlaceText;
+    this.onPaint = options.onPaint;
   }
 
   mount(canvas: HTMLCanvasElement): void {
@@ -355,15 +421,196 @@ export class SketchBoard {
   }
 
   clear(): void {
+    if (this.disabled || !this.hasContent()) return;
+    const commands: SketchCommand[] = [];
+    if (this.graph.atomCount() > 0)
+      commands.push(new ClearDocumentCommand(this.graph));
+    if (this.annotations.length > 0)
+      commands.push(this.replaceAnnotationsCommand([]));
+    this.clearSelection();
+    this.cancelTransientGesture();
+    this.executeCommands(commands);
+  }
+
+  hasContent(): boolean {
+    return this.graph.atomCount() > 0 || this.annotations.length > 0;
+  }
+
+  getSketchDocument(): SketchDocument {
+    return {
+      ...this.graph.getMoleculeData(),
+      annotations: structuredClone([...this.annotations]),
+    };
+  }
+
+  /** Replace the entire drawing and start a new undo history. */
+  loadSketchDocument(data: SketchDocument): void {
+    const annotations = this.documentAnnotations(data);
+    this.graph.loadMoleculeData(data);
+    this.annotations = annotations;
+    this.history.clearHistory();
+    this.resetAfterDocumentChange();
+  }
+
+  /** Replace the drawing as one reversible edit, including its artwork. */
+  updateSketchDocument(data: SketchDocument): void {
+    if (this.disabled || this.readonlyMode) return;
+    const annotations = this.documentAnnotations(data);
+    this.history.execute(
+      new CompositeCommand([
+        new ReplaceMoleculeCommand(this.graph, data),
+        this.replaceAnnotationsCommand(annotations),
+      ]),
+    );
+    this.resetAfterDocumentChange();
+  }
+
+  private documentAnnotations(data: SketchDocument): SketchAnnotation[] {
+    if (
+      !data ||
+      !Array.isArray(data.atoms) ||
+      !Array.isArray(data.bonds) ||
+      !Array.isArray(data.annotations)
+    ) {
+      throw new Error(
+        "A Sketch document needs atoms, bonds, and annotations arrays",
+      );
+    }
+    return data.annotations.map(normalizeAnnotation);
+  }
+
+  setAnnotationTemplate(item: SketchAnnotation, constrainAspect = false): void {
+    this.annotationTemplate = normalizeAnnotation(item);
+    this.constrainAnnotation = constrainAspect;
+  }
+
+  /** Insert one piece of artwork as an undoable edit. */
+  drawAnnotation(item: SketchAnnotation): number {
+    if (this.disabled || this.readonlyMode) return -1;
+    const index = this.annotations.length;
+    this.executeCommand(
+      this.replaceAnnotationsCommand([
+        ...this.annotations,
+        normalizeAnnotation(item),
+      ]),
+    );
+    return index;
+  }
+
+  updateAnnotation(index: number, item: SketchAnnotation): void {
+    if (this.disabled || this.readonlyMode || !this.annotations[index]) return;
+    const next = [...this.annotations];
+    next[index] = normalizeAnnotation(item);
+    this.executeCommand(this.replaceAnnotationsCommand(next));
+  }
+
+  removeAnnotation(index: number): void {
+    if (this.disabled || this.readonlyMode || !this.annotations[index]) return;
+    this.clearSelection();
+    this.executeCommand(
+      this.replaceAnnotationsCommand(
+        this.annotations.filter((_, candidate) => index !== candidate),
+      ),
+    );
+  }
+
+  /** Place a figure using the editor’s tool-lock and selection behavior. */
+  placeAnnotation(item: SketchAnnotation): number {
+    if (this.disabled || this.readonlyMode) return -1;
+    const placed = normalizeAnnotation(item);
+    const index = this.annotations.length;
+    this.clearSelection();
+    if (!(this.figureToolLocked && this.tool === "annotation")) {
+      this.tool = "select";
+      this.selectedAnnotations.add(index);
+      this.updateCursor();
+    }
+    this.executeCommand(
+      this.replaceAnnotationsCommand([...this.annotations, placed]),
+    );
+    return index;
+  }
+
+  setFigureToolLocked(locked: boolean): void {
+    if (this.disabled || this.readonlyMode || this.figureToolLocked === locked)
+      return;
+    this.figureToolLocked = locked;
+    if (!locked && this.tool === "annotation") this.setTool("select");
+    else this.emitState();
+  }
+
+  /** Draw a transient figure draft without changing the document or export. */
+  setAnnotationDraft(
+    draft: { index?: number; item: SketchAnnotation } | null,
+  ): void {
+    if (draft && (this.disabled || this.readonlyMode)) return;
+    this.annotationDraft = draft;
+    this.markDirty();
+  }
+
+  /** Paint typed text with the atom's usual style without recording an edit. */
+  setAtomLabelDraft(draft: { index: number; text: string } | null): void {
+    if (draft && (this.disabled || this.readonlyMode)) return;
+    this.atomLabelDraft = draft;
+    this.markDirty();
+  }
+
+  /** Set display text, or clear it to show the element symbol again. */
+  updateAtomLabel(index: number, text: string): void {
+    if (this.disabled || this.readonlyMode) return;
+    const atom = this.graph.getAtom(index);
+    const value = text.replace(/[\r\n]+/g, " ").trim();
+    const label = value && value !== atom.element ? value : undefined;
+    if (label !== atom.label)
+      this.executeCommand(new SetAtomLabelCommand(this.graph, index, label));
+  }
+
+  getSelectedAnnotation():
+    | { index: number; item: SketchAnnotation }
+    | undefined {
+    if (this.selectedAnnotations.size !== 1) return undefined;
+    const [index] = this.selectedAnnotations;
+    return { index, item: structuredClone(this.annotations[index]) };
+  }
+
+  duplicateSelectedAnnotations(): void {
     if (
       this.disabled ||
-      (this.graph.atomCount() === 0 && this.graph.bondCount() === 0)
-    ) {
+      this.readonlyMode ||
+      this.selectedAnnotations.size === 0
+    )
       return;
-    }
-    this.executeCommand(new ClearDocumentCommand(this.graph));
+    const copies = this.annotations
+      .filter((_, index) => this.selectedAnnotations.has(index))
+      .map((item) => ({ ...item, x: item.x + 0.55, y: item.y - 0.55 }));
     this.clearSelection();
-    this.emitState();
+    for (let index = 0; index < copies.length; index++) {
+      this.selectedAnnotations.add(this.annotations.length + index);
+    }
+    this.executeCommand(
+      this.replaceAnnotationsCommand([...this.annotations, ...copies]),
+    );
+  }
+
+  sendSelectedAnnotationsToBack(): void {
+    if (
+      this.disabled ||
+      this.readonlyMode ||
+      this.selectedAnnotations.size === 0
+    )
+      return;
+    const selected = this.annotations.filter((_, index) =>
+      this.selectedAnnotations.has(index),
+    );
+    const rest = this.annotations.filter(
+      (_, index) => !this.selectedAnnotations.has(index),
+    );
+    const next = [...selected, ...rest];
+    if (next.every((item, index) => item === this.annotations[index])) return;
+    this.selectedAnnotations.clear();
+    for (let index = 0; index < selected.length; index++)
+      this.selectedAnnotations.add(index);
+    this.executeCommand(this.replaceAnnotationsCommand(next));
   }
 
   /** Draw one atom. One undo step. Returns the new atom index, or -1 if disabled. */
@@ -414,20 +661,30 @@ export class SketchBoard {
     );
   }
 
-  /** Delete the current atom and bond selection as one undo step. */
+  /** Delete selected chemistry and annotations as one undo step. */
   deleteSelection(): void {
-    if (this.selectedAtoms.size === 0 && this.selectedBonds.size === 0) {
-      return;
+    if (this.disabled || this.readonlyMode) return;
+    const commands: SketchCommand[] = [];
+    if (this.selectedAtoms.size || this.selectedBonds.size) {
+      commands.push(
+        new DeleteSelectionCommand(
+          this.graph,
+          [...this.selectedAtoms],
+          [...this.selectedBonds],
+        ),
+      );
     }
-    this.executeCommand(
-      new DeleteSelectionCommand(
-        this.graph,
-        [...this.selectedAtoms],
-        [...this.selectedBonds],
-      ),
-    );
+    if (this.selectedAnnotations.size) {
+      commands.push(
+        this.replaceAnnotationsCommand(
+          this.annotations.filter(
+            (_, index) => !this.selectedAnnotations.has(index),
+          ),
+        ),
+      );
+    }
     this.clearSelection();
-    this.emitState();
+    this.executeCommands(commands);
   }
 
   setRingTemplate(size: number, kind: RingKind = "aliphatic"): void {
@@ -560,6 +817,9 @@ export class SketchBoard {
       bondCount: this.graph.bondCount(),
       selectedAtomCount: this.selectedAtoms.size,
       selectedBondCount: this.selectedBonds.size,
+      annotationCount: this.annotations.length,
+      figureToolLocked: this.figureToolLocked,
+      selectedAnnotationCount: this.selectedAnnotations.size,
     };
   }
 
@@ -619,37 +879,49 @@ export class SketchBoard {
 
   fitToView(): void {
     const data = this.graph.getMoleculeData();
-    this.viewportCtrl.fitToAtoms(data.atoms);
+    const fitPoints: Point[] = [...data.atoms];
+    for (const atom of data.atoms) {
+      if (!atom.label) continue;
+      const reach =
+        atomLabelWidth(atom.label, DEPICTION_TOKENS.fontSizeRatio) / 2;
+      fitPoints.push(
+        { x: atom.x - reach, y: atom.y },
+        { x: atom.x + reach, y: atom.y },
+      );
+    }
+    for (const item of this.annotations) {
+      const bounds = annotationBounds(item);
+      fitPoints.push(
+        { x: bounds.minX, y: bounds.minY },
+        { x: bounds.maxX, y: bounds.maxY },
+      );
+    }
+    this.viewportCtrl.fitToAtoms(fitPoints, 48, this.annotations.length > 0);
     this.markDirty();
   }
 
   undo(): void {
     if (this.disabled) return;
     // Synchronous: core's history stays sync for synchronous commands.
-    if (this.history.undo()) {
-      this.clearSelection();
-      this.cancelTransientGesture();
-      this.emitState();
-      this.markDirty();
-    }
+    if (this.history.undo()) this.resetAfterDocumentChange();
   }
 
   redo(): void {
     if (this.disabled) return;
     // Synchronous: core's history stays sync for synchronous commands.
-    if (this.history.redo()) {
-      this.clearSelection();
-      this.cancelTransientGesture();
-      this.emitState();
-      this.markDirty();
-    }
+    if (this.history.redo()) this.resetAfterDocumentChange();
   }
 
   /** Zoom about the canvas centre; `factor` > 1 zooms in. View state only. */
   zoomBy(factor: number): void {
     if (!this.canvas || !(factor > 0)) return;
     const rect = this.canvas.getBoundingClientRect();
-    this.viewportCtrl.zoomAtScreen(rect.width / 2, rect.height / 2, factor);
+    this.viewportCtrl.zoomAtScreen(
+      rect.width / 2,
+      rect.height / 2,
+      factor,
+      this.annotations.length > 0 ? 0.1 : undefined,
+    );
     this.markDirty();
   }
 
@@ -658,14 +930,7 @@ export class SketchBoard {
   }
 
   loadMoleculeData(data: MoleculeData): void {
-    this.graph.loadMoleculeData(data);
-    // A loaded document is a new history root. Commands captured against the
-    // previous graph must never be allowed to mutate it.
-    this.history.clearHistory();
-    this.clearSelection();
-    this.cancelTransientGesture();
-    this.emitState();
-    this.markDirty();
+    this.loadSketchDocument({ ...data, annotations: [] });
   }
 
   /** Apply an external edit as one undoable document change. */
@@ -698,20 +963,26 @@ export class SketchBoard {
 
   /** Serialize a fitted, selection-free vector image of the current sketch. */
   toSvg(options: SketchExportOptions = {}): string {
-    return new SketchImageExporter(
-      this.graph,
-      this.renderer.getTheme(),
-      this.omitCarbonLabel,
-    ).toSvg(options);
+    return this.imageExporter().toSvg(options);
   }
 
   /** Encode a fitted, selection-free PNG image of the current sketch. */
   toPng(options: SketchExportOptions = {}): Promise<Blob> {
+    return this.imageExporter().toPng(options);
+  }
+
+  /** The framing the image exporter will use for these options. */
+  getExportView(options: SketchExportOptions = {}) {
+    return this.imageExporter().getView(options);
+  }
+
+  private imageExporter(): SketchImageExporter {
     return new SketchImageExporter(
       this.graph,
       this.renderer.getTheme(),
       this.omitCarbonLabel,
-    ).toPng(options);
+      this.annotations,
+    );
   }
 
   /** Force a paint (tests). */
@@ -737,6 +1008,7 @@ export class SketchBoard {
       if (!this.dirty) return;
       this.dirty = false;
       this.paint();
+      this.onPaint?.();
     });
   }
 
@@ -744,15 +1016,67 @@ export class SketchBoard {
     if (!this.canvas) return;
     const ctx = this.canvas.getContext("2d");
     if (!ctx) return;
-    const gesturePreview = this.gesturePreviewPoints();
+    const gesturePreview = this.gesturePreview();
+    const move = this.moveGesture;
+    const snappedMolecule = move
+      ? this.snappedBondMove(move, move.current)
+      : undefined;
+    const draft = this.annotationGesture;
+    const editing = this.annotationDraft;
+    let annotations = this.annotations;
+    if (editing) {
+      annotations =
+        editing.index === undefined
+          ? [...annotations, editing.item]
+          : annotations.map((item, index) =>
+              index === editing.index ? editing.item : item,
+            );
+    } else if (this.figureTransform) {
+      const gesture = this.figureTransform;
+      const next = this.transformedAnnotation(
+        gesture,
+        gesture.current,
+        gesture.constrain,
+      );
+      annotations = annotations.map((item, index) =>
+        index === gesture.index ? next : item,
+      );
+    } else if (move?.annotations.size) {
+      annotations = annotations.map((item, index) =>
+        move.annotations.has(index)
+          ? {
+              ...item,
+              x: item.x + move.current.x - move.start.x,
+              y: item.y + move.current.y - move.start.y,
+            }
+          : item,
+      );
+    }
     this.renderer.paint(ctx, this.graph, this.viewport, {
-      selectedAtoms: this.selectedAtoms,
+      annotations,
+      moleculePreview: snappedMolecule,
+      atomLabelDraft: this.atomLabelDraft ?? undefined,
+      resizeAnnotation:
+        !editing && !move ? this.resizableSelection()?.index : undefined,
+      selectedAnnotations: editing ? undefined : this.selectedAnnotations,
+      hoveredAnnotation:
+        !editing && this.hover.kind === "annotation"
+          ? this.hover.index
+          : undefined,
+      annotationPreview: draft
+        ? this.annotationFromGesture(
+            draft.start,
+            draft.current,
+            draft.constrain,
+          )
+        : undefined,
+      selectedAtoms: snappedMolecule ? new Set() : this.selectedAtoms,
       selectedBonds: this.selectedBonds,
       ...(this.hover.kind === "atom" ? { hoveredAtom: this.hover.index } : {}),
       ...(this.hover.kind === "bond" ? { hoveredBond: this.hover.index } : {}),
       omitCarbonLabel: this.omitCarbonLabel,
       atomRadiusDoc: this.atomRadiusDoc,
-      ...(this.moveGesture
+      ...(this.moveGesture && !snappedMolecule
         ? {
             movePreview: {
               atomIndices: new Set(this.moveGesture.atoms),
@@ -771,13 +1095,7 @@ export class SketchBoard {
             },
           }
         : {}),
-      ...(gesturePreview.length >= 2
-        ? {
-            gesturePreview: {
-              points: gesturePreview,
-            },
-          }
-        : {}),
+      gesturePreview,
     });
   }
 
@@ -789,13 +1107,146 @@ export class SketchBoard {
     return this.viewport.screenToDoc(sx, sy);
   }
 
-  private hitAt(doc: Point): BoardHit {
+  /** Resolve the current tool’s pick at a document-coordinate point. */
+  hitAt(doc: Point): BoardHit {
     // Keep hit areas roughly constant in CSS pixels while zooming.
-    const zoomRatio = DEFAULT_BOND_SCREEN_PX / this.viewport.getScale();
-    return new HitTester(
+    const scale = this.viewport.getScale();
+    const zoomRatio = DEFAULT_BOND_SCREEN_PX / scale;
+    const ink = depictionInk(scale);
+    const hit = new HitTester(
       this.atomRadiusDoc * zoomRatio,
       this.atomRadiusDoc * 0.55 * zoomRatio,
+      this.tool === "select" || this.tool === "bond" ? ink.fontPx / scale : 0,
+      (ink.doubleSpacingPx + ink.selectedWidth / 2) / scale,
     ).hit(this.graph, doc.x, doc.y);
+    if (
+      hit.kind !== "none" ||
+      (this.tool !== "select" && this.tool !== "erase")
+    )
+      return hit;
+    const tolerance = 5 / this.viewport.getScale();
+    for (let index = this.annotations.length - 1; index >= 0; index--) {
+      if (hitAnnotation(this.annotations[index], doc.x, doc.y, tolerance))
+        return { kind: "annotation", index };
+    }
+    return hit;
+  }
+
+  private annotationFromGesture(
+    start: Point,
+    end: Point,
+    constrain: boolean,
+  ): SketchAnnotation {
+    const item = this.annotationTemplate;
+    if (item.kind === "text") return { ...item, ...start };
+    if (
+      Math.hypot(end.x - start.x, end.y - start.y) <
+      3 / this.viewport.getScale()
+    ) {
+      return {
+        ...item,
+        ...start,
+        height: this.constrainAnnotation ? item.width : item.height,
+      };
+    }
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const square = Math.max(Math.abs(dx), Math.abs(dy));
+    const useSquare = constrain || this.constrainAnnotation;
+    const width = Math.max(0.08, useSquare ? square : Math.abs(dx));
+    const height = Math.max(0.08, useSquare ? square : Math.abs(dy));
+    return {
+      ...item,
+      x: start.x + (dx < 0 ? -width : width) / 2,
+      y: start.y + (dy < 0 ? -height : height) / 2,
+      width,
+      height,
+    };
+  }
+
+  private resizableSelection():
+    | { index: number; item: ResizableAnnotation }
+    | undefined {
+    if (
+      this.disabled ||
+      this.readonlyMode ||
+      this.tool !== "select" ||
+      this.selectedAnnotations.size !== 1 ||
+      this.selectedAtoms.size ||
+      this.selectedBonds.size
+    )
+      return undefined;
+    const [index] = this.selectedAnnotations;
+    const item = this.annotations[index];
+    return item && item.kind !== "text" ? { index, item } : undefined;
+  }
+
+  private figureHandleAt(doc: Point): FigureHandle | undefined {
+    const selection = this.resizableSelection();
+    if (!selection) return undefined;
+    const scale = this.viewport.getScale();
+    const radius = 6 / scale;
+    const rotation = annotationRotationHandle(
+      selection.item,
+      ANNOTATION_ROTATION_HANDLE_PX / scale,
+    );
+    if (
+      Math.hypot(rotation.x - doc.x, rotation.y - doc.y) <=
+      radius + 2 / scale
+    )
+      return { ...selection, kind: "rotate" };
+    const corner = annotationCorners(selection.item).findIndex(
+      (point) =>
+        Math.abs(doc.x - point.x) <= radius &&
+        Math.abs(doc.y - point.y) <= radius,
+    );
+    return corner === -1 ? undefined : { ...selection, kind: "resize", corner };
+  }
+
+  private transformedAnnotation(
+    gesture: FigureTransformGesture,
+    end: Point,
+    constrain: boolean,
+  ): ResizableAnnotation {
+    const { item, start } = gesture;
+    if (gesture.kind === "rotate") {
+      if (end.x === item.x && end.y === item.y) return item;
+      const before = Math.atan2(start.y - item.y, start.x - item.x);
+      const after = Math.atan2(end.y - item.y, end.x - item.x);
+      const rotation =
+        (item.rotation ?? 0) + ((before - after) * 180) / Math.PI;
+      return {
+        ...item,
+        rotation: constrain ? Math.round(rotation / 15) * 15 : rotation,
+      };
+    }
+    const { corner } = gesture;
+    const signX = corner === 0 || corner === 3 ? -1 : 1;
+    const signY = corner < 2 ? 1 : -1;
+    const localStart = annotationPoint(item, start, "local");
+    const localEnd = annotationPoint(item, end, "local");
+    let width = Math.max(
+      0.08,
+      item.width + signX * (localEnd.x - localStart.x),
+    );
+    let height = Math.max(
+      0.08,
+      item.height + signY * (localEnd.y - localStart.y),
+    );
+    if (constrain) {
+      const scale = Math.max(width / item.width, height / item.height);
+      width = scale * item.width;
+      height = scale * item.height;
+    }
+    return {
+      ...item,
+      ...annotationPoint(item, {
+        x: item.x + (signX * (width - item.width)) / 2,
+        y: item.y + (signY * (height - item.height)) / 2,
+      }),
+      width,
+      height,
+    };
   }
 
   private handlePointerDown(e: PointerEvent): void {
@@ -811,11 +1262,11 @@ export class SketchBoard {
     }
     if (this.activePointerId !== null || e.button === 2) return;
     this.canvas.focus();
-    const doc = this.eventDoc(e);
-    this.pointerDoc = doc;
-    const hit = this.hitAt(doc);
-
-    if (e.button === 1 || this.spacePan) {
+    if (
+      e.button === 1 ||
+      this.spacePan ||
+      (this.tool === "pan" && e.button === 0)
+    ) {
       e.preventDefault();
       this.capturePointer(e);
       this.panning = true;
@@ -825,6 +1276,33 @@ export class SketchBoard {
     }
     if (e.button !== 0) return;
     e.preventDefault();
+    const doc = this.eventDoc(e);
+    this.pointerDoc = doc;
+    const handle = this.figureHandleAt(doc);
+    if (handle) {
+      this.capturePointer(e);
+      this.figureTransform = {
+        ...handle,
+        start: doc,
+        current: doc,
+        constrain: e.shiftKey,
+      };
+      this.updateCursor(handle);
+      this.markDirty();
+      return;
+    }
+    const hit = this.hitAt(doc);
+
+    if (this.tool === "annotation") {
+      this.capturePointer(e);
+      this.annotationGesture = {
+        start: doc,
+        current: doc,
+        constrain: e.shiftKey,
+      };
+      this.markDirty();
+      return;
+    }
 
     if (this.tool === "ring") {
       this.placeRingForHit(hit, doc);
@@ -864,35 +1342,18 @@ export class SketchBoard {
       return;
     }
 
-    if (this.tool === "bond") {
-      if (hit.kind === "bond") {
-        const bond = this.graph.getBond(hit.index);
-        const commands: SketchCommand[] = [
-          bond.order === this.bondOrder
-            ? new CycleBondOrderCommand(this.graph, hit.index)
-            : new SetBondOrderCommand(this.graph, hit.index, this.bondOrder),
-        ];
-        const color = this.activeColor();
-        if (color) {
-          commands.push(...this.colorCommands([], [hit.index], color));
-        }
-        this.executeCommands(commands);
-        return;
-      }
+    if (
+      (this.tool === "bond" && hit.kind !== "bond") ||
+      this.tool === "chain"
+    ) {
       this.capturePointer(e);
       this.bondGesture = {
-        startAtom: hit.kind === "atom" ? hit.index : null,
-        start: doc,
-        current: doc,
-      };
-      this.markDirty();
-      return;
-    }
-
-    if (this.tool === "chain") {
-      this.capturePointer(e);
-      this.bondGesture = {
-        startAtom: hit.kind === "atom" ? hit.index : null,
+        startAtom:
+          hit.kind === "atom"
+            ? hit.index
+            : this.tool === "bond"
+              ? findAtom(this.graph, doc.x, doc.y)
+              : null,
         start: doc,
         current: doc,
       };
@@ -942,57 +1403,50 @@ export class SketchBoard {
         this.executeCommand(new RemoveBondCommand(this.graph, hit.index));
         this.selectedBonds.clear();
         this.emitState();
+      } else if (hit.kind === "annotation") {
+        this.removeAnnotation(hit.index);
       }
       return;
     }
 
-    if (this.tool === "select") {
-      if (hit.kind === "atom") {
-        if (e.shiftKey) {
-          if (this.selectedAtoms.has(hit.index)) {
-            this.selectedAtoms.delete(hit.index);
-          } else {
-            this.selectedAtoms.add(hit.index);
-          }
-        } else {
-          if (!this.selectedAtoms.has(hit.index)) {
-            this.clearSelection();
-            this.selectedAtoms.add(hit.index);
-          }
-          this.capturePointer(e);
-          this.moveGesture = {
-            start: doc,
-            current: doc,
-            atoms: this.atomsForSelectionMove(),
-          };
-        }
-      } else if (hit.kind === "bond") {
-        if (e.shiftKey) {
-          if (this.selectedBonds.has(hit.index)) {
-            this.selectedBonds.delete(hit.index);
-          } else {
-            this.selectedBonds.add(hit.index);
-          }
-        } else {
-          if (!this.selectedBonds.has(hit.index)) {
-            this.clearSelection();
-            this.selectedBonds.add(hit.index);
-          }
-          this.capturePointer(e);
-          this.moveGesture = {
-            start: doc,
-            current: doc,
-            atoms: this.atomsForSelectionMove(),
-          };
-        }
-      } else {
+    if (
+      this.tool === "select" ||
+      (this.tool === "bond" && hit.kind === "bond")
+    ) {
+      if (hit.kind === "none") {
         this.capturePointer(e);
-        this.marqueeGesture = {
-          start: doc,
-          current: doc,
-        };
-        if (!e.shiftKey) {
-          this.clearSelection();
+        this.marqueeGesture = { start: doc, current: doc };
+        if (!e.shiftKey) this.clearSelection();
+      } else {
+        const selection =
+          hit.kind === "atom"
+            ? this.selectedAtoms
+            : hit.kind === "bond"
+              ? this.selectedBonds
+              : this.selectedAnnotations;
+        if (e.shiftKey) {
+          if (!selection.delete(hit.index)) selection.add(hit.index);
+        } else {
+          const wasSelected = selection.has(hit.index);
+          if (!wasSelected) {
+            this.clearSelection();
+            selection.add(hit.index);
+          }
+          this.capturePointer(e);
+          this.moveGesture = {
+            start: doc,
+            current: doc,
+            atoms: this.atomsForSelectionMove(),
+            annotations: new Set(this.selectedAnnotations),
+            selectedBondIndex:
+              wasSelected && hit.kind === "bond" ? hit.index : undefined,
+            snapSelection:
+              (hit.kind === "atom" || hit.kind === "bond") &&
+              this.selectedAtoms.size + this.selectedBonds.size === 1 &&
+              this.selectedAnnotations.size === 0
+                ? hit
+                : undefined,
+          };
         }
       }
       this.emitState();
@@ -1018,6 +1472,8 @@ export class SketchBoard {
       return;
     }
     if (this.activePointerId === null) {
+      if (this.tool === "pan" || this.readonlyMode) return;
+      if (this.tool === "select") this.updateCursor(this.figureHandleAt(doc));
       const nextHover = this.hitAt(doc);
       if (!sameHit(this.hover, nextHover)) {
         this.hover = nextHover;
@@ -1025,7 +1481,15 @@ export class SketchBoard {
       }
       return;
     }
-    if (this.moveGesture) {
+    if (this.annotationGesture) {
+      this.annotationGesture.current = doc;
+      this.annotationGesture.constrain = e.shiftKey;
+      this.markDirty();
+    } else if (this.figureTransform) {
+      this.figureTransform.current = doc;
+      this.figureTransform.constrain = e.shiftKey;
+      this.markDirty();
+    } else if (this.moveGesture) {
       this.moveGesture.current = doc;
       this.markDirty();
     } else if (this.marqueeGesture) {
@@ -1053,19 +1517,76 @@ export class SketchBoard {
       return;
     }
 
+    if (this.annotationGesture) {
+      const { start } = this.annotationGesture;
+      this.annotationGesture = null;
+      const item = this.annotationFromGesture(start, doc, e.shiftKey);
+      if (item.kind === "text" && this.onPlaceText) {
+        this.onPlaceText(item);
+        this.markDirty();
+      } else {
+        this.placeAnnotation(item);
+      }
+      return;
+    }
+
+    if (this.figureTransform) {
+      const gesture = this.figureTransform;
+      this.figureTransform = null;
+      if (
+        Math.hypot(doc.x - gesture.start.x, doc.y - gesture.start.y) >
+        2 / this.viewport.getScale()
+      ) {
+        this.updateAnnotation(
+          gesture.index,
+          this.transformedAnnotation(gesture, doc, e.shiftKey),
+        );
+      }
+      this.updateCursor(this.figureHandleAt(doc));
+      this.markDirty();
+      return;
+    }
+
     if (this.moveGesture) {
       const gesture = this.moveGesture;
       this.moveGesture = null;
       const dx = doc.x - gesture.start.x;
       const dy = doc.y - gesture.start.y;
       const dragThreshold = 2 / this.viewport.getScale();
-      if (Math.hypot(dx, dy) > dragThreshold && gesture.atoms.length > 0) {
-        this.executeCommand(
-          new MoveSelectionCommand(this.graph, gesture.atoms, dx, dy),
-        );
-      } else {
-        this.markDirty();
+      if (Math.hypot(dx, dy) > dragThreshold) {
+        const snapped = this.snappedBondMove(gesture, doc);
+        if (snapped) {
+          this.clearSelection();
+          this.executeCommand(new ReplaceMoleculeCommand(this.graph, snapped));
+          return;
+        }
+        const commands: SketchCommand[] = [];
+        if (gesture.atoms.length)
+          commands.push(
+            new MoveSelectionCommand(this.graph, gesture.atoms, dx, dy),
+          );
+        if (gesture.annotations.size) {
+          commands.push(
+            this.replaceAnnotationsCommand(
+              this.annotations.map((item, index) =>
+                gesture.annotations.has(index)
+                  ? { ...item, x: item.x + dx, y: item.y + dy }
+                  : item,
+              ),
+            ),
+          );
+        }
+        this.executeCommands(commands);
+      } else if (gesture.selectedBondIndex !== undefined) {
+        const index = gesture.selectedBondIndex;
+        const commands: SketchCommand[] = [
+          new CycleBondOrderCommand(this.graph, index),
+        ];
+        const color = this.tool === "bond" ? this.activeColor() : undefined;
+        if (color) commands.push(...this.colorCommands([], [index], color));
+        this.executeCommands(commands);
       }
+      this.markDirty();
       return;
     }
 
@@ -1090,6 +1611,16 @@ export class SketchBoard {
         if (enclosedAtoms.has(bond.i) && enclosedAtoms.has(bond.j)) {
           this.selectedBonds.add(index);
         }
+      }
+      for (const [index, item] of this.annotations.entries()) {
+        const bounds = annotationBounds(item);
+        if (
+          bounds.minX >= x0 &&
+          bounds.maxX <= x1 &&
+          bounds.minY >= y0 &&
+          bounds.maxY <= y1
+        )
+          this.selectedAnnotations.add(index);
       }
       this.emitState();
       this.markDirty();
@@ -1133,12 +1664,8 @@ export class SketchBoard {
       return;
     }
 
-    // Prefer connect-snap over hit-test alone (magnetism when slightly off-center).
-    const hit = this.hitAt(doc);
-    const snapped =
-      hit.kind === "atom"
-        ? hit.index
-        : findAtom(this.graph, doc.x, doc.y, CONNECT_SNAP_RADIUS);
+    const target = this.bondDragTarget(gesture, doc);
+    const snapped = target.existingIndex;
     const start = gesture.startAtom;
 
     if (start === null) {
@@ -1153,6 +1680,7 @@ export class SketchBoard {
           "C",
           DEFAULT_BOND_LENGTH,
           this.activeColor(),
+          target,
         ),
       );
       return;
@@ -1189,7 +1717,7 @@ export class SketchBoard {
       return;
     }
 
-    // Bond tool → empty: one terminal C at fixed length + 30° snap (not free chain).
+    // The terminal carbon goes at the text edge or the default angle and length.
     this.executeCommand(
       new PlaceTerminalBondCommand(
         this.graph,
@@ -1199,6 +1727,7 @@ export class SketchBoard {
         this.bondOrder,
         DEFAULT_BOND_LENGTH,
         this.activeColor(),
+        target,
       ),
     );
   }
@@ -1244,7 +1773,11 @@ export class SketchBoard {
     this.activePointerId = null;
     this.bondGesture = null;
     this.marqueeGesture = null;
+    this.annotationGesture = null;
     this.moveGesture = null;
+    this.figureTransform = null;
+    this.annotationDraft = null;
+    this.atomLabelDraft = null;
     this.panning = false;
     this.lastPan = null;
     this.hover = { kind: "none" };
@@ -1264,6 +1797,26 @@ export class SketchBoard {
   private clearSelection(): void {
     this.selectedAtoms.clear();
     this.selectedBonds.clear();
+    this.selectedAnnotations.clear();
+  }
+
+  private resetAfterDocumentChange(): void {
+    this.clearSelection();
+    this.cancelTransientGesture();
+    this.emitState();
+    this.markDirty();
+  }
+
+  private replaceAnnotationsCommand(
+    after: readonly SketchAnnotation[],
+  ): SketchCommand {
+    return new ReplaceAnnotationsCommand(
+      (items) => {
+        this.annotations = items;
+      },
+      this.annotations,
+      after,
+    );
   }
 
   private activeColor(): string | undefined {
@@ -1311,7 +1864,7 @@ export class SketchBoard {
     for (const listener of [...this.stateListeners]) listener(state);
   }
 
-  private updateCursor(): void {
+  private updateCursor(handle?: FigureHandle): void {
     if (!this.canvas) return;
     if (this.disabled) {
       this.canvas.style.cursor = "not-allowed";
@@ -1325,8 +1878,20 @@ export class SketchBoard {
       this.canvas.style.cursor = "grabbing";
       return;
     }
-    if (this.spacePan) {
+    if (this.spacePan || this.tool === "pan") {
       this.canvas.style.cursor = "grab";
+      return;
+    }
+    if (handle?.kind === "rotate") {
+      this.canvas.style.cursor = this.figureTransform ? "grabbing" : "grab";
+      return;
+    }
+    if (handle?.kind === "resize") {
+      const angle =
+        (handle.item.rotation ?? 0) + (handle.corner % 2 === 0 ? 45 : 135);
+      const cursors = ["ew-resize", "nwse-resize", "ns-resize", "nesw-resize"];
+      this.canvas.style.cursor =
+        cursors[Math.round(angle / 45) % cursors.length];
       return;
     }
     this.canvas.style.cursor =
@@ -1337,60 +1902,90 @@ export class SketchBoard {
           : "crosshair";
   }
 
-  private gesturePreviewPoints(): Point[] {
+  private gesturePreview(): SketchRenderState["gesturePreview"] {
     const gesture = this.bondGesture;
-    if (!gesture) return [];
+    if (!gesture) return undefined;
+    if (this.tool === "chain")
+      return { points: this.chainGesturePoints(gesture, gesture.current) };
+    if (this.tool !== "bond") return undefined;
+
     const start =
       gesture.startAtom === null
         ? gesture.start
         : this.graph.getAtom(gesture.startAtom);
+    const target = this.bondDragTarget(gesture, gesture.current);
+    return {
+      points: [start, target],
+      startAtom: gesture.startAtom ?? undefined,
+      endAtom: target.existingIndex ?? undefined,
+    };
+  }
 
-    if (this.tool === "bond") {
-      if (gesture.startAtom !== null) {
-        const target = resolveBondTarget(
-          this.graph,
-          gesture.startAtom,
-          gesture.current.x,
-          gesture.current.y,
-          DEFAULT_BOND_LENGTH,
-        );
-        const end =
-          target.existingIndex === null
-            ? target
-            : this.graph.getAtom(target.existingIndex);
-        return [
-          { x: start.x, y: start.y },
-          { x: end.x, y: end.y },
-        ];
-      }
-      const snapped = findAtom(
-        this.graph,
-        gesture.current.x,
-        gesture.current.y,
-        CONNECT_SNAP_RADIUS,
-      );
-      if (snapped !== null) {
-        const atom = this.graph.getAtom(snapped);
-        return [
-          { x: start.x, y: start.y },
-          { x: atom.x, y: atom.y },
-        ];
-      }
-      const { ux, uy } = snapDirection(
-        gesture.current.x - start.x,
-        gesture.current.y - start.y,
-      );
-      return [
-        { x: start.x, y: start.y },
-        {
-          x: start.x + ux * DEFAULT_BOND_LENGTH,
-          y: start.y + uy * DEFAULT_BOND_LENGTH,
-        },
-      ];
+  private snappedBondMove(
+    gesture: MoveGesture,
+    pointer: Point,
+  ): MoleculeData | undefined {
+    if (!gesture.snapSelection) return undefined;
+    const dx = pointer.x - gesture.start.x;
+    const dy = pointer.y - gesture.start.y;
+    const scale = this.viewport.getScale();
+    if (Math.hypot(dx, dy) <= 2 / scale) return undefined;
+    return snapMovedBond(
+      this.graph.getMoleculeData(),
+      gesture.snapSelection,
+      dx,
+      dy,
+      pointer,
+      depictionInk(scale).fontPx / scale,
+      8 / scale,
+    );
+  }
+
+  private bondDragTarget(gesture: BondGesture, pointer: Point): BondTarget {
+    const hit = this.hitAt(pointer);
+    const index = hit.kind === "atom" ? hit.index : null;
+    if (index !== null && index !== gesture.startAtom) {
+      const { x, y } = this.graph.getAtom(index);
+      return { x, y, existingIndex: index };
     }
 
-    if (this.tool !== "chain") return [];
-    return this.chainGesturePoints(gesture, gesture.current);
+    const start =
+      gesture.startAtom === null
+        ? gesture.start
+        : this.graph.getAtom(gesture.startAtom);
+    const scale = this.viewport.getScale();
+    const context = this.canvas?.getContext("2d");
+    const text = snapToAnnotationText(
+      this.annotations,
+      start,
+      pointer,
+      8 / scale,
+      2 / scale,
+      context
+        ? (label) => measureAnnotationText(context, label, scale).width / scale
+        : undefined,
+    );
+    if (text) return { ...text, existingIndex: null };
+
+    const nearby = findAtom(
+      this.graph,
+      pointer.x,
+      pointer.y,
+      CONNECT_SNAP_RADIUS,
+    );
+    if (nearby !== null && nearby !== gesture.startAtom) {
+      const { x, y } = this.graph.getAtom(nearby);
+      return { x, y, existingIndex: nearby };
+    }
+    const target = resolveBondTarget(
+      this.graph,
+      gesture.startAtom ?? start,
+      pointer.x,
+      pointer.y,
+    );
+    if (target.existingIndex === null) return target;
+    const { x, y } = this.graph.getAtom(target.existingIndex);
+    return { ...target, x, y };
   }
 
   private chainGesturePoints(gesture: BondGesture, end: Point): Point[] {
@@ -1584,26 +2179,22 @@ export class SketchBoard {
       case "redo":
         this.redo();
         break;
-      case "delete": {
-        if (this.selectedAtoms.size === 0 && this.selectedBonds.size === 0) {
-          return;
-        }
-        this.executeCommand(
-          new DeleteSelectionCommand(
-            this.graph,
-            [...this.selectedAtoms],
-            [...this.selectedBonds],
-          ),
-        );
-        this.clearSelection();
-        this.emitState();
+      case "delete":
+        this.deleteSelection();
         break;
-      }
       case "cancel":
         this.clearSelection();
-        this.cancelTransientGesture();
-        this.emitState();
-        this.markDirty();
+        if (
+          this.tool === "annotation" ||
+          this.tool === "pan" ||
+          this.tool === "erase"
+        ) {
+          this.setTool("select");
+        } else {
+          this.cancelTransientGesture();
+          this.emitState();
+          this.markDirty();
+        }
         break;
       case "bondOrder":
         this.setBondOrder(action.order);

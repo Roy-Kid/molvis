@@ -22,6 +22,13 @@ import {
 
 Do **not** import `@molcrafts/molwasm` from sketch, stage, or page.
 
+### Image export
+
+Stage and Sketch use `@molcrafts/ui-web-components/image-export` for the native
+export dialog. Each engine supplies its raster capture or SVG artwork. The
+existing `@molcrafts/molvis-core/image-crop` and `@molcrafts/molvis-core/save-file`
+entry points re-export the shared crop and file APIs.
+
 ### Element picker
 
 The periodic-table picker is a native Web Component. Registration is explicit

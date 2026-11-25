@@ -62,7 +62,7 @@ export function createSketchPreview(
   };
 
   const actions = (): PreviewAction[] => {
-    const empty = composer.counts().atoms === 0;
+    const empty = !composer.board.hasContent();
     const doc = slot.ownerDocument;
     const full = doc.fullscreenElement === composer.root;
     const list: PreviewAction[] = [
@@ -114,26 +114,19 @@ export function createSketchPreview(
       });
     }
     list.push({
-      kind: "menu",
+      kind: "button",
       id: "export",
       label: "Export",
       icon: "export",
       group: "export",
       disabled: empty,
-      items: (["png", "svg"] as const).map((format) => ({
-        id: format,
-        label: format === "png" ? "PNG image" : "SVG vector",
-        run: () =>
-          void composer
-            .exportImage(format, fileName(title, format, "sketch"))
-            .catch((error: unknown) => fail("Export failed", error)),
-      })),
+      run: () => composer.openImageExport(fileName(title, "png", "sketch")),
     });
     return list;
   };
 
   const shown = (): PreviewState =>
-    state.kind === "ready" && composer.counts().atoms === 0
+    state.kind === "ready" && !composer.board.hasContent()
       ? { kind: "empty", message: "No molecule on the board." }
       : state;
 

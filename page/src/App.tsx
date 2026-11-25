@@ -10,6 +10,7 @@ import {
   ResizablePanelGroup,
   type ResizablePanelHandle,
   usePanelRef,
+  WorkbenchSidePanel as ViewerSidePanel,
 } from "@molcrafts/ui";
 import type React from "react";
 import type { ReactNode } from "react";
@@ -33,7 +34,6 @@ import {
 import { ResetMolvisDialog } from "@/components/viewer/ResetMolvisDialog";
 import { StructureInspector } from "@/components/viewer/StructureInspector";
 import { TrajectoryTimeline } from "@/components/viewer/TrajectoryTimeline";
-import { ViewerSidePanel } from "@/components/viewer/ViewerSidePanel";
 import { ViewerStatusOverlay } from "@/components/viewer/ViewerStatusOverlay";
 import { ViewerToolbar } from "@/components/viewer/ViewerToolbar";
 import { WeChatOpenBrowserBanner } from "@/components/viewer/WeChatOpenBrowserBanner";

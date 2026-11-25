@@ -16,8 +16,6 @@ export class SketchEditor {
   private readonly toggle = document.createElement("button");
   private readonly closeButton = document.createElement("button");
   private readonly divider = document.createElement("div");
-  private readonly menu = document.createElement("div");
-  private readonly menuToggle = document.createElement("button");
   private readonly status = document.createElement("p");
   private readonly retry = document.createElement("button");
   private companion: StageCompanion | null = null;
@@ -26,7 +24,6 @@ export class SketchEditor {
   private generation = 0;
   private ratio = 55;
   private retrySource: LinkSide = "sketch";
-  private returnFocus: HTMLElement | null = null;
   private container: HTMLElement | null = null;
   private transition: Promise<void> = Promise.resolve();
   private linkedReady = false;
@@ -49,18 +46,14 @@ export class SketchEditor {
 
     this.toggle.type = "button";
     this.toggle.className = "msk-btn msk-editor__toggle";
-    this.toggle.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 9 8-4.5M12 12 4 7.5M12 12v9"/></svg><span>3D</span>';
+    const cubeIcon =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 9 8-4.5M12 12 4 7.5M12 12v9"/></svg>';
+    this.toggle.innerHTML = cubeIcon;
     this.toggle.setAttribute("aria-controls", this.pane.id);
     this.toggle.addEventListener("click", this.onToggle);
 
     const header = document.createElement("header");
     header.className = "msk-editor__header";
-    const title = document.createElement("h2");
-    title.textContent = "3D structure";
-    const linked = document.createElement("span");
-    linked.className = "msk-editor__linked";
-    linked.textContent = "Linked editing";
     this.closeButton.type = "button";
     this.closeButton.className = "msk-editor__close";
     this.closeButton.setAttribute("aria-label", "Close 3D structure");
@@ -71,13 +64,16 @@ export class SketchEditor {
       void this.setOpen(false);
       this.toggle.focus();
     });
-    header.append(title, linked, this.closeButton);
+    header.append(this.closeButton);
     this.stageHost.className = "msk-editor__stage";
     const footer = document.createElement("footer");
     footer.className = "msk-editor__status";
     this.status.setAttribute("role", "status");
     this.retry.type = "button";
-    this.retry.textContent = "Retry";
+    this.retry.title = "Retry";
+    this.retry.setAttribute("aria-label", "Retry");
+    this.retry.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2 6m2-12v6h-6"/></svg>';
     this.retry.hidden = true;
     this.retry.addEventListener("click", () => {
       if (this.link) void this.link.syncFrom(this.retrySource);
@@ -131,19 +127,7 @@ export class SketchEditor {
       );
     });
 
-    this.menu.className = "msk-editor__menu";
-    this.menu.hidden = true;
-    this.menu.setAttribute("role", "menu");
-    this.menu.setAttribute("aria-label", "Drawing view");
-    this.menuToggle.type = "button";
-    this.menuToggle.setAttribute("role", "menuitemcheckbox");
-    this.menuToggle.textContent = "Show 3D structure";
-    this.menuToggle.addEventListener("click", () => {
-      this.dismissMenu();
-      this.onToggle();
-    });
-    this.menu.append(this.menuToggle);
-    this.root.append(this.sketchHost, this.divider, this.pane, this.menu);
+    this.root.append(this.sketchHost, this.divider, this.pane);
     this.refreshToggle();
     this.setRatio(this.ratio);
   }
@@ -153,19 +137,11 @@ export class SketchEditor {
     container.append(this.root);
     this.composer.mount(this.sketchHost);
     this.composer.extraSlot.append(this.toggle);
-    this.sketchHost.addEventListener("contextmenu", this.onContextMenu);
-    this.sketchHost.addEventListener("keydown", this.onContextKey);
-    document.addEventListener("pointerdown", this.onOutsidePointer);
-    document.addEventListener("keydown", this.onDocumentKey);
     window.addEventListener("resize", this.onResize);
   }
 
   async destroy(): Promise<void> {
     this.generation++;
-    this.sketchHost.removeEventListener("contextmenu", this.onContextMenu);
-    this.sketchHost.removeEventListener("keydown", this.onContextKey);
-    document.removeEventListener("pointerdown", this.onOutsidePointer);
-    document.removeEventListener("keydown", this.onDocumentKey);
     window.removeEventListener("resize", this.onResize);
     await this.setOpen(false);
     this.saved?.state.frame.free();
@@ -182,47 +158,6 @@ export class SketchEditor {
   private readonly onResize = (): void => {
     this.setRatio(this.ratio);
   };
-  private readonly onContextMenu = (event: MouseEvent): void => {
-    event.preventDefault();
-    this.showMenu(event.clientX, event.clientY);
-  };
-  private readonly onContextKey = (event: KeyboardEvent): void => {
-    if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10"))
-      return;
-    event.preventDefault();
-    const rect = this.sketchHost.getBoundingClientRect();
-    this.showMenu(rect.left + rect.width / 2, rect.top + rect.height / 2);
-  };
-  private readonly onOutsidePointer = (event: PointerEvent): void => {
-    if (!this.menu.contains(event.target as Node)) this.dismissMenu(false);
-  };
-  private readonly onDocumentKey = (event: KeyboardEvent): void => {
-    if (this.menu.hidden) return;
-    if (event.key === "Escape" || event.key === "Tab") this.dismissMenu();
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      this.menuToggle.focus();
-    }
-  };
-
-  private showMenu(x: number, y: number): void {
-    this.returnFocus =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    this.menu.hidden = false;
-    const rect = this.menu.getBoundingClientRect();
-    this.menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - rect.width - 4))}px`;
-    this.menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - rect.height - 4))}px`;
-    this.menuToggle.focus();
-  }
-
-  private dismissMenu(restoreFocus = true): void {
-    if (this.menu.hidden) return;
-    this.menu.hidden = true;
-    if (restoreFocus) this.returnFocus?.focus();
-  }
-
   private stacked(): boolean {
     return window.matchMedia("(max-width: 720px)").matches;
   }
@@ -244,7 +179,6 @@ export class SketchEditor {
     this.toggle.setAttribute("aria-label", label);
     this.toggle.setAttribute("aria-pressed", String(this.open));
     this.toggle.setAttribute("aria-expanded", String(this.open));
-    this.menuToggle.setAttribute("aria-checked", String(this.open));
   }
 
   private readonly onLinkState = (state: LinkState): void => {
@@ -260,10 +194,7 @@ export class SketchEditor {
     } else if (state.kind === "syncing") {
       this.status.textContent = `Updating ${state.target === "stage" ? "3D" : "2D"}…`;
     } else {
-      this.status.textContent =
-        this.composer.counts().atoms === 0
-          ? "Draw in either view to begin."
-          : "Edit either view to update the structure.";
+      this.status.textContent = "";
     }
   };
 
@@ -303,6 +234,7 @@ export class SketchEditor {
           return;
         }
         if (!this.open || generation !== this.generation) return;
+        this.status.dataset.kind = "syncing";
         this.status.textContent = "Opening 3D structure…";
         this.retry.hidden = true;
         this.linkedReady = false;

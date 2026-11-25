@@ -9,6 +9,7 @@ import {
   SketchComposer,
 } from "@molcrafts/molvis-sketch";
 import { Dialog, DialogContent, DialogTitle } from "@molcrafts/ui";
+import { saveBlob } from "@molcrafts/ui-web-components/save-file";
 import {
   forwardRef,
   type ReactNode,
@@ -109,7 +110,9 @@ export const MolvisSketch = forwardRef<MolvisSketchRef, MolvisSketchProps>(
           gui: true,
           mode: "edit",
           onExportFile: (blob, filename) =>
-            onExportFileRef.current?.(blob, filename),
+            onExportFileRef.current
+              ? onExportFileRef.current(blob, filename)
+              : saveBlob(blob, filename),
         }),
     );
     const [poppedOut, setPoppedOut] = useState(false);
@@ -131,11 +134,11 @@ export const MolvisSketch = forwardRef<MolvisSketchRef, MolvisSketchProps>(
           return composer.board.getState();
         },
         toSvg() {
-          if (composer.board.getMoleculeData().atoms.length === 0) return null;
+          if (!composer.board.hasContent()) return null;
           return composer.board.toSvg();
         },
         async toPng() {
-          if (composer.board.getMoleculeData().atoms.length === 0) return null;
+          if (!composer.board.hasContent()) return null;
           return composer.board.toPng();
         },
       }),

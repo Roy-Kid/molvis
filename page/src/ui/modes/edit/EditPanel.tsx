@@ -2,14 +2,7 @@ import {
   SpinnerIosRegular as Loader2,
   WandRegular as Wand2,
 } from "@fluentui/react-icons";
-import {
-  assignKekuleBondOrders,
-  Conformer,
-  type Frame,
-  ModeType,
-  type Molvis,
-  SmilesIr,
-} from "@molcrafts/molvis-stage";
+import { EditMode, type Molvis } from "@molcrafts/molvis-stage";
 import { EmptyState, IconAction, InspectorSection } from "@molcrafts/ui";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,42 +23,6 @@ interface EditPanelProps {
 }
 
 type EditSection = string;
-
-interface EditModeWithPending {
-  type: ModeType.Edit;
-  pendingMolecule: unknown;
-}
-
-function isEditMode(mode: unknown): mode is EditModeWithPending {
-  if (!mode || typeof mode !== "object") return false;
-  return (mode as { type?: unknown }).type === ModeType.Edit;
-}
-
-function placeFrame(app: Molvis, frame3d: Frame) {
-  const mode = app.mode;
-  if (isEditMode(mode)) {
-    mode.pendingMolecule = frame3d;
-  } else {
-    frame3d.free();
-    throw new Error("Switch to Edit mode first");
-  }
-}
-
-function generateAndPlace(app: Molvis, frame2d: Frame) {
-  const conformer = new Conformer();
-  let frame3d: Frame;
-  try {
-    frame3d = conformer.generate(frame2d);
-  } finally {
-    conformer.free();
-    frame2d.free();
-  }
-  // Fill localized bond_number on aromatic bonds before stamp.
-  // PlaceMoleculeCommand also runs this; doing it here keeps the pending
-  // template inspectable / re-stampable with correct columns.
-  assignKekuleBondOrders(frame3d);
-  placeFrame(app, frame3d);
-}
 
 const GENERATE_COPY = {
   running: "Generating a 3D structure…",
@@ -99,7 +56,7 @@ export const EditPanel: React.FC<EditPanelProps> = ({ app }) => {
       setIsEdit(false);
       return;
     }
-    const update = () => setIsEdit(isEditMode(app.mode));
+    const update = () => setIsEdit(app.mode instanceof EditMode);
     update();
     app.events.on("mode-change", update);
     return () => {
@@ -119,14 +76,10 @@ export const EditPanel: React.FC<EditPanelProps> = ({ app }) => {
     (smiles: string) => {
       if (!app) return;
       void runGeneration(() => {
-        const ir = SmilesIr.parse(smiles);
-        let frame2d: Frame;
-        try {
-          frame2d = ir.toFrame();
-        } finally {
-          ir.free();
+        if (!(app.mode instanceof EditMode)) {
+          throw new Error("Switch to Edit mode first");
         }
-        generateAndPlace(app, frame2d);
+        app.mode.placeSmiles(smiles);
       }, GENERATE_COPY);
     },
     [app, runGeneration],
@@ -135,11 +88,15 @@ export const EditPanel: React.FC<EditPanelProps> = ({ app }) => {
   const handleDrawing = useCallback(() => {
     if (!app) return;
     void runGeneration(() => {
+      const mode = app.mode;
+      if (!(mode instanceof EditMode)) {
+        throw new Error("Switch to Edit mode first");
+      }
       const frame2d = sketchRef.current?.toFrame();
       if (!frame2d) {
         throw new Error("Draw a molecule first");
       }
-      generateAndPlace(app, frame2d);
+      mode.placeConformer(frame2d);
     }, GENERATE_COPY);
   }, [app, runGeneration]);
 
@@ -183,7 +140,11 @@ export const EditPanel: React.FC<EditPanelProps> = ({ app }) => {
           disabled={generating}
           onBusyChange={handleDownloadBusyChange}
           onFrameFetched={(frame) => {
-            placeFrame(app, frame);
+            if (!(app.mode instanceof EditMode)) {
+              frame.free();
+              throw new Error("Switch to Edit mode first");
+            }
+            app.mode.pendingMolecule = frame;
           }}
         />
 

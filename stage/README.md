@@ -40,6 +40,13 @@ Custom elements live in `@molcrafts/molvis-stage-viewer` (`dist/main.js` CDN,
 `./element` for bundlers). Page / plugin builds do not compile it. 2D docs
 use `@molcrafts/molvis-sketch-viewer`.
 
+For an embedded editor, mount with `showUI: false` and use
+`app.setMode(ModeType.Edit)` to enable editing on the Stage canvas.
+`EditMode.placeSmiles()` and `EditMode.placeConformer()` prepare 3D structures
+for click placement. `fetchPubChem3DFrame()`, from `@molcrafts/molvis-stage/io`,
+loads an existing PubChem conformer for `EditMode.pendingMolecule`.
+Call `app.commitScene()` before serializing a project with edited structure.
+
 ## Dev commands
 
 ```bash

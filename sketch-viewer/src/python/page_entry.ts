@@ -2,6 +2,7 @@ import {
   listFragmentTemplates,
   MoleculeLayout,
   SketchComposer,
+  type SketchDocument,
 } from "@molcrafts/molvis-sketch";
 import { createSketchPreview } from "../preview";
 import { SketchBoardRpc } from "./board_rpc";
@@ -24,6 +25,7 @@ import { SketchEditor } from "./sketch_editor";
 const search = window.location.search;
 const params = new URLSearchParams(search);
 const surface = params.get("surface");
+const endpoint = SketchPageBridge.readEndpoint(search);
 const root = document.getElementById("molvis-sketch-root") ?? document.body;
 const composer = new SketchComposer({
   gui: surface !== "canvas",
@@ -35,6 +37,33 @@ const editor =
     ? new SketchEditor(composer)
     : null;
 editor?.mount(root);
+if (editor) {
+  const board = composer.board;
+  const storageKey = `molvis-sketch:document:${JSON.stringify(
+    endpoint ? [endpoint.wsUrl, endpoint.session] : [],
+  )}`;
+  try {
+    const saved = window.sessionStorage.getItem(storageKey);
+    if (saved !== null) {
+      board.loadSketchDocument(JSON.parse(saved) as SketchDocument);
+      board.fitToView();
+    }
+  } catch (error) {
+    console.warn("Could not restore the Sketch drawing", error);
+  }
+  // This event includes undo, redo, and document loads. Save synchronously
+  // so refreshing immediately after an edit restores the committed contents.
+  board.events.on("history-change", () => {
+    try {
+      window.sessionStorage.setItem(
+        storageKey,
+        JSON.stringify(board.getSketchDocument()),
+      );
+    } catch (error) {
+      console.warn("Could not save the Sketch drawing for reload", error);
+    }
+  });
+}
 window.addEventListener("beforeunload", () => {
   void editor?.destroy();
 });
@@ -44,7 +73,6 @@ const preview = createSketchPreview(composer, {
   theme: theme === "light" || theme === "dark" ? theme : undefined,
 });
 
-const endpoint = SketchPageBridge.readEndpoint(search);
 if (endpoint) {
   const rpc = new SketchBoardRpc(
     composer.board,
@@ -57,11 +85,11 @@ if (endpoint) {
       preview?.setState({ kind: "loading", message: "Connecting to MolVis…" });
     } else if (status.kind === "ready") {
       connected = true;
-      const loaded = composer.board.getMoleculeData().atoms.length > 0;
+      const loaded = composer.board.hasContent();
       preview?.setState(
         loaded
           ? { kind: "ready" }
-          : { kind: "loading", message: "Waiting for the molecule…" },
+          : { kind: "loading", message: "Waiting for the drawing…" },
       );
     } else {
       const taken =
@@ -76,9 +104,9 @@ if (endpoint) {
       });
     }
   };
-  // The molecule arriving is what makes the board ready to look at.
+  // A drawing arriving is what makes the board ready to look at.
   composer.board.subscribe(() => {
-    if (connected && composer.board.getMoleculeData().atoms.length > 0) {
+    if (connected && composer.board.hasContent()) {
       preview?.setState({ kind: "ready" });
     }
   });

@@ -72,6 +72,7 @@ nav = [
     "development/extending.md",
     "development/plugins.md",
     "development/headless-rendering.md",
+    "development/frame-presentation-spec.md",
     "development/ovito-parity.md",
     "development/pca-tool.md",
   ]},

@@ -36,6 +36,24 @@ Before exporting, record or verify:
 - Use [VS Code](../interfaces/vscode/index.md) when editing and saving a workspace
   file is the center of the workflow.
 
+## Export a Sketch figure
+
+In Sketch, the left toolbar groups controls into **View**, **Molecule**, and
+**Figure**. Each group becomes a menu when the editor is short. Use
+**Molecule** for the structure and **Figure** to add labels, colored panels,
+sequence symbols, and polymer repeat brackets. Draw a shape to select it,
+then resize it with the corner handles or rotate it with the round handle.
+Double-click
+a shape to edit its text on the canvas. For repeat brackets, click any corner
+of the selected object to edit its label. Choose **No brackets** to show only
+the filled corner labels. Choose **Export image** in **Sketch files** to
+preview the drawing and trim the outer margin automatically. The export
+panel shares crop, dimensions, and transparency controls with Stage
+screenshots. Sketch also exports SVG and saves editable
+`.molvis-sketch.json` files. Reopen these files from the same menu to
+continue editing. In Python,
+`Sketch.document()` and `Sketch.load_document()` use the same format.
+
 ## Tutorial complete
 
 You now have a layered model:

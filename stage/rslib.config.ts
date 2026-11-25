@@ -20,9 +20,9 @@ const RUNTIME_EXTERNALS = [
   "@molcrafts/molvis-core/element-picker",
   "@molcrafts/molvis-core/opfs",
   "@molcrafts/molvis-core/platform",
-  "@molcrafts/molvis-core/save-file",
-  "@molcrafts/molvis-core/image-crop",
   "@molcrafts/molvis-core/workload",
+  "@molcrafts/ui-web-components/image-crop",
+  "@molcrafts/ui-web-components/save-file",
 ] as const;
 
 /** Debug-only Babylon packages that must never land in stage dist. */
